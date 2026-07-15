@@ -1,6 +1,6 @@
 ---
 name: ui-evaluator
-description: Declaration-backed UI acceptance. Use after generating a page, or when the user wants design review or a recirculatable critique.
+description: Run evidence-backed UI acceptance. Use after generating a page, or when the user wants a design review or recirculatable critique against declared goals and success criteria.
 ---
 
 # ui-evaluator
@@ -14,7 +14,7 @@ description: Declaration-backed UI acceptance. Use after generating a page, or w
 Identify which of these apply to this surface (repo files, prior turns, or design-playbook defaults):  
 `spec` · `domain` · `craft` · `design` · `components` · `template`.
 
-**Done when:** the check set is named; if `spec` L6 exists, it is on the list.
+**Done when:** the check set is named; if `spec` L6 exists, every criterion and its required proof are on the list.
 
 ### 2. Run checks
 
@@ -29,10 +29,22 @@ Walk every applicable row (exhaustive for bound declarations):
 | Badge/Tag, Dialog/Drawer, … | `components` |
 | Shell matches scene | `template` |
 | Each L6 acceptance item | `spec` |
+| Required proof exists for each L6 item | `spec` |
 
 Rubric notes: [`references/rubric.md`](references/rubric.md).
 
-**Done when:** every bound row was considered; skips are explicit (“N/A: no risk fields”).
+Record an evidence ledger before writing findings:
+
+```text
+criterion: <L6 item or bound declaration>
+required:  <declared proof>
+observed:  <artifact, interaction, check result, or missing>
+result:    pass|fail|blocked|N/A
+```
+
+For implemented UI, visible-state proof is a rendered inspection at the declared target viewport; behavior proof is an interaction trace or automated check; code-health proof is the relevant available test, type/lint, or affected build result. Planning-only proof is declaration coverage and must not claim a render or test occurred.
+
+**Done when:** every bound row was considered; every required proof has a ledger entry; skips are explicit (“N/A: no risk fields”); unavailable required proof is `blocked`, not skipped.
 
 ### 3. Emit point-back findings
 
@@ -49,7 +61,7 @@ Order: **blocking** first (broken L5/L6, unsafe dangerous ops, removed focus rin
 
 ### 4. Verdict
 
-- **Pass:** zero blocking; L6 items tickable; token gaps logged or fixed.  
+- **Pass:** zero blocking; every required evidence row passes; L6 items tickable; token gaps logged or fixed.
 - **Recirculate:** each blocking `source` names the step/declaration to reopen in design-playbook.
 
 **Done when:** pass/recirculate is stated; every blocking finding has a closure trail - `recirculate -> fix -> re-eval -> 0 blocking` - or, only after an explicit user decision, is accepted with a recorded reason that points to the user's statement or decision record. Without a user in the loop, blocking findings remain in recirculate and the run requests a decision. Blocking sources are non-empty when not pass.

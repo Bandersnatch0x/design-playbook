@@ -1,6 +1,6 @@
 ---
 name: ux-spec
-description: Spec-driven UI planning. Use when turning a one-line product/UI ask into six-layer spec.md, or when empty/loading/error/permission acceptance is missing before build.
+description: Write an outcome-first UI declaration. Use when turning a short product/UI ask into six-layer spec.md, or when goal, edge-state, acceptance, or evidence requirements are missing before build.
 ---
 
 # ux-spec
@@ -11,9 +11,9 @@ Write a **six-layer `spec.md`**: the functional **declaration** for what must be
 
 ### 1. Pin L1
 
-From the ask (and only necessary clarifying defaults if the user is silent), fix: one-line definition, user, in-scope scenes, **non-goals**, always/ask/never boundaries.
+From the ask, fix the user-visible goal, target user, in-scope scenes, **non-goals**, and always/ask/never boundaries. Ask only when a missing answer materially changes one of them; otherwise record a conservative assumption.
 
-**Done when:** a stranger could tell what the page is *not* for.
+**Done when:** a stranger could state the intended outcome, what the page is *not* for, and which actions require a user decision.
 
 ### 2. Expand L2–L4
 
@@ -28,9 +28,11 @@ Use the headings in [`references/spec-template.md`](references/spec-template.md)
 ### 3. Force L5–L6
 
 - L5: empty, loading, error, permission — each with what the user can do next  
-- L6: checkable acceptance (Given/When/Then or equivalent)
+- L6: checkable acceptance (Given/When/Then or equivalent), with the proof required for each item
 
-**Done when:** L5 is not a single word (“loading”); L6 items can be ticked pass/fail without taste debate.
+Evidence is criterion-shaped: visible states require rendered inspection at named target viewports; behavior requires an interaction trace or automated check; implementation health uses the relevant tests, type/lint checks, or affected build when available. Planning-only work names the future proof instead of claiming it exists.
+
+**Done when:** L5 is not a single word (“loading”); every L6 item can be ticked pass/fail without taste debate and says what evidence will prove it.
 
 ### 4. Emit
 
