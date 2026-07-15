@@ -20,6 +20,7 @@
 ## L4 组件功能细节
 - 组件定位与功能清单
 - 默认 / 悬停 / 加载 / 禁用 / 错误 等状态
+- L4 declares control behavior only; reuse / no-internal-change constraints must name exceptions (for example, allow a minimal patch when they conflict with L5).
 
 ## L5 边界条件
 - 空态：
