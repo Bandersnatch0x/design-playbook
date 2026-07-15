@@ -29,6 +29,8 @@ Invoke **ui-picker**. Map scene → template + component semantics. Read its `re
 
 Implement structure from the decision report + `spec`. Prefer project tokens: visual values via `var(--*)`; missing tokens → `gaps.log` (or project equivalent), not raw hex/px/ms.
 
+If a reused host component conflicts with spec L5, record the conflict and recirculate to `spec` via the authoritative map in `ui-evaluator` before choosing a minimal patch or explicit acceptance.
+
 Load on demand (only if the fill needs them):
 
 - domain / risk / sensitive fields → `ui-picker/references/domain.md`
@@ -47,7 +49,7 @@ Invoke **craft-guard**. Apply loading tiers, motion purpose, hierarchy, CJK type
 
 Invoke **ui-evaluator**. Issues must **point back** to a declaration.
 
-**Done when:** report lists findings as `issue / source / fix / severity`; zero **blocking** left, or each blocking item has a closure trail (`recirculate -> fix -> re-eval -> 0 blocking`) or is explicitly accepted with a recorded reason.
+**Done when:** report lists findings as `issue / source / fix / severity`; the authoritative verdict completion criterion in `ui-evaluator` is met.
 
 ## Recirculate
 

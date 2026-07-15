@@ -52,7 +52,7 @@ Order: **blocking** first (broken L5/L6, unsafe dangerous ops, removed focus rin
 - **Pass:** zero blocking; L6 items tickable; token gaps logged or fixed.  
 - **Recirculate:** each blocking `source` names the step/declaration to reopen in design-playbook.
 
-**Done when:** pass/recirculate is stated; every blocking finding has a closure trail - `recirculate -> fix -> re-eval -> 0 blocking` - or is explicitly accepted by the user with a recorded reason. Blocking sources are non-empty when not pass.
+**Done when:** pass/recirculate is stated; every blocking finding has a closure trail - `recirculate -> fix -> re-eval -> 0 blocking` - or, only after an explicit user decision, is accepted with a recorded reason that points to the user's statement or decision record. Without a user in the loop, blocking findings remain in recirculate and the run requests a decision. Blocking sources are non-empty when not pass.
 
 ## Recirculate map (authoritative)
 

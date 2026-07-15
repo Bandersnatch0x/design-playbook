@@ -83,6 +83,62 @@ for f in PKG.rglob("*"):
         pass
 check(not hits, f"no vendor residue in runtime surface (found in: {hits})" if hits else "no vendor residue in runtime surface")
 
+print("== Dogfood 004 regression guards ==")
+
+
+def section_between(text: str, start: str, end: str) -> str:
+    if text.count(start) != 1 or text.count(end) != 1:
+        return ""
+    _, tail = text.split(start, 1)
+    body, separator, _ = tail.partition(end)
+    return body if separator else ""
+
+
+evaluator = (PKG / "skills" / "ui-evaluator" / "SKILL.md").read_text(encoding="utf-8")
+verdict = section_between(evaluator, "### 4. Verdict", "## Recirculate map")
+check(
+    bool(verdict) and all(phrase in verdict for phrase in (
+        "only after an explicit user decision",
+        "user's statement or decision record",
+        "remain in recirculate",
+        "requests a decision",
+    )),
+    "ui-evaluator blocks unattended acceptance",
+)
+
+playbook = (PKG / "skills" / "design-playbook" / "SKILL.md").read_text(encoding="utf-8")
+accept = section_between(playbook, "### 5. Accept", "## Recirculate")
+check(
+    bool(accept)
+    and "authoritative verdict completion criterion in `ui-evaluator`" in accept
+    and "explicitly accepted" not in accept,
+    "orchestrator points to the authoritative evaluator verdict",
+)
+
+fill = section_between(playbook, "### 3. Fill", "### 4. Craft")
+check(
+    bool(fill) and all(phrase in fill for phrase in (
+        "reused host component",
+        "conflicts with spec L5",
+        "recirculate to `spec`",
+        "authoritative map in `ui-evaluator`",
+    )),
+    "fill routes reused-component L5 conflicts back to spec",
+)
+
+spec_template = (
+    PKG / "skills" / "ux-spec" / "references" / "spec-template.md"
+).read_text(encoding="utf-8")
+l4 = section_between(spec_template, "## L4", "## L5")
+check(
+    bool(l4) and all(phrase in l4 for phrase in (
+        "L4 declares control behavior only",
+        "reuse / no-internal-change constraints must name exceptions",
+        "conflict with L5",
+    )),
+    "L4 implementation constraints name L5 exceptions",
+)
+
 print()
 if failures:
     print(f"VALIDATION FAILED: {len(failures)} issue(s)")
