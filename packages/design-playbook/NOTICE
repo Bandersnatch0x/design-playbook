@@ -1,0 +1,37 @@
+# NOTICE
+
+design-playbook is an original agent plugin (skills, commands, plugin metadata,
+workflow docs, and self-authored examples), licensed under MIT (see `LICENSE`).
+
+It is **not** a port, overlay, or redistribution of any third-party design
+playbook's manuscript, figures, brand marks, or demo site. No rights to such
+materials are claimed or granted here.
+
+The `native-craft` skill is a derivative of yetone/native-feel-skill (MIT). We
+authored our own Design I/O leaf and condensed its decision gate and native
+conventions audit in our own voice; the full depth (WebView survival, IPC
+contract, memory truths, Raycast evidence) remains in the original skill, which
+users may install separately. The MIT License of the original is reproduced
+below in full, as required for derivative works:
+
+  The MIT License (MIT)
+
+  Copyright (c) 2026 yetone
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
