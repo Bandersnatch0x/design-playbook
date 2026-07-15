@@ -19,7 +19,11 @@ Or `@` reference:
 ## Load order
 
 1. `skills/design-playbook/SKILL.md`
-2. `ux-spec` → `ui-picker` (+ its `references/*`) → fill → `craft-guard` → `ui-evaluator`
+2. Standard order: `ux-spec` → `ui-picker` → `fill` → `craft-guard` → `ui-evaluator`.
+
+Native desktop order: `ux-spec` → `native-craft` → `ui-picker` → `fill` → `craft-guard` → `ui-evaluator`.
+
+Run `native-craft` only for an explicit native-desktop/native-feel target. Web and mobile Web skip `native-craft`; if the platform is unclear, ask before choosing the order. The orchestrator owns the decision gate, render-surface seam handoff, and fail-closed behavior.
 
 ## Compose
 

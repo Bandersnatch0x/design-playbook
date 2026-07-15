@@ -83,6 +83,36 @@ for f in PKG.rglob("*"):
         pass
 check(not hits, f"no vendor residue in runtime surface (found in: {hits})" if hits else "no vendor residue in runtime surface")
 
+print("== Native-desktop routing ==")
+orchestrator = (PKG / "skills" / "design-playbook" / "SKILL.md").read_text(encoding="utf-8")
+codex = (PKG / "codex" / "AGENTS.md").read_text(encoding="utf-8")
+expected_order = (
+    "ux-spec",
+    "native-craft",
+    "ui-picker",
+    "fill",
+    "craft-guard",
+    "ui-evaluator",
+)
+
+
+def native_order(text: str) -> tuple[str, ...] | None:
+    lines = [line for line in text.splitlines() if line.startswith("Native desktop order:")]
+    if len(lines) != 1:
+        return None
+    return tuple(re.findall(r"`([^`]+)`", lines[0]))
+
+
+orchestrator_order = native_order(orchestrator)
+codex_order = native_order(codex)
+check(orchestrator_order == expected_order, "orchestrator owns conditional native route")
+check(codex_order == expected_order, "Codex adapter preserves conditional native route")
+check(orchestrator_order is not None and orchestrator_order == codex_order,
+      "orchestrator and Codex native routes match")
+web_skip = "Web and mobile Web skip `native-craft`"
+check(web_skip in orchestrator and web_skip in codex,
+      "orchestrator and Codex skip native-craft for Web targets")
+
 print("== Dogfood 004 regression guards ==")
 
 
@@ -137,6 +167,47 @@ check(
         "conflict with L5",
     )),
     "L4 implementation constraints name L5 exceptions",
+)
+
+print("== Outcome-first run contract ==")
+run_contract = section_between(playbook, "## Run contract", "## Steps")
+check(
+    bool(run_contract) and all(f"**{control}**" in run_contract for control in (
+        "Goal", "Success", "Evidence", "Stop", "Confirm",
+    )),
+    "orchestrator names all five run-contract controls",
+)
+check(
+    bool(run_contract) and all(phrase in run_contract for phrase in (
+        "external, destructive, costly, or scope-expanding",
+        "same blocking finding survives two repair -> re-evaluate cycles",
+        "smallest next decision",
+    )),
+    "orchestrator defines confirmation and stop boundaries",
+)
+
+ux_spec = (PKG / "skills" / "ux-spec" / "SKILL.md").read_text(encoding="utf-8")
+l6 = section_between(spec_template, "## L6", "---")
+check(
+    bool(l6)
+    and "必备证据" in l6
+    and "every L6 item" in ux_spec
+    and "says what evidence will prove it" in ux_spec,
+    "ux-spec binds each success criterion to required evidence",
+)
+
+run_checks = section_between(evaluator, "### 2. Run checks", "### 3. Emit point-back findings")
+check(
+    bool(run_checks) and all(phrase in run_checks for phrase in (
+        "Record an evidence ledger",
+        "result:    pass|fail|blocked|N/A",
+        "unavailable required proof is `blocked`",
+    )),
+    "ui-evaluator requires an evidence ledger and blocks missing proof",
+)
+check(
+    bool(verdict) and "every required evidence row passes" in verdict,
+    "ui-evaluator pass requires all evidence rows",
 )
 
 print()
