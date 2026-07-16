@@ -21,7 +21,7 @@
 
 ## ✨ What it is
 
-A Claude Code / Codex plugin. One predictable pass per run — **Design I/O**: `ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → ui-evaluator`, where acceptance **points back** to the declaration that owns each failure, and blocking findings **recirculate** until closed. `?` = conditional entry; `preview*` runs only when an optional Preview MCP adapter exposes `preview_prototype` (otherwise skip to Fill).
+A Claude Code / Codex plugin. One predictable pass per run — **Design I/O**: `ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → (observe*) → ui-evaluator`, where acceptance **points back** to the declaration that owns each failure, and blocking findings **recirculate** until closed. `?` = conditional entry; `preview*`/`observe*` run only when their optional MCP adapter is present (`preview_prototype` before Fill, `execute_capture_plan` after craft) — otherwise skipped. `preview*` is a human-in-the-loop confirm gate (G5); `observe*` captures criterion-addressable runtime evidence into a manifest the evaluator binds to a criterion (G6).
 
 - **Declarations** *(what good is)*: `spec` · `domain` · `craft` · `design` · `components` · `template`
 - **Contracts** *(how work enters the pipeline)*: `skill` (timing) · `evaluator` (acceptance + recirculate)
@@ -69,7 +69,7 @@ Six model-invoked skills (`/design-playbook:<name>`):
 
 | Package | Use for |
 | :--- | :--- |
-| **design-playbook** | Spec? → plan? → shell → optional preview* → fill → craft → point-back |
+| **design-playbook** | Spec? → plan? → shell → optional preview* → fill → craft → optional observe* → point-back |
 | [ui-ux-pro-max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | Style / palette / type search |
 | `frontend-design` | Anti-template visual direction |
 | [native-feel-skill](https://github.com/yetone/native-feel-skill) | Full native-feel depth (WebView, IPC, memory) |
