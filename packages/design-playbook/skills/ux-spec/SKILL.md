@@ -28,11 +28,11 @@ Use the headings in [`references/spec-template.md`](references/spec-template.md)
 ### 3. Force L5–L6
 
 - L5: empty, loading, error, permission — each with what the user can do next  
-- L6: checkable acceptance (Given/When/Then or equivalent), with the proof required for each item
+- L6: checkable acceptance; every top-level item explicitly contains `Given`, then `When`, then `Then`, with the proof required for that item
 
 Evidence is criterion-shaped: visible states require rendered inspection at named target viewports; behavior requires an interaction trace or automated check; implementation health uses the relevant tests, type/lint checks, or affected build when available. Planning-only work names the future proof instead of claiming it exists.
 
-**Done when:** L5 is not a single word (“loading”); every L6 item can be ticked pass/fail without taste debate and says what evidence will prove it.
+**Done when:** L5 is not a single word (“loading”); every L6 item is a top-level list item that uses `Given -> When -> Then` in that order, can be ticked pass/fail without taste debate, and says what evidence will prove it.
 
 ### 4. Emit
 

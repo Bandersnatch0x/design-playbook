@@ -13,8 +13,8 @@ dist-ssr
 .worktrees/
 *.local
 
-# local agent scratch (optional: remove this line if you want tickets in git)
-# .scratch/
+# Local agent planning, research, dogfood, and temporary artifacts.
+.scratch/
 
 # Editor directories and files
 .vscode/*

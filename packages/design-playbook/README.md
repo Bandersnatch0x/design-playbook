@@ -62,6 +62,12 @@ LICENSE · NOTICE       ← authored-only scope
 
 Only authored content in this package (skills, pipeline commands, metadata, self-written examples). See `NOTICE` and repo ADRs 0003–0006. Repo-maintainer polish commands live in the monorepo root `.claude/commands/`, not in this package.
 
+## Contract vs enforcement
+
+The Design I/O run is a **declared, host-neutral contract** over plain-Markdown artifacts (spec, decision report, point-back ledger). Any coding agent that emits that shape can be checked; Claude Code and Codex are adapters over the same artifacts, and every generator, bridge, or design-system gate is an optional input, never a dependency.
+
+What is **deterministically enforced** today: plugin install/structure (`scripts/validate.py --strict`) and the run-artifact shape (`scripts/validate_run.py` — L1–L6 present; every top-level L6 item ordered `Given -> When -> Then`; one non-empty four-field evidence ledger row per `L6.<n>` with allowed results; four non-empty finding fields with non-empty source; exactly one explicit `## Verdict` of `Pass` or `Recirculate`; Pass requires every evidence result to be `pass` and exactly one issue-linked `0 blocking` closure per blocking finding; exit 0/`RUN OK`, exit 1/`RUN INVALID`, exit 2/`RUN ERROR`; regression-tested by `tests/test_validate_run.py`, which also validates the showcase artifacts directly). Everything else in the pipeline is agent-executed craft judgment, not a machine gate.
+
 ## Codex
 
 See `codex/AGENTS.md`.

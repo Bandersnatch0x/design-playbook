@@ -21,3 +21,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate
         run: python3 scripts/validate.py
+      - name: Validate run seam
+        run: python3 packages/design-playbook/tests/test_validate_run.py

@@ -36,35 +36,6 @@ fix:      Badge text only
 severity: low
 ```
 
-## Evidence ledger
-
-```text
-criterion: L6.1
-required: rendered failed-row detail shows reason, resource peak, and retry
-observed: evaluator report records all three in the expanded Swarsight run row
-result: pass
-
-criterion: L6.2
-required: interaction trace shows retry success moving failed to queued and onward
-observed: evaluator report records failed -> queued -> running/completed states
-result: pass
-
-criterion: L6.3
-required: rendered no-runs state is non-blank and exposes a next-step CTA
-observed: evaluator report records the empty-state message and CTA
-result: pass
-
-criterion: L6.4
-required: viewer retry and abort controls are unavailable with an explanation
-observed: evaluator report records disabled viewer actions and their reason
-result: pass
-
-criterion: L6.5
-required: batch retry executes only after consequence-bearing confirmation
-observed: closure trails record confirmation copy before retry and abort execution
-result: pass
-```
-
 ## Recirculate closure trail
 
 - closes: batch retry has no confirm step -> reopen `domain` -> fix: confirm Dialog + consequence -> re-eval: confirm present before execute -> **0 blocking**
@@ -77,3 +48,12 @@ result: pass
 ## Verdict
 
 **Pass.** Zero blocking after recirculate closure (3 blocking -> fixed -> re-checked -> 0). All six dogfood gates green. The plugin produced a declaration-grounded critique with a closed recirculate trail on a real third-party codebase.
+
+## Evidence ledger
+
+```text
+criterion: L6.1
+required: declared proof for L6.1
+observed: fixture evidence for L6.1
+result: pass
+```

@@ -16,8 +16,8 @@ Keep each control in one authoritative place:
 | Control | Single source | Required content |
 | --- | --- | --- |
 | **Goal** | `spec` L1 | User-visible outcome, target user and scene, non-goals |
-| **Success** | `spec` L6 | Observable pass/fail criteria |
-| **Evidence** | `spec` L6 + evaluator ledger | Proof for every criterion; planning-only uses declaration coverage, implementation uses rendered states, interaction/test results, and applicable code checks |
+| **Success** | `spec` L6 | Observable pass/fail criteria; every top-level L6 item is `Given -> When -> Then` |
+| **Evidence** | `spec` L6 + evaluator ledger | Exactly one `L6.<n>` ledger row per criterion; planning-only uses declaration coverage, implementation uses rendered states, interaction/test results, and applicable code checks |
 | **Stop** | this orchestrator | Pass; smallest missing decision; unavailable required evidence or authority; repeated blocker |
 | **Confirm** | this orchestrator + user decision | Any consequential action not already authorized |
 
@@ -33,7 +33,7 @@ Do in order. Do not code a pretty shell until the active step’s completion cri
 
 Invoke **ux-spec**. Produce six-layer `spec.md`.
 
-**Done when:** L1–L6 are written; L5 (empty/loading/error/permission) has substantive entries, not “show loading”; each L6 criterion is checkable and names the evidence that will prove it.
+**Done when:** L1–L6 are written; L5 (empty/loading/error/permission) has substantive entries, not “show loading”; every top-level L6 item uses ordered `Given -> When -> Then` and names the evidence that will prove it.
 
 ### 2. Shell → conditional `native-craft` → `ui-picker`
 
@@ -72,7 +72,7 @@ Invoke **craft-guard**. Apply loading tiers, motion purpose, hierarchy, CJK type
 
 Invoke **ui-evaluator**. Issues must **point back** to a declaration.
 
-**Done when:** the report includes the evidence ledger and findings as `issue / source / fix / severity`; the authoritative verdict completion criterion in `ui-evaluator` is met.
+**Done when:** the report includes the criterion-shaped evidence ledger (`criterion / required / observed / result`) and findings as `issue / source / fix / severity`; the authoritative verdict completion criterion in `ui-evaluator` is met.
 
 ## Recirculate
 

@@ -33,18 +33,18 @@ Walk every applicable row (exhaustive for bound declarations):
 
 Rubric notes: [`references/rubric.md`](references/rubric.md).
 
-Record an evidence ledger before writing findings:
+Record an evidence ledger before writing findings. Every L6 criterion has exactly one row:
 
 ```text
-criterion: <L6 item or bound declaration>
+criterion: L6.<n>
 required:  <declared proof>
 observed:  <artifact, interaction, check result, or missing>
 result:    pass|fail|blocked|N/A
 ```
 
-For implemented UI, visible-state proof is a rendered inspection at the declared target viewport; behavior proof is an interaction trace or automated check; code-health proof is the relevant available test, type/lint, or affected build result. Planning-only proof is declaration coverage and must not claim a render or test occurred.
+For implemented UI, visible-state proof is a rendered inspection at the declared target viewport; behavior proof is an interaction trace or automated check; code-health proof is the relevant available test, type/lint, or affected build result. Planning-only proof is declaration coverage and must not claim a render or test occurred. Non-L6 declaration checks may be supporting observations or findings; they do not enter the machine ledger.
 
-**Done when:** every bound row was considered; every required proof has a ledger entry; skips are explicit (“N/A: no risk fields”); unavailable required proof is `blocked`, not skipped.
+**Done when:** every bound row was considered; every L6 criterion has exactly one non-empty `criterion / required / observed / result` row keyed as `L6.<n>`; results use only `pass|fail|blocked|N/A`; unavailable required proof is `blocked`, not skipped.
 
 ### 3. Emit point-back findings
 
@@ -52,7 +52,7 @@ For implemented UI, visible-state proof is a rendered inspection at the declared
 issue:    <observable>
 source:   <declaration>
 fix:      <next edit>
-severity: high|med|low
+severity: high (blocking)|high|med|low
 ```
 
 Order: **blocking** first (broken L5/L6, unsafe dangerous ops, removed focus rings), then polish.
@@ -61,10 +61,19 @@ Order: **blocking** first (broken L5/L6, unsafe dangerous ops, removed focus rin
 
 ### 4. Verdict
 
-- **Pass:** zero blocking; every required evidence row passes; L6 items tickable; token gaps logged or fixed.
-- **Recirculate:** each blocking `source` names the step/declaration to reopen in design-playbook.
+- Emit exactly one `## Verdict` section containing exactly one anchored verdict: `Pass` or `Recirculate`.
+- **Pass:** zero blocking; every L6 criterion has exactly one evidence row; every required evidence row passes (every evidence result is `pass`); token gaps are logged or fixed.
+- **Recirculate:** each blocking `source` names the step/declaration to reopen in design-playbook; `fail` or `blocked` evidence remains visible.
 
-**Done when:** pass/recirculate is stated; every blocking finding has a closure trail - `recirculate -> fix -> re-eval -> 0 blocking` - or, only after an explicit user decision, is accepted with a recorded reason that points to the user's statement or decision record. Without a user in the loop, blocking findings remain in recirculate and the run requests a decision. Blocking sources are non-empty when not pass.
+For a repaired blocker, record exactly one closure line whose issue text is identical to the finding:
+
+```text
+- closes: <exact issue value> -> recirculate -> fix -> re-eval -> 0 blocking
+```
+
+**Done when:** the explicit verdict is structurally unique; blocking sources are non-empty; every blocking finding has exactly one matching closure before `Pass`. A blocking finding cannot be waived inside a Pass artifact. Without a user in the loop, blocking findings remain in recirculate and the run requests a decision. only after an explicit user decision that updates the owning declaration or severity — recorded against the user's statement or decision record — may the evaluator re-evaluate; the final Pass artifact contains no blocking severity.
+
+The artifact shape behind this verdict is machine-checkable: `scripts/validate_run.py` gates L1-L6, ordered `Given -> When -> Then` in every top-level L6 item, one non-empty four-field evidence row per `L6.<n>`, allowed evidence results, all-pass evidence for `Pass`, four non-empty finding fields, one explicit verdict, and one exact issue-linked closure per blocking finding. These checks are the completion criteria above, not extra prose.
 
 ## Recirculate map (authoritative)
 

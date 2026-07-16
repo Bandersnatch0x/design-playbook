@@ -15,6 +15,9 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 | **Design I/O** | Pipeline: plan → shell → fill → craft → accept, with inject/check/recirculate | “just prompt better” |
 | **Declaration** | What good is: spec, domain, craft, design, components, template | “guidelines”, “vibes” |
 | **Contract** | How work enters the pipeline: skill timing, evaluator acceptance | “prompt pack” alone |
+| **Closed-loop run** | One Design I/O run that declares the outcome, proves each success criterion, points failures back to their owning declaration, recirculates blocking findings within a bounded retry policy, and stops with an explicit verdict | “generated a page” / “looks done” |
+| **Run contract** | The five controls fixed before execution: Goal, Success, Evidence, Stop, Confirm | an open-ended task list |
+| **Evidence ledger** | Criterion-shaped acceptance record: required proof, observed proof, and pass/fail/blocked/N/A result for every success criterion | an unstructured review summary |
 | **Recirculate** | Send a failure back to the owning declaration, then resume | blind whole-page restyle |
 | **Point-back** | Evaluator finding names `source` declaration + `fix` | “looks off”, “polish more” |
 | **Decision report** | ui-picker output before code: scene, template, components, risks | coding from intuition |

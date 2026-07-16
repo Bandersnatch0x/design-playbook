@@ -40,9 +40,4 @@ Produced by **ux-spec**. Domain grounded in SwarSight `DESIGN.md` + `WorkbenchPa
 - 权限降级：viewer 角色禁用重试/中止，tooltip 说明所需权限。
 
 ## L6 验收标准
-
-- Given 一条 failed，When 展开详情，Then 可见失败原因 + 资源峰值，且可触发重试。
-- Given 一条 failed，When 重试成功，Then 行转 queued 并可刷新到 running/completed。
-- Given 无运行，When 打开运行列表，Then 非白屏空态 + CTA。
-- Given viewer，When 查看运行操作，Then 重试/中止不可执行且有原因。
-- Given 批量重试，When 提交执行，Then 二次确认 + 后果文案后才执行。
+- 验收项（缺可判定条件）
