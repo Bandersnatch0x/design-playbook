@@ -1,0 +1,15 @@
+﻿# Codex / Claude MCP snippet (copy into client config)
+
+## Claude Code / generic `.mcp.json`
+
+See repo-root `.mcp.json`.
+
+## Codex `~/.codex/config.toml`
+
+```toml
+[mcp_servers.design-playbook-preview]
+command = "python"
+args = ["D:/code_space/vibe-designing-playbook/packages/design-playbook-preview/server.py"]
+```
+
+Restart the agent session after adding so `tools/list` can see `preview_prototype`.
