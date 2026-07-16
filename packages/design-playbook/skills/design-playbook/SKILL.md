@@ -72,7 +72,7 @@ Write a light handoff at `.scratch/<run>/plan.md` (required on disk). Minimum th
 
 ### 4. Shell → conditional `native-craft` → `ui-picker`
 
-Native desktop order: `ux-spec? → plan? → native-craft → ui-picker → (preview*) → fill → craft-guard → ui-evaluator`.
+Native desktop order: `ux-spec` → `native-craft` → `ui-picker` → `fill` → `craft-guard` → `ui-evaluator`. (Conditional entry `?` and optional adapters `preview*`/`observe*` are shown in the full sequence above, step 0.)
 
 - Invoke **native-craft** only for an explicit native-desktop target or a request for native-feel. Web and mobile Web skip `native-craft`; a Web UI that merely resembles a desktop admin tool is still Web.
 - If the target platform is unclear, ask once before choosing the route. Do not assume native desktop.
