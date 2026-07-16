@@ -21,7 +21,7 @@
 
 ## ✨ What it is
 
-A Claude Code / Codex plugin. One predictable pass per run — **Design I/O**: `plan → shell → fill → craft → accept`, where acceptance **points back** to the declaration that owns each failure, and blocking findings **recirculate** until closed.
+A Claude Code / Codex plugin. One predictable pass per run — **Design I/O**: `ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → ui-evaluator`, where acceptance **points back** to the declaration that owns each failure, and blocking findings **recirculate** until closed. `?` = conditional entry; `preview*` runs only when an optional Preview MCP adapter exposes `preview_prototype` (otherwise skip to Fill).
 
 - **Declarations** *(what good is)*: `spec` · `domain` · `craft` · `design` · `components` · `template`
 - **Contracts** *(how work enters the pipeline)*: `skill` (timing) · `evaluator` (acceptance + recirculate)
@@ -69,7 +69,7 @@ Six model-invoked skills (`/design-playbook:<name>`):
 
 | Package | Use for |
 | :--- | :--- |
-| **design-playbook** | Spec → shell → craft → point-back accept |
+| **design-playbook** | Spec? → plan? → shell → optional preview* → fill → craft → point-back |
 | [ui-ux-pro-max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | Style / palette / type search |
 | `frontend-design` | Anti-template visual direction |
 | [native-feel-skill](https://github.com/yetone/native-feel-skill) | Full native-feel depth (WebView, IPC, memory) |

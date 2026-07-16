@@ -10,17 +10,29 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 
 ## Glossary
 
+> Evidence exists only to satisfy a declared criterion.
+> Providers never produce evidence directly; they produce artifacts that become evidence only when bound by a manifest to a criterion.
+
 | Term | Meaning | Avoid |
 | --- | --- | --- |
-| **Design I/O** | Pipeline: plan → shell → fill → craft → accept, with inject/check/recirculate | “just prompt better” |
+| **Design I/O** | Pipeline: `ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → (observe*) → ui-evaluator` | “just prompt better” |
 | **Declaration** | What good is: spec, domain, craft, design, components, template | “guidelines”, “vibes” |
 | **Contract** | How work enters the pipeline: skill timing, evaluator acceptance | “prompt pack” alone |
 | **Closed-loop run** | One Design I/O run that declares the outcome, proves each success criterion, points failures back to their owning declaration, recirculates blocking findings within a bounded retry policy, and stops with an explicit verdict | “generated a page” / “looks done” |
 | **Run contract** | The five controls fixed before execution: Goal, Success, Evidence, Stop, Confirm | an open-ended task list |
 | **Evidence ledger** | Criterion-shaped acceptance record: required proof, observed proof, and pass/fail/blocked/N/A result for every success criterion | an unstructured review summary |
+| **Evidence** | Criterion-addressable artifact: a runtime capture bound by a manifest to an L6.<n>; no criterion → telemetry, not evidence | "observation", "screenshot", an unbound artifact |
 | **Recirculate** | Send a failure back to the owning declaration, then resume | blind whole-page restyle |
 | **Point-back** | Evaluator finding names `source` declaration + `fix` | “looks off”, “polish more” |
 | **Decision report** | ui-picker output before code: scene, template, components, risks | coding from intuition |
+| **plan (step)** | Orchestrator-only handoff (`.scratch/<run>/plan.md`): run scope pointers, description→spec map, ui-picker input pack; not a run-contract control and not a machine gate | host Plan Mode; pre-written decision report |
+| **preview*** | Optional disposable HTML prototype loop via external MCP tool `preview_prototype`; skip when adapter absent | fill from prototype files; ui-picker step 5 |
+| **observe*** | Optional post-Fill runtime-evidence loop via external MCP tool `execute_capture_plan`; provider produces artifacts, orchestrator binds them to L6 criteria via manifest; skip when provider absent | building a runtime/dev server; provider writing the manifest |
+| **Capture Plan** | Derived, disposable: L6 Given/When → state+actions, Then → required; never a SSOT, never edited for intent; L6 wins on conflict | a standalone test script; a persisted plan file |
+| **Manifest** | Execution-record SSOT (`.scratch/<run>/evidence/manifest.jsonl`, append-only): self-contained entries binding criterion ↔ artifact; the only seam between Contract and Runtime objects | provider output; an editable log |
+| **Provider** | Runtime executor of a capture plan; produces artifacts, never evidence; probed via `tools/list` for `execute_capture_plan`; Playwright MCP / manual / future | collector; judge; a criterion-aware tool |
+| **G5** | Conditional `validate_run.py` gate: if preview occurred, require `confirm-round-*.json` with `confirmed=true` and matching `report_ref` | always-on preview gate; scanning Fill source for confirm refs |
+| **G6** | Conditional `validate_run.py` gate: if a ledger `observed` references an `evidence/` artifact, require the artifact to exist and a manifest entry to bind it to the matching L6.<n> | always-on evidence gate; scanning Fill source; judging pass/fail from the manifest |
 | **Blocking** | Acceptance failure that must recirculate (L5/L6, unsafe ops, …) | optional polish |
 | **Dogfood** | Run Design I/O on a real UI ask to test *process*, keep answer not demo code | shipping the throwaway page |
 | **SSOT** | Single source of truth for a declaration snippet | dual-edit attachments + references |
@@ -47,6 +59,7 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 | Path | Role |
 | --- | --- |
 | `packages/design-playbook/` | Public plugin product |
+| `packages/design-playbook-preview/` | Optional Preview MCP adapter (`preview_prototype`); independent install |
 | `packages/design-playbook/skills/` | Skills SSOT |
 | `docs/agents/` | Tracker + product workflow |
 | `.scratch/` | Specs, tickets, dogfood logs |
@@ -56,3 +69,6 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 
 - v0 polish: `.scratch/design-playbook-v0/phase.md` + `docs/agents/product-workflow.md`
 - **Elevate (wayfinder):** `.scratch/elevate-structure-install-skills/map.md` — structure, install, skill workflow decisions (plan-only until map clears)
+- **Pipeline plan+preview (implement):** `.scratch/pipeline-plan-preview/map.md` — map **Clear**；skill 序列 + G5 + optional `packages/design-playbook-preview/` landing in progress
+- **Criterion-addressable evidence (wayfinder→implement):** `.scratch/criterion-addressable-evidence/map.md` — observe\* 缝 + G6 + manifest//provider 契约；map **Clear**（2026-07-16），转 implement（G6 代码 + step 8 文案 + 词汇）
+- **Criterion-addressable evidence (wayfinder):** `.scratch/criterion-addressable-evidence/map.md` — post-Fill 运行取证契约：capture plan（derived）/ manifest（execution SSOT）/ provider 二分 / G6（plan-only until map clears）

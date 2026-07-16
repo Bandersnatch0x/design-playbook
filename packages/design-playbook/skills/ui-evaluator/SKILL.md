@@ -38,9 +38,13 @@ Record an evidence ledger before writing findings. Every L6 criterion has exactl
 ```text
 criterion: L6.<n>
 required:  <declared proof>
-observed:  <artifact, interaction, check result, or missing>
+observed:  <artifact path, interaction, check result, or missing>
 result:    pass|fail|blocked|N/A
 ```
+
+`observed` is either an **artifact path** (relative to the run root, e.g. `evidence/L6.3-error.png`) when a runtime capture was bound by a manifest, or **free-text** describing a manual observation. Both are legitimate; the machine seam (G6) only validates artifact-path references.
+
+Evidence is captured, not judged. A manifest entry records that an artifact was collected at a state — it does not say the criterion passed. `pass`/`fail` is this evaluator's verdict against `required` vs `observed`; a screenshot can prove a criterion false. Three ledgers, each one authority: `spec` L6 names **what to prove**; the manifest records **what happened**; this ledger decides **what it means**. Providers produce artifacts; the manifest binds them to criteria; the evaluator decides.
 
 For implemented UI, visible-state proof is a rendered inspection at the declared target viewport; behavior proof is an interaction trace or automated check; code-health proof is the relevant available test, type/lint, or affected build result. Planning-only proof is declaration coverage and must not claim a render or test occurred. Non-L6 declaration checks may be supporting observations or findings; they do not enter the machine ledger.
 

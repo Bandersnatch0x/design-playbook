@@ -2,6 +2,7 @@
 
 One **demonstrated** Design I/O run against [SwarSight](https://github.com/) (swarm-intelligence foresight platform; React + Tailwind + shadcn workbench). The plugin was loaded from this package and driven against a one-line ask. Screenshots + artifacts below are the output of that single run — a demonstration of the declared contract, not a claim that real UI quality was machine-proven. `scripts/validate_run.py` checks only the run-artifact *shape*; `tests/test_validate_run.py` validates these showcase files directly (not by copying them into fixtures). That proves structure, not that every future run is machine-verified.
 
+**Current orchestrator sequence** (skill SSOT): `ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → (observe*) → ui-evaluator`. This showcase run demonstrates the **declaration / decision / point-back** core (spec → decision report → point-back) from a live SwarSight pass; it does **not** include a `plan.md` handoff, Preview MCP confirm artifacts, or `observe*` evidence artifacts. `preview*`/`observe*` are optional (adapters must expose `preview_prototype` / `execute_capture_plan`); G5/G6 only apply when their artifacts occurred.
 **Ask:** `在 SwarSight 加一个模拟运行队列监控页：看每个模拟任务的状态、失败重试、资源占用。`
 
 ## Screenshots (every key step)

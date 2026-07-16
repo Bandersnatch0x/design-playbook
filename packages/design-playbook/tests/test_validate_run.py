@@ -12,20 +12,24 @@ PASS = FIX / "pass"
 FAIL = FIX / "fail"
 
 
-def run(spec: Path, pointback: Path) -> subprocess.CompletedProcess[str]:
+def run(
+        spec: Path,
+        pointback: Path,
+        *extra: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(VALIDATOR), str(spec), str(pointback)],
+        [sys.executable, str(VALIDATOR), str(spec), str(pointback), *extra],
         capture_output=True,
         text=True,
     )
 
 
 def expect_valid(
-        failures: list[str], name: str, spec: Path, pointback: Path) -> None:
+        failures: list[str], name: str, spec: Path, pointback: Path,
+        *extra: str) -> None:
     if not spec.is_file() or not pointback.is_file():
         failures.append(f"{name}: fixture pair is incomplete")
         return
-    result = run(spec, pointback)
+    result = run(spec, pointback, *extra)
     if result.returncode != 0:
         failures.append(
             f"{name}: expected exit 0, got {result.returncode}; "
@@ -40,11 +44,11 @@ def expect_valid(
 
 def expect_invalid(
         failures: list[str], name: str, spec: Path, pointback: Path,
-        diagnostic: str) -> None:
+        diagnostic: str, *extra: str) -> None:
     if not spec.is_file() or not pointback.is_file():
         failures.append(f"{name}: fixture pair is incomplete")
         return
-    result = run(spec, pointback)
+    result = run(spec, pointback, *extra)
     if result.returncode != 1:
         failures.append(
             f"{name}: expected artifact-invalid exit 1, got "
@@ -58,6 +62,24 @@ def expect_invalid(
             f"stdout={result.stdout!r}")
     else:
         print(f"  ok    {name} rejects with {diagnostic!r}")
+
+
+def _zero_findings_pair() -> tuple[Path, Path]:
+    return PASS / "zero-findings.spec.md", PASS / "zero-findings.point-back.md"
+
+
+def _g5_args(case_dir: Path) -> list[str]:
+    preview = case_dir / "preview"
+    report = case_dir / "decision-report.md"
+    args = ["--preview-dir", str(preview)]
+    if report.is_file():
+        args.extend(["--decision-report", str(report)])
+    return args
+
+
+def _g6_args(case_dir: Path) -> list[str]:
+    evidence = case_dir / "evidence"
+    return ["--evidence-dir", str(evidence), "--run-root", str(case_dir)]
 
 
 def main() -> int:
@@ -146,6 +168,103 @@ def main() -> int:
             "missing input must be an operational exit 2, not artifact exit 1")
     else:
         print("  ok    missing input exits 2")
+
+    # --- G5 conditional preview gate (matrix B) ---
+    spec, pb = _zero_findings_pair()
+
+    expect_valid(failures, "pass/g5-no-preview-omit-flag", spec, pb)
+    expect_valid(
+        failures,
+        "pass/g5-no-preview-empty-dir",
+        spec,
+        pb,
+        "--preview-dir",
+        str(PASS / "g5-no-preview"),
+    )
+
+    for name in (
+            "g5-preview-confirmed",
+            "g5-multi-round-last-confirmed",
+            "g5-aborted-then-confirmed"):
+        case = PASS / name
+        expect_valid(
+            failures, f"pass/{name}", spec, pb, *_g5_args(case))
+
+    expect_invalid(
+        failures,
+        "g5-preview-without-confirm",
+        spec,
+        pb,
+        "G5 preview",
+        *_g5_args(FAIL / "g5-preview-without-confirm"),
+    )
+    expect_invalid(
+        failures,
+        "g5-confirm-bad-report-ref",
+        spec,
+        pb,
+        "G5 preview",
+        *_g5_args(FAIL / "g5-confirm-bad-report-ref"),
+    )
+    expect_invalid(
+        failures,
+        "g5-only-aborted",
+        spec,
+        pb,
+        "G5 preview",
+        *_g5_args(FAIL / "g5-only-aborted"),
+    )
+    expect_invalid(
+        failures,
+        "g5-confirm-false-only",
+        spec,
+        pb,
+        "G5 preview",
+        *_g5_args(FAIL / "g5-confirm-false-only"),
+    )
+
+    # --- G6 conditional evidence-binding gate (matrix) ---
+    g6_spec, _ = _zero_findings_pair()
+
+    expect_valid(
+        failures,
+        "pass/g6-no-evidence",
+        g6_spec,
+        PASS / "g6-no-evidence" / "point-back.md",
+    )
+    expect_valid(
+        failures,
+        "pass/g6-no-evidence-omit-flag",
+        g6_spec,
+        PASS / "g6-no-evidence" / "point-back.md",
+        "--evidence-dir",
+        str(PASS / "g6-no-evidence" / "evidence"),
+    )
+    for name in (
+            "g6-evidence-bound",
+            "g6-multi-entry-latest",
+            "g6-manual-provider"):
+        case = PASS / name
+        expect_valid(
+            failures, f"pass/{name}", g6_spec,
+            case / "point-back.md", *_g6_args(case))
+
+    expect_invalid(
+        failures, "g6-dangling-ref", g6_spec,
+        FAIL / "g6-dangling-ref" / "point-back.md",
+        "G6 evidence", *_g6_args(FAIL / "g6-dangling-ref"))
+    expect_invalid(
+        failures, "g6-missing-artifact", g6_spec,
+        FAIL / "g6-missing-artifact" / "point-back.md",
+        "G6 evidence", *_g6_args(FAIL / "g6-missing-artifact"))
+    expect_invalid(
+        failures, "g6-unknown-criterion", g6_spec,
+        FAIL / "g6-unknown-criterion" / "point-back.md",
+        "G6 evidence", *_g6_args(FAIL / "g6-unknown-criterion"))
+    expect_invalid(
+        failures, "g6-pass-without-valid-binding", g6_spec,
+        FAIL / "g6-pass-without-valid-binding" / "point-back.md",
+        "G6 evidence", *_g6_args(FAIL / "g6-pass-without-valid-binding"))
 
     print()
     if failures:

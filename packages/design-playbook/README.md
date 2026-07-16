@@ -42,7 +42,7 @@ Bare `/design-io` is **not** the installed name — always use the `design-playb
 
 | Package | Use for |
 | --- | --- |
-| **design-playbook** | Spec → shell → fill → craft → evaluate / recirculate |
+| **design-playbook** | Spec? → plan? → shell → optional preview* → fill → craft → optional observe* → evaluate / recirculate |
 | ui-ux-pro-max | Style / palette / type search |
 | frontend-design | Anti-template visual direction |
 
@@ -64,9 +64,13 @@ Only authored content in this package (skills, pipeline commands, metadata, self
 
 ## Contract vs enforcement
 
+Evidence exists only to satisfy a declared criterion — an observation without a binding to an L6 acceptance item is telemetry, not evidence. Runtime capture is done by external providers; design-playbook owns the binding (manifest) and the verdict (ledger), never the runtime.
+
 The Design I/O run is a **declared, host-neutral contract** over plain-Markdown artifacts (spec, decision report, point-back ledger). Any coding agent that emits that shape can be checked; Claude Code and Codex are adapters over the same artifacts, and every generator, bridge, or design-system gate is an optional input, never a dependency.
 
-What is **deterministically enforced** today: plugin install/structure (`scripts/validate.py --strict`) and the run-artifact shape (`scripts/validate_run.py` — L1–L6 present; every top-level L6 item ordered `Given -> When -> Then`; one non-empty four-field evidence ledger row per `L6.<n>` with allowed results; four non-empty finding fields with non-empty source; exactly one explicit `## Verdict` of `Pass` or `Recirculate`; Pass requires every evidence result to be `pass` and exactly one issue-linked `0 blocking` closure per blocking finding; exit 0/`RUN OK`, exit 1/`RUN INVALID`, exit 2/`RUN ERROR`; regression-tested by `tests/test_validate_run.py`, which also validates the showcase artifacts directly). Everything else in the pipeline is agent-executed craft judgment, not a machine gate.
+Optional sibling package [`design-playbook-preview`](../design-playbook-preview/) is a stdio MCP adapter (`preview_prototype`) for disposable HTML prototypes; the orchestrator **probes** for it and skips preview when absent. design-playbook does not package-depend on it.
+
+What is **deterministically enforced** today: plugin install/structure (`scripts/validate.py --strict`) and the run-artifact shape (`scripts/validate_run.py` — L1–L6 present; every top-level L6 item ordered `Given -> When -> Then`; one non-empty four-field evidence ledger row per `L6.<n>` with allowed results; four non-empty finding fields with non-empty source; exactly one explicit `## Verdict` of `Pass` or `Recirculate`; Pass requires every evidence result to be `pass` and exactly one issue-linked `0 blocking` closure per blocking finding; exit 0/`RUN OK`, exit 1/`RUN INVALID`, exit 2/`RUN ERROR`; regression-tested by `tests/test_validate_run.py`, which also validates the showcase artifacts directly; **G5** is a *conditional* preview-confirm gate — enforced only when preview artifacts exist / `--preview-dir` is used; **G6** is a *conditional* evidence-binding gate — enforced only when a ledger `observed` references an `evidence/` artifact / `--evidence-dir` is used). The `observe*` step probes an external MCP tool `execute_capture_plan` (e.g. Playwright MCP) and is skipped when absent. Everything else in the pipeline is agent-executed craft judgment, not a machine gate.
 
 ## Codex
 

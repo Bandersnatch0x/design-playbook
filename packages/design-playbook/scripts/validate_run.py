@@ -9,14 +9,26 @@ Gates the run-level controls that the skills also declare in prose:
                            pass and every blocking finding to have a closure
   G4 recirculation bound - closure coverage prevents blockers being dropped;
                            the two-cycle stop policy remains agent-enforced
+  G5 preview confirm     - conditional: if preview occurred, require a
+                           confirmed record whose report_ref matches the
+                           current decision report (when provided)
+  G6 evidence binding    - conditional: if a ledger `observed` references an
+                           `evidence/` artifact, require the artifact to exist
+                           and a manifest entry to bind it to the matching
+                           L6.<n> (multi-entry: latest wins)
 
 Reads plain Markdown, so it is host-neutral: it accepts artifacts produced by
 any agent (Claude Code, Codex) that follow the declared shape.
 
-Usage:  validate_run.py <spec.md> <point-back.md>
+Usage:
+  validate_run.py <spec.md> <point-back.md>
+      [--preview-dir <path>] [--decision-report <path>]
+      [--evidence-dir <path>] [--run-root <path>]
 Exit 0 + "RUN OK"; exit 1 + one line per artifact violation; exit 2 on usage
 or artifact I/O errors.
 """
+import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -33,7 +45,8 @@ EVIDENCE_FIELDS = ("criterion", "required", "observed", "result")
 EVIDENCE_LINE = re.compile(
     r"^(criterion|required|observed|result):[ \t]*(.*)$", re.I | re.M)
 VALID_RESULTS = {"pass", "fail", "blocked", "n/a"}
-
+ROUND_HTML = re.compile(r"^round-\d+\.html$", re.I)
+CONFIRM_JSON = re.compile(r"^confirm-round-\d+\.json$", re.I)
 
 
 def _l6_body(text: str) -> str:
@@ -131,7 +144,7 @@ def _check_evidence(text: str, expected_l6: int, is_pass: bool) -> list[str]:
                 f"evidence: Pass requires row {i} result pass, got "
                 f"'{row['result'][0]}'")
 
-        l6_ref = re.fullmatch(r"L6\.(\d+)", criterion, re.I)
+        l6_ref = re.fullmatch(r"L6\.(\d+)", criterion.strip(), re.I)
         if not l6_ref and criterion:
             errs.append(
                 f"evidence: row {i} criterion must be exactly L6.<n>, got "
@@ -211,7 +224,8 @@ def check_pointback(text: str, expected_l6: int) -> list[str]:
             _normalise_issue(target) for target in CLOSURE_LINE.findall(text)
         ]
         if not closure_targets:
-            errs.append("point-back: Pass verdict but no '0 blocking' closure trail")
+            errs.append(
+                "point-back: Pass verdict but no '0 blocking' closure trail")
         else:
             known_targets = {_normalise_issue(issue) for _, issue in blocking}
             for i, issue in blocking:
@@ -223,8 +237,8 @@ def check_pointback(text: str, expected_l6: int) -> list[str]:
                         f"closure trail for issue '{issue}'")
                 elif matches > 1:
                     errs.append(
-                        f"point-back: blocking finding {i} has {matches} matching "
-                        f"closure trails for issue '{issue}'")
+                        f"point-back: blocking finding {i} has {matches} "
+                        f"matching closure trails for issue '{issue}'")
             for target in sorted(set(closure_targets) - known_targets):
                 errs.append(
                     "point-back: closure trail targets no blocking finding: "
@@ -232,21 +246,282 @@ def check_pointback(text: str, expected_l6: int) -> list[str]:
     return errs
 
 
-def run(spec_path: str, pb_path: str) -> list[str]:
+def preview_occurred(preview_dir: Path | None) -> bool:
+    """True when preview left log.md or round-*.html (ticket 04/06)."""
+    if preview_dir is None or not preview_dir.is_dir():
+        return False
+    if (preview_dir / "log.md").is_file():
+        return True
+    try:
+        return any(
+            p.is_file() and ROUND_HTML.match(p.name)
+            for p in preview_dir.iterdir())
+    except OSError:
+        return False
+
+
+def _resolve_report_ref(
+        ref: str, preview_dir: Path,
+        decision_report: Path | None) -> Path | None:
+    raw = Path(ref)
+    candidates: list[Path] = []
+    if raw.is_absolute():
+        candidates.append(raw)
+    else:
+        # run root = parent of preview/
+        candidates.append(preview_dir.parent / raw)
+        candidates.append(preview_dir / raw)
+        if decision_report is not None:
+            candidates.append(decision_report.parent / raw)
+        candidates.append(Path.cwd() / raw)
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                return candidate.resolve()
+        except OSError:
+            continue
+    return None
+
+
+def check_preview(
+        preview_dir: Path | None,
+        decision_report: Path | None) -> list[str]:
+    """G5 conditional preview confirmation gate."""
+    if not preview_occurred(preview_dir):
+        return []
+
+    assert preview_dir is not None  # for type checkers
+    confirms: list[tuple[Path, dict]] = []
+    try:
+        entries = list(preview_dir.iterdir())
+    except OSError as exc:
+        return [f"G5 preview: cannot read preview dir: {exc}"]
+
+    for path in entries:
+        if not path.is_file() or not CONFIRM_JSON.match(path.name):
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            return [f"G5 preview: invalid confirm record {path.name}: {exc}"]
+        if not isinstance(data, dict):
+            return [f"G5 preview: confirm record {path.name} is not an object"]
+        confirms.append((path, data))
+
+    true_confirms = [
+        (path, data) for path, data in confirms
+        if data.get("confirmed") is True
+    ]
+    if not true_confirms:
+        return [
+            "G5 preview: preview occurred but no confirm-round-*.json with "
+            "confirmed=true"
+        ]
+
+    wanted: Path | None = None
+    if decision_report is not None:
+        try:
+            wanted = decision_report.resolve()
+        except OSError as exc:
+            return [f"G5 preview: cannot resolve --decision-report: {exc}"]
+        if not wanted.is_file():
+            return [
+                f"G5 preview: --decision-report does not exist: "
+                f"{decision_report}"
+            ]
+
+    for path, data in true_confirms:
+        ref = data.get("report_ref")
+        if not isinstance(ref, str) or not ref.strip():
+            continue
+        resolved = _resolve_report_ref(ref.strip(), preview_dir, decision_report)
+        if resolved is None:
+            continue
+        if wanted is None or resolved == wanted:
+            return []
+
+    if wanted is not None:
+        return [
+            "G5 preview: no confirmed record whose report_ref matches "
+            f"--decision-report ({wanted.name})"
+        ]
+    return [
+        "G5 preview: confirmed record report_ref does not resolve to an "
+        "existing decision report"
+    ]
+
+
+EVIDENCE_PREFIX = "evidence/"
+
+
+def _ledger_observed(text: str) -> list[tuple[str, str]]:
+    """Return (criterion, observed) pairs for each evidence row."""
+    pairs: list[tuple[str, str]] = []
+    for block in re.split(r"\n\s*\n", text):
+        crit = re.search(r"^criterion:\s*(\S+)", block, re.I | re.M)
+        obs = re.search(r"^observed:\s*(.+)$", block, re.I | re.M)
+        if crit and obs:
+            pairs.append((crit.group(1).strip(), obs.group(1).strip()))
+    return pairs
+
+
+def _manifest_entries(evidence_dir: Path) -> list[dict]:
+    """Read .scratch/<run>/evidence/manifest.jsonl; one dict per non-empty line."""
+    path = evidence_dir / "manifest.jsonl"
+    if not path.is_file():
+        return []
+    entries: list[dict] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict):
+            entries.append(data)
+    return entries
+
+
+def check_evidence(
+        pointback_text: str,
+        expected_l6: int,
+        evidence_dir: Path | None,
+        run_root: Path | None) -> list[str]:
+    """G6 conditional evidence-binding gate.
+
+    Triggers only when a ledger ``observed`` references an ``evidence/``
+    artifact. For each such row, the artifact must exist and a manifest entry
+    must bind it to the matching L6.<n> (multi-entry: latest by ts wins).
+    Weak/conditional: rows with free-text observed are not checked; pass rows
+    are not required to reference evidence.
+    """
+    if evidence_dir is None or not evidence_dir.is_dir():
+        return []
+    root = run_root if run_root is not None else evidence_dir.parent
+    entries = _manifest_entries(evidence_dir)
+    valid_criterion_ids = {f"L6.{n}" for n in range(1, expected_l6 + 1)}
+
+    errs: list[str] = []
+    for criterion, observed in _ledger_observed(pointback_text):
+        if not observed.startswith(EVIDENCE_PREFIX):
+            continue  # free-text observation; G6 does not apply
+        artifact_path = root / observed
+        if not artifact_path.is_file():
+            errs.append(
+                f"G6 evidence: {criterion} artifact missing: {observed}")
+            continue
+        # ledger observed is run-root-relative ("evidence/<name>"); manifest
+        # artifact is evidence/-relative ("<name>", no prefix) per ticket 01.
+        # Normalise the ledger leaf and compare to the manifest artifact
+        # exactly; require the manifest criterion to match the ledger row.
+        leaf = observed[len(EVIDENCE_PREFIX):]
+        bound: list[dict] = []
+        for entry in entries:
+            if entry.get("criterion") != criterion:
+                continue
+            art = entry.get("artifact")
+            if isinstance(art, str) and art == leaf:
+                bound.append(entry)
+        if not bound:
+            # distinguish unknown-criterion (manifest binds a criterion not in
+            # spec) from no-binding (manifest criterion != ledger criterion)
+            unknown = [
+                e for e in entries
+                if isinstance(e.get("criterion"), str)
+                and e["criterion"] not in valid_criterion_ids
+                and isinstance(e.get("artifact"), str)
+                and e["artifact"] == leaf
+            ]
+            if unknown:
+                crit = unknown[0].get("criterion")
+                errs.append(
+                    f"G6 evidence: manifest binds unknown criterion {crit}")
+            else:
+                errs.append(
+                    f"G6 evidence: {criterion} no manifest entry binding "
+                    f"{observed}")
+            continue
+        latest = max(bound, key=lambda m: m.get("ts", ""))
+        if latest.get("criterion") not in valid_criterion_ids:
+            errs.append(
+                f"G6 evidence: manifest binds unknown criterion "
+                f"{latest.get('criterion')}")
+            continue
+        # artifact exists + bound -> valid; observed_state/result are the
+        # evaluator's call, not G6's.
+    return errs
+
+
+def run(
+        spec_path: str,
+        pb_path: str,
+        preview_dir: str | None = None,
+        decision_report: str | None = None,
+        evidence_dir: str | None = None,
+        run_root: str | None = None) -> list[str]:
     errs = []
     spec_text = Path(spec_path).read_text(encoding="utf-8")
     pointback_text = Path(pb_path).read_text(encoding="utf-8")
     errs += check_spec(spec_text)
     errs += check_pointback(pointback_text, len(_l6_items(spec_text)))
+    pd = Path(preview_dir) if preview_dir else None
+    dr = Path(decision_report) if decision_report else None
+    errs += check_preview(pd, dr)
+    ed = Path(evidence_dir) if evidence_dir else None
+    rr = Path(run_root) if run_root else None
+    errs += check_evidence(pointback_text, len(_l6_items(spec_text)), ed, rr)
     return errs
 
 
+def _parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="validate_run.py",
+        description="Deterministic seam over Design I/O run artifacts.",
+    )
+    parser.add_argument("spec", help="path to spec.md")
+    parser.add_argument("point_back", help="path to point-back.md")
+    parser.add_argument(
+        "--preview-dir",
+        default=None,
+        help="optional path to .scratch/<run>/preview/ for G5",
+    )
+    parser.add_argument(
+        "--decision-report",
+        default=None,
+        help="optional path to current decision report for G5 report_ref match",
+    )
+    parser.add_argument(
+        "--evidence-dir",
+        default=None,
+        help="optional path to .scratch/<run>/evidence/ for G6",
+    )
+    parser.add_argument(
+        "--run-root",
+        default=None,
+        help="optional run root for resolving evidence/ paths in G6 "
+             "(defaults to --evidence-dir parent)",
+    )
+    return parser.parse_args(argv[1:])
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) != 3:
-        print("usage: validate_run.py <spec.md> <point-back.md>")
-        return 2
     try:
-        errs = run(argv[1], argv[2])
+        args = _parse_args(argv)
+    except SystemExit as exc:
+        # argparse already printed usage
+        code = exc.code if isinstance(exc.code, int) else 2
+        return code if code else 2
+    try:
+        errs = run(
+            args.spec,
+            args.point_back,
+            preview_dir=args.preview_dir,
+            decision_report=args.decision_report,
+            evidence_dir=args.evidence_dir,
+            run_root=args.run_root,
+        )
     except (OSError, UnicodeError) as exc:
         print(f"RUN ERROR: cannot read artifacts: {exc}")
         return 2
