@@ -60,6 +60,7 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 | --- | --- |
 | `packages/design-playbook/` | Public plugin product |
 | `packages/design-playbook-preview/` | Optional Preview MCP adapter (`preview_prototype`); independent install |
+| `packages/design-playbook-evidence/` | Optional Evidence MCP adapter (`execute_capture_plan`); independent install |
 | `packages/design-playbook/skills/` | Skills SSOT |
 | `docs/agents/` | Tracker + product workflow |
 | `.scratch/` | Specs, tickets, dogfood logs |
@@ -68,7 +69,7 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 ## Active effort
 
 - v0 polish: `.scratch/design-playbook-v0/phase.md` + `docs/agents/product-workflow.md`
-- **Elevate (wayfinder):** `.scratch/elevate-structure-install-skills/map.md` — structure, install, skill workflow decisions (plan-only until map clears)
-- **Pipeline plan+preview (implement):** `.scratch/pipeline-plan-preview/map.md` — map **Clear**；skill 序列 + G5 + optional `packages/design-playbook-preview/` landing in progress
-- **Criterion-addressable evidence (wayfinder→implement):** `.scratch/criterion-addressable-evidence/map.md` — observe\* 缝 + G6 + manifest//provider 契约；map **Clear**（2026-07-16），转 implement（G6 代码 + step 8 文案 + 词汇）
-- **Criterion-addressable evidence (wayfinder):** `.scratch/criterion-addressable-evidence/map.md` — post-Fill 运行取证契约：capture plan（derived）/ manifest（execution SSOT）/ provider 二分 / G6（plan-only until map clears）
+- **Elevate (wayfinder Clear → implement):** `.scratch/elevate-structure-install-skills/map.md` — structure/install/skill-workflow decisions **Clear**; implement tickets 01–05 landed, 06 release gate = human (remote/tag/smoke)
+- **Pipeline plan+preview (implement Clear):** `.scratch/pipeline-plan-preview/map.md` — skill 序列 + G5 + optional `packages/design-playbook-preview/` landed
+- **Criterion-addressable evidence (implement Clear):** `.scratch/criterion-addressable-evidence/map.md` — G6 + step 8 `(observe*)` + vocabulary + optional `packages/design-playbook-evidence/` (`execute_capture_plan`); dogfood 004 (manual) + 005 (live provider) + 007 (real Claude host, portable config) green
+- **Architecture review (2026-07-17):** `.scratch/architecture-review-20260717/map.md` — run-seam review; pre-release **zero code changes**

@@ -79,6 +79,8 @@ Six model-invoked skills (`/design-playbook:<name>`):
 ```text
 .claude-plugin/marketplace.json   ← repo-root catalog (source: ./packages/design-playbook)
 packages/design-playbook/         ← public plugin (skills, commands, examples, showcase, LICENSE, NOTICE)
+packages/design-playbook-preview/ ← optional MCP: preview_prototype (G5 / preview*)
+packages/design-playbook-evidence/← optional MCP: execute_capture_plan (G6 / observe*)
 docs/agents/  docs/adr/           ← engineering shell (tracker, workflow, decisions)
 CONTEXT.md  .scratch/             ← glossary, specs, tickets, dogfood logs
 ```

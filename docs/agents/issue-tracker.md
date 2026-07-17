@@ -32,6 +32,7 @@ Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
 ## Active product effort
 
 - v0 (mostly done): `.scratch/design-playbook-v0/` (see `docs/agents/product-workflow.md`).
-- **Wayfinder elevate:** `.scratch/elevate-structure-install-skills/` — map `map.md`; structure / install / skill-workflow decisions.
-- **Wayfinder pipeline-plan-preview:** `.scratch/pipeline-plan-preview/` — map `map.md`; plan 前移 + ui-picker ⇄ preview 循环 + 机器 gate 决策。已 **Clear**（2026-07-16）；implement handoff #1–#5 已落地（skill/G5/adapter/CONTEXT/dogfood；见 map.md）。
-- **Wayfinder criterion-addressable-evidence:** `.scratch/criterion-addressable-evidence/` — map `map.md`; post-Fill 运行取证契约（capture plan / manifest / provider / G6）。已 **Clear**（2026-07-16），转 implement（G6 代码 + step 8 文案 + 词汇；见 map.md「Map status」）。
+- **Wayfinder elevate:** `.scratch/elevate-structure-install-skills/` — map `map.md`; structure/install/skill-workflow。决策 **Clear**；implement 01–05 landed，06 release gate 余 human 步骤（remote/tag/smoke）。
+- **Wayfinder pipeline-plan-preview:** `.scratch/pipeline-plan-preview/` — map `map.md`; plan 前移 + preview 循环 + G5。**Clear** + implement handoff 落地（skill/G5/adapter/CONTEXT/dogfood）。
+- **Wayfinder criterion-addressable-evidence:** `.scratch/criterion-addressable-evidence/` — map `map.md`; post-Fill 运行取证（capture plan / manifest / provider / G6）。决策 **Clear**（2026-07-16）；implement **Clear**（2026-07-17）：G6+fixtures+step 8+词汇 + optional `packages/design-playbook-evidence/`；dogfood 004/005。
+- **Architecture review (2026-07-17):** `.scratch/architecture-review-20260717/map.md` — run-seam architecture review; 4 候选（manifest schema / validate.py grep / report_ref 三处 / Gate Protocol）经三方辩论 + 代码核验 → 2 CUT、1 DEFER、1 可选小做；**净结论：预 release 零代码改动**，run-seam 现状是健康的有意契约边界。reopen 触发条件见 map.md。
