@@ -185,7 +185,8 @@ def main() -> int:
     for name in (
             "g5-preview-confirmed",
             "g5-multi-round-last-confirmed",
-            "g5-aborted-then-confirmed"):
+            "g5-aborted-then-confirmed",
+            "g5-floor-fail-then-revised"):
         case = PASS / name
         expect_valid(
             failures, f"pass/{name}", spec, pb, *_g5_args(case))

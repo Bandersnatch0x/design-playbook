@@ -1,0 +1,12 @@
+{
+  "round": 2,
+  "report_ref": "decision-report.md",
+  "confirmed": true,
+  "floor_pass": true,
+  "selected_options": [
+    "确认通过"
+  ],
+  "feedback": "确认通过，无修改意见",
+  "timestamp": "2026-07-18T00:25:00+08:00",
+  "prototype_path": "preview/round-2.html"
+}

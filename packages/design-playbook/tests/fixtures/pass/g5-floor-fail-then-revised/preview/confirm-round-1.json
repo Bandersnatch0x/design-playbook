@@ -1,0 +1,13 @@
+{
+  "round": 1,
+  "report_ref": "decision-report.md",
+  "confirmed": false,
+  "floor_pass": false,
+  "floor_failure": "confirm with no substantive feedback: empty feedback and no anchor with a non-empty comment",
+  "selected_options": [
+    "确认通过"
+  ],
+  "feedback": "",
+  "timestamp": "2026-07-18T00:20:59+08:00",
+  "prototype_path": "preview/round-1.html"
+}
