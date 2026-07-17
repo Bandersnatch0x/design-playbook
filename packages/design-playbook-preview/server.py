@@ -24,7 +24,7 @@ import threading
 import time
 import webbrowser
 from datetime import datetime, timezone
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer as HTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
@@ -362,6 +362,7 @@ def _kill_browser_proc(
                 stderr=subprocess.DEVNULL,
                 check=False,
                 env=env,
+                timeout=8,
             )
         else:
             # pkill -f is common on mac/linux for matching cmdline
@@ -375,6 +376,8 @@ def _kill_browser_proc(
                     check=False,
                 )
         _log(f"browser kill by profile: {profile_dir}")
+    except subprocess.TimeoutExpired:
+        _log(f"browser kill by profile timed out: {profile_dir}")
     except Exception as exc:  # noqa: BLE001
         _log(f"browser kill by profile failed: {exc}")
 
@@ -412,6 +415,34 @@ def _rm_tree(path: str | None) -> None:
         shutil.rmtree(path, ignore_errors=True)
     except Exception:  # noqa: BLE001
         pass
+
+
+
+
+def _stop_http_server(
+    server: HTTPServer,
+    serve_thread: threading.Thread,
+    *,
+    timeout_s: float = 1.5,
+) -> None:
+    """Stop the threaded preview server and prove its serve loop exited."""
+    errors: list[str] = []
+    try:
+        server.shutdown()
+    except Exception as exc:  # noqa: BLE001
+        errors.append(f"http shutdown failed: {exc}")
+    try:
+        server.server_close()
+    except Exception as exc:  # noqa: BLE001
+        errors.append(f"http server_close failed: {exc}")
+
+    serve_thread.join(timeout=timeout_s)
+    if serve_thread.is_alive():
+        errors.append(f"http serve thread still alive after {timeout_s:.1f}s")
+    if errors:
+        message = "; ".join(errors)
+        _log(message)
+        raise RuntimeError(message)
 
 
 def _parse_anchors(raw: str) -> list[dict[str, Any]]:
@@ -1370,9 +1401,11 @@ def _collect_via_browser(
                 self.send_error(404)
                 return
             data = page.encode("utf-8")
+            self.close_connection = True
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(data)))
+            self.send_header("Connection", "close")
             self.end_headers()
             self.wfile.write(data)
 
@@ -1404,9 +1437,11 @@ def _collect_via_browser(
                     "anchors": anchors,
                 }
             reply = _done_page_html()
+            self.close_connection = True
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(reply)))
+            self.send_header("Connection", "close")
             self.end_headers()
             self.wfile.write(reply)
             self.wfile.flush()
@@ -1414,7 +1449,9 @@ def _collect_via_browser(
 
     server = HTTPServer(("127.0.0.1", 0), Handler)
     port = server.server_address[1]
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(
+        target=server.serve_forever, name="dpb-preview-http", daemon=True
+    )
     thread.start()
     url = f"http://127.0.0.1:{port}/"
     _log(f"preview UI at {url}")
@@ -1429,13 +1466,15 @@ def _collect_via_browser(
                 "anchors": [],
             }
     finally:
-        # Hide first for immediate visual feedback, then stop HTTP cleanly
-        # before terminating Chromium so the socket is not reset mid-request.
+        # Hide for immediate visual feedback. Kill the owned Chromium next so
+        # keep-alive sockets cannot block HTTPServer.shutdown; response is
+        # already flushed before done.set(). Bound HTTP stop so MCP returns.
         _request_browser_window_close(browser_proc)
-        server.shutdown()
-        server.server_close()
         _kill_browser_proc(browser_proc, browser_profile)
-        _rm_tree(browser_profile)
+        try:
+            _stop_http_server(server, thread, timeout_s=1.5)
+        finally:
+            _rm_tree(browser_profile)
     # merge anchors into feedback for log readability
     result["feedback"] = _format_feedback(result.get("feedback") or "", result.get("anchors") or [])
     return result
