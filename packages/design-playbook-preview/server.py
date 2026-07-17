@@ -159,7 +159,9 @@ def _ensure_prototype(path_arg: str | None, html: str | None, round_n: int,
 
 def _append_log(preview_dir: Path, *, round_n: int, report_ref: str,
                 feedback: str, aborted: bool, selected: list[str],
-                anchors: list[dict[str, Any]] | None = None) -> None:
+                anchors: list[dict[str, Any]] | None = None,
+                floor_pass: bool | None = None,
+                floor_failure: str = "") -> None:
     preview_dir.mkdir(parents=True, exist_ok=True)
     log_path = preview_dir / "log.md"
     if not log_path.is_file():
@@ -173,6 +175,10 @@ def _append_log(preview_dir: Path, *, round_n: int, report_ref: str,
         f"- aborted: {str(aborted).lower()}\n"
         f"- anchors: {len(anchors or [])}\n"
     )
+    if floor_pass is not None:
+        block += f"- floor_pass: {str(floor_pass).lower()}\n"
+        if floor_failure:
+            block += f"- floor_failure: {floor_failure}\n"
     if anchors:
         for i, a in enumerate(anchors, 1):
             sel = a.get("selector") or ""
@@ -1572,6 +1578,8 @@ def handle_preview_prototype(args: dict[str, Any]) -> dict[str, Any]:
         aborted=bool(decision["aborted"]),
         selected=list(decision["selected_options"]),
         anchors=list(decision.get("anchors") or []),
+        floor_pass=floor_pass,
+        floor_failure=floor_failure,
     )
     return {
         "confirmed": confirmed,
