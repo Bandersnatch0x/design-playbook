@@ -100,7 +100,8 @@ def native_order(text: str) -> tuple[str, ...] | None:
     lines = [line for line in text.splitlines() if line.startswith("Native desktop order:")]
     if len(lines) != 1:
         return None
-    return tuple(re.findall(r"`([^`]+)`", lines[0]))
+    seq = lines[0].split(".", 1)[0]
+    return tuple(re.findall(r"`([^`]+)`", seq))
 
 
 orchestrator_order = native_order(orchestrator)
@@ -117,11 +118,26 @@ print("== Dogfood 004 regression guards ==")
 
 
 def section_between(text: str, start: str, end: str) -> str:
-    if text.count(start) != 1 or text.count(end) != 1:
+    """Slice body between two heading labels, robust to step renumbering.
+
+    ``"### 5. Accept"`` matches ``"### 9. Accept"`` — the numeric step is
+    optional. Returns "" if either anchor is absent or appears more than once.
+    """
+    def _anchor(label: str) -> str:
+        m = re.match(r"^(#+\s*)", label)
+        if m:
+            prefix = re.escape(m.group(1))
+            body = re.sub(r"^\d+\.\s*", "", label[len(m.group(1)):])
+            return prefix + r"(?:\d+\.\s*)?" + re.escape(body)
+        return re.escape(label)
+
+    start_re = re.compile(_anchor(start))
+    end_re = re.compile(_anchor(end))
+    if len(start_re.findall(text)) != 1 or len(end_re.findall(text)) != 1:
         return ""
-    _, tail = text.split(start, 1)
-    body, separator, _ = tail.partition(end)
-    return body if separator else ""
+    _, tail = start_re.split(text, 1)
+    parts = end_re.split(tail, 1)
+    return parts[0] if len(parts) > 1 else ""
 
 
 evaluator = (PKG / "skills" / "ui-evaluator" / "SKILL.md").read_text(encoding="utf-8")

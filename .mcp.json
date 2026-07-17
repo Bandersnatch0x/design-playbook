@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "design-playbook-preview": {
+      "command": "python",
+      "args": [
+        "packages/design-playbook-preview/server.py"
+      ],
+      "timeout": 3600000
+    },
+    "design-playbook-evidence": {
+      "command": "python",
+      "args": [
+        "packages/design-playbook-evidence/server.py"
+      ],
+      "env": {
+        "DESIGN_PLAYBOOK_RUN_ROOT": "."
+      },
+      "timeout": 3600000
+    }
+  }
+}

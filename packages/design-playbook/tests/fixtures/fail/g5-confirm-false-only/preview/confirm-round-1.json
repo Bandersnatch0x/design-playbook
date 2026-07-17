@@ -1,0 +1,11 @@
+{
+  "round": 1,
+  "report_ref": "decision-report.md",
+  "confirmed": false,
+  "selected_options": [
+    "\u9700\u8981\u4fee\u6539"
+  ],
+  "feedback": "need change",
+  "timestamp": "2026-07-16T12:00:00+08:00",
+  "prototype_path": "preview/round-1.html"
+}
