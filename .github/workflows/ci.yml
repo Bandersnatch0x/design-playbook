@@ -23,3 +23,16 @@ jobs:
         run: python3 scripts/validate.py
       - name: Validate run seam
         run: python3 packages/design-playbook/tests/test_validate_run.py
+      - name: Evidence MCP adapter tests
+        run: python3 packages/design-playbook-evidence/test_server_stdio.py
+      - name: Syntax check (all Python)
+        # preview/evidence servers + validate scripts: preview test drives a
+        # real browser + Windows ctypes so can't run headless; py_compile is
+        # the syntax gate that still catches regressions on every push.
+        run: |
+          python3 -m py_compile \
+            packages/design-playbook-preview/server.py \
+            packages/design-playbook-evidence/server.py \
+            packages/design-playbook-evidence/test_server_stdio.py \
+            scripts/validate.py \
+            packages/design-playbook/scripts/validate_run.py
