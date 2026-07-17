@@ -93,15 +93,15 @@ After the decision report exists, probe MCP `tools/list` for **`preview_prototyp
 - **Present** → run the preview loop in this orchestrator (not inside `ui-picker`):
   1. Host agent generates a disposable prototype HTML (structure-semantics floor: readable scene, named template regions, key component roles as placeholders). Path under `.scratch/<run>/preview/round-{n}.html`.
   2. Call `preview_prototype` with `path` (preferred) or `html`, plus `summary`, `round`, `report_ref` (current decision report), optional `options`.
-  3. Adapter shows the prototype, collects feedback, writes confirm/log under `.scratch/<run>/preview/`.
-  4. On “需要修改”: append feedback to `preview/log.md`, revise the decision report in place (mark round), generate next prototype; **same blocker two repair rounds without new evidence → stop the loop and report**.
-  5. On confirmed: proceed to Fill only with the confirmed decision report (+ plan pointers).
+  3. Adapter shows the prototype, collects feedback, applies the **feedback floor** (ADR-0008: non-empty feedback, OR ≥1 anchor with non-empty selector + non-empty comment), writes confirm/log under `.scratch/<run>/preview/`. A confirm that fails the floor is written with `confirmed: false` + `floor_failure` reason — it does **not** count as a confirm.
+  4. On “需要修改” (or `confirmed: false` from a floor failure): append feedback to `preview/log.md`, revise the decision report in place (mark round), generate next prototype; **same blocker two repair rounds without new evidence → stop the loop and report**.
+  5. On confirmed: the tool's `confirmed=true` is **not authoritative on its own** — the confirm record must also carry `floor_pass: true`. Proceed to Fill only with the confirmed + floor-passed decision report (+ plan pointers).
 
 **Native desktop:** still run Web preview when the adapter exists; coverage is **render-surface seam and above** only. Note that limitation once in `preview/log.md`. Do not skip preview solely because the route is native (skip only when the adapter is missing).
 
 **Hard boundary:** never copy `preview/round-*.html`, preview-only assets, or fake data shells into the Fill source tree. Fill consumes report semantics, not prototype files.
 
-**Done when:** either preview was skipped (no adapter), or a `confirm-round-*.json` with `confirmed: true` matches the current decision report (G5 when `validate_run.py` is given `--preview-dir` / `--decision-report`).
+**Done when:** either preview was skipped (no adapter), or a `confirm-round-*.json` with `confirmed: true` **and `floor_pass: true`** matches the current decision report (G5 when `validate_run.py` is given `--preview-dir` / `--decision-report`). A confirmed record without `floor_pass` fails G5 — empty/garbage feedback is a silent false-pass that must not reach Fill.
 
 ### 6. Fill
 

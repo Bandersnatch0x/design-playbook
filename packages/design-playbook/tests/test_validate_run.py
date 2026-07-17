@@ -222,6 +222,14 @@ def main() -> int:
         "G5 preview",
         *_g5_args(FAIL / "g5-confirm-false-only"),
     )
+    expect_invalid(
+        failures,
+        "g5-confirm-floor-fail",
+        spec,
+        pb,
+        "failed feedback floor",
+        *_g5_args(FAIL / "g5-confirm-floor-fail"),
+    )
 
     # --- G6 conditional evidence-binding gate (matrix) ---
     g6_spec, _ = _zero_findings_pair()
@@ -265,6 +273,21 @@ def main() -> int:
         failures, "g6-pass-without-valid-binding", g6_spec,
         FAIL / "g6-pass-without-valid-binding" / "point-back.md",
         "G6 evidence", *_g6_args(FAIL / "g6-pass-without-valid-binding"))
+
+    # --- ADR-0008 adapter floor self-check (server.py) ---
+    preview_server = PACKAGE.parent / "design-playbook-preview" / "server.py"
+    if preview_server.is_file():
+        sc = subprocess.run(
+            [sys.executable, str(preview_server), "--self-check"],
+            capture_output=True, text=True)
+        if sc.returncode != 0 or "FLOOR SELF-CHECK PASSED" not in sc.stdout:
+            failures.append(
+                f"adapter floor self-check: exit {sc.returncode}; "
+                f"stdout={sc.stdout!r} stderr={sc.stderr!r}")
+        else:
+            print("  ok    adapter floor self-check passed")
+    else:
+        failures.append("adapter floor self-check: server.py not found")
 
     print()
     if failures:
