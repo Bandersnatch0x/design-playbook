@@ -23,12 +23,13 @@ jobs:
         run: python3 scripts/validate.py
       - name: Validate run seam
         run: python3 packages/design-playbook/tests/test_validate_run.py
-      - name: Evidence MCP adapter tests
-        run: python3 packages/design-playbook-evidence/test_server_stdio.py
       - name: Syntax check (all Python)
-        # preview/evidence servers + validate scripts: preview test drives a
-        # real browser + Windows ctypes so can't run headless; py_compile is
-        # the syntax gate that still catches regressions on every push.
+        # MCP server suites (evidence + preview) drive a real browser and
+        # don't belong in headless CI: preview needs Windows ctypes; evidence
+        # needs Playwright + chromium without --no-sandbox. py_compile is the
+        # syntax gate that still catches import/syntax regressions on every
+        # push. Runtime coverage stays with local dogfood (006/007) and the
+        # evidence suite run before each release.
         run: |
           python3 -m py_compile \
             packages/design-playbook-preview/server.py \
