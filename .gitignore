@@ -13,8 +13,11 @@ dist-ssr
 .worktrees/
 *.local
 
-# local agent scratch (optional: remove this line if you want tickets in git)
-# .scratch/
+# Local agent planning, research, dogfood, and temporary artifacts.
+.scratch/
+
+# Stray debug screenshots at repo root (showcase/screenshots/ is tracked).
+/*.png
 
 # Editor directories and files
 .vscode/*

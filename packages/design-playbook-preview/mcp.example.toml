@@ -1,0 +1,4 @@
+# Codex ~/.codex/config.toml example. Replace the placeholder locally.
+[mcp_servers.design-playbook-preview]
+command = "python"
+args = ["<abs-path-to-repo>/packages/design-playbook-preview/server.py"]

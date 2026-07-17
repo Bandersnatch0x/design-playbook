@@ -4,13 +4,16 @@
 
 ## 北极星（v0）
 
-一次 `/design-io`：
+一次 `/design-io`（编排序列 SSOT 见 `packages/design-playbook/skills/design-playbook/SKILL.md`）：
 
-1. L5/L6 `spec.md`
-2. 写码前 decision report
-3. point-back 验收
-4. blocking 回流声明层
-5. 陌生人可复制安装（package README）
+`ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → (observe*) → ui-evaluator`
+
+1. L5/L6 `spec.md`（缺则先 ux-spec；有则 plan 轻量交接）
+2. 写码前 decision report（`ui-picker` 止于 report）
+3. 可选 `preview*`（MCP `preview_prototype` 存在才跑；确认后才进 Fill；G5 条件 gate）
+4. point-back 验收；可选 `observe*` 在 craft 后、验收前从宿主运行态采集 criterion-addressable 证据（manifest bind，ledger observed 引用 `evidence/` 工件；G6 条件 gate）
+5. blocking 回流声明层
+6. 陌生人可复制安装（package README）
 
 ## 阶段
 
@@ -53,3 +56,11 @@
 ## Release gate
 
 见 [`release-checklist.md`](release-checklist.md)：五步门 + semver tag。静态部分由 CI（`.github/workflows/ci.yml` -> `scripts/validate.py`）自动跑；会话级步骤仍手动。`git init` + 公开 remote 是公开 claim 的硬前置（ADR-0006 / 票 06）。
+
+## Optional preview adapter
+
+Sibling package `packages/design-playbook-preview/` (stdio MCP, tool `preview_prototype`). Independent install; design-playbook does not package-depend. Wire via repo-root `.mcp.json` or host MCP config. See package README.
+
+## Optional evidence provider
+
+`observe*` probes for an external MCP tool `execute_capture_plan` (e.g. Playwright MCP). When present, the orchestrator derives a capture plan from spec L6, a provider executes it producing an artifact, and the orchestrator binds it to the criterion in `.scratch/<run>/evidence/manifest.jsonl`. When absent, `ui-evaluator` ledger `observed` stays free-text (current behavior) and G6 does not trigger. design-playbook owns the binding (manifest) and the verdict (ledger), never the runtime.

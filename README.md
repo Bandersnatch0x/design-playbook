@@ -6,7 +6,7 @@
 
 ### *Design I/O for coding agents — declarations + contracts that make UI generation constrained, reviewable, and recirculatable.*
 
-[![Version](https://img.shields.io/badge/Version-0.1.0-2DD4BF?style=flat-square&logo=semver&logoColor=black)](.#)
+[![Version](https://img.shields.io/badge/Version-0.2.0-2DD4BF?style=flat-square&logo=semver&logoColor=black)](.#)
 [![License](https://img.shields.io/badge/License-MIT-2DD4BF?style=flat-square&logo=opensourceinitiative&logoColor=black)](./packages/design-playbook/LICENSE)
 [![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-2DD4BF?style=flat-square&logo=claude&logoColor=black)](.#)
 [![Skills](https://img.shields.io/badge/Skills-6-2DD4BF?style=flat-square)](.#)
@@ -21,7 +21,7 @@
 
 ## ✨ What it is
 
-A Claude Code / Codex plugin. One predictable pass per run — **Design I/O**: `plan → shell → fill → craft → accept`, where acceptance **points back** to the declaration that owns each failure, and blocking findings **recirculate** until closed.
+A Claude Code / Codex plugin. One predictable pass per run — **Design I/O**: `ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → (observe*) → ui-evaluator`, where acceptance **points back** to the declaration that owns each failure, and blocking findings **recirculate** until closed. `?` = conditional entry; `preview*`/`observe*` run only when their optional MCP adapter is present (`preview_prototype` before Fill, `execute_capture_plan` after craft) — otherwise skipped. `preview*` is a human-in-the-loop confirm gate (G5); `observe*` captures criterion-addressable runtime evidence into a manifest the evaluator binds to a criterion (G6).
 
 - **Declarations** *(what good is)*: `spec` · `domain` · `craft` · `design` · `components` · `template`
 - **Contracts** *(how work enters the pipeline)*: `skill` (timing) · `evaluator` (acceptance + recirculate)
@@ -69,7 +69,7 @@ Six model-invoked skills (`/design-playbook:<name>`):
 
 | Package | Use for |
 | :--- | :--- |
-| **design-playbook** | Spec → shell → craft → point-back accept |
+| **design-playbook** | Spec? → plan? → shell → optional preview* → fill → craft → optional observe* → point-back |
 | [ui-ux-pro-max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | Style / palette / type search |
 | `frontend-design` | Anti-template visual direction |
 | [native-feel-skill](https://github.com/yetone/native-feel-skill) | Full native-feel depth (WebView, IPC, memory) |
@@ -79,6 +79,8 @@ Six model-invoked skills (`/design-playbook:<name>`):
 ```text
 .claude-plugin/marketplace.json   ← repo-root catalog (source: ./packages/design-playbook)
 packages/design-playbook/         ← public plugin (skills, commands, examples, showcase, LICENSE, NOTICE)
+packages/design-playbook-preview/ ← optional MCP: preview_prototype (G5 / preview*)
+packages/design-playbook-evidence/← optional MCP: execute_capture_plan (G6 / observe*)
 docs/agents/  docs/adr/           ← engineering shell (tracker, workflow, decisions)
 CONTEXT.md  .scratch/             ← glossary, specs, tickets, dogfood logs
 ```
