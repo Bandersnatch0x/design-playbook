@@ -185,22 +185,50 @@ def _append_log(preview_dir: Path, *, round_n: int, report_ref: str,
 
 def _write_confirm(preview_dir: Path, *, round_n: int, report_ref: str,
                    selected: list[str], feedback: str,
-                   prototype: Path) -> Path:
+                   prototype: Path,
+                   confirmed: bool, floor_pass: bool,
+                   floor_failure: str = "") -> Path:
     digest = hashlib.sha256(prototype.read_bytes()).hexdigest()
     record = {
         "round": round_n,
         "report_ref": report_ref,
-        "confirmed": True,
+        "confirmed": confirmed,
+        "floor_pass": floor_pass,
         "selected_options": selected,
         "feedback": feedback,
         "timestamp": _now_iso(),
         "prototype_path": f"preview/{prototype.name}",
         "prototype_html_hash": digest,
     }
+    if floor_failure:
+        record["floor_failure"] = floor_failure
     out = preview_dir / f"confirm-round-{round_n}.json"
     out.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n",
                    encoding="utf-8")
     return out
+
+
+def _check_feedback_floor(feedback: str,
+                          anchors: list[dict[str, Any]]) -> tuple[bool, str]:
+    """ADR-0008 preview feedback floor (structural, machine-checkable).
+
+    A confirm passes the floor when the feedback is non-empty OR at least one
+    anchor carries both a non-empty selector and a non-empty comment. This is
+    deliberately structural; semantic quality is left to ui-evaluator (G6).
+    Returns (floor_pass, floor_failure_reason).
+    """
+    feedback = (feedback or "").strip()
+    if feedback:
+        return True, ""
+    if anchors:
+        for a in anchors:
+            if not isinstance(a, dict):
+                continue
+            sel = str(a.get("selector") or "").strip()
+            note = str(a.get("comment") or "").strip()
+            if sel and note:
+                return True, ""
+    return False, "confirm with no substantive feedback: empty feedback and no anchor with a non-empty comment"
 
 
 def _screen_size() -> tuple[int, int]:
@@ -1475,8 +1503,16 @@ def _collect_via_browser(
             _stop_http_server(server, thread, timeout_s=1.5)
         finally:
             _rm_tree(browser_profile)
+    # ADR-0008: floor is checked against the RAW feedback (pre-format), else
+    # _format_feedback would always make it non-empty by merging anchors.
+    raw_feedback = result.get("feedback") or ""
+    raw_anchors = list(result.get("anchors") or [])
+    floor_pass, floor_failure = _check_feedback_floor(raw_feedback, raw_anchors)
+    result["floor_pass"] = floor_pass
+    if not floor_pass:
+        result["floor_failure"] = floor_failure
     # merge anchors into feedback for log readability
-    result["feedback"] = _format_feedback(result.get("feedback") or "", result.get("anchors") or [])
+    result["feedback"] = _format_feedback(raw_feedback, raw_anchors)
     return result
 
 
@@ -1506,8 +1542,16 @@ def handle_preview_prototype(args: dict[str, Any]) -> dict[str, Any]:
         path_arg, html, round_n, preview_dir)
 
     decision = _collect_via_browser(prototype, summary.strip(), options, round_n)
+    floor_pass = bool(decision.get("floor_pass"))
+    floor_failure = str(decision.get("floor_failure") or "")
+    # ADR-0008: a confirm whose feedback fails the structural floor is NOT
+    # authoritative — write the record with confirmed=false + floor_failure
+    # (single source of truth on disk and in payload) so the orchestrator
+    # treats it as not-yet-confirmed (revise) instead of advancing to Fill.
+    user_confirmed = bool(decision["confirmed"]) and not decision["aborted"]
+    confirmed = user_confirmed and floor_pass
     confirm_path = ""
-    if decision["confirmed"] and not decision["aborted"]:
+    if user_confirmed:
         out = _write_confirm(
             preview_dir,
             round_n=round_n,
@@ -1515,6 +1559,9 @@ def handle_preview_prototype(args: dict[str, Any]) -> dict[str, Any]:
             selected=decision["selected_options"],
             feedback=decision["feedback"],
             prototype=prototype,
+            confirmed=confirmed,
+            floor_pass=floor_pass,
+            floor_failure=floor_failure,
         )
         confirm_path = str(out)
     _append_log(
@@ -1527,7 +1574,8 @@ def handle_preview_prototype(args: dict[str, Any]) -> dict[str, Any]:
         anchors=list(decision.get("anchors") or []),
     )
     return {
-        "confirmed": bool(decision["confirmed"]),
+        "confirmed": confirmed,
+        "floor_pass": floor_pass,
         "selected_options": list(decision["selected_options"]),
         "feedback": decision["feedback"],
         "anchors": list(decision.get("anchors") or []),
@@ -1635,5 +1683,27 @@ def serve() -> None:
             })
 
 
+def _self_check_floor() -> None:
+    """ADR-0008 floor branch logic self-check (ponytail: one runnable check)."""
+    cases = [
+        ("empty + no anchors", "", [], False),
+        ("whitespace-only feedback", "   \n  ", [], False),
+        ("non-empty feedback", "ok", [], True),
+        ("anchor with comment", "", [{"selector": "h2", "comment": "x"}], True),
+        ("anchor no comment (0015 garbage)", "",
+         [{"selector": "h2", "comment": ""}], False),
+        ("anchor empty selector", "",
+         [{"selector": "", "comment": "x"}], False),
+        ("non-dict anchor skipped", "", ["not-a-dict"], False),
+    ]
+    for label, fb, anc, want in cases:
+        got, _ = _check_feedback_floor(fb, anc)
+        assert got == want, f"{label}: want {want}, got {got}"
+    print("FLOOR SELF-CHECK PASSED")
+
+
 if __name__ == "__main__":
-    serve()
+    if len(sys.argv) > 1 and sys.argv[1] == "--self-check":
+        _self_check_floor()
+    else:
+        serve()

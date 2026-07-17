@@ -318,6 +318,21 @@ def check_preview(
             "confirmed=true"
         ]
 
+    # ADR-0008: a confirmed record must also pass the feedback floor. Older
+    # records without floor_pass (pre-ADR) cannot be distinguished from a
+    # floor-failure, so require floor_pass=true explicitly.
+    floor_fails = [
+        (path, data) for path, data in true_confirms
+        if data.get("floor_pass") is not True
+    ]
+    if floor_fails:
+        path, data = floor_fails[0]
+        reason = data.get("floor_failure") or "no floor_pass=true"
+        return [
+            f"G5 preview: confirmed record {path.name} failed feedback floor: "
+            f"{reason}"
+        ]
+
     wanted: Path | None = None
     if decision_report is not None:
         try:

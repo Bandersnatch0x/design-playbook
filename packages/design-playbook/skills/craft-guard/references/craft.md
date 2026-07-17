@@ -12,6 +12,16 @@
 - 阴影档位少而稳；层级靠 surface 不靠彩虹边
 - 中英混排：中文行高与标点优先
 
+## 交互 affordance（L4 交互区，ADR-0008 Q3.4）
+
+每个 L4 声明的交互区（行、卡片、按钮组、可点单元）须有有意的 motion/hover affordance，且在 craft review 里说明用途：
+
+- 默认 hover/active 有过渡（opacity / transform / background 之一，~120ms），用途写在 craft 报告（如「行可点 → 提示可进入详情」「行只读 → 不加 hover」）。
+- 静态 throwaway 也得体现 affordance 目标：要么给出 hover，要么显式声明「此区只读，无 hover」——不允许「交互区既无 hover 又无声明」的静默 PASS。
+- 数据表/list 的 ledger 行尤其易漏：扫描密集时 hover 是可扫描性 affordance，不是装饰。
+
+**Done when：** 每个 L4 交互区都有 motion/hover purpose（给出或显式声明只读）；无静默漏 hover 的交互区。
+
 ## 图表
 
 - 分类色稳定可复述；风险色回 `domain`

@@ -2,10 +2,11 @@
   "round": 1,
   "report_ref": "decision-report.md",
   "confirmed": true,
+  "floor_pass": true,
   "selected_options": [
     "\u786e\u8ba4\u901a\u8fc7"
   ],
-  "feedback": "",
+  "feedback": "\u786e\u8ba4\u901a\u8fc7\uff0c\u65e0\u4fee\u6539\u610f\u89c1",
   "timestamp": "2026-07-16T12:00:00+08:00",
   "prototype_path": "preview/round-1.html"
 }
