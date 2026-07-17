@@ -1,0 +1,1 @@
+{"criterion": "L6.3", "capture": {"provider": "playwright", "state": "error", "type": "screenshot"}, "artifact": "L6.3-other.png", "observed_state": "error", "result": "captured", "ts": "2026-07-16T15:00:00+08:00"}

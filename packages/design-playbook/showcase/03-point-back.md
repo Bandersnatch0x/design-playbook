@@ -36,11 +36,40 @@ fix:      Badge text only
 severity: low
 ```
 
+## Evidence ledger
+
+```text
+criterion: L6.1
+required: rendered failed-row detail shows reason, resource peak, and retry
+observed: evaluator report records all three in the expanded Swarsight run row
+result: pass
+
+criterion: L6.2
+required: interaction trace shows retry success moving failed to queued and onward
+observed: evaluator report records failed -> queued -> running/completed states
+result: pass
+
+criterion: L6.3
+required: rendered no-runs state is non-blank and exposes a next-step CTA
+observed: evaluator report records the empty-state message and CTA
+result: pass
+
+criterion: L6.4
+required: viewer retry and abort controls are unavailable with an explanation
+observed: evaluator report records disabled viewer actions and their reason
+result: pass
+
+criterion: L6.5
+required: batch retry executes only after consequence-bearing confirmation
+observed: closure trails record confirmation copy before retry and abort execution
+result: pass
+```
+
 ## Recirculate closure trail
 
-- blocking: batch retry no confirm -> reopen `domain` -> fix: confirm Dialog + consequence -> re-eval: confirm present before execute -> **0 blocking**
-- blocking: abort without confirm -> reopen `domain` -> fix: confirm Dialog + irreversibility copy -> re-eval: confirm gates abort -> **0 blocking**
-- blocking: sparkline animates width -> reopen `craft`/`design` -> fix: opacity/transform only, data re-rendered in place -> re-eval: no width animation -> **0 blocking**
+- closes: batch retry has no confirm step -> reopen `domain` -> fix: confirm Dialog + consequence -> re-eval: confirm present before execute -> **0 blocking**
+- closes: abort run without confirm -> reopen `domain` -> fix: confirm Dialog + irreversibility copy -> re-eval: confirm gates abort -> **0 blocking**
+- closes: resource sparkline animates width on update -> reopen `craft`/`design` -> fix: opacity/transform only, data re-rendered in place -> re-eval: no width animation -> **0 blocking**
 - med: failed red neon -> reopen `craft` -> fix: var(--amber-evidence) no glow -> re-eval: amber warning role -> resolved
 - med: viewer retry ungated -> reopen `spec` L5 -> fix: disable + tooltip -> re-eval: viewer cannot retry -> resolved
 - low: emoji icons -> reopen `craft` -> fix: Badge text -> re-eval: no emojis -> resolved

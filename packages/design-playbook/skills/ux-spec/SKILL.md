@@ -28,11 +28,11 @@ Use the headings in [`references/spec-template.md`](references/spec-template.md)
 ### 3. Force L5–L6
 
 - L5: empty, loading, error, permission — each with what the user can do next  
-- L6: checkable acceptance (Given/When/Then or equivalent), with the proof required for each item
+- L6: checkable acceptance; every top-level item explicitly contains `Given`, then `When`, then `Then`, with the proof required for that item
 
-Evidence is criterion-shaped: visible states require rendered inspection at named target viewports; behavior requires an interaction trace or automated check; implementation health uses the relevant tests, type/lint checks, or affected build when available. Planning-only work names the future proof instead of claiming it exists.
+Evidence is criterion-shaped: visible states require rendered inspection at named target viewports; behavior requires an interaction trace or automated check; implementation health uses the relevant tests, type/lint checks, or affected build when available. Planning-only work names the future proof instead of claiming it exists. Where the proof is a runtime state, name the **capture seed** — the state to capture (e.g. "error-state screenshot") and the capture type. This is the seed the `observe*` step derives a capture plan from (`Given`/`When` → state+actions, `Then` → required); do not write selectors, URLs, or actions here — those are derived later.
 
-**Done when:** L5 is not a single word (“loading”); every L6 item can be ticked pass/fail without taste debate and says what evidence will prove it.
+**Done when:** L5 is not a single word (“loading”); every L6 item is a top-level list item that uses `Given -> When -> Then` in that order, can be ticked pass/fail without taste debate, and says what evidence will prove it (naming the capture seed where the proof is a runtime state).
 
 ### 4. Emit
 
