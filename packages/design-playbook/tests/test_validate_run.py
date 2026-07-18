@@ -290,6 +290,21 @@ def main() -> int:
     else:
         failures.append("adapter floor self-check: server.py not found")
 
+    # --- ADR-0008 frontend floor JS intercept (playwright) ---
+    frontend_test = HERE / "test_floor_frontend.py"
+    if frontend_test.is_file():
+        ft = subprocess.run(
+            [sys.executable, str(frontend_test)],
+            capture_output=True, text=True)
+        if ft.returncode != 0 or "FRONTEND FLOOR TEST PASSED" not in ft.stdout:
+            failures.append(
+                f"frontend floor test: exit {ft.returncode}; "
+                f"stdout={ft.stdout[-400:]!r} stderr={ft.stderr[-400:]!r}")
+        else:
+            print("  ok    frontend floor intercept test passed")
+    else:
+        failures.append("frontend floor test: test_floor_frontend.py not found")
+
     print()
     if failures:
         for failure in failures:
