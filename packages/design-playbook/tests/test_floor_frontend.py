@@ -53,28 +53,32 @@ def main():
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
 
-        # --- Scenario 1: empty confirm -> frontend must prevent submit ---
-        click_primary(page)
+        # --- Scenario 1 (I1): pill primary opens the drawer, does NOT submit ---
+        # After I1 the pill has no confirm submit; its primary opens the drawer.
+        page.click('#dpb-open-primary')
         page.wait_for_timeout(300)
         drawer_open = page.evaluate(
-            "() => document.getElementById('dpb-preview-bar')"
-            ".classList.contains('is-open')")
-        hint_on = page.evaluate(
-            "() => { const h = document.getElementById('dpb-feedback-hint');"
-            "  return h && h.classList.contains('is-on'); }")
-        # URL should still be file:// (no navigation to /decide)
-        url_after = page.url
-        s1_ok = drawer_open and hint_on and url_after.startswith('file:')
-        print(f"  S1 empty confirm: drawer_open={drawer_open} hint_on={hint_on} "
-              f"stayed={url_after.startswith('file:')} -> {'OK' if s1_ok else 'FAIL'}")
+            "() => { const d = document.getElementById('dpb-drawer'); "
+            "  return !!(d && d.open); }")
+        # URL must stay file:// (no submit/navigation from the pill)
+        s1_ok = drawer_open and page.url.startswith('file:')
+        print(f"  S1 pill opens drawer (no submit): drawer_open={drawer_open} "
+              f"stayed={page.url.startswith('file:')} -> {'OK' if s1_ok else 'FAIL'}")
         if not s1_ok:
-            failures.append("S1: empty confirm not blocked by frontend")
+            failures.append("S1: pill primary must open drawer, not submit")
+        # then an empty in-drawer confirm is still blocked by the floor
+        page.wait_for_selector('.dpb-drawer .dpb-btn-primary', timeout=2000)
+        page.click('.dpb-drawer .dpb-btn-primary', timeout=2000)
+        page.wait_for_timeout(200)
+        blocked = page.url.startswith('file:')
+        if not blocked:
+            failures.append("S1b: empty in-drawer confirm must be blocked")
 
         # --- Scenario 2: feedback text -> submit allowed ---
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
-        page.click('#dpb-open-drawer')
-        page.wait_for_timeout(150)
+        page.click('#dpb-open-primary')
+        page.wait_for_timeout(200)
         page.fill('textarea[name="feedback"]', '确认通过,摘要列清晰')
         # submit allowed -> browser navigates to /decide (404 chrome-error)
         page.click('.dpb-drawer .dpb-btn-primary', timeout=2000)
@@ -88,8 +92,8 @@ def main():
         # --- Scenario 3: anchor with comment -> submit allowed ---
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
-        page.click('#dpb-open-drawer')
-        page.wait_for_timeout(150)
+        page.click('#dpb-open-primary')
+        page.wait_for_timeout(200)
         # enable pin (点选批注)
         page.click('#dpb-pin-toggle')
         # click the h2 to add an anchor

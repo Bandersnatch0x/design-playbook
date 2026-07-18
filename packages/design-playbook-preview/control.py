@@ -129,8 +129,11 @@ outline: 2px solid var(--dpb-accent); outline-offset: 2px;
   }}
 
   /* ---- drawer (expanded state) ---- */
-  #dpb-preview-bar .dpb-drawer {{
-display: none;
+  #dpb-preview-bar dialog.dpb-drawer {{
+position: fixed;
+right: 24px;
+bottom: 24px;
+margin: 0;
 width: 380px;
 max-width: calc(100vw - 48px);
 max-height: calc(100vh - 48px);
@@ -140,16 +143,19 @@ border: 1px solid var(--dpb-line);
 border-radius: 16px;
 box-shadow: 0 16px 48px rgba(0,0,0,.22), 0 4px 12px rgba(0,0,0,.12);
 overflow: hidden;
+color: var(--dpb-ink);
+padding: 0;
   }}
-  /* dim overlay when drawer is open — gives the dark drawer modal context on a light page */
+  /* non-modal <dialog>.show() is not in the top layer, so we keep the hand-rolled
+     scrim (stronger than before per UX V4) so the drawer reads as a focused layer. */
+  #dpb-preview-bar dialog.dpb-drawer[open] {{ display: flex; }}
   #dpb-preview-bar.is-open::before {{
 content: "";
 position: fixed; inset: 0; z-index: -1;
-background: rgba(15,23,42,.18);
-pointer-events: none;
+background: rgba(15,23,42,.5);
+pointer-events: none;  /* let pin-mode clicks reach prototype elements */
   }}
   #dpb-preview-bar.is-open .dpb-pill {{ display: none; }}
-  #dpb-preview-bar.is-open .dpb-drawer {{ display: flex; }}
 
   #dpb-preview-bar .dpb-drawer-head {{
 display: flex; align-items: center; justify-content: space-between;
@@ -279,8 +285,16 @@ font: 650 12px/1 system-ui, sans-serif;
 display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
   }}
   #dpb-preview-bar .dpb-label {{ font-size: 12px; font-weight: 650; color: var(--dpb-muted); }}
-  #dpb-preview-bar .dpb-hint {{ margin: 0; font-size: 12px; color: var(--dpb-danger); display: none; }}
-  #dpb-preview-bar .dpb-hint.is-on {{ display: block; }}
+  /* I4: neutral hint up-front; .is-on only adds emphasis (was red-danger-only). */
+  #dpb-preview-bar .dpb-hint {{ margin: 0; font-size: 12px; color: var(--dpb-muted); display: block; }}
+  #dpb-preview-bar .dpb-hint.is-on {{ color: var(--dpb-danger); font-weight: 600; }}
+  /* I4: pill readiness indicator (live status on the resting pill). */
+  #dpb-preview-bar .dpb-pill .dpb-pill-ready {{
+font-size: 11px; color: var(--dpb-muted); white-space: nowrap;
+  }}
+  #dpb-preview-bar .dpb-pill .dpb-pill-ready.is-ready {{
+color: #5eead4; font-weight: 600;
+  }}
   #dpb-preview-bar textarea[name="feedback"] {{
 width: 100%; box-sizing: border-box; min-height: 56px; max-height: 120px;
 resize: vertical; margin: 0; padding: 8px 12px; color: var(--dpb-ink);
@@ -414,18 +428,19 @@ cursor: default !important;
   <span class="dpb-pill-info">
     <span class="dpb-round">{t_round}</span>
     <p class="dpb-summary" title="{summary_safe}">{summary_safe}</p>
+    <span class="dpb-pill-ready" id="dpb-pill-ready" role="status">{t_not_ready}</span>
   </span>
   <span class="dpb-pill-actions">
     {pill_secondary_html}
-    <button type="button" class="dpb-btn-ghost" id="dpb-open-drawer">
+    <button type="button" class="dpb-btn-ghost" id="dpb-open-drawer" aria-haspopup="dialog">
       <span aria-hidden="true">💬</span>{t_annotate}<span class="dpb-badge-dot" id="dpb-pill-count">0</span>
     </button>
-    <button type="submit" name="choice" value="{primary_val}" class="dpb-btn-primary">{primary_label}</button>
+    <button type="button" class="dpb-btn-primary" id="dpb-open-primary" aria-haspopup="dialog">{t_pill_open}</button>
   </span>
 </div>
 
 <!-- drawer (expanded) -->
-<div class="dpb-drawer" role="dialog" aria-modal="true" aria-label="{t_drawer_aria}">
+<dialog class="dpb-drawer" id="dpb-drawer" aria-label="{t_drawer_aria}">
   <div class="dpb-drawer-head">
     <span class="dpb-head-left">
       <span class="dpb-round">{t_round}</span>
@@ -464,7 +479,7 @@ cursor: default !important;
       <button type="submit" name="choice" value="__abort__" class="dpb-btn dpb-btn-quiet">{t_close}</button>
     </div>
   </div>
-</div>
+</dialog>
   </form>
 </div>
 <div id="dpb-preview-spacer" aria-hidden="true"></div>
@@ -483,6 +498,8 @@ cursor: default !important;
   var closeBtn = document.getElementById("dpb-close-drawer");
   var pinCountEl = document.getElementById("dpb-pin-count");
   var pillCountEl = document.getElementById("dpb-pill-count");
+  var drawerEl = document.getElementById("dpb-drawer");
+  var pillReadyEl = document.getElementById("dpb-pill-ready");
   var anchors = [];
   var pinOn = false;
   var hoverEl = null;
@@ -645,6 +662,27 @@ if (pillCountEl) {{
   pillCountEl.textContent = String(n);
   pillCountEl.classList.toggle("is-on", n > 0);
 }}
+setReadiness();
+  }}
+
+  // I4: ADR-0008 substantive predicate (mirror of adapter floor) + live readiness.
+  function isSubstantive() {{
+var value = (field && field.value || "").trim();
+var anchorsComplete = !anchors.length || anchors.every(function (a) {{
+  return (a && (a.selector || "").trim() && (a.comment || "").trim());
+}});
+return (value || anchors.length) && anchorsComplete;
+  }}
+  function setReadiness() {{
+if (!pillReadyEl) return;
+var ready = isSubstantive();
+pillReadyEl.classList.toggle("is-ready", ready);
+var words = field ? (field.value || "").trim().split(/\s+/).filter(Boolean).length : 0;
+if (ready) {{
+  pillReadyEl.textContent = '{t_ready}';
+}} else {{
+  pillReadyEl.textContent = '{t_not_ready}';
+}}
   }}
 
   function clearHover() {{
@@ -675,29 +713,38 @@ return Array.prototype.slice.call(
   function openDrawer() {{
 bar.classList.add("is-open");
 lastFocus = document.activeElement;
-// focus the close button so keyboard users land inside the dialog
+// Use non-modal <dialog>.show() (NOT showModal): the drawer must NOT make the
+// page inert, because pin-to-annotate requires clicking prototype elements
+// behind the drawer. ::backdrop (modal only) is replaced by the .is-open::before
+// scrim below. ESC + focus-restore handled manually.
+if (drawerEl && typeof drawerEl.show === "function") {{
+  try {{ if (!drawerEl.open) drawerEl.show(); }} catch (e) {{ /* ignore */ }}
+}}
 setTimeout(function () {{ if (closeBtn) closeBtn.focus(); }}, 0);
   }}
   function closeDrawer() {{
 bar.classList.remove("is-open");
 if (pinOn) setPin(false);
+if (drawerEl && drawerEl.open && typeof drawerEl.close === "function") drawerEl.close();
 if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
   }}
 
   if (openBtn) openBtn.addEventListener("click", openDrawer);
+  var openPrimary = document.getElementById("dpb-open-primary");
+  if (openPrimary) openPrimary.addEventListener("click", openDrawer);
   if (closeBtn) closeBtn.addEventListener("click", closeDrawer);
   if (pinBtn) pinBtn.addEventListener("click", function () {{ setPin(!pinOn); }});
 
-  // ponytail: dialog focus trap + ESC to close — a11y baseline, single keydown on bar
-  bar.addEventListener("keydown", function (e) {{
-if (!bar.classList.contains("is-open")) return;
-if (e.key === "Escape") {{ e.preventDefault(); closeDrawer(); return; }}
-if (e.key !== "Tab") return;
-var items = focusableEls();
-if (!items.length) return;
-var first = items[0], lastItem = items[items.length - 1];
-if (e.shiftKey && document.activeElement === first) {{ e.preventDefault(); lastItem.focus(); }}
-else if (!e.shiftKey && document.activeElement === lastItem) {{ e.preventDefault(); first.focus(); }}
+  // <dialog> handles ESC + focus trap natively; mirror its close to our state.
+  if (drawerEl) drawerEl.addEventListener("close", function () {{
+bar.classList.remove("is-open");
+if (pinOn) setPin(false);
+  }});
+  // non-modal <dialog> has no native ESC; add it (skip while pinning - Esc exits pin).
+  document.addEventListener("keydown", function (e) {{
+if (e.key !== "Escape") return;
+if (pinOn) {{ setPin(false); return; }}
+if (bar.classList.contains("is-open")) {{ e.preventDefault(); closeDrawer(); }}
   }});
 
   document.addEventListener("mousemove", function (e) {{
@@ -828,7 +875,8 @@ e.preventDefault();
 if (field) {{ field.setAttribute("aria-invalid", "true"); field.focus(); }}
 if (hint) hint.classList.add("is-on");
 if (!bar.classList.contains("is-open")) openDrawer();
-if (!pinOn) setPin(true);
+// I1: do NOT force pin mode on - that was an intent guess; the user may want
+// overall feedback, not element selection.
   }});
   if (field) {{
 field.addEventListener("input", function () {{
@@ -836,6 +884,7 @@ field.addEventListener("input", function () {{
     field.removeAttribute("aria-invalid");
     if (hint) hint.classList.remove("is-on");
   }}
+  setReadiness();
 }});
   }}
 }})();
@@ -892,6 +941,9 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         t_region=t("region_label"),
         t_round=t("round_n", n=round_n),
         t_annotate=t("annotate"),
+        t_pill_open=t("pill_open"),
+        t_ready=t("ready"),
+        t_not_ready=t("not_ready"),
         t_drawer_aria=t("drawer_aria"),
         t_collapse=t("collapse"),
         t_pin_toggle=t("pin_toggle"),
