@@ -531,9 +531,11 @@ def _format_feedback(feedback: str, anchors: list[dict[str, Any]]) -> str:
 
 def _done_page_html() -> bytes:
     # Owned Chromium is killed by the server after submit; JS is best-effort only.
-    html = """<!DOCTYPE html><html lang="{html_lang}"><head><meta charset="utf-8"/>
+    # Use unique %markers + str.replace (not .format) so the CSS/JS braces don't
+    # need escaping.
+    html = """<!DOCTYPE html><html lang="%html_lang%"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>{done_title}</title>
+<title>%done_title%</title>
 <style>
 body{margin:0;min-height:100vh;display:grid;place-items:center;
 font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -554,9 +556,12 @@ setTimeout(function () {
 </script>
 </head><body><div class="card">
 <div class="ok" aria-hidden="true">OK</div>
-<h1>{done_title}</h1><p>{done_body}</p>
+<h1>%done_title%</h1><p>%done_body%</p>
 </div></body></html>"""
-    return html.format(html_lang=lang(), done_title=t("done_title"),                        done_body=t("done_body")).encode("utf-8")
+    return (html
+            .replace("%html_lang%", lang())
+            .replace("%done_title%", t("done_title"))
+            .replace("%done_body%", t("done_body"))).encode("utf-8")
 
 
 control_tpl = r"""
