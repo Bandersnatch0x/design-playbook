@@ -12,7 +12,7 @@
 - 阴影档位少而稳；层级靠 surface 不靠彩虹边
 - 中英混排：中文行高与标点优先
 
-## 交互 affordance（L4 交互区，ADR-0008 Q3.4）
+## 交互 affordance（L4 交互区，grill v0.3 Q3.4）
 
 每个 L4 声明的交互区（行、卡片、按钮组、可点单元）须有有意的 motion/hover affordance，且在 craft review 里说明用途：
 
