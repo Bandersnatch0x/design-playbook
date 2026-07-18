@@ -30,8 +30,12 @@ from typing import Any
 from urllib.parse import parse_qs
 
 TOOL_NAME = "preview_prototype"
-DEFAULT_OPTIONS = ["确认通过", "需要修改"]
-CONFIRM_LABELS = {"确认通过", "confirm", "confirmed", "pass", "ok"}
+
+# i18n: CONFIRM_LABELS is the cross-locale union so the backend recognises a
+# confirm regardless of UI language. default_options() resolves [confirm, revise]
+# in the active locale for the pill UI.
+from i18n import CONFIRM_LABELS, REVISE_LABELS, default_options, lang, t  # noqa: E402
+
 STDIO_FRAMING_CONTENT_LENGTH = "content-length"
 STDIO_FRAMING_NEWLINE = "newline"
 _stdio_framing: str | None = None
@@ -516,10 +520,10 @@ def _format_feedback(feedback: str, anchors: list[dict[str, Any]]) -> str:
     if feedback:
         lines.append(feedback)
         lines.append("")
-    lines.append(f"锚点批注 ({len(anchors)}):")
+    lines.append(t("anchor_note_label", n=len(anchors)))
     for i, a in enumerate(anchors, 1):
         label = a.get("label") or a.get("tag") or "?"
-        note = a.get("comment") or "(无文字)"
+        note = a.get("comment") or t("no_text")
         sel = a.get("selector") or ""
         lines.append(f"{i}. [{label}] {note} — {sel}")
     return "\n".join(lines)
@@ -527,9 +531,9 @@ def _format_feedback(feedback: str, anchors: list[dict[str, Any]]) -> str:
 
 def _done_page_html() -> bytes:
     # Owned Chromium is killed by the server after submit; JS is best-effort only.
-    html = """<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"/>
+    html = """<!DOCTYPE html><html lang="{html_lang}"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>已记录</title>
+<title>{done_title}</title>
 <style>
 body{margin:0;min-height:100vh;display:grid;place-items:center;
 font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -550,9 +554,9 @@ setTimeout(function () {
 </script>
 </head><body><div class="card">
 <div class="ok" aria-hidden="true">OK</div>
-<h1>已记录</h1><p>窗口即将自动关闭。</p>
+<h1>{done_title}</h1><p>{done_body}</p>
 </div></body></html>"""
-    return html.encode("utf-8")
+    return html.format(html_lang=lang(), done_title=t("done_title"),                        done_body=t("done_body")).encode("utf-8")
 
 
 control_tpl = r"""
@@ -650,7 +654,7 @@ transition: background 140ms ease, transform 100ms ease;
   #dpb-preview-bar .dpb-pill .dpb-btn-primary:focus-visible {{
 outline: 2px solid var(--dpb-accent); outline-offset: 2px;
   }}
-  /* secondary action surfaced on the pill (e.g. 需要修改) */
+  /* secondary action surfaced on the pill (e.g. the revise label) */
   #dpb-preview-bar .dpb-pill .dpb-btn-pill-secondary {{
 appearance: none; cursor: pointer; height: 32px; padding: 0 14px;
 border-radius: 999px; border: 1px solid var(--dpb-line-strong);
@@ -946,55 +950,55 @@ cursor: default !important;
 .dpb-pin-flash {{ animation: none; }}
   }}
 </style>
-<div id="dpb-preview-bar" role="region" aria-label="预览确认">
+<div id="dpb-preview-bar" role="region" aria-label="{t_region}">
   <form method="POST" action="/decide" id="dpb-decide-form">
 <input type="hidden" name="anchors_json" id="dpb-anchors-json" value="[]" />
 
 <!-- floating pill (default) -->
 <div class="dpb-pill">
   <span class="dpb-pill-info">
-    <span class="dpb-round">第 {round_n} 轮</span>
+    <span class="dpb-round">{t_round}</span>
     <p class="dpb-summary" title="{summary_safe}">{summary_safe}</p>
   </span>
   <span class="dpb-pill-actions">
     {pill_secondary_html}
     <button type="button" class="dpb-btn-ghost" id="dpb-open-drawer">
-      <span aria-hidden="true">💬</span>批注<span class="dpb-badge-dot" id="dpb-pill-count">0</span>
+      <span aria-hidden="true">💬</span>{t_annotate}<span class="dpb-badge-dot" id="dpb-pill-count">0</span>
     </button>
     <button type="submit" name="choice" value="{primary_val}" class="dpb-btn-primary">{primary_label}</button>
   </span>
 </div>
 
 <!-- drawer (expanded) -->
-<div class="dpb-drawer" role="dialog" aria-modal="true" aria-label="批注与确认">
+<div class="dpb-drawer" role="dialog" aria-modal="true" aria-label="{t_drawer_aria}">
   <div class="dpb-drawer-head">
     <span class="dpb-head-left">
-      <span class="dpb-round">第 {round_n} 轮</span>
+      <span class="dpb-round">{t_round}</span>
       <h2 class="dpb-title">{summary_safe}</h2>
     </span>
-    <button type="button" class="dpb-icon-btn" id="dpb-close-drawer" aria-label="收起">−</button>
+    <button type="button" class="dpb-icon-btn" id="dpb-close-drawer" aria-label="{t_collapse}">−</button>
   </div>
   <div class="dpb-drawer-body">
     <div class="dpb-pin-row">
       <button type="button" class="dpb-pin-toggle" id="dpb-pin-toggle" aria-pressed="false">
-        <span aria-hidden="true">🎯</span><span class="dpb-pin-label">点选批注</span>
+        <span aria-hidden="true">🎯</span><span class="dpb-pin-label">{t_pin_toggle}</span>
       </button>
-      <span class="dpb-pin-count" id="dpb-pin-count">已选 0 处</span>
+      <span class="dpb-pin-count" id="dpb-pin-count">{t_pin_count}</span>
     </div>
 
     <div>
-      <p class="dpb-subhead">选中批注</p>
+      <p class="dpb-subhead">{t_anchors_head}</p>
       <div class="dpb-anchors" id="dpb-anchors" aria-live="polite"></div>
-      <p class="dpb-empty">尚未选中元素。点上方「点选批注」后，再点页面上的元素。</p>
+      <p class="dpb-empty">{t_anchors_empty}</p>
     </div>
 
     <div class="dpb-field">
       <span class="dpb-label-row">
-        <span class="dpb-label">整体批注</span>
-        <span class="dpb-hint" id="dpb-feedback-hint" role="alert">请写整体意见或点选元素加批注后确认；空反馈会被拦下（ADR-0008）</span>
+        <span class="dpb-label">{t_field_label}</span>
+        <span class="dpb-hint" id="dpb-feedback-hint" role="alert">{t_field_hint}</span>
       </span>
       <textarea name="feedback" rows="2"
-        placeholder="对整页的总意见；页面元素的局部问题用「点选批注」"
+        placeholder="{t_field_placeholder}"
         autocomplete="off"></textarea>
     </div>
   </div>
@@ -1002,7 +1006,7 @@ cursor: default !important;
     <div class="dpb-btns">
       {secondary_html}
       <button type="submit" name="choice" value="{primary_val}" class="dpb-btn dpb-btn-primary">{primary_label}</button>
-      <button type="submit" name="choice" value="__abort__" class="dpb-btn dpb-btn-quiet">关闭</button>
+      <button type="submit" name="choice" value="__abort__" class="dpb-btn dpb-btn-quiet">{t_close}</button>
     </div>
   </div>
 </div>
@@ -1167,11 +1171,11 @@ anchors.forEach(function (a, idx) {{
   row.innerHTML =
     '<span class="n">' + (idx + 1) + "</span>" +
     '<div class="meta">' +
-      '<button type="button" class="label" data-locate="' + idx + '" title="定位到该元素" aria-label="定位到锚点 ' + (idx + 1) + '">' + esc(a.label) + "</button>" +
+      '<button type="button" class="label" data-locate="' + idx + '" title="{t_locate}" aria-label="{t_locate_anchor} ' + (idx + 1) + '">' + esc(a.label) + "</button>" +
       '<div class="sel" title="' + esc(a.selector) + '">' + esc(a.selector) + "</div>" +
-      '<input type="text" data-i="' + idx + '" aria-label="锚点 ' + (idx + 1) + ' 的修改意见" placeholder="这条要改什么" value="' + esc(a.comment) + '" />' +
+      '<input type="text" data-i="' + idx + '" aria-label="' + '{t_anchor_num_pre}' + (idx + 1) + '{t_anchor_num_post}' + '" placeholder="' + '{t_anchor_placeholder}' + '" value="' + esc(a.comment) + '" />' +
     "</div>" +
-    '<button type="button" class="rm" data-rm="' + idx + '" aria-label="移除锚点 ' + (idx + 1) + '">移除</button>';
+    '<button type="button" class="rm" data-rm="' + idx + '" aria-label="' + '{t_remove_num_pre}' + (idx + 1) + '">' + '{t_remove}' + '</button>';
   listEl.appendChild(row);
   ensureBubble(a, idx);
 }});
@@ -1181,7 +1185,7 @@ updateCounts();
 
   function updateCounts() {{
 var n = anchors.length;
-if (pinCountEl) pinCountEl.textContent = "已选 " + n + " 处";
+if (pinCountEl) pinCountEl.textContent = '{t_pin_count_pre}' + n + '{t_pin_count_post}';
 if (pillCountEl) {{
   pillCountEl.textContent = String(n);
   pillCountEl.classList.toggle("is-on", n > 0);
@@ -1202,7 +1206,7 @@ if (pinBtn) {{
   pinBtn.classList.toggle("is-on", pinOn);
   pinBtn.setAttribute("aria-pressed", pinOn ? "true" : "false");
 }}
-if (pinLabel) pinLabel.textContent = pinOn ? "点选中 · 再点关闭" : "点选批注";
+if (pinLabel) pinLabel.textContent = pinOn ? "{t_pin_on}" : "{t_pin_off}";
 if (!pinOn) clearHover();
   }}
 
@@ -1341,12 +1345,12 @@ anchors.forEach(function (a, idx) {{ positionFloat(a, idx); }});
   window.addEventListener("scroll", repositionAll, true);
   window.addEventListener("resize", repositionAll);
 
-  // ADR-0008: confirm (e.g. 确认通过) requires substantive feedback too -
+  // ADR-0008: confirm (e.g. the confirm label) requires substantive feedback too -
   // non-empty feedback OR >=1 anchor with comment. Revise was already guarded;
   // confirm was previously a one-click empty submit the backend floor caught
   // only after the fact. Now the frontend blocks the empty confirm and opens
   // the drawer to guide input, mirroring revise.
-  var reviseLabels = {{"需要修改": 1, "revise": 1, "needs changes": 1}};
+  var reviseLabels = {{{t_revise_labels}}};
   form.addEventListener("submit", function (e) {{
 syncHidden();
 var submitter = e.submitter;
@@ -1391,6 +1395,10 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
     (playwright) so the option/button markup is not duplicated across them.
     """
     confirm_cf = {c.casefold() for c in CONFIRM_LABELS}
+    # JS object literal of revise labels across all locales (frontend classifies
+    # a revise regardless of UI language). Keys are JSON-quoted/escaped.
+    revise_js = ", ".join(
+        f"{json.dumps(lbl, ensure_ascii=False)}: 1" for lbl in sorted(REVISE_LABELS))
     primary_bits: list[str] = []
     secondary_bits: list[str] = []
     for opt in options:
@@ -1404,7 +1412,7 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         )
         (primary_bits if primary else secondary_bits).append(bit)
     secondary_html = "\n".join(secondary_bits)
-    # secondary actions surfaced directly on the floating pill (so revise isn't hidden in the drawer)
+    # secondary actions surfaced on the floating pill (so revise is not hidden in the drawer)
     pill_secondary_html = "\n".join(
         b.replace('class="dpb-btn dpb-btn-secondary"', 'class="dpb-btn-pill-secondary"')
          .replace("dpb-btn-secondary", "dpb-btn-pill-secondary")
@@ -1413,17 +1421,42 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
     summary_safe = html_lib.escape(summary)
     primary_opt = next(
         (o for o in options if o in CONFIRM_LABELS or o.casefold() in confirm_cf),
-        options[0] if options else "确认通过",
+        options[0] if options else t("confirm"),
     )
     primary_val = html_lib.escape(primary_opt, quote=True)
     primary_label = html_lib.escape(primary_opt)
     return control_tpl.format(
         round_n=html_lib.escape(str(round_n)),
+        t_revise_labels=revise_js,
         summary_safe=summary_safe,
         secondary_html=secondary_html,
         pill_secondary_html=pill_secondary_html,
         primary_val=primary_val,
         primary_label=primary_label,
+        t_region=t("region_label"),
+        t_round=t("round_n", n=round_n),
+        t_annotate=t("annotate"),
+        t_drawer_aria=t("drawer_aria"),
+        t_collapse=t("collapse"),
+        t_pin_toggle=t("pin_toggle"),
+        t_pin_count=t("pin_count", n=0),
+        t_pin_on=t("pin_on"),
+        t_pin_off=t("pin_off"),
+        t_anchors_head=t("anchors_head"),
+        t_anchors_empty=t("anchors_empty"),
+        t_field_label=t("field_label"),
+        t_field_hint=t("field_hint"),
+        t_field_placeholder=t("field_placeholder"),
+        t_close=t("close"),
+        t_locate=t("locate_anchor"),
+        t_locate_anchor=t("locate_anchor"),
+        t_remove=t("remove"),
+        t_anchor_num_pre=t("anchor_num_pre"),
+        t_anchor_num_post=t("anchor_num_post"),
+        t_anchor_placeholder=t("anchor_placeholder"),
+        t_remove_num_pre=t("remove_num_pre"),
+        t_pin_count_pre=t("pin_count_pre"),
+        t_pin_count_post=t("pin_count_post"),
     )
 
 
@@ -1551,7 +1584,7 @@ def handle_preview_prototype(args: dict[str, Any]) -> dict[str, Any]:
     summary = args.get("summary")
     round_n = args.get("round")
     report_ref = args.get("report_ref")
-    options = args.get("options") or list(DEFAULT_OPTIONS)
+    options = args.get("options") or default_options()
 
     if not isinstance(summary, str) or not summary.strip():
         raise ValueError("summary is required")
