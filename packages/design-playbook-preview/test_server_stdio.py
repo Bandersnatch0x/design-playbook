@@ -14,6 +14,14 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+# Sibling modules live next to this file (script dir is sys.path[0]).
+# After server.py was split, the browser/HTTP helpers moved to browser.py;
+# _collect_via_browser resolves them from the ``browser`` namespace, so the
+# patches must target ``browser``. ``server`` re-exports the same names, which
+# keeps the call sites (server._collect_via_browser, server.HTTPServer, ...)
+# working unchanged.
+import browser  # noqa: E402
+
 
 SERVER = Path(__file__).with_name("server.py")
 
@@ -72,10 +80,10 @@ class PreviewWindowTests(unittest.TestCase):
     def test_open_preview_window_uses_centered_app_window_not_fullscreen(self) -> None:
         server = _load_server_module()
         fake_proc = mock.Mock(pid=4242)
-        with mock.patch.object(server, "_screen_size", return_value=(1920, 1080)), mock.patch.object(
-            server, "_browser_candidates", return_value=["browser.exe"]
-        ), mock.patch.object(server.tempfile, "mkdtemp", return_value="profile-dir"), mock.patch.object(
-            server.subprocess, "Popen", return_value=fake_proc
+        with mock.patch.object(browser, "_screen_size", return_value=(1920, 1080)), mock.patch.object(
+            browser, "_browser_candidates", return_value=["browser.exe"]
+        ), mock.patch.object(browser.tempfile, "mkdtemp", return_value="profile-dir"), mock.patch.object(
+            browser.subprocess, "Popen", return_value=fake_proc
         ) as popen:
             proc, profile = server._open_preview_window(
                 "http://127.0.0.1:4321/", width=1100, height=780
@@ -158,10 +166,10 @@ class PreviewCollectShutdownTests(unittest.TestCase):
                 "<html><body><h1>proto</h1></body></html>",
                 encoding="utf-8",
             )
-            with mock.patch.object(server, "HTTPServer", StashingHTTPServer), mock.patch.object(
-                server, "_open_preview_window", return_value=(None, None)
-            ), mock.patch.object(server, "_request_browser_window_close") as close_window, mock.patch.object(
-                server, "_kill_browser_proc"
+            with mock.patch.object(browser, "HTTPServer", StashingHTTPServer), mock.patch.object(
+                browser, "_open_preview_window", return_value=(None, None)
+            ), mock.patch.object(browser, "_request_browser_window_close") as close_window, mock.patch.object(
+                browser, "_kill_browser_proc"
             ) as kill_browser:
                 started = time.monotonic()
                 decision = server._collect_via_browser(
@@ -229,11 +237,11 @@ class PreviewCollectShutdownTests(unittest.TestCase):
                 "<html><body><button id='submit'>Retry</button></body></html>",
                 encoding="utf-8",
             )
-            with mock.patch.object(server, "HTTPServer", StashingHTTPServer), mock.patch.object(
-                server, "_open_preview_window", return_value=(mock.sentinel.proc, "profile")
-            ), mock.patch.object(server, "_request_browser_window_close") as close_window, mock.patch.object(
-                server, "_kill_browser_proc"
-            ) as kill_browser, mock.patch.object(server, "_rm_tree"):
+            with mock.patch.object(browser, "HTTPServer", StashingHTTPServer), mock.patch.object(
+                browser, "_open_preview_window", return_value=(mock.sentinel.proc, "profile")
+            ), mock.patch.object(browser, "_request_browser_window_close") as close_window, mock.patch.object(
+                browser, "_kill_browser_proc"
+            ) as kill_browser, mock.patch.object(browser, "_rm_tree"):
                 decision = server._collect_via_browser(
                     proto, "summary", ["\u786e\u8ba4\u901a\u8fc7", "\u9700\u8981\u4fee\u6539"], 1
                 )
