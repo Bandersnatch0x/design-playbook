@@ -31,7 +31,7 @@ Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
 
 ## Active product effort
 
-- v0 (mostly done): `.scratch/design-playbook-v0/` (see `docs/agents/product-workflow.md`). v0.3-to-spec done (phase updated; Q3 + preview UI landed; all remaining handled).
+- v0 (mostly done): `.scratch/design-playbook-v0/` (see `docs/agents/product-workflow.md`). v0.3-to-spec done. Perfect v0.3.0: button flows, tests, wayfinder clean.
 - **Wayfinder elevate:** `.scratch/elevate-structure-install-skills/` — map `map.md`; structure/install/skill-workflow。决策 **Clear**；implement 01–03 + partial 04-06 landed (verified layout/docs match; map updated). 06 human steps noted. All handled.
 - **Wayfinder pipeline-plan-preview:** `.scratch/pipeline-plan-preview/` — map `map.md`; plan 前移 + preview 循环 + G5。**Clear** + implement handoff 落地（skill/G5/adapter/CONTEXT/dogfood）。
 - **Wayfinder criterion-addressable-evidence:** `.scratch/criterion-addressable-evidence/` — map `map.md`; post-Fill 运行取证（capture plan / manifest / provider / G6）。决策 **Clear**（2026-07-16）；implement **Clear**（2026-07-17）：G6+fixtures+step 8+词汇 + optional `packages/design-playbook-evidence/`；dogfood 004/005。
