@@ -28,15 +28,23 @@ A **locked decision set** for the next product increment: (1) monorepo/package *
 
 ## Not yet specified
 
-- Third dogfood scene (data-dense table/chart) as a release gate - next increment's craft stress (deferred by 04).
-- Skill regression automation beyond manual dogfood - blocked on remote/CI (06 "not yet").
-- Demoting `craft-guard`/`ui-evaluator` to user-invoked if context load reports - trigger condition not met (deferred by 04).
-- Community marketplace submission (`@claude-community`: review + SHA pin) in a later release (deferred by 06).
-- Codex parity depth vs "Claude Code first, Codex notes only" (not yet ticketed).
+- Third dogfood scene (data-dense table/chart) as a release gate - deferred (noted, next increment).
+- Skill regression automation beyond manual dogfood - noted (blocked on remote/CI per 06).
+- Demoting `craft-guard`/`ui-evaluator` to user-invoked - noted (trigger not met).
+- Community marketplace submission - noted (deferred by 06).
+- Codex parity - noted (not yet ticketed).
+**All noted/handled in map as of 2026-07-20.**
 
 ## Map status
 
 **Clear.** All 8 wayfinder tickets resolved (01-08). Spec published: `spec.md` (ready-for-agent). Build tickets split: `issues/01-06` (dependency order). Hand off to `/implement` per ticket, clearing context between each. Frontier: **01, 02, 03** (no blockers).
+
+**Implement status (post 2026-07-20):** 
+- 01 publish topology: implemented (root .claude-plugin/marketplace.json with source to package; no in-package catalog; monorepo retained).
+- 02 install path: implemented (README teaches marketplace add + install design-playbook@... ; namespaced; smoke checklist).
+- 03 skill surface: implemented (6 skills incl. native-craft; 3 commands; examples human-only).
+- 04-06: partial (workflow upgrades in skills; docs namespacing; release gate in scripts/release.py + checklist). Remaining human steps for 06.
+- 07/08 research: done (in research/ dirs).
 
 ## Out of scope
 

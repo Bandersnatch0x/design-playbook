@@ -13,7 +13,7 @@
 | 6-polish | done (review fixes + run-seam product-surface sync) |
 | 7-release | done (v0.2.0, 2026-07-17) |
 | v0.3-grill | done (2026-07-18, 4 决策 + ADR-0008 floor enforcement 落地, SEAM TEST PASSED) |
-| v0.3-to-spec | next |
+| v0.3-to-spec | done (2026-07-20: Q3.1-Q3.4 locked & implemented; preview floor, button flows, visibility in 02; test scenarios added; phase advance complete) |
 
 ## v0 ship checklist (5/5 pass)
 
