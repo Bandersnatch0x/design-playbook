@@ -133,7 +133,7 @@ def main() -> int:
     print("== manual (irreversible / human) ==")
     print(f"  - git push origin main")
     print(f"  - git push origin {tag}  (after --apply)")
-    print(f"  - GitHub Release @ {tag}, body = docs/releases/{tag[1:]}.md")
+    print(f"  - GitHub Release @ {tag}, body = docs/releases/{tag}.md")
     print(f"  - 2nd-session install smoke (release-checklist gate 5)")
 
     print()
