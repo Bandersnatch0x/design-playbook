@@ -17,7 +17,7 @@ absent, preview is skipped and the pipeline goes straight to Fill.
 | `summary` | yes | Decision-report summary / change note |
 | `round` | yes | 1-based loop index |
 | `report_ref` | yes | Decision report path or version id |
-| `options` | no | Default `["确认通过","需要修改"]` |
+| `options` | no | Default depends on locale (see i18n.py), e.g. `["确认通过","需要修改"]` (zh) or `["Confirm","Needs changes"]` (en) |
 
 Returns: `confirmed`, `selected_options`, `feedback`, `anchors`, `round`,
 `confirm_record_path`, `aborted`.
