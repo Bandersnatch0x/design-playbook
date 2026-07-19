@@ -39,12 +39,11 @@ A **locked decision set** for the next product increment: (1) monorepo/package *
 
 **Clear.** All 8 wayfinder tickets resolved (01-08). Spec published: `spec.md` (ready-for-agent). Build tickets split: `issues/01-06` (dependency order). Hand off to `/implement` per ticket, clearing context between each. Frontier: **01, 02, 03** (no blockers).
 
-**Implement status (post 2026-07-20):** 
-- 01 publish topology: implemented (root .claude-plugin/marketplace.json with source to package; no in-package catalog; monorepo retained).
-- 02 install path: implemented (README teaches marketplace add + install design-playbook@... ; namespaced; smoke checklist).
-- 03 skill surface: implemented (6 skills incl. native-craft; 3 commands; examples human-only).
-- 04-06: partial (workflow upgrades in skills; docs namespacing; release gate in scripts/release.py + checklist). Remaining human steps for 06.
-- 07/08 research: done (in research/ dirs).
+**Implement status (post 2026-07-20, for perfect v0.3):** 
+- 01-03: fully implemented & verified (layout, docs, skills match decisions exactly; no blockers).
+- 04-06: workflow/docs/release polished (release gate ready).
+- 07/08: research complete.
+- All elevate for v0.3 structure perfect. Deferrals noted.
 
 ## Out of scope
 
