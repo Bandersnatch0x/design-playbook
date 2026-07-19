@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -102,16 +103,20 @@ def _check_feedback_floor(feedback: str,
                           anchors: list[dict[str, Any]]) -> tuple[bool, str]:
     """ADR-0008 preview feedback floor (structural, machine-checkable).
 
-    Passes when: feedback is non-empty (OR >=1 anchor present) AS the trigger,
-    AND every present anchor carries a non-empty selector AND a non-empty
-    comment. So a non-empty feedback with an incomplete anchor still fails.
-    Deliberately structural; semantic quality is left to ui-evaluator (G6).
+    Passes when:
+    - (non-empty feedback with >=4 chars OR >=1 complete anchor) as trigger, AND
+    - every present anchor (if any) has non-empty selector AND non-empty comment.
+
+    Pure-feedback confirms now require a minimum length to block ultra-short
+    junk like test placeholders. Anchors (when used) must be complete.
+    Deliberately structural; semantic quality left to ui-evaluator (G6).
     Returns (floor_pass, floor_failure_reason).
     """
     feedback = (feedback or "").strip()
-    trigger = bool(feedback) or bool(anchors)
+    has_substantive_feedback = len(feedback) >= 4
+    trigger = has_substantive_feedback or bool(anchors)
     if not trigger:
-        return False, "confirm with no substantive feedback: empty feedback and no anchor"
+        return False, "confirm with no substantive feedback: empty/too-short feedback and no anchor"
     if anchors:
         for a in anchors:
             if not isinstance(a, dict):
@@ -131,7 +136,9 @@ def _self_check_floor() -> None:
     cases = [
         ("empty + no anchors", "", [], False),
         ("whitespace-only feedback", "   \n  ", [], False),
-        ("non-empty feedback no anchors", "ok", [], True),
+        ("short feedback (<4 chars) no anchors", "ok", [], False),
+        ("short junk like '安师大'", "安师大", [], False),
+        ("4+ char feedback no anchors passes", "fix it", [], True),
         ("anchor with comment", "", [{"selector": "h2", "comment": "x"}], True),
         ("anchor no comment (0015 garbage)", "",
          [{"selector": "h2", "comment": ""}], False),
@@ -144,6 +151,8 @@ def _self_check_floor() -> None:
          [{"selector": "h2", "comment": "x"}, {"selector": "p", "comment": ""}], False),
         ("two anchors both complete passes", "",
          [{"selector": "h2", "comment": "x"}, {"selector": "p", "comment": "y"}], True),
+        ("short feedback + good anchor still passes (anchor triggers)", "hi",
+         [{"selector": "h2", "comment": "x"}], True),
     ]
     for label, fb, anc, want in cases:
         got, _ = _check_feedback_floor(fb, anc)

@@ -140,7 +140,7 @@ def _tool_schema() -> dict[str, Any]:
                 "options": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": 'Default ["确认通过","需要修改"].',
+                    "description": 'Default is locale-dependent via i18n (e.g. ["确认通过","需要修改"] in zh-CN).',
                 },
             },
             "required": ["summary", "round", "report_ref"],

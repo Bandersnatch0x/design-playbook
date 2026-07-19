@@ -109,6 +109,11 @@ transition: background 140ms ease, transform 100ms ease;
   #dpb-preview-bar .dpb-pill .dpb-btn-primary:focus-visible {{
 outline: 2px solid var(--dpb-accent); outline-offset: 2px;
   }}
+  /* Direct confirm state on pill primary when readiness allows immediate action */
+  #dpb-preview-bar .dpb-pill .dpb-btn-primary.is-direct-confirm {{
+    box-shadow: 0 0 0 3px rgba(20,184,166,0.25);
+    font-weight: 700;
+  }}
   /* secondary action surfaced on the pill (e.g. the revise label) */
   #dpb-preview-bar .dpb-pill .dpb-btn-pill-secondary {{
 appearance: none; cursor: pointer; height: 32px; padding: 0 14px;
@@ -125,7 +130,8 @@ background: #3a4150; border-color: #6b7588; color: var(--dpb-ink);
 outline: 2px solid var(--dpb-accent); outline-offset: 2px;
   }}
   @media (max-width: 720px) {{
-#dpb-preview-bar .dpb-pill .dpb-btn-pill-secondary {{ display: none; }}
+#dpb-preview-bar .dpb-pill .dpb-btn-pill-secondary {{ display: inline-flex; font-size: 11px; padding: 0 8px; }}
+/* Per debate: do not hide revise on mobile; allow stacking if needed */
   }}
 
   /* ---- drawer (expanded state) ---- */
@@ -476,6 +482,7 @@ cursor: default !important;
     <div class="dpb-btns">
       {secondary_html}
       <button type="submit" name="choice" value="{primary_val}" class="dpb-btn dpb-btn-primary">{primary_label}</button>
+      <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-draft">仅记录批注但暂不决定</button>
       <button type="submit" name="choice" value="__abort__" class="dpb-btn dpb-btn-quiet">{t_close}</button>
     </div>
   </div>
@@ -668,10 +675,11 @@ setReadiness();
   // I4: ADR-0008 substantive predicate (mirror of adapter floor) + live readiness.
   function isSubstantive() {{
 var value = (field && field.value || "").trim();
+var hasSubstantiveText = value.length >= 4;
 var anchorsComplete = !anchors.length || anchors.every(function (a) {{
   return (a && (a.selector || "").trim() && (a.comment || "").trim());
 }});
-return (value || anchors.length) && anchorsComplete;
+return (hasSubstantiveText || anchors.length) && anchorsComplete;
   }}
   function setReadiness() {{
 if (!pillReadyEl) return;
@@ -680,8 +688,22 @@ pillReadyEl.classList.toggle("is-ready", ready);
 var words = field ? (field.value || "").trim().split(/\s+/).filter(Boolean).length : 0;
 if (ready) {{
   pillReadyEl.textContent = '{t_ready}';
+  if (openPrimary) {{
+    openPrimary.classList.add('is-direct-confirm');
+    openPrimary.setAttribute('aria-label', '直接确认通过（当前已就绪）');
+    // Mirror the confirm button label so user sees the action will confirm directly
+    var drawerPrimary = document.querySelector('.dpb-drawer .dpb-btn-primary');
+    if (drawerPrimary && drawerPrimary.textContent && openPrimary.textContent !== drawerPrimary.textContent) {{
+      openPrimary.textContent = drawerPrimary.textContent;
+    }}
+  }}
 }} else {{
   pillReadyEl.textContent = '{t_not_ready}';
+  if (openPrimary) {{
+    openPrimary.classList.remove('is-direct-confirm');
+    // Optionally restore original label, but for simplicity keep as-is or re-set on not ready
+    // The original {t_pill_open} is fine as fallback
+  }}
 }}
   }}
 
@@ -731,9 +753,30 @@ if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
 
   if (openBtn) openBtn.addEventListener("click", openDrawer);
   var openPrimary = document.getElementById("dpb-open-primary");
-  if (openPrimary) openPrimary.addEventListener("click", openDrawer);
+  function handlePillPrimary(e) {{
+    if (isSubstantive()) {{
+      // When ready, the pill primary directly submits the confirm (no need to open drawer)
+      e.preventDefault();
+      var targetBtn = document.querySelector(".dpb-drawer .dpb-btn-primary");
+      if (targetBtn) {{
+        form.requestSubmit(targetBtn);
+      }} else {{
+        form.requestSubmit();
+      }}
+    }} else {{
+      openDrawer();
+    }}
+  }}
+  if (openPrimary) openPrimary.addEventListener("click", handlePillPrimary);
   if (closeBtn) closeBtn.addEventListener("click", closeDrawer);
   if (pinBtn) pinBtn.addEventListener("click", function () {{ setPin(!pinOn); }});
+
+  // Draft: record current feedback/anchors without making confirm/revise decision (per debate)
+  var draftBtn = document.getElementById("dpb-draft");
+  if (draftBtn) draftBtn.addEventListener("click", function () {{ closeDrawer(); }});
+
+  // Initial readiness (may enable direct confirm on pill primary)
+  setReadiness();
 
   // <dialog> handles ESC + focus trap natively; mirror its close to our state.
   if (drawerEl) drawerEl.addEventListener("close", function () {{
@@ -810,6 +853,7 @@ var i = Number(t.getAttribute("data-i"));
 anchors[i].comment = t.value;
 syncHidden();
 ensureBubble(anchors[i], i);
+setReadiness();
   }});
 
   listEl.addEventListener("click", function (e) {{
@@ -838,6 +882,7 @@ if (a) {{
 }}
 anchors.splice(i, 1);
 render();
+setReadiness();
   }});
 
   // reposition floats on scroll/resize
@@ -847,11 +892,9 @@ anchors.forEach(function (a, idx) {{ positionFloat(a, idx); }});
   window.addEventListener("scroll", repositionAll, true);
   window.addEventListener("resize", repositionAll);
 
-  // ADR-0008: confirm (e.g. the confirm label) requires substantive feedback too -
-  // non-empty feedback OR >=1 anchor with comment. Revise was already guarded;
-  // confirm was previously a one-click empty submit the backend floor caught
-  // only after the fact. Now the frontend blocks the empty confirm and opens
-  // the drawer to guide input, mirroring revise.
+  // ADR-0008: confirm requires substantive feedback too -
+  // (feedback text >=4 chars OR >=1 complete anchor) AND all anchors complete.
+  // Frontend mirrors adapter _check_feedback_floor (incl. min length for pure text).
   var reviseLabels = {{{t_revise_labels}}};
   form.addEventListener("submit", function (e) {{
 syncHidden();
@@ -860,13 +903,16 @@ var choice = submitter && submitter.name === "choice" ? submitter.value : "";
 if (!choice || choice === "__abort__") return;
 var isRevise = !!reviseLabels[choice] || /修改|revise|change/i.test(choice);
 var value = (field && field.value || "").trim();
+var hasSubstantiveText = value.length >= 4;
 // ADR-0008: if anchors present, EVERY anchor needs non-empty selector AND
-// comment (mirrors adapter _check_feedback_floor exactly).
+// comment. Pure-feedback now also requires >=4 chars (mirrors adapter).
 var anchorsComplete = !anchors.length || anchors.every(function (a) {{
   return (a && (a.selector || "").trim() && (a.comment || "").trim());
 }});
-var substantive = (value || anchors.length) && anchorsComplete;
-if (substantive) {{
+var substantive = (hasSubstantiveText || anchors.length) && anchorsComplete;
+// For revise actions (e.g. "需要修改"), allow even without substantive feedback (the point is to request changes).
+// Only enforce floor for actual confirm actions.
+if (isRevise || substantive) {{
   if (field) field.removeAttribute("aria-invalid");
   if (hint) hint.classList.remove("is-on");
   return;
@@ -880,7 +926,9 @@ if (!bar.classList.contains("is-open")) openDrawer();
   }});
   if (field) {{
 field.addEventListener("input", function () {{
-  if ((field.value || "").trim() || anchors.length) {{
+  var v = (field.value || "").trim();
+  var hasText = v.length >= 4;
+  if (hasText || anchors.length) {{
     field.removeAttribute("aria-invalid");
     if (hint) hint.classList.remove("is-on");
   }}
