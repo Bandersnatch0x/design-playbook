@@ -17,6 +17,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+# Shared stdio JSON-RPC framing lives one level up in mcp/_transport.py
+# (both bundled adapters speak the same wire format; ADR-0009).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from _transport import read_message, write_message  # noqa: E402
+
 from i18n import default_options
 from util import _log
 
@@ -52,59 +57,6 @@ from browser import (  # noqa: F401
 )
 
 TOOL_NAME = "preview_prototype"
-
-STDIO_FRAMING_CONTENT_LENGTH = "content-length"
-STDIO_FRAMING_NEWLINE = "newline"
-_stdio_framing: str | None = None
-
-
-def _read_message() -> dict[str, Any] | None:
-    """Read Content-Length or newline-delimited JSON-RPC from stdin."""
-    global _stdio_framing
-
-    while True:
-        first_line = sys.stdin.buffer.readline()
-        if not first_line:
-            return None
-        if first_line not in (b"\r\n", b"\n"):
-            break
-
-    if not first_line.lower().startswith(b"content-length:"):
-        _stdio_framing = STDIO_FRAMING_NEWLINE
-        return json.loads(first_line.decode("utf-8"))
-
-    _stdio_framing = STDIO_FRAMING_CONTENT_LENGTH
-    headers: dict[str, str] = {}
-    line = first_line
-    while line not in (b"\r\n", b"\n"):
-        key, separator, value = line.decode("utf-8").partition(":")
-        if not separator:
-            raise ValueError(f"invalid MCP stdio header: {line!r}")
-        headers[key.strip().lower()] = value.strip()
-        line = sys.stdin.buffer.readline()
-        if not line:
-            raise EOFError("MCP stdio headers ended before the blank line")
-    length = int(headers.get("content-length", "0"))
-    if length <= 0:
-        raise ValueError("MCP stdio Content-Length must be positive")
-    body = sys.stdin.buffer.read(length)
-    if len(body) != length:
-        raise EOFError(
-            f"MCP stdio body ended early: expected {length}, got {len(body)}"
-        )
-    return json.loads(body.decode("utf-8"))
-
-
-
-def _write_message(payload: dict[str, Any]) -> None:
-    raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    if _stdio_framing == STDIO_FRAMING_NEWLINE:
-        sys.stdout.buffer.write(raw + b"\n")
-    else:
-        sys.stdout.buffer.write(
-            f"Content-Length: {len(raw)}\r\n\r\n".encode("ascii") + raw
-        )
-    sys.stdout.buffer.flush()
 
 
 
@@ -247,7 +199,7 @@ def _error_result(message: str) -> dict[str, Any]:
 def serve() -> None:
     _log("design-playbook-preview MCP server starting (stdio)")
     while True:
-        msg = _read_message()
+        msg = read_message()
         if msg is None:
             break
         method = msg.get("method")
@@ -255,7 +207,7 @@ def serve() -> None:
         params = msg.get("params") or {}
 
         if method == "initialize":
-            _write_message({
+            write_message({
                 "jsonrpc": "2.0",
                 "id": msg_id,
                 "result": {
@@ -274,7 +226,7 @@ def serve() -> None:
             continue
 
         if method == "tools/list":
-            _write_message({
+            write_message({
                 "jsonrpc": "2.0",
                 "id": msg_id,
                 "result": {"tools": [_tool_schema()]},
@@ -285,7 +237,7 @@ def serve() -> None:
             name = params.get("name")
             arguments = params.get("arguments") or {}
             if name != TOOL_NAME:
-                _write_message({
+                write_message({
                     "jsonrpc": "2.0",
                     "id": msg_id,
                     "result": _error_result(f"unknown tool: {name}"),
@@ -293,14 +245,14 @@ def serve() -> None:
                 continue
             try:
                 payload = handle_preview_prototype(arguments)
-                _write_message({
+                write_message({
                     "jsonrpc": "2.0",
                     "id": msg_id,
                     "result": _result_text(payload),
                 })
             except Exception as exc:  # noqa: BLE001 — return to client
                 _log(f"tools/call error: {exc}")
-                _write_message({
+                write_message({
                     "jsonrpc": "2.0",
                     "id": msg_id,
                     "result": _error_result(str(exc)),
@@ -308,11 +260,11 @@ def serve() -> None:
             continue
 
         if method == "ping":
-            _write_message({"jsonrpc": "2.0", "id": msg_id, "result": {}})
+            write_message({"jsonrpc": "2.0", "id": msg_id, "result": {}})
             continue
 
         if msg_id is not None:
-            _write_message({
+            write_message({
                 "jsonrpc": "2.0",
                 "id": msg_id,
                 "error": {

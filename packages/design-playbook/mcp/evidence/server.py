@@ -18,15 +18,17 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
+# Shared stdio JSON-RPC framing lives one level up in mcp/_transport.py
+# (both bundled adapters speak the same wire format; ADR-0009).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from _transport import read_message, write_message  # noqa: E402
+
 TOOL_NAME = "execute_capture_plan"
 SERVER_NAME = "design-playbook-evidence"
 SERVER_VERSION = "0.1.0"
 CAPTURE_TYPES = frozenset({"screenshot", "a11y tree", "interaction trace"})
 ALLOWED_ARGUMENTS = frozenset({"url", "type", "state", "actions", "artifact_path"})
 RUN_ROOT_ENV = "DESIGN_PLAYBOOK_RUN_ROOT"
-STDIO_FRAMING_CONTENT_LENGTH = "content-length"
-STDIO_FRAMING_NEWLINE = "newline"
-_stdio_framing: str | None = None
 
 
 def _log(msg: str) -> None:
@@ -35,54 +37,6 @@ def _log(msg: str) -> None:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
-
-
-def _read_message() -> dict[str, Any] | None:
-    """Read Content-Length or newline-delimited JSON-RPC from stdin."""
-    global _stdio_framing
-
-    while True:
-        first_line = sys.stdin.buffer.readline()
-        if not first_line:
-            return None
-        if first_line not in (b"\r\n", b"\n"):
-            break
-
-    if not first_line.lower().startswith(b"content-length:"):
-        _stdio_framing = STDIO_FRAMING_NEWLINE
-        return json.loads(first_line.decode("utf-8"))
-
-    _stdio_framing = STDIO_FRAMING_CONTENT_LENGTH
-    headers: dict[str, str] = {}
-    line = first_line
-    while line not in (b"\r\n", b"\n"):
-        key, separator, value = line.decode("utf-8").partition(":")
-        if not separator:
-            raise ValueError(f"invalid MCP stdio header: {line!r}")
-        headers[key.strip().lower()] = value.strip()
-        line = sys.stdin.buffer.readline()
-        if not line:
-            raise EOFError("MCP stdio headers ended before the blank line")
-    length = int(headers.get("content-length", "0"))
-    if length <= 0:
-        raise ValueError("MCP stdio Content-Length must be positive")
-    body = sys.stdin.buffer.read(length)
-    if len(body) != length:
-        raise EOFError(
-            f"MCP stdio body ended early: expected {length}, got {len(body)}"
-        )
-    return json.loads(body.decode("utf-8"))
-
-
-def _write_message(payload: dict[str, Any]) -> None:
-    raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    if _stdio_framing == STDIO_FRAMING_NEWLINE:
-        sys.stdout.buffer.write(raw + b"\n")
-    else:
-        sys.stdout.buffer.write(
-            f"Content-Length: {len(raw)}\r\n\r\n".encode("ascii") + raw
-        )
-    sys.stdout.buffer.flush()
 
 
 def _tool_schema() -> dict[str, Any]:
@@ -402,10 +356,10 @@ def serve() -> None:
     _log(f"{SERVER_NAME} MCP server starting (stdio)")
     while True:
         try:
-            msg = _read_message()
+            msg = read_message()
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError, EOFError) as exc:
             _log(f"MCP parse error: {exc}")
-            _write_message({
+            write_message({
                 "jsonrpc": "2.0",
                 "id": None,
                 "error": {"code": -32700, "message": f"Parse error: {exc}"},
@@ -414,7 +368,7 @@ def serve() -> None:
         if msg is None:
             break
         if not isinstance(msg, dict):
-            _write_message({
+            write_message({
                 "jsonrpc": "2.0",
                 "id": None,
                 "error": {"code": -32600, "message": "Invalid Request"},
@@ -425,7 +379,7 @@ def serve() -> None:
         params = msg.get("params") or {}
 
         if method == "initialize":
-            _write_message({
+            write_message({
                 "jsonrpc": "2.0",
                 "id": msg_id,
                 "result": {
@@ -445,7 +399,7 @@ def serve() -> None:
             continue
 
         if method == "tools/list":
-            _write_message({
+            write_message({
                 "jsonrpc": "2.0",
                 "id": msg_id,
                 "result": {"tools": [_tool_schema()]},
@@ -456,7 +410,7 @@ def serve() -> None:
             name = params.get("name")
             arguments = params.get("arguments") or {}
             if name != TOOL_NAME:
-                _write_message({
+                write_message({
                     "jsonrpc": "2.0",
                     "id": msg_id,
                     "result": _error_result(f"unknown tool: {name}"),
@@ -466,14 +420,14 @@ def serve() -> None:
                 payload = execute_capture_plan(arguments)
                 # Capture failures remain data so the orchestrator can bind them.
                 # Schema/contract violations raise and become tool-level errors.
-                _write_message({
+                write_message({
                     "jsonrpc": "2.0",
                     "id": msg_id,
                     "result": _result_text(payload),
                 })
             except Exception as exc:  # noqa: BLE001 — return to client
                 _log(f"tools/call error: {exc}")
-                _write_message({
+                write_message({
                     "jsonrpc": "2.0",
                     "id": msg_id,
                     "result": _error_result(str(exc)),
@@ -481,11 +435,11 @@ def serve() -> None:
             continue
 
         if method == "ping":
-            _write_message({"jsonrpc": "2.0", "id": msg_id, "result": {}})
+            write_message({"jsonrpc": "2.0", "id": msg_id, "result": {}})
             continue
 
         if msg_id is not None:
-            _write_message({
+            write_message({
                 "jsonrpc": "2.0",
                 "id": msg_id,
                 "error": {
