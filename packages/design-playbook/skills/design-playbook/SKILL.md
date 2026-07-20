@@ -27,6 +27,8 @@ Pause for explicit confirmation before an external, destructive, costly, or scop
 
 ## Steps
 
+> **Stage-list mirror:** `scripts/run_status.py` `STAGES` mirrors this section's steps and artifact filenames to derive run status / resume hints. If you add/remove a step or change an artifact filename here, update that table.
+
 Do in order. Data flow:
 
 `ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → (observe*) → ui-evaluator`

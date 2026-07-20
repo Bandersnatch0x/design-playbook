@@ -65,7 +65,8 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 | `packages/design-playbook-evidence/` | Compatibility launcher + docs for Evidence MCP (`execute_capture_plan`) |
 | `packages/design-playbook/skills/` | Skills SSOT |
 | `docs/agents/` | Tracker + product workflow |
-| `.scratch/` | Specs, tickets, dogfood logs |
+| `.scratch/<run>/` | Single-run artifacts (spec / plan / decision / preview / filled-ui / craft-guard / evidence / point-back) |
+| `.scratch/<effort>/` | wayfinder decision maps (`map.md` + `issues/`) |
 | `docs/adr/` | Decisions |
 
 ## Active effort
