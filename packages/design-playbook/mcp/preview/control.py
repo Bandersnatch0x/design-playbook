@@ -359,10 +359,13 @@ position: absolute; width: 1px; height: 1px; overflow: hidden;
 clip-path: inset(50%); white-space: nowrap;
   }}
 
-  /* floating annotation bubbles pinned to targeted elements */
+  /* floating annotation bubbles pinned to targeted elements.
+     z-index 999 < #dpb-preview-bar (1000): float-note sits above the prototype
+     page content but BELOW the bar/drawer, so pin bubbles never cover the
+     confirm controls (was 1001 -> covered drawer, d46682d follow-up). */
   .dpb-float-note {{
 position: absolute;
-z-index: 1001;
+z-index: 999;
 max-width: 240px;
 min-width: 120px;
 padding: 6px 10px 6px 8px;
@@ -423,7 +426,8 @@ cursor: default !important;
 #dpb-preview-bar .dpb-drawer {{ width: calc(100vw - 24px); }}
 #dpb-preview-bar .dpb-pill .dpb-pill-info {{ display: none; }}
 #dpb-preview-bar .dpb-drawer-body {{ padding: 10px 10px 14px; }}
-#dpb-preview-bar .dpb-drawer-foot {{ justify-content: stretch; }}
+#dpb-preview-bar .dpb-drawer-foot {{ justify-content: stretch; flex-wrap: wrap; }}
+#dpb-preview-bar .dpb-btns {{ flex: 1 1 auto; }}
 #dpb-preview-bar .dpb-btn {{ flex: 1 1 auto; min-width: 0; }}
   }}
   @media (prefers-reduced-motion: reduce) {{
@@ -854,6 +858,13 @@ abortBtn.addEventListener("click", function (e) {{
   }}  // else: let the submit proceed (choice=__abort__)
 }});
   }}
+  // MEDIUM: clicking elsewhere in the drawer cancels abort arming (not just
+  // ESC / 4s timeout); the abort button's own click is excluded via closest.
+  if (drawerEl) drawerEl.addEventListener("click", function (e) {{
+if (abortArmed && abortBtn && !e.target.closest("#dpb-abort")) {{
+  resetAbortArmed();
+}}
+  }});
 
   // Initial readiness (may enable direct confirm on pill primary)
   setReadiness();
