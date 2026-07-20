@@ -106,6 +106,14 @@ def main() -> int:
         PACKAGE / "showcase" / "01-spec.md",
         PACKAGE / "showcase" / "03-point-back.md",
     )
+    expect_valid(
+        failures,
+        "showcase/preview-g5",
+        PACKAGE / "showcase" / "01-spec.md",
+        PACKAGE / "showcase" / "03-point-back.md",
+        "--preview-dir", str(PACKAGE / "showcase" / "preview"),
+        "--decision-report", str(PACKAGE / "showcase" / "preview" / "decision-report.md"),
+    )
 
     cases = [
         ("g1-spec-no-criteria", FAIL / "g1-spec-no-criteria.spec.md",
@@ -251,6 +259,7 @@ def main() -> int:
     )
     for name in (
             "g6-evidence-bound",
+            "g6-observed-with-commentary",
             "g6-multi-entry-latest",
             "g6-manual-provider"):
         case = PASS / name

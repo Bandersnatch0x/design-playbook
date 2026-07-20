@@ -376,13 +376,23 @@ EVIDENCE_PREFIX = "evidence/"
 
 
 def _ledger_observed(text: str) -> list[tuple[str, str]]:
-    """Return (criterion, observed) pairs for each evidence row."""
+    """Return (criterion, observed) pairs for each evidence row.
+
+    The G6 evidence path is the leading token of the observed line; trailing
+    commentary after whitespace or a (full/half-width) paren is tolerated so
+    authors can annotate ``evidence/`` rows without a false-positive G6 fail
+    (issue 03). Free-text observed is unaffected — G6 only checks evidence/
+    rows, and a leading-token free text never starts with ``evidence/``.
+    """
     pairs: list[tuple[str, str]] = []
     for block in re.split(r"\n\s*\n", text):
         crit = re.search(r"^criterion:\s*(\S+)", block, re.I | re.M)
         obs = re.search(r"^observed:\s*(.+)$", block, re.I | re.M)
         if crit and obs:
-            pairs.append((crit.group(1).strip(), obs.group(1).strip()))
+            raw = obs.group(1).strip()
+            lead = re.match(r"[^\s（(]+", raw)
+            observed = lead.group(0) if lead else raw
+            pairs.append((crit.group(1).strip(), observed))
     return pairs
 
 
