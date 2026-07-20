@@ -74,6 +74,31 @@ def check_layout() -> None:
 # Mirrors release.py check_version's three-point plugin.json/marketplace
 # comparison (release.py additionally checks README badges + release notes).
 # Keep in sync when version sites change.
+def check_gate1_smoke() -> None:
+    print("== gate 1 structural smoke (6 skills / 3 commands / namespace) ==")
+    # Semi-automated gate 1 (release-checklist): the static counts a human
+    # would eyeball in /help. The dynamic `claude --plugin-dir` load + /help
+    # listing stay human (host slash, not automatable - see memory).
+    skills_dir = PKG / "skills"
+    skill_dirs = [d for d in skills_dir.iterdir() if d.is_dir()] if skills_dir.is_dir() else []
+    if len(skill_dirs) == 6:
+        ok("6 skills present")
+    else:
+        fail(f"expected 6 skills, got {len(skill_dirs)}")
+    commands_dir = PKG / "commands"
+    cmds = sorted(commands_dir.glob("*.md")) if commands_dir.is_dir() else []
+    if len(cmds) == 3:
+        ok("3 commands present")
+    else:
+        fail(f"expected 3 commands, got {len(cmds)}")
+    plugin = read_json(PKG / ".claude-plugin" / "plugin.json")
+    if plugin is not None:
+        if plugin.get("name") == "design-playbook":
+            ok("plugin.json name = design-playbook")
+        else:
+            fail(f"plugin.json name = {plugin.get('name')!r}, expected design-playbook")
+
+
 def check_versions() -> str:
     print("== versions ==")
     plugin = read_json(PKG / ".claude-plugin" / "plugin.json")
@@ -176,6 +201,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     check_layout()
+    check_gate1_smoke()
     check_versions()
     check_mcp()
     check_launchers()
