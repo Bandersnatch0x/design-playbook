@@ -24,6 +24,9 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("DOCTOR PASSED", result.stdout)
         self.assertIn(".mcp.json", result.stdout)
         self.assertIn("mcp/preview/server.py", result.stdout)
+        self.assertIn("gate 1 structural smoke", result.stdout)
+        self.assertIn("6 skills present", result.stdout)
+        self.assertIn("3 commands present", result.stdout)
 
 
 if __name__ == "__main__":
