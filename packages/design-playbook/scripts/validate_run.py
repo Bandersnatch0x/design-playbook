@@ -24,8 +24,14 @@ Usage:
   validate_run.py <spec.md> <point-back.md>
       [--preview-dir <path>] [--decision-report <path>]
       [--evidence-dir <path>] [--run-root <path>]
+      [--require-preview] [--require-evidence] [--strict]
 Exit 0 + "RUN OK"; exit 1 + one line per artifact violation; exit 2 on usage
 or artifact I/O errors.
+
+Strict quality mode (opt-in):
+  --require-preview   fail when preview did not occur (G5 must fire)
+  --require-evidence  fail when no evidence/ binding is present (G6 must fire)
+  --strict            shorthand for both require flags
 """
 import argparse
 import json
@@ -469,13 +475,22 @@ def check_evidence(
     return errs
 
 
+def _ledger_has_evidence_binding(pointback_text: str) -> bool:
+    for _criterion, observed in _ledger_observed(pointback_text):
+        if observed.startswith(EVIDENCE_PREFIX):
+            return True
+    return False
+
+
 def run(
         spec_path: str,
         pb_path: str,
         preview_dir: str | None = None,
         decision_report: str | None = None,
         evidence_dir: str | None = None,
-        run_root: str | None = None) -> list[str]:
+        run_root: str | None = None,
+        require_preview: bool = False,
+        require_evidence: bool = False) -> list[str]:
     errs = []
     spec_text = Path(spec_path).read_text(encoding="utf-8")
     pointback_text = Path(pb_path).read_text(encoding="utf-8")
@@ -483,9 +498,25 @@ def run(
     errs += check_pointback(pointback_text, len(_l6_items(spec_text)))
     pd = Path(preview_dir) if preview_dir else None
     dr = Path(decision_report) if decision_report else None
+    if require_preview and not preview_occurred(pd):
+        errs.append(
+            "G5 preview: --require-preview set but preview did not occur "
+            "(pass --preview-dir with preview artifacts)"
+        )
     errs += check_preview(pd, dr)
     ed = Path(evidence_dir) if evidence_dir else None
     rr = Path(run_root) if run_root else None
+    if require_evidence:
+        if ed is None or not ed.is_dir():
+            errs.append(
+                "G6 evidence: --require-evidence set but --evidence-dir "
+                "is missing or not a directory"
+            )
+        elif not _ledger_has_evidence_binding(pointback_text):
+            errs.append(
+                "G6 evidence: --require-evidence set but no ledger "
+                "`observed` references an evidence/ artifact"
+            )
     errs += check_evidence(pointback_text, len(_l6_items(spec_text)), ed, rr)
     return errs
 
@@ -518,7 +549,26 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         help="optional run root for resolving evidence/ paths in G6 "
              "(defaults to --evidence-dir parent)",
     )
-    return parser.parse_args(argv[1:])
+    parser.add_argument(
+        "--require-preview",
+        action="store_true",
+        help="strict mode: fail when preview did not occur",
+    )
+    parser.add_argument(
+        "--require-evidence",
+        action="store_true",
+        help="strict mode: fail when no evidence/ binding is present",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="shorthand for --require-preview --require-evidence",
+    )
+    args = parser.parse_args(argv[1:])
+    if args.strict:
+        args.require_preview = True
+        args.require_evidence = True
+    return args
 
 
 def main(argv: list[str]) -> int:
@@ -536,6 +586,8 @@ def main(argv: list[str]) -> int:
             decision_report=args.decision_report,
             evidence_dir=args.evidence_dir,
             run_root=args.run_root,
+            require_preview=args.require_preview,
+            require_evidence=args.require_evidence,
         )
     except (OSError, UnicodeError) as exc:
         print(f"RUN ERROR: cannot read artifacts: {exc}")

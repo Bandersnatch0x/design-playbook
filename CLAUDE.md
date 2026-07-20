@@ -12,6 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Plugin 元数据 | `packages/design-playbook/.claude-plugin/plugin.json` |
 | Skills | `packages/design-playbook/skills/{design-playbook,ux-spec,ui-picker,craft-guard,ui-evaluator}/` |
 | Commands | `packages/design-playbook/commands/` |
+| MCP adapters | `packages/design-playbook/mcp/{preview,evidence}/` + 包根 `.mcp.json`（ADR-0009；sibling 包为兼容启动器） |
 | Codex | `packages/design-playbook/codex/AGENTS.md` |
 | 自有示例 | `packages/design-playbook/examples/` |
 | 产品 workflow | `docs/agents/product-workflow.md` |
@@ -41,7 +42,7 @@ Commands live under `packages/design-playbook/commands/` (pipeline) and monorepo
 
 ## 开发注意
 
-1. **公开可分发表面**仅 package 内自有文案（ADR-0003）；改 skill 勿从任何上游/旧 attachments 同步。  
+1. **公开可分发表面**仅 package 内自有内容——文案与自研 MCP runtime（ADR-0003、ADR-0009）；改 skill 勿从任何上游/旧 attachments 同步。  
 2. **SSOT** = `packages/design-playbook/skills/*/references/*`（ADR-0004）。  
 3. 演示站已移除；勿再引入 `src/` 阅读站作为交付。  
 4. 打磨产品时先读 `.scratch/design-playbook-v0/phase.md` 与 `CONTEXT.md`。  

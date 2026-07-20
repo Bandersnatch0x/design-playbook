@@ -39,6 +39,29 @@ check(not (PKG / ".claude-plugin" / "commands").exists(), "no commands/ inside .
 check(not (PKG / ".claude-plugin" / "marketplace.json").exists(),
       "no in-package marketplace.json (catalog lives at repo root)")
 
+print("== Bundled MCP adapters (marketplace install path) ==")
+mcp_json = PKG / ".mcp.json"
+check(mcp_json.is_file(), "plugin .mcp.json present")
+if mcp_json.is_file():
+    try:
+        mcp = json.loads(mcp_json.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        mcp = {}
+        check(False, f"plugin .mcp.json is valid JSON: {exc}")
+    else:
+        servers = mcp.get("mcpServers", {}) if isinstance(mcp, dict) else {}
+        check(isinstance(servers, dict) and "design-playbook-preview" in servers,
+              "plugin .mcp.json registers design-playbook-preview")
+        check(isinstance(servers, dict) and "design-playbook-evidence" in servers,
+              "plugin .mcp.json registers design-playbook-evidence")
+        raw = mcp_json.read_text(encoding="utf-8")
+        check("${CLAUDE_PLUGIN_ROOT}" in raw,
+              "plugin .mcp.json uses ${CLAUDE_PLUGIN_ROOT}")
+check((PKG / "mcp" / "preview" / "server.py").is_file(),
+      "bundled preview runtime at mcp/preview/server.py")
+check((PKG / "mcp" / "evidence" / "server.py").is_file(),
+      "bundled evidence runtime at mcp/evidence/server.py")
+
 print("== Marketplace catalog ==")
 if mj:
     plugins = mj.get("plugins", [])

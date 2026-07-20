@@ -1,4 +1,5 @@
 # Codex ~/.codex/config.toml example. Replace the placeholder locally.
+# Preferred path is the plugin-bundled runtime; the sibling launcher still works.
 [mcp_servers.design-playbook-preview]
 command = "python"
-args = ["<abs-path-to-repo>/packages/design-playbook-preview/server.py"]
+args = ["<abs-path-to-repo>/packages/design-playbook/mcp/preview/server.py"]

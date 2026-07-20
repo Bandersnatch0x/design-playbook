@@ -275,8 +275,8 @@ def main() -> int:
         FAIL / "g6-pass-without-valid-binding" / "point-back.md",
         "G6 evidence", *_g6_args(FAIL / "g6-pass-without-valid-binding"))
 
-    # --- ADR-0008 adapter floor self-check (server.py) ---
-    preview_server = PACKAGE.parent / "design-playbook-preview" / "server.py"
+    # --- ADR-0008 adapter floor self-check (bundled runtime) ---
+    preview_server = PACKAGE / "mcp" / "preview" / "server.py"
     if preview_server.is_file():
         sc = subprocess.run(
             [sys.executable, str(preview_server), "--self-check"],
@@ -288,7 +288,55 @@ def main() -> int:
         else:
             print("  ok    adapter floor self-check passed")
     else:
-        failures.append("adapter floor self-check: server.py not found")
+        failures.append("adapter floor self-check: bundled server.py not found")
+
+    # --- Strict quality mode (opt-in require flags) ---
+    strict_spec, strict_pb = _zero_findings_pair()
+    strict_no_preview = run(strict_spec, strict_pb, "--require-preview")
+    if strict_no_preview.returncode != 1 or "require-preview" not in strict_no_preview.stdout:
+        failures.append(
+            "strict require-preview: expected exit 1 with diagnostic; "
+            f"got {strict_no_preview.returncode} {strict_no_preview.stdout!r}"
+        )
+    else:
+        print("  ok    strict --require-preview fails without preview")
+    strict_no_evidence = run(strict_spec, strict_pb, "--require-evidence")
+    if (
+        strict_no_evidence.returncode != 1
+        or "require-evidence" not in strict_no_evidence.stdout
+    ):
+        failures.append(
+            "strict require-evidence: expected exit 1 with diagnostic; "
+            f"got {strict_no_evidence.returncode} {strict_no_evidence.stdout!r}"
+        )
+    else:
+        print("  ok    strict --require-evidence fails without evidence")
+    g6_case = PASS / "g6-evidence-bound"
+    g5_case = PASS / "g5-preview-confirmed"
+    req_ev = run(
+        g6_spec,
+        g6_case / "point-back.md",
+        "--require-evidence",
+        *_g6_args(g6_case),
+    )
+    if req_ev.returncode != 0:
+        failures.append(
+            f"strict require-evidence on bound fixture failed: {req_ev.stdout!r}"
+        )
+    else:
+        print("  ok    strict --require-evidence passes with bound evidence")
+    req_prev = run(
+        strict_spec,
+        strict_pb,
+        "--require-preview",
+        *_g5_args(g5_case),
+    )
+    if req_prev.returncode != 0:
+        failures.append(
+            f"strict require-preview on confirmed fixture failed: {req_prev.stdout!r}"
+        )
+    else:
+        print("  ok    strict --require-preview passes with confirmed preview")
 
     # --- ADR-0008 frontend floor JS intercept (playwright) ---
     # CI has no playwright (see ci.yml: browser suites stay local/release).

@@ -12,7 +12,7 @@ import sys, tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent.parent / "design-playbook-preview"))
+sys.path.insert(0, str(HERE.parent / "mcp" / "preview"))
 import server  # noqa: E402
 from i18n import default_options  # noqa: E402
 

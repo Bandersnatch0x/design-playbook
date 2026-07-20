@@ -74,27 +74,35 @@ Six model-invoked skills (`/design-playbook:<name>`):
 | `frontend-design` | Anti-template visual direction |
 | [native-feel-skill](https://github.com/yetone/native-feel-skill) | Full native-feel depth (WebView, IPC, memory) |
 
-## 🔌 Optional adapters
+## 🔌 Adapters (bundled in v0.3+)
 
-The orchestrator **probes** for these and skips their steps when absent — neither is a dependency.
+Preview and Evidence MCP runtimes ship **inside** the main plugin
+(`packages/design-playbook/mcp/` + `.mcp.json` with `${CLAUDE_PLUGIN_ROOT}`).
+Marketplace install therefore registers both tools without a second package.
+The orchestrator still **probes** and skips steps when a host has no MCP tools.
 
-| Adapter | MCP tool | Enables | Install |
+| Adapter | MCP tool | Enables | Notes |
 | :--- | :--- | :--- | :--- |
-| `design-playbook-preview` | `preview_prototype` | `preview*` human confirm gate (G5) | [Install / MCP config](./packages/design-playbook-preview/#install--mcp-config) |
-| `design-playbook-evidence` | `execute_capture_plan` | `observe*` runtime evidence (G6) — needs Playwright + Chromium | [Install / MCP config](./packages/design-playbook-evidence/#install--mcp-config) |
+| `design-playbook-preview` | `preview_prototype` | `preview*` human confirm gate (G5) | Bundled; sibling dir is a compatibility launcher |
+| `design-playbook-evidence` | `execute_capture_plan` | `observe*` runtime evidence (G6) — needs Playwright + Chromium | Bundled; capture still optional at runtime |
+
+Docs: [preview](./packages/design-playbook-preview/#install--mcp-config) · [evidence](./packages/design-playbook-evidence/#install--mcp-config)
 
 ## 🗂️ Layout
 
 ```text
 .claude-plugin/marketplace.json   ← repo-root catalog (source: ./packages/design-playbook)
-packages/design-playbook/         ← public plugin (skills, commands, examples, showcase, LICENSE, NOTICE)
-packages/design-playbook-preview/ ← optional MCP: preview_prototype (G5 / preview*)
-packages/design-playbook-evidence/← optional MCP: execute_capture_plan (G6 / observe*)
+packages/design-playbook/         ← public plugin (skills, commands, mcp/, examples, showcase)
+packages/design-playbook/mcp/     ← bundled Preview + Evidence MCP runtimes
+packages/design-playbook-preview/ ← compatibility launcher + docs (G5)
+packages/design-playbook-evidence/← compatibility launcher + docs (G6)
 docs/agents/  docs/adr/           ← engineering shell (tracker, workflow, decisions)
 CONTEXT.md  .scratch/             ← glossary, specs, tickets, dogfood logs
 ```
 
 Runs land their artifacts under `.scratch/<run>/` in your project — see the [package README](./packages/design-playbook/README.md) and `SKILL.md` steps 3, 5, 8.
+
+**Maintainer helpers (repo root, not a product CLI):** `scripts/doctor.py` (install health), `scripts/run_status.py` (derive status/resume from run artifacts), `scripts/release.py` (tag gate), `scripts/validate.py` (static plugin surface).
 
 Root = GitHub front door + engineering shell · Package = only runtime surface · `product-*` maintainer commands stay at root, never in the package.
 
