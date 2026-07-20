@@ -16,6 +16,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 # Ordered pipeline stages used only for status/resume narration.
+#
+# Mirror of SKILL.md Steps (spec / plan / decision / preview / fill / craft /
+# evidence / accept); the SKILL.md Steps section points back here. When you
+# add/remove a step or change an artifact filename in SKILL.md, sync this
+# table. A lockstep test or a SKILL-embedded machine-readable table is deferred
+# until ADR-0010 P1 turns STAGES into a navigation data source.
 STAGES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("spec", "ux-spec", ("spec.md",)),
     ("plan", "plan", ("plan.md",)),
