@@ -26,7 +26,7 @@ A Claude Code / Codex plugin. One predictable pass per run — **Design I/O**: `
 - **Declarations** *(what good is)*: `spec` · `domain` · `craft` · `design` · `components` · `template`
 - **Contracts** *(how work enters the pipeline)*: `skill` (timing) · `evaluator` (acceptance + recirculate)
 
-> 🎬 **See it run on a real project:** the [`showcase/`](./packages/design-playbook/showcase) folder is a full Design I/O pass against [SwarSight](https://github.com/) — spec, decision report, and point-back critique with a closed recirculate trail.
+> 🎬 **Try it:** `/design-playbook:design-io <your ask>` — one pass lands `spec.md`, a decision report, and a point-back ledger under `.scratch/<run>/` (artifact shape: [`showcase/01-spec.md`](./packages/design-playbook/showcase/01-spec.md)). **See it run on a real project:** the [`showcase/`](./packages/design-playbook/showcase) folder is a full Design I/O pass against SwarSight — spec, decision report, and point-back critique with a closed recirculate trail.
 
 ## 📦 Install
 
@@ -74,6 +74,15 @@ Six model-invoked skills (`/design-playbook:<name>`):
 | `frontend-design` | Anti-template visual direction |
 | [native-feel-skill](https://github.com/yetone/native-feel-skill) | Full native-feel depth (WebView, IPC, memory) |
 
+## 🔌 Optional adapters
+
+The orchestrator **probes** for these and skips their steps when absent — neither is a dependency.
+
+| Adapter | MCP tool | Enables | Install |
+| :--- | :--- | :--- | :--- |
+| `design-playbook-preview` | `preview_prototype` | `preview*` human confirm gate (G5) | [Install / MCP config](./packages/design-playbook-preview/#install--mcp-config) |
+| `design-playbook-evidence` | `execute_capture_plan` | `observe*` runtime evidence (G6) — needs Playwright + Chromium | [Install / MCP config](./packages/design-playbook-evidence/#install--mcp-config) |
+
 ## 🗂️ Layout
 
 ```text
@@ -84,6 +93,8 @@ packages/design-playbook-evidence/← optional MCP: execute_capture_plan (G6 / o
 docs/agents/  docs/adr/           ← engineering shell (tracker, workflow, decisions)
 CONTEXT.md  .scratch/             ← glossary, specs, tickets, dogfood logs
 ```
+
+Runs land their artifacts under `.scratch/<run>/` in your project — see the [package README](./packages/design-playbook/README.md) and `SKILL.md` steps 3, 5, 8.
 
 Root = GitHub front door + engineering shell · Package = only runtime surface · `product-*` maintainer commands stay at root, never in the package.
 

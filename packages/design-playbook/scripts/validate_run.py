@@ -69,10 +69,10 @@ def check_spec(text: str) -> list[str]:
     for layer in SPEC_LAYERS:
         # heading like "## L6 验收标准" or "## L6"
         if not re.search(rf"^#+\s*{layer}\b", text, re.M):
-            errs.append(f"spec: missing {layer}")
+            errs.append(f"G1 spec: missing {layer}")
     items = _l6_items(text)
     if not items:
-        errs.append("spec: L6 has no top-level acceptance criteria")
+        errs.append("G1 spec: L6 has no top-level acceptance criteria")
     for number, item in enumerate(items, 1):
         positions = {
             keyword: re.search(rf"\b{keyword}\b", item, re.I)
@@ -81,12 +81,12 @@ def check_spec(text: str) -> list[str]:
         missing = [name for name, match in positions.items() if not match]
         if missing:
             errs.append(
-                f"spec: L6.{number} missing {', '.join(missing)}")
+                f"G1 spec: L6.{number} missing {', '.join(missing)}")
             continue
         if not (positions["Given"].start() < positions["When"].start() <
                 positions["Then"].start()):
             errs.append(
-                f"spec: L6.{number} must order Given -> When -> Then")
+                f"G1 spec: L6.{number} must order Given -> When -> Then")
     return errs
 
 
@@ -121,33 +121,33 @@ def _check_evidence(text: str, expected_l6: int, is_pass: bool) -> list[str]:
     errs = []
     rows = _evidence(text)
     if not rows:
-        return ["evidence: no criterion-shaped ledger entries"]
+        return ["G2 evidence: no criterion-shaped ledger entries"]
 
     seen_l6: dict[int, int] = {}
     for i, row in enumerate(rows, 1):
         for field in EVIDENCE_FIELDS:
             values = row[field]
             if not values:
-                errs.append(f"evidence: row {i} missing {field}:")
+                errs.append(f"G2 evidence: row {i} missing {field}:")
             elif not any(values):
-                errs.append(f"evidence: row {i} has empty {field}")
+                errs.append(f"G2 evidence: row {i} has empty {field}")
             elif len(values) > 1:
-                errs.append(f"evidence: row {i} repeats {field}:")
+                errs.append(f"G2 evidence: row {i} repeats {field}:")
 
         criterion = row["criterion"][0] if row["criterion"] else ""
         result = row["result"][0].casefold() if row["result"] else ""
         if result and result not in VALID_RESULTS:
             errs.append(
-                f"evidence: row {i} has invalid result '{row['result'][0]}'")
+                f"G2 evidence: row {i} has invalid result '{row['result'][0]}'")
         if is_pass and result and result != "pass":
             errs.append(
-                f"evidence: Pass requires row {i} result pass, got "
+                f"G3 evidence: Pass requires row {i} result pass, got "
                 f"'{row['result'][0]}'")
 
         l6_ref = re.fullmatch(r"L6\.(\d+)", criterion.strip(), re.I)
         if not l6_ref and criterion:
             errs.append(
-                f"evidence: row {i} criterion must be exactly L6.<n>, got "
+                f"G2 evidence: row {i} criterion must be exactly L6.<n>, got "
                 f"'{criterion}'")
         elif l6_ref:
             number = int(l6_ref.group(1))
@@ -156,11 +156,11 @@ def _check_evidence(text: str, expected_l6: int, is_pass: bool) -> list[str]:
     for number in range(1, expected_l6 + 1):
         count = seen_l6.get(number, 0)
         if count == 0:
-            errs.append(f"evidence: missing ledger row for L6.{number}")
+            errs.append(f"G2 evidence: missing ledger row for L6.{number}")
         elif count > 1:
-            errs.append(f"evidence: repeated ledger rows for L6.{number}")
+            errs.append(f"G2 evidence: repeated ledger rows for L6.{number}")
     for number in sorted(set(seen_l6) - set(range(1, expected_l6 + 1))):
-        errs.append(f"evidence: ledger references unknown L6.{number}")
+        errs.append(f"G2 evidence: ledger references unknown L6.{number}")
     return errs
 
 
@@ -171,9 +171,9 @@ def _normalise_issue(value: str) -> str:
 def _verdict(text: str) -> tuple[str | None, list[str]]:
     headings = list(re.finditer(r"^#+\s*Verdict\s*$", text, re.I | re.M))
     if not headings:
-        return None, ["point-back: missing explicit Verdict section"]
+        return None, ["G3 point-back: missing explicit Verdict section"]
     if len(headings) > 1:
-        return None, ["point-back: repeated Verdict section"]
+        return None, ["G3 point-back: repeated Verdict section"]
 
     start = headings[0].end()
     next_heading = re.search(r"^#+\s+", text[start:], re.M)
@@ -184,7 +184,7 @@ def _verdict(text: str) -> tuple[str | None, list[str]]:
         body, re.I | re.M)
     if len(values) != 1:
         return None, [
-            "point-back: Verdict section must contain exactly one "
+            "G3 point-back: Verdict section must contain exactly one "
             "Pass or Recirculate verdict"]
     return values[0].casefold(), []
 
@@ -198,7 +198,7 @@ def check_pointback(text: str, expected_l6: int) -> list[str]:
     errs += _check_evidence(text, expected_l6, is_pass)
     if not findings:
         if not is_pass:
-            errs.append("point-back: no findings and no Pass verdict")
+            errs.append("G3 point-back: no findings and no Pass verdict")
         return errs
 
     blocking: list[tuple[int, str]] = []
@@ -206,13 +206,13 @@ def check_pointback(text: str, expected_l6: int) -> list[str]:
         for field in FINDING_FIELDS:
             values = finding[field]
             if not values:
-                errs.append(f"point-back: finding {i} missing {field}:")
+                errs.append(f"G2 point-back: finding {i} missing {field}:")
             elif not any(values):
                 suffix = " (breaks routing)" if field == "source" else ""
                 errs.append(
-                    f"point-back: finding {i} has empty {field}{suffix}")
+                    f"G2 point-back: finding {i} has empty {field}{suffix}")
             elif len(values) > 1:
-                errs.append(f"point-back: finding {i} repeats {field}:")
+                errs.append(f"G2 point-back: finding {i} repeats {field}:")
 
         severity = finding["severity"][0] if finding["severity"] else ""
         if re.search(r"(?<!non-)\bblocking\b", severity, re.I):
@@ -225,7 +225,7 @@ def check_pointback(text: str, expected_l6: int) -> list[str]:
         ]
         if not closure_targets:
             errs.append(
-                "point-back: Pass verdict but no '0 blocking' closure trail")
+                "G4 point-back: Pass verdict but no '0 blocking' closure trail")
         else:
             known_targets = {_normalise_issue(issue) for _, issue in blocking}
             for i, issue in blocking:
@@ -233,15 +233,15 @@ def check_pointback(text: str, expected_l6: int) -> list[str]:
                 matches = closure_targets.count(target)
                 if matches == 0:
                     errs.append(
-                        f"point-back: blocking finding {i} has no matching "
+                        f"G4 point-back: blocking finding {i} has no matching "
                         f"closure trail for issue '{issue}'")
                 elif matches > 1:
                     errs.append(
-                        f"point-back: blocking finding {i} has {matches} "
+                        f"G4 point-back: blocking finding {i} has {matches} "
                         f"matching closure trails for issue '{issue}'")
             for target in sorted(set(closure_targets) - known_targets):
                 errs.append(
-                    "point-back: closure trail targets no blocking finding: "
+                    "G4 point-back: closure trail targets no blocking finding: "
                     f"'{target}'")
     return errs
 
