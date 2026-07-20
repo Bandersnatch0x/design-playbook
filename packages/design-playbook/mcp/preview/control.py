@@ -155,6 +155,8 @@ padding: 0;
   /* non-modal <dialog>.show() is not in the top layer, so we keep the hand-rolled
      scrim (stronger than before per UX V4) so the drawer reads as a focused layer. */
   #dpb-preview-bar dialog.dpb-drawer[open] {{ display: flex; }}
+  /* show() failure / no-dialog fallback: is-open alone must reveal the drawer */
+  #dpb-preview-bar.is-open dialog.dpb-drawer {{ display: flex; }}
   #dpb-preview-bar.is-open::before {{
 content: "";
 position: fixed; inset: 0; z-index: -1;
@@ -507,11 +509,13 @@ cursor: default !important;
   </form>
 </div>
 <div id="dpb-preview-spacer" aria-hidden="true"></div>
+<script>window.DPB_I18N = {i18n_json};</script>
 <script>
 (function () {{
   var bar = document.getElementById("dpb-preview-bar");
   var form = document.getElementById("dpb-decide-form");
   if (!form) return;
+  var I18N = window.DPB_I18N || {{}};
   var field = form.querySelector('textarea[name="feedback"]');
   var hint = document.getElementById("dpb-feedback-hint");
   var pinBtn = document.getElementById("dpb-pin-toggle");
@@ -667,11 +671,11 @@ anchors.forEach(function (a, idx) {{
   row.innerHTML =
     '<span class="n">' + (idx + 1) + "</span>" +
     '<div class="meta">' +
-      '<button type="button" class="label" data-locate="' + idx + '" title="{t_locate}" aria-label="{t_locate_anchor} ' + (idx + 1) + '">' + esc(a.label) + "</button>" +
+      '<button type="button" class="label" data-locate="' + idx + '" title="' + esc(I18N.locate) + '" aria-label="' + esc(I18N.locate_anchor) + ' ' + (idx + 1) + '">' + esc(a.label) + "</button>" +
       '<div class="sel" title="' + esc(a.selector) + '">' + esc(a.selector) + "</div>" +
-      '<input type="text" data-i="' + idx + '" aria-label="' + '{t_anchor_num_pre}' + (idx + 1) + '{t_anchor_num_post}' + '" placeholder="' + '{t_anchor_placeholder}' + '" value="' + esc(a.comment) + '" />' +
+      '<input type="text" data-i="' + idx + '" aria-label="' + esc(I18N.anchor_num_pre) + (idx + 1) + esc(I18N.anchor_num_post) + '" placeholder="' + esc(I18N.anchor_placeholder) + '" value="' + esc(a.comment) + '" />' +
     "</div>" +
-    '<button type="button" class="rm" data-rm="' + idx + '" aria-label="' + '{t_remove_num_pre}' + (idx + 1) + '">' + '{t_remove}' + '</button>';
+    '<button type="button" class="rm" data-rm="' + idx + '" aria-label="' + esc(I18N.remove_num_pre) + (idx + 1) + '">' + esc(I18N.remove) + '</button>';
   listEl.appendChild(row);
   ensureBubble(a, idx);
 }});
@@ -681,7 +685,7 @@ updateCounts();
 
   function updateCounts() {{
 var n = anchors.length;
-if (pinCountEl) pinCountEl.textContent = '{t_pin_count_pre}' + n + '{t_pin_count_post}';
+if (pinCountEl) pinCountEl.textContent = (I18N.pin_count_pre || "") + n + (I18N.pin_count_post || "");
 if (pillCountEl) {{
   pillCountEl.textContent = String(n);
   pillCountEl.classList.toggle("is-on", n > 0);
@@ -707,7 +711,7 @@ pillReadyEl.classList.toggle("is-ready", ready);
 if (ready === lastReady) return;  // P1.6: cache to avoid screen-reader jitter on every input
 lastReady = ready;
 if (ready) {{
-  pillReadyEl.textContent = '{t_ready}';
+  pillReadyEl.textContent = I18N.ready || "";
   if (openPrimary) {{
     if (pillOpenLabel === null) pillOpenLabel = openPrimary.textContent;  // I13: capture once
     openPrimary.classList.add('is-direct-confirm');
@@ -719,7 +723,7 @@ if (ready) {{
     }}
   }}
 }} else {{
-  pillReadyEl.textContent = '{t_not_ready}';
+  pillReadyEl.textContent = I18N.not_ready || "";
   if (openPrimary) {{
     openPrimary.classList.remove('is-direct-confirm');
     openPrimary.setAttribute('aria-haspopup', 'dialog');  // P1.1: restore dialog trigger
@@ -745,21 +749,23 @@ if (pinBtn) {{
   pinBtn.classList.toggle("is-on", pinOn);
   pinBtn.setAttribute("aria-pressed", pinOn ? "true" : "false");
 }}
-if (pinLabel) pinLabel.textContent = pinOn ? "{t_pin_on}" : "{t_pin_off}";
+if (pinLabel) pinLabel.textContent = pinOn ? (I18N.pin_on || "") : (I18N.pin_off || "");
 if (!pinOn) clearHover();
   }}
 
   var lastFocus = null;
   function openDrawer() {{
-bar.classList.add("is-open");
 lastFocus = document.activeElement;
 // Use non-modal <dialog>.show() (NOT showModal): the drawer must NOT make the
 // page inert, because pin-to-annotate requires clicking prototype elements
 // behind the drawer. ::backdrop (modal only) is replaced by the .is-open::before
 // scrim below. ESC + focus-restore handled manually.
+// is-open is the reliable open signal (scrim/pill + CSS display fallback when
+// dialog.show is missing or throws — drawer must not depend on dialog[open]).
 if (drawerEl && typeof drawerEl.show === "function") {{
-  try {{ if (!drawerEl.open) drawerEl.show(); }} catch (e) {{ /* ignore */ }}
+  try {{ if (!drawerEl.open) drawerEl.show(); }} catch (e) {{ /* fall through to is-open */ }}
 }}
+bar.classList.add("is-open");
 setTimeout(function () {{ if (closeBtn) closeBtn.focus(); }}, 0);
   }}
   function closeDrawer() {{
@@ -837,13 +843,20 @@ field.addEventListener("keydown", function (e) {{
   var abortArmed = false;
   var abortTimer = null;
   var abortLabel = "";
-  function resetAbortArmed() {{
+  // announceCancel: when true (4s timeout), write "cancelled" to the sr-only
+  // status so screen readers hear the arm expire; other paths clear silently.
+  function resetAbortArmed(announceCancel) {{
 if (abortTimer) {{ clearTimeout(abortTimer); abortTimer = null; }}
-if (abortStatus) abortStatus.textContent = "";
+var wasArmed = abortArmed;
 if (abortBtn && abortArmed) {{
   abortArmed = false;
   abortBtn.textContent = abortLabel;
   abortBtn.classList.remove("is-armed");
+}}
+if (abortStatus) {{
+  abortStatus.textContent = (announceCancel && wasArmed)
+    ? (I18N.abort_cancelled || "")
+    : "";
 }}
   }}
   if (abortBtn) {{
@@ -852,10 +865,10 @@ abortBtn.addEventListener("click", function (e) {{
   if (!abortArmed) {{
     e.preventDefault();
     abortArmed = true;
-    abortBtn.textContent = "{t_terminate_confirm}";
+    abortBtn.textContent = I18N.terminate_confirm || "";
     abortBtn.classList.add("is-armed");
-    if (abortStatus) abortStatus.textContent = "{t_terminate_confirm}";
-    abortTimer = setTimeout(resetAbortArmed, ABORT_ARM_MS);
+    if (abortStatus) abortStatus.textContent = I18N.terminate_confirm || "";
+    abortTimer = setTimeout(function () {{ resetAbortArmed(true); }}, ABORT_ARM_MS);
   }}  // else: let the submit proceed (choice=__abort__)
 }});
   }}
@@ -870,17 +883,42 @@ if (abortArmed && abortBtn && !e.target.closest("#dpb-abort")) {{
   // Initial readiness (may enable direct confirm on pill primary)
   setReadiness();
 
-  // <dialog> handles ESC + focus trap natively; mirror its close to our state.
+  // non-modal <dialog>.show() has no native focus trap / ESC. Mirror close +
+  // trap Tab inside the drawer when pin is OFF; when pin is ON, Tab must reach
+  // the prototype so keyboard users can move focus onto page elements.
   if (drawerEl) drawerEl.addEventListener("close", function () {{
 bar.classList.remove("is-open");
 resetAbortArmed();  // I18: defense-in-depth - clear arming if a future path closes the dialog directly
 if (pinOn) setPin(false);
   }});
-  // non-modal <dialog> has no native ESC; add it (skip while pinning - Esc exits pin).
+  function drawerFocusables() {{
+if (!drawerEl) return [];
+var sel = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+var nodes = drawerEl.querySelectorAll(sel);
+return Array.prototype.filter.call(nodes, function (el) {{
+  return !el.hasAttribute("disabled") && el.tabIndex !== -1 &&
+    (el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement);
+}});
+  }}
   document.addEventListener("keydown", function (e) {{
-if (e.key !== "Escape") return;
-if (pinOn) {{ setPin(false); return; }}
-if (bar.classList.contains("is-open")) {{ e.preventDefault(); closeDrawer(); }}
+if (e.key === "Escape") {{
+  if (pinOn) {{ setPin(false); return; }}
+  if (bar.classList.contains("is-open")) {{ e.preventDefault(); closeDrawer(); }}
+  return;
+}}
+if (e.key !== "Tab") return;
+if (!bar.classList.contains("is-open") || pinOn) return;  // pinOn: let Tab escape to prototype
+var list = drawerFocusables();
+if (!list.length) return;
+var first = list[0];
+var last = list[list.length - 1];
+var active = document.activeElement;
+var outside = !drawerEl.contains(active);
+if (e.shiftKey) {{
+  if (outside || active === first) {{ e.preventDefault(); last.focus(); }}
+}} else {{
+  if (outside || active === last) {{ e.preventDefault(); first.focus(); }}
+}}
   }});
 
   document.addEventListener("mousemove", function (e) {{
@@ -1065,10 +1103,10 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         (primary_bits if primary else secondary_bits).append(bit)
     secondary_html = "\n".join(secondary_bits)
     # secondary actions surfaced on the floating pill (so revise is not hidden in the drawer)
+    # Second replace rewrites the full class attr; a third partial replace would be dead.
     pill_secondary_html = "\n".join(
         b.replace('type="submit" name="choice"', 'type="button" data-pill-revise')
          .replace('class="dpb-btn dpb-btn-secondary"', 'class="dpb-btn-pill-secondary"')
-         .replace("dpb-btn-secondary", "dpb-btn-pill-secondary")
         for b in secondary_bits
     )
     summary_safe = html_lib.escape(summary)
@@ -1078,44 +1116,53 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
     )
     primary_val = html_lib.escape(primary_opt, quote=True)
     primary_label = html_lib.escape(display_label(primary_opt))
+    # JS-side strings: inject via JSON script (not .format into JS literals).
+    # Translations with quotes, braces, or "/{" must not break JS or raise KeyError.
+    # HTML {t_xxx} placeholders stay on .format (html.escape-safe static chrome).
+    JS_KEYS = (
+        "locate",
+        "locate_anchor",
+        "anchor_num_pre",
+        "anchor_num_post",
+        "anchor_placeholder",
+        "remove_num_pre",
+        "remove",
+        "pin_count_pre",
+        "pin_count_post",
+        "ready",
+        "not_ready",
+        "pin_on",
+        "pin_off",
+        "terminate_confirm",
+    )
+    i18n_obj = {k: t(k) for k in JS_KEYS}
+    # abort 4s timeout a11y broadcast (not in the 14 JS title/label slots above)
+    i18n_obj["abort_cancelled"] = t("abort_cancelled")
+    i18n_json = json.dumps(i18n_obj, ensure_ascii=False)
     return control_tpl.format(
-        round_n=html_lib.escape(str(round_n)),
         t_revise_labels=revise_js,
+        i18n_json=i18n_json,
         summary_safe=summary_safe,
         secondary_html=secondary_html,
         pill_secondary_html=pill_secondary_html,
         primary_val=primary_val,
         primary_label=primary_label,
-        t_region=t("region_label"),
-        t_round=t("round_n", n=round_n),
-        t_annotate=t("annotate"),
-        t_pill_open=t("pill_open"),
-        t_ready=t("ready"),
-        t_not_ready=t("not_ready"),
-        t_drawer_aria=t("drawer_aria"),
-        t_collapse=t("collapse"),
-        t_pin_toggle=t("pin_toggle"),
-        t_pin_count=t("pin_count", n=0),
-        t_pin_on=t("pin_on"),
-        t_pin_off=t("pin_off"),
-        t_anchors_head=t("anchors_head"),
-        t_anchors_empty=t("anchors_empty"),
-        t_field_label=t("field_label"),
-        t_field_hint=t("field_hint"),
-        t_field_placeholder=t("field_placeholder"),
-        t_close=t("close"),
-        t_terminate=t("terminate"),
-        t_terminate_confirm=t("terminate_confirm"),
-        t_draft=t("draft"),
-        t_locate=t("locate_anchor"),
-        t_locate_anchor=t("locate_anchor"),
-        t_remove=t("remove"),
-        t_anchor_num_pre=t("anchor_num_pre"),
-        t_anchor_num_post=t("anchor_num_post"),
-        t_anchor_placeholder=t("anchor_placeholder"),
-        t_remove_num_pre=t("remove_num_pre"),
-        t_pin_count_pre=t("pin_count_pre"),
-        t_pin_count_post=t("pin_count_post"),
+        t_region=html_lib.escape(t("region_label")),
+        t_round=html_lib.escape(t("round_n", n=round_n)),
+        t_annotate=html_lib.escape(t("annotate")),
+        t_pill_open=html_lib.escape(t("pill_open")),
+        t_not_ready=html_lib.escape(t("not_ready")),
+        t_drawer_aria=html_lib.escape(t("drawer_aria")),
+        t_collapse=html_lib.escape(t("collapse")),
+        t_pin_toggle=html_lib.escape(t("pin_toggle")),
+        t_pin_count=html_lib.escape(t("pin_count", n=0)),
+        t_anchors_head=html_lib.escape(t("anchors_head")),
+        t_anchors_empty=html_lib.escape(t("anchors_empty")),
+        t_field_label=html_lib.escape(t("field_label")),
+        t_field_hint=html_lib.escape(t("field_hint")),
+        t_field_placeholder=html_lib.escape(t("field_placeholder"), quote=True),
+        t_terminate=html_lib.escape(t("terminate")),
+        t_draft=html_lib.escape(t("draft")),
     )
 
 
