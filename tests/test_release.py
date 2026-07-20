@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
-"""Black-box regression tests for the release gate."""
+"""Black-box regression tests for the release gate.
+
+The tests are pinned to the *current* version read from plugin.json (rather
+than a hardcoded literal) so they survive every version bump without
+bit-rotting the tag/release-notes assertions.
+"""
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
@@ -11,6 +17,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE = ROOT / "scripts" / "release.py"
+
+
+def _current_version() -> str:
+    """Read the shipped plugin version so tests track release.py's own source."""
+    plugin_json = ROOT / "packages" / "design-playbook" / ".claude-plugin" / "plugin.json"
+    return json.loads(plugin_json.read_text(encoding="utf-8"))["version"]
+
+
+CURRENT_VERSION = _current_version()
+CURRENT_TAG = f"v{CURRENT_VERSION}"
+CURRENT_NOTES_REL = f"docs/releases/{CURRENT_TAG}.md"
 
 
 def _run(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -32,9 +49,12 @@ class ReleaseGateTests(unittest.TestCase):
         shutil.copy2(ROOT / "README.md", self.root / "README.md")
         shutil.copy2(ROOT / "README-zh.md", self.root / "README-zh.md")
         (self.root / "docs" / "releases").mkdir(parents=True)
+        # Copy the release-notes file for the current version so version-gate
+        # tests find it; test_release_notes_for_version_are_required deletes
+        # it explicitly to force the miss.
         shutil.copy2(
-            ROOT / "docs" / "releases" / "v0.3.0.md",
-            self.root / "docs" / "releases" / "v0.3.0.md",
+            ROOT / CURRENT_NOTES_REL,
+            self.root / CURRENT_NOTES_REL,
         )
         _run("git", "init", cwd=self.root)
         _run("git", "config", "user.email", "release-test@example.com", cwd=self.root)
@@ -59,13 +79,13 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertIn("working tree has uncommitted changes", result.stdout)
 
     def test_existing_tag_at_head_is_idempotent(self) -> None:
-        tagged = _run("git", "tag", "v0.3.0", cwd=self.root)
+        tagged = _run("git", "tag", CURRENT_TAG, cwd=self.root)
         self.assertEqual(tagged.returncode, 0, tagged.stderr)
 
         result = self.release("--checks", "tree,tag")
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("tag v0.3.0 already points at HEAD", result.stdout)
+        self.assertIn(f"tag {CURRENT_TAG} already points at HEAD", result.stdout)
 
     def test_apply_refuses_to_tag_when_a_gate_failed(self) -> None:
         (self.root / "untracked.txt").write_text("not released\n", encoding="utf-8")
@@ -74,18 +94,18 @@ class ReleaseGateTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("refusing to create tag", result.stdout)
-        tags = _run("git", "tag", "-l", "v0.3.0", cwd=self.root)
+        tags = _run("git", "tag", "-l", CURRENT_TAG, cwd=self.root)
         self.assertEqual(
             tags.stdout.strip(), "",
             "tag must not be created when an earlier gate failed")
 
     def test_release_notes_for_version_are_required(self) -> None:
-        (self.root / "docs" / "releases" / "v0.3.0.md").unlink()
+        (self.root / CURRENT_NOTES_REL).unlink()
 
         result = self.release("--checks", "version")
 
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("docs/releases/v0.3.0.md", result.stdout)
+        self.assertIn(CURRENT_NOTES_REL, result.stdout)
 
 
 if __name__ == "__main__":
