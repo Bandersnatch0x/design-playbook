@@ -252,6 +252,69 @@ class EvidenceMcpStdioTests(unittest.TestCase):
                             names = archive.namelist()
                         self.assertTrue(any(name.endswith("trace.trace") for name in names))
 
+    def test_select_option_action_drives_native_select(self) -> None:
+        """select_option drives a native <select> by value or label (issue 02)."""
+        select_html = """<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>select-fixture</title></head>
+<body data-state="idle">
+  <label for="pick">行业</label>
+  <select id="pick">
+    <option value="">请选择</option>
+    <option value="a">软件 / 互联网</option>
+    <option value="b">制造业</option>
+  </select>
+  <script>
+    document.getElementById("pick").addEventListener("change", (e) => {
+      document.body.dataset.state = e.target.value || "idle";
+    });
+  </script>
+</body>
+</html>
+"""
+        cases = [
+            ("by value", {"do": "select_option", "selector": "#pick", "value": "b"}, "b"),
+            ("by label", {"do": "select_option", "selector": "#pick", "label": "软件 / 互联网"}, "a"),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            html = root / "page.html"
+            html.write_text(select_html, encoding="utf-8")
+            (root / "evidence").mkdir()
+            for label, action, expected_state in cases:
+                with self.subTest(label=label):
+                    artifact_rel = f"evidence/select-{label.replace(' ', '')}.png"
+                    requests = [
+                        {
+                            "jsonrpc": "2.0",
+                            "id": 1,
+                            "method": "initialize",
+                            "params": {"protocolVersion": "2025-06-18"},
+                        },
+                        {
+                            "jsonrpc": "2.0",
+                            "id": 2,
+                            "method": "tools/call",
+                            "params": {
+                                "name": "execute_capture_plan",
+                                "arguments": {
+                                    "url": html.resolve().as_uri(),
+                                    "type": "screenshot",
+                                    "state": expected_state,
+                                    "actions": [action],
+                                    "artifact_path": artifact_rel,
+                                },
+                            },
+                        },
+                    ]
+                    completed = _run_stdio(requests, timeout=45, cwd=root)
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    payload = _structured(_responses(completed)[1])
+                    self.assertEqual(payload["result"], "captured", payload)
+                    # select_option fired change -> body[data-state] reflects it
+                    self.assertEqual(payload["observed_state"], expected_state, payload)
+                    self.assertTrue((root / artifact_rel).is_file())
+
     def test_provider_rejects_criterion_field(self) -> None:
         """Provider does not accept criterion (ticket 02 / map premise 9)."""
         requests = [

@@ -65,7 +65,16 @@ def _tool_schema() -> dict[str, Any]:
                 },
                 "actions": {
                     "type": "array",
-                    "description": "Trigger sequence until state (may be empty).",
+                    "description": (
+                        "Trigger sequence until state (may be empty). Each "
+                        "action is an object: do=click|fill|type|press|"
+                        "select_option|wait_for_selector|wait_for_state|wait "
+                        "with selector (click/fill/type/press/select_option/"
+                        "wait_for_selector), value/label (fill/type/select_option), "
+                        "key (press), state (wait_for_state), ms (wait). "
+                        "select_option drives a native <select> by option value "
+                        "(or visible label) and fires change."
+                    ),
                     "items": {"type": "object"},
                 },
                 "artifact_path": {
@@ -200,6 +209,21 @@ def _run_actions(page: Any, actions: list[dict[str, Any]]) -> None:
             if ms is None:
                 ms = action.get("timeout_ms", 200)
             page.wait_for_timeout(int(ms))
+        elif do == "select_option":
+            # Native <select> — page.fill raises "not a <input>"; select_option
+            # drives <option> by value (or visible label) and fires change.
+            if not isinstance(selector, str) or not selector:
+                raise ValueError(
+                    f"actions[{i}].selector required for select_option")
+            value = action.get("value")
+            label = action.get("label")
+            if value is None and label is None:
+                raise ValueError(
+                    f"actions[{i}].value or label required for select_option")
+            if value is not None:
+                page.select_option(selector, value=value, timeout=10_000)
+            else:
+                page.select_option(selector, label=label, timeout=10_000)
         else:
             raise ValueError(f"actions[{i}]: unsupported do={do!r}")
 
