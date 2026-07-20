@@ -51,6 +51,8 @@ Bare `/design-io` is **not** the installed name — always use the `design-playb
 ```text
 .claude-plugin/
   plugin.json          ← plugin manifest (the marketplace catalog lives at the repo root)
+.mcp.json              ← bundled MCP servers, launched via ${CLAUDE_PLUGIN_ROOT} (ADR-0009)
+mcp/{preview,evidence}/← MCP adapter runtimes (preview_prototype / execute_capture_plan)
 skills/<name>/SKILL.md ← model-invoked skills
 commands/<name>.md     ← slash commands (design-io, ux-spec, ui-review only)
 codex/AGENTS.md        ← Codex bridge notes
@@ -60,7 +62,7 @@ LICENSE · NOTICE       ← authored-only scope
 
 ## What ships
 
-Only authored content in this package (skills, pipeline commands, metadata, self-written examples). See `NOTICE` and repo ADRs 0003–0006. Repo-maintainer polish commands live in the monorepo root `.claude/commands/`, not in this package.
+Only authored content in this package (skills, pipeline commands, metadata, self-written examples, self-authored bundled MCP adapters). See `NOTICE` and repo ADRs 0003–0006, 0009. Repo-maintainer polish commands live in the monorepo root `.claude/commands/`, not in this package.
 
 ## Contract vs enforcement
 

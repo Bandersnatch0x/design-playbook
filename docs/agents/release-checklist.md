@@ -1,15 +1,16 @@
 # Release checklist - design-playbook
 
-Manual gate. Automated checks (JSON, layout, frontmatter, clean surface, version consistency, seam test, adapter floor self-check) run via `python scripts/release.py` (dry-run) or `python scripts/release.py --apply` (creates the tag). Static portions also run in CI (`.github/workflows/ci.yml` -> `scripts/validate.py`); the session-level steps below remain manual.
+Manual gate. Automated checks (JSON, layout, frontmatter, clean surface, bundled MCP layout, version consistency incl. README badges, release notes present, seam test, adapter floor self-check) run via `python scripts/release.py` (dry-run) or `python scripts/release.py --apply` (creates the tag). Static portions also run in CI (`.github/workflows/ci.yml` -> `scripts/validate.py`); the session-level steps below remain manual.
 
 ## Automated release gate
 
 ```text
-python scripts/release.py          # dry-run: all gates, no side effects
-python scripts/release.py --apply  # also creates the vX.Y.Z tag
+python scripts/release.py                    # dry-run: all gates, no side effects
+python scripts/release.py --apply            # also creates the vX.Y.Z tag
+python scripts/release.py --checks tree,tag  # run a subset (tree,version,validate,seam,adapter,tag)
 ```
 
-Gates: working-tree clean · plugin.json + marketplace.json (3 sites) version match + semver · `validate.py` green · seam test green · adapter floor self-check green · tag not pre-existing.
+Gates: working tree clean (untracked files also block) · versions match across plugin.json + marketplace.json (3 sites) **and** README.md / README-zh.md badges + semver · release notes exist at `docs/releases/vX.Y.Z.md` · `validate.py` green (incl. bundled MCP layout) · seam test green · adapter floor self-check green (bundled path) · tag absent **or already pointing at HEAD** (idempotent re-run passes; a tag pointing elsewhere fails).
 
 ## Prerequisites
 
@@ -26,7 +27,7 @@ Gates: working-tree clean · plugin.json + marketplace.json (3 sites) version ma
 
 ## Version + tag + publish (manual, irreversible)
 
-- [ ] `plugin.json` + `marketplace.json` (2 sites) versions match (checked by `release.py`).
+- [ ] `plugin.json` + `marketplace.json` (3 sites) + README badge versions match (checked by `release.py`).
 - [ ] `python scripts/release.py --apply` creates `vX.Y.Z` tag.
 - [ ] `git push origin main && git push origin vX.Y.Z`.
 - [ ] GitHub Release at `vX.Y.Z`; body = `docs/releases/X.Y.Z.md`.
