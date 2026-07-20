@@ -12,7 +12,7 @@ ADR-0005 split preview/evidence into optional sibling packages so the plugin pac
 
 1. Adapter runtimes move into the plugin package: `packages/design-playbook/mcp/{preview,evidence}/`. Shipping **self-authored** Python runtime is within ADR-0003's authored-only scope (the ban is on third-party corpus content, not on our own code).
 2. `packages/design-playbook/.claude-plugin/` stays plugin.json-only (ADR-0006). MCP servers are declared in the plugin-root `.mcp.json` via `${CLAUDE_PLUGIN_ROOT}/mcp/...`, so a marketplace install gets `preview*`/`observe*` with zero manual MCP config.
-3. `packages/design-playbook-{preview,evidence}/server.py` remain as thin runpy **compatibility launchers** for existing local configs; their READMEs label them as such. No sunset milestone yet — policy is decided in the v0.3.1 cycle (wayfinder `.scratch/dedup-single-source/`, issue 05); actual removal is not a patch-release change.
+3. `packages/design-playbook-{preview,evidence}/server.py` remain as thin runpy **compatibility launchers** for existing local configs; their READMEs label them as such. **Retained through v0.4.x; evaluated for sunset at v0.5** (compatibility-surface removal is not a patch/minor change — it needs a major-version decision window). Reopen triggers for the sunset call (dedup-single-source ticket 05): a user issue/PR showing active launcher dependency, loss of CI coverage, or non-trivial maintenance burden (coupling / security). No deprecation notice ships until a sunset is actually decided.
 4. Root `.mcp.json` (repo-dev convenience) points at the bundled paths.
 
 ## Consequences
