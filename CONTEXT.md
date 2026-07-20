@@ -53,6 +53,7 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 - Multi-agent-platform install CLI
 - Figma MCP as a required delivery path
 - Treating demo-site visuals as the release artifact
+- Dedicated-hardware input surfaces; input/navigation ideas enter only as 2D declaration/evidence extensions (ADR-0010)
 
 ## Layout
 
