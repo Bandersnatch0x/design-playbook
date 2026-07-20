@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>企业入驻 · 预览原型 round-1（结构语义 floor）</title>
+<!--
+  ponytail: preview 原型只承结构语义 floor（命名区域 + component 角色），不做像素抛光（fill+craft 负责）。
+  人审重点：场景结构 / step indicator / 字段联动方向 / 校验门控语义 —— 不是配色与间距。
+-->
+<style>
+  :root{
+    --ink:#0f1413; --fg:#1a2422; --muted:#5b6a66; --line:#d7dddb; --bg:#f6f8f7; --card:#fff;
+    --accent:#1f7a6b; --accent-soft:#e6f2ef; --err:#b23b2e; --ok:#2f7d4f;
+    --r:10px; --sp:14px;
+    font-family: "PingFang SC","Microsoft YaHei","Hiragino Sans GB",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-size:14px;line-height:1.5}
+  .wrap{max-width:720px;margin:24px auto;padding:0 16px}
+  .page-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+  .page-head h1{font-size:18px;margin:0}
+  .page-head .ghost{color:var(--muted);font-size:12px}
+  /* region: StepIndicator */
+  .steps{display:flex;gap:0;align-items:stretch;background:var(--card);border:1px solid var(--line);
+    border-radius:var(--r);padding:10px 14px;margin-bottom:16px}
+  .seg{flex:1;display:flex;align-items:center;gap:8px;padding:6px 4px;position:relative;color:var(--muted)}
+  .seg .dot{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line);
+    background:var(--bg);font-size:12px;color:var(--muted)}
+  .seg .lbl{font-size:13px}
+  .seg.done{color:var(--ok)}
+  .seg.done .dot{background:var(--ok);border-color:var(--ok);color:#fff}
+  .seg.current{color:var(--ink);font-weight:600}
+  .seg.current .dot{background:var(--accent);border-color:var(--accent);color:#fff}
+  .seg.current::after{content:"当前";font-size:10px;color:var(--accent);margin-left:4px;font-weight:400}
+  .seg + .seg::before{content:"";position:absolute;left:-8px;top:50%;width:16px;height:1px;background:var(--line)}
+  /* region: 主体表单卡 */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+  .card h2{font-size:15px;margin:0 0 4px}
+  .card .hint{color:var(--muted);font-size:12px;margin:0 0 16px}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:13px;margin-bottom:6px}
+  .field label .req{color:var(--err)}
+  .ctrl{display:block;width:100%;height:38px;border:1px solid var(--line);border-radius:8px;padding:0 10px;
+    background:#fff;color:var(--fg);font-size:14px}
+  .ctrl.err{border-color:var(--err)}
+  .err-txt{color:var(--err);font-size:12px;margin-top:4px;display:none}
+  .field.invalid .err-txt{display:block}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  /* region: 支付方式联动（step3 结构示意） */
+  .pay-note{background:var(--accent-soft);border:1px dashed var(--accent);border-radius:8px;padding:12px;margin-top:6px}
+  .pay-note b{color:var(--accent)}
+  .radio{display:flex;gap:16px;margin-bottom:10px}
+  .radio label{display:flex;align-items:center;gap:6px;font-size:13px}
+  details{border-top:1px dashed var(--line);margin-top:14px;padding-top:12px}
+  summary{cursor:pointer;color:var(--muted);font-size:12px}
+  /* region: step actions */
+  .actions{display:flex;justify-content:space-between;margin-top:18px}
+  .btn{height:38px;padding:0 18px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:14px}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn[disabled]{opacity:.5;cursor:not-allowed}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- region: 顶栏 标题 + StepIndicator（component 角色） -->
+  <header class="page-head">
+    <h1>企业入驻</h1>
+    <span class="ghost">结构语义原型 · 非视觉终稿</span>
+  </header>
+
+  <ol class="steps" role="list" aria-label="入驻进度">
+    <li class="seg current" aria-current="step"><span class="dot">1</span><span class="lbl">公司信息</span></li>
+    <li class="seg" aria-current="step"><span class="dot">2</span><span class="lbl">管理员账户</span></li>
+    <li class="seg" aria-current="step"><span class="dot">3</span><span class="lbl">支付方式</span></li>
+  </ol>
+
+  <!-- region: 主体 单步表单卡（当前 step1） -->
+  <section class="card" aria-label="当前步骤表单">
+    <h2>公司信息</h2>
+    <p class="hint">填写企业基础资料，标 <span style="color:var(--err)">*</span> 为必填。</p>
+
+    <!-- component: Field（公司名称，必填） -->
+    <div class="field invalid" data-field="company">
+      <label for="f-company">公司名称 <span class="req">*</span></label>
+      <input id="f-company" class="ctrl err" placeholder="请输入工商注册全称">
+      <div class="err-txt">请填写公司名称</div>
+    </div>
+
+    <div class="row">
+      <!-- component: Field 选择（行业） -->
+      <div class="field" data-field="industry">
+        <label for="f-industry">所属行业 <span class="req">*</span></label>
+        <select id="f-industry" class="ctrl"><option value="">请选择行业</option><option>软件 / 互联网</option><option>制造业</option></select>
+      </div>
+      <!-- component: Field 选择（规模） -->
+      <div class="field" data-field="scale">
+        <label for="f-scale">公司规模</label>
+        <select id="f-scale" class="ctrl"><option value="">请选择规模</option><option>1–50 人</option><option>51–200 人</option></select>
+      </div>
+    </div>
+
+    <!-- region: step3 结构示意（联动 = 核心，提前给人审方向） -->
+    <div class="pay-note">
+      <b>step3 支付方式联动方向（供审）：</b>
+      <div class="radio" role="radiogroup" aria-label="支付方式">
+        <label><input type="radio" name="pay" value="card" checked> 卡片</label>
+        <label><input type="radio" name="pay" value="bank_transfer"> 对公转账</label>
+      </div>
+      <div>选「卡片」→ 显 <code>卡号 / 有效期 / CVV</code>；选「对公转账」→ 显 <code>开户行 / 对公账号</code>。两组互斥，切换即换。</div>
+    </div>
+
+    <details>
+      <summary>step2 管理员账户字段（折叠，结构同 step1）</summary>
+      <div class="row" style="margin-top:10px">
+        <div class="field"><label>姓名 *</label><input class="ctrl" placeholder="管理员姓名"></div>
+        <div class="field"><label>手机 *</label><input class="ctrl" placeholder="11 位手机号"></div>
+      </div>
+      <div class="field"><label>邮箱 *</label><input class="ctrl" placeholder="name@company.com"></div>
+    </details>
+
+    <!-- region: step actions -->
+    <div class="actions">
+      <button class="btn" type="button" disabled>上一步</button>
+      <button class="btn primary" type="button">下一步</button>
+    </div>
+  </section>
+</div>
+</body>
+</html>

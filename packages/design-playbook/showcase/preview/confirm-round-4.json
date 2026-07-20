@@ -1,0 +1,13 @@
+{
+  "round": 4,
+  "report_ref": "decision-report.md",
+  "confirmed": true,
+  "floor_pass": true,
+  "selected_options": [
+    "确认通过"
+  ],
+  "feedback": "Anchor notes (2):\n1. [div \"下一步\"] 修改按钮位置 — body > div.wrap:nth-of-type(1) > section.card:nth-of-type(1) > div.actions:nth-of-type(3)\n2. [label \"手机 *\"] label 需要与输入框在同一行 — body > div.wrap:nth-of-type(1) > section.card:nth-of-type(2) > div.row:nth-of-type(1) > div.field:nth-of-type(2) > label",
+  "timestamp": "2026-07-20T22:57:42+08:00",
+  "prototype_path": "round-4.html",
+  "prototype_html_hash": "c0ab8eb1d1c37ed237c9cb602b1472bb1cc2f10e66ddfeff1afce2fe282d602f"
+}

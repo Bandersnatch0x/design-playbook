@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>企业入驻 · 预览原型 round-4（结构语义 floor，#c 改两列行）</title>
+<!--
+  ponytail: round-4 修 round-3 anchor [#c] 改为一行两个——
+  公司名称从独占行改为两列行（与 所属行业 同行），公司规模 次行。密度收敛。
+  仍只承结构语义；字族/间距最终归 craft-guard。
+-->
+<style>
+  :root{
+    --ink:#0f1413; --fg:#1a2422; --muted:#5b6a66; --line:#d7dddb; --bg:#f6f8f7; --card:#fff;
+    --accent:#1f7a6b; --accent-soft:#e6f2ef; --err:#b23b2e; --ok:#2f7d4f;
+    --r:10px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-size:14px;line-height:1.5;
+    font-family:"PingFang SC","Microsoft YaHei","Hiragino Sans GB",system-ui,sans-serif;}
+  /* round-2 anchor 修复：表单控件（含 select/option）显式继承 CJK 字族 */
+  input, select, select option, textarea, button { font-family: inherit; }
+  .wrap{max-width:760px;margin:24px auto;padding:0 16px}
+  .page-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+  .page-head h1{font-size:18px;margin:0}
+  .page-head .ghost{color:var(--muted);font-size:12px}
+  .steps{display:flex;gap:0;align-items:stretch;background:var(--card);border:1px solid var(--line);
+    border-radius:var(--r);padding:10px 14px;margin-bottom:16px}
+  .seg{flex:1;display:flex;align-items:center;gap:8px;padding:6px 4px;position:relative;color:var(--muted)}
+  .seg .dot{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line);
+    background:var(--bg);font-size:12px;color:var(--muted)}
+  .seg .lbl{font-size:13px}
+  .seg.done{color:var(--ok)} .seg.done .dot{background:var(--ok);border-color:var(--ok);color:#fff}
+  .seg.current{color:var(--ink);font-weight:600} .seg.current .dot{background:var(--accent);border-color:var(--accent);color:#fff}
+  .seg + .seg::before{content:"";position:absolute;left:-8px;top:50%;width:16px;height:1px;background:var(--line)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:14px}
+  .card h2{font-size:15px;margin:0 0 4px}
+  .card .hint{color:var(--muted);font-size:12px;margin:0 0 14px}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:13px;margin-bottom:6px}
+  .field label .req{color:var(--err)}
+  .ctrl{display:block;width:100%;height:36px;border:1px solid var(--line);border-radius:8px;padding:0 10px;background:#fff;font-size:14px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .radio{display:flex;gap:16px;margin-bottom:10px}
+  .radio label{display:flex;align-items:center;gap:6px;font-size:13px}
+  .pay-fields{border-top:1px dashed var(--line);padding-top:10px;margin-top:4px}
+  .tag{display:inline-block;font-size:11px;background:var(--accent-soft);color:var(--accent);padding:2px 8px;border-radius:20px;margin-left:6px}
+  .actions{display:flex;justify-content:space-between;margin-top:4px}
+  .btn{height:38px;padding:0 18px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:14px}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page-head">
+    <h1>企业入驻</h1>
+    <span class="ghost">结构语义原型 round-4 · #c 改两列行 · 非视觉终稿</span>
+  </header>
+
+  <ol class="steps" role="list" aria-label="入驻进度">
+    <li class="seg current" aria-current="step"><span class="dot">1</span><span class="lbl">公司信息</span></li>
+    <li class="seg" aria-current="step"><span class="dot">2</span><span class="lbl">管理员账户</span></li>
+    <li class="seg" aria-current="step"><span class="dot">3</span><span class="lbl">支付方式</span></li>
+  </ol>
+
+  <!-- region: step1 公司信息 -->
+  <section class="card" aria-label="第一步 公司信息">
+    <h2>公司信息 <span class="tag">当前</span></h2>
+    <p class="hint">企业基础资料，<span style="color:var(--err)">*</span> 为必填。</p>
+    <div class="row">
+      <div class="field"><label for="c">公司名称 <span class="req">*</span></label><input id="c" class="ctrl" placeholder="工商注册全称"></div>
+      <div class="field"><label for="i">所属行业 <span class="req">*</span></label><select id="i" class="ctrl"><option value="">请选择</option><option>软件 / 互联网</option><option>制造业</option></select></div>
+    </div>
+    <div class="row">
+      <div class="field"><label for="s">公司规模</label><select id="s" class="ctrl"><option value="">请选择</option><option>1–50 人</option><option>51–200 人</option><option>201–1000 人</option><option>1000+ 人</option></select></div>
+    </div>
+    <div class="actions"><span></span><button class="btn primary" type="button">下一步</button></div>
+  </section>
+
+  <!-- region: step2 管理员账户（结构示意） -->
+  <section class="card" aria-label="第二步 管理员账户（结构示意）">
+    <h2>管理员账户</h2>
+    <p class="hint">首位管理员即企业超级管理员。</p>
+    <div class="row">
+      <div class="field"><label>姓名 <span class="req">*</span></label><input class="ctrl" placeholder="管理员姓名"></div>
+      <div class="field"><label>手机 <span class="req">*</span></label><input class="ctrl" placeholder="11 位手机号"></div>
+    </div>
+    <div class="field"><label>邮箱 <span class="req">*</span></label><input class="ctrl" placeholder="name@company.com"></div>
+    <div class="actions"><button class="btn" type="button">上一步</button><button class="btn primary" type="button">下一步</button></div>
+  </section>
+
+  <!-- region: step3 支付方式（独立步骤区域 + 联动） -->
+  <section class="card" aria-label="第三步 支付方式（联动核心）">
+    <h2>支付方式 <span class="tag">联动核心</span></h2>
+    <p class="hint">选择支付方式，下方字段组随之切换（互斥）。</p>
+    <div class="radio" role="radiogroup" aria-label="支付方式">
+      <label><input type="radio" name="pay" value="card" checked> 卡片</label>
+      <label><input type="radio" name="pay" value="bank_transfer"> 对公转账</label>
+    </div>
+    <div class="pay-fields" id="grp-card">
+      <div class="field"><label>卡号</label><input class="ctrl" placeholder="卡片号"></div>
+      <div class="row">
+        <div class="field"><label>有效期</label><input class="ctrl" placeholder="MM/YY"></div>
+        <div class="field"><label>CVV</label><input class="ctrl" placeholder="3 位"></div>
+      </div>
+    </div>
+    <div class="pay-fields" id="grp-bank" style="display:none">
+      <div class="field"><label>开户行</label><input class="ctrl" placeholder="开户行名称"></div>
+      <div class="field"><label>对公账号</label><input class="ctrl" placeholder="对公银行账号"></div>
+    </div>
+    <div class="actions"><button class="btn" type="button">上一步</button><button class="btn primary" type="button">提交</button></div>
+  </section>
+</div>
+<script>
+  // ponytail: 仅承联动语义，供人审方向；真实校验/抛光在 fill。
+  document.querySelectorAll('input[name="pay"]').forEach(r=>r.addEventListener('change',e=>{
+    const card=e.target.value==='card';
+    document.getElementById('grp-card').style.display=card?'':'none';
+    document.getElementById('grp-bank').style.display=card?'none':'';
+  }));
+</script>
+</body>
+</html>
