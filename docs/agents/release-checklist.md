@@ -2,6 +2,18 @@
 
 Manual gate. Automated checks (JSON, layout, frontmatter, clean surface, bundled MCP layout, version consistency incl. README badges, release notes present, seam test, adapter floor self-check) run via `python scripts/release.py` (dry-run) or `python scripts/release.py --apply` (creates the tag). Static portions also run in CI (`.github/workflows/ci.yml` -> `scripts/validate.py`); the session-level steps below remain manual.
 
+## Validation surfaces
+
+Three scripts overlap on version + bundled-MCP checks **by design**. Roles:
+
+| Script | Purpose | Called by |
+| --- | --- | --- |
+| `scripts/validate.py` | Static structure gate (layout, bundled MCP, skill/command frontmatter, content residue, dogfood regression guards) | CI + `release.py` |
+| `scripts/release.py` | Publish gate (tree clean, version consistency incl. README badges + release notes, then calls validate + seam + adapter floor, creates tag) | human release |
+| `scripts/doctor.py` | Read-only diagnostic aggregator (one-stop: layout + version three-point + bundled MCP + launchers + floor self-check) | human |
+
+`doctor.py` deliberately re-runs the version three-point comparison and the bundled-MCP check so a human gets one overview without invoking the other two scripts. The canonical rules live in `release.py` (version consistency, which also covers badges + release notes) and `validate.py` (bundled MCP); `doctor.py` mirrors them (see the `Mirrors ...` comments on `check_versions` / `check_mcp`). **One rule must not fork into two thresholds or two messages** — when changing either check, update both sites. If the overlap ever drifts in practice, extract a shared `scripts/_checks.py` (deferred from dedup-single-source ticket 02; the ~18-line overlap did not justify a new module yet).
+
 ## Automated release gate
 
 ```text

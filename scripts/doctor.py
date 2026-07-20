@@ -4,6 +4,10 @@
 Read-only: reports whether the redistributable plugin surface is present,
 versions agree, bundled MCP adapters are reachable, and optional local
 adapter floor self-check can run. Does not mutate the tree or create tags.
+
+See docs/agents/release-checklist.md 'Validation surfaces' for the split
+between validate.py (static structure gate), release.py (publish gate),
+and this script (read-only diagnostic aggregator).
 """
 from __future__ import annotations
 
@@ -67,6 +71,9 @@ def check_layout() -> None:
             fail(f"missing {rel}")
 
 
+# Mirrors release.py check_version's three-point plugin.json/marketplace
+# comparison (release.py additionally checks README badges + release notes).
+# Keep in sync when version sites change.
 def check_versions() -> str:
     print("== versions ==")
     plugin = read_json(PKG / ".claude-plugin" / "plugin.json")
@@ -95,6 +102,10 @@ def check_versions() -> str:
     return version
 
 
+# Mirrors validate.py bundled-MCP gate (.mcp.json present + both servers
+# registered + ${CLAUDE_PLUGIN_ROOT}); validate.py additionally checks the
+# bundled server.py runtime files exist. Keep in sync when adapter layout
+# changes.
 def check_mcp() -> None:
     print("== bundled MCP ==")
     mcp_path = PKG / ".mcp.json"

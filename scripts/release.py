@@ -4,6 +4,10 @@
 Run with no arguments for a side-effect-free dry run. Pass ``--apply`` to
 create the version tag after every selected check passes. Pushing commits or
 tags and publishing the GitHub release remain explicit human actions.
+
+See docs/agents/release-checklist.md 'Validation surfaces' for the split
+between validate.py (static structure gate), this script (publish gate),
+and doctor.py (read-only diagnostic aggregator).
 """
 from __future__ import annotations
 
