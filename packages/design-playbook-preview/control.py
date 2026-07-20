@@ -61,7 +61,7 @@ box-shadow: 0 8px 28px rgba(0,0,0,.15), 0 2px 6px rgba(0,0,0,.1);
   #dpb-preview-bar .dpb-pill .dpb-pill-info {{
 display: inline-flex; align-items: center; gap: 8px; max-width: 260px;
   }}
-  #dpb-preview-bar .dpb-pill .dpb-round {{
+  #dpb-preview-bar .dpb-round {{
 flex: 0 0 auto; display: inline-flex; align-items: center; height: 22px;
 padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
 font-variant-numeric: tabular-nums; color: #99f6e4;
@@ -159,7 +159,10 @@ padding: 0;
 content: "";
 position: fixed; inset: 0; z-index: -1;
 background: rgba(15,23,42,.5);
-pointer-events: none;  /* let pin-mode clicks reach prototype elements */
+pointer-events: auto;  /* P1.5: intercept clicks outside drawer (close on scrim) */
+  }}
+  body.dpb-pin-mode #dpb-preview-bar.is-open::before {{
+pointer-events: none;  /* P1.5: let pin-mode clicks reach prototype elements */
   }}
   #dpb-preview-bar.is-open .dpb-pill {{ display: none; }}
 
@@ -171,12 +174,6 @@ background: linear-gradient(180deg, #131722, var(--dpb-bg));
   }}
   #dpb-preview-bar .dpb-drawer-head .dpb-head-left {{
 display: inline-flex; align-items: center; gap: 8px; min-width: 0;
-  }}
-  #dpb-preview-bar .dpb-drawer-head .dpb-round {{
-flex: 0 0 auto; display: inline-flex; align-items: center; height: 22px;
-padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
-font-variant-numeric: tabular-nums; color: #99f6e4;
-background: rgba(20,184,166,.14); border: 1px solid rgba(20,184,166,.35);
   }}
   #dpb-preview-bar .dpb-drawer-head .dpb-title {{
 margin: 0; font-size: 13px; font-weight: 650; color: var(--dpb-ink);
@@ -319,7 +316,7 @@ border-color: #f87171; box-shadow: 0 0 0 3px rgba(248,113,113,.18);
 
   /* footer actions */
   #dpb-preview-bar .dpb-drawer-foot {{
-display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end;
+display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between;
 align-items: center; padding: 12px 14px;
 border-top: 1px solid var(--dpb-line);
 background: linear-gradient(180deg, var(--dpb-bg), #131722);
@@ -349,6 +346,12 @@ background: var(--dpb-elev); color: var(--dpb-ink); border-color: var(--dpb-line
 min-width: 72px; background: transparent; color: var(--dpb-muted); border-color: transparent;
   }}
   #dpb-preview-bar .dpb-btn-quiet:hover {{ color: var(--dpb-ink); background: rgba(255,255,255,.04); }}
+  #dpb-preview-bar .dpb-btn-danger {{
+min-width: 72px; background: transparent; color: var(--dpb-danger); border-color: transparent;
+  }}
+  #dpb-preview-bar .dpb-btn-danger:hover {{ color: #fff; background: var(--dpb-danger); border-color: var(--dpb-danger); }}
+  #dpb-preview-bar .dpb-btn-danger.is-armed {{ color: #fff; background: var(--dpb-danger); border-color: var(--dpb-danger); animation: dpb-abort-pulse 1s ease-in-out infinite; }}
+  @keyframes dpb-abort-pulse {{ 0%,100% {{ opacity: 1; }} 50% {{ opacity: .6; }} }}
 
   /* floating annotation bubbles pinned to targeted elements */
   .dpb-float-note {{
@@ -479,11 +482,11 @@ cursor: default !important;
     </div>
   </div>
   <div class="dpb-drawer-foot">
+    <button type="submit" name="choice" value="__abort__" class="dpb-btn dpb-btn-danger" id="dpb-abort" aria-label="{t_terminate}">{t_terminate}</button>
     <div class="dpb-btns">
       {secondary_html}
       <button type="submit" name="choice" value="{primary_val}" class="dpb-btn dpb-btn-primary">{primary_label}</button>
       <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-draft">仅记录批注但暂不决定</button>
-      <button type="submit" name="choice" value="__abort__" class="dpb-btn dpb-btn-quiet">{t_close}</button>
     </div>
   </div>
 </dialog>
@@ -681,16 +684,20 @@ var anchorsComplete = !anchors.length || anchors.every(function (a) {{
 }});
 return (hasSubstantiveText || anchors.length) && anchorsComplete;
   }}
+  var lastReady = null;
+  var pillOpenLabel = null;  // I13: original pill-primary label, restored on ready->not-ready flip
   function setReadiness() {{
 if (!pillReadyEl) return;
 var ready = isSubstantive();
 pillReadyEl.classList.toggle("is-ready", ready);
-var words = field ? (field.value || "").trim().split(/\s+/).filter(Boolean).length : 0;
+if (ready === lastReady) return;  // P1.6: cache to avoid screen-reader jitter on every input
+lastReady = ready;
 if (ready) {{
   pillReadyEl.textContent = '{t_ready}';
   if (openPrimary) {{
+    if (pillOpenLabel === null) pillOpenLabel = openPrimary.textContent;  // I13: capture once
     openPrimary.classList.add('is-direct-confirm');
-    openPrimary.setAttribute('aria-label', '直接确认通过（当前已就绪）');
+    openPrimary.removeAttribute('aria-haspopup');  // P1.1: direct confirm, no longer a dialog trigger
     // Mirror the confirm button label so user sees the action will confirm directly
     var drawerPrimary = document.querySelector('.dpb-drawer .dpb-btn-primary');
     if (drawerPrimary && drawerPrimary.textContent && openPrimary.textContent !== drawerPrimary.textContent) {{
@@ -701,8 +708,11 @@ if (ready) {{
   pillReadyEl.textContent = '{t_not_ready}';
   if (openPrimary) {{
     openPrimary.classList.remove('is-direct-confirm');
-    // Optionally restore original label, but for simplicity keep as-is or re-set on not ready
-    // The original {t_pill_open} is fine as fallback
+    openPrimary.setAttribute('aria-haspopup', 'dialog');  // P1.1: restore dialog trigger
+    // I13: restore original label so the pill no longer advertises direct confirm
+    if (pillOpenLabel !== null && openPrimary.textContent !== pillOpenLabel) {{
+      openPrimary.textContent = pillOpenLabel;
+    }}
   }}
 }}
   }}
@@ -725,12 +735,6 @@ if (pinLabel) pinLabel.textContent = pinOn ? "{t_pin_on}" : "{t_pin_off}";
 if (!pinOn) clearHover();
   }}
 
-  function focusableEls() {{
-if (!bar) return [];
-return Array.prototype.slice.call(
-  bar.querySelectorAll('a[href],button:not([disabled]),textarea,input:not([disabled]),[tabindex="0"]')
-).filter(function (el) {{ return el.offsetParent !== null || el === document.activeElement; }});
-  }}
   var lastFocus = null;
   function openDrawer() {{
 bar.classList.add("is-open");
@@ -746,6 +750,7 @@ setTimeout(function () {{ if (closeBtn) closeBtn.focus(); }}, 0);
   }}
   function closeDrawer() {{
 bar.classList.remove("is-open");
+resetAbortArmed();  // I18: clear abort arming when drawer closes (no stale armed state on reopen)
 if (pinOn) setPin(false);
 if (drawerEl && drawerEl.open && typeof drawerEl.close === "function") drawerEl.close();
 if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
@@ -753,27 +758,79 @@ if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
 
   if (openBtn) openBtn.addEventListener("click", openDrawer);
   var openPrimary = document.getElementById("dpb-open-primary");
+  // Shared: submit the confirm (drawer primary). Used by pill-primary direct
+  // confirm (handlePillPrimary) and Ctrl+Enter (I8) to avoid divergent targets.
+  function submitPrimary() {{
+var targetBtn = document.querySelector(".dpb-drawer .dpb-btn-primary");
+if (targetBtn) form.requestSubmit(targetBtn); else form.requestSubmit();
+  }}
   function handlePillPrimary(e) {{
     if (isSubstantive()) {{
       // When ready, the pill primary directly submits the confirm (no need to open drawer)
       e.preventDefault();
-      var targetBtn = document.querySelector(".dpb-drawer .dpb-btn-primary");
-      if (targetBtn) {{
-        form.requestSubmit(targetBtn);
-      }} else {{
-        form.requestSubmit();
-      }}
+      submitPrimary();
     }} else {{
       openDrawer();
     }}
   }}
   if (openPrimary) openPrimary.addEventListener("click", handlePillPrimary);
+  var pillReviseBtns = bar.querySelectorAll('[data-pill-revise]');
+  for (var ri = 0; ri < pillReviseBtns.length; ri++) {{
+    pillReviseBtns[ri].addEventListener("click", function () {{
+      openDrawer();
+      setTimeout(function () {{ if (field) field.focus(); }}, 0);
+    }});
+  }}
   if (closeBtn) closeBtn.addEventListener("click", closeDrawer);
   if (pinBtn) pinBtn.addEventListener("click", function () {{ setPin(!pinOn); }});
+  // P1.5: click on scrim (outside drawer) closes the drawer. Fires only when pin
+  // is OFF (CSS sets scrim pointer-events:none while body.dpb-pin-mode is on, so
+  // pin-on clicks reach the page for element selection, not the scrim).
+  bar.addEventListener("click", function (e) {{
+if (bar.classList.contains("is-open") && !pinOn && e.target === bar) closeDrawer();
+  }});
 
   // Draft: record current feedback/anchors without making confirm/revise decision (per debate)
   var draftBtn = document.getElementById("dpb-draft");
   if (draftBtn) draftBtn.addEventListener("click", function () {{ closeDrawer(); }});
+
+  // I8: Ctrl/Cmd+Enter in the feedback textarea submits the confirm (primary) action
+  if (field) {{
+field.addEventListener("keydown", function (e) {{
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {{
+    e.preventDefault();
+    submitPrimary();
+  }}
+}});
+  }}
+
+  // I18: abort requires a second click within the confirm window (prevents accidental
+  // session kill). First click arms the button for ABORT_ARM_MS; second click submits __abort__.
+  var ABORT_ARM_MS = 2000;
+  var abortBtn = document.getElementById("dpb-abort");
+  var abortArmed = false;
+  var abortTimer = null;
+  var abortLabel = "";
+  function resetAbortArmed() {{
+if (abortTimer) {{ clearTimeout(abortTimer); abortTimer = null; }}
+if (abortBtn && abortArmed) {{
+  abortArmed = false;
+  abortBtn.textContent = abortLabel;
+  abortBtn.classList.remove("is-armed");
+}}
+  }}
+  if (abortBtn) {{
+abortLabel = abortBtn.textContent;
+abortBtn.addEventListener("click", function (e) {{
+  if (!abortArmed) {{
+    e.preventDefault();
+    abortArmed = true;
+    abortBtn.textContent = "{t_terminate_confirm}";
+    abortBtn.classList.add("is-armed");
+    abortTimer = setTimeout(resetAbortArmed, ABORT_ARM_MS);
+  }}  // else: let the submit proceed (choice=__abort__)
+}});
+  }}
 
   // Initial readiness (may enable direct confirm on pill primary)
   setReadiness();
@@ -781,6 +838,7 @@ if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
   // <dialog> handles ESC + focus trap natively; mirror its close to our state.
   if (drawerEl) drawerEl.addEventListener("close", function () {{
 bar.classList.remove("is-open");
+resetAbortArmed();  // I18: defense-in-depth - clear arming if a future path closes the dialog directly
 if (pinOn) setPin(false);
   }});
   // non-modal <dialog> has no native ESC; add it (skip while pinning - Esc exits pin).
@@ -967,7 +1025,8 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
     secondary_html = "\n".join(secondary_bits)
     # secondary actions surfaced on the floating pill (so revise is not hidden in the drawer)
     pill_secondary_html = "\n".join(
-        b.replace('class="dpb-btn dpb-btn-secondary"', 'class="dpb-btn-pill-secondary"')
+        b.replace('type="submit" name="choice"', 'type="button" data-pill-revise')
+         .replace('class="dpb-btn dpb-btn-secondary"', 'class="dpb-btn-pill-secondary"')
          .replace("dpb-btn-secondary", "dpb-btn-pill-secondary")
         for b in secondary_bits
     )
@@ -1004,6 +1063,8 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         t_field_hint=t("field_hint"),
         t_field_placeholder=t("field_placeholder"),
         t_close=t("close"),
+        t_terminate=t("terminate"),
+        t_terminate_confirm=t("terminate_confirm"),
         t_locate=t("locate_anchor"),
         t_locate_anchor=t("locate_anchor"),
         t_remove=t("remove"),

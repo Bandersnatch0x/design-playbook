@@ -287,6 +287,92 @@ def main():
         if not s12_ok:
             failures.append("S12: pill primary label should update to confirm label when ready")
 
+        # --- S13: pill primary label restores when readiness flips back (I13) ---
+        page.goto(file_url, wait_until='domcontentloaded')
+        page.wait_for_selector('#dpb-preview-bar')
+        page.click('#dpb-open-primary')
+        page.wait_for_timeout(200)
+        original_label = page.evaluate("() => document.getElementById('dpb-open-primary').textContent")
+        page.fill('textarea[name="feedback"]', 'enough text to be ready')
+        page.wait_for_timeout(100)
+        ready_label = page.evaluate("() => document.getElementById('dpb-open-primary').textContent")
+        # clear feedback -> readiness flips back, label must restore
+        page.fill('textarea[name="feedback"]', '')
+        page.wait_for_timeout(100)
+        restored_label = page.evaluate("() => document.getElementById('dpb-open-primary').textContent")
+        s13_ok = (ready_label != original_label) and (restored_label == original_label)
+        print(f"  S13 label restore on flip-back: orig='{original_label}' ready='{ready_label}' restored='{restored_label}' -> {'OK' if s13_ok else 'FAIL'}")
+        if not s13_ok:
+            failures.append("S13: pill primary label should restore when readiness flips back to not-ready")
+
+        # --- S14: abort requires a second click (I18 two-step confirm) ---
+        page.goto(file_url, wait_until='domcontentloaded')
+        page.wait_for_selector('#dpb-preview-bar')
+        page.click('#dpb-open-primary')
+        page.wait_for_timeout(200)
+        abort_btn = page.query_selector('#dpb-abort')
+        abort_armed_before = page.evaluate("() => document.getElementById('dpb-abort').classList.contains('is-armed')")
+        abort_btn.click()  # first click should arm, not submit
+        page.wait_for_timeout(100)
+        stayed_after_arm = page.url.startswith('file:')
+        abort_armed_after = page.evaluate("() => document.getElementById('dpb-abort').classList.contains('is-armed')")
+        # close+reopen should reset arming (I18 leak fix); then first click arms, second submits
+        abort_btn.click()  # second click while armed -> should submit __abort__ (navigate)
+        page.wait_for_timeout(300)
+        aborted_nav = not page.url.startswith('file:')
+        s14_ok = (not abort_armed_before) and stayed_after_arm and abort_armed_after and aborted_nav
+        print(f"  S14 abort two-step: armed_before={abort_armed_before} armed_after_1st={abort_armed_after} aborted_on_2nd={aborted_nav} -> {'OK' if s14_ok else 'FAIL'}")
+        if not s14_ok:
+            failures.append("S14: abort needs arm(1st)+submit(2nd); first must not navigate")
+
+        # --- S14b: arming resets when drawer closes (I18 leak fix) ---
+        page.goto(file_url, wait_until='domcontentloaded')
+        page.wait_for_selector('#dpb-preview-bar')
+        page.click('#dpb-open-primary')
+        page.wait_for_timeout(200)
+        page.click('#dpb-abort')  # arm
+        page.wait_for_timeout(50)
+        armed_before_close = page.evaluate("() => document.getElementById('dpb-abort').classList.contains('is-armed')")
+        page.click('#dpb-close-drawer')  # collapse drawer -> should reset arming
+        page.wait_for_timeout(50)
+        armed_after_close = page.evaluate("() => document.getElementById('dpb-abort').classList.contains('is-armed')")
+        s14b_ok = armed_before_close and (not armed_after_close)
+        print(f"  S14b abort reset on close: armed_before={armed_before_close} armed_after={armed_after_close} -> {'OK' if s14b_ok else 'FAIL'}")
+        if not s14b_ok:
+            failures.append("S14b: abort arming should reset when drawer closes")
+
+        # --- S15: Ctrl+Enter in feedback submits the CONFIRM (I8) ---
+        page.goto(file_url, wait_until='domcontentloaded')
+        page.wait_for_selector('#dpb-preview-bar')
+        page.click('#dpb-open-primary')
+        page.wait_for_timeout(200)
+        page.fill('textarea[name="feedback"]', 'enough text to be ready')
+        page.wait_for_timeout(100)
+        # capture the submitter value via a capture-phase listener that preventDefaults,
+        # so the form does not navigate and we can assert WHICH action was submitted.
+        page.evaluate("""() => {{
+          const f = document.getElementById('dpb-decide-form');
+          f.addEventListener('submit', (e) => {{
+            window.__capturedSubmitter = (e.submitter && e.submitter.value) || null;
+            e.preventDefault();
+          }}, true);
+        }}""")
+        page.focus('textarea[name="feedback"]')
+        page.keyboard.press('Control+Enter')
+        page.wait_for_timeout(200)
+        captured = page.evaluate("() => window.__capturedSubmitter")
+        s15_ok = captured == PRIMARY_OPT  # must be the confirm, not abort/revise
+        # S15b: Ctrl+Enter with drawer CLOSED must NOT submit (handler only on textarea)
+        page.goto(file_url, wait_until='domcontentloaded')
+        page.wait_for_selector('#dpb-preview-bar')
+        page.keyboard.press('Control+Enter')
+        page.wait_for_timeout(200)
+        stayed_closed = page.url.startswith('file:')
+        s15_ok = s15_ok and stayed_closed
+        print(f"  S15 Ctrl+Enter: captured_submitter='{captured}' (want '{PRIMARY_OPT}') no_submit_when_closed={stayed_closed} -> {'OK' if s15_ok else 'FAIL'}")
+        if not s15_ok:
+            failures.append("S15: Ctrl+Enter should submit the CONFIRM (not abort/revise) when open; nothing when closed")
+
         browser.close()
 
     print()
