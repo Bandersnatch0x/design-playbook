@@ -3,13 +3,16 @@
 import { createRequire } from "node:module";
 const require = createRequire("D:/code_space/SwarSight/frontend/package.json");
 const { chromium } = require("playwright-core");
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const EXE =
   "C:/Users/amsterdam/AppData/Local/ms-playwright/chromium-1223/chrome-win64/chrome.exe";
 const OUT = path.resolve("packages/design-playbook/showcase/screenshots");
 mkdirSync(OUT, { recursive: true });
+const VERSION = JSON.parse(
+  readFileSync("packages/design-playbook/.claude-plugin/plugin.json", "utf8")
+).version;
 
 const BASE = `
 *{box-sizing:border-box;margin:0;padding:0}
@@ -117,7 +120,7 @@ tokens:
 </table>
 <div class=card style="margin-top:18px"><h3>What ran</h3><p><code>/design-playbook:design-io 在 SwarSight 加一个模拟运行队列监控页</code></p>
 <p style="margin-top:8px">Skills invoked: <code>ux-spec</code> → <code>ui-picker</code> → fill → <code>craft-guard</code> → <code>ui-evaluator</code></p></div>
-<div class=foot>design-playbook v0.1.0 · Design I/O on SwarSight</div></div>`,
+<div class=foot>design-playbook v${VERSION} · Design I/O on SwarSight</div></div>`,
   },
 ];
 

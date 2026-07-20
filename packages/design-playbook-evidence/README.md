@@ -43,37 +43,7 @@ playwright install chromium
 **Preferred (plugin install):** no manual config — marketplace / `--plugin-dir`
 loads `packages/design-playbook/.mcp.json`.
 
-**Monorepo / manual:**
-
-```json
-{
-  "mcpServers": {
-    "design-playbook-evidence": {
-      "command": "python",
-      "args": ["packages/design-playbook/mcp/evidence/server.py"],
-      "env": {
-        "DESIGN_PLAYBOOK_RUN_ROOT": "."
-      }
-    }
-  }
-}
-```
-
-Compatibility launcher (redirects to the bundled runtime):
-
-```json
-{
-  "mcpServers": {
-    "design-playbook-evidence": {
-      "command": "python",
-      "args": ["packages/design-playbook-evidence/server.py"],
-      "env": {
-        "DESIGN_PLAYBOOK_RUN_ROOT": "."
-      }
-    }
-  }
-}
-```
+**Monorepo / manual config:** the plugin's [`packages/design-playbook/.mcp.json`](../design-playbook/.mcp.json) is the source of truth (marketplace / `--plugin-dir` loads it automatically). For a monorepo dev checkout, see the repo-root `.mcp.json`; for Codex, see [`mcp.example.toml`](./mcp.example.toml) (it also shows the `DESIGN_PLAYBOOK_RUN_ROOT` env). The compatibility launcher at `packages/design-playbook-evidence/server.py` still works for older local configs but is not the preferred path.
 
 ## Implementation notes
 

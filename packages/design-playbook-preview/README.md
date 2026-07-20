@@ -39,31 +39,7 @@ Stdio server, stdlib only:
 **Preferred (plugin install):** no manual config — marketplace / `--plugin-dir`
 loads `packages/design-playbook/.mcp.json`.
 
-**Monorepo / manual:**
-
-```json
-{
-  "mcpServers": {
-    "design-playbook-preview": {
-      "command": "python",
-      "args": ["<abs-path-to-repo>/packages/design-playbook/mcp/preview/server.py"]
-    }
-  }
-}
-```
-
-Compatibility launcher (same process, redirects to the bundled runtime):
-
-```json
-{
-  "mcpServers": {
-    "design-playbook-preview": {
-      "command": "python",
-      "args": ["<abs-path-to-repo>/packages/design-playbook-preview/server.py"]
-    }
-  }
-}
-```
+**Monorepo / manual config:** the plugin's [`packages/design-playbook/.mcp.json`](../design-playbook/.mcp.json) is the source of truth (marketplace / `--plugin-dir` loads it automatically). For a monorepo dev checkout, see the repo-root `.mcp.json`; for Codex, see [`mcp.example.toml`](./mcp.example.toml). The compatibility launcher at `packages/design-playbook-preview/server.py` still works for older local configs but is not the preferred path.
 
 ## Implementation notes
 
