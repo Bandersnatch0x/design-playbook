@@ -210,8 +210,9 @@ def _run_actions(page: Any, actions: list[dict[str, Any]]) -> None:
                 ms = action.get("timeout_ms", 200)
             page.wait_for_timeout(int(ms))
         elif do == "select_option":
-            # Native <select> — page.fill raises "not a <input>"; select_option
-            # drives <option> by value (or visible label) and fires change.
+            # Native <select> — page.fill raises "Fill did not work on <select>";
+            # select_option drives <option> by value (or visible label) and
+            # fires change.
             if not isinstance(selector, str) or not selector:
                 raise ValueError(
                     f"actions[{i}].selector required for select_option")
