@@ -379,10 +379,14 @@ def _ledger_observed(text: str) -> list[tuple[str, str]]:
     """Return (criterion, observed) pairs for each evidence row.
 
     The G6 evidence path is the leading token of the observed line; trailing
-    commentary after whitespace or a (full/half-width) paren is tolerated so
-    authors can annotate ``evidence/`` rows without a false-positive G6 fail
-    (issue 03). Free-text observed is unaffected — G6 only checks evidence/
-    rows, and a leading-token free text never starts with ``evidence/``.
+    commentary after whitespace, a (full/half-width) paren, or a
+    (full/half-width) comma / colon is tolerated so authors can annotate
+    ``evidence/`` rows without a false-positive G6 fail (issue 03). Free-text
+    observed is unaffected — G6 only checks evidence/ rows, and a leading
+    token starting with ``evidence/`` never appears in free text.
+
+    Keep the tolerated separators in sync with skills/ui-evaluator/SKILL.md
+    (which teaches authors what punctuation may follow the artifact path).
     """
     pairs: list[tuple[str, str]] = []
     for block in re.split(r"\n\s*\n", text):
@@ -390,7 +394,7 @@ def _ledger_observed(text: str) -> list[tuple[str, str]]:
         obs = re.search(r"^observed:\s*(.+)$", block, re.I | re.M)
         if crit and obs:
             raw = obs.group(1).strip()
-            lead = re.match(r"[^\s（(]+", raw)
+            lead = re.match(r"[^\s（(,，:：]+", raw)
             observed = lead.group(0) if lead else raw
             pairs.append((crit.group(1).strip(), observed))
     return pairs

@@ -29,13 +29,13 @@ result:    pass
 ```
 criterion: L6.4
 required:  declared proof for L6.4
-observed:  manual viewer
+observed:  evidence/L6.4-viewer.png: viewer state screenshot
 result:    pass
 ```
 
 ```
 criterion: L6.5
 required:  declared proof for L6.5
-observed:  manual retry
+observed:  evidence/L6.5-retry.png, retry state screenshot
 result:    pass
 ```

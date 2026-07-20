@@ -21,6 +21,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "packages" / "design-playbook"
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
+
+# Gate 1 structural expectations. Keep these in sync with
+# docs/agents/release-checklist.md ("six skills + three commands") when the
+# plugin surface grows or shrinks; the checklist wording and this floor are
+# the two authorities a reviewer eyeballs, and doctor.py is the machine echo.
+GATE1_EXPECTED_SKILLS = 6
+GATE1_EXPECTED_COMMANDS = 3
+GATE1_EXPECTED_PLUGIN_NAME = "design-playbook"
+
 failures: list[str] = []
 warnings: list[str] = []
 
@@ -75,28 +84,35 @@ def check_layout() -> None:
 # comparison (release.py additionally checks README badges + release notes).
 # Keep in sync when version sites change.
 def check_gate1_smoke() -> None:
-    print("== gate 1 structural smoke (6 skills / 3 commands / namespace) ==")
+    print(
+        "== gate 1 structural smoke "
+        f"({GATE1_EXPECTED_SKILLS} skills / "
+        f"{GATE1_EXPECTED_COMMANDS} commands / namespace) =="
+    )
     # Semi-automated gate 1 (release-checklist): the static counts a human
     # would eyeball in /help. The dynamic `claude --plugin-dir` load + /help
     # listing stay human (host slash, not automatable - see memory).
     skills_dir = PKG / "skills"
     skill_dirs = [d for d in skills_dir.iterdir() if d.is_dir()] if skills_dir.is_dir() else []
-    if len(skill_dirs) == 6:
-        ok("6 skills present")
+    if len(skill_dirs) == GATE1_EXPECTED_SKILLS:
+        ok(f"{GATE1_EXPECTED_SKILLS} skills present")
     else:
-        fail(f"expected 6 skills, got {len(skill_dirs)}")
+        fail(f"expected {GATE1_EXPECTED_SKILLS} skills, got {len(skill_dirs)}")
     commands_dir = PKG / "commands"
     cmds = sorted(commands_dir.glob("*.md")) if commands_dir.is_dir() else []
-    if len(cmds) == 3:
-        ok("3 commands present")
+    if len(cmds) == GATE1_EXPECTED_COMMANDS:
+        ok(f"{GATE1_EXPECTED_COMMANDS} commands present")
     else:
-        fail(f"expected 3 commands, got {len(cmds)}")
+        fail(f"expected {GATE1_EXPECTED_COMMANDS} commands, got {len(cmds)}")
     plugin = read_json(PKG / ".claude-plugin" / "plugin.json")
     if plugin is not None:
-        if plugin.get("name") == "design-playbook":
-            ok("plugin.json name = design-playbook")
+        if plugin.get("name") == GATE1_EXPECTED_PLUGIN_NAME:
+            ok(f"plugin.json name = {GATE1_EXPECTED_PLUGIN_NAME}")
         else:
-            fail(f"plugin.json name = {plugin.get('name')!r}, expected design-playbook")
+            fail(
+                f"plugin.json name = {plugin.get('name')!r}, "
+                f"expected {GATE1_EXPECTED_PLUGIN_NAME}"
+            )
 
 
 def check_versions() -> str:
