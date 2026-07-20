@@ -449,8 +449,8 @@ cursor: default !important;
   <span class="dpb-pill-info">
     <span class="dpb-round">{t_round}</span>
     <p class="dpb-summary" title="{summary_safe}">{summary_safe}</p>
-    <span class="dpb-pill-ready" id="dpb-pill-ready" role="status">{t_not_ready}</span>
   </span>
+  <span class="dpb-pill-ready" id="dpb-pill-ready" role="status">{t_not_ready}</span>
   <span class="dpb-pill-actions">
     {pill_secondary_html}
     <button type="button" class="dpb-btn-ghost" id="dpb-open-drawer" aria-haspopup="dialog">
@@ -497,9 +497,9 @@ cursor: default !important;
     <button type="submit" name="choice" value="__abort__" class="dpb-btn dpb-btn-danger" id="dpb-abort">{t_terminate}</button>
     <span class="dpb-sr-only" id="dpb-abort-status" role="alert"></span>
     <div class="dpb-btns">
+      <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-draft">{t_draft}</button>
       {secondary_html}
       <button type="submit" name="choice" value="{primary_val}" class="dpb-btn dpb-btn-primary">{primary_label}</button>
-      <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-draft">{t_draft}</button>
     </div>
   </div>
 </dialog>
