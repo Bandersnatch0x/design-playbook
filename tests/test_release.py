@@ -67,6 +67,18 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("tag v0.3.0 already points at HEAD", result.stdout)
 
+    def test_apply_refuses_to_tag_when_a_gate_failed(self) -> None:
+        (self.root / "untracked.txt").write_text("not released\n", encoding="utf-8")
+
+        result = self.release("--checks", "tree,tag", "--apply")
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("refusing to create tag", result.stdout)
+        tags = _run("git", "tag", "-l", "v0.3.0", cwd=self.root)
+        self.assertEqual(
+            tags.stdout.strip(), "",
+            "tag must not be created when an earlier gate failed")
+
     def test_release_notes_for_version_are_required(self) -> None:
         (self.root / "docs" / "releases" / "v0.3.0.md").unlink()
 
