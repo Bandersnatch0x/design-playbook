@@ -186,6 +186,11 @@ def check_tag(*, apply: bool) -> str:
         ok(f"tag {tag} not present (dry-run; pass --apply to create)")
         return tag
 
+    if failures:
+        fail(f"refusing to create tag {tag}: "
+             f"{len(failures)} earlier gate failure(s)")
+        return tag
+
     result = run(["git", "-C", str(ROOT), "tag", tag])
     if result.returncode == 0:
         ok(f"created tag {tag}")
