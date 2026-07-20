@@ -8,7 +8,8 @@ manual (irreversible / human).
 
 Steps:
   1. working tree clean (no uncommitted tracked changes)
-  2. plugin.json + marketplace.json versions match (2 sites) and are semver
+  2. plugin.json + marketplace.json versions match (2 sites) and are semver;
+     README.md / README-zh.md Version badges match too (badge drift guard)
   3. scripts/validate.py green
   4. seam test (test_validate_run.py) green
   5. adapter floor self-check green
@@ -84,6 +85,17 @@ def main() -> int:
     else:
         fail(f"version mismatch: plugin.json={v_pj!r} "
              f"marketplace.meta={v_mj_meta!r} marketplace.plugin={v_mj_plugin!r}")
+
+    # README version badges (no test covers the root READMEs; drifted 3 times)
+    badge_re = re.compile(r"badge/Version-(\d+\.\d+\.\d+)-")
+    for rel in ("README.md", "README-zh.md"):
+        m = badge_re.search((ROOT / rel).read_text(encoding="utf-8"))
+        if not m:
+            fail(f"{rel}: no Version badge found")
+        elif m.group(1) != v_pj:
+            fail(f"{rel}: Version badge {m.group(1)} != plugin.json {v_pj}")
+        else:
+            ok(f"{rel} Version badge matches: {m.group(1)}")
 
     # --- 3. validate.py ---
     print("== 3. scripts/validate.py ==")

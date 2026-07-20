@@ -4,9 +4,9 @@
 Renders the adapter confirm page (prototype + injected control bar) and
 drives multiple HITL-equivalent scenarios with playwright to verify the
 frontend submit handler + readiness logic blocks non-substantive feedback
-(short text, empty, incomplete anchors) and allows valid cases (4+ chars,
-complete anchors). Covers all feedback operation scenarios post floor
-hardening (min 4 chars for pure text).
+(empty, whitespace-only, incomplete anchors) and allows valid cases
+(non-empty feedback incl. short CJK, complete anchors). Mirrors the
+adapter floor's structural semantics — no minimum length (ADR-0008).
 """
 import sys, tempfile
 from pathlib import Path
@@ -20,10 +20,20 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 
 ROUND_N = 1
 SUMMARY = "verify run summary - list scene"
-OPTIONS = default_options()
+OPTIONS = default_options()  # [confirm, revise] in the active locale
 PRIMARY_OPT = OPTIONS[0]
 SECONDARY = [OPTIONS[1]]
-OPTIONS = [PRIMARY_OPT] + SECONDARY  # ensure order if needed, but default_options already gives [confirm, revise]
+
+# Capture-phase listener that records the submitter value and preventDefaults,
+# so the form does not navigate and tests can assert WHICH action was
+# submitted. Shared by S10 + S15.
+CAPTURE_SUBMITTER_JS = """() => {
+  const f = document.getElementById('dpb-decide-form');
+  f.addEventListener('submit', (e) => {
+    window.__capturedSubmitter = (e.submitter && e.submitter.value) || null;
+    e.preventDefault();
+  }, true);
+}"""
 
 control = server._build_control(ROUND_N, SUMMARY, OPTIONS)
 
@@ -116,33 +126,35 @@ def main():
         if not s3_ok:
             failures.append("S3: anchor+comment confirm not allowed through")
 
-        # --- Scenario 4: short feedback (<4 chars, e.g. "ok") is blocked (new min-length rule) ---
+        # --- Scenario 4: short feedback is allowed (structural floor, no min length) ---
+        # CJK-first: 3-char "太挤了" is substantive feedback; semantic junk is G6's
+        # job, not the floor's (ADR-0008).
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
         page.wait_for_timeout(200)
-        page.fill('textarea[name="feedback"]', 'ok')  # 2 chars
-        page.click('.dpb-drawer .dpb-btn-primary', timeout=2000)
-        page.wait_for_timeout(200)
-        blocked = page.url.startswith('file:')
-        s4_ok = blocked
-        print(f"  S4 short feedback (2 chars): blocked={blocked} -> {'OK' if s4_ok else 'FAIL'}")
-        if not s4_ok:
-            failures.append("S4: short feedback (<4) must be blocked")
-
-        # --- Scenario 5: exactly 4 chars feedback allowed ---
-        page.goto(file_url, wait_until='domcontentloaded')
-        page.wait_for_selector('#dpb-preview-bar')
-        page.click('#dpb-open-primary')
-        page.wait_for_timeout(200)
-        page.fill('textarea[name="feedback"]', 'fixx')  # 4 chars
+        page.fill('textarea[name="feedback"]', '太挤了')  # 3 chars, substantive
         page.click('.dpb-drawer .dpb-btn-primary', timeout=2000)
         page.wait_for_timeout(300)
         nav_ok = not page.url.startswith('file:')
-        s5_ok = nav_ok
-        print(f"  S5 4-char feedback: submit_allowed={nav_ok} -> {'OK' if s5_ok else 'FAIL'}")
+        s4_ok = nav_ok
+        print(f"  S4 short CJK feedback (3 chars): submit_allowed={nav_ok} -> {'OK' if s4_ok else 'FAIL'}")
+        if not s4_ok:
+            failures.append("S4: short CJK feedback must be allowed (no min-length floor)")
+
+        # --- Scenario 5: whitespace-only feedback is blocked (trimmed before non-empty check) ---
+        page.goto(file_url, wait_until='domcontentloaded')
+        page.wait_for_selector('#dpb-preview-bar')
+        page.click('#dpb-open-primary')
+        page.wait_for_timeout(200)
+        page.fill('textarea[name="feedback"]', '   ')  # whitespace only
+        page.click('.dpb-drawer .dpb-btn-primary', timeout=2000)
+        page.wait_for_timeout(200)
+        blocked = page.url.startswith('file:')
+        s5_ok = blocked
+        print(f"  S5 whitespace-only feedback: blocked={blocked} -> {'OK' if s5_ok else 'FAIL'}")
         if not s5_ok:
-            failures.append("S5: 4-char feedback must be allowed through")
+            failures.append("S5: whitespace-only feedback must be blocked")
 
         # --- Scenario 6: feedback present + incomplete anchor (no comment) still blocked ---
         page.goto(file_url, wait_until='domcontentloaded')
@@ -227,6 +239,8 @@ def main():
 
         # --- S10: pill primary directly submits confirm when ready (no drawer forced open) ---
         # Per button flow debate: when isSubstantive(), pill primary should direct confirm.
+        # Uses the capture listener so we can assert WHICH value was submitted -
+        # guards the "null"-choice regression directly (previously only S15 did).
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -238,18 +252,19 @@ def main():
         page.wait_for_timeout(200)
         # Check readiness on now-visible pill
         ready = page.evaluate("() => document.getElementById('dpb-pill-ready').classList.contains('is-ready')")
+        page.evaluate(CAPTURE_SUBMITTER_JS)
         # Click the pill primary (should now direct submit because ready)
         page.click('#dpb-open-primary')
         page.wait_for_timeout(300)
-        nav_ok = not page.url.startswith('file:')
-        # Drawer should be closed
+        captured = page.evaluate("() => window.__capturedSubmitter")
+        # Drawer should stay closed
         drawer_open = page.evaluate("() => { const d = document.getElementById('dpb-drawer'); return !!(d && d.open); }")
-        s10_ok = nav_ok and ready and not drawer_open
-        print(f"  S10 pill primary direct confirm when ready: ready={ready} nav={nav_ok} drawer_open={drawer_open} -> {'OK' if s10_ok else 'FAIL'}")
+        s10_ok = ready and captured == PRIMARY_OPT and not drawer_open
+        print(f"  S10 pill primary direct confirm when ready: ready={ready} captured='{captured}' (want '{PRIMARY_OPT}') drawer_open={drawer_open} -> {'OK' if s10_ok else 'FAIL'}")
         if not s10_ok:
-            failures.append("S10: pill primary must direct submit when ready, without forcing drawer")
+            failures.append("S10: pill primary must direct submit the confirm value when ready, without forcing drawer")
 
-        # --- S11: draft button records without deciding (closes without submit) ---
+        # --- S11: draft button keeps notes and closes without deciding (no submit) ---
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -348,15 +363,9 @@ def main():
         page.wait_for_timeout(200)
         page.fill('textarea[name="feedback"]', 'enough text to be ready')
         page.wait_for_timeout(100)
-        # capture the submitter value via a capture-phase listener that preventDefaults,
-        # so the form does not navigate and we can assert WHICH action was submitted.
-        page.evaluate("""() => {{
-          const f = document.getElementById('dpb-decide-form');
-          f.addEventListener('submit', (e) => {{
-            window.__capturedSubmitter = (e.submitter && e.submitter.value) || null;
-            e.preventDefault();
-          }}, true);
-        }}""")
+        # capture the submitter value (shared listener) so the form does not
+        # navigate and we can assert WHICH action was submitted.
+        page.evaluate(CAPTURE_SUBMITTER_JS)
         page.focus('textarea[name="feedback"]')
         page.keyboard.press('Control+Enter')
         page.wait_for_timeout(200)

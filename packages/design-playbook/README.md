@@ -68,6 +68,8 @@ Evidence exists only to satisfy a declared criterion — an observation without 
 
 The Design I/O run is a **declared, host-neutral contract** over plain-Markdown artifacts (spec, decision report, point-back ledger). Any coding agent that emits that shape can be checked; Claude Code and Codex are adapters over the same artifacts, and every generator, bridge, or design-system gate is an optional input, never a dependency.
 
+Run artifacts land under `.scratch/<run>/` (`plan.md`, `preview/`, `evidence/manifest.jsonl`, `point-back.md`); see `SKILL.md` steps 3, 5, 8 for what lands when. That is where to look — and manually intervene — when a run stalls.
+
 Optional sibling package [`design-playbook-preview`](../design-playbook-preview/) is a stdio MCP adapter (`preview_prototype`) for disposable HTML prototypes; the orchestrator **probes** for it and skips preview when absent. design-playbook does not package-depend on it.
 
 Optional sibling package [`design-playbook-evidence`](../design-playbook-evidence/) is a stdio MCP adapter (`execute_capture_plan`) for post-Fill runtime capture (screenshot / a11y tree / interaction trace via Playwright); the orchestrator **probes** for it and skips observe when absent. Provider writes artifacts only — never the manifest. design-playbook does not package-depend on it.

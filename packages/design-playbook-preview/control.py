@@ -352,6 +352,11 @@ min-width: 72px; background: transparent; color: var(--dpb-danger); border-color
   #dpb-preview-bar .dpb-btn-danger:hover {{ color: #fff; background: var(--dpb-danger); border-color: var(--dpb-danger); }}
   #dpb-preview-bar .dpb-btn-danger.is-armed {{ color: #fff; background: var(--dpb-danger); border-color: var(--dpb-danger); animation: dpb-abort-pulse 1s ease-in-out infinite; }}
   @keyframes dpb-abort-pulse {{ 0%,100% {{ opacity: 1; }} 50% {{ opacity: .6; }} }}
+  /* visually hidden live region (screen-reader announcements, e.g. abort arming) */
+  #dpb-preview-bar .dpb-sr-only {{
+position: absolute; width: 1px; height: 1px; overflow: hidden;
+clip-path: inset(50%); white-space: nowrap;
+  }}
 
   /* floating annotation bubbles pinned to targeted elements */
   .dpb-float-note {{
@@ -482,11 +487,12 @@ cursor: default !important;
     </div>
   </div>
   <div class="dpb-drawer-foot">
-    <button type="submit" name="choice" value="__abort__" class="dpb-btn dpb-btn-danger" id="dpb-abort" aria-label="{t_terminate}">{t_terminate}</button>
+    <button type="submit" name="choice" value="__abort__" class="dpb-btn dpb-btn-danger" id="dpb-abort">{t_terminate}</button>
+    <span class="dpb-sr-only" id="dpb-abort-status" role="alert"></span>
     <div class="dpb-btns">
       {secondary_html}
       <button type="submit" name="choice" value="{primary_val}" class="dpb-btn dpb-btn-primary">{primary_label}</button>
-      <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-draft">仅记录批注但暂不决定</button>
+      <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-draft">{t_draft}</button>
     </div>
   </div>
 </dialog>
@@ -676,13 +682,13 @@ setReadiness();
   }}
 
   // I4: ADR-0008 substantive predicate (mirror of adapter floor) + live readiness.
+  // Structural only, no minimum length (ADR-0008: semantic junk is G6's job).
   function isSubstantive() {{
 var value = (field && field.value || "").trim();
-var hasSubstantiveText = value.length >= 4;
 var anchorsComplete = !anchors.length || anchors.every(function (a) {{
   return (a && (a.selector || "").trim() && (a.comment || "").trim());
 }});
-return (hasSubstantiveText || anchors.length) && anchorsComplete;
+return (value.length > 0 || anchors.length) && anchorsComplete;
   }}
   var lastReady = null;
   var pillOpenLabel = null;  // I13: original pill-primary label, restored on ready->not-ready flip
@@ -790,7 +796,8 @@ if (targetBtn) form.requestSubmit(targetBtn); else form.requestSubmit();
 if (bar.classList.contains("is-open") && !pinOn && e.target === bar) closeDrawer();
   }});
 
-  // Draft: record current feedback/anchors without making confirm/revise decision (per debate)
+  // Draft: keep current feedback/anchors in the form and close without a
+  // confirm/revise decision (per debate); nothing is submitted or persisted.
   var draftBtn = document.getElementById("dpb-draft");
   if (draftBtn) draftBtn.addEventListener("click", function () {{ closeDrawer(); }});
 
@@ -806,13 +813,17 @@ field.addEventListener("keydown", function (e) {{
 
   // I18: abort requires a second click within the confirm window (prevents accidental
   // session kill). First click arms the button for ABORT_ARM_MS; second click submits __abort__.
+  // Armed state is announced to screen readers via the #dpb-abort-status alert
+  // region (the visible textContent swap alone is not reliably announced).
   var ABORT_ARM_MS = 2000;
   var abortBtn = document.getElementById("dpb-abort");
+  var abortStatus = document.getElementById("dpb-abort-status");
   var abortArmed = false;
   var abortTimer = null;
   var abortLabel = "";
   function resetAbortArmed() {{
 if (abortTimer) {{ clearTimeout(abortTimer); abortTimer = null; }}
+if (abortStatus) abortStatus.textContent = "";
 if (abortBtn && abortArmed) {{
   abortArmed = false;
   abortBtn.textContent = abortLabel;
@@ -827,6 +838,7 @@ abortBtn.addEventListener("click", function (e) {{
     abortArmed = true;
     abortBtn.textContent = "{t_terminate_confirm}";
     abortBtn.classList.add("is-armed");
+    if (abortStatus) abortStatus.textContent = "{t_terminate_confirm}";
     abortTimer = setTimeout(resetAbortArmed, ABORT_ARM_MS);
   }}  // else: let the submit proceed (choice=__abort__)
 }});
@@ -951,8 +963,8 @@ anchors.forEach(function (a, idx) {{ positionFloat(a, idx); }});
   window.addEventListener("resize", repositionAll);
 
   // ADR-0008: confirm requires substantive feedback too -
-  // (feedback text >=4 chars OR >=1 complete anchor) AND all anchors complete.
-  // Frontend mirrors adapter _check_feedback_floor (incl. min length for pure text).
+  // (non-empty feedback OR >=1 anchor) AND all anchors complete.
+  // Frontend mirrors adapter _check_feedback_floor via isSubstantive().
   var reviseLabels = {{{t_revise_labels}}};
   form.addEventListener("submit", function (e) {{
 syncHidden();
@@ -960,17 +972,9 @@ var submitter = e.submitter;
 var choice = submitter && submitter.name === "choice" ? submitter.value : "";
 if (!choice || choice === "__abort__") return;
 var isRevise = !!reviseLabels[choice] || /修改|revise|change/i.test(choice);
-var value = (field && field.value || "").trim();
-var hasSubstantiveText = value.length >= 4;
-// ADR-0008: if anchors present, EVERY anchor needs non-empty selector AND
-// comment. Pure-feedback now also requires >=4 chars (mirrors adapter).
-var anchorsComplete = !anchors.length || anchors.every(function (a) {{
-  return (a && (a.selector || "").trim() && (a.comment || "").trim());
-}});
-var substantive = (hasSubstantiveText || anchors.length) && anchorsComplete;
 // For revise actions (e.g. "需要修改"), allow even without substantive feedback (the point is to request changes).
 // Only enforce floor for actual confirm actions.
-if (isRevise || substantive) {{
+if (isRevise || isSubstantive()) {{
   if (field) field.removeAttribute("aria-invalid");
   if (hint) hint.classList.remove("is-on");
   return;
@@ -984,9 +988,7 @@ if (!bar.classList.contains("is-open")) openDrawer();
   }});
   if (field) {{
 field.addEventListener("input", function () {{
-  var v = (field.value || "").trim();
-  var hasText = v.length >= 4;
-  if (hasText || anchors.length) {{
+  if (isSubstantive()) {{
     field.removeAttribute("aria-invalid");
     if (hint) hint.classList.remove("is-on");
   }}
@@ -1065,6 +1067,7 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         t_close=t("close"),
         t_terminate=t("terminate"),
         t_terminate_confirm=t("terminate_confirm"),
+        t_draft=t("draft"),
         t_locate=t("locate_anchor"),
         t_locate_anchor=t("locate_anchor"),
         t_remove=t("remove"),

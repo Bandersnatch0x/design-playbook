@@ -50,7 +50,7 @@ No schema-version field is added (manifest/confirm schema structural fields rema
 
 ## Enforcement sites (landed 2026-07-18, SEAM TEST PASSED)
 
-1. ✅ `packages/design-playbook-preview/server.py` — `_check_feedback_floor` + floor before `_write_confirm`; `floor_pass`/`floor_failure` in record + return payload; `_self_check_floor()` via `--self-check` (wired into seam test).
+1. ✅ `packages/design-playbook-preview/confirm.py` (sibling split from `server.py`, wired via `server.py` `do_POST`) — `_check_feedback_floor` + floor before `_write_confirm`; `floor_pass`/`floor_failure` in record + return payload; `_self_check_floor()` via `--self-check` (wired into seam test). Frontend mirror lives in `control.py` (`isSubstantive()`), kept in lockstep by `test_floor_frontend.py`.
 2. ✅ `packages/design-playbook/skills/design-playbook/SKILL.md` — step 5 + "Done when": confirm requires `floor_pass: true`.
 3. ✅ `packages/design-playbook/scripts/validate_run.py` — `check_preview` asserts `floor_pass`, rejects confirmed-without-floor.
 4. ✅ G5 pass fixtures (`g5-preview-confirmed`, `g5-aborted-then-confirmed`, `g5-multi-round-last-confirmed`) carry substantive feedback + `floor_pass`; new fail fixture `g5-confirm-floor-fail` (empty feedback, no floor_pass) rejects with "failed feedback floor".
