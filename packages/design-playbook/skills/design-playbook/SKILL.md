@@ -33,7 +33,7 @@ Do in order. Data flow:
 
 - `?` = conditional entry/route
 - `*` = run only when the matching MCP tool is available (`preview_prototype` for preview, `execute_capture_plan` for observe); otherwise skip
-- When you skip a step, say so in one line — step name + reason + how to enable, with the gate label when one applies. Matters most for `preview*`/`observe*` adapter absence, e.g. `-> preview*: adapter absent, skipped (G5 not triggered; enable via packages/design-playbook-preview/)`. Other conditional skips may use the same shape; entry lines are optional (keep output lean). Narration only — not a run-contract control.
+- When you skip a step, say so in one line — step name + reason + how to enable, with the gate label when one applies. Matters most for `preview*`/`observe*` adapter absence, e.g. `-> preview*: adapter absent, skipped (G5 not triggered; enable via packages/design-playbook/mcp/preview/ or host MCP)`. Other conditional skips may use the same shape; entry lines are optional (keep output lean). Narration only — not a run-contract control.
 - Do not code a pretty shell until the active step’s completion criterion is met
 
 ### 1. Entry routing

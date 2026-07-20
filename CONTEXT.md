@@ -58,9 +58,10 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 
 | Path | Role |
 | --- | --- |
-| `packages/design-playbook/` | Public plugin product |
-| `packages/design-playbook-preview/` | Optional Preview MCP adapter (`preview_prototype`); independent install |
-| `packages/design-playbook-evidence/` | Optional Evidence MCP adapter (`execute_capture_plan`); independent install |
+| `packages/design-playbook/` | Public plugin product (skills, commands, bundled MCP) |
+| `packages/design-playbook/mcp/` | Bundled Preview + Evidence MCP runtimes (marketplace install path) |
+| `packages/design-playbook-preview/` | Compatibility launcher + docs for Preview MCP (`preview_prototype`) |
+| `packages/design-playbook-evidence/` | Compatibility launcher + docs for Evidence MCP (`execute_capture_plan`) |
 | `packages/design-playbook/skills/` | Skills SSOT |
 | `docs/agents/` | Tracker + product workflow |
 | `.scratch/` | Specs, tickets, dogfood logs |

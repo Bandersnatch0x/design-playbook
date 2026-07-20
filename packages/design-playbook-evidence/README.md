@@ -2,8 +2,12 @@
 
 Optional **Evidence Provider MCP adapter** for [design-playbook](../design-playbook/).
 
-Independent package: design-playbook does **not** package-depend on this.
-Orchestrator probes MCP `tools/list` for tool name `execute_capture_plan`; if
+**v0.3+:** runtime is bundled inside the main plugin at
+`packages/design-playbook/mcp/evidence/` and auto-registered via the plugin's
+`.mcp.json` (`${CLAUDE_PLUGIN_ROOT}`). This sibling directory is a
+**compatibility launcher + docs** surface for monorepo / older local configs.
+
+Orchestrator still probes MCP `tools/list` for tool name `execute_capture_plan`; if
 absent, step 8 falls back to manual provider or free-text `observed` (no G6).
 
 ## Tool
@@ -35,6 +39,27 @@ Requires Python 3 + [Playwright](https://playwright.dev/python/) with Chromium.
 pip install playwright
 playwright install chromium
 ```
+
+**Preferred (plugin install):** no manual config — marketplace / `--plugin-dir`
+loads `packages/design-playbook/.mcp.json`.
+
+**Monorepo / manual:**
+
+```json
+{
+  "mcpServers": {
+    "design-playbook-evidence": {
+      "command": "python",
+      "args": ["packages/design-playbook/mcp/evidence/server.py"],
+      "env": {
+        "DESIGN_PLAYBOOK_RUN_ROOT": "."
+      }
+    }
+  }
+}
+```
+
+Compatibility launcher (redirects to the bundled runtime):
 
 ```json
 {

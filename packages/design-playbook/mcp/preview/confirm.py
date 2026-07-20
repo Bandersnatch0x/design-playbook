@@ -164,5 +164,6 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--self-check":
         _self_check_floor()
     else:
-        serve()
+        raise SystemExit(
+            "usage: confirm.py --self-check (the MCP server entry is server.py)")
 

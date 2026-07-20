@@ -2,8 +2,12 @@
 
 Optional **Preview MCP adapter** for [design-playbook](../design-playbook/).
 
-Independent package: design-playbook does **not** package-depend on this.
-Orchestrator probes MCP `tools/list` for tool name `preview_prototype`; if
+**v0.3+:** runtime is bundled inside the main plugin at
+`packages/design-playbook/mcp/preview/` and auto-registered via the plugin's
+`.mcp.json` (`${CLAUDE_PLUGIN_ROOT}`). This sibling directory is a
+**compatibility launcher + docs** surface for monorepo / older local configs.
+
+Orchestrator still probes MCP `tools/list` for tool name `preview_prototype`; if
 absent, preview is skipped and the pipeline goes straight to Fill.
 
 ## Tool
@@ -31,6 +35,24 @@ prototype when `path` is under `preview/`) and appends `log.md`.
 ## Install / MCP config
 
 Stdio server, stdlib only:
+
+**Preferred (plugin install):** no manual config — marketplace / `--plugin-dir`
+loads `packages/design-playbook/.mcp.json`.
+
+**Monorepo / manual:**
+
+```json
+{
+  "mcpServers": {
+    "design-playbook-preview": {
+      "command": "python",
+      "args": ["<abs-path-to-repo>/packages/design-playbook/mcp/preview/server.py"]
+    }
+  }
+}
+```
+
+Compatibility launcher (same process, redirects to the bundled runtime):
 
 ```json
 {
