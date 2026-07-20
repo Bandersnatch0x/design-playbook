@@ -382,6 +382,23 @@ def main():
         if not s15_ok:
             failures.append("S15: Ctrl+Enter should submit the CONFIRM (not abort/revise) when open; nothing when closed")
 
+        # --- S16: clicking elsewhere in drawer cancels abort arming (8b34387) ---
+        page.goto(file_url, wait_until='domcontentloaded')
+        page.wait_for_selector('#dpb-preview-bar')
+        page.click('#dpb-open-primary')
+        page.wait_for_timeout(200)
+        page.click('#dpb-abort')  # first click arms
+        page.wait_for_timeout(100)
+        armed = page.evaluate("() => document.getElementById('dpb-abort').classList.contains('is-armed')")
+        page.click('textarea[name="feedback"]')  # click elsewhere in drawer -> cancel arm
+        page.wait_for_timeout(100)
+        armed_after_cancel = page.evaluate("() => document.getElementById('dpb-abort').classList.contains('is-armed')")
+        stayed = page.url.startswith('file:')
+        s16_ok = armed and not armed_after_cancel and stayed
+        print(f"  S16 drawer-click cancels abort arm: armed={armed} after_cancel={armed_after_cancel} stayed={stayed} -> {'OK' if s16_ok else 'FAIL'}")
+        if not s16_ok:
+            failures.append("S16: clicking elsewhere in drawer must cancel abort arming")
+
         browser.close()
 
     print()

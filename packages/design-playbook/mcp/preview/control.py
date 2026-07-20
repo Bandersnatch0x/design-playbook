@@ -426,9 +426,10 @@ cursor: default !important;
 #dpb-preview-bar .dpb-drawer {{ width: calc(100vw - 24px); }}
 #dpb-preview-bar .dpb-pill .dpb-pill-info {{ display: none; }}
 #dpb-preview-bar .dpb-drawer-body {{ padding: 10px 10px 14px; }}
-#dpb-preview-bar .dpb-drawer-foot {{ justify-content: stretch; flex-wrap: wrap; }}
+#dpb-preview-bar .dpb-drawer-foot {{ justify-content: flex-start; flex-wrap: wrap; }}
+#dpb-preview-bar .dpb-btn.dpb-btn-danger {{ flex: 0 0 auto; }}
 #dpb-preview-bar .dpb-btns {{ flex: 1 1 auto; }}
-#dpb-preview-bar .dpb-btn {{ flex: 1 1 auto; min-width: 0; }}
+#dpb-preview-bar .dpb-btns .dpb-btn {{ flex: 1 1 auto; min-width: 0; }}
   }}
   @media (prefers-reduced-motion: reduce) {{
 #dpb-preview-bar .dpb-btn,
