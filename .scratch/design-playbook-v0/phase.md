@@ -14,6 +14,8 @@
 | 7-release | done (v0.2.0, 2026-07-17) |
 | v0.3-grill | done (2026-07-18, 4 决策 + ADR-0008 floor enforcement 落地, SEAM TEST PASSED) |
 | v0.3-to-spec | done (2026-07-20: Q3.1-Q3.4 + preview polish landed; v0.3.0 perfect release prep complete) |
+| v0.3.1 | done (2026-07-20: dedup-single-source 5 票 + ADR-0010, shipped, tag v0.3.1) |
+| v0.4-grill | in progress (2026-07-20 启动, 4 主题: 完整链路演示 / input-nav 扩展(ADR-0010 P1/P2) / 基础设施分发 / launcher 评估提前; wayfinder `.scratch/v0.4-cycle/`) |
 
 ## v0 ship checklist (5/5 pass)
 
