@@ -350,8 +350,9 @@ min-width: 72px; background: transparent; color: var(--dpb-muted); border-color:
 min-width: 72px; background: transparent; color: var(--dpb-danger); border-color: transparent;
   }}
   #dpb-preview-bar .dpb-btn-danger:hover {{ color: #fff; background: var(--dpb-danger); border-color: var(--dpb-danger); }}
-  #dpb-preview-bar .dpb-btn-danger.is-armed {{ color: #fff; background: var(--dpb-danger); border-color: var(--dpb-danger); animation: dpb-abort-pulse 1s ease-in-out infinite; }}
-  @keyframes dpb-abort-pulse {{ 0%,100% {{ opacity: 1; }} 50% {{ opacity: .6; }} }}
+  #dpb-preview-bar .dpb-btn-danger.is-armed {{ color: #fff; background: var(--dpb-danger); border-color: var(--dpb-danger); font-weight: 700; animation: dpb-abort-pulse 1s ease-in-out infinite; }}
+  /* ring pulse (not opacity) so the armed label stays at full contrast */
+  @keyframes dpb-abort-pulse {{ 0%,100% {{ box-shadow: 0 0 0 0 rgba(248,113,113,.55); }} 50% {{ box-shadow: 0 0 0 7px rgba(248,113,113,.12); }} }}
   /* visually hidden live region (screen-reader announcements, e.g. abort arming) */
   #dpb-preview-bar .dpb-sr-only {{
 position: absolute; width: 1px; height: 1px; overflow: hidden;
@@ -431,6 +432,8 @@ cursor: default !important;
 .dpb-float-note {{ transition: none; }}
 #dpb-preview-bar .dpb-btn:active {{ transform: none; }}
 .dpb-pin-flash {{ animation: none; }}
+/* armed state still reads via solid danger fill + bold label, no pulse */
+#dpb-preview-bar .dpb-btn-danger.is-armed {{ animation: none; }}
   }}
 </style>
 <div id="dpb-preview-bar" role="region" aria-label="{t_region}">
@@ -762,7 +765,13 @@ if (drawerEl && drawerEl.open && typeof drawerEl.close === "function") drawerEl.
 if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
   }}
 
-  if (openBtn) openBtn.addEventListener("click", openDrawer);
+  // I2: 批注 (annotate) and the not-ready pill primary used to both just open
+  // the drawer. Annotate now drops straight into element picking, so the two
+  // buttons carry distinct intents (annotate elements vs. review/confirm).
+  if (openBtn) openBtn.addEventListener("click", function () {{
+openDrawer();
+setPin(true);
+  }});
   var openPrimary = document.getElementById("dpb-open-primary");
   // Shared: submit the confirm (drawer primary). Used by pill-primary direct
   // confirm (handlePillPrimary) and Ctrl+Enter (I8) to avoid divergent targets.
@@ -815,7 +824,9 @@ field.addEventListener("keydown", function (e) {{
   // session kill). First click arms the button for ABORT_ARM_MS; second click submits __abort__.
   // Armed state is announced to screen readers via the #dpb-abort-status alert
   // region (the visible textContent swap alone is not reliably announced).
-  var ABORT_ARM_MS = 2000;
+  // 4000ms: at 2000ms a hesitant user's second click landed AFTER expiry and
+  // just re-armed, so the button felt dead no matter how often it was clicked.
+  var ABORT_ARM_MS = 4000;
   var abortBtn = document.getElementById("dpb-abort");
   var abortStatus = document.getElementById("dpb-abort-status");
   var abortArmed = false;
@@ -1008,6 +1019,22 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
     (playwright) so the option/button markup is not duplicated across them.
     """
     confirm_cf = {c.casefold() for c in CONFIRM_LABELS}
+    revise_cf = {r.casefold() for r in REVISE_LABELS}
+
+    def display_label(opt: str) -> str:
+        """Render known confirm/revise labels in the ACTIVE locale.
+
+        The submitted value stays the raw option (CONFIRM/REVISE union sets
+        still classify it); only the visible label is localized, so options
+        a caller copied from another locale's docs cannot mix languages into
+        an otherwise locale-consistent control bar.
+        """
+        if opt in CONFIRM_LABELS or opt.casefold() in confirm_cf:
+            return t("confirm")
+        if opt in REVISE_LABELS or opt.casefold() in revise_cf:
+            return t("revise")
+        return opt
+
     # JS object literal of revise labels across all locales (frontend classifies
     # a revise regardless of UI language). Keys are JSON-quoted/escaped.
     revise_js = ", ".join(
@@ -1016,7 +1043,7 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
     secondary_bits: list[str] = []
     for opt in options:
         safe_val = html_lib.escape(opt, quote=True)
-        safe_label = html_lib.escape(opt)
+        safe_label = html_lib.escape(display_label(opt))
         primary = opt in CONFIRM_LABELS or opt.casefold() in confirm_cf
         cls = "dpb-btn dpb-btn-primary" if primary else "dpb-btn dpb-btn-secondary"
         bit = (
@@ -1038,7 +1065,7 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         options[0] if options else t("confirm"),
     )
     primary_val = html_lib.escape(primary_opt, quote=True)
-    primary_label = html_lib.escape(primary_opt)
+    primary_label = html_lib.escape(display_label(primary_opt))
     return control_tpl.format(
         round_n=html_lib.escape(str(round_n)),
         t_revise_labels=revise_js,

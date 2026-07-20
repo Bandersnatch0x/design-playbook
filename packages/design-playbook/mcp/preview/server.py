@@ -93,7 +93,11 @@ def _tool_schema() -> dict[str, Any]:
                 "options": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": 'Default is locale-dependent via i18n (e.g. ["确认通过","需要修改"] in zh-CN).',
+                    "description": (
+                        "Confirm/revise labels. Omit to use the adapter locale's "
+                        "defaults; known confirm/revise labels are rendered in "
+                        "the adapter locale either way."
+                    ),
                 },
             },
             "required": ["summary", "round", "report_ref"],
