@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Static validation for the design-playbook plugin. No dependencies.
 Mirrors the static portion of docs/agents/release-checklist.md.
-Exit non-zero on any failure."""
+Exit non-zero on any failure.
+
+See docs/agents/release-checklist.md 'Validation surfaces' for the split
+between this script (static structure gate), release.py (publish gate),
+and doctor.py (read-only diagnostic aggregator).
+"""
 import json
 import re
 import sys
