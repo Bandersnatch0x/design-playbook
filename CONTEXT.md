@@ -15,7 +15,8 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 
 | Term | Meaning | Avoid |
 | --- | --- | --- |
-| **Design I/O** | Pipeline: `ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → (observe*) → ui-evaluator` | “just prompt better” |
+| **Design I/O** | Pipeline: `reference-intake? → ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → (observe*) → ui-evaluator` | “just prompt better” |
+| **reference-intake** | Conditional declaration input (ADR-0011): screenshot/URL/design/product analogy → run-local `reference/contract.md` + `manifest.json` with observed/inferred + Keep/Change/Do not copy; not a gate | style library; visual Pass/Fail; Fill from reference assets |
 | **Declaration** | What good is: spec, domain, craft, design, components, template | “guidelines”, “vibes” |
 | **Contract** | How work enters the pipeline: skill timing, evaluator acceptance | “prompt pack” alone |
 | **Closed-loop run** | One Design I/O run that declares the outcome, proves each success criterion, points failures back to their owning declaration, recirculates blocking findings within a bounded retry policy, and stops with an explicit verdict | “generated a page” / “looks done” |
@@ -65,7 +66,7 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 | `packages/design-playbook-evidence/` | Compatibility launcher + docs for Evidence MCP (`execute_capture_plan`) |
 | `packages/design-playbook/skills/` | Skills SSOT |
 | `docs/agents/` | Tracker + product workflow |
-| `.scratch/<run>/` | Single-run artifacts (spec / plan / decision / preview / filled-ui / craft-guard / evidence / point-back) |
+| `.scratch/<run>/` | Single-run artifacts (reference / spec / plan / decision / preview / filled-ui / craft-guard / evidence / point-back) |
 | `.scratch/<effort>/` | wayfinder decision maps (`map.md` + `issues/`) |
 | `docs/adr/` | Decisions |
 

@@ -45,6 +45,7 @@ After install, skills and commands are **namespaced** by the plugin name:
 | Invoke | Role |
 | --- | --- |
 | `/design-playbook:design-playbook` | Orchestrator skill (model-invoked) |
+| `/design-playbook:reference-intake` | Reference contract skill (screenshot/URL/analogy) |
 | `/design-playbook:ux-spec` | Six-layer spec skill |
 | `/design-playbook:ui-picker` | Shell + components skill |
 | `/design-playbook:craft-guard` | Craft / anti-slop skill |
@@ -60,7 +61,7 @@ Bare `/design-io` is **not** the installed name — always use the `design-playb
 
 | Package | Use for |
 | --- | --- |
-| **design-playbook** | Spec? → plan? → shell → optional preview* → fill → craft → optional observe* → evaluate / recirculate |
+| **design-playbook** | Reference? → Spec? → plan? → shell → optional preview* → fill → craft → optional observe* → evaluate / recirculate |
 | ui-ux-pro-max | Style / palette / type search |
 | frontend-design | Anti-template visual direction |
 

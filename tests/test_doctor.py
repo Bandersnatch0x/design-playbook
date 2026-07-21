@@ -44,7 +44,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIn(".mcp.json", result.stdout)
         self.assertIn("mcp/preview/server.py", result.stdout)
         self.assertIn("gate 1 structural smoke", result.stdout)
-        self.assertIn("6 skills present", result.stdout)
+        self.assertIn("7 skills present", result.stdout)
         self.assertIn("3 commands present", result.stdout)
         # Issue 07: doctor must surface the Codex dual-publish manifest
         # (ADR-0009) so drift between Claude and Codex surfaces is visible

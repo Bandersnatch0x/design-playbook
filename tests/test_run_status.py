@@ -42,8 +42,24 @@ class RunStatusTests(unittest.TestCase):
             result = _run(str(run_root), "--json")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             payload = json.loads(result.stdout)
-            self.assertTrue(payload["stages"][0]["present"])
+            by_key = {s["key"]: s for s in payload["stages"]}
+            self.assertFalse(by_key["reference"]["present"])
+            self.assertTrue(by_key["spec"]["present"])
             self.assertIn("Resume", payload["next"])
+
+    def test_status_from_reference_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-ref"
+            ref = run_root / "reference"
+            ref.mkdir(parents=True)
+            (ref / "contract.md").write_text("# ref\n", encoding="utf-8")
+            (ref / "manifest.json").write_text("{\"schema\": \"x\"}\n", encoding="utf-8")
+            result = _run(str(run_root), "--json")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertTrue(payload["stages"][0]["present"])
+            self.assertEqual(payload["stages"][0]["key"], "reference")
+            self.assertIn("ux-spec", payload["next"])
 
     def test_status_after_accept_pass(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
