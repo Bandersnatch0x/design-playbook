@@ -46,7 +46,9 @@ def _append_log(preview_dir: Path, *, round_n: int, report_ref: str,
                 feedback: str, aborted: bool, selected: list[str],
                 anchors: list[dict[str, Any]] | None = None,
                 floor_pass: bool | None = None,
-                floor_failure: str = "") -> None:
+                floor_failure: str = "",
+                rejected: bool = False,
+                rejection: str = "") -> None:
     preview_dir.mkdir(parents=True, exist_ok=True)
     log_path = preview_dir / "log.md"
     if not log_path.is_file():
@@ -64,6 +66,15 @@ def _append_log(preview_dir: Path, *, round_n: int, report_ref: str,
         block += f"- floor_pass: {str(floor_pass).lower()}\n"
         if floor_failure:
             block += f"- floor_failure: {floor_failure}\n"
+    # LOW-4 (secure-ship-0.4.4): persist G5 fail-closed rejections (forged
+    # token / replay / round mismatch) to log.md so the event is auditable
+    # on disk, not just in the ephemeral MCP payload. Only emitted when a
+    # decision was actually rejected — a normal confirm/revise/abort leaves
+    # no rejection line.
+    if rejected:
+        block += "- rejected: true\n"
+        if rejection:
+            block += f"- rejection: {rejection}\n"
     if anchors:
         for i, a in enumerate(anchors, 1):
             sel = a.get("selector") or ""

@@ -36,6 +36,7 @@ Strict quality mode (opt-in):
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -362,8 +363,15 @@ def _prototype_target(data: dict, run_root: Path) -> Path | None:
     Uses the trusted-side-written ``prototype_path`` (e.g.
     ``preview/round-2.html``) and falls back to ``preview/round-<n>.html``
     derived from the record's round. Returns None if no prototype file is
-    found.
+    found **inside ``<run_root>/preview/``**.
+
+    Containment (LOW-2): a ``prototype_path`` that resolves outside
+    ``preview/`` (e.g. ``../secret.txt``) is treated as a missing prototype.
+    The validator never hashes files outside ``preview/`` even when their
+    recorded hash would match — the read side must mirror the preview/
+    boundary the write side already enforces.
     """
+    preview_root = (run_root / "preview").resolve()
     candidates: list[Path] = []
     ref = data.get("prototype_path")
     if isinstance(ref, str) and ref.strip():
@@ -378,10 +386,17 @@ def _prototype_target(data: dict, run_root: Path) -> Path | None:
         candidates.append(run_root / "preview" / f"round-{rnd}.html")
     for cand in candidates:
         try:
-            if cand.is_file():
-                return cand
+            if not cand.is_file():
+                continue
+            resolved = cand.resolve()
         except OSError:
             continue
+        try:
+            resolved.relative_to(preview_root)
+        except ValueError:
+            # Outside preview/ (LOW-2): treat as missing, never hash.
+            continue
+        return resolved
     return None
 
 
@@ -607,7 +622,11 @@ def check_evidence(
 
     errs: list[str] = []
     for criterion, observed in _ledger_observed(pointback_text):
-        if not observed.startswith(EVIDENCE_PREFIX):
+        # LOW-3: case-insensitive prefix. The write boundary treats paths
+        # case-insensitively on case-insensitive filesystems (Windows), so
+        # ``EVIDENCE/<x>`` lands in the evidence/ subtree on disk; the read
+        # side must match the same way or uppercase rows skip G6 entirely.
+        if not observed.casefold().startswith(EVIDENCE_PREFIX):
             continue  # free-text observation; G6 does not apply
         # Containment (issue 04 / G6): the observed path must resolve *inside*
         # the evidence/ subtree. Reject any ".." segment, absolute paths, and
@@ -628,6 +647,19 @@ def check_evidence(
             continue
         try:
             resolved.relative_to(evidence_root)
+        except ValueError:
+            errs.append(
+                f"G6 evidence: {criterion} observed escapes evidence/ "
+                f"subtree: {observed}")
+            continue
+        # M6: defence in depth — mirror evidence/server.py
+        # _resolve_artifact_path. ``Path.resolve`` and ``os.path.realpath``
+        # can disagree on symlink chains across platforms, so a symlink under
+        # evidence/ that resolves outside must also be rejected on the read
+        # side (the write side already rejects it).
+        try:
+            Path(os.path.realpath(resolved)).relative_to(
+                os.path.realpath(evidence_root))
         except ValueError:
             errs.append(
                 f"G6 evidence: {criterion} observed escapes evidence/ "

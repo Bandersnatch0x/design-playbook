@@ -2,6 +2,7 @@
 """Regression-test the deterministic run seam and its diagnostics."""
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -145,6 +146,47 @@ result: pass
 criterion: L6.3
 required: declared proof for L6.3
 observed: evidence/../spec.md
+result: pass
+
+criterion: L6.4
+required: declared proof for L6.4
+observed: fixture evidence for L6.4
+result: pass
+
+criterion: L6.5
+required: declared proof for L6.5
+observed: fixture evidence for L6.5
+result: pass
+```
+"""
+
+
+def _g6_probe_pointback(observed_l6_1: str) -> str:
+    """Build a G6-probe point-back: L6.1's observed is the probe; L6.2-L6.5
+    are free-text pass rows. Pass verdict + no findings keeps G1-G4 happy
+    against the zero-findings spec (5 L6 items), so only G6 fires on L6.1."""
+    return f"""# Point-back findings - G6 probe
+
+## Verdict
+
+**Pass.**
+
+## Evidence ledger
+
+```text
+criterion: L6.1
+required: declared proof for L6.1
+observed: {observed_l6_1}
+result: pass
+
+criterion: L6.2
+required: declared proof for L6.2
+observed: fixture evidence for L6.2
+result: pass
+
+criterion: L6.3
+required: declared proof for L6.3
+observed: fixture evidence for L6.3
 result: pass
 
 criterion: L6.4
@@ -440,6 +482,105 @@ def main() -> int:
             "escapes evidence/",
             "--evidence-dir", str(evidence),
             "--run-root", str(run_root))
+
+    # --- M6: realpath defence against symlink escape. Mirror evidence/
+    # server.py _resolve_artifact_path on the read side: Path.resolve and
+    # os.path.realpath can disagree on symlink chains across platforms, so a
+    # symlink under evidence/ that resolves outside must be caught here too.
+    with tempfile.TemporaryDirectory() as tmp:
+        run_root = Path(tmp)
+        evidence = run_root / "evidence"
+        evidence.mkdir()
+        secret = run_root / "secret.txt"
+        secret.write_text("secret at run root", encoding="utf-8")
+        link = evidence / "link.txt"
+        try:
+            os.symlink(secret, link)
+        except (OSError, NotImplementedError):
+            # Windows without developer mode refuses symlinks; skip rather
+            # than false-fail. The escape is still exercised on Linux/CI.
+            print("  skip  g6-symlink-escape (symlinks unavailable on this OS)")
+        else:
+            _write_text(
+                evidence / "manifest.jsonl",
+                json.dumps({
+                    "criterion": "L6.1",
+                    "artifact": "link.txt",
+                    "ts": "2026-07-21T00:00:00+08:00",
+                }) + "\n",
+            )
+            g6_spec, _ = _zero_findings_pair()
+            g6_pb = run_root / "point-back.md"
+            _write_text(g6_pb, _g6_probe_pointback("evidence/link.txt"))
+            expect_invalid(
+                failures, "g6-symlink-escape-via-realpath", g6_spec, g6_pb,
+                "escapes evidence/",
+                "--evidence-dir", str(evidence),
+                "--run-root", str(run_root))
+
+    # --- LOW-3: observed prefix check is case-insensitive. An uppercase
+    # EVIDENCE/ row must still bind to G6 (write boundary is casefold on
+    # Windows; the read side was case-sensitive, an asymmetry that let
+    # EVIDENCE/<x> skip the gate). Without the fix this row is silently
+    # skipped and a missing artifact goes unflagged.
+    with tempfile.TemporaryDirectory() as tmp:
+        run_root = Path(tmp)
+        evidence = run_root / "evidence"
+        evidence.mkdir()
+        _write_text(
+            evidence / "manifest.jsonl",
+            json.dumps({
+                "criterion": "L6.1",
+                "artifact": "missing.png",
+                "ts": "2026-07-21T00:00:00+08:00",
+            }) + "\n",
+        )
+        g6_spec, _ = _zero_findings_pair()
+        g6_pb = run_root / "point-back.md"
+        _write_text(g6_pb, _g6_probe_pointback("EVIDENCE/missing.png"))
+        expect_invalid(
+            failures, "g6-uppercase-observed-prefix-binds", g6_spec, g6_pb,
+            "artifact missing",
+            "--evidence-dir", str(evidence),
+            "--run-root", str(run_root))
+
+    # --- LOW-2: _prototype_target must keep prototype resolution inside
+    # preview/. A prototype_path that resolves outside preview/ (e.g.
+    # ../secret.txt) is treated as a missing prototype; the validator must
+    # never hash files outside preview/ even when their hash matches the
+    # recorded one. log.md triggers preview_occurred without any round-*.html
+    # so the round-fallback candidate does not exist.
+    spec, pb = _zero_findings_pair()
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+        run_root = base / "run"
+        preview = run_root / "preview"
+        preview.mkdir(parents=True)
+        secret = base / "secret.txt"  # at run_root.parent, outside preview/
+        secret.write_text("<html>secret</html>", encoding="utf-8")
+        secret_hash = hashlib.sha256(b"<html>secret</html>").hexdigest()
+        _write_text(preview / "log.md", "# preview log\n")
+        _write_text(
+            preview / "confirm-round-1.json",
+            json.dumps(
+                {
+                    "report_ref": "decision-report.md",
+                    "confirmed": True,
+                    "floor_pass": True,
+                    "selected_options": ["确认通过"],
+                    "feedback": "确认通过",
+                    "timestamp": "2026-07-21T12:00:00+08:00",
+                    "prototype_path": "../secret.txt",
+                    "prototype_html_hash": secret_hash,
+                },
+                ensure_ascii=False, indent=2),
+        )
+        _write_text(run_root / "decision-report.md", "# decision report\n")
+        expect_invalid(
+            failures, "g5-prototype-path-escapes-preview", spec, pb,
+            "prototype html is missing",
+            "--preview-dir", str(preview),
+            "--decision-report", str(run_root / "decision-report.md"))
 
     # --- ADR-0008 adapter floor self-check (bundled runtime) ---
     preview_server = PACKAGE / "mcp" / "preview" / "server.py"
