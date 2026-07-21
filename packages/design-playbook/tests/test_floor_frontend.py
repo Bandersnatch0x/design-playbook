@@ -464,6 +464,42 @@ def main():
                 "S17: pill confirm arm must undo via annotate click and 4s timeout without submit"
             )
 
+        # --- S18: footer decision controls expose non-empty consequence descriptions ---
+        page.goto(file_url, wait_until='domcontentloaded')
+        page.wait_for_selector('#dpb-preview-bar')
+        page.click('#dpb-open-primary')
+        page.wait_for_timeout(200)
+        descs = page.evaluate("""() => {
+          const pick = (sel) => {
+            const el = document.querySelector(sel);
+            if (!el) return null;
+            return (el.getAttribute('aria-description') || el.getAttribute('title') || '').trim();
+          };
+          return {
+            abort: pick('#dpb-abort'),
+            draft: pick('#dpb-draft'),
+            confirm: pick('.dpb-drawer-foot .dpb-btn-primary'),
+            revise: pick('.dpb-drawer-foot .dpb-btn-secondary'),
+          };
+        }""")
+        s18_ok = all(
+            isinstance(descs.get(k), str) and len(descs[k]) > 0
+            for k in ("abort", "draft", "confirm", "revise")
+        )
+        # Descriptions must be pairwise distinct (different outcomes, not copy-paste)
+        vals = [descs[k] for k in ("abort", "draft", "confirm", "revise")]
+        s18_ok = s18_ok and len(set(vals)) == 4
+        print(
+            f"  S18 footer descs: abort={bool(descs.get('abort'))} "
+            f"draft={bool(descs.get('draft'))} confirm={bool(descs.get('confirm'))} "
+            f"revise={bool(descs.get('revise'))} distinct={len(set(vals)) == 4} "
+            f"-> {'OK' if s18_ok else 'FAIL'}"
+        )
+        if not s18_ok:
+            failures.append(
+                "S18: abort/draft/confirm/revise must each expose a non-empty, distinct title/aria-description"
+            )
+
         browser.close()
 
     print()
