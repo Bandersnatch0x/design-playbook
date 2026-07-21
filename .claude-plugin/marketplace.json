@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Agent UI design plugin: Design I/O declarations + contracts (not a style CSV pack).",
-    "version": "0.4.1"
+    "version": "0.4.2"
   },
   "plugins": [
     {
       "name": "design-playbook",
       "source": "./packages/design-playbook",
       "description": "Design I/O plugin for Claude Code / coding agents. Six design declarations + skill/evaluator contracts so UI generation is constrained, reviewable, and refinable.",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "author": {
         "name": "Bandersnatch0x"
       },

@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** v0.3 grill — 4 决策 locked（Q3.1–Q3.4）+ ADR-0008 floor enforcement **已落地**（2026-07-18，6 sites + SEAM TEST PASSED）。Grill 可收尾,下一阶段 v0.3-to-spec。上一里程碑:v0.2.0 released（2026-07-17，PR #2 merged f641a1d + tag on main，全部 gate 闭合）。
+**Current:** v0.4 实现收尾 — 决策 01-04 全 resolved，按钮修复经 dogfood 007b 完整链路验证（六 gate 全绿），**v0.4.0 + v0.4.1 已发**（2026-07-21），gate 5 install smoke PASS。剩 3b community catalog 提交（human，冒烟已绿）。上一里程碑:v0.3.1（2026-07-20）。
 
 | Phase | Status |
 | --- | --- |
@@ -15,7 +15,9 @@
 | v0.3-grill | done (2026-07-18, 4 决策 + ADR-0008 floor enforcement 落地, SEAM TEST PASSED) |
 | v0.3-to-spec | done (2026-07-20: Q3.1-Q3.4 + preview polish landed; v0.3.0 perfect release prep complete) |
 | v0.3.1 | done (2026-07-20: dedup-single-source 5 票 + ADR-0010, shipped, tag v0.3.1) |
-| v0.4-grill | in progress (2026-07-20 启动, 4 主题: 完整链路演示 / input-nav 扩展(ADR-0010 P1/P2) / 基础设施分发 / launcher 评估提前; wayfinder `.scratch/v0.4-cycle/`) |
+| v0.4-grill | done (2026-07-21: 决策 01-04 全 resolved, wayfinder `.scratch/v0.4-cycle/`) |
+| v0.4-implement | done (2026-07-21: 按钮修复 d46682d + 007b 六 gate 全绿 + 3a/3c 落地 + pill 两步 arm 0a1dd33) |
+| v0.4-release | done (v0.4.0 + v0.4.1, 2026-07-21; gate5 install smoke PASS; 3b catalog 提交待 human) |
 
 ## v0 ship checklist (5/5 pass)
 
