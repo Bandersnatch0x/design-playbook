@@ -34,3 +34,8 @@ Thumbs.db
 # Python (validate.py)
 __pycache__/
 *.pyc
+
+# Local tool artifacts (codegraph / graphify / playwright-cli)
+.codegraph/
+.graphify/
+.playwright-cli/
