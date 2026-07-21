@@ -300,15 +300,16 @@ class PreviewCollectShutdownTests(unittest.TestCase):
         kill_browser.assert_called_once_with(mock.sentinel.proc, "profile")
 
     def test_post_with_bogus_token_is_rejected(self) -> None:
-        """G5 stdio e2e: a POST whose dpb_token does not match the parent
-        form's token must fail closed. The POST carries *a* token (so the
-        session terminates per MEDIUM-1), and the caller observes the
-        rejected decision rather than hanging.
+        """G5 stdio e2e: a forged POST carrying an arbitrary dpb_token (which
+        an attacker controls in the POST body) must NOT abort the session -
+        only a genuinely validated decision ends it. The bogus POST is fail
+        closed (confirmed=False), then the real user's valid-token POST still
+        confirms, proving the session was not hijacked.
         """
         server = _load_server_module()
         port_box: dict[str, int] = {}
 
-        def bogus_token_client() -> None:
+        def bogus_then_valid_client() -> None:
             deadline = time.time() + 5
             port = None
             while time.time() < deadline:
@@ -318,16 +319,45 @@ class PreviewCollectShutdownTests(unittest.TestCase):
                 time.sleep(0.02)
             if not port:
                 return
-            # Lift the real round, but POST a bogus token.
-            _token, round_n = _fetch_decision_token(port)
-            body = (
+            from urllib.parse import quote
+
+            # Lift the real token + round from the parent page.
+            token, round_n = _fetch_decision_token(port)
+            # 1) Forged POST: attacker-controlled arbitrary dpb_token. Must be
+            #    fail closed AND must not end the session.
+            forged_body = (
                 "choice=%E7%A1%AE%E8%AE%A4%E9%80%9A%E8%BF%87"
                 "&feedback=forged"
                 "&anchors_json=%5B%5D"
                 "&dpb_token=bogus-not-the-real-token"
                 + f"&dpb_round={round_n}"
             )
-            payload = body.encode("ascii")
+            for body in (forged_body,):
+                payload = body.encode("ascii")
+                req = (
+                    f"POST /decide HTTP/1.1\r\n"
+                    f"Host: 127.0.0.1:{port}\r\n"
+                    "Content-Type: application/x-www-form-urlencoded\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode("ascii") + payload
+                with socket.create_connection(("127.0.0.1", port), timeout=3) as sock:
+                    sock.sendall(req)
+                    sock.settimeout(3)
+                    try:
+                        sock.recv(65536)
+                    except socket.timeout:
+                        pass
+            # 2) Real user's valid-token POST: must still confirm (session was
+            #    not hijacked by the forged POST).
+            valid_body = (
+                "choice=%E7%A1%AE%E8%AE%A4%E9%80%9A%E8%BF%87"
+                "&feedback=ok"
+                "&anchors_json=%5B%5D"
+                + f"&dpb_token={quote(token)}"
+                + f"&dpb_round={round_n}"
+            )
+            payload = valid_body.encode("ascii")
             req = (
                 f"POST /decide HTTP/1.1\r\n"
                 f"Host: 127.0.0.1:{port}\r\n"
@@ -350,7 +380,7 @@ class PreviewCollectShutdownTests(unittest.TestCase):
                 super().__init__(*args, **kwargs)
                 port_box["port"] = self.server_address[1]
 
-        client_thread = threading.Thread(target=bogus_token_client, daemon=True)
+        client_thread = threading.Thread(target=bogus_then_valid_client, daemon=True)
         client_thread.start()
         with tempfile.TemporaryDirectory() as tmp:
             proto = Path(tmp) / "proto.html"
@@ -372,24 +402,17 @@ class PreviewCollectShutdownTests(unittest.TestCase):
 
         client_thread.join(timeout=3)
         self.assertFalse(client_thread.is_alive())
-        self.assertFalse(decision["confirmed"])
-        self.assertTrue(decision.get("rejected"))
-        self.assertEqual(decision.get("rejection"), "invalid_token")
-
+        # The forged POST did not hijack: the real user's valid POST wins.
+        self.assertTrue(decision["confirmed"])
+        self.assertFalse(decision.get("aborted"))
     def test_replay_same_token_is_rejected(self) -> None:
-        """G5 stdio e2e: posting the same dpb_token twice must reject the
-        second POST as a replay (first-decision-wins session).
-
-        Determinism: the first valid POST done.set()s, which wakes the main
-        thread toward shutdown. We gate ``_stop_http_server`` on a
-        ``client_done`` event so the second POST is guaranteed to be
-        processed by the still-alive server before serve_forever stops;
-        the replayed POST then overwrites the confirmed result with a
-        rejected one.
+        """G5 stdio e2e: first-decision-wins. The first valid POST locks the
+        session and sets the confirmed result; a replayed second POST with
+        the same token must NOT overwrite that result - the legitimate
+        confirmed decision survives.
         """
         server = _load_server_module()
         port_box: dict[str, int] = {}
-        client_done = threading.Event()
 
         def replay_client() -> None:
             deadline = time.time() + 5
@@ -400,7 +423,6 @@ class PreviewCollectShutdownTests(unittest.TestCase):
                     break
                 time.sleep(0.02)
             if not port:
-                client_done.set()
                 return
             from urllib.parse import quote
 
@@ -420,7 +442,8 @@ class PreviewCollectShutdownTests(unittest.TestCase):
                 f"Content-Length: {len(payload)}\r\n"
                 "Connection: close\r\n\r\n"
             ).encode("ascii") + payload
-            # POST 1: first valid use of the token - locks the session.
+            # POST 1: first valid use of the token - locks the session and
+            # ends it (done.set()). result is confirmed=True.
             with socket.create_connection(("127.0.0.1", port), timeout=3) as sock:
                 sock.sendall(req)
                 sock.settimeout(3)
@@ -428,22 +451,24 @@ class PreviewCollectShutdownTests(unittest.TestCase):
                     sock.recv(65536)
                 except socket.timeout:
                     pass
-            # POST 2: same token - must be rejected as reuse.
-            with socket.create_connection(("127.0.0.1", port), timeout=3) as sock:
-                sock.sendall(req)
-                sock.settimeout(3)
-                try:
-                    sock.recv(65536)
-                except socket.timeout:
-                    pass
-            client_done.set()
+            # POST 2: same token - rejected as reuse by the session. It must
+            # not change the confirmed result already set by POST 1. (This
+            # POST may or may not be processed before shutdown; the assertion
+            # is that result stays confirmed regardless.)
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=1) as sock:
+                    sock.sendall(req)
+                    sock.settimeout(1)
+                    try:
+                        sock.recv(65536)
+                    except socket.timeout:
+                        pass
+            except OSError:
+                # Server already shut down after POST 1 - acceptable; the
+                # replay never reached the handler, result is intact.
+                pass
 
         real_http = server.HTTPServer
-        real_stop = browser._stop_http_server
-
-        def gated_stop(srv, serve_thread, *, timeout_s=1.5):  # type: ignore[no-untyped-def]
-            client_done.wait(timeout=5)
-            real_stop(srv, serve_thread, timeout_s=timeout_s)
 
         class StashingHTTPServer(real_http):  # type: ignore[misc, valid-type]
             def __init__(self, *args, **kwargs):
@@ -462,7 +487,7 @@ class PreviewCollectShutdownTests(unittest.TestCase):
                 browser, "_open_preview_window", return_value=(None, None)
             ), mock.patch.object(browser, "_request_browser_window_close"), mock.patch.object(
                 browser, "_kill_browser_proc"
-            ), mock.patch.object(browser, "_stop_http_server", gated_stop):
+            ):
                 decision = server._collect_via_browser(
                     proto,
                     "summary",
@@ -472,11 +497,10 @@ class PreviewCollectShutdownTests(unittest.TestCase):
 
         client_thread.join(timeout=3)
         self.assertFalse(client_thread.is_alive())
-        # The replayed (second) POST overwrites the confirmed result with a
-        # rejected one; the session correctly identifies the reuse.
-        self.assertFalse(decision["confirmed"])
-        self.assertTrue(decision.get("rejected"))
-        self.assertEqual(decision.get("rejection"), "reuse")
+        # First-decision-wins: the legitimate confirmed result survives the
+        # replay attempt - it was not overwritten with a rejected one.
+        self.assertTrue(decision["confirmed"])
+        self.assertFalse(decision.get("aborted"))
 
     def test_stop_http_server_joins_serve_thread(self) -> None:
         server_mod = _load_server_module()

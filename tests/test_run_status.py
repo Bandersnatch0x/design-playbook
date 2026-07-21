@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -14,11 +15,20 @@ RUN_STATUS = ROOT / "scripts" / "run_status.py"
 
 
 def _run(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+    # Force UTF-8 on the child's stdio: run_status.py emits JSON with
+    # ensure_ascii=False, and Python's own DeprecationWarnings (routed to
+    # stderr) contain smart quotes that the Windows default GBK codec
+    # cannot decode. A UTF-8 round-trip keeps the black-box test robust
+    # regardless of the host locale.
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     return subprocess.run(
         [sys.executable, str(RUN_STATUS), *args],
         cwd=cwd or ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
         check=False,
     )
 

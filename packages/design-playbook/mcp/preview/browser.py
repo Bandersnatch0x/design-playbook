@@ -505,7 +505,7 @@ def _collect_via_browser(
             # done.set() here let one forged POST abort every preview before
             # the user clicked anything. Fail-closed semantics above are
             # unchanged — only session termination is now gated.
-            if validated or posted_token is not None:
+            if validated:
                 done.set()
 
     server = HTTPServer(("127.0.0.1", 0), Handler)
