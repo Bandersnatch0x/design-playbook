@@ -1,7 +1,7 @@
 {
   "name": "design-playbook",
   "description": "Design I/O for coding agents: controllable UI generation via declarations (spec/domain/craft/design/components/template) and contracts (skill/evaluator). Use for product UI—console, dashboard, agent-ops, CJK-first apps.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "author": {
     "name": "Bandersnatch0x"
   },
