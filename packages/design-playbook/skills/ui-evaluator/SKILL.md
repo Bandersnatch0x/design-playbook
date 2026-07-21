@@ -31,7 +31,7 @@ Walk every applicable row (exhaustive for bound declarations):
 | Each L6 acceptance item | `spec` |
 | Required proof exists for each L6 item | `spec` |
 
-Rubric notes: [`references/rubric.md`](references/rubric.md).
+Dimension selection, 回流示例, the preview-seam health check (required when the run produced `preview/` artifacts), and the **observe\* mirror-surface** finding (required when any manifest capture notes `surface: mirror`): [`references/rubric.md`](references/rubric.md).
 
 Record an evidence ledger before writing findings. Every L6 criterion has exactly one row:
 
@@ -75,7 +75,7 @@ For a repaired blocker, record exactly one closure line whose issue text is iden
 - closes: <exact issue value> -> recirculate -> fix -> re-eval -> 0 blocking
 ```
 
-**Done when:** the explicit verdict is structurally unique; blocking sources are non-empty; every blocking finding has exactly one matching closure before `Pass`. A blocking finding cannot be waived inside a Pass artifact. Without a user in the loop, blocking findings remain in recirculate and the run requests a decision. only after an explicit user decision that updates the owning declaration or severity — recorded against the user's statement or decision record — may the evaluator re-evaluate; the final Pass artifact contains no blocking severity.
+**Done when:** the explicit verdict is structurally unique; blocking sources are non-empty; every blocking finding has exactly one matching closure before `Pass`. A blocking finding cannot be waived inside a Pass artifact. Without a user in the loop, blocking findings remain in recirculate and the run requests a decision; only after an explicit user decision that updates the owning declaration or severity — recorded against the user's statement or decision record — may the evaluator re-evaluate; the final Pass artifact contains no blocking severity.
 
 The artifact shape behind this verdict is machine-checkable: `scripts/validate_run.py` gates L1-L6, ordered `Given -> When -> Then` in every top-level L6 item, one non-empty four-field evidence row per `L6.<n>`, allowed evidence results, all-pass evidence for `Pass`, four non-empty finding fields, one explicit verdict, and one exact issue-linked closure per blocking finding. These checks are the completion criteria above, not extra prose.
 

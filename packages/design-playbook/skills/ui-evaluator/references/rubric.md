@@ -30,3 +30,16 @@
 - 结构 floor（adapter，G5）只挡空反馈/无注释锚点；**语义**问题（如「安师大」这种与被批注元素无关的合法字符串）floor 挡不住，靠这里兜。
 - `source` 归 `preview* seam`（orchestrator 的 preview 步骤契约），不是 UI source —— 当缺陷在 adapter loop 契约而非生成 UI 本身时用这个。
 - 过程缺口（seam 契约）与产品 findings（UI）分开记；不混在回流闭包 trail 里。
+
+## observe* mirror surface（supporting）
+
+若 `evidence/manifest.jsonl` 任一条 capture 声明 **`surface: mirror`**（或等价 note），必须有 finding：
+
+```text
+issue:    observe used semantic mirror, not live Fill host
+source:   observe* seam
+fix:      re-capture on live host URL when available; keep surface: mirror until then
+severity: low
+```
+
+Do not treat G6 artifact presence alone as proof the Fill tree was runtime-verified.
