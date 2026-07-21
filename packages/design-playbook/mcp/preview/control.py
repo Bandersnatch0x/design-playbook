@@ -114,6 +114,15 @@ outline: 2px solid var(--dpb-accent); outline-offset: 2px;
     box-shadow: 0 0 0 3px rgba(20,184,166,0.25);
     font-weight: 700;
   }}
+  /* Pill direct-confirm arm (二级保护): first click arms, second submits */
+  #dpb-preview-bar .dpb-pill .dpb-btn-primary.is-armed {{
+    font-weight: 700;
+    animation: dpb-confirm-pulse 1s ease-in-out infinite;
+  }}
+  @keyframes dpb-confirm-pulse {{
+    0%,100% {{ box-shadow: 0 0 0 3px rgba(20,184,166,0.35); }}
+    50% {{ box-shadow: 0 0 0 7px rgba(20,184,166,0.12); }}
+  }}
   /* secondary action surfaced on the pill (e.g. the revise label) */
   #dpb-preview-bar .dpb-pill .dpb-btn-pill-secondary {{
 appearance: none; cursor: pointer; height: 32px; padding: 0 14px;
@@ -441,6 +450,7 @@ cursor: default !important;
 .dpb-pin-flash {{ animation: none; }}
 /* armed state still reads via solid danger fill + bold label, no pulse */
 #dpb-preview-bar .dpb-btn-danger.is-armed {{ animation: none; }}
+#dpb-preview-bar .dpb-pill .dpb-btn-primary.is-armed {{ animation: none; }}
   }}
 </style>
 <div id="dpb-preview-bar" role="region" aria-label="{t_region}">
@@ -461,6 +471,7 @@ cursor: default !important;
     </button>
     <button type="button" class="dpb-btn-primary" id="dpb-open-primary" aria-haspopup="dialog">{t_pill_open}</button>
   </span>
+  <span class="dpb-sr-only" id="dpb-pill-arm-status" role="alert"></span>
 </div>
 
 <!-- drawer (expanded) -->
@@ -704,6 +715,27 @@ return (value.length > 0 || anchors.length) && anchorsComplete;
   }}
   var lastReady = null;
   var pillOpenLabel = null;  // I13: original pill-primary label, restored on ready->not-ready flip
+  var openPrimary = document.getElementById("dpb-open-primary");
+  // Pill direct-confirm 二级保护: first click arms, second submits (mirrors abort arm).
+  var CONFIRM_ARM_MS = 4000;
+  var pillConfirmArmed = false;
+  var pillConfirmTimer = null;
+  var pillConfirmReadyLabel = null;  // label while ready (pre-arm)
+  var pillArmStatus = document.getElementById("dpb-pill-arm-status");
+  function resetPillConfirmArmed(announceCancel) {{
+if (pillConfirmTimer) {{ clearTimeout(pillConfirmTimer); pillConfirmTimer = null; }}
+var wasArmed = pillConfirmArmed;
+if (openPrimary && pillConfirmArmed) {{
+  pillConfirmArmed = false;
+  openPrimary.classList.remove("is-armed");
+  if (pillConfirmReadyLabel !== null) openPrimary.textContent = pillConfirmReadyLabel;
+}}
+if (pillArmStatus) {{
+  pillArmStatus.textContent = (announceCancel && wasArmed)
+    ? (I18N.confirm_cancelled || "")
+    : "";
+}}
+  }}
   function setReadiness() {{
 if (!pillReadyEl) return;
 var ready = isSubstantive();
@@ -721,8 +753,10 @@ if (ready) {{
     if (drawerPrimary && drawerPrimary.textContent && openPrimary.textContent !== drawerPrimary.textContent) {{
       openPrimary.textContent = drawerPrimary.textContent;
     }}
+    pillConfirmReadyLabel = openPrimary.textContent;  // snapshot for arm restore
   }}
 }} else {{
+  resetPillConfirmArmed();  // readiness flip undoes any pending arm
   pillReadyEl.textContent = I18N.not_ready || "";
   if (openPrimary) {{
     openPrimary.classList.remove('is-direct-confirm');
@@ -732,6 +766,7 @@ if (ready) {{
       openPrimary.textContent = pillOpenLabel;
     }}
   }}
+  pillConfirmReadyLabel = null;
 }}
   }}
 
@@ -756,6 +791,7 @@ if (!pinOn) clearHover();
   var lastFocus = null;
   function openDrawer() {{
 lastFocus = document.activeElement;
+resetPillConfirmArmed();  // drawer open: pill is hidden; drop any pending confirm arm
 // Use non-modal <dialog>.show() (NOT showModal): the drawer must NOT make the
 // page inert, because pin-to-annotate requires clicking prototype elements
 // behind the drawer. ::backdrop (modal only) is replaced by the .is-open::before
@@ -771,6 +807,7 @@ setTimeout(function () {{ if (closeBtn) closeBtn.focus(); }}, 0);
   function closeDrawer() {{
 bar.classList.remove("is-open");
 resetAbortArmed();  // I18: clear abort arming when drawer closes (no stale armed state on reopen)
+resetPillConfirmArmed();  // pill reappears disarmed
 if (pinOn) setPin(false);
 if (drawerEl && drawerEl.open && typeof drawerEl.close === "function") drawerEl.close();
 if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
@@ -783,7 +820,6 @@ if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
 openDrawer();
 setPin(true);
   }});
-  var openPrimary = document.getElementById("dpb-open-primary");
   // Shared: submit the confirm (drawer primary). Used by pill-primary direct
   // confirm (handlePillPrimary) and Ctrl+Enter (I8) to avoid divergent targets.
   function submitPrimary() {{
@@ -792,10 +828,22 @@ if (targetBtn) form.requestSubmit(targetBtn); else form.requestSubmit();
   }}
   function handlePillPrimary(e) {{
     if (isSubstantive()) {{
-      // When ready, the pill primary directly submits the confirm (no need to open drawer)
+      // 二级保护: ready pill primary is arm → confirm (not one-click submit).
+      // Accidental click on a resting "确认通过" must not kill the review session.
       e.preventDefault();
+      if (!pillConfirmArmed) {{
+        pillConfirmArmed = true;
+        if (pillConfirmReadyLabel === null) pillConfirmReadyLabel = openPrimary.textContent;
+        openPrimary.classList.add("is-armed");
+        openPrimary.textContent = I18N.confirm_confirm || "";
+        if (pillArmStatus) pillArmStatus.textContent = I18N.confirm_confirm || "";
+        pillConfirmTimer = setTimeout(function () {{ resetPillConfirmArmed(true); }}, CONFIRM_ARM_MS);
+        return;
+      }}
+      resetPillConfirmArmed();
       submitPrimary();
     }} else {{
+      resetPillConfirmArmed();
       openDrawer();
     }}
   }}
@@ -803,6 +851,7 @@ if (targetBtn) form.requestSubmit(targetBtn); else form.requestSubmit();
   var pillReviseBtns = bar.querySelectorAll('[data-pill-revise]');
   for (var ri = 0; ri < pillReviseBtns.length; ri++) {{
     pillReviseBtns[ri].addEventListener("click", function () {{
+      resetPillConfirmArmed();
       openDrawer();
       setTimeout(function () {{ if (field) field.focus(); }}, 0);
     }});
@@ -1135,6 +1184,8 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         "pin_off",
         "terminate_confirm",
         "abort_cancelled",  # 4s-timeout a11y broadcast (window.DPB_I18N.abort_cancelled)
+        "confirm_confirm",  # pill direct-confirm arm label
+        "confirm_cancelled",  # 4s-timeout a11y broadcast for pill arm undo
     )
     # json.dumps is JS-safe for quotes/backslashes; also neutralize </script>
     # and U+2028/2029 (pre-ES2019 JS string breaks) in case translations ever
