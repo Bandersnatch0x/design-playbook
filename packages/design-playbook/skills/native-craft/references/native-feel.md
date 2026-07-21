@@ -16,10 +16,7 @@ Proceed only when: macOS + Windows (optionally Linux), native-feel is a competit
 
 ## The seam (the one structural decision)
 
-Below the WebView surface -> native, twice (Swift + C#). Above -> shared TS/React, once.
-
-- Below: windowing, hotkeys, materials, file dialogs, system tray, a11y, input methods, context menu.
-- Above: React tree, business logic, extension API, AI orchestration.
+The below/above split is declared in `SKILL.md` — that list is authoritative. This reference adds the IPC rule:
 
 One schema for all IPC -> generate typed clients per runtime (UniFFI for Rust<->Swift/Kotlin/C#). Hand-written marshalling drifts in a sprint.
 

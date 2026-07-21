@@ -36,7 +36,7 @@ Treat as exhaustive for the surface under edit.
 - Each animation names the state change it explains.  
 - Honor `prefers-reduced-motion`. Keyboard-triggered actions stay free of decorative motion.
 
-**Done when:** no motion lacks a stated purpose.
+**Done when:** every motion in scope states the state change it explains.
 
 ### AI slop → target look
 
@@ -48,8 +48,8 @@ Treat as exhaustive for the surface under edit.
 | Weighted modules | Equal white card grid |
 | State-explaining motion | Bounce/elastic decoration |
 
-More edge craft: [`references/craft.md`](references/craft.md).
+[`references/craft.md`](references/craft.md) — **required when the surface has L4 interactive zones** (per-zone hover/motion affordance, with its own Done when); also holds edge craft (failure/permission feedback, 圆角/阴影, charts).
 
 ## Completion
 
-**Done when:** hierarchy, every in-scope wait/fail path, and every animation pass the checks above; residual issues are listed for `ui-evaluator` with source `craft`.
+**Done when:** hierarchy, every in-scope wait/fail path, every animation, and — when the surface has L4 interactive zones — every zone's affordance (per `references/craft.md`) pass their checks; residual issues are listed for `ui-evaluator` with source `craft`.

@@ -31,8 +31,9 @@
 - 权限降级：
 
 ## L6 验收标准
-- Given / When / Then：
+- 每条验收是一个顶层列表项，按序显式包含 `Given` → `When` → `Then`（顺序固定），并写明该条的必备证据
   - 必备证据：规划声明覆盖 / 目标视口渲染 / 交互记录或自动化检查 / 相关 test、type、lint、build（按任务适用项选择）
+  - 证据为运行时状态时，命名 capture seed（要捕获的状态 + 捕获类型，如 "error-state screenshot"）；不写 selector/URL/actions
 - 设计完成定义：
 
 ---
