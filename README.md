@@ -30,9 +30,18 @@ A Claude Code / Codex plugin. One predictable pass per run — **Design I/O**: `
 
 ## 📦 Install
 
+**Claude Code**
+
 ```text
 /plugin marketplace add <owner>/<repo>
 /plugin install design-playbook@design-playbook
+```
+
+**Codex**
+
+```bash
+codex plugin marketplace add Bandersnatch0x/design-playbook
+codex plugin add design-playbook@design-playbook
 ```
 
 <details>
@@ -44,7 +53,12 @@ The marketplace catalog lives at the **repo root** (not the package):
 claude --plugin-dir <abs>/packages/design-playbook          # dev load, no install
 /plugin marketplace add <abs-to-repo-root>                 # local marketplace
 /plugin install design-playbook@design-playbook
+
+codex plugin marketplace add <abs-to-repo-root>
+codex plugin add design-playbook@design-playbook
 ```
+
+Codex bridge notes: [`packages/design-playbook/codex/AGENTS.md`](./packages/design-playbook/codex/AGENTS.md).
 
 </details>
 

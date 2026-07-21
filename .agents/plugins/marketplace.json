@@ -1,0 +1,20 @@
+{
+  "name": "design-playbook",
+  "interface": {
+    "displayName": "design-playbook"
+  },
+  "plugins": [
+    {
+      "name": "design-playbook",
+      "source": {
+        "source": "local",
+        "path": "./packages/design-playbook"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Design"
+    }
+  ]
+}

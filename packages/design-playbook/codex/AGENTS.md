@@ -1,31 +1,45 @@
 # design-playbook for Codex
 
-## Install
+## Install (path of record)
 
-**Preferred (Claude Code marketplace / plugin-dir):** install the main package
-only. Preview + Evidence MCP servers are registered from
-`packages/design-playbook/.mcp.json` using `${CLAUDE_PLUGIN_ROOT}`.
+Marketplace catalog lives at the **repo root** (same GitHub repo as Claude Code).
 
-**Codex skills (cross-platform Python helper):**
+```bash
+# published
+codex plugin marketplace add Bandersnatch0x/design-playbook
+codex plugin add design-playbook@design-playbook
+
+# local monorepo (dev)
+codex plugin marketplace add <abs-path-to-repo-root>
+codex plugin add design-playbook@design-playbook
+```
+
+Verify:
+
+```bash
+codex plugin list -m design-playbook --available --json
+# expect: design-playbook@design-playbook, enabled=true after add
+```
+
+Codex-native manifest: `packages/design-playbook/.codex-plugin/plugin.json`  
+Codex MCP (relative paths, no `CLAUDE_PLUGIN_ROOT`): `.codex-plugin/mcp.json`  
+Skills: `packages/design-playbook/skills/*`
+
+## Fallback: skills-only install
+
+If you only want skills under `~/.codex/skills` (no plugin marketplace):
 
 ```bash
 # from repo root — copies/symlinks skill trees into ~/.codex/skills
-python packages/design-playbook/codex/install_skills.py
-# or manual:
-#   ln -s <abs>/packages/design-playbook/skills/design-playbook ~/.codex/skills/design-playbook
-#   (repeat for ux-spec, ui-picker, craft-guard, native-craft, ui-evaluator)
+python packages/design-playbook/codex/install_skills.py --force
+# or @-reference a single skill:
+#   @packages/design-playbook/skills/design-playbook/SKILL.md
 ```
 
-Or `@` reference a single skill:
-
-```text
-@packages/design-playbook/skills/design-playbook/SKILL.md
-```
-
-**MCP (optional but recommended for G5/G6):**
+Manual MCP (only if not using `codex plugin add`):
 
 ```toml
-# ~/.codex/config.toml — use plugin-bundled runtimes
+# ~/.codex/config.toml
 [mcp_servers.design-playbook-preview]
 command = "python"
 args = ["<abs>/packages/design-playbook/mcp/preview/server.py"]
