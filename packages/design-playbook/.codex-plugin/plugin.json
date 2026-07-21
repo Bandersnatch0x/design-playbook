@@ -1,0 +1,34 @@
+{
+  "name": "design-playbook",
+  "version": "0.4.3",
+  "description": "Design I/O for coding agents: controllable UI generation via declarations (spec/domain/craft/design/components/template) and contracts (skill/evaluator). Use for product UI—console, dashboard, agent-ops, CJK-first apps.",
+  "author": {
+    "name": "Bandersnatch0x",
+    "url": "https://github.com/Bandersnatch0x"
+  },
+  "homepage": "https://github.com/Bandersnatch0x/design-playbook",
+  "repository": "https://github.com/Bandersnatch0x/design-playbook",
+  "license": "MIT",
+  "keywords": [
+    "ui",
+    "ux",
+    "design",
+    "design-io",
+    "design-playbook",
+    "spec",
+    "craft",
+    "evaluator",
+    "console",
+    "cjk"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.codex-plugin/mcp.json",
+  "interface": {
+    "displayName": "design-playbook",
+    "shortDescription": "Design I/O declarations + contracts for product UI",
+    "developerName": "Bandersnatch0x",
+    "category": "Design",
+    "brandColor": "#2DD4BF",
+    "websiteURL": "https://github.com/Bandersnatch0x/design-playbook"
+  }
+}

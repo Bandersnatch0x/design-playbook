@@ -22,6 +22,24 @@ claude --plugin-dir <abs-path>/packages/design-playbook      # dev load, no inst
 /plugin install design-playbook@design-playbook
 ```
 
+## Install (Codex)
+
+Same GitHub repo / monorepo root catalog. Codex-native manifest lives at `.codex-plugin/` (MCP uses relative paths).
+
+```bash
+codex plugin marketplace add Bandersnatch0x/design-playbook
+codex plugin add design-playbook@design-playbook
+```
+
+Local monorepo:
+
+```bash
+codex plugin marketplace add <abs-path-to-repo-root>
+codex plugin add design-playbook@design-playbook
+```
+
+Details + skills-only fallback: [`codex/AGENTS.md`](codex/AGENTS.md).
+
 After install, skills and commands are **namespaced** by the plugin name:
 
 | Invoke | Role |
