@@ -22,7 +22,7 @@ absent, step 8 falls back to manual provider or free-text `observed` (no G6).
 | `actions` | no | Trigger sequence (`click` / `fill` / `wait_for_state` / …) |
 | `artifact_path` | yes | Relative path under the configured run root |
 
-Returns: `artifact`, `observed_state`, `result` (`captured` \| `failed`), `error`.
+Returns: `artifact`, `observed_state`, `result` (`captured` \| `failed`), `error`, **`written_path`** (absolute path of the write target under `DESIGN_PLAYBOOK_RUN_ROOT` / cwd).
 
 **Hard contracts**
 
@@ -47,7 +47,7 @@ loads `packages/design-playbook/.mcp.json`.
 
 ## Implementation notes
 
-- Run root: `DESIGN_PLAYBOOK_RUN_ROOT`; when omitted, the MCP process cwd is used.
+- Run root: `DESIGN_PLAYBOOK_RUN_ROOT`; when omitted or `"."`, paths resolve under the **MCP process cwd** (not the chat workspace). For a host-app run, set an **absolute** path to `.scratch/<run>/`. See bundled [`mcp/evidence/README.md`](../design-playbook/mcp/evidence/README.md).
 - Stack: stdlib JSON-RPC framing + Playwright sync API for capture only.
 - Framing: Content-Length and newline JSON (same dual mode as preview adapter).
 - `observed_state` reads `body[data-state]` / `[data-state]` when present; otherwise it is `unknown` (the requested `state` is intent, not observation).
