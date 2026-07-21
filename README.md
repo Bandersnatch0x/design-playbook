@@ -6,7 +6,7 @@
 
 ### *Design I/O for coding agents — declarations + contracts that make UI generation constrained, reviewable, and recirculatable.*
 
-[![Version](https://img.shields.io/badge/Version-0.4.1-2DD4BF?style=flat-square&logo=semver&logoColor=black)](.#)
+[![Version](https://img.shields.io/badge/Version-0.4.2-2DD4BF?style=flat-square&logo=semver&logoColor=black)](.#)
 [![License](https://img.shields.io/badge/License-MIT-2DD4BF?style=flat-square&logo=opensourceinitiative&logoColor=black)](./packages/design-playbook/LICENSE)
 [![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-2DD4BF?style=flat-square&logo=claude&logoColor=black)](.#)
 [![Skills](https://img.shields.io/badge/Skills-6-2DD4BF?style=flat-square)](.#)
