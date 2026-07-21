@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** v0.4 shipped — 决策 01-04 全 resolved，007b 六 gate 全绿，**v0.4.0–v0.4.2 已发**（2026-07-21，v0.4.2 = pill 两步确认保护）。3b community catalog **READY TO SUBMIT**（pre-submit 4 项全绿，pin `9ec07bf`，表单 human）。上一里程碑:v0.3.1（2026-07-20）。
+**Current:** v0.4 shipped — 决策 01-04 全 resolved，007b 六 gate 全绿，**v0.4.0–v0.4.2 已发**（2026-07-21，v0.4.2 = pill 两步确认保护）。3b community catalog **BLOCKED**（pre-submit 全绿，pin `9ec07bf`；region + Claude 账号 on hold/`account_banned`；粘贴包见 `community-catalog-checklist.md`）。上一里程碑:v0.3.1（2026-07-20）。
 
 | Phase | Status |
 | --- | --- |
@@ -17,7 +17,7 @@
 | v0.3.1 | done (2026-07-20: dedup-single-source 5 票 + ADR-0010, shipped, tag v0.3.1) |
 | v0.4-grill | done (2026-07-21: 决策 01-04 全 resolved, wayfinder `.scratch/v0.4-cycle/`) |
 | v0.4-implement | done (2026-07-21: 按钮修复 d46682d + 007b 六 gate 全绿 + 3a/3c 落地 + pill 两步 arm 0a1dd33) |
-| v0.4-release | done (v0.4.0–v0.4.2, 2026-07-21; gate5 install smoke PASS; 3b READY TO SUBMIT, 表单 human) |
+| v0.4-release | done (v0.4.0–v0.4.2, 2026-07-21; gate5 install smoke PASS; 3b form region-blocked, paste pack ready) |
 
 ## v0 ship checklist (5/5 pass)
 
