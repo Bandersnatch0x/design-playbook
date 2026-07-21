@@ -169,6 +169,78 @@ def check_mcp() -> None:
             fail(f"missing mcp server {name}")
 
 
+# Mirrors validate.py Codex manifest section (issue 07, ADR-0009). doctor is
+# read-only, so this only reports drift rather than gating a release; the
+# authoritative gate lives in validate.py / release.py. Keep in sync when
+# the Codex dual-publish surface changes.
+def check_codex_manifest() -> None:
+    print("== Codex manifest (ADR-0009 dual-publish) ==")
+    claude_plugin = read_json(PKG / ".claude-plugin" / "plugin.json")
+    codex_plugin = read_json(PKG / ".codex-plugin" / "plugin.json")
+    codex_mcp = read_json(PKG / ".codex-plugin" / "mcp.json")
+    agents_market = read_json(ROOT / ".agents" / "plugins" / "marketplace.json")
+
+    claude_version = ""
+    if claude_plugin is not None:
+        raw = claude_plugin.get("version", "")
+        claude_version = raw if isinstance(raw, str) else ""
+
+    if codex_plugin is not None:
+        raw = codex_plugin.get("version", "")
+        codex_version = raw if isinstance(raw, str) else ""
+        if codex_version and codex_version == claude_version:
+            ok(f".codex-plugin/plugin.json version matches Claude ({codex_version})")
+        else:
+            fail(
+                f".codex-plugin/plugin.json version drift: "
+                f"codex={codex_version!r}, claude={claude_version!r}"
+            )
+
+    if codex_mcp is not None:
+        servers = codex_mcp.get("mcpServers", {})
+        servers = servers if isinstance(servers, dict) else {}
+        for name in ("design-playbook-preview", "design-playbook-evidence"):
+            entry = servers.get(name)
+            if not isinstance(entry, dict):
+                fail(f".codex-plugin/mcp.json missing server {name}")
+                continue
+            ok(f".codex-plugin/mcp.json registers {name}")
+            raw_args = entry.get("args", [])
+            args_list = raw_args if isinstance(raw_args, list) else []
+            target_arg = args_list[0] if args_list and isinstance(args_list[0], str) else ""
+            if not target_arg:
+                fail(f".codex-plugin/mcp.json {name} missing args[0] path")
+                continue
+            target = PKG / target_arg
+            if target.is_file():
+                ok(f".codex-plugin/mcp.json {name} target exists: {target_arg}")
+            else:
+                fail(f".codex-plugin/mcp.json {name} target missing: {target_arg}")
+
+    if agents_market is not None:
+        plugins = agents_market.get("plugins", [])
+        plugins = plugins if isinstance(plugins, list) else []
+        if not plugins:
+            fail(".agents marketplace lists no plugin")
+        elif isinstance(plugins[0], dict):
+            src = plugins[0].get("source", "")
+            src_path = ""
+            if isinstance(src, dict):
+                raw_path = src.get("path", "")
+                src_path = raw_path if isinstance(raw_path, str) else ""
+            elif isinstance(src, str):
+                src_path = src
+            if not src_path:
+                fail(".agents marketplace plugins[0].source.path missing")
+            elif (ROOT / src_path).is_dir():
+                ok(f".agents marketplace plugins[0].source.path exists: {src_path}")
+            else:
+                fail(
+                    ".agents marketplace plugins[0].source.path "
+                    f"missing on disk: {src_path}"
+                )
+
+
 def check_floor_self_check(*, skip: bool) -> None:
     print("== preview floor self-check ==")
     if skip:
@@ -220,6 +292,7 @@ def main(argv: list[str] | None = None) -> int:
     check_gate1_smoke()
     check_versions()
     check_mcp()
+    check_codex_manifest()
     check_launchers()
     check_floor_self_check(skip=args.skip_self_check)
 

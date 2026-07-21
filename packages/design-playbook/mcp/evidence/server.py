@@ -31,8 +31,11 @@ TOOL_NAME = "execute_capture_plan"
 SERVER_NAME = "design-playbook-evidence"
 SERVER_VERSION = "0.1.0"
 CAPTURE_TYPES = frozenset({"screenshot", "a11y tree", "interaction trace"})
-ALLOWED_ARGUMENTS = frozenset({"url", "type", "state", "actions", "artifact_path"})
+ALLOWED_ARGUMENTS = frozenset(
+    {"url", "type", "state", "actions", "artifact_path", "overwrite"}
+)
 RUN_ROOT_ENV = "DESIGN_PLAYBOOK_RUN_ROOT"
+EVIDENCE_SUBDIR = "evidence"
 
 
 def _log(msg: str) -> None:
@@ -85,9 +88,18 @@ def _tool_schema() -> dict[str, Any]:
                 "artifact_path": {
                     "type": "string",
                     "description": (
-                        "Relative artifact path under the configured run root. "
-                        "Provider only writes this file."
+                        "Relative artifact path under the evidence/ subtree of "
+                        "the configured run root (must already start with "
+                        "'evidence/'). Provider only writes this file."
                     ),
+                },
+                "overwrite": {
+                    "type": "boolean",
+                    "description": (
+                        "Opt in to replacing an existing artifact. Default "
+                        "false: an existing file is refused (G6 write boundary)."
+                    ),
+                    "default": False,
                 },
             },
             "required": ["url", "type", "state", "artifact_path"],
@@ -160,6 +172,21 @@ def _run_root() -> Path:
 
 
 def _resolve_artifact_path(artifact_path: str) -> Path:
+    """Resolve ``artifact_path`` to an absolute path under ``<run_root>/evidence/``.
+
+    G6 write boundary (issue 04):
+      * reject absolute paths (POSIX + Windows + native);
+      * reject any ``..`` segment in the requested path (defence in depth
+        before resolution — also catches ``evidence/../spec.md``);
+      * the resolved candidate must stay under ``<run_root>/evidence/``;
+      * explicit ``realpath`` check so a symlink chain that resolves out of
+        the evidence subtree is rejected even when ``Path.resolve`` and
+        ``os.path.realpath`` disagree across platforms.
+
+    The caller is responsible for providing a path that already starts with
+    ``evidence/``; we do not prepend it (``spec.md`` and ``skills/x`` are
+    refused because they land outside the evidence subtree).
+    """
     requested = Path(artifact_path)
     if (
         requested.is_absolute()
@@ -168,12 +195,30 @@ def _resolve_artifact_path(artifact_path: str) -> Path:
     ):
         raise ValueError("artifact_path must be relative to the configured run root")
 
+    if any(part == ".." for part in requested.parts):
+        raise ValueError("artifact_path must not contain '..' segments")
+
     root = _run_root()
+    evidence_root = (root / EVIDENCE_SUBDIR).resolve(strict=False)
     candidate = (root / requested).resolve(strict=False)
     try:
-        candidate.relative_to(root)
+        candidate.relative_to(evidence_root)
     except ValueError as exc:
-        raise ValueError("artifact_path escapes the configured run root") from exc
+        raise ValueError(
+            "artifact_path must stay under the evidence/ subtree"
+        ) from exc
+
+    # Defence in depth: realpath must also stay under evidence/. Catches
+    # symlink chains that Path.resolve may normalise differently per platform.
+    try:
+        Path(os.path.realpath(candidate)).relative_to(
+            os.path.realpath(evidence_root)
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "artifact_path symlink escapes the evidence/ subtree"
+        ) from exc
+
     return candidate
 
 
@@ -334,6 +379,7 @@ def execute_capture_plan(args: dict[str, Any]) -> dict[str, Any]:
     state = args.get("state")
     actions = args.get("actions")
     artifact_path = args.get("artifact_path")
+    overwrite = args.get("overwrite", False)
 
     if not isinstance(url, str) or not url.strip():
         raise ValueError("url is required")
@@ -345,6 +391,8 @@ def execute_capture_plan(args: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("state is required")
     if not isinstance(artifact_path, str) or not artifact_path.strip():
         raise ValueError("artifact_path is required")
+    if not isinstance(overwrite, bool):
+        raise ValueError("overwrite must be a boolean")
     if actions is None:
         actions = []
     if not isinstance(actions, list):
@@ -362,6 +410,16 @@ def execute_capture_plan(args: dict[str, Any]) -> dict[str, Any]:
     # Refuse every case variant of the manifest execution-record SSOT.
     if out_path.name.casefold() == "manifest.jsonl":
         return _failed(rel, "provider never writes manifest.jsonl", abs_written)
+    # G6 write boundary: refuse to overwrite an existing artifact unless the
+    # caller explicitly opts in via overwrite=true. Checked before any
+    # Playwright launch so a misconfigured re-run cannot clobber prior evidence.
+    if out_path.exists() and not overwrite:
+        return _failed(
+            rel,
+            f"artifact already exists: {out_path} "
+            "(pass overwrite=true to replace)",
+            abs_written,
+        )
 
     try:
         from playwright.sync_api import sync_playwright

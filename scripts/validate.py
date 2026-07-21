@@ -25,6 +25,24 @@ def check(cond: bool, msg: str) -> None:
         print(f"  ok    {msg}")
 
 
+def _read_json(path: Path) -> dict:
+    """Read a JSON manifest, returning {} on absent or malformed JSON.
+
+    Malformed JSON records a clean FAIL line via ``check`` instead of
+    crashing validate.py with a stack trace — same defensive contract as
+    doctor.read_json and the inline guard at the .mcp.json block (lines
+    ~50-55). Callers downstream already defend against non-dict payloads
+    via isinstance checks.
+    """
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        check(False, f"{path.relative_to(ROOT)} malformed JSON: {exc}")
+        return {}
+
+
 print("== JSON manifests ==")
 plugin_json = PKG / ".claude-plugin" / "plugin.json"
 market_json = ROOT / ".claude-plugin" / "marketplace.json"
@@ -75,6 +93,76 @@ if mj:
         src = plugins[0].get("source", "")
         check(src.endswith("packages/design-playbook"),
               f"marketplace plugin source points at package (got {src!r})")
+
+print("== Codex manifest (ADR-0009 dual-publish) ==")
+# The Codex marketplace install path ships its own plugin.json + mcp.json
+# under packages/design-playbook/.codex-plugin/, plus a separate catalog at
+# .agents/plugins/marketplace.json. None of these are read by the Claude
+# plugin loader, so a static gate is the only thing catching drift between
+# the two publish surfaces. See issue 07 (secure-ship-0.4.4).
+codex_plugin_json = PKG / ".codex-plugin" / "plugin.json"
+codex_mcp_json = PKG / ".codex-plugin" / "mcp.json"
+agents_market_json = ROOT / ".agents" / "plugins" / "marketplace.json"
+cpj = _read_json(codex_plugin_json)
+cmcp = _read_json(codex_mcp_json)
+amj = _read_json(agents_market_json)
+check(bool(cpj), f".codex-plugin/plugin.json present: {codex_plugin_json.relative_to(ROOT)}")
+check(bool(cmcp), f".codex-plugin/mcp.json present: {codex_mcp_json.relative_to(ROOT)}")
+check(bool(amj), f".agents marketplace.json present: {agents_market_json.relative_to(ROOT)}")
+
+# 1) Codex plugin.json version must equal the Claude plugin.json version.
+#    A bump that touches only the Claude side leaves the Codex marketplace
+#    shipping a stale version — fail-fast here so the gate catches it.
+codex_version = cpj.get("version") if isinstance(cpj, dict) else None
+claude_version = pj.get("version") if isinstance(pj, dict) else None
+check(bool(codex_version), ".codex-plugin/plugin.json has explicit semver version")
+check(
+    bool(codex_version) and codex_version == claude_version,
+    f".codex-plugin/plugin.json version matches Claude plugin.json "
+    f"(codex={codex_version!r}, claude={claude_version!r})",
+)
+
+# 2) Codex mcp.json preview/evidence target files exist on disk. The Codex
+#    adapter resolves these relative to its install cwd, so a missing file
+#    would surface only at runtime in a foreign agent.
+if isinstance(cmcp, dict):
+    codex_servers = cmcp.get("mcpServers", {})
+    codex_servers = codex_servers if isinstance(codex_servers, dict) else {}
+    for codex_server_name in ("design-playbook-preview", "design-playbook-evidence"):
+        entry = codex_servers.get(codex_server_name)
+        if not isinstance(entry, dict):
+            check(False, f".codex-plugin/mcp.json registers {codex_server_name}")
+            continue
+        check(True, f".codex-plugin/mcp.json registers {codex_server_name}")
+        raw_args = entry.get("args", [])
+        args_list = raw_args if isinstance(raw_args, list) else []
+        target_arg = args_list[0] if args_list and isinstance(args_list[0], str) else ""
+        if not target_arg:
+            check(False, f".codex-plugin/mcp.json {codex_server_name} has args[0] path")
+            continue
+        target_path = PKG / target_arg
+        check(target_path.is_file(),
+              f".codex-plugin/mcp.json {codex_server_name} target exists on disk: {target_arg}")
+
+# 3) .agents marketplace plugins[0].source.path must resolve to a real dir.
+#    Unlike the Claude marketplace, the .agents catalog intentionally has no
+#    version field (issue 07); only the source path is verified here.
+if isinstance(amj, dict):
+    agents_plugins = amj.get("plugins", [])
+    agents_plugins = agents_plugins if isinstance(agents_plugins, list) else []
+    check(bool(agents_plugins), ".agents marketplace lists >=1 plugin")
+    if agents_plugins and isinstance(agents_plugins[0], dict):
+        agents_src = agents_plugins[0].get("source", "")
+        agents_path = ""
+        if isinstance(agents_src, dict):
+            raw_path = agents_src.get("path", "")
+            agents_path = raw_path if isinstance(raw_path, str) else ""
+        elif isinstance(agents_src, str):
+            agents_path = agents_src
+        check(bool(agents_path), ".agents marketplace plugins[0].source.path present")
+        if agents_path:
+            check((ROOT / agents_path).is_dir(),
+                  f".agents marketplace plugins[0].source.path exists: {agents_path}")
 
 print("== Skill frontmatter ==")
 for skill_dir in sorted((PKG / "skills").iterdir()):

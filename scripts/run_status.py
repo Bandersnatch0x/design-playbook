@@ -15,6 +15,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# Issue 03: run_status reuses the validator's shared judgment so the state
+# machine and G5 cannot drift on "which round is current" or "what counts as
+# a usable confirm". validate_run.py is a standalone script under the
+# installable plugin package (no __init__.py on either scripts/ dir), so put
+# its directory on sys.path and import the two exported helpers instead of
+# re-sorting confirm filenames or re-deriving the confirmed+floor rule here.
+_VALIDATE_RUN_DIR = ROOT / "packages" / "design-playbook" / "scripts"
+if str(_VALIDATE_RUN_DIR) not in sys.path:
+    sys.path.insert(0, str(_VALIDATE_RUN_DIR))
+from validate_run import is_confirmed_valid, latest_numeric_round  # noqa: E402
+
 # Ordered pipeline stages used only for status/resume narration.
 #
 # Mirror of packages/design-playbook/skills/design-playbook/SKILL.md Steps
@@ -65,11 +76,23 @@ def discover_runs(scratch: Path) -> list[Path]:
 
 
 def latest_confirm(run_root: Path) -> Path | None:
-    preview = run_root / "preview"
-    if not preview.is_dir():
+    """Confirm record for the latest numeric round, or None when undecided.
+
+    Reuses ``validate_run.latest_numeric_round`` as the single source of
+    "which round is current" (issues 02 / 03): numeric — not lexicographic —
+    so ``round-10`` > ``round-2``. The old ``sorted(glob(...))[-1]`` let a
+    historic round-1 confirm satisfy the gate while round-2 sat undecided.
+
+    Returns the path to ``confirm-round-<latest>.json`` when it exists, else
+    None (the latest round has only a prototype, or preview/ holds no round
+    artifacts). When preview/ has confirm files but no round-*.html, the
+    validator's combined scan still yields the max confirm round.
+    """
+    latest = latest_numeric_round(run_root)
+    if latest is None:
         return None
-    confirms = sorted(preview.glob("confirm-round-*.json"))
-    return confirms[-1] if confirms else None
+    path = run_root / "preview" / f"confirm-round-{latest}.json"
+    return path if path.is_file() else None
 
 
 def verdict_of(run_root: Path) -> str | None:
@@ -114,13 +137,29 @@ def next_action(states: list[StageState], run_root: Path) -> str:
     if "preview" in present and "fill" not in present:
         confirm = latest_confirm(run_root)
         if confirm is None:
-            return "Preview artifacts exist without confirm — finish preview* HITL (G5) before fill."
+            return ("Preview artifacts exist without a confirm for the latest "
+                    "round — finish preview* HITL (G5) before fill.")
         try:
             payload = json.loads(confirm.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return f"Preview confirm unreadable ({confirm.name}); re-run preview*."
-        if payload.get("confirmed") is True or payload.get("aborted") is True:
-            return "Preview decided — resume at fill."
+        # Reuse validate_run.is_confirmed_valid as the single judgment of a
+        # usable confirm (issue 03). Fail closed on abort / floor-failure:
+        # never direct the orchestrator to fill on a non-positive decision.
+        # The old ``confirmed or aborted -> resume at fill`` was fail-open —
+        # it let aborted runs and floor-failed confirms reach fill, and it
+        # ignored floor_pass entirely. Wording deliberately avoids the phrase
+        # "resume at fill" so status consumers can grep cleanly.
+        if isinstance(payload, dict) and payload.get("aborted") is True:
+            return (f"Preview ABORTED in {confirm.name} — must not proceed to "
+                    f"fill; re-run preview* from the current round.")
+        if is_confirmed_valid(payload):
+            return "Preview confirmed and floor passed — resume at fill."
+        if isinstance(payload, dict) and payload.get("confirmed") is True:
+            reason = payload.get("floor_failure") or "floor_pass is not true"
+            return (f"Preview confirmed in {confirm.name} but feedback floor "
+                    f"failed ({reason}) — must not proceed to fill; re-run "
+                    f"preview* HITL.")
         return "Preview open without decision — complete preview* confirm/revise."
     if "decision" in present and "preview" not in present and "fill" not in present:
         return "Resume at preview* (if adapter present) or fill."
