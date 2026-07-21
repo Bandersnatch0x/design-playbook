@@ -49,7 +49,7 @@ Do in order. Data flow:
 
 Invoke **ux-spec**. Produce six-layer `spec.md`.
 
-**Done when:** L1–L6 are written; L5 (empty/loading/error/permission) has substantive entries, not “show loading”; every top-level L6 item uses ordered `Given -> When -> Then` and names the evidence that will prove it.
+**Done when:** **ux-spec**'s own completion criteria hold (that skill is SSOT). Smoke: L1–L6 present; L5 substantive, not "show loading"; every top-level L6 item uses ordered `Given -> When -> Then`, names its evidence, and names the capture seed where the proof is a runtime state.
 
 Then continue to **3. plan**.
 
@@ -133,9 +133,13 @@ After craft, probe MCP `tools/list` for **`execute_capture_plan`**.
 - **Absent** → skip; `ui-evaluator` ledger `observed` stays free-text (current behavior). G6 not triggered.
 - **Present** → for each L6 criterion whose proof is a runtime state, run the evidence loop in this orchestrator (not inside any skill):
   1. **Derive** a capture plan from L6 `Given -> When -> Then` (in memory, not on disk): `Given`/`When` → `state` + `actions`; `Then` → required proof (already in the ledger `required` field). Do not add or remove verification intent; L6 wins on conflict.
-  2. **Execute**: call `execute_capture_plan({url, type, state, actions, artifact_path})`. The provider returns `{artifact, observed_state, result, error}` and never sees the criterion.
-  3. **Bind**: append a manifest entry to `.scratch/<run>/evidence/manifest.jsonl` with the criterion ref + embedded capture snapshot + artifact + `observed_state` + `result` (`captured`|`failed`) + `ts`. The orchestrator owns the manifest; the provider never writes it.
-  4. **Manual provider**: when no ecosystem provider is present but a human operates + screenshots to `artifact_path`, write the same-format manifest entry (`capture.provider: "manual"`).
+  2. **Execute**: call `execute_capture_plan({url, type, state, actions, artifact_path})`. The provider returns `{artifact, observed_state, result, error, written_path}` and never sees the criterion. Prefer the live host URL (dev server route). Prefer `written_path` (absolute) when locating the file; if it points outside `.scratch/<run>/`, fix `DESIGN_PLAYBOOK_RUN_ROOT` / cwd before binding.
+  3. **Bind** (orchestrator owns the manifest; provider never writes it). After **each** successful or failed capture, **immediately append** one line to `.scratch/<run>/evidence/manifest.jsonl` — do not batch-rewrite the file at the end. Rules:
+     - **`observed_state` / `result` / `error`**: copy the provider return **verbatim**. If the provider returns `unknown`, write `unknown` — never overwrite with the requested `state` (request intent lives only under `capture.state`).
+     - **Embedded capture snapshot**: store the full call parameters used (`url` including query string, `type`, `state`, `actions`, `artifact_path`). Omit nothing that would be needed to re-run the capture.
+     - **`ts`**: wall-clock of **this** capture's completion (ISO-8601). Distinct captures must not share one batch timestamp.
+     - Also record: criterion ref, `artifact` (run-root-relative), optional `artifact_sha256`, optional `written_path` from the provider.
+  4. **Manual provider**: when no ecosystem provider is present but a human operates + screenshots to `artifact_path`, write the same-format manifest entry (`capture.provider: "manual"`); `observed_state` is what the human actually saw, not the planned label.
 - v1 capture types: `screenshot` / `a11y tree` / `interaction trace`.
 
 Evidence is captured, not judged: a manifest entry records that an artifact was collected at a state — it does not say the criterion passed. `pass`/`fail` is the evaluator's verdict (step 9) against `required` vs `observed`; a screenshot can prove a criterion false.
@@ -146,7 +150,7 @@ Evidence is captured, not judged: a manifest entry records that an artifact was 
 
 Invoke **ui-evaluator**. Issues must **point back** to a declaration.
 
-**Done when:** the report includes the criterion-shaped evidence ledger (`criterion / required / observed / result`) and findings as `issue / source / fix / severity`; the authoritative verdict completion criterion in `ui-evaluator` is met.
+**Done when:** the report includes the criterion-shaped evidence ledger (`criterion / required / observed / result`) and findings as `issue / source / fix / severity`; the authoritative verdict completion criterion in `ui-evaluator` is met; **and** you show the user a short **run artifact index** (paths under `.scratch/<run>/`) so declaration products are discoverable — at minimum: `spec.md`, `plan.md`, `decision-report.md`, `preview/` (if any), Fill surface path, `evidence/` (if any), `point-back.md`. One block is enough; do not only leave paths buried in tool logs.
 
 Machine seam (optional local check): `python scripts/validate_run.py <spec.md> <point-back.md> [--preview-dir <preview/>] [--decision-report <report>] [--evidence-dir <evidence/>] [--run-root <run>]`.
 

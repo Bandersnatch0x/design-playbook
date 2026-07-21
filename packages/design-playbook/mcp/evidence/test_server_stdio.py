@@ -155,6 +155,12 @@ class EvidenceMcpStdioTests(unittest.TestCase):
             # Provider must never write manifest.
             self.assertFalse((evidence / "manifest.jsonl").exists())
             self.assertEqual(payload["artifact"], artifact_rel)
+            # P0-1: absolute written_path so RUN_ROOT/cwd misconfig is visible
+            self.assertIn("written_path", payload)
+            self.assertEqual(
+                Path(payload["written_path"]).resolve(),
+                artifact_abs.resolve(),
+            )
 
     def test_capture_without_explicit_page_state_reports_unknown(self) -> None:
         """Requested state is intent, not an observed fact."""
