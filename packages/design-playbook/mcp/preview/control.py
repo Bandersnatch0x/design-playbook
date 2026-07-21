@@ -508,12 +508,12 @@ cursor: default !important;
     </div>
   </div>
   <div class="dpb-drawer-foot">
-    <button type="submit" name="choice" value="__abort__" class="dpb-btn dpb-btn-danger" id="dpb-abort">{t_terminate}</button>
+    <button type="submit" name="choice" value="__abort__" class="dpb-btn dpb-btn-danger" id="dpb-abort" title="{t_terminate_desc}" aria-description="{t_terminate_desc}">{t_terminate}</button>
     <span class="dpb-sr-only" id="dpb-abort-status" role="alert"></span>
     <div class="dpb-btns">
-      <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-draft">{t_draft}</button>
+      <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-draft" title="{t_draft_desc}" aria-description="{t_draft_desc}">{t_draft}</button>
       {secondary_html}
-      <button type="submit" name="choice" value="{primary_val}" class="dpb-btn dpb-btn-primary">{primary_label}</button>
+      <button type="submit" name="choice" value="{primary_val}" class="dpb-btn dpb-btn-primary" title="{t_confirm_desc}" aria-description="{t_confirm_desc}">{primary_label}</button>
     </div>
   </div>
 </dialog>
@@ -1140,14 +1140,19 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         f"{json.dumps(lbl, ensure_ascii=False)}: 1" for lbl in sorted(REVISE_LABELS))
     primary_bits: list[str] = []
     secondary_bits: list[str] = []
+    confirm_desc = html_lib.escape(t("confirm_desc"), quote=True)
+    revise_desc = html_lib.escape(t("revise_desc"), quote=True)
     for opt in options:
         safe_val = html_lib.escape(opt, quote=True)
         safe_label = html_lib.escape(display_label(opt))
         primary = opt in CONFIRM_LABELS or opt.casefold() in confirm_cf
+        is_revise = opt in REVISE_LABELS or opt.casefold() in revise_cf
         cls = "dpb-btn dpb-btn-primary" if primary else "dpb-btn dpb-btn-secondary"
+        desc = confirm_desc if primary else (revise_desc if is_revise else "")
+        desc_attr = f' title="{desc}" aria-description="{desc}"' if desc else ""
         bit = (
-            f'<button type="submit" name="choice" value="{safe_val}" class="{cls}">'
-            f"{safe_label}</button>"
+            f'<button type="submit" name="choice" value="{safe_val}" class="{cls}"'
+            f"{desc_attr}>{safe_label}</button>"
         )
         (primary_bits if primary else secondary_bits).append(bit)
     secondary_html = "\n".join(secondary_bits)
@@ -1219,7 +1224,10 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         t_field_hint=html_lib.escape(t("field_hint")),
         t_field_placeholder=html_lib.escape(t("field_placeholder"), quote=True),
         t_terminate=html_lib.escape(t("terminate")),
+        t_terminate_desc=html_lib.escape(t("terminate_desc"), quote=True),
         t_draft=html_lib.escape(t("draft")),
+        t_draft_desc=html_lib.escape(t("draft_desc"), quote=True),
+        t_confirm_desc=html_lib.escape(t("confirm_desc"), quote=True),
     )
 
 
