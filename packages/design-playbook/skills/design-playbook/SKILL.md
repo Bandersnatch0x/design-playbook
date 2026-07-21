@@ -27,7 +27,7 @@ Pause for explicit confirmation before an external, destructive, costly, or scop
 
 ## Steps
 
-> **Stage-list mirror:** `scripts/run_status.py` `STAGES` mirrors this section's steps and artifact filenames to derive run status / resume hints. If you add/remove a step or change an artifact filename here, update that table.
+> **Stage-list mirror (monorepo maintainers only):** repo-root `scripts/run_status.py` → `STAGES` mirrors this section's steps and artifact filenames for status/resume narration. **Not shipped** with the installable plugin package (`packages/design-playbook/`). Plugin users ignore this pointer. If you add/remove a step or change an artifact filename here, update that monorepo table.
 
 Do in order. Data flow:
 
@@ -104,7 +104,9 @@ After the decision report exists, probe MCP `tools/list` for **`preview_prototyp
 
 **Hard boundary:** never copy `preview/round-*.html`, preview-only assets, or fake data shells into the Fill source tree. Fill consumes report semantics, not prototype files.
 
-**Done when:** either preview was skipped (no adapter), or a `confirm-round-*.json` with `confirmed: true` **and `floor_pass: true`** matches the current decision report (G5 when `validate_run.py` is given `--preview-dir` / `--decision-report`). A confirmed record without `floor_pass` fails G5 — empty/garbage feedback is a silent false-pass that must not reach Fill.
+**Re-Fill signal (preview after Fill already exists):** if a Fill surface (code under the host tree or `filled-ui.*`) already exists and a later preview round **revises the decision report** (new round, structural/component change absorbed into `decision-report.md`), you **must re-Fill** (or explicitly record user acceptance that the existing Fill already matches the new report) **before** observe* / ui-evaluator. Do not run observe against a Fill that predates the current confirmed report. Log the re-Fill (or acceptance) once in `preview/log.md`.
+
+**Done when:** either preview was skipped (no adapter), or a `confirm-round-*.json` with `confirmed: true` **and `floor_pass: true`** matches the current decision report (G5 when `validate_run.py` is given `--preview-dir` / `--decision-report`). A confirmed record without `floor_pass` fails G5 — empty/garbage feedback is a silent false-pass that must not reach Fill. When Fill already existed, the re-Fill signal above is satisfied.
 
 ### 6. Fill
 
@@ -149,7 +151,15 @@ After craft, probe MCP `tools/list` for **`execute_capture_plan`**.
    - every manifest entry's capture snapshot includes `note` (or equivalent) with **`surface: mirror`** and a one-line reason;
    - **ui-evaluator** must emit a finding (severity at least **low**) that observe used a mirror, `source` = `observe* seam` (or preview*/observe* seam), and the fix is "re-capture on live host when available";
    - do **not** claim G6/process Pass as proof that the Fill tree was runtime-verified.
-3. Mirror pages should expose `data-state` (or body `[data-state]`) matching the intended state when possible so provider `observed_state` is not forced to `unknown` — still never invent observed_state in the manifest.
+3. **Mirror `data-state` (recommended):** when using a semantic mirror, set the page state the provider can read so `observed_state` is not forced to `unknown`. The evidence adapter reads `body[data-state]` or `[data-state]` (see `mcp/evidence/server.py` `_read_observed_state`). Example:
+
+   ```html
+   <body data-state="empty">
+     <!-- empty-state UI for L6 empty criterion -->
+   </body>
+   ```
+
+   Prefer one root marker that matches the capture plan's `state` intent. Still **never invent** `observed_state` in the manifest — copy the provider return verbatim (unknown stays unknown).
 
 Evidence is captured, not judged: a manifest entry records that an artifact was collected at a state — it does not say the criterion passed. `pass`/`fail` is the evaluator's verdict (step 9) against `required` vs `observed`; a screenshot can prove a criterion false.
 

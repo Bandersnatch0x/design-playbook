@@ -28,3 +28,13 @@ Codex / manual: sibling [`mcp.example.toml`](../../../design-playbook-evidence/m
 `artifact` (run-root-relative) · `observed_state` (from page `data-state`, else `unknown`) · `result` · `error` · **`written_path`** (absolute).
 
 Orchestrator bind rules (verbatim `observed_state`, per-capture append, mirror surface notes): `skills/design-playbook/SKILL.md` step 8.
+
+## Mirror pages and `data-state`
+
+When capture uses a semantic mirror (not the live Fill host), set a root marker the provider can read:
+
+```html
+<body data-state="error">…</body>
+```
+
+`observed_state` comes only from that probe (else `unknown`). Do not overwrite it in the manifest with the request's `state` field.
