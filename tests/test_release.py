@@ -107,6 +107,34 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn(CURRENT_NOTES_REL, result.stdout)
 
+    def test_fixture_includes_codex_plugin_manifest(self) -> None:
+        # Regression guard for issue 07: the release fixture must carry the
+        # Codex dual-publish manifest so check_version can police drift
+        # between Claude and Codex plugin.json (ADR-0009).
+        codex_plugin = (
+            self.root / "packages" / "design-playbook" / ".codex-plugin" / "plugin.json"
+        )
+        codex_mcp = (
+            self.root / "packages" / "design-playbook" / ".codex-plugin" / "mcp.json"
+        )
+        self.assertTrue(codex_plugin.is_file(), "fixture missing .codex-plugin/plugin.json")
+        self.assertTrue(codex_mcp.is_file(), "fixture missing .codex-plugin/mcp.json")
+
+    def test_codex_plugin_json_version_must_match_claude(self) -> None:
+        # Issue 07 acceptance: bump漏改 .codex-plugin/plugin.json -> release FAIL.
+        codex_plugin = (
+            self.root / "packages" / "design-playbook" / ".codex-plugin" / "plugin.json"
+        )
+        payload = json.loads(codex_plugin.read_text(encoding="utf-8"))
+        payload["version"] = "9.9.9"  # drift off Claude plugin.json
+        codex_plugin.write_text(json.dumps(payload), encoding="utf-8")
+
+        result = self.release("--checks", "version")
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("9.9.9", result.stdout)
+        self.assertIn("codex", result.stdout.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

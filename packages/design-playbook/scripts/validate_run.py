@@ -34,6 +34,7 @@ Strict quality mode (opt-in):
   --strict            shorthand for both require flags
 """
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -289,10 +290,144 @@ def _resolve_report_ref(
     return None
 
 
+def _round_from_name(name: str) -> int | None:
+    """Extract the numeric round from a ``round-<n>.html`` or
+    ``confirm-round-<n>.json`` filename. Returns None if it does not match."""
+    match = re.match(r"^(?:confirm-)?round-(\d+)\.(?:html|json)$", name, re.I)
+    return int(match.group(1)) if match else None
+
+
+def latest_numeric_round(run_root: Path) -> int | None:
+    """Return the highest numeric round seen under ``<run_root>/preview/``.
+
+    Scans both ``round-<n>.html`` prototypes and ``confirm-round-<n>.json``
+    records and returns the maximum ``<n>`` as an int, or None when
+    ``preview/`` is missing or holds no round artifacts.
+
+    Numeric — not lexicographic — so ``round-10`` > ``round-2``. The old
+    ``sorted(glob("confirm-round-*.json"))`` ordering was the stale-confirm
+    bug (issues 02 / 03): it let a historic round-1 confirm satisfy the gate
+    while round-2 sat undecided.
+
+    Exported for D-domain ``run_status`` to reuse as the single source of
+    "which round is current"; do not re-sort confirm filenames there.
+    """
+    preview = run_root / "preview"
+    if not preview.is_dir():
+        return None
+    try:
+        entries = list(preview.iterdir())
+    except OSError:
+        return None
+    nums = [
+        n for n in (_round_from_name(p.name) for p in entries if p.is_file())
+        if n is not None
+    ]
+    return max(nums) if nums else None
+
+
+def is_confirmed_valid(confirm_data: object) -> bool:
+    """True iff a confirm record is a valid (decided-positive) confirmation.
+
+    Validity = ``confirmed is True`` AND ``floor_pass is True`` (ADR-0008
+    feedback floor). Accepts the parsed JSON value of any type; non-dict →
+    False.
+
+    Exported as the single judgment shared by ``check_preview`` (G5) and
+    D-domain ``run_status`` so the validator and the state machine cannot
+    drift on what counts as a usable confirm (issue 03).
+    """
+    if not isinstance(confirm_data, dict):
+        return False
+    return (confirm_data.get("confirmed") is True
+            and confirm_data.get("floor_pass") is True)
+
+
+def _confirm_round(path: Path, data: dict) -> int | None:
+    """Round number of a confirm record: prefer the JSON ``round`` field,
+    fall back to the ``confirm-round-<n>.json`` filename."""
+    raw = data.get("round")
+    if isinstance(raw, bool):  # bool is an int subtype; reject explicitly
+        return _round_from_name(path.name)
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, str) and raw.strip().isdigit():
+        return int(raw)
+    return _round_from_name(path.name)
+
+
+def _prototype_target(data: dict, run_root: Path) -> Path | None:
+    """Resolve the prototype html a confirm record refers to.
+
+    Uses the trusted-side-written ``prototype_path`` (e.g.
+    ``preview/round-2.html``) and falls back to ``preview/round-<n>.html``
+    derived from the record's round. Returns None if no prototype file is
+    found.
+    """
+    candidates: list[Path] = []
+    ref = data.get("prototype_path")
+    if isinstance(ref, str) and ref.strip():
+        raw = Path(ref.strip())
+        if raw.is_absolute():
+            candidates.append(raw)
+        else:
+            candidates.append(run_root / raw)
+            candidates.append(run_root / "preview" / raw.name)
+    rnd = data.get("round")
+    if isinstance(rnd, int) and not isinstance(rnd, bool):
+        candidates.append(run_root / "preview" / f"round-{rnd}.html")
+    for cand in candidates:
+        try:
+            if cand.is_file():
+                return cand
+        except OSError:
+            continue
+    return None
+
+
+def _verify_prototype_hash(data: dict, run_root: Path) -> list[str]:
+    """Verify ``prototype_html_hash`` when the confirm record carries one.
+
+    The hash is written by the trusted-side ``confirm.py`` as
+    ``sha256(<prototype bytes>)``; the validator (also trusted) recomputes it
+    from the prototype html currently on disk and compares. The hash source
+    stays on the trusted side and is never self-reported by the prototype
+    (issue 02 / T01 trust boundary).
+
+    Returns an empty list for legacy records that have no
+    ``prototype_html_hash`` (skipped, not failed) so historic runs that
+    predate the field are not broken.
+    """
+    stored = data.get("prototype_html_hash")
+    if not isinstance(stored, str) or not stored:
+        return []
+    target = _prototype_target(data, run_root)
+    if target is None:
+        return [
+            "G5 preview: confirmed record carries prototype_html_hash but "
+            "its prototype html is missing"
+        ]
+    digest = hashlib.sha256(target.read_bytes()).hexdigest()
+    if digest != stored:
+        return [
+            "G5 preview: confirmed record prototype_html_hash mismatch "
+            "(prototype altered after confirm)"
+        ]
+    return []
+
+
 def check_preview(
         preview_dir: Path | None,
         decision_report: Path | None) -> list[str]:
-    """G5 conditional preview confirmation gate."""
+    """G5 conditional preview confirmation gate.
+
+    A preview run is satisfied only by a *current* confirmed record: the
+    record must belong to the latest numeric round (issues 02 / 03 — accepting
+    any historical confirmed round let a stale round-1 confirm mask an
+    undecided round-2), must pass the ADR-0008 feedback floor, and — when the
+    trusted side wrote ``prototype_html_hash`` — the prototype html on disk
+    must still hash to it (issue 02).
+    """
     if not preview_occurred(preview_dir):
         return []
 
@@ -314,8 +449,31 @@ def check_preview(
             return [f"G5 preview: confirm record {path.name} is not an object"]
         confirms.append((path, data))
 
-    true_confirms = [
+    run_root = preview_dir.parent
+    latest = latest_numeric_round(run_root)
+
+    # Keep only records that belong to the current (max numeric) round. When
+    # latest is None (preview/ has no round-* artifacts — log.md only) fall
+    # back to considering every confirm we found.
+    current: list[tuple[Path, dict]] = [
         (path, data) for path, data in confirms
+        if latest is None or _confirm_round(path, data) == latest
+    ]
+
+    if not current:
+        if latest is not None:
+            return [
+                f"G5 preview: latest round {latest} has no "
+                f"confirm-round-{latest}.json (stale confirmation; only an "
+                f"older round may be confirmed)"
+            ]
+        return [
+            "G5 preview: preview occurred but no confirm-round-*.json with "
+            "confirmed=true"
+        ]
+
+    true_confirms = [
+        (path, data) for path, data in current
         if data.get("confirmed") is True
     ]
     if not true_confirms:
@@ -338,6 +496,14 @@ def check_preview(
             f"G5 preview: confirmed record {path.name} failed feedback floor: "
             f"{reason}"
         ]
+
+    # Prototype integrity: when the trusted side recorded a hash, the
+    # prototype on disk must still match it (issue 02). Legacy records
+    # without a hash are skipped, not failed.
+    for _path, data in true_confirms:
+        hash_errs = _verify_prototype_hash(data, run_root)
+        if hash_errs:
+            return hash_errs
 
     wanted: Path | None = None
     if decision_report is not None:
@@ -437,13 +603,37 @@ def check_evidence(
     root = run_root if run_root is not None else evidence_dir.parent
     entries = _manifest_entries(evidence_dir)
     valid_criterion_ids = {f"L6.{n}" for n in range(1, expected_l6 + 1)}
+    evidence_root = (root / "evidence").resolve()
 
     errs: list[str] = []
     for criterion, observed in _ledger_observed(pointback_text):
         if not observed.startswith(EVIDENCE_PREFIX):
             continue  # free-text observation; G6 does not apply
-        artifact_path = root / observed
-        if not artifact_path.is_file():
+        # Containment (issue 04 / G6): the observed path must resolve *inside*
+        # the evidence/ subtree. Reject any ".." segment, absolute paths, and
+        # post-resolve escapes (e.g. ``evidence/../spec.md`` -> run root,
+        # which under the new Codex manifest could overwrite spec / source).
+        observed_path = Path(observed)
+        if observed_path.is_absolute() or ".." in observed_path.parts:
+            errs.append(
+                f"G6 evidence: {criterion} observed escapes evidence/ "
+                f"subtree: {observed}")
+            continue
+        try:
+            resolved = (root / observed).resolve()
+        except OSError:
+            errs.append(
+                f"G6 evidence: {criterion} observed escapes evidence/ "
+                f"subtree: {observed}")
+            continue
+        try:
+            resolved.relative_to(evidence_root)
+        except ValueError:
+            errs.append(
+                f"G6 evidence: {criterion} observed escapes evidence/ "
+                f"subtree: {observed}")
+            continue
+        if not resolved.is_file():
             errs.append(
                 f"G6 evidence: {criterion} artifact missing: {observed}")
             continue

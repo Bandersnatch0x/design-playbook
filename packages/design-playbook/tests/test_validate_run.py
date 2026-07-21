@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Regression-test the deterministic run seam and its diagnostics."""
+import hashlib
+import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -80,6 +83,81 @@ def _g5_args(case_dir: Path) -> list[str]:
 def _g6_args(case_dir: Path) -> list[str]:
     evidence = case_dir / "evidence"
     return ["--evidence-dir", str(evidence), "--run-root", str(case_dir)]
+
+
+def _write_text(path: Path, text: str) -> None:
+    """Create parent dirs and write a UTF-8 file inside a temp run root."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def _confirm_record(
+        round_n: int, *,
+        confirmed: bool = True,
+        floor_pass: bool = True,
+        report_ref: str = "decision-report.md",
+        prototype_html_hash: str | None = None,
+        floor_failure: str = "") -> dict:
+    """Build a confirm-round JSON payload mirroring trusted-side confirm.py.
+
+    ``prototype_html_hash`` is omitted by default so legacy-style records can
+    still be constructed; pass an explicit value to exercise the hash gate.
+    """
+    record: dict = {
+        "round": round_n,
+        "report_ref": report_ref,
+        "confirmed": confirmed,
+        "floor_pass": floor_pass,
+        "selected_options": ["确认通过"],
+        "feedback": "确认通过，无修改意见",
+        "timestamp": "2026-07-21T12:00:00+08:00",
+        "prototype_path": f"preview/round-{round_n}.html",
+    }
+    if prototype_html_hash is not None:
+        record["prototype_html_hash"] = prototype_html_hash
+    if floor_failure:
+        record["floor_failure"] = floor_failure
+    return record
+
+
+# Point-back with one ``evidence/`` observed that escapes the evidence/
+# subtree via ``..`` (issue 04/G6). Otherwise shaped to pass G1-G4 against
+# the zero-findings spec (5 L6 items, Pass verdict, no findings).
+_G6_ESCAPE_POINTBACK = """# Point-back findings - escape probe
+
+## Verdict
+
+**Pass.**
+
+## Evidence ledger
+
+```text
+criterion: L6.1
+required: declared proof for L6.1
+observed: fixture evidence for L6.1
+result: pass
+
+criterion: L6.2
+required: declared proof for L6.2
+observed: fixture evidence for L6.2
+result: pass
+
+criterion: L6.3
+required: declared proof for L6.3
+observed: evidence/../spec.md
+result: pass
+
+criterion: L6.4
+required: declared proof for L6.4
+observed: fixture evidence for L6.4
+result: pass
+
+criterion: L6.5
+required: declared proof for L6.5
+observed: fixture evidence for L6.5
+result: pass
+```
+"""
 
 
 def main() -> int:
@@ -283,6 +361,85 @@ def main() -> int:
         failures, "g6-pass-without-valid-binding", g6_spec,
         FAIL / "g6-pass-without-valid-binding" / "point-back.md",
         "G6 evidence", *_g6_args(FAIL / "g6-pass-without-valid-binding"))
+
+    # --- G5 latest numeric round + prototype hash (issues 02 / 03) ---
+    # round-1 confirmed, round-2 prototype exists with NO confirm: the
+    # round-1 confirm is stale and must not satisfy the gate.
+    spec, pb = _zero_findings_pair()
+    with tempfile.TemporaryDirectory() as tmp:
+        run_root = Path(tmp)
+        preview = run_root / "preview"
+        _write_text(preview / "round-1.html", "<html>round-1</html>")
+        _write_text(preview / "round-2.html", "<html>round-2</html>")
+        h1 = hashlib.sha256(b"<html>round-1</html>").hexdigest()
+        _write_text(
+            preview / "confirm-round-1.json",
+            json.dumps(
+                _confirm_record(1, prototype_html_hash=h1),
+                ensure_ascii=False, indent=2),
+        )
+        _write_text(run_root / "decision-report.md", "# decision report\n")
+        expect_invalid(
+            failures, "g5-stale-old-round-confirmed", spec, pb,
+            "stale",
+            "--preview-dir", str(preview),
+            "--decision-report", str(run_root / "decision-report.md"))
+
+    # prototype on disk no longer hashes to the recorded prototype_html_hash
+    # (prototype altered after confirm) -> G5 fail.
+    with tempfile.TemporaryDirectory() as tmp:
+        run_root = Path(tmp)
+        preview = run_root / "preview"
+        _write_text(preview / "round-1.html", "<html>round-1</html>")
+        _write_text(
+            preview / "confirm-round-1.json",
+            json.dumps(
+                _confirm_record(1, prototype_html_hash="0" * 64),
+                ensure_ascii=False, indent=2),
+        )
+        _write_text(run_root / "decision-report.md", "# decision report\n")
+        expect_invalid(
+            failures, "g5-prototype-hash-mismatch", spec, pb,
+            "prototype_html_hash",
+            "--preview-dir", str(preview),
+            "--decision-report", str(run_root / "decision-report.md"))
+
+    # A current, confirmed, hash-matching record still passes (hash happy path
+    # guards against the gate becoming a blanket reject).
+    with tempfile.TemporaryDirectory() as tmp:
+        run_root = Path(tmp)
+        preview = run_root / "preview"
+        _write_text(preview / "round-1.html", "<html>round-1</html>")
+        h1 = hashlib.sha256(b"<html>round-1</html>").hexdigest()
+        _write_text(
+            preview / "confirm-round-1.json",
+            json.dumps(
+                _confirm_record(1, prototype_html_hash=h1),
+                ensure_ascii=False, indent=2),
+        )
+        _write_text(run_root / "decision-report.md", "# decision report\n")
+        expect_valid(
+            failures, "g5-prototype-hash-match", spec, pb,
+            "--preview-dir", str(preview),
+            "--decision-report", str(run_root / "decision-report.md"))
+
+    # --- G6 observed containment (issue 04): observed must not escape
+    # the evidence/ subtree via ".." ---
+    with tempfile.TemporaryDirectory() as tmp:
+        run_root = Path(tmp)
+        evidence = run_root / "evidence"
+        _write_text(evidence / ".keep", "")  # evidence/ must be a directory
+        _write_text(
+            run_root / "spec.md",
+            "# real spec at run root (escape target, must NOT be reached)")
+        g6_spec, _ = _zero_findings_pair()
+        g6_pb = run_root / "point-back.md"
+        _write_text(g6_pb, _G6_ESCAPE_POINTBACK)
+        expect_invalid(
+            failures, "g6-observed-escape-dotdot", g6_spec, g6_pb,
+            "escapes evidence/",
+            "--evidence-dir", str(evidence),
+            "--run-root", str(run_root))
 
     # --- ADR-0008 adapter floor self-check (bundled runtime) ---
     preview_server = PACKAGE / "mcp" / "preview" / "server.py"

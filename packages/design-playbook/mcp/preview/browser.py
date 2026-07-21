@@ -8,6 +8,7 @@ and tears down the browser + server without hanging on keep-alive sockets.
 from __future__ import annotations
 
 import ctypes
+import html
 import json
 import os
 import re
@@ -22,7 +23,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
-from confirm import _check_feedback_floor
+from confirm import _DecisionSession, _check_feedback_floor, _generate_decision_token
 from control import _build_control, _format_feedback
 from i18n import CONFIRM_LABELS, lang, t
 from util import _log
@@ -337,6 +338,66 @@ setTimeout(function () {
 
 
 
+# G5: the parent control form's opening tag — a stable hook for token
+# injection. control.py owns the template; we only splice hidden fields in.
+_FORM_MARKER = '<form method="POST" action="/decide" id="dpb-decide-form">'
+
+
+def _inject_token_fields(control_html: str, token: str, round_n: int) -> str:
+    """Insert hidden dpb_token + dpb_round fields into the control form (G5).
+
+    The token is the parent page's proof-of-origin; the round binds it to this
+    preview session. Spliced in post-template so control.py stays untouched
+    (sibling agents own its contents).
+    """
+    safe_token = html.escape(token, quote=True)
+    fields = (
+        f'<input type="hidden" name="dpb_token" value="{safe_token}"/>'
+        f'<input type="hidden" name="dpb_round" value="{round_n}"/>'
+    )
+    if _FORM_MARKER in control_html:
+        return control_html.replace(_FORM_MARKER, _FORM_MARKER + fields, 1)
+    # Defensive fallback: anchor to any <form ...> open tag if the template
+    # marker ever moves. Lambda keeps the replacement literal (no backslash
+    # expansion of the HTML/JS payload).
+    return re.sub(
+        r"(<form\b[^>]*>)",
+        lambda m: m.group(1) + fields,
+        control_html,
+        count=1,
+    )
+
+
+def _build_parent_page(prototype_html: str, control_html: str) -> str:
+    """Build the trusted parent document (G5 trust boundary).
+
+    The parent renders only the control bar; the prototype is isolated inside
+    ``<iframe sandbox="allow-scripts" srcdoc="...">``. ``allow-same-origin`` is
+    deliberately omitted so the iframe is treated as a unique opaque origin and
+    prototype scripts cannot reach the parent DOM — where the one-time decision
+    token lives as a hidden form field.
+    """
+    srcdoc = html.escape(prototype_html, quote=True)
+    # String concatenation (not .format): the CSS braces are literal here, and
+    # concatenation sidesteps the format()-on-HTML brace-escaping trap.
+    return (
+        '<!DOCTYPE html><html lang="' + lang() + '"><head>'
+        '<meta charset="utf-8"/>'
+        '<meta name="viewport" content="width=device-width, initial-scale=1"/>'
+        '<title>preview</title>'
+        "<style>"
+        "html,body{margin:0;padding:0;height:100%;background:#0f1218;}"
+        ".dpb-proto-frame{position:fixed;inset:0;width:100%;height:100%;"
+        "border:0;background:#ffffff;}"
+        "</style></head><body>"
+        + control_html
+        + '<iframe class="dpb-proto-frame" sandbox="allow-scripts" srcdoc="'
+        + srcdoc
+        + '" title="prototype"></iframe>'
+        + "</body></html>"
+    )
+
+
 def _collect_via_browser(
         prototype: Path, summary: str, options: list[str],
         round_n: int) -> dict[str, Any]:
@@ -350,14 +411,16 @@ def _collect_via_browser(
     }
     done = threading.Event()
 
-    html = prototype.read_text(encoding="utf-8")
+    prototype_html = prototype.read_text(encoding="utf-8")
     control = _build_control(round_n, summary.strip(), options)
-    m = re.search(r"</body\s*>", html, re.I)
-    if m:
-        # Avoid re.sub replacement template: control HTML/JS has backslashes (e.g. \s).
-        page = html[: m.start()] + control + html[m.start() :]
-    else:
-        page = html + control
+    # G5 trust boundary: one-time token + first-decision-wins session. The
+    # token renders as a hidden field in the PARENT control form (trusted);
+    # the sandboxed prototype iframe cannot read it, so a forged
+    # fetch('/decide', ...) arrives without proof and fails closed.
+    token = _generate_decision_token()
+    control = _inject_token_fields(control, token, round_n)
+    page = _build_parent_page(prototype_html, control)
+    session = _DecisionSession(round_n, token)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt: str, *args: Any) -> None:  # noqa: A003
@@ -384,7 +447,27 @@ def _collect_via_browser(
             choice = (form.get("choice") or ["__abort__"])[0]
             feedback = (form.get("feedback") or [""])[0]
             anchors = _parse_anchors((form.get("anchors_json") or ["[]"])[0])
-            if choice == "__abort__":
+            # G5: validate the one-time decision token before trusting choice.
+            # A sandboxed prototype cannot read the hidden token, so a forged
+            # fetch('/decide', ...) arrives without it and fails closed.
+            try:
+                posted_round = int((form.get("dpb_round") or [""])[0])
+            except (ValueError, TypeError):
+                posted_round = -1
+            posted_token = (form.get("dpb_token") or [None])[0]
+            validated = session.validate(posted_round, posted_token)
+            if not validated:
+                # Fail closed: missing / reused / mismatched token -> NOT confirmed.
+                result = {
+                    "confirmed": False,
+                    "selected_options": [],
+                    "feedback": feedback,
+                    "aborted": True,
+                    "anchors": anchors,
+                    "rejected": True,
+                    "rejection": session.last_rejection,
+                }
+            elif choice == "__abort__":
                 result = {
                     "confirmed": False,
                     "selected_options": [],
@@ -412,7 +495,18 @@ def _collect_via_browser(
             self.end_headers()
             self.wfile.write(reply)
             self.wfile.flush()
-            done.set()
+            # MEDIUM-1 (secure-ship-0.4.4) anti-DoS: only end the session when
+            # the POST proves trusted-form origin — validated (first valid
+            # decision) OR carried a dpb_token at all (real control-form
+            # submit, even on replay/mismatch). A forged cross-origin fetch
+            # arrives with no token (sandboxed iframe cannot read the hidden
+            # field); responding 200 keeps it quiet, but the server stays
+            # alive so the real user can still confirm. Unconditional
+            # done.set() here let one forged POST abort every preview before
+            # the user clicked anything. Fail-closed semantics above are
+            # unchanged — only session termination is now gated.
+            if validated or posted_token is not None:
+                done.set()
 
     server = HTTPServer(("127.0.0.1", 0), Handler)
     port = server.server_address[1]
@@ -446,10 +540,15 @@ def _collect_via_browser(
     # _format_feedback would always make it non-empty by merging anchors.
     raw_feedback = result.get("feedback") or ""
     raw_anchors = list(result.get("anchors") or [])
-    floor_pass, floor_failure = _check_feedback_floor(raw_feedback, raw_anchors)
-    result["floor_pass"] = floor_pass
-    if not floor_pass:
-        result["floor_failure"] = floor_failure
+    if result.get("rejected"):
+        # G5 fail-closed: an untrusted decision never passes the floor, even
+        # if the forged payload happened to carry substantive feedback.
+        result["floor_pass"] = False
+    else:
+        floor_pass, floor_failure = _check_feedback_floor(raw_feedback, raw_anchors)
+        result["floor_pass"] = floor_pass
+        if not floor_pass:
+            result["floor_failure"] = floor_failure
     # merge anchors into feedback for log readability
     result["feedback"] = _format_feedback(raw_feedback, raw_anchors)
     return result

@@ -67,6 +67,20 @@ def plugin_version() -> str:
     return version if isinstance(version, str) else ""
 
 
+def codex_plugin_version() -> str:
+    """Version declared in the Codex dual-publish manifest (ADR-0009).
+
+    The Codex marketplace ships its own ``.codex-plugin/plugin.json``; a bump
+    that skips it leaves the Codex surface advertising a stale version. This
+    is one of the 6+ version sites ``check_version`` polices (issue 07).
+    """
+    payload = read_json(PKG / ".codex-plugin" / "plugin.json")
+    if payload is None:
+        return ""
+    version = payload.get("version", "")
+    return version if isinstance(version, str) else ""
+
+
 def check_tree() -> None:
     print("== 1. working tree clean ==")
     status = git("status", "--porcelain", "--untracked-files=all")
@@ -83,6 +97,7 @@ def check_tree() -> None:
 def check_version() -> None:
     print("== 2. version consistency ==")
     version = plugin_version()
+    codex_version = codex_plugin_version()
     marketplace = read_json(ROOT / ".claude-plugin" / "marketplace.json")
     if marketplace is None:
         return
@@ -97,13 +112,14 @@ def check_version() -> None:
 
     if not SEMVER.fullmatch(version):
         fail(f"plugin.json version not semver: {version!r}")
-    elif version == metadata_version == marketplace_version:
-        ok(f"versions match across 3 sites: {version}")
+    elif version == metadata_version == marketplace_version == codex_version:
+        ok(f"versions match across 4 manifest sites: {version}")
     else:
         fail(
             f"version mismatch: plugin.json={version!r} "
             f"marketplace.meta={metadata_version!r} "
-            f"marketplace.plugin={marketplace_version!r}"
+            f"marketplace.plugin={marketplace_version!r} "
+            f"codex.plugin={codex_version!r}"
         )
 
     badge_re = re.compile(r"badge/Version-(\d+\.\d+\.\d+)-")

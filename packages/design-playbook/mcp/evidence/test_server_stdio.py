@@ -440,6 +440,121 @@ class EvidenceMcpStdioTests(unittest.TestCase):
                     self.assertEqual(payload["observed_state"], "unknown")
             self.assertFalse(outside.exists())
 
+    def test_provider_rejects_non_evidence_subtree_paths(self) -> None:
+        """G6 containment: artifact_path must already live under evidence/."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "evidence").mkdir()
+            cases = [
+                "spec.md",              # would land at run root, not evidence/
+                "../spec.md",           # explicit .. segment
+                "evidence/../spec.md",  # .. segment that resolves out of evidence/
+                "skills/x",             # sibling subtree, not evidence/
+            ]
+            for artifact_path in cases:
+                with self.subTest(artifact_path=artifact_path):
+                    requests = [
+                        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+                        {
+                            "jsonrpc": "2.0",
+                            "id": 2,
+                            "method": "tools/call",
+                            "params": {
+                                "name": "execute_capture_plan",
+                                "arguments": {
+                                    "url": "about:blank",
+                                    "type": "screenshot",
+                                    "state": "ok",
+                                    "actions": [],
+                                    "artifact_path": artifact_path,
+                                },
+                            },
+                        },
+                    ]
+                    completed = _run_stdio(requests, timeout=15, cwd=root)
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    payload = _structured(_responses(completed)[1])
+                    self.assertEqual(payload["result"], "failed", payload)
+                    self.assertEqual(payload["observed_state"], "unknown")
+            # None of these wrote anywhere outside evidence/.
+            self.assertFalse((root / "spec.md").exists())
+            self.assertFalse((root / "skills").exists())
+
+    def test_provider_refuses_overwrite_without_opt_in(self) -> None:
+        """G6 write boundary: existing artifact is not overwritten by default."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "evidence").mkdir()
+            html = root / "page.html"
+            html.write_text(FIXTURE_HTML, encoding="utf-8")
+            artifact_rel = "evidence/L6.3-error.png"
+            sentinel = b"pre-existing-by-hand"
+            (root / artifact_rel).write_bytes(sentinel)
+
+            requests = [
+                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "execute_capture_plan",
+                        "arguments": {
+                            "url": html.resolve().as_uri(),
+                            "type": "screenshot",
+                            "state": "error",
+                            "actions": [],
+                            "artifact_path": artifact_rel,
+                        },
+                    },
+                },
+            ]
+            completed = _run_stdio(requests, timeout=45, cwd=root)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            payload = _structured(_responses(completed)[1])
+            self.assertEqual(payload["result"], "failed", payload)
+            self.assertEqual(payload["observed_state"], "unknown")
+            # Pre-existing bytes preserved (write boundary held).
+            self.assertEqual((root / artifact_rel).read_bytes(), sentinel)
+
+    def test_provider_overwrites_when_opted_in(self) -> None:
+        """G6 write boundary: overwrite=true explicitly opts in to replace."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "evidence").mkdir()
+            html = root / "page.html"
+            html.write_text(FIXTURE_HTML, encoding="utf-8")
+            artifact_rel = "evidence/L6.3-error.png"
+            artifact = root / artifact_rel
+            artifact.write_bytes(b"pre-existing-by-hand")
+
+            requests = [
+                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "execute_capture_plan",
+                        "arguments": {
+                            "url": html.resolve().as_uri(),
+                            "type": "screenshot",
+                            "state": "error",
+                            "actions": [],
+                            "artifact_path": artifact_rel,
+                            "overwrite": True,
+                        },
+                    },
+                },
+            ]
+            completed = _run_stdio(requests, timeout=45, cwd=root)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            payload = _structured(_responses(completed)[1])
+            self.assertEqual(payload["result"], "captured", payload)
+            # Sentinel replaced with a real screenshot (>100 bytes).
+            self.assertGreater(artifact.stat().st_size, 100)
+            self.assertNotEqual(artifact.read_bytes(), b"pre-existing-by-hand")
+
     def test_provider_rejects_unknown_and_criterion_ref_fields(self) -> None:
         for forbidden in ("criterion", "criterion_ref", "criterion_id", "unexpected"):
             with self.subTest(forbidden=forbidden):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import socket
 import subprocess
 import sys
@@ -24,6 +25,40 @@ import browser  # noqa: E402
 
 
 SERVER = Path(__file__).with_name("server.py")
+
+
+# G5: the parent page embeds a one-time dpb_token + dpb_round as hidden fields.
+# Tests that POST /decide must GET / first and lift them — the same path a real
+# human submit takes through the trusted control form (not a forged fetch).
+_TOKEN_RE = re.compile(r'name="dpb_token"\s+value="([^"]*)"')
+_ROUND_RE = re.compile(r'name="dpb_round"\s+value="([^"]*)"')
+
+
+def _fetch_decision_token(port: int, timeout: float = 3.0) -> tuple[str, int]:
+    """GET / and extract the one-time dpb_token + dpb_round from the parent form."""
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=timeout) as sock:
+                sock.sendall(
+                    f"GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+                    "Connection: close\r\n\r\n".encode("ascii")
+                )
+                chunks: list[bytes] = []
+                while True:
+                    data = sock.recv(65536)
+                    if not data:
+                        break
+                    chunks.append(data)
+                body = b"".join(chunks).decode("utf-8", errors="replace")
+            m_tok = _TOKEN_RE.search(body)
+            m_round = _ROUND_RE.search(body)
+            if m_tok and m_round:
+                return m_tok.group(1), int(m_round.group(1))
+        except OSError:
+            pass
+        time.sleep(0.02)
+    raise AssertionError("could not fetch dpb_token/dpb_round from parent page")
 
 
 def _load_server_module():
@@ -118,10 +153,15 @@ class PreviewCollectShutdownTests(unittest.TestCase):
             if not port:
                 sticky_done.set()
                 return
+            from urllib.parse import quote
+
+            token, round_n = _fetch_decision_token(port)
             body = (
                 "choice=%E7%A1%AE%E8%AE%A4%E9%80%9A%E8%BF%87"
                 "&feedback="
                 "&anchors_json=%5B%5D"
+                + f"&dpb_token={quote(token)}"
+                + f"&dpb_round={round_n}"
             )
             payload = body.encode("ascii")
             req = (
@@ -204,11 +244,14 @@ class PreviewCollectShutdownTests(unittest.TestCase):
             while time.time() < deadline and not port_box.get("port"):
                 time.sleep(0.02)
             port = port_box["port"]
+            token, round_n = _fetch_decision_token(port)
             body = (
                 "choice=%E9%9C%80%E8%A6%81%E4%BF%AE%E6%94%B9"
                 "&feedback=%E8%AF%B7%E8%B0%83%E6%95%B4"
                 "&anchors_json="
                 + quote(json.dumps([anchor], ensure_ascii=False))
+                + f"&dpb_token={quote(token)}"
+                + f"&dpb_round={round_n}"
             )
             payload = body.encode("ascii")
             request = (
@@ -255,6 +298,185 @@ class PreviewCollectShutdownTests(unittest.TestCase):
         self.assertIn("\u6309\u94ae\u5c42\u7ea7\u4e0d\u6e05\u6670", decision["feedback"])
         close_window.assert_called_once_with(mock.sentinel.proc)
         kill_browser.assert_called_once_with(mock.sentinel.proc, "profile")
+
+    def test_post_with_bogus_token_is_rejected(self) -> None:
+        """G5 stdio e2e: a POST whose dpb_token does not match the parent
+        form's token must fail closed. The POST carries *a* token (so the
+        session terminates per MEDIUM-1), and the caller observes the
+        rejected decision rather than hanging.
+        """
+        server = _load_server_module()
+        port_box: dict[str, int] = {}
+
+        def bogus_token_client() -> None:
+            deadline = time.time() + 5
+            port = None
+            while time.time() < deadline:
+                port = port_box.get("port")
+                if port:
+                    break
+                time.sleep(0.02)
+            if not port:
+                return
+            # Lift the real round, but POST a bogus token.
+            _token, round_n = _fetch_decision_token(port)
+            body = (
+                "choice=%E7%A1%AE%E8%AE%A4%E9%80%9A%E8%BF%87"
+                "&feedback=forged"
+                "&anchors_json=%5B%5D"
+                "&dpb_token=bogus-not-the-real-token"
+                + f"&dpb_round={round_n}"
+            )
+            payload = body.encode("ascii")
+            req = (
+                f"POST /decide HTTP/1.1\r\n"
+                f"Host: 127.0.0.1:{port}\r\n"
+                "Content-Type: application/x-www-form-urlencoded\r\n"
+                f"Content-Length: {len(payload)}\r\n"
+                "Connection: close\r\n\r\n"
+            ).encode("ascii") + payload
+            with socket.create_connection(("127.0.0.1", port), timeout=3) as sock:
+                sock.sendall(req)
+                sock.settimeout(3)
+                try:
+                    sock.recv(65536)
+                except socket.timeout:
+                    pass
+
+        real_http = server.HTTPServer
+
+        class StashingHTTPServer(real_http):  # type: ignore[misc, valid-type]
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                port_box["port"] = self.server_address[1]
+
+        client_thread = threading.Thread(target=bogus_token_client, daemon=True)
+        client_thread.start()
+        with tempfile.TemporaryDirectory() as tmp:
+            proto = Path(tmp) / "proto.html"
+            proto.write_text(
+                "<html><body><h1>proto</h1></body></html>",
+                encoding="utf-8",
+            )
+            with mock.patch.object(browser, "HTTPServer", StashingHTTPServer), mock.patch.object(
+                browser, "_open_preview_window", return_value=(None, None)
+            ), mock.patch.object(browser, "_request_browser_window_close"), mock.patch.object(
+                browser, "_kill_browser_proc"
+            ):
+                decision = server._collect_via_browser(
+                    proto,
+                    "summary",
+                    ["确认通过", "需要修改"],
+                    1,
+                )
+
+        client_thread.join(timeout=3)
+        self.assertFalse(client_thread.is_alive())
+        self.assertFalse(decision["confirmed"])
+        self.assertTrue(decision.get("rejected"))
+        self.assertEqual(decision.get("rejection"), "invalid_token")
+
+    def test_replay_same_token_is_rejected(self) -> None:
+        """G5 stdio e2e: posting the same dpb_token twice must reject the
+        second POST as a replay (first-decision-wins session).
+
+        Determinism: the first valid POST done.set()s, which wakes the main
+        thread toward shutdown. We gate ``_stop_http_server`` on a
+        ``client_done`` event so the second POST is guaranteed to be
+        processed by the still-alive server before serve_forever stops;
+        the replayed POST then overwrites the confirmed result with a
+        rejected one.
+        """
+        server = _load_server_module()
+        port_box: dict[str, int] = {}
+        client_done = threading.Event()
+
+        def replay_client() -> None:
+            deadline = time.time() + 5
+            port = None
+            while time.time() < deadline:
+                port = port_box.get("port")
+                if port:
+                    break
+                time.sleep(0.02)
+            if not port:
+                client_done.set()
+                return
+            from urllib.parse import quote
+
+            token, round_n = _fetch_decision_token(port)
+            body = (
+                "choice=%E7%A1%AE%E8%AE%A4%E9%80%9A%E8%BF%87"
+                "&feedback=ok"
+                "&anchors_json=%5B%5D"
+                + f"&dpb_token={quote(token)}"
+                + f"&dpb_round={round_n}"
+            )
+            payload = body.encode("ascii")
+            req = (
+                f"POST /decide HTTP/1.1\r\n"
+                f"Host: 127.0.0.1:{port}\r\n"
+                "Content-Type: application/x-www-form-urlencoded\r\n"
+                f"Content-Length: {len(payload)}\r\n"
+                "Connection: close\r\n\r\n"
+            ).encode("ascii") + payload
+            # POST 1: first valid use of the token - locks the session.
+            with socket.create_connection(("127.0.0.1", port), timeout=3) as sock:
+                sock.sendall(req)
+                sock.settimeout(3)
+                try:
+                    sock.recv(65536)
+                except socket.timeout:
+                    pass
+            # POST 2: same token - must be rejected as reuse.
+            with socket.create_connection(("127.0.0.1", port), timeout=3) as sock:
+                sock.sendall(req)
+                sock.settimeout(3)
+                try:
+                    sock.recv(65536)
+                except socket.timeout:
+                    pass
+            client_done.set()
+
+        real_http = server.HTTPServer
+        real_stop = browser._stop_http_server
+
+        def gated_stop(srv, serve_thread, *, timeout_s=1.5):  # type: ignore[no-untyped-def]
+            client_done.wait(timeout=5)
+            real_stop(srv, serve_thread, timeout_s=timeout_s)
+
+        class StashingHTTPServer(real_http):  # type: ignore[misc, valid-type]
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                port_box["port"] = self.server_address[1]
+
+        client_thread = threading.Thread(target=replay_client, daemon=True)
+        client_thread.start()
+        with tempfile.TemporaryDirectory() as tmp:
+            proto = Path(tmp) / "proto.html"
+            proto.write_text(
+                "<html><body><h1>proto</h1></body></html>",
+                encoding="utf-8",
+            )
+            with mock.patch.object(browser, "HTTPServer", StashingHTTPServer), mock.patch.object(
+                browser, "_open_preview_window", return_value=(None, None)
+            ), mock.patch.object(browser, "_request_browser_window_close"), mock.patch.object(
+                browser, "_kill_browser_proc"
+            ), mock.patch.object(browser, "_stop_http_server", gated_stop):
+                decision = server._collect_via_browser(
+                    proto,
+                    "summary",
+                    ["确认通过", "需要修改"],
+                    1,
+                )
+
+        client_thread.join(timeout=3)
+        self.assertFalse(client_thread.is_alive())
+        # The replayed (second) POST overwrites the confirmed result with a
+        # rejected one; the session correctly identifies the reuse.
+        self.assertFalse(decision["confirmed"])
+        self.assertTrue(decision.get("rejected"))
+        self.assertEqual(decision.get("rejection"), "reuse")
 
     def test_stop_http_server_joins_serve_thread(self) -> None:
         server_mod = _load_server_module()
