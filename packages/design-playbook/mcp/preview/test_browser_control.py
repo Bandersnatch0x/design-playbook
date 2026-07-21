@@ -324,9 +324,15 @@ class TrustBoundaryIntegrationTests(unittest.TestCase):
         self.assertNotIn("rejected", decision)
 
     def test_round_mismatch_rejected_at_http(self) -> None:
+        # A POST whose dpb_round does not match the session round is rejected
+        # (validate -> round_mismatch) and, per MEDIUM-1, must NOT end the
+        # session - the real user can still confirm afterward. The mismatch
+        # POST is fail closed internally; the subsequent valid POST wins,
+        # proving the mismatch neither consumed nor hijacked the session.
         def client(port: int) -> None:
             page = _get_page(port)
             token = _extract_token(page) or ""
+            # 1) Mismatched-round POST: rejected, must not terminate.
             _post_form(
                 port,
                 {
@@ -337,12 +343,23 @@ class TrustBoundaryIntegrationTests(unittest.TestCase):
                     "dpb_round": "99",
                 },
             )
+            # 2) Real user's valid-round POST: must still confirm.
+            _post_form(
+                port,
+                {
+                    "choice": "确认通过",
+                    "feedback": "real user",
+                    "anchors_json": "[]",
+                    "dpb_token": token,
+                    "dpb_round": "1",
+                },
+            )
 
         decision = _run_collect("<html><body>x</body></html>", client)
-        self.assertFalse(decision["confirmed"])
-        self.assertFalse(decision["floor_pass"])
-        self.assertTrue(decision.get("rejected"))
-        self.assertEqual(decision.get("rejection"), "round_mismatch")
+        # Mismatch did not hijack: the real user's valid POST wins.
+        self.assertTrue(decision["confirmed"])
+        self.assertEqual(decision["selected_options"], ["确认通过"])
+        self.assertFalse(decision.get("aborted"))
 
     def test_normal_confirm_with_token_passes(self) -> None:
         def client(port: int) -> None:
