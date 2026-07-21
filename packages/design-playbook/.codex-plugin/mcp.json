@@ -10,6 +10,7 @@
       "command": "python",
       "args": ["./mcp/evidence/server.py"],
       "cwd": ".",
+      "env_vars": ["DESIGN_PLAYBOOK_RUN_ROOT"],
       "timeout": 3600000
     }
   }

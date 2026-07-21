@@ -12,6 +12,7 @@
       "args": [
         "${CLAUDE_PLUGIN_ROOT}/mcp/evidence/server.py"
       ],
+      "env_vars": ["DESIGN_PLAYBOOK_RUN_ROOT"],
       "timeout": 3600000
     }
   }
