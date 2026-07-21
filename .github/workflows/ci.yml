@@ -79,20 +79,19 @@ jobs:
         # (server.py): unknown-arg / manifest.jsonl / G6 evidence-subtree
         # containment / overwrite opt-in / JSON-RPC parse-error all
         # short-circuit first, so they pass with or without chromium.
-        # TODO(ticket 06 follow-up): replace the -k keyword filter with
-        # pytest markers (needs a conftest.py — out of scope for this
-        # ci.yml-only change) so new capture tests cannot silently slip
-        # past the chromium gate. Update this list when capture tests are
-        # added or renamed.
+        # Selection is by class name (review item M3): every test in
+        # EvidencePurePathTests runs here; EvidenceCaptureTests runs in the
+        # chromium gate below. Unlike the previous -k keyword OR-list, new
+        # tests are picked up automatically by their class — no
+        # hand-maintained list to silently drift out of sync (the old list
+        # silently skipped any new test whose name matched no keyword).
+        # Note: -k PurePathTests (not -k Capture on the other gate) because
+        # `test_tools_list_exposes_execute_capture_plan` is a pure-path
+        # test whose method name contains "capture"; filtering on the full
+        # class-name suffix keeps the two groups disjoint.
         run: |
           python3 -m pytest packages/design-playbook/mcp/evidence/test_server_stdio.py -v \
-            -k "tools_list_exposes_execute_capture_plan \
-                or provider_rejects_criterion_field \
-                or provider_rejects_manifest_variants_and_path_escape \
-                or provider_rejects_non_evidence_subtree_paths \
-                or provider_refuses_overwrite_without_opt_in \
-                or provider_rejects_unknown_and_criterion_ref_fields \
-                or malformed_messages_return_parse_error_and_server_continues"
+            -k PurePathTests
 
       - name: Install Playwright + chromium (ticket 06 default path)
         id: pw_install
@@ -112,14 +111,10 @@ jobs:
         # Real-browser captures: screenshot, a11y tree, interaction trace,
         # select_option, failure paths, overwrite opt-in. Requires the
         # Playwright + chromium install step above to have succeeded.
+        # Selection by class name (review item M3): EvidenceCaptureTests.
         run: |
           python3 -m pytest packages/design-playbook/mcp/evidence/test_server_stdio.py -v \
-            -k "screenshot_capture_writes_artifact_never_manifest \
-                or capture_without_explicit_page_state_reports_unknown \
-                or a11y_tree_and_interaction_trace_write_artifacts \
-                or select_option_action_drives_native_select \
-                or failure_paths_never_echo_requested_state_as_observed \
-                or provider_overwrites_when_opted_in"
+            -k CaptureTests
 
       - name: Playwright missing — skip-with-reason, mark gate red
         if: steps.pw_install.outcome != 'success'

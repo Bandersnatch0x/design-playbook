@@ -15,7 +15,12 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-# Sibling modules live next to this file (script dir is sys.path[0]).
+# Sibling modules live next to this file. pytest's default prepend mode only
+# puts this dir on sys.path[0] when it has no __init__.py; mcp/preview/ is now
+# a package (see __init__.py) so the two same-named test_server_stdio.py files
+# in preview/ and evidence/ collect under package-qualified names without an
+# import-mismatch — so make the sibling dir importable explicitly here.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 # After server.py was split, the browser/HTTP helpers moved to browser.py;
 # _collect_via_browser resolves them from the ``browser`` namespace, so the
 # patches must target ``browser``. ``server`` re-exports the same names, which
@@ -511,6 +516,66 @@ class PreviewCollectShutdownTests(unittest.TestCase):
         server_mod._stop_http_server(http, serve_thread, timeout_s=0.4)
 
         self.assertFalse(serve_thread.is_alive())
+
+
+class PreviewLogRejectionTests(unittest.TestCase):
+    """LOW-4 (secure-ship-0.4.4): a rejected decision's rejection reason
+    must persist to preview_dir/log.md so a fail-closed G5 event (forged
+    token / replay / round mismatch) is auditable on disk, not just in the
+    in-memory MCP payload that vanishes when the call returns.
+    """
+
+    def _run_handle(self, server_mod: object, tmp: str, decision: dict) -> dict:
+        proto = Path(tmp) / "proto.html"
+        proto.write_text("<html></html>", encoding="utf-8")
+        with mock.patch.object(server_mod, "_collect_via_browser",
+                               return_value=decision):
+            return server_mod.handle_preview_prototype(
+                {
+                    "path": str(proto),
+                    "summary": "summary",
+                    "round": 1,
+                    "report_ref": "report-1",
+                }
+            )
+
+    def test_rejected_decision_writes_rejection_line_to_log(self) -> None:
+        server_mod = _load_server_module()
+        rejected_decision = {
+            "confirmed": False,
+            "selected_options": [],
+            "feedback": "forged",
+            "aborted": True,
+            "anchors": [],
+            "rejected": True,
+            "rejection": "invalid_token",
+            "floor_pass": False,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = self._run_handle(server_mod, tmp, rejected_decision)
+            log_text = (Path(tmp) / "log.md").read_text(encoding="utf-8")
+
+        self.assertFalse(payload["confirmed"])
+        self.assertIn("- rejected: true", log_text)
+        self.assertIn("- rejection: invalid_token", log_text)
+
+    def test_confirmed_decision_does_not_write_rejection_line(self) -> None:
+        server_mod = _load_server_module()
+        confirmed_decision = {
+            "confirmed": True,
+            "selected_options": ["确认通过"],
+            "feedback": "ok",
+            "aborted": False,
+            "anchors": [],
+            "floor_pass": True,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = self._run_handle(server_mod, tmp, confirmed_decision)
+            log_text = (Path(tmp) / "log.md").read_text(encoding="utf-8")
+
+        self.assertTrue(payload["confirmed"])
+        self.assertNotIn("rejected:", log_text)
+        self.assertNotIn("rejection:", log_text)
 
 
 if __name__ == "__main__":

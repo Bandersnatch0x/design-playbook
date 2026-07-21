@@ -164,6 +164,8 @@ def handle_preview_prototype(args: dict[str, Any]) -> dict[str, Any]:
         anchors=list(decision.get("anchors") or []),
         floor_pass=floor_pass,
         floor_failure=floor_failure,
+        rejected=bool(decision.get("rejected")),
+        rejection=str(decision.get("rejection") or ""),
     )
     return {
         "confirmed": confirmed,
