@@ -67,15 +67,32 @@ class CodexManifestTest(_ManifestMixin, unittest.TestCase):
     manifest_path = CODEX_MANIFEST
 
     def test_keeps_relative_cwd(self) -> None:
-        # Codex has no workspace variable, so cwd stays as "." — the host
-        # installer is expected to anchor it to the host workspace. Removing
-        # the static RUN_ROOT relies on this cwd flowing into _run_root().
+        # Issue 09 (env_vars passthrough): cwd stays "." so the loader anchors
+        # it to plugin_root, which is what lets the relative args resolve the
+        # server script (server.py self-locates via __file__ for its imports,
+        # so cwd is single-duty = script location, not run_root). run_root now
+        # comes from env_vars passthrough, not cwd.
         evidence = self._evidence()
         self.assertEqual(
             evidence.get("cwd"),
             ".",
-            "Codex manifest must keep cwd='.' so _run_root() cwd-fallback "
-            "resolves to the host workspace, not the plugin cache",
+            "Codex manifest must keep cwd='.' (anchored to plugin_root by the "
+            "loader) so the relative args resolve the server script",
+        )
+
+    def test_evidence_passes_through_run_root_env_var(self) -> None:
+        # Issue 09: codex has no workspace variable and no env interpolation,
+        # so the only host-trusted channel for run_root is env_vars (name
+        # passthrough). The host sets DESIGN_PLAYBOOK_RUN_ROOT before launching
+        # codex; this entry forwards it to the evidence server process.
+        evidence = self._evidence()
+        env_vars = evidence.get("env_vars") or []
+        self.assertIn(
+            RUN_ROOT_ENV,
+            env_vars,
+            "Codex manifest must list DESIGN_PLAYBOOK_RUN_ROOT in env_vars so "
+            "the host-set value is forwarded to the evidence server "
+            "(codex has no workspace variable / env interpolation)",
         )
 
 
@@ -97,6 +114,20 @@ class ClaudeManifestTest(_ManifestMixin, unittest.TestCase):
         self.assertTrue(
             any("${CLAUDE_PLUGIN_ROOT}" in str(a) for a in args),
             "Claude manifest must reference ${CLAUDE_PLUGIN_ROOT} in args",
+        )
+
+    def test_evidence_passes_through_run_root_env_var(self) -> None:
+        # Issue 09 (ADR-0009 symmetry): Claude side mirrors the Codex env_vars
+        # passthrough. Behavior is unchanged when unset (falls back to
+        # Path.cwd() = host project), but the symmetric declaration keeps the
+        # run_root mechanism consistent across both manifests.
+        evidence = self._evidence()
+        env_vars = evidence.get("env_vars") or []
+        self.assertIn(
+            RUN_ROOT_ENV,
+            env_vars,
+            "Claude manifest must mirror the Codex env_vars passthrough for "
+            "DESIGN_PLAYBOOK_RUN_ROOT (ADR-0009 run_root mechanism symmetry)",
         )
 
 
