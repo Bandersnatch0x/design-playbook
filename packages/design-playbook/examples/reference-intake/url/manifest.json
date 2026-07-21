@@ -1,0 +1,15 @@
+{
+  "schema": "design-playbook.reference.manifest/v1",
+  "run_id": "fixture-url",
+  "captured_at": "2026-07-22T10:05:00+08:00",
+  "tool": "reference-intake",
+  "sources": [
+    {
+      "id": "src-1",
+      "kind": "url",
+      "locator": "https://example.com/docs/settings/notifications",
+      "sha256": null,
+      "note": "example.com placeholder for fixture shape only"
+    }
+  ]
+}

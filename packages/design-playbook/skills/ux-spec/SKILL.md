@@ -13,7 +13,9 @@ Write a **six-layer `spec.md`**: the functional **declaration** for what must be
 
 From the ask, fix the user-visible goal, target user, in-scope scenes, **non-goals**, and always/ask/never boundaries. Ask only when a missing answer materially changes one of them; otherwise record a conservative assumption.
 
-**Done when:** all five L1 fields are explicit — goal, target user, in-scope scenes, non-goals, and always/ask/never boundaries — with each assumption labeled as such; none left blank or implied.
+When `.scratch/<run>/reference/contract.md` exists (ADR-0011), **read it before writing L1–L6**. Fold its functional constraints, non-goals implied by Do not copy, and always/ask/never hints into L1 (and later L5/L6 edges). Cite the path; do not re-derive the screenshot from memory. The reference contract is input only — it does not replace any L1–L6 heading.
+
+**Done when:** all five L1 fields are explicit — goal, target user, in-scope scenes, non-goals, and always/ask/never boundaries — with each assumption labeled as such; none left blank or implied; and if a reference contract exists, its functional constraints are reflected (or an explicit rejected-with-reason note is recorded).
 
 ### 2. Expand L2–L4
 

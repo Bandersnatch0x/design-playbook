@@ -31,7 +31,7 @@ Gates: working tree clean (untracked files also block) · versions match across 
 
 ## Five-step gate (manual)
 
-- [ ] **1. Plugin loads:** `claude --plugin-dir <abs>/packages/design-playbook` starts; `/reload-plugins` reports no errors; six skills + three commands appear under the `design-playbook` namespace in `/help`. **Semi-automated (v0.4):** `scripts/doctor.py` checks the static counts (6 skills / 3 commands / plugin.json namespace); the dynamic `--plugin-dir` load + `/help` listing stay human (host slash, not automatable).
+- [ ] **1. Plugin loads:** `claude --plugin-dir <abs>/packages/design-playbook` starts; `/reload-plugins` reports no errors; seven skills + three commands appear under the `design-playbook` namespace in `/help`. **Semi-automated (v0.4):** `scripts/doctor.py` checks the static counts (7 skills / 3 commands / plugin.json namespace); the dynamic `--plugin-dir` load + `/help` listing stay human (host slash, not automatable).
 - [ ] **2. Six-gate dogfood:** `/design-playbook:design-io <real product UI ask>` passes all six gates (L5/L6 before UI; decision report before code; point-back findings; no Done-when skip; generality; recirculate closure). Log under `.scratch/design-playbook-v0/dogfood/`.
 - [ ] **3. Validate:** `python scripts/validate.py` green (also in `release.py` and CI); `claude plugin validate` too if your Claude Code version has it.
 - [ ] **4. Clean surface:** covered by `scripts/validate.py` (runtime surface; attribution files excluded).

@@ -13,7 +13,9 @@ Before code: map the job to a **template** (shell) and **component semantics**. 
 
 Choose density (console-tight vs marketing-loose) and scene class (list / detail / settings / dashboard / editor / agent-admin / …).
 
-**Done when:** one scene label and one density choice are explicit.
+When `.scratch/<run>/reference/contract.md` exists (ADR-0011), read its **Visual cues for ui-picker**, Keep/Change, and Do not copy / exclusions. Use them as input for density, scene, region weight, and risks — never as hex tokens or as a license to copy brand chrome.
+
+**Done when:** one scene label and one density choice are explicit; if a reference contract exists, the decision report's risks or exclusions surface its Do not copy / brand risks (path citation is enough).
 
 ### 2. Template
 

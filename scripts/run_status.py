@@ -29,13 +29,14 @@ from validate_run import is_confirmed_valid, latest_numeric_round  # noqa: E402
 # Ordered pipeline stages used only for status/resume narration.
 #
 # Mirror of packages/design-playbook/skills/design-playbook/SKILL.md Steps
-# (spec / plan / decision / preview / fill / craft / evidence / accept).
+# (reference / spec / plan / decision / preview / fill / craft / evidence / accept).
 # That skill points back here as **monorepo-only** — this file is NOT shipped
 # inside the installable plugin package. When you add/remove a step or change
 # an artifact filename in SKILL.md, sync this table. A lockstep test or a
 # SKILL-embedded machine-readable table is deferred until ADR-0010 P1 turns
 # STAGES into a navigation data source.
 STAGES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("reference", "reference-intake", ("reference/contract.md", "reference/manifest.json")),
     ("spec", "ux-spec", ("spec.md",)),
     ("plan", "plan", ("plan.md",)),
     ("decision", "ui-picker", ("decision-report.md",)),
@@ -167,8 +168,10 @@ def next_action(states: list[StageState], run_root: Path) -> str:
         return "Resume at ui-picker (decision-report)."
     if "spec" in present and "decision" not in present and "plan" not in present:
         return "Resume at plan? (optional) or ui-picker."
+    if "reference" in present and "spec" not in present:
+        return "Resume at ux-spec (reference contract present)."
     if not present:
-        return "No run artifacts — start with /design-playbook:design-io <ask> (ux-spec)."
+        return "No run artifacts — start with /design-playbook:design-io <ask> (reference-intake? or ux-spec)."
     # partial unknown
     last = [s for s in states if s.present][-1]
     return f"Latest artifact stage: {last.key} ({last.skill}). Continue the orchestrator sequence from there."

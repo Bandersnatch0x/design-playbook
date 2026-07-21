@@ -199,6 +199,55 @@ for f in PKG.rglob("*"):
         pass
 check(not hits, f"no vendor residue in runtime surface (found in: {hits})" if hits else "no vendor residue in runtime surface")
 
+print("== Reference intake (ADR-0011) ==")
+ref_skill = PKG / "skills" / "reference-intake" / "SKILL.md"
+ref_template = PKG / "skills" / "reference-intake" / "references" / "contract-template.md"
+check(ref_skill.is_file(), "reference-intake skill present")
+check(ref_template.is_file(), "reference-intake contract template present")
+ref_body = ref_skill.read_text(encoding="utf-8") if ref_skill.is_file() else ""
+check(
+    "Keep" in ref_body and "Do not copy" in ref_body and "manifest.json" in ref_body,
+    "reference-intake names Keep/Do not copy and manifest.json",
+)
+playbook_for_ref = (PKG / "skills" / "design-playbook" / "SKILL.md").read_text(encoding="utf-8")
+check(
+    "reference-intake?" in playbook_for_ref and "ADR-0011" in playbook_for_ref,
+    "orchestrator data flow includes reference-intake? (ADR-0011)",
+)
+check(
+    (PKG / "examples" / "reference-intake" / "screenshot" / "contract.md").is_file()
+    and (PKG / "examples" / "reference-intake" / "url" / "manifest.json").is_file()
+    and (PKG / "examples" / "reference-intake" / "product-analogy" / "contract.md").is_file(),
+    "reference-intake examples cover screenshot/url/product-analogy",
+)
+ux_for_ref = (PKG / "skills" / "ux-spec" / "SKILL.md").read_text(encoding="utf-8")
+picker_for_ref = (PKG / "skills" / "ui-picker" / "SKILL.md").read_text(encoding="utf-8")
+eval_for_ref = (PKG / "skills" / "ui-evaluator" / "SKILL.md").read_text(encoding="utf-8")
+check(
+    "reference/contract.md" in ux_for_ref and "always/ask/never" in ux_for_ref,
+    "ux-spec consumes reference/contract.md before L1",
+)
+check(
+    "reference/contract.md" in picker_for_ref and "Visual cues" in picker_for_ref,
+    "ui-picker consumes reference visual cues",
+)
+check(
+    "reference/contract.md" in eval_for_ref
+    and "never" in eval_for_ref.lower()
+    and "L6 proof" in eval_for_ref,
+    "ui-evaluator may cite reference but not as L6 proof",
+)
+check(
+    "reference/assets" in playbook_for_ref and "reference/example.html" in playbook_for_ref,
+    "orchestrator Fill hard-boundary bans reference assets/example.html",
+)
+check(
+    "always / ask / never hints:" in ref_template.read_text(encoding="utf-8")
+    if ref_template.is_file()
+    else False,
+    "reference contract template includes always/ask/never hints",
+)
+
 print("== Native-desktop routing ==")
 orchestrator = (PKG / "skills" / "design-playbook" / "SKILL.md").read_text(encoding="utf-8")
 codex = (PKG / "codex" / "AGENTS.md").read_text(encoding="utf-8")

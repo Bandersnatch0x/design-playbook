@@ -1,0 +1,15 @@
+{
+  "schema": "design-playbook.reference.manifest/v1",
+  "run_id": "fixture-product-analogy",
+  "captured_at": "2026-07-22T10:10:00+08:00",
+  "tool": "reference-intake",
+  "sources": [
+    {
+      "id": "src-1",
+      "kind": "product_analogy",
+      "locator": "Linear (product analogy; no asset)",
+      "sha256": null,
+      "note": "taste anchor only"
+    }
+  ]
+}

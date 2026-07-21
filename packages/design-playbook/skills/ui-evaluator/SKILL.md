@@ -14,6 +14,8 @@ description: Run evidence-backed UI acceptance. Use after generating a page, or 
 Identify which of these apply to this surface (repo files, prior turns, or design-playbook defaults):  
 `spec` · `domain` · `craft` · `design` · `components` · `template`.
 
+When `.scratch/<run>/reference/contract.md` exists (ADR-0011), you **may** use it as supporting context for findings about copied brand chrome, distinctive illustration, or other **Do not copy** breaches (`source` = `reference` or the owning declaration). It is **never** L6 proof and never a Pass/Fail gate by itself.
+
 **Done when:** the check set is named; if `spec` L6 exists, every criterion and its required proof are on the list.
 
 ### 2. Run checks
@@ -92,6 +94,7 @@ Single source of truth for the observable -> declaration routing. The orchestrat
 | Badge↔Tag, Dialog↔Drawer mixups | `components` |
 | Wrong page shell (e.g. list as card wall) | `template` |
 | Desktop app feels like a web page / wrong seam | `native-craft` |
+| Copied third-party brand / Do not copy breach | `reference` (supporting) → fix in Fill / re-intake |
 | Critique with no owner | re-run `ui-evaluator` |
 
 Fix only the owning layer, then resume from the pipeline step that consumes it.
