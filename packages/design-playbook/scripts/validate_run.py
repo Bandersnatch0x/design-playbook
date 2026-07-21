@@ -489,6 +489,34 @@ def check_evidence(
     return errs
 
 
+def check_manifest_ts_warnings(evidence_dir: Path | None) -> list[str]:
+    """Soft signal: all manifest rows share one ``ts`` (likely batch bind).
+
+    Not a hard gate — root fix is orchestrator per-capture append (SKILL step 8).
+    Printed as WARN; does not fail the run. Fires only when ≥2 entries exist and
+    every non-empty ``ts`` value is identical (including when some rows omit ts
+    only if at least two share the same non-empty value and no other ts exists).
+    """
+    if evidence_dir is None or not evidence_dir.is_dir():
+        return []
+    entries = _manifest_entries(evidence_dir)
+    if len(entries) < 2:
+        return []
+    ts_vals = [
+        e.get("ts") for e in entries
+        if isinstance(e.get("ts"), str) and e.get("ts").strip()
+    ]
+    if len(ts_vals) < 2:
+        return []
+    if len(set(ts_vals)) == 1:
+        return [
+            "G6 evidence: all manifest entries share one ts "
+            f"({ts_vals[0]}); prefer per-capture append "
+            "(batch bind weakens multi-entry latest-by-ts)"
+        ]
+    return []
+
+
 def _ledger_has_evidence_binding(pointback_text: str) -> bool:
     for _criterion, observed in _ledger_observed(pointback_text):
         if observed.startswith(EVIDENCE_PREFIX):
@@ -504,8 +532,10 @@ def run(
         evidence_dir: str | None = None,
         run_root: str | None = None,
         require_preview: bool = False,
-        require_evidence: bool = False) -> list[str]:
-    errs = []
+        require_evidence: bool = False) -> tuple[list[str], list[str]]:
+    """Return ``(errors, warnings)``. Errors fail the run; warnings do not."""
+    errs: list[str] = []
+    warns: list[str] = []
     spec_text = Path(spec_path).read_text(encoding="utf-8")
     pointback_text = Path(pb_path).read_text(encoding="utf-8")
     errs += check_spec(spec_text)
@@ -532,7 +562,8 @@ def run(
                 "`observed` references an evidence/ artifact"
             )
     errs += check_evidence(pointback_text, len(_l6_items(spec_text)), ed, rr)
-    return errs
+    warns += check_manifest_ts_warnings(ed)
+    return errs, warns
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
@@ -593,7 +624,7 @@ def main(argv: list[str]) -> int:
         code = exc.code if isinstance(exc.code, int) else 2
         return code if code else 2
     try:
-        errs = run(
+        errs, warns = run(
             args.spec,
             args.point_back,
             preview_dir=args.preview_dir,
@@ -610,8 +641,12 @@ def main(argv: list[str]) -> int:
         print("RUN INVALID:")
         for e in errs:
             print(f"  FAIL  {e}")
+        for w in warns:
+            print(f"  WARN  {w}")
         return 1
     print("RUN OK: artifacts satisfy the deterministic seam")
+    for w in warns:
+        print(f"  WARN  {w}")
     return 0
 
 
