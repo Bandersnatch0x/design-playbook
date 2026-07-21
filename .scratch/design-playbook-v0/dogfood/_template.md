@@ -14,6 +14,20 @@ Scene: <class, chosen to differ from prior dogfoods>
 | No skip of Done when | |
 | Generalizes (not hardcoded to one scene) | |
 | Recirculate closure (blocking -> fix -> re-eval -> 0 blocking, or accepted) | |
+| Run artifact index shown (spec/plan/decision/preview?/fill/evidence?/point-back) | |
+
+## Run artifact index
+
+```text
+run root:   .scratch/<run>/
+spec:       ...
+plan:       ...
+decision:   ...
+preview:    ... | n/a
+fill:       ...
+evidence:   ... | n/a
+point-back: ...
+```
 
 ## Point-back findings
 

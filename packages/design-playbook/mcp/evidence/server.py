@@ -3,10 +3,14 @@
 
 Evidence Provider adapter (ticket 02). Captures artifacts via Playwright.
 Never writes manifest.jsonl; never accepts criterion refs (orchestrator binds).
+Returns relative ``artifact`` plus absolute ``written_path`` so RUN_ROOT/cwd
+misconfig is visible to the orchestrator.
 
 Run (plugin-bundled MCP config uses ${CLAUDE_PLUGIN_ROOT}):
   { "command": "python", "args": ["<plugin>/mcp/evidence/server.py"],
     "env": {"DESIGN_PLAYBOOK_RUN_ROOT": "."} }
+  DESIGN_PLAYBOOK_RUN_ROOT="." is process-cwd-relative — point it at the
+  absolute run root when the host workspace is not the MCP cwd.
 Compatibility launcher remains at packages/design-playbook-evidence/server.py.
 """
 from __future__ import annotations
@@ -45,7 +49,8 @@ def _tool_schema() -> dict[str, Any]:
         "description": (
             "Execute a capture plan snapshot: navigate, run actions, write one "
             "artifact (screenshot / a11y tree / interaction trace). Returns "
-            "capture result only — never writes manifest; never judges criteria."
+            "capture result only (artifact, observed_state, result, error, "
+            "written_path absolute) — never writes manifest; never judges criteria."
         ),
         "inputSchema": {
             "type": "object",
@@ -111,21 +116,41 @@ def _error_result(message: str) -> dict[str, Any]:
     }
 
 
-def _failed(artifact: str, error: str) -> dict[str, Any]:
+def _failed(
+    artifact: str, error: str, written_path: str = "",
+) -> dict[str, Any]:
+    """Capture failure payload.
+
+    ``written_path`` is the absolute path under the resolved run root when
+    known (empty when path resolution never ran). Callers must not treat a
+    non-empty path as proof the file exists — only as where the write was
+    attempted. Exposing the absolute path makes cwd / RUN_ROOT misconfig
+    visible to the orchestrator without a post-hoc filesystem search.
+    """
     return {
         "artifact": artifact,
         "observed_state": "unknown",
         "result": "failed",
         "error": error,
+        "written_path": written_path,
     }
 
 
-def _captured(artifact: str, observed_state: str) -> dict[str, Any]:
+def _captured(
+    artifact: str, observed_state: str, written_path: str,
+) -> dict[str, Any]:
+    """Successful capture payload.
+
+    ``written_path`` is always the absolute path of the written artifact
+    (resolved under DESIGN_PLAYBOOK_RUN_ROOT or process cwd). Relative
+    ``artifact`` stays the run-root-relative path for manifest binding.
+    """
     return {
         "artifact": artifact,
         "observed_state": observed_state,
         "result": "captured",
         "error": "",
+        "written_path": written_path,
     }
 
 
@@ -328,20 +353,23 @@ def execute_capture_plan(args: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(a, dict):
             raise ValueError(f"actions[{i}] must be an object")
 
+    rel = artifact_path.strip()
     try:
-        out_path = _resolve_artifact_path(artifact_path.strip())
+        out_path = _resolve_artifact_path(rel)
     except ValueError as exc:
-        return _failed(artifact_path.strip(), str(exc))
+        return _failed(rel, str(exc))
+    abs_written = str(out_path)
     # Refuse every case variant of the manifest execution-record SSOT.
     if out_path.name.casefold() == "manifest.jsonl":
-        return _failed(artifact_path.strip(), "provider never writes manifest.jsonl")
+        return _failed(rel, "provider never writes manifest.jsonl", abs_written)
 
     try:
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
         return _failed(
-            artifact_path.strip(),
+            rel,
             f"playwright not installed: {exc}",
+            abs_written,
         )
 
     try:
@@ -366,15 +394,16 @@ def execute_capture_plan(args: dict[str, Any]) -> dict[str, Any]:
                 browser.close()
     except Exception as exc:  # noqa: BLE001 — surface as capture failure
         _log(f"capture failed: {exc}")
-        return _failed(artifact_path.strip(), str(exc))
+        return _failed(rel, str(exc), abs_written)
 
     if not out_path.is_file():
         return _failed(
-            artifact_path.strip(),
+            rel,
             f"artifact not written: {out_path}",
+            abs_written,
         )
 
-    return _captured(artifact_path.strip(), observed)
+    return _captured(rel, observed, abs_written)
 
 
 def serve() -> None:

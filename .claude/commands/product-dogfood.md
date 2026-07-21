@@ -16,8 +16,9 @@ description: Dogfood Design I/O once; log process gaps only
 | No skip of Done when | |
 | Generalizes (not hardcoded to one scene) | |
 | Recirculate closure (blocking -> fix -> re-eval -> 0 blocking, or accepted) | |
+| Run artifact index shown (spec/plan/decision/preview?/fill/evidence?/point-back paths) | |
 
-4. Append log from the template at `.scratch/design-playbook-v0/dogfood/_template.md` to `.scratch/design-playbook-v0/dogfood/YYYY-MM-DD-HHmm.md`; fill gates + any skill fix suggestions (completion criteria / pointers only).
+4. Append log from the template at `.scratch/design-playbook-v0/dogfood/_template.md` to `.scratch/design-playbook-v0/dogfood/YYYY-MM-DD-HHmm.md`; fill gates + any skill fix suggestions (completion criteria / pointers only). The log must include the same **run artifact index** (absolute or run-root-relative paths) that step 9 of the design-playbook skill requires in chat.
 5. Do not expand product scope. Skill text edits -> `/writing-great-skills` discipline.
 
 Ask:
