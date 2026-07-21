@@ -1134,11 +1134,17 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         "pin_on",
         "pin_off",
         "terminate_confirm",
+        "abort_cancelled",  # 4s-timeout a11y broadcast (window.DPB_I18N.abort_cancelled)
     )
-    i18n_obj = {k: t(k) for k in JS_KEYS}
-    # abort 4s timeout a11y broadcast (not in the 14 JS title/label slots above)
-    i18n_obj["abort_cancelled"] = t("abort_cancelled")
-    i18n_json = json.dumps(i18n_obj, ensure_ascii=False)
+    # json.dumps is JS-safe for quotes/backslashes; also neutralize </script>
+    # and U+2028/2029 (pre-ES2019 JS string breaks) in case translations ever
+    # carry them — defense, not a current risk.
+    i18n_json = (
+        json.dumps({k: t(k) for k in JS_KEYS}, ensure_ascii=False)
+        .replace("</", "<\\/")
+        .replace(" ", "\\u2028")
+        .replace(" ", "\\u2029")
+    )
     return control_tpl.format(
         t_revise_labels=revise_js,
         i18n_json=i18n_json,
@@ -1147,13 +1153,13 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         pill_secondary_html=pill_secondary_html,
         primary_val=primary_val,
         primary_label=primary_label,
-        t_region=html_lib.escape(t("region_label")),
+        t_region=html_lib.escape(t("region_label"), quote=True),
         t_round=html_lib.escape(t("round_n", n=round_n)),
         t_annotate=html_lib.escape(t("annotate")),
         t_pill_open=html_lib.escape(t("pill_open")),
         t_not_ready=html_lib.escape(t("not_ready")),
-        t_drawer_aria=html_lib.escape(t("drawer_aria")),
-        t_collapse=html_lib.escape(t("collapse")),
+        t_drawer_aria=html_lib.escape(t("drawer_aria"), quote=True),
+        t_collapse=html_lib.escape(t("collapse"), quote=True),
         t_pin_toggle=html_lib.escape(t("pin_toggle")),
         t_pin_count=html_lib.escape(t("pin_count", n=0)),
         t_anchors_head=html_lib.escape(t("anchors_head")),
