@@ -161,7 +161,7 @@ After craft, probe MCP `tools/list` for **`execute_capture_plan`**.
 
    Prefer one root marker that matches the capture plan's `state` intent. Still **never invent** `observed_state` in the manifest — copy the provider return verbatim (unknown stays unknown).
 
-Evidence is captured, not judged: a manifest entry records that an artifact was collected at a state — it does not say the criterion passed. `pass`/`fail` is the evaluator's verdict (step 9) against `required` vs `observed`; a screenshot can prove a criterion false.
+Evidence is captured, not judged — copy provider returns verbatim here; `pass`/`fail` authority is the evaluator's (step 9 / `ui-evaluator`). Full authority model (three ledgers: spec names what to prove, manifest what happened, evaluator what it means): SSOT `ui-evaluator` step 2.
 
 **Done when:** either observe was skipped (no provider, ledger `observed` free-text), or each runtime-proven criterion has a manifest entry whose artifact exists (G6 when `validate_run.py` is given `--evidence-dir`); and if any capture used a mirror surface, the point-back includes the required mirror finding.
 

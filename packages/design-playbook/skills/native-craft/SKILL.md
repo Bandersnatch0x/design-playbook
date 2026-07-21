@@ -18,8 +18,8 @@ Inspired by yetone/native-feel-skill (MIT) - see `NOTICE`. Depth lives in [`refe
 
 The cross-platform boundary is drawn at the **WebView surface**, nowhere else.
 
-- **Below the seam** - windowing, hotkeys, materials, file dialogs, tray, a11y, input methods - **native**, written twice in idiomatic Swift / C#. No abstraction is fast or correct enough.
-- **Above the seam** - React tree, business logic, extension API - **shared**, written once in TS.
+- **Below the seam** - windowing, hotkeys, materials, file dialogs, tray, a11y, input methods, context menu - **native**, written twice in idiomatic Swift / C#. No abstraction is fast or correct enough.
+- **Above the seam** - React tree, business logic, extension API, AI orchestration - **shared**, written once in TS.
 
 Test every platform decision: *is this above or below the rendering surface?* Below -> write it twice. Above -> write it once. Refuse to draw the line elsewhere.
 

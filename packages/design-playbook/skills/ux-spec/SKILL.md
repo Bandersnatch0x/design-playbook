@@ -1,6 +1,6 @@
 ---
 name: ux-spec
-description: Write an outcome-first UI declaration. Use when turning a short product/UI ask into six-layer spec.md, or when goal, edge-state, acceptance, or evidence requirements are missing before build.
+description: Declaration-first UI spec (six-layer spec.md). Use when turning a short product/UI ask into six-layer spec.md, or when goal, edge-state, acceptance, or evidence requirements are missing before build.
 ---
 
 # ux-spec
@@ -13,7 +13,7 @@ Write a **six-layer `spec.md`**: the functional **declaration** for what must be
 
 From the ask, fix the user-visible goal, target user, in-scope scenes, **non-goals**, and always/ask/never boundaries. Ask only when a missing answer materially changes one of them; otherwise record a conservative assumption.
 
-**Done when:** a stranger could state the intended outcome, what the page is *not* for, and which actions require a user decision.
+**Done when:** all five L1 fields are explicit — goal, target user, in-scope scenes, non-goals, and always/ask/never boundaries — with each assumption labeled as such; none left blank or implied.
 
 ### 2. Expand L2–L4
 
@@ -38,7 +38,7 @@ Evidence is criterion-shaped: visible states require rendered inspection at name
 
 Output the full `spec.md` using the template structure. Stop. Do not scaffold UI or pick components here.
 
-**Done when:** one complete markdown spec exists for the next pipeline step (`ui-picker` / fill).
+**Done when:** one markdown spec exists containing every L1–L6 heading from the template, with steps 1–3 Done-when criteria still holding in the emitted file, ready for the next pipeline step (`ui-picker` / fill).
 
 ## Scope fence
 

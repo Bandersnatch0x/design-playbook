@@ -53,7 +53,5 @@ If template is underdetermined, offer 2–3 IA variants (same `spec`, different 
 
 ## Defaults that hold
 
-- Prefer production templates over sample/playground shells.  
 - Brand color as token/role, not a hex literal.  
-- Badge → status/count/attachment; Tag → type/category/removable facet.  
-- Dialog → interrupt confirm; Drawer → dense detail.
+- Easy-mix pair semantics and shell 禁用 rules live in `references/components.md` and `references/template.md` — resolve against those tables, not from memory.
