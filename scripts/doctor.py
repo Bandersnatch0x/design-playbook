@@ -174,6 +174,80 @@ def check_mcp() -> None:
 # read-only, so this only reports drift rather than gating a release; the
 # authoritative gate lives in validate.py / release.py. Keep in sync when
 # the Codex dual-publish surface changes.
+#
+# Split into three single-responsibility helpers (H3) so each check is
+# independently testable with a crafted payload, without standing up the
+# full four-file fixture the orchestrator reads. ``check_codex_manifest``
+# only loads the manifests and dispatches; behaviour is unchanged.
+def _check_codex_plugin_version(
+    claude_version: str, codex_plugin: dict | None
+) -> None:
+    """Surface Claude vs Codex ``plugin.json`` version drift (issue 07 / H5)."""
+    if codex_plugin is None:
+        return
+    raw = codex_plugin.get("version", "")
+    codex_version = raw if isinstance(raw, str) else ""
+    if codex_version and codex_version == claude_version:
+        ok(f".codex-plugin/plugin.json version matches Claude ({codex_version})")
+    else:
+        fail(
+            f".codex-plugin/plugin.json version drift: "
+            f"codex={codex_version!r}, claude={claude_version!r}"
+        )
+
+
+def _check_codex_mcp_targets(codex_mcp: dict | None) -> None:
+    """Verify each Codex MCP server is registered and its ``args[0]`` resolves."""
+    if codex_mcp is None:
+        return
+    servers = codex_mcp.get("mcpServers", {})
+    servers = servers if isinstance(servers, dict) else {}
+    for name in ("design-playbook-preview", "design-playbook-evidence"):
+        entry = servers.get(name)
+        if not isinstance(entry, dict):
+            fail(f".codex-plugin/mcp.json missing server {name}")
+            continue
+        ok(f".codex-plugin/mcp.json registers {name}")
+        raw_args = entry.get("args", [])
+        args_list = raw_args if isinstance(raw_args, list) else []
+        target_arg = args_list[0] if args_list and isinstance(args_list[0], str) else ""
+        if not target_arg:
+            fail(f".codex-plugin/mcp.json {name} missing args[0] path")
+            continue
+        target = PKG / target_arg
+        if target.is_file():
+            ok(f".codex-plugin/mcp.json {name} target exists: {target_arg}")
+        else:
+            fail(f".codex-plugin/mcp.json {name} target missing: {target_arg}")
+
+
+def _check_agents_marketplace(agents_market: dict | None) -> None:
+    """Verify ``.agents`` marketplace ``plugins[0].source.path`` resolves."""
+    if agents_market is None:
+        return
+    plugins = agents_market.get("plugins", [])
+    plugins = plugins if isinstance(plugins, list) else []
+    if not plugins:
+        fail(".agents marketplace lists no plugin")
+    elif isinstance(plugins[0], dict):
+        src = plugins[0].get("source", "")
+        src_path = ""
+        if isinstance(src, dict):
+            raw_path = src.get("path", "")
+            src_path = raw_path if isinstance(raw_path, str) else ""
+        elif isinstance(src, str):
+            src_path = src
+        if not src_path:
+            fail(".agents marketplace plugins[0].source.path missing")
+        elif (ROOT / src_path).is_dir():
+            ok(f".agents marketplace plugins[0].source.path exists: {src_path}")
+        else:
+            fail(
+                ".agents marketplace plugins[0].source.path "
+                f"missing on disk: {src_path}"
+            )
+
+
 def check_codex_manifest() -> None:
     print("== Codex manifest (ADR-0009 dual-publish) ==")
     claude_plugin = read_json(PKG / ".claude-plugin" / "plugin.json")
@@ -186,60 +260,9 @@ def check_codex_manifest() -> None:
         raw = claude_plugin.get("version", "")
         claude_version = raw if isinstance(raw, str) else ""
 
-    if codex_plugin is not None:
-        raw = codex_plugin.get("version", "")
-        codex_version = raw if isinstance(raw, str) else ""
-        if codex_version and codex_version == claude_version:
-            ok(f".codex-plugin/plugin.json version matches Claude ({codex_version})")
-        else:
-            fail(
-                f".codex-plugin/plugin.json version drift: "
-                f"codex={codex_version!r}, claude={claude_version!r}"
-            )
-
-    if codex_mcp is not None:
-        servers = codex_mcp.get("mcpServers", {})
-        servers = servers if isinstance(servers, dict) else {}
-        for name in ("design-playbook-preview", "design-playbook-evidence"):
-            entry = servers.get(name)
-            if not isinstance(entry, dict):
-                fail(f".codex-plugin/mcp.json missing server {name}")
-                continue
-            ok(f".codex-plugin/mcp.json registers {name}")
-            raw_args = entry.get("args", [])
-            args_list = raw_args if isinstance(raw_args, list) else []
-            target_arg = args_list[0] if args_list and isinstance(args_list[0], str) else ""
-            if not target_arg:
-                fail(f".codex-plugin/mcp.json {name} missing args[0] path")
-                continue
-            target = PKG / target_arg
-            if target.is_file():
-                ok(f".codex-plugin/mcp.json {name} target exists: {target_arg}")
-            else:
-                fail(f".codex-plugin/mcp.json {name} target missing: {target_arg}")
-
-    if agents_market is not None:
-        plugins = agents_market.get("plugins", [])
-        plugins = plugins if isinstance(plugins, list) else []
-        if not plugins:
-            fail(".agents marketplace lists no plugin")
-        elif isinstance(plugins[0], dict):
-            src = plugins[0].get("source", "")
-            src_path = ""
-            if isinstance(src, dict):
-                raw_path = src.get("path", "")
-                src_path = raw_path if isinstance(raw_path, str) else ""
-            elif isinstance(src, str):
-                src_path = src
-            if not src_path:
-                fail(".agents marketplace plugins[0].source.path missing")
-            elif (ROOT / src_path).is_dir():
-                ok(f".agents marketplace plugins[0].source.path exists: {src_path}")
-            else:
-                fail(
-                    ".agents marketplace plugins[0].source.path "
-                    f"missing on disk: {src_path}"
-                )
+    _check_codex_plugin_version(claude_version, codex_plugin)
+    _check_codex_mcp_targets(codex_mcp)
+    _check_agents_marketplace(agents_market)
 
 
 def check_floor_self_check(*, skip: bool) -> None:

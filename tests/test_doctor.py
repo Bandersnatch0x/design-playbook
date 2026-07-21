@@ -102,5 +102,61 @@ class DoctorTests(unittest.TestCase):
         )
 
 
+    def test_check_codex_mcp_targets_fails_on_missing_target(self) -> None:
+        """H3: ``_check_codex_mcp_targets`` must FAIL when a Codex MCP
+        server's ``args[0]`` target does not resolve on disk. The split
+        helper takes a crafted payload directly, so this exercises the
+        fail branch without the four-file fixture the orchestrator reads.
+        """
+        doctor = _load_doctor_module()
+        payload = {
+            "mcpServers": {
+                "design-playbook-preview": {"args": ["./does-not-exist/preview.py"]},
+                "design-playbook-evidence": {"args": ["./does-not-exist/evidence.py"]},
+            }
+        }
+        orig_failures = doctor.failures[:]
+        doctor.failures = []
+        try:
+            doctor._check_codex_mcp_targets(payload)
+            captured = list(doctor.failures)
+        finally:
+            doctor.failures = orig_failures
+
+        target_fails = [
+            f for f in captured
+            if "target missing" in f and "./does-not-exist/preview.py" in f
+        ]
+        self.assertTrue(
+            target_fails,
+            f"expected missing-target failure, got: {captured}",
+        )
+
+    def test_check_agents_marketplace_fails_on_missing_source_path(self) -> None:
+        """H3: ``_check_agents_marketplace`` must FAIL when
+        ``plugins[0].source.path`` points at a directory that does not
+        exist on disk. Mirrors the kind of regression a repo move would
+        cause; the helper is called directly with a crafted payload.
+        """
+        doctor = _load_doctor_module()
+        payload = {"plugins": [{"source": {"path": "./does-not-exist-pkg"}}]}
+        orig_failures = doctor.failures[:]
+        doctor.failures = []
+        try:
+            doctor._check_agents_marketplace(payload)
+            captured = list(doctor.failures)
+        finally:
+            doctor.failures = orig_failures
+
+        source_fails = [
+            f for f in captured
+            if "missing on disk" in f and "./does-not-exist-pkg" in f
+        ]
+        self.assertTrue(
+            source_fails,
+            f"expected missing source-path failure, got: {captured}",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
