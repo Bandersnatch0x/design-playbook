@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **v0.4.4 shipped**（2026-07-21，security-hardening：G5 iframe+token 信任边界隔离、forged-POST 修复、Codex marketplace install path；Codex RUN_ROOT = opt-in env_vars + known limitations，完整 codex_exec smoke 因本机 proxy 403 未跑）。HEAD 领先 tag **7 个未发布 commit**（reference-intake skill/ADR-0011、preview pin-to-annotate 修复、G6 casefold 修复、README hero 等）→ 下一版按 semver 为 **v0.5.0**。当前周期 `.scratch/secure-ship-0.4.4/`：02+03 圆桌裁决中；05 **blocked（release-blocking**，缺 codex_exec 可用环境）；06 blocked by 05。3b community catalog 仍 **BLOCKED**（region + Claude 账号 on hold/`account_banned`；粘贴包见 `community-catalog-checklist.md`）。上一里程碑:v0.4.2（2026-07-21）。
+**Current:** **v0.4.4 shipped**（2026-07-21，security-hardening：G5 iframe+token 信任边界隔离、forged-POST 修复、Codex marketplace install path）。`secure-ship-0.4.4` 周期基本收口：02/03 圆桌裁决已 resolved 并实现（BYPASS-1 renumber replay + BYPASS-2 hash-strip + TOCTOU 修复 + fail-closed，commit `da38edd`）；**05/09 codex_exec 端到端 smoke PASS**（2026-07-22，独立 codex CLI 环境，env_vars 透传运行时证实，artifact 落 host workspace 不落 plugin cache）。HEAD 领先 tag **8 个未发布 commit**（含 02/03 安全修复）→ 下一版按 semver 为 **v0.5.0**。剩余：06（CI Playwright 策略，已被 05 解锁）；3b community catalog 仍 **BLOCKED**（region + Claude 账号 on hold/`account_banned`；粘贴包见 `community-catalog-checklist.md`）。上一里程碑:v0.4.2（2026-07-21）。
 
 | Phase | Status |
 | --- | --- |
@@ -19,7 +19,7 @@
 | v0.4-implement | done (2026-07-21: 按钮修复 d46682d + 007b 六 gate 全绿 + 3a/3c 落地 + pill 两步 arm 0a1dd33) |
 | v0.4-release | done (v0.4.0–v0.4.2, 2026-07-21; gate5 install smoke PASS; 3b form region-blocked, paste pack ready) |
 | v0.4.3–v0.4.4 | done (2026-07-21: preview P1/P2 polish + security-hardening G5 隔离/forged-POST 修复 + Codex install path; RUN_ROOT opt-in + known limitations) |
-| secure-ship-0.4.4 | in progress (01/04/07/08 resolved, 09 MCP-roots code-complete; 02/03 裁决中; 05 blocked release-blocking; 06 blocked by 05) |
+| secure-ship-0.4.4 | in progress (01-05/07-09 resolved; 02/03 已实现 da38edd; 05/09 codex_exec smoke PASS; 仅 06 待办) |
 
 ## v0 ship checklist (5/5 pass)
 
@@ -42,11 +42,9 @@
 
 ## Still open（2026-07-22 刷新）
 
-1. `secure-ship-0.4.4` 票 02+03：validator/run_status 单一真源 + fail-closed（圆桌裁决中 → implement）
-2. 票 05 codex_exec smoke：MCP roots 修法已 code-complete（票 09），缺 codex_exec 可用环境（本机 CC Switch proxy 403）——人工/换环境；解后解锁 06 与下次 tag
-3. 票 06 CI required gate + Playwright 策略（blocked by 05）
-4. v0.5.0 发版：7 个未发布 commit 含 feat(reference-intake)；bump 一次改全 5 处版本位
-5. 3b community catalog：人工阻塞（region + 账号）
+1. `secure-ship-0.4.4` 票 06：CI required gate + Playwright 策略（已被 05 解锁，可直接干）
+2. v0.5.0 发版：8 个未发布 commit（含 02/03 安全修复、reference-intake）；bump 一次改全 5 处版本位
+3. 3b community catalog：人工阻塞（region + 账号）
 
 **Package commands (ship):** design-io · ux-spec · ui-review
 **Monorepo commands (maintain):** product-next · product-grill · product-dogfood
