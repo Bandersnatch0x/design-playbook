@@ -368,6 +368,113 @@ def _inject_token_fields(control_html: str, token: str, round_n: int) -> str:
     )
 
 
+# pin-to-annotate postMessage bridge (G5 sandbox regression fix).
+#
+# G5 isolated the prototype inside <iframe sandbox="allow-scripts" srcdoc=...>
+# with allow-same-origin DELIBERATELY omitted, so the iframe is an opaque
+# origin and prototype scripts cannot reach the parent DOM (where the decision
+# token lives). That broke pin-to-annotate: the parent's document.click +
+# cssPath(e.target) can no longer see clicks inside the iframe or traverse the
+# iframe DOM (cross-origin). This bridge runs INSIDE the iframe document and
+# restores anchor collection by postMessaging {selector, tag} to the parent.
+#
+# G5 safety contract (verified by test_browser_control.PinAnnotationBridgeTests):
+#   - the bridge only postMessages anchor DATA ({selector, tag}) — it never
+#     reads parent.document, parent.location, the token, or storage, and it
+#     never fetches/XHRs. postMessage is its only outbound channel.
+#   - the parent records the anchor only while pin mode is on (control.py
+#     message listener filters on pinOn), so no pin-state sync is needed.
+#   - the iframe highlights the clicked element itself (dpb-pin-target) since
+#     the parent cannot reach into the iframe DOM to do it.
+#
+# Raw string + single braces: this is plain string concatenation (not .format),
+# so JS braces stay literal (no {{ doubling). cssPath is a faithful copy of
+# control.py's cssPath so selectors match the same-origin path.
+BRIDGE_SCRIPT = r"""<script>
+(function () {
+  // Inject the pin highlight CSS into the iframe document. The parent's
+  // control-bar stylesheet does not cross the iframe boundary, so the bridge
+  // brings its own copy of .dpb-pin-target / .dpb-pin-hover (the same rules
+  // control.py renders in the parent) to actually show the highlight in-frame.
+  var style = document.createElement("style");
+  style.textContent =
+    ".dpb-pin-target{outline:1.5px solid rgba(20,184,166,.9)!important;" +
+    "outline-offset:1px!important;background-color:rgba(20,184,166,.06)!important;" +
+    "cursor:crosshair!important}" +
+    ".dpb-pin-hover{outline:1px dashed rgba(20,184,166,.45)!important;" +
+    "outline-offset:1px!important}";
+  (document.head || document.documentElement).appendChild(style);
+
+  function cssPath(el) {
+    if (!el || el.nodeType !== 1) return "";
+    if (el.id) return "#" + CSS.escape(el.id);
+    var parts = [];
+    var cur = el;
+    var depth = 0;
+    while (cur && cur.nodeType === 1 && cur !== document.documentElement && depth < 8) {
+      if (cur.id === "dpb-preview-bar" || cur.id === "dpb-preview-spacer" || cur.id === "dpb-float-root") break;
+      var part = cur.tagName.toLowerCase();
+      if (cur.classList && cur.classList.length) {
+        var cls = Array.prototype.slice.call(cur.classList, 0, 2)
+          .filter(function (c) { return c && c.indexOf("dpb-") !== 0; })
+          .map(function (c) { return "." + CSS.escape(c); })
+          .join("");
+        part += cls;
+      }
+      var parent = cur.parentElement;
+      if (parent) {
+        var kids = parent.children;
+        var n = 0, idx = 0, i;
+        for (i = 0; i < kids.length; i++) {
+          if (kids[i].tagName === cur.tagName) {
+            n++;
+            if (kids[i] === cur) idx = n;
+          }
+        }
+        if (n > 1) part += ":nth-of-type(" + idx + ")";
+      }
+      parts.unshift(part);
+      if (cur.tagName === "BODY") break;
+      cur = parent;
+      depth++;
+    }
+    return parts.join(" > ");
+  }
+  var hoverEl = null;
+  function clearHover() {
+    if (hoverEl) {
+      hoverEl.classList.remove("dpb-pin-hover");
+      hoverEl = null;
+    }
+  }
+  document.addEventListener("mousemove", function (e) {
+    var el = e.target;
+    if (!el || el === document.body || el === document.documentElement) {
+      clearHover();
+      return;
+    }
+    if (hoverEl !== el) {
+      clearHover();
+      hoverEl = el;
+      hoverEl.classList.add("dpb-pin-hover");
+    }
+  }, true);
+  document.addEventListener("click", function (e) {
+    var el = e.target;
+    if (!el || el === document.body || el === document.documentElement) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var prev = document.querySelector(".dpb-pin-target");
+    if (prev && prev !== el) prev.classList.remove("dpb-pin-target");
+    el.classList.add("dpb-pin-target");
+    var selector = cssPath(el);
+    if (!selector) return;
+    parent.postMessage({ dpbPinAnchor: { selector: selector, tag: el.tagName.toLowerCase() } }, "*");
+  }, true);
+})();
+</script>"""
+
+
 def _build_parent_page(prototype_html: str, control_html: str) -> str:
     """Build the trusted parent document (G5 trust boundary).
 
@@ -376,8 +483,24 @@ def _build_parent_page(prototype_html: str, control_html: str) -> str:
     deliberately omitted so the iframe is treated as a unique opaque origin and
     prototype scripts cannot reach the parent DOM — where the one-time decision
     token lives as a hidden form field.
+
+    The pin-to-annotate bridge (``BRIDGE_SCRIPT``) is appended to the prototype
+    BEFORE escaping so it executes inside the iframe document, where it can see
+    the prototype DOM. It captures clicks/hover, computes a cssPath selector
+    on its own side of the trust boundary, and postMessages ``{selector, tag}``
+    to the parent — restoring anchor collection that G5's cross-origin boundary
+    took away (the parent can no longer see iframe clicks or traverse iframe
+    DOM). The bridge never touches ``parent.document`` or the token; postMessage
+    is its only outbound channel (verified by test_browser_control).
     """
-    srcdoc = html.escape(prototype_html, quote=True)
+    # html.escape neutralizes every </script> (and quote) in both the prototype
+    # and the bridge trailer to entity form inside the srcdoc ATTRIBUTE, so the
+    # prototype's own script boundaries cannot leak across and truncate the
+    # bridge. The browser decodes the entities when rendering the iframe
+    # document, restoring the original <script>...</script> blocks. This is the
+    # attribute-escaping context (safe); it is NOT the inline-<script> context
+    # where </script> would need splitting.
+    srcdoc = html.escape(prototype_html + BRIDGE_SCRIPT, quote=True)
     # String concatenation (not .format): the CSS braces are literal here, and
     # concatenation sidesteps the format()-on-HTML brace-escaping trap.
     return (

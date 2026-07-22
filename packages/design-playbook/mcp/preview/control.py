@@ -605,6 +605,16 @@ if (el.className && typeof el.className === "string") return el.tagName.toLowerC
 return el.tagName.toLowerCase();
   }}
 
+  function labelForTag(tag, selector) {{
+// Cross-origin anchor (el is null): the parent cannot read innerText or
+// aria-label from the sandboxed iframe DOM, so derive a readable label from
+// the tag + the leaf segment of the cssPath selector the bridge sent.
+var parts = String(selector || "").split(/\s*>\s*/);
+var leaf = parts.length ? parts[parts.length - 1] : String(selector || "");
+if (leaf.charAt(0) === "#") return leaf;
+return (tag || "element") + " " + leaf;
+  }}
+
   function syncHidden() {{
 hidden.value = JSON.stringify(anchors.map(function (a) {{
   return {{ selector: a.selector, label: a.label, comment: a.comment, tag: a.tag }};
@@ -1024,6 +1034,39 @@ setTimeout(function () {{
   if (inputs.length) inputs[inputs.length - 1].focus();
 }}, 0);
   }}, true);
+
+  // G5 sandbox bridge: accept pin anchors postMessaged from the cross-origin
+  // prototype iframe (opaque origin). The iframe cannot read the parent DOM or
+  // the hidden decision token; it only sends {{selector, tag}}. Filter by
+  // pinOn so the always-on bridge only records while the user is annotating
+  // (no pin-state sync needed). el is null cross-origin — the iframe highlights
+  // the element itself (dpb-pin-target), and existing el-guarded code
+  // (positionFloat/ensureBubble/locate) already tolerates el === null.
+  window.addEventListener("message", function (e) {{
+if (!pinOn) return;
+var data = e.data;
+if (!data || !data.dpbPinAnchor) return;
+var a = data.dpbPinAnchor;
+var selector = String(a.selector || "");
+var tag = String(a.tag || "").toLowerCase();
+if (!selector) return;
+// de-dupe by selector; no el/classList work (cross-origin)
+for (var i = 0; i < anchors.length; i++) {{
+  if (anchors[i].selector === selector) return;
+}}
+anchors.push({{
+  selector: selector,
+  label: labelForTag(tag, selector),
+  comment: "",
+  tag: tag,
+  el: null
+}});
+render();
+setTimeout(function () {{
+  var inputs = listEl.querySelectorAll("input[data-i]");
+  if (inputs.length) inputs[inputs.length - 1].focus();
+}}, 0);
+  }});
 
   listEl.addEventListener("input", function (e) {{
 var t = e.target;
