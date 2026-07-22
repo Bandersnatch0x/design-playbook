@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **v0.5.0 tagged**（2026-07-22，本地 tag `43499de`，未 push）。G5 preview integrity hardening（02/03 BYPASS-1/2 + TOCTOU + fail-closed）+ reference-intake skill（ADR-0011）+ preview/evidence fixes。`secure-ship-0.4.4` 周期 9 票全 resolved。release gate 6/6 全绿（dry-run + --apply）。剩余 manual：push main+tag、GitHub Release、2nd-session install smoke。frontend floor graduate follow-up（需 capture 组先在 CI ubuntu 绿）。3b community catalog 仍 **BLOCKED**（region + Claude 账号 on hold/`account_banned`；粘贴包见 `community-catalog-checklist.md`）。上一里程碑:v0.4.4（2026-07-21）。
+**Current:** **v0.5.0 released**（2026-07-22，tag `43499de` 已 push + GitHub Release 已发布：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.5.0）。G5 preview integrity hardening（02/03 BYPASS-1/2 + TOCTOU + fail-closed）+ reference-intake skill（ADR-0011）+ preview/evidence fixes。`secure-ship-0.4.4` 周期 9 票全 resolved。release gate 6/6 全绿。剩余 manual：2nd-session install smoke（release-checklist gate 5）。frontend floor graduate follow-up（需 capture 组先在 CI ubuntu 绿）。3b community catalog 仍 **BLOCKED**（region + Claude 账号 on hold/`account_banned`；粘贴包见 `community-catalog-checklist.md`）。上一里程碑:v0.4.4（2026-07-21）。
 
 | Phase | Status |
 | --- | --- |
