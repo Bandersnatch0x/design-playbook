@@ -501,20 +501,28 @@ def check_evidence(
         # case-insensitively on case-insensitive filesystems (Windows), so
         # ``EVIDENCE/<x>`` lands in the evidence/ subtree on disk; the read
         # side must match the same way or uppercase rows skip G6 entirely.
+        # After the casefold match, rewrite the leading segment to the
+        # canonical ``evidence/`` so path resolution stays under that subtree
+        # on case-*sensitive* filesystems (Linux CI) too — otherwise
+        # ``root / "EVIDENCE/…"`` resolves as a sibling of ``evidence/`` and
+        # the containment check spuriously reports "escapes" instead of the
+        # intended missing/bound diagnostic.
         if not observed.casefold().startswith(EVIDENCE_PREFIX):
             continue  # free-text observation; G6 does not apply
+        leaf = observed[len(EVIDENCE_PREFIX):]
+        canonical = EVIDENCE_PREFIX + leaf
         # Containment (issue 04 / G6): the observed path must resolve *inside*
         # the evidence/ subtree. Reject any ".." segment, absolute paths, and
         # post-resolve escapes (e.g. ``evidence/../spec.md`` -> run root,
         # which under the new Codex manifest could overwrite spec / source).
-        observed_path = Path(observed)
+        observed_path = Path(canonical)
         if observed_path.is_absolute() or ".." in observed_path.parts:
             errs.append(
                 f"G6 evidence: {criterion} observed escapes evidence/ "
                 f"subtree: {observed}")
             continue
         try:
-            resolved = (root / observed).resolve()
+            resolved = (root / canonical).resolve()
         except OSError:
             errs.append(
                 f"G6 evidence: {criterion} observed escapes evidence/ "
@@ -548,7 +556,6 @@ def check_evidence(
         # artifact is evidence/-relative ("<name>", no prefix) per ticket 01.
         # Normalise the ledger leaf and compare to the manifest artifact
         # exactly; require the manifest criterion to match the ledger row.
-        leaf = observed[len(EVIDENCE_PREFIX):]
         bound: list[dict] = []
         for entry in entries:
             if entry.get("criterion") != criterion:
@@ -616,7 +623,8 @@ def check_manifest_ts_warnings(evidence_dir: Path | None) -> list[str]:
 
 def _ledger_has_evidence_binding(pointback_text: str) -> bool:
     for _criterion, observed in _ledger_observed(pointback_text):
-        if observed.startswith(EVIDENCE_PREFIX):
+        # Match check_evidence: case-insensitive evidence/ prefix (LOW-3).
+        if observed.casefold().startswith(EVIDENCE_PREFIX):
             return True
     return False
 
