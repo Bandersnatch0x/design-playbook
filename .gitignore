@@ -39,3 +39,7 @@ __pycache__/
 .codegraph/
 .graphify/
 .playwright-cli/
+
+# External-reference research notes (not version-controlled; avoid
+# third-party attribution/attribution drift. Keep local only.)
+docs/research/
