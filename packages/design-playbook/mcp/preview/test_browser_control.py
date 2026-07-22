@@ -441,5 +441,210 @@ class ConfirmRecordHashTests(unittest.TestCase):
         self.assertEqual(record["round"], 1)
 
 
+# --------------------------------------------------------------------------- #
+# pin-to-annotate postMessage bridge (G5 sandbox regression fix)              #
+# --------------------------------------------------------------------------- #
+
+
+def _bridge_inner_js() -> str:
+    """Return the raw JS inside the bridge <script> tag (no <script> wrappers).
+
+    Used by syntax + string assertions so they reason about the executable JS
+    rather than the HTML wrapper. Strips the leading ``<script ...>`` and
+    trailing ``</script>`` of the first script block in BRIDGE_SCRIPT.
+    """
+    raw = browser.BRIDGE_SCRIPT
+    m = re.search(r"<script[^>]*>(.*)</script>\s*$", raw, re.DOTALL)
+    assert m, f"BRIDGE_SCRIPT is not a single <script>...</script> block: {raw[:80]!r}"
+    return m.group(1)
+
+
+class PinAnnotationBridgeTests(unittest.TestCase):
+    """G5 introduced ``<iframe sandbox="allow-scripts" srcdoc=...>`` (no
+    allow-same-origin, opaque origin) to keep the prototype away from the
+    parent DOM where the decision token lives. That isolation also broke
+    pin-to-annotate: the parent's ``document.click`` + ``cssPath(e.target)``
+    can no longer see iframe clicks or traverse the iframe DOM.
+
+    The fix is a postMessage bridge: a script injected into the srcdoc captures
+    clicks inside the iframe and postMessages ``{dpbPinAnchor:{selector,tag}}``
+    to the parent; the parent records the anchor only while pin mode is on.
+
+    These tests pin the bridge's presence, structure, and G5 safety (it must
+    never touch the parent DOM or the token) at the unit level. End-to-end
+    DOM correctness is covered by the playwright bridge test.
+    """
+
+    def test_bridge_script_constant_is_single_script_block(self) -> None:
+        # The bridge is a self-contained <script>...</script> appended to the
+        # prototype before escaping into srcdoc. It must be exactly one block
+        # so _build_parent_page can concatenate it as a trailer.
+        self.assertTrue(browser.BRIDGE_SCRIPT.startswith("<script"))
+        self.assertTrue(browser.BRIDGE_SCRIPT.rstrip().endswith("</script>"))
+        # exactly one <script...> open + one </script> close
+        self.assertEqual(
+            len(re.findall(r"<script\b", browser.BRIDGE_SCRIPT)), 1,
+            "bridge must be a single <script> block",
+        )
+        self.assertEqual(
+            len(re.findall(r"</script>", browser.BRIDGE_SCRIPT)), 1,
+            "bridge must close exactly one <script> block",
+        )
+
+    def test_bridge_script_is_valid_javascript(self) -> None:
+        # node --check proves the injected JS parses (catches copy/format
+        # errors that string assertions cannot). Skipped if node is absent.
+        import shutil
+        import subprocess
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node not available; JS syntax check skipped")
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".js", delete=False, encoding="utf-8"
+        ) as fh:
+            fh.write(_bridge_inner_js())
+            tmp_path = fh.name
+        try:
+            completed = subprocess.run(
+                [node, "--check", tmp_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=10,
+            )
+        finally:
+            try:
+                Path(tmp_path).unlink()
+            except OSError:
+                pass
+        self.assertEqual(
+            completed.returncode, 0,
+            f"bridge script is not valid JS: "
+            f"{completed.stderr.decode('utf-8', 'replace')}",
+        )
+
+    def test_build_parent_page_injects_bridge_into_srcdoc(self) -> None:
+        page = browser._build_parent_page(
+            "<html><body>proto-marker-xyz</body></html>",
+            "<div>control</div>",
+        )
+        # The srcdoc attribute carries the escaped prototype + bridge. After
+        # unescaping the srcdoc payload we must find BOTH the prototype body
+        # and the bridge trailer.
+        m = re.search(r'<iframe[^>]*\bsrcdoc="([^"]*)"', page)
+        self.assertIsNotNone(m, "no srcdoc iframe in parent page")
+        import html as html_mod
+        payload = html_mod.unescape(m.group(1))
+        self.assertIn("proto-marker-xyz", payload)
+        self.assertIn("dpbPinAnchor", payload,
+                      "bridge trailer missing from srcdoc payload")
+        # bridge comes AFTER the prototype body (appended, not prepended)
+        self.assertLess(
+            payload.index("proto-marker-xyz"),
+            payload.index("dpbPinAnchor"),
+            "bridge must be appended after prototype body",
+        )
+
+    def test_bridge_contains_postMessage_with_dpbPinAnchor(self) -> None:
+        js = _bridge_inner_js()
+        self.assertIn("postMessage", js,
+                      "bridge must postMessage the anchor to the parent")
+        self.assertIn("dpbPinAnchor", js,
+                      "bridge must tag its messages with the dpbPinAnchor key")
+        # postMessage target must be the parent window
+        self.assertRegex(
+            js, r"parent\.postMessage\s*\(",
+            "bridge must postMessage to parent (not top/opener)",
+        )
+
+    def test_bridge_contains_cssPath_logic(self) -> None:
+        # The bridge duplicates cssPath (from control.py) so the iframe can
+        # compute a selector for the clicked element on its own side of the
+        # trust boundary. Assert the key branches are present.
+        js = _bridge_inner_js()
+        self.assertIn("function cssPath", js,
+                      "cssPath function missing from bridge")
+        self.assertIn("CSS.escape", js,
+                      "cssPath must escape id/class via CSS.escape")
+        # id fast path
+        self.assertRegex(js, r'el\.id\b.*#"',
+                         "cssPath must short-circuit on element id")
+        # nth-of-type branch (disambiguate siblings)
+        self.assertIn(":nth-of-type(", js,
+                       "cssPath must include :nth-of-type for sibling disambig")
+        # tag fallback
+        self.assertIn("tagName.toLowerCase()", js,
+                       "cssPath must fall back to lowercased tagName")
+        # the click listener that fires cssPath + postMessage
+        self.assertIn('"click"', js,
+                      "bridge must register a click listener")
+        self.assertIn("dpb-pin-target", js,
+                      "bridge must highlight the clicked element in-iframe")
+
+    def test_bridge_does_not_reach_parent_dom_or_token(self) -> None:
+        # G5 security contract: the bridge runs inside the sandboxed opaque-
+        # origin iframe. It must NOT touch parent.document, parent.location,
+        # or the decision token. It may only postMessage anchor data.
+        js = _bridge_inner_js()
+        self.assertNotIn("parent.document", js,
+                         "bridge must not read parent.document (G5 boundary)")
+        self.assertNotIn("parent.location", js,
+                         "bridge must not read parent.location (G5 boundary)")
+        self.assertNotIn("dpb_token", js,
+                         "bridge must not reference the decision token")
+        self.assertNotIn("dpb_round", js,
+                         "bridge must not reference the decision round")
+        self.assertNotIn("/decide", js,
+                         "bridge must not POST to /decide (parent-only path)")
+        self.assertNotIn("localStorage", js,
+                         "bridge must not touch storage (no exfil channel)")
+        # no fetch/XHR — the bridge's only outbound channel is postMessage
+        self.assertNotRegex(
+            js, r"\bfetch\s*\(",
+            "bridge must not use fetch (postMessage is its only channel)",
+        )
+        self.assertNotIn("XMLHttpRequest", js,
+                         "bridge must not use XHR (postMessage is its only channel)")
+
+    def test_iframe_sandbox_still_excludes_allow_same_origin_with_bridge(self) -> None:
+        # Regression guard: injecting the bridge must NOT relax the sandbox.
+        # allow-same-origin would re-same-origin the iframe and let prototype
+        # scripts read the parent DOM (and the hidden token) — defeating G5.
+        page = browser._build_parent_page(
+            "<html><body>x</body></html>", "<div>control</div>"
+        )
+        m = re.search(r'<iframe[^>]*\bsandbox="([^"]*)"', page)
+        self.assertIsNotNone(m, "no sandboxed iframe in parent page")
+        sandbox_attr = m.group(1)
+        self.assertIn("allow-scripts", sandbox_attr)
+        self.assertNotIn(
+            "allow-same-origin", sandbox_attr,
+            "bridge injection must not re-add allow-same-origin (G5)",
+        )
+
+    def test_bridge_survives_prototype_with_closing_script_tag(self) -> None:
+        # If the prototype itself contains a literal </script> inside a script
+        # block, the bridge (also a <script>) is appended AFTER the escaped
+        # prototype into srcdoc. html.escape neutralizes every </script> in
+        # the prototype to &lt;/script&gt; so neither the prototype's nor the
+        # bridge's script boundaries leak across the srcdoc attribute. Assert
+        # the bridge marker still lands in the srcdoc payload intact.
+        proto = (
+            "<html><body><script>var x = 1; "
+            "console.log('</script>')</script><h1>hi</h1></body></html>"
+        )
+        page = browser._build_parent_page(proto, "<div>control</div>")
+        m = re.search(r'<iframe[^>]*\bsrcdoc="([^"]*)"', page)
+        self.assertIsNotNone(m)
+        import html as html_mod
+        payload = html_mod.unescape(m.group(1))
+        self.assertIn("dpbPinAnchor", payload,
+                      "bridge dropped by prototype </script> — escaping bug")
+        # And the sandbox attribute must not be corrupted by the prototype's
+        # quotes (the whole srcdoc is attribute-escaped).
+        sb = re.search(r'<iframe[^>]*\bsandbox="([^"]*)"', page)
+        self.assertIsNotNone(sb)
+        self.assertIn("allow-scripts", sb.group(1))
+
+
 if __name__ == "__main__":
     unittest.main()
