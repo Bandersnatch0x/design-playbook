@@ -8,6 +8,7 @@ and tears down the browser + server without hanging on keep-alive sockets.
 from __future__ import annotations
 
 import ctypes
+import hashlib
 import html
 import json
 import os

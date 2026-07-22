@@ -12,6 +12,7 @@ Compatibility launcher remains at packages/design-playbook-preview/server.py.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -142,13 +143,20 @@ def handle_preview_prototype(args: dict[str, Any]) -> dict[str, Any]:
     confirmed = user_confirmed and floor_pass
     confirm_path = ""
     if user_confirmed:
+        # TOCTOU: prefer the hash captured at serve time by _collect_via_browser
+        # (hashes the exact bytes shown to the user). Fall back to reading the
+        # prototype only when no served hash is present (test mocks / direct
+        # callers that bypassed the browser path).
+        proto_hash = decision.get("prototype_html_hash")
+        if not proto_hash:
+            proto_hash = hashlib.sha256(prototype.read_bytes()).hexdigest()
         out = _write_confirm(
             preview_dir,
             round_n=round_n,
             report_ref=report_ref.strip(),
             selected=decision["selected_options"],
             feedback=decision["feedback"],
-            prototype_html_hash=decision["prototype_html_hash"],
+            prototype_html_hash=proto_hash,
             confirmed=confirmed,
             floor_pass=floor_pass,
             floor_failure=floor_failure,

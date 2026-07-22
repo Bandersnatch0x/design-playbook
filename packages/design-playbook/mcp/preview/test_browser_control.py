@@ -429,7 +429,7 @@ class ConfirmRecordHashTests(unittest.TestCase):
                 report_ref="report.md",
                 selected=["确认通过"],
                 feedback="ok",
-                prototype=proto,
+                prototype_html_hash=expected,
                 confirmed=True,
                 floor_pass=True,
             )
