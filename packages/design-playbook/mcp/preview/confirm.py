@@ -88,10 +88,9 @@ def _append_log(preview_dir: Path, *, round_n: int, report_ref: str,
 
 def _write_confirm(preview_dir: Path, *, round_n: int, report_ref: str,
                    selected: list[str], feedback: str,
-                   prototype: Path,
                    confirmed: bool, floor_pass: bool,
+                   prototype_html_hash: str,
                    floor_failure: str = "") -> Path:
-    digest = hashlib.sha256(prototype.read_bytes()).hexdigest()
     record = {
         "round": round_n,
         "report_ref": report_ref,
@@ -100,8 +99,8 @@ def _write_confirm(preview_dir: Path, *, round_n: int, report_ref: str,
         "selected_options": selected,
         "feedback": feedback,
         "timestamp": _now_iso(),
-        "prototype_path": f"preview/{prototype.name}",
-        "prototype_html_hash": digest,
+        "prototype_path": f"preview/round-{round_n}.html",
+        "prototype_html_hash": prototype_html_hash,
     }
     if floor_failure:
         record["floor_failure"] = floor_failure

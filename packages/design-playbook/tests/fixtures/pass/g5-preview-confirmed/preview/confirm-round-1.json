@@ -4,9 +4,10 @@
   "confirmed": true,
   "floor_pass": true,
   "selected_options": [
-    "\u786e\u8ba4\u901a\u8fc7"
+    "确认通过"
   ],
-  "feedback": "\u786e\u8ba4\u901a\u8fc7\uff0c\u65e0\u4fee\u6539\u610f\u89c1",
+  "feedback": "确认通过，无修改意见",
   "timestamp": "2026-07-16T12:00:00+08:00",
-  "prototype_path": "preview/round-1.html"
+  "prototype_path": "preview/round-1.html",
+  "prototype_html_hash": "fd3c09a40a096601632dc2993d6ed8689e13bbd88f9946a2c63ec3305aa2f2c0"
 }

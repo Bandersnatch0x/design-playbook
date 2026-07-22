@@ -34,7 +34,8 @@ def latest_numeric_round(run_root: Path) -> int | None:
     """Return the highest numeric round seen under ``<run_root>/preview/``.
 
     Scans both ``round-<n>.html`` prototypes and ``confirm-round-<n>.json``
-    records and returns the maximum ``<n>`` as an int, or None when
+    records, plus round headings in ``preview/log.md`` (deletion-rollback
+    protection). Returns the maximum ``<n>`` as an int, or None when
     ``preview/`` is missing or holds no round artifacts.
 
     Numeric — not lexicographic — so ``round-10`` > ``round-2``. The old
@@ -45,17 +46,37 @@ def latest_numeric_round(run_root: Path) -> int | None:
     Exported for D-domain ``run_status`` to reuse as the single source of
     "which round is current"; do not re-sort confirm filenames there.
     """
+    import re
+
     preview = run_root / "preview"
     if not preview.is_dir():
         return None
+
+    nums: list[int] = []
+
+    # Scan filesystem artifacts
     try:
         entries = list(preview.iterdir())
     except OSError:
-        return None
-    nums = [
-        n for n in (_round_from_name(p.name) for p in entries if p.is_file())
-        if n is not None
-    ]
+        entries = []
+    for p in entries:
+        if p.is_file():
+            n = _round_from_name(p.name)
+            if n is not None:
+                nums.append(n)
+
+    # Scan log.md for round headings (format: "## round <n>")
+    log_path = preview / "log.md"
+    try:
+        if log_path.is_file():
+            log_content = log_path.read_text(encoding="utf-8")
+            nums.extend(
+                int(m.group(1))
+                for m in re.finditer(r"^## round (\d+)", log_content, re.MULTILINE)
+            )
+    except OSError:
+        pass
+
     return max(nums) if nums else None
 
 
@@ -73,63 +94,57 @@ def is_confirmed_valid(confirm_data: object) -> bool:
     if not isinstance(confirm_data, dict):
         return False
     return (confirm_data.get("confirmed") is True
-            and confirm_data.get("floor_pass") is True)
+            and confirm_data.get("floor_pass") is True
+            and confirm_data.get("aborted") is not True)
 
 
 def _confirm_round(path: Path, data: dict) -> int | None:
     """Round number of a confirm record: prefer the JSON ``round`` field,
-    fall back to the ``confirm-round-<n>.json`` filename."""
+    fall back to the ``confirm-round-<n>.json`` filename.
+
+    If both the filename round and the JSON ``round`` field exist, they must
+    be equal (round互证). Otherwise the record is excluded from current.
+    """
+    filename_round = _round_from_name(path.name)
     raw = data.get("round")
+    json_round: int | None = None
     if isinstance(raw, bool):  # bool is an int subtype; reject explicitly
-        return _round_from_name(path.name)
-    if isinstance(raw, int):
-        return raw
-    if isinstance(raw, str) and raw.strip().isdigit():
-        return int(raw)
-    return _round_from_name(path.name)
+        json_round = None
+    elif isinstance(raw, int):
+        json_round = raw
+    elif isinstance(raw, str) and raw.strip().isdigit():
+        json_round = int(raw)
+
+    # Round互证: if both exist, they must match
+    if filename_round is not None and json_round is not None:
+        if filename_round != json_round:
+            return None  # Mismatch: exclude from current
+    # Prefer JSON round, fallback to filename
+    return json_round if json_round is not None else filename_round
 
 
 def _prototype_target(data: dict, run_root: Path) -> Path | None:
     """Resolve the prototype html a confirm record refers to.
 
-    Uses the trusted-side-written ``prototype_path`` (e.g.
-    ``preview/round-2.html``) and falls back to ``preview/round-<n>.html``
-    derived from the record's round. Returns None if no prototype file is
-    found **inside ``<run_root>/preview/``**.
+    The target is **always** ``preview/round-<latest>.html`` derived from the
+    latest numeric round (never from the record's ``prototype_path`` field).
+    The ``prototype_path`` field is kept only as metadata (LOW-2 containment).
 
-    Containment (LOW-2): a ``prototype_path`` that resolves outside
-    ``preview/`` (e.g. ``../secret.txt``) is treated as a missing prototype.
-    The validator never hashes files outside ``preview/`` even when their
-    recorded hash would match — the read side must mirror the preview/
-    boundary the write side already enforces.
+    Returns None if the target file is missing or outside ``preview/``.
     """
     preview_root = (run_root / "preview").resolve()
-    candidates: list[Path] = []
-    ref = data.get("prototype_path")
-    if isinstance(ref, str) and ref.strip():
-        raw = Path(ref.strip())
-        if raw.is_absolute():
-            candidates.append(raw)
-        else:
-            candidates.append(run_root / raw)
-            candidates.append(run_root / "preview" / raw.name)
-    rnd = data.get("round")
-    if isinstance(rnd, int) and not isinstance(rnd, bool):
-        candidates.append(run_root / "preview" / f"round-{rnd}.html")
-    for cand in candidates:
-        try:
-            if not cand.is_file():
-                continue
-            resolved = cand.resolve()
-        except OSError:
-            continue
-        try:
-            resolved.relative_to(preview_root)
-        except ValueError:
-            # Outside preview/ (LOW-2): treat as missing, never hash.
-            continue
+    latest = latest_numeric_round(run_root)
+    if latest is None:
+        return None
+    target = run_root / "preview" / f"round-{latest}.html"
+    try:
+        if not target.is_file():
+            return None
+        resolved = target.resolve()
+        resolved.relative_to(preview_root)  # Containment (LOW-2)
         return resolved
-    return None
+    except (OSError, ValueError):
+        return None
 
 
 def _verify_prototype_hash(data: dict, run_root: Path) -> list[str]:
@@ -141,13 +156,15 @@ def _verify_prototype_hash(data: dict, run_root: Path) -> list[str]:
     stays on the trusted side and is never self-reported by the prototype
     (issue 02 / T01 trust boundary).
 
-    Returns an empty list for legacy records that have no
-    ``prototype_html_hash`` (skipped, not failed) so historic runs that
-    predate the field are not broken.
+    Missing ``prototype_html_hash`` FAILs (since 0.4.4+ adapter always
+    writes it; absence indicates hand-written or pre-0.4.4 records).
     """
     stored = data.get("prototype_html_hash")
     if not isinstance(stored, str) or not stored:
-        return []
+        return [
+            "G5 preview: confirmed record missing prototype_html_hash "
+            "(pre-0.4.4 record or hand-written — re-run preview*)"
+        ]
     target = _prototype_target(data, run_root)
     if target is None:
         return [

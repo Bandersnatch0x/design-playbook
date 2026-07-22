@@ -388,8 +388,8 @@ def check_preview(
         ]
 
     # Prototype integrity: when the trusted side recorded a hash, the
-    # prototype on disk must still match it (issue 02). Legacy records
-    # without a hash are skipped, not failed.
+    # prototype on disk must still match it (issue 02). Missing hash FAILs
+    # (adapter always writes it post-0.4.4).
     for _path, data in true_confirms:
         hash_errs = _verify_prototype_hash(data, run_root)
         if hash_errs:
