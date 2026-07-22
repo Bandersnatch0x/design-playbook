@@ -96,12 +96,10 @@ jobs:
       - name: Install Playwright + chromium (ticket 06 default path)
         id: pw_install
         continue-on-error: true
-        # TODO(smoke, ticket 05 / map.md "Not yet specified"): the exact
-        # chromium install method is pending Codex RUN_ROOT smoke. Default
-        # is the documented `playwright install --with-deps chromium` on
-        # ubuntu-latest (passwordless sudo for --with-deps apt libs). If
-        # the runner image or base changes, revisit. Tracked as "Not yet
-        # specified" in map.md until smoke confirms.
+        # chromium install method confirmed by ticket 05 codex_exec smoke
+        # (2026-07-22 PASS). Standard `playwright install --with-deps
+        # chromium` on ubuntu-latest (passwordless sudo for --with-deps
+        # apt libs). If the runner image or base changes, revisit.
         run: |
           python3 -m pip install playwright
           python3 -m playwright install --with-deps chromium
