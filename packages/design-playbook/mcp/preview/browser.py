@@ -534,7 +534,12 @@ def _collect_via_browser(
     }
     done = threading.Event()
 
-    prototype_html = prototype.read_text(encoding="utf-8")
+    # TOCTOU fix: read bytes once, hash, then decode for display
+    raw_bytes = prototype.read_bytes()
+    prototype_html_hash = hashlib.sha256(raw_bytes).hexdigest()
+    prototype_html = raw_bytes.decode("utf-8")
+    result["prototype_html_hash"] = prototype_html_hash
+
     control = _build_control(round_n, summary.strip(), options)
     # G5 trust boundary: one-time token + first-decision-wins session. The
     # token renders as a hidden field in the PARENT control form (trusted);

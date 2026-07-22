@@ -148,7 +148,7 @@ def handle_preview_prototype(args: dict[str, Any]) -> dict[str, Any]:
             report_ref=report_ref.strip(),
             selected=decision["selected_options"],
             feedback=decision["feedback"],
-            prototype=prototype,
+            prototype_html_hash=decision["prototype_html_hash"],
             confirmed=confirmed,
             floor_pass=floor_pass,
             floor_failure=floor_failure,

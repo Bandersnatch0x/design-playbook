@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** v0.4 shipped — 决策 01-04 全 resolved，007b 六 gate 全绿，**v0.4.0–v0.4.2 已发**（2026-07-21，v0.4.2 = pill 两步确认保护）。3b community catalog **BLOCKED**（pre-submit 全绿，pin `9ec07bf`；region + Claude 账号 on hold/`account_banned`；粘贴包见 `community-catalog-checklist.md`）。上一里程碑:v0.3.1（2026-07-20）。
+**Current:** **v0.4.4 shipped**（2026-07-21，security-hardening：G5 iframe+token 信任边界隔离、forged-POST 修复、Codex marketplace install path；Codex RUN_ROOT = opt-in env_vars + known limitations，完整 codex_exec smoke 因本机 proxy 403 未跑）。HEAD 领先 tag **7 个未发布 commit**（reference-intake skill/ADR-0011、preview pin-to-annotate 修复、G6 casefold 修复、README hero 等）→ 下一版按 semver 为 **v0.5.0**。当前周期 `.scratch/secure-ship-0.4.4/`：02+03 圆桌裁决中；05 **blocked（release-blocking**，缺 codex_exec 可用环境）；06 blocked by 05。3b community catalog 仍 **BLOCKED**（region + Claude 账号 on hold/`account_banned`；粘贴包见 `community-catalog-checklist.md`）。上一里程碑:v0.4.2（2026-07-21）。
 
 | Phase | Status |
 | --- | --- |
@@ -18,6 +18,8 @@
 | v0.4-grill | done (2026-07-21: 决策 01-04 全 resolved, wayfinder `.scratch/v0.4-cycle/`) |
 | v0.4-implement | done (2026-07-21: 按钮修复 d46682d + 007b 六 gate 全绿 + 3a/3c 落地 + pill 两步 arm 0a1dd33) |
 | v0.4-release | done (v0.4.0–v0.4.2, 2026-07-21; gate5 install smoke PASS; 3b form region-blocked, paste pack ready) |
+| v0.4.3–v0.4.4 | done (2026-07-21: preview P1/P2 polish + security-hardening G5 隔离/forged-POST 修复 + Codex install path; RUN_ROOT opt-in + known limitations) |
+| secure-ship-0.4.4 | in progress (01/04/07/08 resolved, 09 MCP-roots code-complete; 02/03 裁决中; 05 blocked release-blocking; 06 blocked by 05) |
 
 ## v0 ship checklist (5/5 pass)
 
@@ -38,12 +40,13 @@
 
 `.scratch/architecture-review-20260717/map.md` — 4 候选经三方辩论 + 代码核验：#3 report_ref 三处（CUT，Explore 误判，server.py 无路径解析）、#4 Gate Protocol（CUT，issue 04 明文禁 G7 + 六 gate 签名不齐）、#1 manifest schema（DEFER post-v1，字段有意 prose-only 属 capture≠judge 边界）、#2 validate.py phrase-table（可选小做，bool guard 已防静默 false-pass）。**净结论：预 release 零代码改动**，run-seam 现状是健康的有意契约边界。
 
-## Still open (human, pre → formal release)
+## Still open（2026-07-22 刷新）
 
-1. ~~Handoff #7: 真 provider 端到端 dogfood~~ ✅ 票 10 resolved（真 Claude Code MCP host 006 + 可移植复跑 007；日志 `dogfood/2026-07-17-006-real-provider-observe.md`）
-2. ~~Handoff #8: manual provider dogfood 日志~~ ✅ 票 09 resolved（`dogfood/2026-07-17-005-manual-provider-observe.md`）
-3. ~~门 5: 第二机/会话 install smoke（票 11）~~ ✅ 票 11 resolved（worker `term_1635c607` 干净会话走公开 install trio 全 4 步过；coordinator 独立核验 on-disk 6 skills + 3 commands；证据 `evidence/ticket-11-install-smoke/result.md`）
-4. bump version + `git tag vX.Y.Z` + PR #2 merge（票 12，无 blockers；tag 不可逆，人裁决）
+1. `secure-ship-0.4.4` 票 02+03：validator/run_status 单一真源 + fail-closed（圆桌裁决中 → implement）
+2. 票 05 codex_exec smoke：MCP roots 修法已 code-complete（票 09），缺 codex_exec 可用环境（本机 CC Switch proxy 403）——人工/换环境；解后解锁 06 与下次 tag
+3. 票 06 CI required gate + Playwright 策略（blocked by 05）
+4. v0.5.0 发版：7 个未发布 commit 含 feat(reference-intake)；bump 一次改全 5 处版本位
+5. 3b community catalog：人工阻塞（region + 账号）
 
 **Package commands (ship):** design-io · ux-spec · ui-review
 **Monorepo commands (maintain):** product-next · product-grill · product-dogfood
