@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **v0.4.4 shipped**（2026-07-21，security-hardening：G5 iframe+token 信任边界隔离、forged-POST 修复、Codex marketplace install path）。**`secure-ship-0.4.4` 周期全部 9 票 resolved**（01-09）：02/03 G5 安全绕过修复（BYPASS-1/2 + TOCTOU + fail-closed，`da38edd`）+ 05/09 codex_exec smoke PASS（env_vars 透传运行时证实）+ 06 CI required gate（Preview/Evidence stdio + Playwright 策略，已落地全套件验证绿）。HEAD 领先 tag **10 个未发布 commit**（含 02/03 修复 + regression hotfix + ci 注释）→ 下一版按 semver 为 **v0.5.0**。frontend floor graduate 作为 follow-up（需 capture 组先在 CI ubuntu 验证绿）。3b community catalog 仍 **BLOCKED**（region + Claude 账号 on hold/`account_banned`；粘贴包见 `community-catalog-checklist.md`）。上一里程碑:v0.4.2（2026-07-21）。
+**Current:** **v0.5.0 tagged**（2026-07-22，本地 tag `43499de`，未 push）。G5 preview integrity hardening（02/03 BYPASS-1/2 + TOCTOU + fail-closed）+ reference-intake skill（ADR-0011）+ preview/evidence fixes。`secure-ship-0.4.4` 周期 9 票全 resolved。release gate 6/6 全绿（dry-run + --apply）。剩余 manual：push main+tag、GitHub Release、2nd-session install smoke。frontend floor graduate follow-up（需 capture 组先在 CI ubuntu 绿）。3b community catalog 仍 **BLOCKED**（region + Claude 账号 on hold/`account_banned`；粘贴包见 `community-catalog-checklist.md`）。上一里程碑:v0.4.4（2026-07-21）。
 
 | Phase | Status |
 | --- | --- |
@@ -20,6 +20,7 @@
 | v0.4-release | done (v0.4.0–v0.4.2, 2026-07-21; gate5 install smoke PASS; 3b form region-blocked, paste pack ready) |
 | v0.4.3–v0.4.4 | done (2026-07-21: preview P1/P2 polish + security-hardening G5 隔离/forged-POST 修复 + Codex install path; RUN_ROOT opt-in + known limitations) |
 | secure-ship-0.4.4 | done (01-09 全 resolved; 02/03 G5 修复 da38edd; 05/09 codex_exec smoke PASS; 06 CI gate 落地; frontend floor follow-up) |
+| v0.5.0 release | tagged 43499de (2026-07-22, 本地未 push; gate 6/6 绿; 待 push + GitHub Release + install smoke) |
 
 ## v0 ship checklist (5/5 pass)
 
