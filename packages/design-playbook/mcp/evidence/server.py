@@ -22,10 +22,11 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
-# Shared stdio JSON-RPC framing lives one level up in mcp/_transport.py
-# (both bundled adapters speak the same wire format; ADR-0009).
+# Shared stdio JSON-RPC framing + single-tool dispatch live one level up in
+# mcp/_transport.py (both bundled adapters speak the same wire format and
+# run the same JSON-RPC protocol; ADR-0009).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _transport import read_message, write_message  # noqa: E402
+from _transport import serve_stdio  # noqa: E402
 
 TOOL_NAME = "execute_capture_plan"
 SERVER_NAME = "design-playbook-evidence"
@@ -105,26 +106,6 @@ def _tool_schema() -> dict[str, Any]:
             "required": ["url", "type", "state", "artifact_path"],
             "additionalProperties": False,
         },
-    }
-
-
-def _result_text(payload: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "content": [
-            {
-                "type": "text",
-                "text": json.dumps(payload, ensure_ascii=False, indent=2),
-            }
-        ],
-        "structuredContent": payload,
-        "isError": False,
-    }
-
-
-def _error_result(message: str) -> dict[str, Any]:
-    return {
-        "content": [{"type": "text", "text": message}],
-        "isError": True,
     }
 
 
@@ -464,102 +445,11 @@ def execute_capture_plan(args: dict[str, Any]) -> dict[str, Any]:
     return _captured(rel, observed, abs_written)
 
 
-def serve() -> None:
-    _log(f"{SERVER_NAME} MCP server starting (stdio)")
-    while True:
-        try:
-            msg = read_message()
-        except (json.JSONDecodeError, UnicodeDecodeError, ValueError, EOFError) as exc:
-            _log(f"MCP parse error: {exc}")
-            write_message({
-                "jsonrpc": "2.0",
-                "id": None,
-                "error": {"code": -32700, "message": f"Parse error: {exc}"},
-            })
-            continue
-        if msg is None:
-            break
-        if not isinstance(msg, dict):
-            write_message({
-                "jsonrpc": "2.0",
-                "id": None,
-                "error": {"code": -32600, "message": "Invalid Request"},
-            })
-            continue
-        method = msg.get("method")
-        msg_id = msg.get("id")
-        params = msg.get("params") or {}
-
-        if method == "initialize":
-            write_message({
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "result": {
-                    "protocolVersion": params.get(
-                        "protocolVersion", "2024-11-05"
-                    ),
-                    "capabilities": {"tools": {}},
-                    "serverInfo": {
-                        "name": SERVER_NAME,
-                        "version": SERVER_VERSION,
-                    },
-                },
-            })
-            continue
-
-        if method == "notifications/initialized":
-            continue
-
-        if method == "tools/list":
-            write_message({
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "result": {"tools": [_tool_schema()]},
-            })
-            continue
-
-        if method == "tools/call":
-            name = params.get("name")
-            arguments = params.get("arguments") or {}
-            if name != TOOL_NAME:
-                write_message({
-                    "jsonrpc": "2.0",
-                    "id": msg_id,
-                    "result": _error_result(f"unknown tool: {name}"),
-                })
-                continue
-            try:
-                payload = execute_capture_plan(arguments)
-                # Capture failures remain data so the orchestrator can bind them.
-                # Schema/contract violations raise and become tool-level errors.
-                write_message({
-                    "jsonrpc": "2.0",
-                    "id": msg_id,
-                    "result": _result_text(payload),
-                })
-            except Exception as exc:  # noqa: BLE001 — return to client
-                _log(f"tools/call error: {exc}")
-                write_message({
-                    "jsonrpc": "2.0",
-                    "id": msg_id,
-                    "result": _error_result(str(exc)),
-                })
-            continue
-
-        if method == "ping":
-            write_message({"jsonrpc": "2.0", "id": msg_id, "result": {}})
-            continue
-
-        if msg_id is not None:
-            write_message({
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "error": {
-                    "code": -32601,
-                    "message": f"Method not found: {method}",
-                },
-            })
-
-
 if __name__ == "__main__":
-    serve()
+    serve_stdio(
+        SERVER_NAME,
+        SERVER_VERSION,
+        _tool_schema(),
+        execute_capture_plan,
+        recover_from_malformed=True,
+    )

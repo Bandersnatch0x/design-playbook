@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Minimal stdio MCP server: single tool ``preview_prototype``.
 
-Entry point only: JSON-RPC stdio framing + tool dispatch. The browser
-window, HTTP decide form, control-bar template, and ADR-0008 floor logic
-live in the sibling modules (browser.py, control.py, confirm.py, util.py,
-i18n.py). No third-party deps.
+Entry point only: tool schema + handler. JSON-RPC stdio framing and the
+single-tool dispatch loop live one level up in ``mcp/_transport.py``
+(:func:`serve_stdio`); the browser window, HTTP decide form, control-bar
+template, and ADR-0008 floor logic live in the sibling modules (browser.py,
+control.py, confirm.py, util.py, i18n.py). No third-party deps.
 
 Run (plugin-bundled MCP config uses ${CLAUDE_PLUGIN_ROOT}):
   { "command": "python", "args": ["<plugin>/mcp/preview/server.py"] }
@@ -12,18 +13,17 @@ Compatibility launcher remains at packages/design-playbook-preview/server.py.
 """
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 from typing import Any
 
-# Shared stdio JSON-RPC framing lives one level up in mcp/_transport.py
-# (both bundled adapters speak the same wire format; ADR-0009).
+# Shared stdio JSON-RPC framing + single-tool dispatch live one level up in
+# mcp/_transport.py (both bundled adapters speak the same wire format and
+# run the same JSON-RPC protocol; ADR-0009).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _transport import read_message, write_message  # noqa: E402
+from _transport import serve_stdio  # noqa: E402
 
 from i18n import default_options
-from util import _log
 
 # Confirm/floor records + prototype target resolution + self-check.
 from confirm import (  # noqa: F401  (re-exported for stable module surface)
@@ -187,111 +187,14 @@ def handle_preview_prototype(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-
-def _result_text(payload: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "content": [
-            {
-                "type": "text",
-                "text": json.dumps(payload, ensure_ascii=False, indent=2),
-            }
-        ],
-        "structuredContent": payload,
-        "isError": False,
-    }
-
-
-
-def _error_result(message: str) -> dict[str, Any]:
-    return {
-        "content": [{"type": "text", "text": message}],
-        "isError": True,
-    }
-
-
-
-def serve() -> None:
-    _log("design-playbook-preview MCP server starting (stdio)")
-    while True:
-        msg = read_message()
-        if msg is None:
-            break
-        method = msg.get("method")
-        msg_id = msg.get("id")
-        params = msg.get("params") or {}
-
-        if method == "initialize":
-            write_message({
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "result": {
-                    "protocolVersion": params.get(
-                        "protocolVersion", "2024-11-05"),
-                    "capabilities": {"tools": {}},
-                    "serverInfo": {
-                        "name": "design-playbook-preview",
-                        "version": "0.1.0",
-                    },
-                },
-            })
-            continue
-
-        if method == "notifications/initialized":
-            continue
-
-        if method == "tools/list":
-            write_message({
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "result": {"tools": [_tool_schema()]},
-            })
-            continue
-
-        if method == "tools/call":
-            name = params.get("name")
-            arguments = params.get("arguments") or {}
-            if name != TOOL_NAME:
-                write_message({
-                    "jsonrpc": "2.0",
-                    "id": msg_id,
-                    "result": _error_result(f"unknown tool: {name}"),
-                })
-                continue
-            try:
-                payload = handle_preview_prototype(arguments)
-                write_message({
-                    "jsonrpc": "2.0",
-                    "id": msg_id,
-                    "result": _result_text(payload),
-                })
-            except Exception as exc:  # noqa: BLE001 — return to client
-                _log(f"tools/call error: {exc}")
-                write_message({
-                    "jsonrpc": "2.0",
-                    "id": msg_id,
-                    "result": _error_result(str(exc)),
-                })
-            continue
-
-        if method == "ping":
-            write_message({"jsonrpc": "2.0", "id": msg_id, "result": {}})
-            continue
-
-        if msg_id is not None:
-            write_message({
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "error": {
-                    "code": -32601,
-                    "message": f"Method not found: {method}",
-                },
-            })
-
-
-
-
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--self-check":
         _self_check_floor()
     else:
-        serve()
+        serve_stdio(
+            "design-playbook-preview",
+            "0.1.0",
+            _tool_schema(),
+            handle_preview_prototype,
+            recover_from_malformed=False,
+        )
