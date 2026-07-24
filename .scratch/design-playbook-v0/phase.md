@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **v0.5.0 released**（2026-07-22，tag `43499de` 已 push + GitHub Release 已发布：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.5.0）。G5 preview integrity hardening（02/03 BYPASS-1/2 + TOCTOU + fail-closed）+ reference-intake skill（ADR-0011）+ preview/evidence fixes。`secure-ship-0.4.4` 周期 9 票全 resolved。release gate 6/6 全绿。剩余 manual：2nd-session install smoke（release-checklist gate 5）。frontend floor graduate follow-up（需 capture 组先在 CI ubuntu 绿）。3b community catalog 仍 **BLOCKED**（region + Claude 账号 on hold/`account_banned`；粘贴包见 `community-catalog-checklist.md`）。上一里程碑:v0.4.4（2026-07-21）。
+**Current:** **v0.6.0 released**（2026-07-24，tag `a065e7b` 已 push + GitHub Release 已发布：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.6.0）。design-baseline 现有产品 DESIGN.md 门禁（ADR-0012，prepare/confirm/verify + state.json）+ G5 LF-normalized `prototype_html_hash`（Windows autocrlf vs Linux CI）。release gate 6/6 全绿。剩余 manual：2nd-session install smoke（release-checklist gate 5）。frontend floor graduate follow-up 仍 pending。3b community catalog 仍 **BLOCKED**。上一里程碑:v0.5.0（2026-07-22）。
 
 | Phase | Status |
 | --- | --- |
@@ -20,7 +20,8 @@
 | v0.4-release | done (v0.4.0–v0.4.2, 2026-07-21; gate5 install smoke PASS; 3b form region-blocked, paste pack ready) |
 | v0.4.3–v0.4.4 | done (2026-07-21: preview P1/P2 polish + security-hardening G5 隔离/forged-POST 修复 + Codex install path; RUN_ROOT opt-in + known limitations) |
 | secure-ship-0.4.4 | done (01-09 全 resolved; 02/03 G5 修复 da38edd; 05/09 codex_exec smoke PASS; 06 CI gate 落地; frontend floor follow-up) |
-| v0.5.0 release | tagged 43499de (2026-07-22, 本地未 push; gate 6/6 绿; 待 push + GitHub Release + install smoke) |
+| v0.5.0 release | done (v0.5.0, 2026-07-22; pushed + GitHub Release) |
+| v0.6.0 release | done (v0.6.0, 2026-07-24; design-baseline ADR-0012 + G5 LF hash; tag a065e7b pushed + GitHub Release) |
 
 ## v0 ship checklist (5/5 pass)
 
