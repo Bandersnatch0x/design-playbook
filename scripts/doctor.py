@@ -27,7 +27,7 @@ SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 # added reference-intake) when the plugin surface grows or shrinks; the
 # checklist wording and this floor are the two authorities a reviewer eyeballs,
 # and doctor.py is the machine echo.
-GATE1_EXPECTED_SKILLS = 7
+GATE1_EXPECTED_SKILLS = 8
 GATE1_EXPECTED_COMMANDS = 3
 GATE1_EXPECTED_PLUGIN_NAME = "design-playbook"
 

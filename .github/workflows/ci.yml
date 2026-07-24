@@ -25,11 +25,12 @@ jobs:
         run: python3 scripts/doctor.py --skip-self-check
       - name: Validate run seam
         run: python3 packages/design-playbook/tests/test_validate_run.py
-      - name: Release / doctor / run-status unit tests
+      - name: Release / doctor / run-status / design-baseline unit tests
         run: |
           python3 tests/test_release.py
           python3 tests/test_doctor.py
           python3 tests/test_run_status.py
+          python3 tests/test_design_baseline.py
       - name: Syntax check (all Python)
         # py_compile is the always-on syntax gate. The MCP stdio suites now
         # also run as required gates below (ticket 06): preview mocks its
@@ -50,9 +51,11 @@ jobs:
             scripts/release.py \
             scripts/doctor.py \
             scripts/run_status.py \
+            packages/design-playbook/skills/design-baseline/scripts/design_baseline.py \
             tests/test_release.py \
             tests/test_doctor.py \
             tests/test_run_status.py \
+            tests/test_design_baseline.py \
             packages/design-playbook/scripts/validate_run.py
 
       # ----------------------------------------------------------------

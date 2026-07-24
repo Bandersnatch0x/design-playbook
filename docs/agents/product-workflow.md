@@ -6,15 +6,16 @@
 
 一次 `/design-io`（编排序列 SSOT 见 `packages/design-playbook/skills/design-playbook/SKILL.md`）：
 
-`reference-intake? → ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → (observe*) → ui-evaluator`
+`design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → (observe*) → ui-evaluator`
 
-1. 有截图/URL/设计稿/产品类比时先 `reference-intake?`（`.scratch/<run>/reference/`；非 gate，ADR-0011）
-2. L5/L6 `spec.md`（缺则先 ux-spec，并消费 reference 功能约束；有则 plan 轻量交接）
-3. 写码前 decision report（`ui-picker` 止于 report；消费 reference 视觉线索）
-4. 可选 `preview*`（MCP `preview_prototype` 存在才跑；确认后才进 Fill；G5 条件 gate）
-5. point-back 验收；可选 `observe*` 在 craft 后、验收前从宿主运行态采集 criterion-addressable 证据（manifest bind，ledger observed 引用 `evidence/` 工件；G6 条件 gate）
-6. blocking 回流声明层
-7. 陌生人可复制安装（package README）
+1. 已有产品做 UI build/fix 时先 `design-baseline?`：`prepare` → 确认/waiver → `verify`；门禁工件仅为 `design-baseline/state.json`；缺失或过期则从第一方 UI 生成草稿，确认或显式 waiver 后才能 Fill（ADR-0012）
+2. 有截图/URL/设计稿/产品类比时跑 `reference-intake?`（`.scratch/<run>/reference/`；非 gate，ADR-0011）
+3. L5/L6 `spec.md`（缺则先 ux-spec，并消费 reference 功能约束；有则 plan 轻量交接）
+4. 写码前 decision report（`ui-picker` 止于 report；引用 project `DESIGN.md` 路径 + hash，并消费 reference 视觉线索）
+5. 可选 `preview*`（MCP `preview_prototype` 存在才跑；确认后才进 Fill；G5 条件 gate）
+6. point-back 验收；可选 `observe*` 在 craft 后、验收前从宿主运行态采集 criterion-addressable 证据（manifest bind，ledger observed 引用 `evidence/` 工件；G6 条件 gate）
+7. blocking 回流声明层
+8. 陌生人可复制安装（package README）
 
 ## 阶段
 

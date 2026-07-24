@@ -47,6 +47,7 @@ Open Design's `reference-design-contract` and open-codesign's reference decompos
 
 - Orchestrator data flow becomes:
   `reference-intake? → ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → (observe*) → ui-evaluator`
+  ADR-0012 later prepends the conditional existing-product `design-baseline?` gate; this ADR remains the authority for `reference-intake?` itself.
 - New skill: `packages/design-playbook/skills/reference-intake/`.
 - Future optional MCP provider (`decompose_reference`) may fill observed fields only; it must not write spec, decision report, or verdict. That provider is **out of scope for this ADR**.
 - `run-manifest.json` freshness across the whole run remains a separate later ADR; this ADR only freezes the reference subtree.

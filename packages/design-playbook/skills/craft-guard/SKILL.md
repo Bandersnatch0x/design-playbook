@@ -7,6 +7,8 @@ description: UI craft and feedback quality. Use when polishing product UI (motio
 
 **Craft** declaration for cross-product quality: hierarchy, wait feedback, purposeful motion, CJK-safe type. Does not own business risk (`domain`) or token inventory (`design`).
 
+When a verified design-baseline binding exists (`status: ready`), use that path as the project-specific visual baseline. Report clear divergence (density, type, spacing, shape, motion, or primitive treatment) to `ui-evaluator` with source set to the bound path; do not replace valid project choices with this skill's generic taste defaults.
+
 ## Apply (checklist)
 
 Treat as exhaustive for the surface under edit.
