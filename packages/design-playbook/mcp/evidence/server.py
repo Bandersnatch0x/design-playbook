@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
@@ -41,10 +40,6 @@ EVIDENCE_SUBDIR = "evidence"
 
 def _log(msg: str) -> None:
     print(msg, file=sys.stderr, flush=True)
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
 def _tool_schema() -> dict[str, Any]:
