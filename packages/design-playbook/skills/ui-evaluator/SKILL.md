@@ -14,6 +14,8 @@ description: Run evidence-backed UI acceptance. Use after generating a page, or 
 Identify which of these apply to this surface (repo files, prior turns, or design-playbook defaults):  
 `spec` · `domain` · `craft` · `design` · `components` · `template`.
 
+When a verified `.scratch/<run>/design-baseline/state.json` binds a baseline (`status: ready`, path from `baseline.path`), include it as the project-specific visual declaration. It can support design-drift findings but is never L6 runtime proof by itself. An explicit `status: waived` disables baseline-drift checks for that run; it does not waive `spec`, accessibility, or craft checks.
+
 When `.scratch/<run>/reference/contract.md` exists (ADR-0011), you **may** use it as supporting context for findings about copied brand chrome, distinctive illustration, or other **Do not copy** breaches (`source` = `reference` or the owning declaration). It is **never** L6 proof and never a Pass/Fail gate by itself.
 
 **Done when:** the check set is named; if `spec` L6 exists, every criterion and its required proof are on the list.
@@ -27,6 +29,7 @@ Walk every applicable row (exhaustive for bound declarations):
 | Empty / loading / error / permission | `spec` |
 | Risk color, secrets, dangerous ops | `domain` |
 | AI slop, hierarchy, purposeless motion | `craft` |
+| New surface drifts from confirmed project visual roles/patterns | bound `<binding.path>` |
 | Raw hex / px / ms (unlogged) | `design` |
 | Badge/Tag, Dialog/Drawer, … | `components` |
 | Shell matches scene | `template` |
@@ -90,6 +93,7 @@ Single source of truth for the observable -> declaration routing. The orchestrat
 | Happy path only; empty/fail/auth missing | `spec` |
 | Wrong business meaning / risk / secrets | `domain` |
 | AI slop, flat hierarchy, purposeless motion | `craft` |
+| New UI visually conflicts with confirmed existing-product baseline | bound `<binding.path>` |
 | Scattered hex/px/ms | `design` |
 | Badge↔Tag, Dialog↔Drawer mixups | `components` |
 | Wrong page shell (e.g. list as card wall) | `template` |

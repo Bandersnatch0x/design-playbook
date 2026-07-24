@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 层 | 路径 |
 | --- | --- |
 | Plugin 元数据 | `packages/design-playbook/.claude-plugin/plugin.json` |
-| Skills | `packages/design-playbook/skills/{design-playbook,reference-intake,ux-spec,ui-picker,craft-guard,native-craft,ui-evaluator}/` |
+| Skills | `packages/design-playbook/skills/{design-playbook,design-baseline,reference-intake,ux-spec,ui-picker,craft-guard,native-craft,ui-evaluator}/` |
 | Commands | `packages/design-playbook/commands/` |
 | MCP adapters | `packages/design-playbook/mcp/{preview,evidence}/` + 包根 `.mcp.json`（ADR-0009；sibling 包为兼容启动器） |
 | Codex | `packages/design-playbook/codex/AGENTS.md` |

@@ -29,13 +29,17 @@ from validate_run import is_confirmed_valid, latest_numeric_round  # noqa: E402
 # Ordered pipeline stages used only for status/resume narration.
 #
 # Mirror of packages/design-playbook/skills/design-playbook/SKILL.md Steps
-# (reference / spec / plan / decision / preview / fill / craft / evidence / accept).
+# (baseline / reference / spec / plan / decision / preview / fill / craft / evidence / accept).
 # That skill points back here as **monorepo-only** — this file is NOT shipped
 # inside the installable plugin package. When you add/remove a step or change
 # an artifact filename in SKILL.md, sync this table. A lockstep test or a
 # SKILL-embedded machine-readable table is deferred until ADR-0010 P1 turns
 # STAGES into a navigation data source.
 STAGES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    # DesignBaseline deep module (ADR-0012): state.json is the sole gate artifact.
+    # Draft/evidence are not authority and must not mark the stage present —
+    # orphan drafts without state.json are incomplete noise, not a resume stage.
+    ("baseline", "design-baseline", ("design-baseline/state.json",)),
     ("reference", "reference-intake", ("reference/contract.md", "reference/manifest.json")),
     ("spec", "ux-spec", ("spec.md",)),
     ("plan", "plan", ("plan.md",)),
@@ -120,8 +124,57 @@ def verdict_of(run_root: Path) -> str | None:
     return None
 
 
+def _baseline_next_action(run_root: Path) -> str | None:
+    """Return a blocking resume hint when the DesignBaseline gate is incomplete.
+
+    Reads only ``design-baseline/state.json`` (schema ``design-baseline/v1``),
+    which is the sole stage marker (ADR-0012). Mirrors the public statuses
+    produced by ``prepare`` / ``confirm`` / ``verify``:
+    ``ready`` (bound), ``waived`` (explicit reason), ``needs_confirmation``,
+    or ``ambiguous``. This is **status narration only** — it does not re-hash
+    sources or re-verify the binding. ``verify()`` at Fill time is the
+    forge-resistant gate.
+    """
+    state_path = run_root / "design-baseline" / "state.json"
+    # Stage is only present when state.json exists, so a missing file here is
+    # a race/corruption case rather than the orphan-draft path.
+    if not state_path.is_file():
+        return ("Design-baseline state.json vanished mid-read — "
+                "re-run design-baseline prepare before Fill.")
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "Design-baseline state.json is unreadable — re-run design-baseline prepare before Fill."
+    if not isinstance(state, dict):
+        return "Design-baseline state.json is not an object — re-run design-baseline prepare before Fill."
+
+    status = state.get("status")
+    decision = state.get("decision") if isinstance(state.get("decision"), dict) else {}
+
+    if status == "needs_confirmation":
+        return ("Design-baseline draft needs confirmation — "
+                "accept/waive via design-baseline confirm before Fill.")
+    if status == "ambiguous":
+        return ("Design-baseline candidates are ambiguous — "
+                "resolve DESIGN.md vs .stitch/DESIGN.md before Fill.")
+    if status == "waived":
+        waiver_reason = decision.get("reason")
+        if not (isinstance(waiver_reason, str) and waiver_reason.strip()):
+            return ("Design-baseline waiver is missing a non-empty reason — "
+                    "record an explicit waiver reason before Fill.")
+        return None
+    if status == "ready":
+        return None
+    return ("Design-baseline status is not ready/waived — "
+            "complete prepare/confirm (or re-run prepare) before Fill.")
+
+
 def next_action(states: list[StageState], run_root: Path) -> str:
     present = {s.key: s for s in states if s.present}
+    if "baseline" in present:
+        blocked = _baseline_next_action(run_root)
+        if blocked is not None:
+            return blocked
     if "accept" in present:
         verdict = verdict_of(run_root)
         if verdict and verdict.lower().startswith("pass"):
@@ -170,8 +223,10 @@ def next_action(states: list[StageState], run_root: Path) -> str:
         return "Resume at plan? (optional) or ui-picker."
     if "reference" in present and "spec" not in present:
         return "Resume at ux-spec (reference contract present)."
+    if "baseline" in present and "reference" not in present and "spec" not in present:
+        return "Design baseline bound — resume at reference-intake? (if needed) or ux-spec."
     if not present:
-        return "No run artifacts — start with /design-playbook:design-io <ask> (reference-intake? or ux-spec)."
+        return "No run artifacts — start with /design-playbook:design-io <ask> (design-baseline?, reference-intake?, or ux-spec)."
     # partial unknown
     last = [s for s in states if s.present][-1]
     return f"Latest artifact stage: {last.key} ({last.skill}). Continue the orchestrator sequence from there."

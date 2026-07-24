@@ -53,11 +53,13 @@ args = ["<abs>/packages/design-playbook/mcp/evidence/server.py"]
 ## Load order
 
 1. `skills/design-playbook/SKILL.md`
-2. Standard order: `ux-spec` → `ui-picker` → `fill` → `craft-guard` → `ui-evaluator`.
+2. Standard order: `design-baseline?` → `ux-spec` → `ui-picker` → `fill` → `craft-guard` → `ui-evaluator`.
 
 Native desktop order: `ux-spec` → `native-craft` → `ui-picker` → `fill` → `craft-guard` → `ui-evaluator`.
 
 Conditional entry `reference-intake?` (screenshot/URL/design/product analogy, ADR-0011) runs **before** `ux-spec?` when reference materials are present — fixed orchestrator order, not reorderable. Run `native-craft` only for an explicit native-desktop/native-feel target. Web and mobile Web skip `native-craft`; if the platform is unclear, ask before choosing the order. The orchestrator owns the decision gate, render-surface seam handoff, and fail-closed behavior.
+
+Conditional entry `design-baseline?` (ADR-0012) runs before `reference-intake?` for UI builds/fixes in repositories with meaningful existing first-party UI. Existing-product Fill requires a valid existing baseline, an accepted generated baseline, or an explicit user waiver.
 
 Mirror the orchestrator's skip narration (SKILL.md Steps preamble): when a step is skipped, output one line — step name + reason + how to enable, with the gate label when one applies, e.g. `-> preview*: adapter absent, skipped (G5 not triggered; enable via packages/design-playbook/mcp/preview/ or host MCP)`.
 

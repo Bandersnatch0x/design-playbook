@@ -45,6 +45,7 @@ After install, skills and commands are **namespaced** by the plugin name:
 | Invoke | Role |
 | --- | --- |
 | `/design-playbook:design-playbook` | Orchestrator skill (model-invoked) |
+| `/design-playbook:design-baseline` | Discover/validate/draft the project `DESIGN.md` baseline |
 | `/design-playbook:reference-intake` | Reference contract skill (screenshot/URL/analogy) |
 | `/design-playbook:ux-spec` | Six-layer spec skill |
 | `/design-playbook:ui-picker` | Shell + components skill |
@@ -61,7 +62,7 @@ Bare `/design-io` is **not** the installed name — always use the `design-playb
 
 | Package | Use for |
 | --- | --- |
-| **design-playbook** | Reference? → Spec? → plan? → shell → optional preview* → fill → craft → optional observe* → evaluate / recirculate |
+| **design-playbook** | Baseline? → Reference? → Spec? → plan? → shell → optional preview* → fill → craft → optional observe* → evaluate / recirculate |
 | ui-ux-pro-max | Style / palette / type search |
 | frontend-design | Anti-template visual direction |
 
@@ -87,9 +88,9 @@ Only authored content in this package (skills, pipeline commands, metadata, self
 
 Evidence exists only to satisfy a declared criterion — an observation without a binding to an L6 acceptance item is telemetry, not evidence. Runtime capture is done by external providers; design-playbook owns the binding (manifest) and the verdict (ledger), never the runtime.
 
-The Design I/O run is a **declared, host-neutral contract** over plain-Markdown artifacts (spec, decision report, point-back ledger). Any coding agent that emits that shape can be checked; Claude Code and Codex are adapters over the same artifacts, and every generator, bridge, or design-system gate is an optional input, never a dependency.
+The Design I/O run is a **declared, host-neutral contract** over plain-Markdown artifacts (`DESIGN.md`, spec, decision report, point-back ledger). Any coding agent that emits that shape can be checked; Claude Code and Codex are adapters over the same artifacts. Generators and bridges remain optional; existing-product UI work must bind a valid/accepted project baseline or record an explicit waiver.
 
-Run artifacts land under `.scratch/<run>/` (`plan.md`, `preview/`, `evidence/manifest.jsonl`, `point-back.md`); see `SKILL.md` steps 3, 5, 8 for what lands when. That is where to look — and manually intervene — when a run stalls.
+Run artifacts land under `.scratch/<run>/` (`design-baseline/`, `plan.md`, `preview/`, `evidence/manifest.jsonl`, `point-back.md`); see the orchestrator skill for what lands when. That is where to look — and manually intervene — when a run stalls.
 
 **Bundled MCP (v0.3+):** Preview (`mcp/preview/`) and Evidence (`mcp/evidence/`) runtimes ship inside this package and are registered by `.mcp.json` (`${CLAUDE_PLUGIN_ROOT}`). Sibling monorepo dirs remain compatibility launchers/docs. The orchestrator still **probes** MCP `tools/list` and skips `preview*` / `observe*` when tools are absent. Evidence provider writes artifacts only — never the manifest. **`DESIGN_PLAYBOOK_RUN_ROOT`:** default `"."` in `.mcp.json` is the **MCP process cwd**, not the chat workspace — for a host-app dogfood, set an **absolute** path to `.scratch/<run>/` (see [`mcp/evidence/README.md`](mcp/evidence/README.md)). Capture responses include `written_path` (absolute) so mis-rooted writes are visible without a filesystem search.
 

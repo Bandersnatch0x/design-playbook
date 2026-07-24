@@ -57,8 +57,144 @@ class RunStatusTests(unittest.TestCase):
             result = _run(str(run_root), "--json")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             payload = json.loads(result.stdout)
-            self.assertTrue(payload["stages"][0]["present"])
-            self.assertEqual(payload["stages"][0]["key"], "reference")
+            by_key = {s["key"]: s for s in payload["stages"]}
+            self.assertFalse(by_key["baseline"]["present"])
+            self.assertTrue(by_key["reference"]["present"])
+            self.assertIn("ux-spec", payload["next"])
+
+    def test_pending_design_baseline_blocks_resume(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-baseline-pending"
+            baseline = run_root / "design-baseline"
+            baseline.mkdir(parents=True)
+            (baseline / "state.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "design-baseline/v1",
+                        "status": "needs_confirmation",
+                        "baseline": None,
+                        "draft": {
+                            "path": "design-baseline/DESIGN.draft.md",
+                            "sha256": "b" * 64,
+                        },
+                        "decision": None,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (baseline / "DESIGN.draft.md").write_text(
+                "# proposed baseline\n", encoding="utf-8"
+            )
+            result = _run(str(run_root), "--json")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertIn("baseline", payload["next"].lower())
+            self.assertIn("before fill", payload["next"].lower())
+
+    def test_design_baseline_draft_without_state_does_not_mark_stage(self) -> None:
+        # Sole gate artifact is state.json (ADR-0012). Orphan draft/evidence
+        # must not flip baseline.present or invent a baseline resume hint.
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-baseline-missing-state"
+            baseline = run_root / "design-baseline"
+            baseline.mkdir(parents=True)
+            (baseline / "DESIGN.draft.md").write_text(
+                "# proposed baseline\n", encoding="utf-8"
+            )
+            (baseline / "evidence.json").write_text("{}\n", encoding="utf-8")
+            (run_root / "spec.md").write_text("# L1\n", encoding="utf-8")
+
+            result = _run(str(run_root), "--json")
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            by_key = {s["key"]: s for s in payload["stages"]}
+            self.assertFalse(by_key["baseline"]["present"])
+            self.assertTrue(by_key["spec"]["present"])
+            self.assertNotIn("state.json", payload["next"])
+            self.assertIn("ui-picker", payload["next"].lower())
+
+    def test_accepted_design_baseline_routes_to_next_declaration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-baseline-accepted"
+            baseline = run_root / "design-baseline"
+            baseline.mkdir(parents=True)
+            (baseline / "state.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "design-baseline/v1",
+                        "status": "ready",
+                        "baseline": {
+                            "path": "DESIGN.md",
+                            "sha256": "a" * 64,
+                            "origin": "generated",
+                        },
+                        "decision": {
+                            "kind": "accepted",
+                            "confirmed_at": "2026-07-24T00:00:00Z",
+                        },
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            result = _run(str(run_root), "--json")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertIn("ux-spec", payload["next"])
+
+    def test_design_baseline_waiver_requires_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-baseline-empty-waiver"
+            baseline = run_root / "design-baseline"
+            baseline.mkdir(parents=True)
+            (baseline / "state.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "design-baseline/v1",
+                        "status": "waived",
+                        "baseline": None,
+                        "decision": {
+                            "kind": "waived",
+                            "reason": "",
+                            "confirmed_at": "2026-07-24T00:00:00Z",
+                        },
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            result = _run(str(run_root), "--json")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertIn("waiver", payload["next"].lower())
+            self.assertIn("before fill", payload["next"].lower())
+
+    def test_explicit_design_baseline_waiver_routes_to_next_declaration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-baseline-waived"
+            baseline = run_root / "design-baseline"
+            baseline.mkdir(parents=True)
+            (baseline / "state.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "design-baseline/v1",
+                        "status": "waived",
+                        "baseline": None,
+                        "decision": {
+                            "kind": "waived",
+                            "reason": "User accepted legacy visual drift",
+                            "confirmed_at": "2026-07-24T00:00:00Z",
+                        },
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            result = _run(str(run_root), "--json")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
             self.assertIn("ux-spec", payload["next"])
 
     def test_status_after_accept_pass(self) -> None:

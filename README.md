@@ -9,7 +9,7 @@
 [![Version](https://img.shields.io/badge/Version-0.5.0-2DD4BF?style=flat-square&logo=semver&logoColor=black)](.#)
 [![License](https://img.shields.io/badge/License-MIT-2DD4BF?style=flat-square&logo=opensourceinitiative&logoColor=black)](./packages/design-playbook/LICENSE)
 [![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-2DD4BF?style=flat-square&logo=claude&logoColor=black)](.#)
-[![Skills](https://img.shields.io/badge/Skills-7-2DD4BF?style=flat-square)](.#)
+[![Skills](https://img.shields.io/badge/Skills-8-2DD4BF?style=flat-square)](.#)
 [![Commands](https://img.shields.io/badge/Commands-3-2DD4BF?style=flat-square)](.#)
 [![Codex](https://img.shields.io/badge/Codex-ready-2DD4BF?style=flat-square)](./packages/design-playbook/codex/AGENTS.md)
 
@@ -21,7 +21,7 @@
 
 ## ✨ What it is
 
-A Claude Code / Codex plugin. One predictable pass per run — **Design I/O**: `reference-intake? → ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → (observe*) → ui-evaluator`, where acceptance **points back** to the declaration that owns each failure, and blocking findings **recirculate** until closed. `?` = conditional entry (`reference-intake?` when screenshot/URL/design/product analogy is present); `preview*`/`observe*` run only when their optional MCP adapter is present (`preview_prototype` before Fill, `execute_capture_plan` after craft) — otherwise skipped. `preview*` is a human-in-the-loop confirm gate (G5); `observe*` captures criterion-addressable runtime evidence into a manifest the evaluator binds to a criterion (G6).
+A Claude Code / Codex plugin. One predictable pass per run — **Design I/O**: `design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → (observe*) → ui-evaluator`, where acceptance **points back** to the declaration that owns each failure, and blocking findings **recirculate** until closed. `?` = conditional entry (`design-baseline?` for UI work in an existing product; `reference-intake?` when screenshot/URL/design/product analogy is present); `preview*`/`observe*` run only when their optional MCP adapter is present (`preview_prototype` before Fill, `execute_capture_plan` after craft) — otherwise skipped. `preview*` is a human-in-the-loop confirm gate (G5); `observe*` captures criterion-addressable runtime evidence into a manifest the evaluator binds to a criterion (G6).
 
 - **Declarations** *(what good is)*: `spec` · `domain` · `craft` · `design` · `components` · `template`
 - **Contracts** *(how work enters the pipeline)*: `skill` (timing) · `evaluator` (acceptance + recirculate)
@@ -66,11 +66,12 @@ Invoke **namespaced**: `/design-playbook:design-io <ask>`. Bare `/design-io` is 
 
 ## 🧩 Skills & commands
 
-Seven model-invoked skills (`/design-playbook:<name>`):
+Eight model-invoked skills (`/design-playbook:<name>`):
 
 | Skill | Role |
 | :--- | :--- |
 | `design-playbook` | 🎯 Orchestrator (full pipeline) |
+| `design-baseline` | 🧭 Discover, validate, or draft project `DESIGN.md` before existing-product UI work |
 | `reference-intake` | 📎 Reference contract (screenshot/URL/analogy → Keep/Change/Do not copy) |
 | `ux-spec` | 📋 Six-layer spec declaration |
 | `ui-picker` | 🧱 Shell + component semantics |
@@ -84,7 +85,7 @@ Seven model-invoked skills (`/design-playbook:<name>`):
 
 | Package | Use for |
 | :--- | :--- |
-| **design-playbook** | Reference? → Spec? → plan? → shell → optional preview* → fill → craft → optional observe* → point-back |
+| **design-playbook** | Baseline? → Reference? → Spec? → plan? → shell → optional preview* → fill → craft → optional observe* → point-back |
 | [ui-ux-pro-max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | Style / palette / type search |
 | `frontend-design` | Anti-template visual direction |
 | [native-feel-skill](https://github.com/yetone/native-feel-skill) | Full native-feel depth (WebView, IPC, memory) |

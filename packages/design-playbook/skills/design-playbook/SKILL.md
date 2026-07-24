@@ -31,7 +31,7 @@ Pause for explicit confirmation before an external, destructive, costly, or scop
 
 Do in order. Data flow:
 
-`reference-intake? → ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → (observe*) → ui-evaluator`
+`design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → (observe*) → ui-evaluator`
 
 - `?` = conditional entry/route
 - `*` = run only when the matching MCP tool is available (`preview_prototype` for preview, `execute_capture_plan` for observe); otherwise skip
@@ -42,10 +42,20 @@ Do in order. Data flow:
 
 **SSOT for this decision is this skill only** (not `commands/design-io.md`).
 
+- **Existing-product UI build/fix** (meaningful first-party pages/components/theme/styles already exist) and no usable verified baseline binding under `.scratch/<run>/design-baseline/state.json` → step **1A. `design-baseline`**
 - **Reference materials present** (screenshot, design file path, URL, or product/brand analogy) and no usable `.scratch/<run>/reference/contract.md` → step **2. `reference-intake`**
 - **Missing `spec`** (no usable six-layer `spec.md` for this run) → step **3. `ux-spec`**
 - **Spec present** → step **4. plan** (do not re-run `ux-spec` unless structural conflict forces it)
+- No meaningful existing UI, or no UI mutation in scope → skip `design-baseline` with one-line narration
 - No reference materials → skip `reference-intake` with one-line narration
+
+### 1A. `design-baseline` (existing-product UI only)
+
+Invoke **design-baseline** before reference intake or specification work. Call the deep module `prepare` → (user confirm/waive) → `confirm` as needed; immediately before Fill call `verify`. Discover and validate project `DESIGN.md`; if missing or incomplete, generate only run-local `DESIGN.draft.md` + `evidence.json` from first-party UI evidence and wait for confirmation before a durable write.
+
+Gate artifact is only `.scratch/<run>/design-baseline/state.json` (`schema: design-baseline/v1`). A valid existing baseline becomes `status: ready` with `decision.kind: existing`. A generated draft requires `confirm(..., "accept")` (`ready` + `accepted`) or explicit `confirm(..., "waive", reason=...)` (`waived`). `needs_confirmation` and `ambiguous` block Fill. A draft alone is not authority.
+
+**Done when:** **design-baseline**'s own completion criteria hold (that skill is SSOT). Smoke: `state.json` exists; candidate conflicts and stale source hashes are exposed by prepare/verify; status is `ready` or `waived`; no valid baseline was silently replaced.
 
 ### 2. `reference-intake` (when reference materials present)
 
@@ -120,7 +130,9 @@ After the decision report exists, probe MCP `tools/list` for **`preview_prototyp
 
 ### 7. Fill
 
-Implement structure from the decision report + `spec`. Prefer project tokens: visual values via `var(--*)`; missing tokens → `gaps.log` (or project equivalent), not raw hex/px/ms.
+Implement structure from the decision report + `spec` + confirmed project `DESIGN.md` when bound. Prefer project tokens: visual values via `var(--*)`; missing tokens → `gaps.log` (or project equivalent), not raw hex/px/ms.
+
+**Hard boundary (design baseline):** for existing-product UI work, do not enter Fill unless `design_baseline.verify(project_root, run_root)` succeeds with `status` `ready` (bound path + sha256) or `waived` (non-empty reason). A draft alone is not authority.
 
 **Hard boundary (reference):** never copy `.scratch/<run>/reference/assets/`, `reference/example.html`, or third-party brand media inventoried by reference-intake into the host Fill tree. Honor Do not copy via report + `spec` only.
 
@@ -181,7 +193,7 @@ Evidence is captured, not judged — copy provider returns verbatim here; `pass`
 
 Invoke **ui-evaluator**. Issues must **point back** to a declaration.
 
-**Done when:** the report includes the criterion-shaped evidence ledger (`criterion / required / observed / result`) and findings as `issue / source / fix / severity`; the authoritative verdict completion criterion in `ui-evaluator` is met; **and** you show the user a short **run artifact index** (paths under `.scratch/<run>/`) so declaration products are discoverable — at minimum: `reference/` (if any), `spec.md`, `plan.md`, `decision-report.md`, `preview/` (if any), Fill surface path, `evidence/` (if any), `point-back.md`. One block is enough; do not only leave paths buried in tool logs.
+**Done when:** the report includes the criterion-shaped evidence ledger (`criterion / required / observed / result`) and findings as `issue / source / fix / severity`; the authoritative verdict completion criterion in `ui-evaluator` is met; **and** you show the user a short **run artifact index** (paths under `.scratch/<run>/`) so declaration products are discoverable — at minimum: `design-baseline/` (if triggered), `reference/` (if any), `spec.md`, `plan.md`, `decision-report.md`, `preview/` (if any), Fill surface path, `evidence/` (if any), `point-back.md`. One block is enough; do not only leave paths buried in tool logs.
 
 Machine seam (optional local check): `python scripts/validate_run.py <spec.md> <point-back.md> [--preview-dir <preview/>] [--decision-report <report>] [--evidence-dir <evidence/>] [--run-root <run>]`.
 
@@ -193,6 +205,7 @@ When a finding has no owner or you need the observable -> declaration routing, u
 
 | Contract | Skill |
 | --- | --- |
+| Discover/validate/generate the project visual baseline | `design-baseline` |
 | Reference intake (observed/inferred + Keep/Change/Do not copy) | `reference-intake` |
 | Write the functional declaration | `ux-spec` |
 | Choose shell + component meaning | `ui-picker` |
@@ -200,7 +213,7 @@ When a finding has no owner or you need the observable -> declaration routing, u
 | Native-feel desktop declaration (render seam + conventions) | `native-craft` |
 | Acceptance + point-back critique | `ui-evaluator` |
 
-`plan`, `preview*`, and `observe*` are orchestrator steps (plus optional external MCPs for preview and observe), not rows in this table. `reference-intake?` is a conditional skill step (ADR-0011), not a machine gate.
+`plan`, `preview*`, and `observe*` are orchestrator steps (plus optional external MCPs for preview and observe), not rows in this table. `design-baseline?` is a conditional existing-product orchestrator gate (ADR-0012); `reference-intake?` is a conditional skill step (ADR-0011), not a machine gate.
 
 Slash (installed plugin, namespaced): `/design-playbook:design-io` · `/design-playbook:ux-spec` · `/design-playbook:ui-review`.
 With `claude --plugin-dir` the same command files apply under the plugin namespace.

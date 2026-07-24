@@ -13,9 +13,11 @@ Before code: map the job to a **template** (shell) and **component semantics**. 
 
 Choose density (console-tight vs marketing-loose) and scene class (list / detail / settings / dashboard / editor / agent-admin / …).
 
+When a verified `.scratch/<run>/design-baseline/state.json` binds a baseline (`status: ready` from `design_baseline.verify`), read that binding path first (`baseline.path`, usually `DESIGN.md` or `.stitch/DESIGN.md`). It is the project-specific authority for atmosphere, visual roles, density, layout, motion, and component conventions. Preserve it unless the requested change explicitly revises the baseline.
+
 When `.scratch/<run>/reference/contract.md` exists (ADR-0011), read its **Visual cues for ui-picker**, Keep/Change, and Do not copy / exclusions. Use them as input for density, scene, region weight, and risks — never as hex tokens or as a license to copy brand chrome.
 
-**Done when:** one scene label and one density choice are explicit; if a reference contract exists, the decision report's risks or exclusions surface its Do not copy / brand risks (path citation is enough).
+**Done when:** one scene label and one density choice are explicit; a bound baseline is cited by path + SHA-256; if a reference contract exists, the decision report's risks or exclusions surface its Do not copy / brand risks (path citation is enough).
 
 ### 2. Template
 
@@ -30,7 +32,7 @@ Read [`references/components.md`](references/components.md). For each field/acti
 Load only if needed:
 
 - business risk / desensitize → [`references/domain.md`](references/domain.md)
-- token roles while deciding surfaces → [`references/design.md`](references/design.md)
+- token roles while deciding surfaces → verified `<binding.path>` first, then generic fallback [`references/design.md`](references/design.md)
 
 **Done when:** every primary datum/action has a named component role; easy-mix pairs (Badge/Tag, Dialog/Drawer, Dropdown/Menu/Command) are resolved in writing.
 
@@ -39,15 +41,17 @@ Load only if needed:
 Write, then wait for confirmation if the user is in the loop:
 
 ```text
+design-baseline: <binding.path> sha256:<digest> | waived:<reason>
 scene:
 density:
 template:
 regions: …
 components: …
+baseline-changes: none | <explicitly approved change>
 risks: …
 ```
 
-**Done when:** the report exists and coding has not started without it.
+**Done when:** the report exists, records the bound baseline or explicit waiver, and coding has not started without it.
 
 ### Branch — structure still open
 
