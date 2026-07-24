@@ -8,7 +8,6 @@ and tears down the browser + server without hanging on keep-alive sockets.
 from __future__ import annotations
 
 import ctypes
-import hashlib
 import html
 import json
 import os
@@ -24,7 +23,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
-from confirm import _DecisionSession, _check_feedback_floor, _generate_decision_token
+from confirm import (
+    _DecisionSession,
+    _check_feedback_floor,
+    _generate_decision_token,
+    prototype_html_digest,
+)
 from control import _build_control, _format_feedback
 from i18n import CONFIRM_LABELS, lang, t
 from util import _log
@@ -535,9 +539,9 @@ def _collect_via_browser(
     }
     done = threading.Event()
 
-    # TOCTOU fix: read bytes once, hash, then decode for display
+    # TOCTOU fix: read bytes once, hash (LF-normalized), then decode for display
     raw_bytes = prototype.read_bytes()
-    prototype_html_hash = hashlib.sha256(raw_bytes).hexdigest()
+    prototype_html_hash = prototype_html_digest(raw_bytes)
     prototype_html = raw_bytes.decode("utf-8")
     result["prototype_html_hash"] = prototype_html_hash
 

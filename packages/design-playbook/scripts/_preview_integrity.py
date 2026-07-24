@@ -147,14 +147,29 @@ def _prototype_target(data: dict, run_root: Path) -> Path | None:
         return None
 
 
+def prototype_html_digest(raw: bytes) -> str:
+    """SHA-256 of prototype bytes with newlines normalized to LF.
+
+    Windows ``core.autocrlf`` rewrites working-tree bytes on checkout; a raw
+    digest then disagrees between the machine that wrote the confirm record
+    and a Linux CI runner validating the same git blob. Line-ending noise is
+    not a prototype content change for G5 integrity (issue 02 / T01).
+
+    Must stay in lockstep with ``mcp/preview/confirm.prototype_html_digest``.
+    """
+    return hashlib.sha256(
+        raw.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    ).hexdigest()
+
+
 def _verify_prototype_hash(data: dict, run_root: Path) -> list[str]:
     """Verify ``prototype_html_hash`` when the confirm record carries one.
 
     The hash is written by the trusted-side ``confirm.py`` as
-    ``sha256(<prototype bytes>)``; the validator (also trusted) recomputes it
-    from the prototype html currently on disk and compares. The hash source
-    stays on the trusted side and is never self-reported by the prototype
-    (issue 02 / T01 trust boundary).
+    ``prototype_html_digest(<prototype bytes>)`` (LF-normalized SHA-256);
+    the validator (also trusted) recomputes it from the prototype html
+    currently on disk and compares. The hash source stays on the trusted
+    side and is never self-reported by the prototype (issue 02 / T01).
 
     Missing ``prototype_html_hash`` FAILs (since 0.4.4+ adapter always
     writes it; absence indicates hand-written or pre-0.4.4 records).
@@ -171,7 +186,7 @@ def _verify_prototype_hash(data: dict, run_root: Path) -> list[str]:
             "G5 preview: confirmed record carries prototype_html_hash but "
             "its prototype html is missing"
         ]
-    digest = hashlib.sha256(target.read_bytes()).hexdigest()
+    digest = prototype_html_digest(target.read_bytes())
     if digest != stored:
         return [
             "G5 preview: confirmed record prototype_html_hash mismatch "

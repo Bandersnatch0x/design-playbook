@@ -12,7 +12,6 @@ Compatibility launcher remains at packages/design-playbook-preview/server.py.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import sys
 from pathlib import Path
@@ -34,6 +33,7 @@ from confirm import (  # noqa: F401  (re-exported for stable module surface)
     _preview_dir_for,
     _self_check_floor,
     _write_confirm,
+    prototype_html_digest,
 )
 # Control-bar template + builder + feedback formatting.
 from control import _build_control, _format_feedback, control_tpl  # noqa: F401
@@ -149,7 +149,7 @@ def handle_preview_prototype(args: dict[str, Any]) -> dict[str, Any]:
         # callers that bypassed the browser path).
         proto_hash = decision.get("prototype_html_hash")
         if not proto_hash:
-            proto_hash = hashlib.sha256(prototype.read_bytes()).hexdigest()
+            proto_hash = prototype_html_digest(prototype.read_bytes())
         out = _write_confirm(
             preview_dir,
             round_n=round_n,
