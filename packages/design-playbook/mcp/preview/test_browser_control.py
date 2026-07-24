@@ -419,9 +419,9 @@ class ConfirmRecordHashTests(unittest.TestCase):
             proto = preview_dir / "round-1.html"
             proto_bytes = b"<html><body><h1>hash me</h1></body></html>"
             proto.write_bytes(proto_bytes)
-            import hashlib
+            from confirm import prototype_html_digest
 
-            expected = hashlib.sha256(proto_bytes).hexdigest()
+            expected = prototype_html_digest(proto_bytes)
 
             out = _write_confirm(
                 preview_dir,

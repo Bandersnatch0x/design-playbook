@@ -17,6 +17,21 @@ from typing import Any
 from util import _now_iso
 
 
+def prototype_html_digest(raw: bytes) -> str:
+    """SHA-256 of prototype bytes with newlines normalized to LF.
+
+    Windows ``core.autocrlf`` rewrites working-tree bytes on checkout; a raw
+    digest then disagrees between the machine that wrote the confirm record
+    and a Linux CI runner validating the same git blob. Line-ending noise is
+    not a prototype content change for G5 integrity (issue 02 / T01).
+
+    Must stay in lockstep with ``scripts/_preview_integrity.prototype_html_digest``.
+    """
+    return hashlib.sha256(
+        raw.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    ).hexdigest()
+
+
 def _preview_dir_for(path: Path | None) -> Path:
     if path is not None:
         return path.parent

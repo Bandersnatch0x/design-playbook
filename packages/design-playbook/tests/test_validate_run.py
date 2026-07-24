@@ -465,6 +465,27 @@ def main() -> int:
             "--preview-dir", str(preview),
             "--decision-report", str(run_root / "decision-report.md"))
 
+    # CRLF working-tree bytes must match an LF-normalized confirm hash
+    # (Windows core.autocrlf vs Linux CI checkout of the same blob).
+    with tempfile.TemporaryDirectory() as tmp:
+        run_root = Path(tmp)
+        preview = run_root / "preview"
+        body = b"<html>round-1</html>\n"
+        (preview).mkdir(parents=True, exist_ok=True)
+        (preview / "round-1.html").write_bytes(body.replace(b"\n", b"\r\n"))
+        h_lf = hashlib.sha256(body).hexdigest()
+        _write_text(
+            preview / "confirm-round-1.json",
+            json.dumps(
+                _confirm_record(1, prototype_html_hash=h_lf),
+                ensure_ascii=False, indent=2),
+        )
+        _write_text(run_root / "decision-report.md", "# decision report\n")
+        expect_valid(
+            failures, "g5-prototype-hash-crlf-normalized", spec, pb,
+            "--preview-dir", str(preview),
+            "--decision-report", str(run_root / "decision-report.md"))
+
     # --- G6 observed containment (issue 04): observed must not escape
     # the evidence/ subtree via ".." ---
     with tempfile.TemporaryDirectory() as tmp:
