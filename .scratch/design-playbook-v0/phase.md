@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **v0.6.0 released**（2026-07-24，tag `a065e7b` 已 push + GitHub Release 已发布：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.6.0）。design-baseline 现有产品 DESIGN.md 门禁（ADR-0012，prepare/confirm/verify + state.json）+ G5 LF-normalized `prototype_html_hash`（Windows autocrlf vs Linux CI）。release gate 6/6 全绿。frontend floor 已 graduate 为 required CI gate（`29c80f3`；Ubuntu run `30165226282` 全绿）。剩余 manual：2nd-session install smoke（release-checklist gate 5）。3b community catalog 仍 **BLOCKED**（region + 账号）。
+**Current:** **v0.6.0 released**（2026-07-24，tag `a065e7b` 已 push + GitHub Release 已发布：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.6.0）。design-baseline 现有产品 DESIGN.md 门禁（ADR-0012，prepare/confirm/verify + state.json）+ G5 LF-normalized `prototype_html_hash`（Windows autocrlf vs Linux CI）。release gate 6/6 全绿。frontend floor 已 graduate 为 required CI gate（`29c80f3`；Ubuntu run `30165226282` 全绿）。2nd-session install smoke 已通过（Claude Code 2.1.218；隔离 `CLAUDE_CONFIG_DIR`；GitHub HTTPS marketplace + v0.6.0 plugin + 2 MCP servers）。3b community catalog 仍 **BLOCKED**（region + 账号）。
 
 | Phase | Status |
 | --- | --- |
@@ -23,6 +23,7 @@
 | v0.5.0 release | done (v0.5.0, 2026-07-22; pushed + GitHub Release) |
 | v0.6.0 release | done (v0.6.0, 2026-07-24; design-baseline ADR-0012 + G5 LF hash; tag a065e7b pushed + GitHub Release) |
 | frontend floor graduate | done (2026-07-25; required CI gate `29c80f3`; Ubuntu run `30165226282` green) |
+| v0.6.0 gate 5 smoke | done (2026-07-25; isolated second-session marketplace install; plugin v0.6.0 + 2 MCP servers resolved) |
 
 ## v0 ship checklist (5/5 pass)
 
@@ -45,8 +46,7 @@
 
 ## Still open（2026-07-25 刷新）
 
-1. 2nd-session install smoke：release-checklist gate 5（manual）
-2. 3b community catalog：人工阻塞（region + 账号）
+1. 3b community catalog：人工阻塞（region + 账号）
 
 **Package commands (ship):** design-io · ux-spec · ui-review
 **Monorepo commands (maintain):** product-next · product-grill · product-dogfood
