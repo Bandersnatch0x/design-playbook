@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **v0.6.0 released**（2026-07-24，tag `a065e7b` 已 push + GitHub Release 已发布：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.6.0）。design-baseline 现有产品 DESIGN.md 门禁（ADR-0012，prepare/confirm/verify + state.json）+ G5 LF-normalized `prototype_html_hash`（Windows autocrlf vs Linux CI）。release gate 6/6 全绿。剩余 manual：2nd-session install smoke（release-checklist gate 5）。frontend floor graduate follow-up 仍 pending。3b community catalog 仍 **BLOCKED**。上一里程碑:v0.5.0（2026-07-22）。
+**Current:** **v0.6.0 released**（2026-07-24，tag `a065e7b` 已 push + GitHub Release 已发布：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.6.0）。design-baseline 现有产品 DESIGN.md 门禁（ADR-0012，prepare/confirm/verify + state.json）+ G5 LF-normalized `prototype_html_hash`（Windows autocrlf vs Linux CI）。release gate 6/6 全绿。frontend floor 已 graduate 为 required CI gate（`29c80f3`；Ubuntu run `30165226282` 全绿）。剩余 manual：2nd-session install smoke（release-checklist gate 5）。3b community catalog 仍 **BLOCKED**（region + 账号）。
 
 | Phase | Status |
 | --- | --- |
@@ -22,6 +22,7 @@
 | secure-ship-0.4.4 | done (01-09 全 resolved; 02/03 G5 修复 da38edd; 05/09 codex_exec smoke PASS; 06 CI gate 落地; frontend floor follow-up) |
 | v0.5.0 release | done (v0.5.0, 2026-07-22; pushed + GitHub Release) |
 | v0.6.0 release | done (v0.6.0, 2026-07-24; design-baseline ADR-0012 + G5 LF hash; tag a065e7b pushed + GitHub Release) |
+| frontend floor graduate | done (2026-07-25; required CI gate `29c80f3`; Ubuntu run `30165226282` green) |
 
 ## v0 ship checklist (5/5 pass)
 
@@ -42,11 +43,10 @@
 
 `.scratch/architecture-review-20260717/map.md` — 4 候选经三方辩论 + 代码核验：#3 report_ref 三处（CUT，Explore 误判，server.py 无路径解析）、#4 Gate Protocol（CUT，issue 04 明文禁 G7 + 六 gate 签名不齐）、#1 manifest schema（DEFER post-v1，字段有意 prose-only 属 capture≠judge 边界）、#2 validate.py phrase-table（可选小做，bool guard 已防静默 false-pass）。**净结论：预 release 零代码改动**，run-seam 现状是健康的有意契约边界。
 
-## Still open（2026-07-22 刷新）
+## Still open（2026-07-25 刷新）
 
-1. v0.5.0 发版：10 个未发布 commit（02/03 G5 修复、regression hotfix、reference-intake、ci 注释）；bump 一次改全 5 处版本位
-2. frontend floor graduate（follow-up）：先 push 让 Evidence capture 组在 CI ubuntu 验证绿，再 graduate `test_floor_frontend.py`
-3. 3b community catalog：人工阻塞（region + 账号）
+1. 2nd-session install smoke：release-checklist gate 5（manual）
+2. 3b community catalog：人工阻塞（region + 账号）
 
 **Package commands (ship):** design-io · ux-spec · ui-review
 **Monorepo commands (maintain):** product-next · product-grill · product-dogfood
