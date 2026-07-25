@@ -130,17 +130,12 @@ jobs:
           echo "is marked red (NOT silent green). Pure-path Evidence tests already ran."
           exit 1
 
-      - name: Frontend floor (ADR-0008 JS verification) — deferred, skip-with-reason
-        # TODO(ticket 06 follow-up): graduate test_floor_frontend.py to a
-        # required gate once the Playwright install method is confirmed via
-        # smoke (map.md "Not yet specified") and the chromium capture group
-        # above has run green on main. Deferred per ticket 06: the deferral
-        # is visible here as a documented skip-with-reason rather than
-        # silently absent. Evidence capture tests already cover the provider
-        # contract; the frontend floor adds JS submit/readiness coverage
-        # (control.py floor-intercept) on top.
+      - name: Frontend floor (ADR-0008 JS verification, required)
+        # Graduated after the Playwright install and Evidence capture group
+        # ran green on main (run 30165093470). This exercises the preview
+        # control's browser-side submit/readiness contract.
         if: steps.pw_install.outcome == 'success'
         run: |
-          echo "::notice::Frontend floor deferred (ticket 06). Not gating 0.4.4."
-          echo "Reason: Playwright install method pending smoke; graduate in a follow-up."
-          echo "Acknowledged skip-with-reason — not a red mark."
+          python3 packages/design-playbook/tests/test_floor_frontend.py \
+            | tee /tmp/frontend-floor.log
+          grep -Fx "FRONTEND FLOOR TEST PASSED" /tmp/frontend-floor.log
