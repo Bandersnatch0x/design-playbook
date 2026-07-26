@@ -15,4 +15,4 @@
 
 ## Answer
 
-Added landing/product and existing-brand contrasts, including verified-baseline precedence and explicit override boundary. Root tests and serial run seam pass; Ubuntu evidence recorded after push.
+Added landing/product and existing-brand contrasts, including verified-baseline precedence and explicit override boundary. Root tests and serial run seam pass; Ubuntu CI `30209670547` green.

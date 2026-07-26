@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 — Cover hierarchy and composition failures; 03 — Cover type, controls, motion, and baseline exceptions.
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] `ui-evaluator` consumes the craft ledger as supporting input and retains sole authority for declaration source, severity, and verdict.
 - [ ] A `blocked` detector reaches evaluator as a craft proof gap; implemented UI cannot claim complete craft Pass from missing proof, while planning-only output can record explicit `N/A` rationale.

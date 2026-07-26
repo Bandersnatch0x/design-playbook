@@ -438,6 +438,13 @@ PROSE_PHRASES: dict[str, list[str]] = {
     "ui-evaluator pass requires all evidence rows": [
         "every required evidence row passes",
     ],
+    "ui-evaluator consumes craft detector ledger": [
+        "`.scratch/<run>/craft-guard.md`",
+        "all eight `CRAFT-01` through `CRAFT-08` rows",
+        "A detector never decides source, severity, or verdict",
+        "Carry every `blocked` row into evaluation as a craft proof gap",
+        "Keep craft detector rows out of the G6 manifest and L6 evidence ledger",
+    ],
 }
 
 
@@ -517,6 +524,7 @@ check_skill_prose(
     run_checks,
     "ui-evaluator requires an evidence ledger and blocks missing proof",
 )
+check_skill_prose(run_checks, "ui-evaluator consumes craft detector ledger")
 check_skill_prose(verdict, "ui-evaluator pass requires all evidence rows")
 
 print()

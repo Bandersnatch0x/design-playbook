@@ -1,0 +1,38 @@
+[
+  {
+    "drawer": {
+      "width": 382,
+      "height": 510.890625
+    },
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "horizontalOverflow": false,
+    "maxFontPx": 16,
+    "overflowingText": 0,
+    "annotateText": "Annotate0",
+    "annotateHasEmoji": false,
+    "cards": 0,
+    "reducedMotion": true,
+    "scene": "desktop"
+  },
+  {
+    "drawer": {
+      "width": 344,
+      "height": 510.890625
+    },
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "horizontalOverflow": false,
+    "maxFontPx": 16,
+    "overflowingText": 0,
+    "annotateText": "Annotate0",
+    "annotateHasEmoji": false,
+    "cards": 0,
+    "reducedMotion": true,
+    "scene": "mobile"
+  }
+]

@@ -133,6 +133,24 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("verified baseline wins generic detector taste", result.stdout)
         self.assertIn("VALIDATION FAILED", result.stdout)
 
+    def test_evaluator_craft_ledger_contract_drift_fails(self) -> None:
+        evaluator = (
+            self.root / "packages" / "design-playbook" / "skills"
+            / "ui-evaluator" / "SKILL.md"
+        )
+        text = evaluator.read_text(encoding="utf-8")
+        self.assertIn("`.scratch/<run>/craft-guard.md`", text)
+        evaluator.write_text(
+            text.replace("`.scratch/<run>/craft-guard.md`", "`.scratch/<run>/craft.md`", 1),
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("ui-evaluator consumes craft detector ledger", result.stdout)
+        self.assertIn("VALIDATION FAILED", result.stdout)
+
     def test_codex_plugin_json_version_drift_fails(self) -> None:
         # Issue 07 acceptance: bump漏改 .codex-plugin/plugin.json ->
         # validate FAIL (gate catches Claude/Codex version drift).

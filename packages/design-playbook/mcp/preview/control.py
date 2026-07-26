@@ -467,7 +467,7 @@ cursor: default !important;
   <span class="dpb-pill-actions">
     {pill_secondary_html}
     <button type="button" class="dpb-btn-ghost" id="dpb-open-drawer" aria-haspopup="dialog">
-      <span aria-hidden="true">💬</span>{t_annotate}<span class="dpb-badge-dot" id="dpb-pill-count">0</span>
+      {t_annotate}<span class="dpb-badge-dot" id="dpb-pill-count">0</span>
     </button>
     <button type="button" class="dpb-btn-primary" id="dpb-open-primary" aria-haspopup="dialog">{t_pill_open}</button>
   </span>
