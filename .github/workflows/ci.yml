@@ -42,8 +42,10 @@ jobs:
         run: |
           python3 -m py_compile \
             packages/design-playbook/mcp/preview/server.py \
+            packages/design-playbook/mcp/preview/transaction.py \
             packages/design-playbook/mcp/evidence/server.py \
             packages/design-playbook/mcp/preview/test_server_stdio.py \
+            packages/design-playbook/mcp/preview/test_transaction.py \
             packages/design-playbook/mcp/evidence/test_server_stdio.py \
             packages/design-playbook-preview/server.py \
             packages/design-playbook-evidence/server.py \
@@ -60,7 +62,7 @@ jobs:
 
       # ----------------------------------------------------------------
       # ticket 06: MCP stdio gates (required, merge-blocking).
-      #   - Preview stdio: mocks browser/HTTP layer; no chromium needed.
+      #   - Preview transaction + stdio: fake collector/local HTTP; no chromium.
       #   - Evidence stdio pure-path: contract/path validation that never
       #     reaches `from playwright.sync_api import sync_playwright`; runs
       #     with or without chromium (always required).
@@ -73,9 +75,12 @@ jobs:
       - name: Install pytest (for stdio gates)
         run: python3 -m pip install pytest
 
-      - name: Preview MCP stdio tests (required)
+      - name: Preview transaction + MCP stdio tests (required)
         run: |
-          python3 -m pytest packages/design-playbook/mcp/preview/test_server_stdio.py -v
+          python3 -m pytest \
+            packages/design-playbook/mcp/preview/test_transaction.py \
+            packages/design-playbook/mcp/preview/test_server_stdio.py \
+            -v
 
       - name: Evidence MCP stdio — pure-path tests (required, no Playwright)
         # These never reach the Playwright import in execute_capture_plan

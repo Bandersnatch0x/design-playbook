@@ -13,7 +13,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "mcp" / "preview"))
-import server  # noqa: E402
+import control as preview_control  # noqa: E402
 from i18n import default_options  # noqa: E402
 
 from playwright.sync_api import sync_playwright  # noqa: E402
@@ -35,7 +35,7 @@ CAPTURE_SUBMITTER_JS = """() => {
   }, true);
 }"""
 
-control = server._build_control(ROUND_N, SUMMARY, OPTIONS)
+control = preview_control._build_control(ROUND_N, SUMMARY, OPTIONS)
 
 # Prototype body with an anchorable element
 proto = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">

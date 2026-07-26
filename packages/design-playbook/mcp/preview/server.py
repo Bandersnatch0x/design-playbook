@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Minimal stdio MCP server: single tool ``preview_prototype``.
 
-Entry point only: tool schema + handler. JSON-RPC stdio framing and the
-single-tool dispatch loop live one level up in ``mcp/_transport.py``
-(:func:`serve_stdio`); the browser window, HTTP decide form, control-bar
-template, and ADR-0008 floor logic live in the sibling modules (browser.py,
-control.py, confirm.py, util.py, i18n.py). No third-party deps.
+Entry point only: tool schema + handler. JSON-RPC stdio framing lives in
+``mcp/_transport.py``; browser HTTP collection lives in ``browser.py``;
+decision authority and persistence live in ``transaction.py``. Control,
+confirm, utility, and locale details stay in their sibling modules. No
+third-party deps.
 
 Run (plugin-bundled MCP config uses ${CLAUDE_PLUGIN_ROOT}):
   { "command": "python", "args": ["<plugin>/mcp/preview/server.py"] }
@@ -23,39 +23,10 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _transport import serve_stdio  # noqa: E402
 
+import browser
+from confirm import _self_check_floor
 from i18n import default_options
-
-# Confirm/floor records + prototype target resolution + self-check.
-from confirm import (  # noqa: F401  (re-exported for stable module surface)
-    _append_log,
-    _check_feedback_floor,
-    _ensure_prototype,
-    _preview_dir_for,
-    _self_check_floor,
-    _write_confirm,
-    prototype_html_digest,
-)
-# Control-bar template + builder + feedback formatting.
-from control import _build_control, _format_feedback, control_tpl  # noqa: F401
-# Owned-Chromium window + HTTP decide form + browser/HTTP helpers
-# (re-exported so external callers and tests that import ``server`` keep
-# resolving names that previously lived here).
-from browser import (  # noqa: F401
-    BaseHTTPRequestHandler,
-    HTTPServer,
-    _browser_candidates,
-    _collect_via_browser,
-    _done_page_html,
-    _kill_browser_proc,
-    _open_preview_window,
-    _parse_anchors,
-    _request_browser_window_close,
-    _rm_tree,
-    _screen_size,
-    _stop_http_server,
-    subprocess,
-    tempfile,
-)
+from transaction import run_preview_transaction
 
 TOOL_NAME = "preview_prototype"
 
@@ -128,63 +99,15 @@ def handle_preview_prototype(args: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(options, list) or not all(isinstance(o, str) for o in options):
         raise ValueError("options must be string[]")
 
-    preview_dir = _preview_dir_for(Path(path_arg) if path_arg else None)
-    prototype = _ensure_prototype(
-        path_arg, html, round_n, preview_dir)
-
-    decision = _collect_via_browser(prototype, summary.strip(), options, round_n)
-    floor_pass = bool(decision.get("floor_pass"))
-    floor_failure = str(decision.get("floor_failure") or "")
-    # ADR-0008: a confirm whose feedback fails the structural floor is NOT
-    # authoritative — write the record with confirmed=false + floor_failure
-    # (single source of truth on disk and in payload) so the orchestrator
-    # treats it as not-yet-confirmed (revise) instead of advancing to Fill.
-    user_confirmed = bool(decision["confirmed"]) and not decision["aborted"]
-    confirmed = user_confirmed and floor_pass
-    confirm_path = ""
-    if user_confirmed:
-        # TOCTOU: prefer the hash captured at serve time by _collect_via_browser
-        # (hashes the exact bytes shown to the user). Fall back to reading the
-        # prototype only when no served hash is present (test mocks / direct
-        # callers that bypassed the browser path).
-        proto_hash = decision.get("prototype_html_hash")
-        if not proto_hash:
-            proto_hash = prototype_html_digest(prototype.read_bytes())
-        out = _write_confirm(
-            preview_dir,
-            round_n=round_n,
-            report_ref=report_ref.strip(),
-            selected=decision["selected_options"],
-            feedback=decision["feedback"],
-            prototype_html_hash=proto_hash,
-            confirmed=confirmed,
-            floor_pass=floor_pass,
-            floor_failure=floor_failure,
-        )
-        confirm_path = str(out)
-    _append_log(
-        preview_dir,
+    return run_preview_transaction(
+        path_arg=path_arg,
+        html=html,
+        summary=summary,
         round_n=round_n,
-        report_ref=report_ref.strip(),
-        feedback=decision["feedback"],
-        aborted=bool(decision["aborted"]),
-        selected=list(decision["selected_options"]),
-        anchors=list(decision.get("anchors") or []),
-        floor_pass=floor_pass,
-        floor_failure=floor_failure,
-        rejected=bool(decision.get("rejected")),
-        rejection=str(decision.get("rejection") or ""),
+        report_ref=report_ref,
+        options=options,
+        collect=browser._collect_via_browser,
     )
-    return {
-        "confirmed": confirmed,
-        "floor_pass": floor_pass,
-        "selected_options": list(decision["selected_options"]),
-        "feedback": decision["feedback"],
-        "anchors": list(decision.get("anchors") or []),
-        "round": round_n,
-        "confirm_record_path": confirm_path,
-        "aborted": bool(decision["aborted"]),
-    }
 
 
 if __name__ == "__main__":

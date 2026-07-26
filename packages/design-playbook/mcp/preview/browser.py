@@ -1,9 +1,9 @@
 """Owned-Chromium preview window + local HTTP decide form.
 
-Sibling module split from server.py; behavior unchanged. Opens a centered
-app window, serves the prototype + injected control bar over a one-shot
-HTTP server, classifies the POSTed decision, applies the ADR-0008 floor,
-and tears down the browser + server without hanging on keep-alive sockets.
+Opens a centered app window, serves the prototype and trusted control bar,
+authenticates one raw submission, and tears down browser and server without
+hanging on keep-alive sockets. Decision authority and floor logic belong to
+transaction.py.
 """
 from __future__ import annotations
 
@@ -25,12 +25,11 @@ from urllib.parse import parse_qs
 
 from confirm import (
     _DecisionSession,
-    _check_feedback_floor,
     _generate_decision_token,
     prototype_html_digest,
 )
-from control import _build_control, _format_feedback
-from i18n import CONFIRM_LABELS, lang, t
+from control import _build_control
+from i18n import lang, t
 from util import _log
 
 
@@ -531,8 +530,7 @@ def _collect_via_browser(
         round_n: int) -> dict[str, Any]:
     """Serve prototype + control form; block until user submits or aborts."""
     result: dict[str, Any] = {
-        "confirmed": False,
-        "selected_options": [],
+        "choice": "",
         "feedback": "",
         "aborted": True,
         "anchors": [],
@@ -544,6 +542,10 @@ def _collect_via_browser(
     prototype_html_hash = prototype_html_digest(raw_bytes)
     prototype_html = raw_bytes.decode("utf-8")
     result["prototype_html_hash"] = prototype_html_hash
+
+    def with_prototype_hash(submission: dict[str, Any]) -> dict[str, Any]:
+        submission["prototype_html_hash"] = prototype_html_hash
+        return submission
 
     control = _build_control(round_n, summary.strip(), options)
     # G5 trust boundary: one-time token + first-decision-wins session. The
@@ -591,34 +593,21 @@ def _collect_via_browser(
             validated = session.validate(posted_round, posted_token)
             if not validated:
                 # Fail closed: missing / reused / mismatched token -> NOT confirmed.
-                result = {
-                    "confirmed": False,
-                    "selected_options": [],
+                result = with_prototype_hash({
+                    "choice": "",
                     "feedback": feedback,
                     "aborted": True,
                     "anchors": anchors,
                     "rejected": True,
                     "rejection": session.last_rejection,
-                }
-            elif choice == "__abort__":
-                result = {
-                    "confirmed": False,
-                    "selected_options": [],
-                    "feedback": feedback,
-                    "aborted": True,
-                    "anchors": anchors,
-                }
+                })
             else:
-                confirmed = choice in CONFIRM_LABELS or choice.casefold() in {
-                    c.casefold() for c in CONFIRM_LABELS
-                }
-                result = {
-                    "confirmed": confirmed,
-                    "selected_options": [choice],
+                result = with_prototype_hash({
+                    "choice": choice,
                     "feedback": feedback,
-                    "aborted": False,
+                    "aborted": choice == "__abort__",
                     "anchors": anchors,
-                }
+                })
             reply = _done_page_html()
             self.close_connection = True
             self.send_response(200)
@@ -652,13 +641,12 @@ def _collect_via_browser(
     browser_proc, browser_profile = _open_preview_window(url)
     try:
         if not done.wait(timeout=1800):
-            result = {
-                "confirmed": False,
-                "selected_options": [],
+            result = with_prototype_hash({
+                "choice": "",
                 "feedback": "timeout waiting for user",
                 "aborted": True,
                 "anchors": [],
-            }
+            })
     finally:
         # Hide for immediate visual feedback. Kill the owned Chromium next so
         # keep-alive sockets cannot block HTTPServer.shutdown; response is
@@ -669,20 +657,5 @@ def _collect_via_browser(
             _stop_http_server(server, thread, timeout_s=1.5)
         finally:
             _rm_tree(browser_profile)
-    # ADR-0008: floor is checked against the RAW feedback (pre-format), else
-    # _format_feedback would always make it non-empty by merging anchors.
-    raw_feedback = result.get("feedback") or ""
-    raw_anchors = list(result.get("anchors") or [])
-    if result.get("rejected"):
-        # G5 fail-closed: an untrusted decision never passes the floor, even
-        # if the forged payload happened to carry substantive feedback.
-        result["floor_pass"] = False
-    else:
-        floor_pass, floor_failure = _check_feedback_floor(raw_feedback, raw_anchors)
-        result["floor_pass"] = floor_pass
-        if not floor_pass:
-            result["floor_failure"] = floor_failure
-    # merge anchors into feedback for log readability
-    result["feedback"] = _format_feedback(raw_feedback, raw_anchors)
     return result
 

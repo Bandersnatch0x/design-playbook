@@ -21,11 +21,7 @@ from unittest import mock
 # in preview/ and evidence/ collect under package-qualified names without an
 # import-mismatch — so make the sibling dir importable explicitly here.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-# After server.py was split, the browser/HTTP helpers moved to browser.py;
-# _collect_via_browser resolves them from the ``browser`` namespace, so the
-# patches must target ``browser``. ``server`` re-exports the same names, which
-# keeps the call sites (server._collect_via_browser, server.HTTPServer, ...)
-# working unchanged.
+# Browser behavior is tested through its owning adapter, not server re-exports.
 import browser  # noqa: E402
 
 
@@ -118,14 +114,13 @@ class PreviewMcpStdioTests(unittest.TestCase):
 
 class PreviewWindowTests(unittest.TestCase):
     def test_open_preview_window_uses_centered_app_window_not_fullscreen(self) -> None:
-        server = _load_server_module()
         fake_proc = mock.Mock(pid=4242)
         with mock.patch.object(browser, "_screen_size", return_value=(1920, 1080)), mock.patch.object(
             browser, "_browser_candidates", return_value=["browser.exe"]
         ), mock.patch.object(browser.tempfile, "mkdtemp", return_value="profile-dir"), mock.patch.object(
             browser.subprocess, "Popen", return_value=fake_proc
         ) as popen:
-            proc, profile = server._open_preview_window(
+            proc, profile = browser._open_preview_window(
                 "http://127.0.0.1:4321/", width=1100, height=780
             )
 
@@ -143,7 +138,6 @@ class PreviewWindowTests(unittest.TestCase):
 class PreviewCollectShutdownTests(unittest.TestCase):
     def test_collect_returns_when_client_keeps_connection_open(self) -> None:
         """POST /decide must not hang MCP on HTTP keep-alive (dogfood 006 hang)."""
-        server = _load_server_module()
         port_box: dict[str, int] = {}
         sticky_done = threading.Event()
 
@@ -195,7 +189,7 @@ class PreviewCollectShutdownTests(unittest.TestCase):
                     pass
                 sticky_done.set()
 
-        real_http = server.HTTPServer
+        real_http = browser.HTTPServer
 
         class StashingHTTPServer(real_http):  # type: ignore[misc, valid-type]
             def __init__(self, *args, **kwargs):
@@ -217,7 +211,7 @@ class PreviewCollectShutdownTests(unittest.TestCase):
                 browser, "_kill_browser_proc"
             ) as kill_browser:
                 started = time.monotonic()
-                decision = server._collect_via_browser(
+                decision = browser._collect_via_browser(
                     proto,
                     "summary for test",
                     ["\u786e\u8ba4\u901a\u8fc7", "\u9700\u8981\u4fee\u6539"],
@@ -233,12 +227,11 @@ class PreviewCollectShutdownTests(unittest.TestCase):
             2.5,
             f"collect hung under keep-alive client: {elapsed:.2f}s",
         )
-        self.assertTrue(decision["confirmed"])
-        self.assertEqual(decision["selected_options"], ["确认通过"])
+        self.assertEqual(decision["choice"], "确认通过")
+        self.assertEqual(decision["feedback"], "")
         self.assertFalse(decision["aborted"])
 
     def test_modify_submission_returns_dom_anchor_and_closes_owned_window(self) -> None:
-        server = _load_server_module()
         port_box: dict[str, int] = {}
         anchor = {"selector": "#submit", "comment": "\u6309\u94ae\u5c42\u7ea7\u4e0d\u6e05\u6670", "label": "Retry", "tag": ""}
 
@@ -270,7 +263,7 @@ class PreviewCollectShutdownTests(unittest.TestCase):
                 sock.sendall(request)
                 sock.recv(65536)
 
-        real_http = server.HTTPServer
+        real_http = browser.HTTPServer
 
         class StashingHTTPServer(real_http):  # type: ignore[misc, valid-type]
             def __init__(self, *args, **kwargs):
@@ -290,17 +283,16 @@ class PreviewCollectShutdownTests(unittest.TestCase):
             ), mock.patch.object(browser, "_request_browser_window_close") as close_window, mock.patch.object(
                 browser, "_kill_browser_proc"
             ) as kill_browser, mock.patch.object(browser, "_rm_tree"):
-                decision = server._collect_via_browser(
+                decision = browser._collect_via_browser(
                     proto, "summary", ["\u786e\u8ba4\u901a\u8fc7", "\u9700\u8981\u4fee\u6539"], 1
                 )
 
         client_thread.join(timeout=3)
         self.assertFalse(client_thread.is_alive())
-        self.assertFalse(decision["confirmed"])
-        self.assertEqual(decision["selected_options"], ["\u9700\u8981\u4fee\u6539"])
+        self.assertEqual(decision["choice"], "\u9700\u8981\u4fee\u6539")
+        self.assertEqual(decision["feedback"], "\u8bf7\u8c03\u6574")
         self.assertEqual(decision["anchors"], [anchor])
-        self.assertIn("#submit", decision["feedback"])
-        self.assertIn("\u6309\u94ae\u5c42\u7ea7\u4e0d\u6e05\u6670", decision["feedback"])
+        self.assertFalse(decision["aborted"])
         close_window.assert_called_once_with(mock.sentinel.proc)
         kill_browser.assert_called_once_with(mock.sentinel.proc, "profile")
 
@@ -311,7 +303,6 @@ class PreviewCollectShutdownTests(unittest.TestCase):
         closed (confirmed=False), then the real user's valid-token POST still
         confirms, proving the session was not hijacked.
         """
-        server = _load_server_module()
         port_box: dict[str, int] = {}
 
         def bogus_then_valid_client() -> None:
@@ -378,7 +369,7 @@ class PreviewCollectShutdownTests(unittest.TestCase):
                 except socket.timeout:
                     pass
 
-        real_http = server.HTTPServer
+        real_http = browser.HTTPServer
 
         class StashingHTTPServer(real_http):  # type: ignore[misc, valid-type]
             def __init__(self, *args, **kwargs):
@@ -398,7 +389,7 @@ class PreviewCollectShutdownTests(unittest.TestCase):
             ), mock.patch.object(browser, "_request_browser_window_close"), mock.patch.object(
                 browser, "_kill_browser_proc"
             ):
-                decision = server._collect_via_browser(
+                decision = browser._collect_via_browser(
                     proto,
                     "summary",
                     ["确认通过", "需要修改"],
@@ -408,15 +399,15 @@ class PreviewCollectShutdownTests(unittest.TestCase):
         client_thread.join(timeout=3)
         self.assertFalse(client_thread.is_alive())
         # The forged POST did not hijack: the real user's valid POST wins.
-        self.assertTrue(decision["confirmed"])
-        self.assertFalse(decision.get("aborted"))
+        self.assertEqual(decision["choice"], "确认通过")
+        self.assertEqual(decision["feedback"], "ok")
+        self.assertFalse(decision["aborted"])
     def test_replay_same_token_is_rejected(self) -> None:
         """G5 stdio e2e: first-decision-wins. The first valid POST locks the
         session and sets the confirmed result; a replayed second POST with
         the same token must NOT overwrite that result - the legitimate
         confirmed decision survives.
         """
-        server = _load_server_module()
         port_box: dict[str, int] = {}
 
         def replay_client() -> None:
@@ -473,7 +464,7 @@ class PreviewCollectShutdownTests(unittest.TestCase):
                 # replay never reached the handler, result is intact.
                 pass
 
-        real_http = server.HTTPServer
+        real_http = browser.HTTPServer
 
         class StashingHTTPServer(real_http):  # type: ignore[misc, valid-type]
             def __init__(self, *args, **kwargs):
@@ -493,7 +484,7 @@ class PreviewCollectShutdownTests(unittest.TestCase):
             ), mock.patch.object(browser, "_request_browser_window_close"), mock.patch.object(
                 browser, "_kill_browser_proc"
             ):
-                decision = server._collect_via_browser(
+                decision = browser._collect_via_browser(
                     proto,
                     "summary",
                     ["确认通过", "需要修改"],
@@ -502,18 +493,17 @@ class PreviewCollectShutdownTests(unittest.TestCase):
 
         client_thread.join(timeout=3)
         self.assertFalse(client_thread.is_alive())
-        # First-decision-wins: the legitimate confirmed result survives the
-        # replay attempt - it was not overwritten with a rejected one.
-        self.assertTrue(decision["confirmed"])
-        self.assertFalse(decision.get("aborted"))
+        # First-decision-wins: legitimate submission survives replay.
+        self.assertEqual(decision["choice"], "确认通过")
+        self.assertEqual(decision["feedback"], "ok")
+        self.assertFalse(decision["aborted"])
 
     def test_stop_http_server_joins_serve_thread(self) -> None:
-        server_mod = _load_server_module()
-        http = server_mod.HTTPServer(("127.0.0.1", 0), server_mod.BaseHTTPRequestHandler)
+        http = browser.HTTPServer(("127.0.0.1", 0), browser.BaseHTTPRequestHandler)
         serve_thread = threading.Thread(target=http.serve_forever, daemon=True)
         serve_thread.start()
 
-        server_mod._stop_http_server(http, serve_thread, timeout_s=0.4)
+        browser._stop_http_server(http, serve_thread, timeout_s=0.4)
 
         self.assertFalse(serve_thread.is_alive())
 
@@ -528,7 +518,7 @@ class PreviewLogRejectionTests(unittest.TestCase):
     def _run_handle(self, server_mod: object, tmp: str, decision: dict) -> dict:
         proto = Path(tmp) / "proto.html"
         proto.write_text("<html></html>", encoding="utf-8")
-        with mock.patch.object(server_mod, "_collect_via_browser",
+        with mock.patch.object(browser, "_collect_via_browser",
                                return_value=decision):
             return server_mod.handle_preview_prototype(
                 {
@@ -542,14 +532,12 @@ class PreviewLogRejectionTests(unittest.TestCase):
     def test_rejected_decision_writes_rejection_line_to_log(self) -> None:
         server_mod = _load_server_module()
         rejected_decision = {
-            "confirmed": False,
-            "selected_options": [],
+            "choice": "",
             "feedback": "forged",
             "aborted": True,
             "anchors": [],
             "rejected": True,
             "rejection": "invalid_token",
-            "floor_pass": False,
         }
         with tempfile.TemporaryDirectory() as tmp:
             payload = self._run_handle(server_mod, tmp, rejected_decision)
@@ -562,12 +550,10 @@ class PreviewLogRejectionTests(unittest.TestCase):
     def test_confirmed_decision_does_not_write_rejection_line(self) -> None:
         server_mod = _load_server_module()
         confirmed_decision = {
-            "confirmed": True,
-            "selected_options": ["确认通过"],
+            "choice": "确认通过",
             "feedback": "ok",
             "aborted": False,
             "anchors": [],
-            "floor_pass": True,
         }
         with tempfile.TemporaryDirectory() as tmp:
             payload = self._run_handle(server_mod, tmp, confirmed_decision)
