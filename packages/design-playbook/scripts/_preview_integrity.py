@@ -26,15 +26,19 @@ from pathlib import Path
 def _round_from_name(name: str) -> int | None:
     """Extract the numeric round from a ``round-<n>.html`` or
     ``confirm-round-<n>.json`` filename. Returns None if it does not match."""
-    match = re.match(r"^(?:confirm-)?round-(\d+)\.(?:html|json)$", name, re.I)
+    match = re.match(
+        r"^(?:(?:confirm|decision)-)?round-(\d+)\.(?:html|json)$",
+        name,
+        re.I,
+    )
     return int(match.group(1)) if match else None
 
 
 def latest_numeric_round(run_root: Path) -> int | None:
     """Return the highest numeric round seen under ``<run_root>/preview/``.
 
-    Scans both ``round-<n>.html`` prototypes and ``confirm-round-<n>.json``
-    records, plus round headings in ``preview/log.md`` (deletion-rollback
+    Scans prototypes, confirm records, durable decision entries, and round
+    headings in ``preview/log.md`` (deletion-rollback
     protection). Returns the maximum ``<n>`` as an int, or None when
     ``preview/`` is missing or holds no round artifacts.
 
