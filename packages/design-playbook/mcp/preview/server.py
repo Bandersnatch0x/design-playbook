@@ -21,12 +21,12 @@ from typing import Any
 # mcp/_transport.py (both bundled adapters speak the same wire format and
 # run the same JSON-RPC protocol; ADR-0009).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _transport import serve_stdio  # noqa: E402
+from _transport import ToolError, serve_stdio  # noqa: E402
 
 import browser
 from confirm import _self_check_floor
 from i18n import default_options
-from transaction import run_preview_transaction
+from transaction import PreviewTransactionError, run_preview_transaction
 
 TOOL_NAME = "preview_prototype"
 
@@ -99,15 +99,18 @@ def handle_preview_prototype(args: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(options, list) or not all(isinstance(o, str) for o in options):
         raise ValueError("options must be string[]")
 
-    return run_preview_transaction(
-        path_arg=path_arg,
-        html=html,
-        summary=summary,
-        round_n=round_n,
-        report_ref=report_ref,
-        options=options,
-        collect=browser._collect_via_browser,
-    )
+    try:
+        return run_preview_transaction(
+            path_arg=path_arg,
+            html=html,
+            summary=summary,
+            round_n=round_n,
+            report_ref=report_ref,
+            options=options,
+            collect=browser._collect_via_browser,
+        )
+    except PreviewTransactionError as exc:
+        raise ToolError(str(exc), exc.details) from exc
 
 
 if __name__ == "__main__":

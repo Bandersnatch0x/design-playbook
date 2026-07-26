@@ -10,9 +10,12 @@ import hashlib
 import json
 import os
 import tempfile
+import threading
+import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from confirm import (
     _check_feedback_floor,
@@ -28,8 +31,121 @@ BrowserCollector = Callable[[Path, str, list[str], int], dict[str, Any]]
 ENTRY_SCHEMA_VERSION = 1
 
 
-class TransactionConflict(ValueError):
+class PreviewTransactionError(ValueError):
+    """Recoverable transaction failure with actionable artifact context."""
+
+    def __init__(
+        self, message: str, *, retryable: bool, round_n: int,
+        decision_id: str, artifact: str,
+    ) -> None:
+        super().__init__(message)
+        self.details = {
+            "error": "preview_transaction",
+            "message": message,
+            "retryable": retryable,
+            "round": round_n,
+            "decision_id": decision_id,
+            "artifact": artifact,
+        }
+
+
+class TransactionConflict(PreviewTransactionError):
     """Existing same-round authority cannot be replaced by this request."""
+
+
+LOCK_HEARTBEAT_SECONDS = 30
+LOCK_STALE_SECONDS = LOCK_HEARTBEAT_SECONDS * 3
+
+
+def _lock_metadata(path: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+@contextmanager
+def _round_lock(
+    preview_dir: Path, *, round_n: int, binding_digest: str, decision_id: str,
+) -> Iterator[None]:
+    preview_dir.mkdir(parents=True, exist_ok=True)
+    path = preview_dir / f"decision-round-{round_n}.lock"
+    owner_id = uuid.uuid4().hex
+    metadata = {
+        "owner_id": owner_id,
+        "decision_id": decision_id,
+        "binding_digest": binding_digest,
+        "heartbeat": time.time(),
+    }
+    raw = json.dumps(metadata, sort_keys=True)
+    while True:
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            existing = _lock_metadata(path)
+            try:
+                age = time.time() - path.stat().st_mtime
+            except OSError:
+                continue
+            if age < LOCK_STALE_SECONDS:
+                raise PreviewTransactionError(
+                    f"Preview round {round_n} is already active",
+                    retryable=True, round_n=round_n,
+                    decision_id=str(existing.get("decision_id") or decision_id),
+                    artifact=str(path),
+                )
+            if existing.get("binding_digest") != binding_digest:
+                raise TransactionConflict(
+                    f"stale lock binding differs; use next round: {round_n}",
+                    retryable=False, round_n=round_n,
+                    decision_id=str(existing.get("decision_id") or decision_id),
+                    artifact=str(path),
+                )
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+            continue
+        else:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(raw)
+                fh.flush()
+            break
+
+    stopped = threading.Event()
+    heartbeat_errors: list[OSError] = []
+
+    def heartbeat() -> None:
+        while not stopped.wait(LOCK_HEARTBEAT_SECONDS):
+            current = _lock_metadata(path)
+            if current.get("owner_id") != owner_id:
+                return
+            metadata["heartbeat"] = time.time()
+            try:
+                _atomic_write(path, json.dumps(metadata, sort_keys=True))
+            except OSError as exc:
+                heartbeat_errors.append(exc)
+                return
+
+    thread = threading.Thread(target=heartbeat, daemon=True)
+    thread.start()
+    try:
+        yield
+        if heartbeat_errors:
+            raise PreviewTransactionError(
+                f"Preview lock heartbeat failed: {heartbeat_errors[0]}",
+                retryable=True, round_n=round_n, decision_id=decision_id,
+                artifact=str(path),
+            )
+    finally:
+        stopped.set()
+        thread.join(timeout=1)
+        if _lock_metadata(path).get("owner_id") == owner_id:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def _atomic_write(path: Path, content: str) -> None:
@@ -78,7 +194,9 @@ def _load_entry(path: Path) -> dict[str, Any] | None:
         entry = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise TransactionConflict(
-            f"round decision metadata is unreadable; use next round: {path}"
+            f"round decision metadata is unreadable; use next round: {path}",
+            retryable=False, round_n=_round_from_path(path), decision_id="",
+            artifact=str(path),
         ) from exc
     required = {
         "schema_version", "decision_id", "timestamp", "binding", "outcome"
@@ -91,9 +209,18 @@ def _load_entry(path: Path) -> dict[str, Any] | None:
         or not isinstance(entry.get("outcome"), dict)
     ):
         raise TransactionConflict(
-            f"round decision metadata is invalid; use next round: {path}"
+            f"round decision metadata is invalid; use next round: {path}",
+            retryable=False, round_n=_round_from_path(path), decision_id="",
+            artifact=str(path),
         )
     return entry
+
+
+def _round_from_path(path: Path) -> int:
+    try:
+        return int(path.stem.rsplit("-", 1)[1])
+    except (IndexError, ValueError):
+        return 0
 
 
 def _confirm_record(entry: dict[str, Any]) -> dict[str, Any]:
@@ -175,11 +302,15 @@ def _commit_projections(preview_dir: Path, entry: dict[str, Any]) -> str:
             None, entry["decision_id"]
         }:
             raise TransactionConflict(
-                f"confirm belongs to another decision; use next round: {confirm_path}"
+                f"confirm belongs to another decision; use next round: {confirm_path}",
+                retryable=False, round_n=int(binding["round"]),
+                decision_id=str(entry["decision_id"]), artifact=str(confirm_path),
             )
         if existing_confirm and "decision_id" not in existing_confirm:
             raise TransactionConflict(
-                f"legacy confirm cannot be overwritten; use next round: {confirm_path}"
+                f"legacy confirm cannot be overwritten; use next round: {confirm_path}",
+                retryable=False, round_n=int(binding["round"]),
+                decision_id=str(entry["decision_id"]), artifact=str(confirm_path),
             )
         _atomic_write(confirm_path, _json_text(_confirm_record(entry)))
         confirm_result = str(confirm_path)
@@ -215,12 +346,61 @@ def run_preview_transaction(
     options: list[str],
     collect: BrowserCollector,
 ) -> dict[str, Any]:
-    """Collect once or repair projections for one bound Preview decision."""
+    """Serialize, collect once, or repair one bound Preview decision."""
     summary = summary.strip()
     report_ref = report_ref.strip()
     preview_dir = _preview_dir_for(Path(path_arg) if path_arg else None)
+    if path_arg:
+        prototype = Path(path_arg)
+        if not prototype.is_file():
+            raise ValueError(f"prototype path does not exist: {path_arg}")
+        prototype_hash = prototype_html_digest(prototype.read_bytes())
+    else:
+        if not html:
+            raise ValueError("path or html is required")
+        prototype_hash = prototype_html_digest(html.encode("utf-8"))
+    binding = _binding(
+        round_n=round_n, prototype_hash=prototype_hash,
+        report_ref=report_ref, summary=summary, options=options,
+    )
     entry_path = preview_dir / f"decision-round-{round_n}.json"
+    existing = _load_entry(entry_path)
+    decision_id = str(existing.get("decision_id") if existing else uuid.uuid4().hex)
+    try:
+        with _round_lock(
+            preview_dir, round_n=round_n,
+            binding_digest=binding["digest"], decision_id=decision_id,
+        ):
+            return _run_locked(
+                path_arg=path_arg, html=html, summary=summary, round_n=round_n,
+                report_ref=report_ref, options=options, collect=collect,
+                preview_dir=preview_dir, prototype_hash=prototype_hash,
+                binding=binding, decision_id=decision_id,
+            )
+    except PreviewTransactionError:
+        raise
+    except OSError as exc:
+        confirm_path = preview_dir / f"confirm-round-{round_n}.json"
+        log_path = preview_dir / "log.md"
+        if not entry_path.is_file():
+            artifact = entry_path
+        elif not confirm_path.is_file():
+            artifact = confirm_path
+        else:
+            artifact = log_path
+        raise PreviewTransactionError(
+            f"Preview persistence incomplete: {exc}", retryable=True,
+            round_n=round_n, decision_id=decision_id, artifact=str(artifact),
+        ) from exc
 
+
+def _run_locked(
+    *, path_arg: str | None, html: str | None, summary: str, round_n: int,
+    report_ref: str, options: list[str], collect: BrowserCollector,
+    preview_dir: Path, prototype_hash: str, binding: dict[str, Any],
+    decision_id: str,
+) -> dict[str, Any]:
+    entry_path = preview_dir / f"decision-round-{round_n}.json"
     if path_arg:
         prototype = Path(path_arg)
         if not prototype.is_file():
@@ -232,18 +412,13 @@ def run_preview_transaction(
         prototype_hash = prototype_html_digest(html.encode("utf-8"))
         prototype = preview_dir / f"round-{round_n}.html"
 
-    binding = _binding(
-        round_n=round_n,
-        prototype_hash=prototype_hash,
-        report_ref=report_ref,
-        summary=summary,
-        options=options,
-    )
     existing = _load_entry(entry_path)
     if existing is not None:
         if existing["binding"].get("digest") != binding["digest"]:
             raise TransactionConflict(
-                f"round binding differs from durable decision; use next round: {round_n}"
+                f"round binding differs from durable decision; use next round: {round_n}",
+                retryable=False, round_n=round_n,
+                decision_id=str(existing["decision_id"]), artifact=str(entry_path),
             )
         confirm_path = _commit_projections(preview_dir, existing)
         return _result(existing, confirm_path)
@@ -251,7 +426,9 @@ def run_preview_transaction(
     legacy_confirm = preview_dir / f"confirm-round-{round_n}.json"
     if legacy_confirm.is_file():
         raise TransactionConflict(
-            f"legacy confirm cannot be overwritten; use next round: {legacy_confirm}"
+            f"legacy confirm cannot be overwritten; use next round: {legacy_confirm}",
+            retryable=False, round_n=round_n, decision_id=decision_id,
+            artifact=str(legacy_confirm),
         )
 
     prototype = _ensure_prototype(path_arg, html, round_n, preview_dir)
@@ -277,10 +454,14 @@ def run_preview_transaction(
 
     served_hash = str(submission.get("prototype_html_hash") or prototype_hash)
     if served_hash != prototype_hash:
-        raise TransactionConflict("served prototype hash differs from request binding")
+        raise TransactionConflict(
+            "served prototype hash differs from request binding",
+            retryable=False, round_n=round_n, decision_id=decision_id,
+            artifact=str(prototype),
+        )
     entry = {
         "schema_version": ENTRY_SCHEMA_VERSION,
-        "decision_id": uuid.uuid4().hex,
+        "decision_id": decision_id,
         "timestamp": _now_iso(),
         "binding": binding,
         "outcome": {

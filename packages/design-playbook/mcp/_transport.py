@@ -25,6 +25,14 @@ STDIO_FRAMING_NEWLINE = "newline"
 _stdio_framing: str | None = None
 
 
+class ToolError(Exception):
+    """Recoverable domain error with MCP structured error content."""
+
+    def __init__(self, message: str, structured_content: dict[str, Any]):
+        super().__init__(message)
+        self.structured_content = structured_content
+
+
 def read_message() -> dict[str, Any] | None:
     """Read one Content-Length- or newline-delimited JSON-RPC message.
 
@@ -91,11 +99,21 @@ def _result_text(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _error_result(message: str) -> dict[str, Any]:
-    return {
+def _error_result(
+        message: str, structured_content: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
         "content": [{"type": "text", "text": message}],
         "isError": True,
     }
+    if structured_content is not None:
+        result["structuredContent"] = structured_content
+    return result
+
+
+def _exception_result(exc: Exception) -> dict[str, Any]:
+    structured = exc.structured_content if isinstance(exc, ToolError) else None
+    return _error_result(str(exc), structured)
 
 
 def serve_stdio(
@@ -205,7 +223,7 @@ def serve_stdio(
                 write_message({
                     "jsonrpc": "2.0",
                     "id": msg_id,
-                    "result": _error_result(str(exc)),
+                    "result": _exception_result(exc),
                 })
             continue
 
