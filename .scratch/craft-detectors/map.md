@@ -1,6 +1,6 @@
 # Craft detectors decision map
 
-**Status:** Clear
+**Status:** Closed
 **Opened:** 2026-07-26
 **Source:** post-v0.6 product-next frontier selection + one-question-at-a-time grill
 
@@ -49,6 +49,6 @@
 - Treating generic taste as stronger than a verified project baseline.
 - DTCG tokens, Storybook/Ladle capture, or a new evidence provider.
 
-## Frontier
+## Completion
 
-Ticket 01 can start immediately. Tickets 02 and 03 unblock after 01. Ticket 04 closes the effort after 02 and 03.
+Tickets 01-04 resolved. Implementation commits: `e86c4b5`, `7f43acb`, `06c9e5d`, `0d40450`. Ubuntu CI runs `30208980787`, `30209240916`, `30209670547`, and `30210795805` green. Final documentation HEAD verified separately after closure commit.
