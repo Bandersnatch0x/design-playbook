@@ -7,9 +7,11 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from transaction import run_preview_transaction  # noqa: E402
+import transaction  # noqa: E402
+from transaction import TransactionConflict, run_preview_transaction  # noqa: E402
 
 
 class PreviewDecisionTransactionTests(unittest.TestCase):
@@ -60,8 +62,11 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
                 "round": 1,
                 "confirm_record_path": str(confirm_path),
                 "aborted": False,
+                "decision_id": result["decision_id"],
             },
         )
+        self.assertEqual(len(result["decision_id"]), 32)
+        self.assertEqual(confirm["decision_id"], result["decision_id"])
         self.assertTrue(confirm["confirmed"])
         self.assertTrue(confirm["floor_pass"])
         self.assertEqual(confirm["selected_options"], ["确认通过"])
@@ -119,6 +124,138 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
         self.assertIsNone(confirm)
         self.assertIn("- rejected: true", log)
         self.assertIn("- rejection: invalid_token", log)
+
+    def test_same_binding_retry_repairs_without_collecting_again(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            prototype = Path(tmp) / "round-1.html"
+            prototype.write_text("reviewed", encoding="utf-8")
+            calls = 0
+
+            def collect(*args: object) -> dict:
+                nonlocal calls
+                calls += 1
+                return {
+                    "choice": "确认通过", "feedback": "清晰",
+                    "anchors": [], "aborted": False,
+                }
+
+            first = self._run(prototype, collect=collect)
+            (Path(tmp) / "confirm-round-1.json").unlink()
+            (Path(tmp) / "log.md").write_text("corrupt projection", encoding="utf-8")
+            repaired = self._run(prototype, collect=collect)
+
+            self.assertEqual(calls, 1)
+            self.assertEqual(repaired["decision_id"], first["decision_id"])
+            self.assertTrue(Path(repaired["confirm_record_path"]).is_file())
+            log = (Path(tmp) / "log.md").read_text(encoding="utf-8")
+            self.assertEqual(log.count(first["decision_id"]), 1)
+            self.assertNotIn("corrupt projection", log)
+
+    def test_changed_binding_and_legacy_confirm_fail_closed(self) -> None:
+        variants = (
+            {"summary": "changed"},
+            {"report_ref": "other.md"},
+            {"options": ["需要修改", "确认通过"]},
+        )
+        for variant in variants:
+            with self.subTest(variant=variant), tempfile.TemporaryDirectory() as tmp:
+                prototype = Path(tmp) / "round-1.html"
+                prototype.write_text("reviewed", encoding="utf-8")
+                self._run(prototype)
+                with self.assertRaisesRegex(TransactionConflict, "use next round"):
+                    self._run(prototype, **variant)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            prototype = Path(tmp) / "round-1.html"
+            prototype.write_text("reviewed", encoding="utf-8")
+            self._run(prototype)
+            prototype.write_text("changed bytes", encoding="utf-8")
+            with self.assertRaisesRegex(TransactionConflict, "use next round"):
+                self._run(prototype)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            prototype = Path(tmp) / "round-1.html"
+            prototype.write_text("reviewed", encoding="utf-8")
+            (Path(tmp) / "confirm-round-1.json").write_text("{}", encoding="utf-8")
+            with self.assertRaisesRegex(TransactionConflict, "legacy confirm"):
+                self._run(prototype)
+
+    def test_malformed_decision_metadata_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            prototype = Path(tmp) / "round-1.html"
+            prototype.write_text("reviewed", encoding="utf-8")
+            (Path(tmp) / "decision-round-1.json").write_text(
+                "{not json", encoding="utf-8"
+            )
+            with self.assertRaisesRegex(TransactionConflict, "metadata is unreadable"):
+                self._run(prototype)
+
+    def test_projection_failures_repair_from_committed_entry(self) -> None:
+        for failed_name in ("confirm-round-1.json", "log.md"):
+            with self.subTest(failed_name=failed_name), tempfile.TemporaryDirectory() as tmp:
+                prototype = Path(tmp) / "round-1.html"
+                prototype.write_text("reviewed", encoding="utf-8")
+                calls = 0
+
+                def collect(*args: object) -> dict:
+                    nonlocal calls
+                    calls += 1
+                    return {
+                        "choice": "确认通过", "feedback": "清晰",
+                        "anchors": [], "aborted": False,
+                    }
+
+                real_write = transaction._atomic_write
+                failed = False
+
+                def flaky_write(path: Path, content: str) -> None:
+                    nonlocal failed
+                    if path.name == failed_name and not failed:
+                        failed = True
+                        raise OSError(f"injected {failed_name} failure")
+                    real_write(path, content)
+
+                with mock.patch.object(transaction, "_atomic_write", side_effect=flaky_write):
+                    with self.assertRaises(OSError):
+                        self._run(prototype, collect=collect)
+                result = self._run(prototype, collect=collect)
+                self.assertEqual(calls, 1)
+                self.assertTrue(Path(result["confirm_record_path"]).is_file())
+                self.assertTrue((Path(tmp) / "log.md").is_file())
+
+    def test_decision_entry_failure_leaves_no_recoverable_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            prototype = Path(tmp) / "round-1.html"
+            prototype.write_text("reviewed", encoding="utf-8")
+            real_write = transaction._atomic_write
+
+            def fail_entry(path: Path, content: str) -> None:
+                if path.name == "decision-round-1.json":
+                    raise OSError("injected entry failure")
+                real_write(path, content)
+
+            with mock.patch.object(transaction, "_atomic_write", side_effect=fail_entry):
+                with self.assertRaises(OSError):
+                    self._run(prototype)
+            self.assertFalse((Path(tmp) / "decision-round-1.json").exists())
+            self.assertFalse((Path(tmp) / "confirm-round-1.json").exists())
+            self.assertFalse((Path(tmp) / "log.md").exists())
+
+    def _run(
+        self, prototype: Path, *, summary: str = "summary",
+        report_ref: str = "report.md", options: list[str] | None = None,
+        collect=None,
+    ) -> dict:
+        if collect is None:
+            collect = lambda *args: {
+                "choice": "确认通过", "feedback": "清晰",
+                "anchors": [], "aborted": False,
+            }
+        return run_preview_transaction(
+            path_arg=str(prototype), html=None, summary=summary, round_n=1,
+            report_ref=report_ref,
+            options=options or ["确认通过", "需要修改"], collect=collect,
+        )
 
     def _run_submission(
         self, submission: dict
