@@ -38,6 +38,8 @@ Walk every applicable row (exhaustive for bound declarations):
 
 Dimension selection, 回流示例, the preview-seam health check (required when the run produced `preview/` artifacts), and the **observe\* mirror-surface** finding (required when any manifest capture notes `surface: mirror`): [`references/rubric.md`](references/rubric.md).
 
+When `.scratch/<run>/craft-guard.md` exists, consume all eight `CRAFT-01` through `CRAFT-08` rows as supporting craft input. Detector rows are advisory: verify their rendered/source evidence and exception checks, then use the authoritative recirculate map below to choose declaration source and assign severity. A detector never decides source, severity, or verdict. Carry every `blocked` row into evaluation as a craft proof gap. Implemented UI cannot claim complete craft Pass while required rendered or source proof is blocked; planning-only work may record an explicit `N/A` rationale without claiming rendered inspection. Keep craft detector rows out of the G6 manifest and L6 evidence ledger: they are craft-stage audit records, not runtime artifacts or criterion results.
+
 Record an evidence ledger before writing findings. Every L6 criterion has exactly one row:
 
 ```text

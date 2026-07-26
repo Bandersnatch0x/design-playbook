@@ -500,6 +500,19 @@ def main():
                 "S18: abort/draft/confirm/revise must each expose a non-empty, distinct title/aria-description"
             )
 
+        # --- S19: familiar control text is not prefixed by platform emoji ---
+        page.goto(file_url, wait_until='domcontentloaded')
+        page.wait_for_selector('#dpb-open-drawer')
+        annotate_text = page.locator('#dpb-open-drawer').inner_text()
+        annotate_html = page.locator('#dpb-open-drawer').inner_html()
+        s19_ok = '💬' not in annotate_text and '💬' not in annotate_html
+        print(
+            "  S19 annotate control avoids platform emoji: "
+            f"text={ascii(annotate_text)} -> {'OK' if s19_ok else 'FAIL'}"
+        )
+        if not s19_ok:
+            failures.append("S19: annotate control should use stable text/control language, not platform emoji")
+
         browser.close()
 
     print()
