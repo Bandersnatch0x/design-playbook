@@ -1,26 +1,208 @@
-"""Preview decision authority and artifact transaction.
+"""Durable Preview decision authority and artifact transaction.
 
 Browser collectors return authenticated submission data. This module owns
-choice classification, feedback-floor judgment, persistence order, and result
-construction for one Preview decision.
+request binding, choice authority, atomic persistence, recovery, projections,
+and result construction for one Preview decision.
 """
 from __future__ import annotations
 
+import hashlib
+import json
+import os
+import tempfile
+import uuid
 from pathlib import Path
 from typing import Any, Callable
 
 from confirm import (
-    _append_log,
     _check_feedback_floor,
     _ensure_prototype,
     _preview_dir_for,
-    _write_confirm,
     prototype_html_digest,
 )
 from control import _format_feedback
 from i18n import CONFIRM_LABELS
+from util import _now_iso
 
 BrowserCollector = Callable[[Path, str, list[str], int], dict[str, Any]]
+ENTRY_SCHEMA_VERSION = 1
+
+
+class TransactionConflict(ValueError):
+    """Existing same-round authority cannot be replaced by this request."""
+
+
+def _atomic_write(path: Path, content: str) -> None:
+    """Flush a same-directory temporary file before atomically replacing path."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
+            fh.write(content)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(temp_name, path)
+    except BaseException:
+        try:
+            os.unlink(temp_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _json_text(value: dict[str, Any]) -> str:
+    return json.dumps(value, ensure_ascii=False, indent=2) + "\n"
+
+
+def _binding(
+    *, round_n: int, prototype_hash: str, report_ref: str,
+    summary: str, options: list[str],
+) -> dict[str, Any]:
+    fields = {
+        "round": round_n,
+        "prototype_html_hash": prototype_hash,
+        "report_ref": report_ref,
+        "summary": summary,
+        "options": list(options),
+    }
+    canonical = json.dumps(
+        fields, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return {"digest": hashlib.sha256(canonical).hexdigest(), **fields}
+
+
+def _load_entry(path: Path) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    try:
+        entry = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise TransactionConflict(
+            f"round decision metadata is unreadable; use next round: {path}"
+        ) from exc
+    required = {
+        "schema_version", "decision_id", "timestamp", "binding", "outcome"
+    }
+    if (
+        not isinstance(entry, dict)
+        or entry.get("schema_version") != ENTRY_SCHEMA_VERSION
+        or not required.issubset(entry)
+        or not isinstance(entry.get("binding"), dict)
+        or not isinstance(entry.get("outcome"), dict)
+    ):
+        raise TransactionConflict(
+            f"round decision metadata is invalid; use next round: {path}"
+        )
+    return entry
+
+
+def _confirm_record(entry: dict[str, Any]) -> dict[str, Any]:
+    binding = entry["binding"]
+    outcome = entry["outcome"]
+    record: dict[str, Any] = {
+        "round": binding["round"],
+        "report_ref": binding["report_ref"],
+        "confirmed": outcome["confirmed"],
+        "floor_pass": outcome["floor_pass"],
+        "selected_options": outcome["selected_options"],
+        "feedback": outcome["feedback"],
+        "timestamp": entry["timestamp"],
+        "prototype_path": f"preview/round-{binding['round']}.html",
+        "prototype_html_hash": binding["prototype_html_hash"],
+        "decision_id": entry["decision_id"],
+    }
+    if outcome.get("floor_failure"):
+        record["floor_failure"] = outcome["floor_failure"]
+    return record
+
+
+def _render_log(entries: list[dict[str, Any]]) -> str:
+    blocks = ["# preview log\n"]
+    for entry in sorted(
+        entries, key=lambda item: (str(item["timestamp"]), str(item["decision_id"]))
+    ):
+        binding = entry["binding"]
+        outcome = entry["outcome"]
+        anchors = list(outcome.get("anchors") or [])
+        lines = [
+            "",
+            f"## round {binding['round']}",
+            f"- report_ref: {binding['report_ref']}",
+            f"- timestamp: {entry['timestamp']}",
+            f"- decision_id: {entry['decision_id']}",
+            f"- feedback: {outcome.get('feedback') or ''}",
+            f"- selected: {', '.join(outcome.get('selected_options') or [])}",
+            f"- aborted: {str(bool(outcome.get('aborted'))).lower()}",
+            f"- anchors: {len(anchors)}",
+            f"- floor_pass: {str(bool(outcome.get('floor_pass'))).lower()}",
+        ]
+        if outcome.get("floor_failure"):
+            lines.append(f"- floor_failure: {outcome['floor_failure']}")
+        if outcome.get("rejected"):
+            lines.append("- rejected: true")
+            if outcome.get("rejection"):
+                lines.append(f"- rejection: {outcome['rejection']}")
+        for index, anchor in enumerate(anchors, 1):
+            lines.append(
+                f"  - [{index}] {anchor.get('selector') or ''} | "
+                f"{anchor.get('label') or ''} | {anchor.get('comment') or ''}"
+            )
+        blocks.append("\n".join(lines) + "\n")
+    return "".join(blocks)
+
+
+def _valid_entries(preview_dir: Path) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for path in preview_dir.glob("decision-round-*.json"):
+        entry = _load_entry(path)
+        if entry is not None:
+            entries.append(entry)
+    return entries
+
+
+def _commit_projections(preview_dir: Path, entry: dict[str, Any]) -> str:
+    binding = entry["binding"]
+    outcome = entry["outcome"]
+    confirm_path = preview_dir / f"confirm-round-{binding['round']}.json"
+    if outcome["user_confirmed"]:
+        existing_confirm = None
+        if confirm_path.is_file():
+            try:
+                existing_confirm = json.loads(confirm_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError):
+                existing_confirm = None
+        if existing_confirm and existing_confirm.get("decision_id") not in {
+            None, entry["decision_id"]
+        }:
+            raise TransactionConflict(
+                f"confirm belongs to another decision; use next round: {confirm_path}"
+            )
+        if existing_confirm and "decision_id" not in existing_confirm:
+            raise TransactionConflict(
+                f"legacy confirm cannot be overwritten; use next round: {confirm_path}"
+            )
+        _atomic_write(confirm_path, _json_text(_confirm_record(entry)))
+        confirm_result = str(confirm_path)
+    else:
+        confirm_result = ""
+    _atomic_write(preview_dir / "log.md", _render_log(_valid_entries(preview_dir)))
+    return confirm_result
+
+
+def _result(entry: dict[str, Any], confirm_path: str) -> dict[str, Any]:
+    binding = entry["binding"]
+    outcome = entry["outcome"]
+    return {
+        "confirmed": outcome["confirmed"],
+        "floor_pass": outcome["floor_pass"],
+        "selected_options": list(outcome["selected_options"]),
+        "feedback": outcome["feedback"],
+        "anchors": list(outcome["anchors"]),
+        "round": binding["round"],
+        "confirm_record_path": confirm_path,
+        "aborted": outcome["aborted"],
+        "decision_id": entry["decision_id"],
+    }
 
 
 def run_preview_transaction(
@@ -33,12 +215,46 @@ def run_preview_transaction(
     options: list[str],
     collect: BrowserCollector,
 ) -> dict[str, Any]:
-    """Collect and commit one Preview decision using current artifact format."""
+    """Collect once or repair projections for one bound Preview decision."""
     summary = summary.strip()
     report_ref = report_ref.strip()
     preview_dir = _preview_dir_for(Path(path_arg) if path_arg else None)
-    prototype = _ensure_prototype(path_arg, html, round_n, preview_dir)
+    entry_path = preview_dir / f"decision-round-{round_n}.json"
 
+    if path_arg:
+        prototype = Path(path_arg)
+        if not prototype.is_file():
+            raise ValueError(f"prototype path does not exist: {path_arg}")
+        prototype_hash = prototype_html_digest(prototype.read_bytes())
+    else:
+        if not html:
+            raise ValueError("path or html is required")
+        prototype_hash = prototype_html_digest(html.encode("utf-8"))
+        prototype = preview_dir / f"round-{round_n}.html"
+
+    binding = _binding(
+        round_n=round_n,
+        prototype_hash=prototype_hash,
+        report_ref=report_ref,
+        summary=summary,
+        options=options,
+    )
+    existing = _load_entry(entry_path)
+    if existing is not None:
+        if existing["binding"].get("digest") != binding["digest"]:
+            raise TransactionConflict(
+                f"round binding differs from durable decision; use next round: {round_n}"
+            )
+        confirm_path = _commit_projections(preview_dir, existing)
+        return _result(existing, confirm_path)
+
+    legacy_confirm = preview_dir / f"confirm-round-{round_n}.json"
+    if legacy_confirm.is_file():
+        raise TransactionConflict(
+            f"legacy confirm cannot be overwritten; use next round: {legacy_confirm}"
+        )
+
+    prototype = _ensure_prototype(path_arg, html, round_n, preview_dir)
     submission = collect(prototype, summary, options, round_n)
     anchors = list(submission.get("anchors") or [])
     raw_feedback = str(submission.get("feedback") or "")
@@ -50,9 +266,7 @@ def run_preview_transaction(
 
     confirm_labels = {label.casefold() for label in CONFIRM_LABELS}
     user_confirmed = (
-        not aborted
-        and not rejected
-        and choice.casefold() in confirm_labels
+        not aborted and not rejected and choice.casefold() in confirm_labels
     )
     if rejected:
         floor_pass = False
@@ -61,44 +275,27 @@ def run_preview_transaction(
         floor_pass, floor_failure = _check_feedback_floor(raw_feedback, anchors)
     confirmed = user_confirmed and floor_pass
 
-    confirm_path = ""
-    if user_confirmed:
-        proto_hash = submission.get("prototype_html_hash")
-        if not proto_hash:
-            proto_hash = prototype_html_digest(prototype.read_bytes())
-        out = _write_confirm(
-            preview_dir,
-            round_n=round_n,
-            report_ref=report_ref,
-            selected=selected,
-            feedback=feedback,
-            prototype_html_hash=str(proto_hash),
-            confirmed=confirmed,
-            floor_pass=floor_pass,
-            floor_failure=floor_failure,
-        )
-        confirm_path = str(out)
-
-    _append_log(
-        preview_dir,
-        round_n=round_n,
-        report_ref=report_ref,
-        feedback=feedback,
-        aborted=aborted,
-        selected=selected,
-        anchors=anchors,
-        floor_pass=floor_pass,
-        floor_failure=floor_failure,
-        rejected=rejected,
-        rejection=str(submission.get("rejection") or ""),
-    )
-    return {
-        "confirmed": confirmed,
-        "floor_pass": floor_pass,
-        "selected_options": selected,
-        "feedback": feedback,
-        "anchors": anchors,
-        "round": round_n,
-        "confirm_record_path": confirm_path,
-        "aborted": aborted,
+    served_hash = str(submission.get("prototype_html_hash") or prototype_hash)
+    if served_hash != prototype_hash:
+        raise TransactionConflict("served prototype hash differs from request binding")
+    entry = {
+        "schema_version": ENTRY_SCHEMA_VERSION,
+        "decision_id": uuid.uuid4().hex,
+        "timestamp": _now_iso(),
+        "binding": binding,
+        "outcome": {
+            "confirmed": confirmed,
+            "user_confirmed": user_confirmed,
+            "floor_pass": floor_pass,
+            "floor_failure": floor_failure,
+            "selected_options": selected,
+            "feedback": feedback,
+            "anchors": anchors,
+            "aborted": aborted,
+            "rejected": rejected,
+            "rejection": str(submission.get("rejection") or ""),
+        },
     }
+    _atomic_write(entry_path, _json_text(entry))
+    confirm_path = _commit_projections(preview_dir, entry)
+    return _result(entry, confirm_path)
