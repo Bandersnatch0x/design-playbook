@@ -101,6 +101,22 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("CRAFT-01 detector contract", result.stdout)
         self.assertIn("VALIDATION FAILED", result.stdout)
 
+    def test_composition_detector_coverage_drift_fails(self) -> None:
+        fixture = (
+            self.root / "packages" / "design-playbook" / "examples"
+            / "craft-detectors" / "composition-contrast.md"
+        )
+        text = fixture.read_text(encoding="utf-8")
+        target = "| card-collection-clear | CRAFT-02 | clear |"
+        self.assertIn(target, text)
+        fixture.write_text(text.replace(target, "| card-collection-clear | CRAFT-02 | hit |", 1), encoding="utf-8")
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("CRAFT-02 contrast has hit and clear", result.stdout)
+        self.assertIn("VALIDATION FAILED", result.stdout)
+
     def test_codex_plugin_json_version_drift_fails(self) -> None:
         # Issue 07 acceptance: bump漏改 .codex-plugin/plugin.json ->
         # validate FAIL (gate catches Claude/Codex version drift).
