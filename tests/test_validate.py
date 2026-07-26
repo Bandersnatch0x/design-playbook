@@ -117,6 +117,22 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("CRAFT-02 contrast has hit and clear", result.stdout)
         self.assertIn("VALIDATION FAILED", result.stdout)
 
+    def test_craft_baseline_exception_drift_fails(self) -> None:
+        fixture = (
+            self.root / "packages" / "design-playbook" / "examples"
+            / "craft-detectors" / "existing-brand-contrast.md"
+        )
+        text = fixture.read_text(encoding="utf-8")
+        marker = "Baseline disposition: clear"
+        self.assertIn(marker, text)
+        fixture.write_text(text.replace(marker, "Baseline disposition: hit", 1), encoding="utf-8")
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("verified baseline wins generic detector taste", result.stdout)
+        self.assertIn("VALIDATION FAILED", result.stdout)
+
     def test_codex_plugin_json_version_drift_fails(self) -> None:
         # Issue 07 acceptance: bump漏改 .codex-plugin/plugin.json ->
         # validate FAIL (gate catches Claude/Codex version drift).

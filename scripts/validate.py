@@ -354,6 +354,45 @@ for detector_id in detector_ids[:5]:
         f"{detector_id} hit has evidence exception owner and fix",
     )
 
+landing_fixture = PKG / "examples" / "craft-detectors" / "landing-product-contrast.md"
+landing_text = landing_fixture.read_text(encoding="utf-8") if landing_fixture.exists() else ""
+landing_rows = re.findall(
+    r"^\| ([^|]+) \| (CRAFT-\d{2}) \| (hit|clear) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \|$",
+    landing_text,
+    re.M,
+)
+for detector_id in detector_ids[5:]:
+    rows = [row for row in landing_rows if row[1] == detector_id]
+    check(
+        len(rows) == 2 and {row[2] for row in rows} == {"hit", "clear"},
+        f"{detector_id} contrast has hit and clear",
+    )
+    hit_rows = [row for row in rows if row[2] == "hit"]
+    check(
+        len(hit_rows) == 1
+        and all(cell.strip() and cell.strip() != "-" for cell in hit_rows[0][3:]),
+        f"{detector_id} hit has evidence exception owner and fix",
+    )
+
+brand_fixture = PKG / "examples" / "craft-detectors" / "existing-brand-contrast.md"
+brand_text = brand_fixture.read_text(encoding="utf-8") if brand_fixture.exists() else ""
+check(
+    all(phrase in brand_text for phrase in (
+        "binding status is `ready`",
+        "Baseline disposition: clear",
+        "verified project choice wins generic detector taste",
+    )),
+    "verified baseline wins generic detector taste",
+)
+check(
+    all(phrase in brand_text for phrase in (
+        "Override disposition: hit",
+        "safety, usability, and explicit dangerous-action declarations override baseline consistency",
+        "Positive fix:",
+    )),
+    "safety usability and declarations override baseline",
+)
+
 print("== Dogfood 004 regression guards ==")
 
 
