@@ -44,6 +44,7 @@ jobs:
             packages/design-playbook/mcp/preview/server.py \
             packages/design-playbook/mcp/preview/transaction.py \
             packages/design-playbook/mcp/evidence/server.py \
+            packages/design-playbook/mcp/test_transport.py \
             packages/design-playbook/mcp/preview/test_server_stdio.py \
             packages/design-playbook/mcp/preview/test_transaction.py \
             packages/design-playbook/mcp/evidence/test_server_stdio.py \
@@ -75,9 +76,10 @@ jobs:
       - name: Install pytest (for stdio gates)
         run: python3 -m pip install pytest
 
-      - name: Preview transaction + MCP stdio tests (required)
+      - name: Shared transport + Preview transaction/stdin tests (required)
         run: |
           python3 -m pytest \
+            packages/design-playbook/mcp/test_transport.py \
             packages/design-playbook/mcp/preview/test_transaction.py \
             packages/design-playbook/mcp/preview/test_server_stdio.py \
             -v
