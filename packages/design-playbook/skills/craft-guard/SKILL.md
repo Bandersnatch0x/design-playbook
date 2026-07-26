@@ -42,6 +42,8 @@ Treat as exhaustive for the surface under edit.
 
 ### AI slop → target look
 
+For implemented UI, run all eight checks in [`references/detectors.md`](references/detectors.md) against rendered UI plus relevant source. Write exactly one `clear|hit|blocked` row per detector to `.scratch/<run>/craft-guard.md`. Detector output is advisory: record evidence, exception check, and positive fix; leave declaration source, severity, and verdict to `ui-evaluator`. Missing proof is `blocked`, not a silent clear.
+
 | Push toward | Instead of default sludge |
 | --- | --- |
 | Accent on key noun + primary CTA | Purple–blue gradient wallpaper |
@@ -54,4 +56,4 @@ Treat as exhaustive for the surface under edit.
 
 ## Completion
 
-**Done when:** hierarchy, every in-scope wait/fail path, every animation, and — when the surface has L4 interactive zones — every zone's affordance (per `references/craft.md`) pass their checks; residual issues are listed for `ui-evaluator` with source `craft`.
+**Done when:** hierarchy, every in-scope wait/fail path, every animation, and — when the surface has L4 interactive zones — every zone's affordance (per `references/craft.md`) pass their checks; implemented UI also has all eight detector rows with no unexplained missing proof. Residual hits and blocked proof are handed to `ui-evaluator`; detector rows do not assign source, severity, or verdict.

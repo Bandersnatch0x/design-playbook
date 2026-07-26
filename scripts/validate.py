@@ -279,6 +279,58 @@ web_skip = "Web and mobile Web skip `native-craft`"
 check(web_skip in orchestrator and web_skip in codex,
       "orchestrator and Codex skip native-craft for Web targets")
 
+print("== Craft detector protocol ==")
+detector_catalog = PKG / "skills" / "craft-guard" / "references" / "detectors.md"
+detector_fixture = PKG / "examples" / "craft-detectors" / "saas-dashboard.md"
+detector_text = detector_catalog.read_text(encoding="utf-8") if detector_catalog.exists() else ""
+fixture_text = detector_fixture.read_text(encoding="utf-8") if detector_fixture.exists() else ""
+detector_ids = tuple(f"CRAFT-{index:02d}" for index in range(1, 9))
+detector_fields = (
+    "**Purpose:**",
+    "**Rendered signals:**",
+    "**Source signals:**",
+    "**Legitimate exceptions:**",
+    "**Owner hint:**",
+    "**Positive fix:**",
+)
+for index, detector_id in enumerate(detector_ids):
+    next_id = detector_ids[index + 1] if index + 1 < len(detector_ids) else None
+    headings = re.findall(rf"^## {re.escape(detector_id)}\b", detector_text, re.M)
+    start = re.search(rf"^## {re.escape(detector_id)}\b", detector_text, re.M)
+    end = re.search(rf"^## {re.escape(next_id)}\b", detector_text, re.M) if next_id else None
+    section = detector_text[start.start():end.start()] if start and end else (
+        detector_text[start.start():] if start else ""
+    )
+    check(
+        len(headings) == 1
+        and bool(section)
+        and all(section.count(field) == 1 for field in detector_fields),
+        f"{detector_id} detector contract",
+    )
+
+fixture_rows = re.findall(
+    r"^\| (CRAFT-\d{2}) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \|$",
+    fixture_text,
+    re.M,
+)
+check(
+    len(fixture_rows) == len(detector_ids)
+    and tuple(row[0] for row in fixture_rows) == detector_ids,
+    "SaaS detector ledger has all eight IDs exactly once",
+)
+check(
+    all(row[1].strip() in {"clear", "hit", "blocked"} for row in fixture_rows),
+    "SaaS detector ledger uses allowed statuses",
+)
+check(
+    all(all(cell.strip() for cell in row[2:]) for row in fixture_rows),
+    "SaaS detector ledger has complete evidence fields",
+)
+check(
+    {row[1].strip() for row in fixture_rows} >= {"clear", "hit", "blocked"},
+    "SaaS detector ledger demonstrates hit clear and blocked",
+)
+
 print("== Dogfood 004 regression guards ==")
 
 

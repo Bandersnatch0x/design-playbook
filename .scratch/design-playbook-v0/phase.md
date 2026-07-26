@@ -26,6 +26,7 @@
 | v0.6.0 gate 5 smoke | done (2026-07-25; isolated second-session marketplace install; plugin v0.6.0 + 2 MCP servers resolved) |
 | Preview decision transaction | done (2026-07-26; tickets `01`-`04` resolved; implementation `94b2e64`; Ubuntu run `30183789524` green incl. exact frontend marker) |
 | validate.py phrase table | done (2026-07-26; ticket `14` resolved; implementation `5d3733b`; Ubuntu run `30206845177` green) |
+| craft detectors | active (2026-07-26; decisions locked; 4-ticket frontier; ticket `01` in progress) |
 
 ## v0 ship checklist (5/5 pass)
 
