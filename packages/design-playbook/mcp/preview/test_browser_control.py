@@ -35,6 +35,7 @@ from confirm import (  # noqa: E402
     _DecisionSession,
     _generate_decision_token,
     _write_confirm,
+    prototype_html_digest,
 )
 
 
@@ -317,10 +318,12 @@ class TrustBoundaryIntegrationTests(unittest.TestCase):
             "</script></body></html>",
             client,
         )
-        # Forged POST did not hijack: real user's confirm is the final decision.
-        self.assertTrue(decision["confirmed"])
-        self.assertTrue(decision["floor_pass"])
-        self.assertEqual(decision["selected_options"], ["确认通过"])
+        # Forged POST did not hijack: real user's authenticated submission wins.
+        self.assertEqual(decision["choice"], "确认通过")
+        self.assertEqual(decision["feedback"], "real user clicked confirm")
+        self.assertFalse(decision["aborted"])
+        self.assertNotIn("confirmed", decision)
+        self.assertNotIn("floor_pass", decision)
         self.assertNotIn("rejected", decision)
 
     def test_round_mismatch_rejected_at_http(self) -> None:
@@ -357,9 +360,10 @@ class TrustBoundaryIntegrationTests(unittest.TestCase):
 
         decision = _run_collect("<html><body>x</body></html>", client)
         # Mismatch did not hijack: the real user's valid POST wins.
-        self.assertTrue(decision["confirmed"])
-        self.assertEqual(decision["selected_options"], ["确认通过"])
-        self.assertFalse(decision.get("aborted"))
+        self.assertEqual(decision["choice"], "确认通过")
+        self.assertEqual(decision["feedback"], "real user")
+        self.assertFalse(decision["aborted"])
+        self.assertNotIn("rejected", decision)
 
     def test_normal_confirm_with_token_passes(self) -> None:
         def client(port: int) -> None:
@@ -380,10 +384,17 @@ class TrustBoundaryIntegrationTests(unittest.TestCase):
         decision = _run_collect(
             "<html><body><h1>real prototype</h1></body></html>", client
         )
-        self.assertTrue(decision["confirmed"])
-        self.assertEqual(decision["selected_options"], ["确认通过"])
-        self.assertTrue(decision["floor_pass"])
+        self.assertEqual(decision["choice"], "确认通过")
+        self.assertEqual(decision["feedback"], "looks good, ship it")
         self.assertFalse(decision["aborted"])
+        self.assertEqual(
+            decision["prototype_html_hash"],
+            prototype_html_digest(
+                b"<html><body><h1>real prototype</h1></body></html>"
+            ),
+        )
+        self.assertNotIn("confirmed", decision)
+        self.assertNotIn("floor_pass", decision)
         self.assertNotIn("rejected", decision)
 
     def test_abort_with_token_is_recorded(self) -> None:
@@ -402,8 +413,10 @@ class TrustBoundaryIntegrationTests(unittest.TestCase):
             )
 
         decision = _run_collect("<html><body>x</body></html>", client)
-        self.assertFalse(decision["confirmed"])
+        self.assertEqual(decision["choice"], "__abort__")
+        self.assertEqual(decision["feedback"], "")
         self.assertTrue(decision["aborted"])
+        self.assertNotIn("confirmed", decision)
         self.assertNotIn("rejected", decision)
 
 
