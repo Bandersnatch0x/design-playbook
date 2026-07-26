@@ -360,6 +360,59 @@ def main() -> int:
         *_g5_args(FAIL / "g5-confirm-floor-fail"),
     )
 
+    # Durable decision entries are Preview occurrence signals, never G5
+    # confirmation authority. Valid entry-only state therefore fails closed;
+    # malformed lookalikes do not change no-preview compatibility.
+    with tempfile.TemporaryDirectory() as tmp:
+        run_root = Path(tmp)
+        preview = run_root / "preview"
+        prototype_body = b"<html>round-1</html>"
+        prototype_hash = hashlib.sha256(prototype_body).hexdigest()
+        binding = {
+            "round": 1,
+            "prototype_html_hash": prototype_hash,
+            "report_ref": "decision-report.md",
+            "summary": "review",
+            "options": ["确认通过", "需要修改"],
+        }
+        binding["digest"] = hashlib.sha256(json.dumps(
+            binding, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")).hexdigest()
+        entry = {
+            "schema_version": 1,
+            "decision_id": "decision-1",
+            "timestamp": "2026-07-26T00:00:00Z",
+            "binding": binding,
+            "outcome": {"confirmed": False},
+        }
+        _write_text(
+            preview / "decision-round-1.json",
+            json.dumps(entry, ensure_ascii=False),
+        )
+        expect_invalid(
+            failures, "g5-decision-entry-without-confirm", spec, pb,
+            "G5 preview", "--preview-dir", str(preview))
+
+        _write_text(preview / "round-1.html", prototype_body.decode("utf-8"))
+        _write_text(run_root / "decision-report.md", "# decision report\n")
+        _write_text(
+            preview / "confirm-round-1.json",
+            json.dumps(
+                _confirm_record(1, prototype_html_hash=prototype_hash),
+                ensure_ascii=False,
+            ),
+        )
+        expect_valid(
+            failures, "g5-decision-entry-with-current-confirm", spec, pb,
+            "--preview-dir", str(preview))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        preview = Path(tmp) / "preview"
+        _write_text(preview / "decision-round-1.json", "{}")
+        expect_valid(
+            failures, "g5-malformed-decision-lookalike", spec, pb,
+            "--preview-dir", str(preview))
+
     # --- G6 conditional evidence-binding gate (matrix) ---
     g6_spec, _ = _zero_findings_pair()
 
@@ -425,6 +478,38 @@ def main() -> int:
             failures, "g5-stale-old-round-confirmed", spec, pb,
             "stale",
             "--preview-dir", str(preview),
+            "--decision-report", str(run_root / "decision-report.md"))
+
+    # A durable round-2 entry also makes round 2 current. It cannot let the
+    # prior round-1 confirmation satisfy G5 when its projection is incomplete.
+    with tempfile.TemporaryDirectory() as tmp:
+        run_root = Path(tmp)
+        preview = run_root / "preview"
+        body = b"<html>round-1</html>"
+        _write_text(preview / "round-1.html", body.decode("utf-8"))
+        _write_text(
+            preview / "confirm-round-1.json",
+            json.dumps(_confirm_record(
+                1, prototype_html_hash=hashlib.sha256(body).hexdigest()
+            ), ensure_ascii=False),
+        )
+        binding = {
+            "round": 2, "prototype_html_hash": "c" * 64,
+            "report_ref": "decision-report.md", "summary": "round two",
+            "options": ["确认通过", "需要修改"],
+        }
+        binding["digest"] = hashlib.sha256(json.dumps(
+            binding, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")).hexdigest()
+        _write_text(preview / "decision-round-2.json", json.dumps({
+            "schema_version": 1, "decision_id": "decision-2",
+            "timestamp": "2026-07-26T00:00:01Z", "binding": binding,
+            "outcome": {"confirmed": False},
+        }, ensure_ascii=False))
+        _write_text(run_root / "decision-report.md", "# decision report\n")
+        expect_invalid(
+            failures, "g5-decision-entry-makes-latest-round-current", spec, pb,
+            "latest round 2", "--preview-dir", str(preview),
             "--decision-report", str(run_root / "decision-report.md"))
 
     # prototype on disk no longer hashes to the recorded prototype_html_hash

@@ -65,6 +65,51 @@ def _lock_metadata(path: Path) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _claim_stale_lock(
+    path: Path, *, binding_digest: str, round_n: int, decision_id: str,
+) -> None:
+    """Serialize stale takeover so one recoverer cannot delete another's lock."""
+    guard = path.with_suffix(path.suffix + ".recovery")
+    try:
+        fd = os.open(guard, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError as exc:
+        raise PreviewTransactionError(
+            f"Preview round {round_n} recovery is already active",
+            retryable=True, round_n=round_n, decision_id=decision_id,
+            artifact=str(guard),
+        ) from exc
+    os.close(fd)
+    try:
+        existing = _lock_metadata(path)
+        try:
+            age = time.time() - path.stat().st_mtime
+        except FileNotFoundError:
+            return
+        if age < LOCK_STALE_SECONDS:
+            raise PreviewTransactionError(
+                f"Preview round {round_n} is already active",
+                retryable=True, round_n=round_n,
+                decision_id=str(existing.get("decision_id") or decision_id),
+                artifact=str(path),
+            )
+        if existing.get("binding_digest") != binding_digest:
+            raise TransactionConflict(
+                f"stale lock binding differs; use next round: {round_n}",
+                retryable=False, round_n=round_n,
+                decision_id=str(existing.get("decision_id") or decision_id),
+                artifact=str(path),
+            )
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+    finally:
+        try:
+            guard.unlink()
+        except FileNotFoundError:
+            pass
+
+
 @contextmanager
 def _round_lock(
     preview_dir: Path, *, round_n: int, binding_digest: str, decision_id: str,
@@ -83,29 +128,10 @@ def _round_lock(
         try:
             fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         except FileExistsError:
-            existing = _lock_metadata(path)
-            try:
-                age = time.time() - path.stat().st_mtime
-            except OSError:
-                continue
-            if age < LOCK_STALE_SECONDS:
-                raise PreviewTransactionError(
-                    f"Preview round {round_n} is already active",
-                    retryable=True, round_n=round_n,
-                    decision_id=str(existing.get("decision_id") or decision_id),
-                    artifact=str(path),
-                )
-            if existing.get("binding_digest") != binding_digest:
-                raise TransactionConflict(
-                    f"stale lock binding differs; use next round: {round_n}",
-                    retryable=False, round_n=round_n,
-                    decision_id=str(existing.get("decision_id") or decision_id),
-                    artifact=str(path),
-                )
-            try:
-                path.unlink()
-            except FileNotFoundError:
-                pass
+            _claim_stale_lock(
+                path, binding_digest=binding_digest,
+                round_n=round_n, decision_id=decision_id,
+            )
             continue
         else:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -201,16 +227,41 @@ def _load_entry(path: Path) -> dict[str, Any] | None:
     required = {
         "schema_version", "decision_id", "timestamp", "binding", "outcome"
     }
+    round_n = _round_from_path(path)
+    binding = entry.get("binding") if isinstance(entry, dict) else None
+    outcome = entry.get("outcome") if isinstance(entry, dict) else None
+    binding_valid = False
+    if isinstance(binding, dict):
+        try:
+            expected = _binding(
+                round_n=round_n,
+                prototype_hash=binding["prototype_html_hash"],
+                report_ref=binding["report_ref"], summary=binding["summary"],
+                options=binding["options"],
+            )
+            binding_valid = binding == expected
+        except (KeyError, TypeError):
+            binding_valid = False
     if (
         not isinstance(entry, dict)
         or entry.get("schema_version") != ENTRY_SCHEMA_VERSION
         or not required.issubset(entry)
-        or not isinstance(entry.get("binding"), dict)
-        or not isinstance(entry.get("outcome"), dict)
+        or not isinstance(entry.get("decision_id"), str)
+        or not entry["decision_id"]
+        or not isinstance(entry.get("timestamp"), str)
+        or not binding_valid
+        or not isinstance(outcome, dict)
+        or not isinstance(outcome.get("selected_options"), list)
+        or not isinstance(outcome.get("anchors"), list)
+        or not isinstance(outcome.get("feedback"), str)
+        or not isinstance(outcome.get("confirmed"), bool)
+        or not isinstance(outcome.get("user_confirmed"), bool)
+        or not isinstance(outcome.get("floor_pass"), bool)
+        or not isinstance(outcome.get("aborted"), bool)
     ):
         raise TransactionConflict(
             f"round decision metadata is invalid; use next round: {path}",
-            retryable=False, round_n=_round_from_path(path), decision_id="",
+            retryable=False, round_n=round_n, decision_id="",
             artifact=str(path),
         )
     return entry
@@ -384,10 +435,13 @@ def run_preview_transaction(
         log_path = preview_dir / "log.md"
         if not entry_path.is_file():
             artifact = entry_path
-        elif not confirm_path.is_file():
-            artifact = confirm_path
         else:
-            artifact = log_path
+            entry = _load_entry(entry_path)
+            needs_confirm = bool(entry and entry["outcome"].get("user_confirmed"))
+            if needs_confirm and not confirm_path.is_file():
+                artifact = confirm_path
+            else:
+                artifact = log_path
         raise PreviewTransactionError(
             f"Preview persistence incomplete: {exc}", retryable=True,
             round_n=round_n, decision_id=decision_id, artifact=str(artifact),

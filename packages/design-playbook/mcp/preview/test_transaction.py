@@ -341,6 +341,9 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
                     result = self._run(prototype)
                     self.assertTrue(result["decision_id"])
                     self.assertFalse(lock.exists())
+                    self.assertFalse(
+                        lock.with_suffix(lock.suffix + ".recovery").exists()
+                    )
                 else:
                     with self.assertRaises(TransactionConflict) as caught:
                         self._run(prototype)

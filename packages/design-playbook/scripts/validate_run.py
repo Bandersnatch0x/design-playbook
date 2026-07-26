@@ -34,6 +34,7 @@ Strict quality mode (opt-in):
   --strict            shorthand for both require flags
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -70,6 +71,7 @@ EVIDENCE_LINE = re.compile(
 VALID_RESULTS = {"pass", "fail", "blocked", "n/a"}
 ROUND_HTML = re.compile(r"^round-\d+\.html$", re.I)
 CONFIRM_JSON = re.compile(r"^confirm-round-\d+\.json$", re.I)
+DECISION_JSON = re.compile(r"^decision-round-(\d+)\.json$", re.I)
 
 
 def _l6_body(text: str) -> str:
@@ -269,15 +271,55 @@ def check_pointback(text: str, expected_l6: int) -> list[str]:
     return errs
 
 
+def _valid_decision_entry(path: Path) -> bool:
+    """Recognize transaction audit/recovery authority, never confirmation."""
+    match = DECISION_JSON.match(path.name)
+    if not match or not path.is_file():
+        return False
+    try:
+        entry = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return False
+    if not isinstance(entry, dict) or entry.get("schema_version") != 1:
+        return False
+    binding = entry.get("binding")
+    outcome = entry.get("outcome")
+    if not (
+        isinstance(entry.get("decision_id"), str)
+        and bool(entry["decision_id"])
+        and isinstance(binding, dict)
+        and binding.get("round") == int(match.group(1))
+        and isinstance(binding.get("prototype_html_hash"), str)
+        and isinstance(binding.get("report_ref"), str)
+        and isinstance(binding.get("summary"), str)
+        and isinstance(binding.get("options"), list)
+        and all(isinstance(item, str) for item in binding["options"])
+        and isinstance(outcome, dict)
+    ):
+        return False
+    fields = {
+        "round": binding["round"],
+        "prototype_html_hash": binding["prototype_html_hash"],
+        "report_ref": binding["report_ref"],
+        "summary": binding["summary"],
+        "options": binding["options"],
+    }
+    canonical = json.dumps(
+        fields, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return binding.get("digest") == hashlib.sha256(canonical).hexdigest()
+
+
 def preview_occurred(preview_dir: Path | None) -> bool:
-    """True when preview left log.md or round-*.html (ticket 04/06)."""
+    """True for historical signals or a valid durable decision entry."""
     if preview_dir is None or not preview_dir.is_dir():
         return False
     if (preview_dir / "log.md").is_file():
         return True
     try:
         return any(
-            p.is_file() and ROUND_HTML.match(p.name)
+            p.is_file()
+            and (bool(ROUND_HTML.match(p.name)) or _valid_decision_entry(p))
             for p in preview_dir.iterdir())
     except OSError:
         return False

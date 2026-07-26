@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import re
 import socket
+import sys
 import tempfile
 import threading
 import time
@@ -27,9 +28,8 @@ from typing import Any
 from unittest import mock
 from urllib.parse import urlencode
 
-# Sibling modules resolve via the test file's directory (pytest prepend mode
-# or sys.path[0] under plain `python <file>`); same convention as
-# test_server_stdio.py.
+# Make sibling runtime modules importable under package-qualified discovery.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import browser  # noqa: E402
 from confirm import (  # noqa: E402
     _DecisionSession,
