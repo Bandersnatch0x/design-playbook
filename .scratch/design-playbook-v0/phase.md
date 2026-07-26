@@ -25,6 +25,7 @@
 | frontend floor graduate | done (2026-07-25; required CI gate `29c80f3`; Ubuntu run `30165226282` green) |
 | v0.6.0 gate 5 smoke | done (2026-07-25; isolated second-session marketplace install; plugin v0.6.0 + 2 MCP servers resolved) |
 | Preview decision transaction | done (2026-07-26; tickets `01`-`04` resolved; implementation `94b2e64`; Ubuntu run `30183789524` green incl. exact frontend marker) |
+| validate.py phrase table | active (2026-07-26; optional post-v1 ticket `14`; locality-only, gate semantics unchanged) |
 
 ## v0 ship checklist (5/5 pass)
 

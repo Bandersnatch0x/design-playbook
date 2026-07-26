@@ -65,6 +65,24 @@ class ValidateGateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("VALIDATION PASSED", result.stdout)
 
+    def test_skill_heading_rename_fails_named_prose_gate(self) -> None:
+        evaluator = (
+            self.root / "packages" / "design-playbook" / "skills"
+            / "ui-evaluator" / "SKILL.md"
+        )
+        text = evaluator.read_text(encoding="utf-8")
+        self.assertIn("### 4. Verdict", text)
+        evaluator.write_text(
+            text.replace("### 4. Verdict", "### 4. Final verdict", 1),
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("ui-evaluator blocks unattended acceptance", result.stdout)
+        self.assertIn("VALIDATION FAILED", result.stdout)
+
     def test_codex_plugin_json_version_drift_fails(self) -> None:
         # Issue 07 acceptance: bump漏改 .codex-plugin/plugin.json ->
         # validate FAIL (gate catches Claude/Codex version drift).

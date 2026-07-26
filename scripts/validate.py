@@ -282,6 +282,65 @@ check(web_skip in orchestrator and web_skip in codex,
 print("== Dogfood 004 regression guards ==")
 
 
+PROSE_PHRASES: dict[str, list[str]] = {
+    "ui-evaluator blocks unattended acceptance": [
+        "only after an explicit user decision",
+        "user's statement or decision record",
+        "remain in recirculate",
+        "requests a decision",
+    ],
+    "orchestrator points to the authoritative evaluator verdict": [
+        "authoritative verdict completion criterion in `ui-evaluator`",
+    ],
+    "fill routes reused-component L5 conflicts back to spec": [
+        "reused host component",
+        "conflicts with spec L5",
+        "recirculate to `spec`",
+        "authoritative map in `ui-evaluator`",
+    ],
+    "L4 implementation constraints name L5 exceptions": [
+        "L4 declares control behavior only",
+        "reuse / no-internal-change constraints must name exceptions",
+        "conflict with L5",
+    ],
+    "orchestrator names all five run-contract controls": [
+        "**Goal**", "**Success**", "**Evidence**", "**Stop**", "**Confirm**",
+    ],
+    "orchestrator defines confirmation and stop boundaries": [
+        "external, destructive, costly, or scope-expanding",
+        "same blocking finding survives two repair -> re-evaluate cycles",
+        "smallest next decision",
+    ],
+    "ux-spec binds each success criterion to required evidence": [
+        "必备证据",
+        "every L6 item",
+        "says what evidence will prove it",
+    ],
+    "ui-evaluator requires an evidence ledger and blocks missing proof": [
+        "Record an evidence ledger",
+        "result:    pass|fail|blocked|N/A",
+        "unavailable required proof is `blocked`",
+    ],
+    "ui-evaluator pass requires all evidence rows": [
+        "every required evidence row passes",
+    ],
+}
+
+
+def validate_skill_prose(text: str, table: dict[str, list[str]]) -> list[str]:
+    """Return gate names whose required phrases are absent from text."""
+    return [
+        gate for gate, phrases in table.items()
+        if not text or any(phrase not in text for phrase in phrases)
+    ]
+
+
+def check_skill_prose(text: str, gate: str, *, extra: bool = True) -> None:
+    """Report one phrase-table gate through the standard validation surface."""
+    missing = validate_skill_prose(text, {gate: PROSE_PHRASES[gate]})
+    check(extra and not missing, gate)
+
+
 def section_between(text: str, start: str, end: str) -> str:
     """Slice body between two heading labels, robust to step renumbering.
 
@@ -307,89 +366,44 @@ def section_between(text: str, start: str, end: str) -> str:
 
 evaluator = (PKG / "skills" / "ui-evaluator" / "SKILL.md").read_text(encoding="utf-8")
 verdict = section_between(evaluator, "### 4. Verdict", "## Recirculate map")
-check(
-    bool(verdict) and all(phrase in verdict for phrase in (
-        "only after an explicit user decision",
-        "user's statement or decision record",
-        "remain in recirculate",
-        "requests a decision",
-    )),
-    "ui-evaluator blocks unattended acceptance",
-)
+check_skill_prose(verdict, "ui-evaluator blocks unattended acceptance")
 
 playbook = (PKG / "skills" / "design-playbook" / "SKILL.md").read_text(encoding="utf-8")
 accept = section_between(playbook, "### 5. Accept", "## Recirculate")
-check(
-    bool(accept)
-    and "authoritative verdict completion criterion in `ui-evaluator`" in accept
-    and "explicitly accepted" not in accept,
+check_skill_prose(
+    accept,
     "orchestrator points to the authoritative evaluator verdict",
+    extra="explicitly accepted" not in accept,
 )
 
 fill = section_between(playbook, "### 3. Fill", "### 4. Craft")
-check(
-    bool(fill) and all(phrase in fill for phrase in (
-        "reused host component",
-        "conflicts with spec L5",
-        "recirculate to `spec`",
-        "authoritative map in `ui-evaluator`",
-    )),
-    "fill routes reused-component L5 conflicts back to spec",
-)
+check_skill_prose(fill, "fill routes reused-component L5 conflicts back to spec")
 
 spec_template = (
     PKG / "skills" / "ux-spec" / "references" / "spec-template.md"
 ).read_text(encoding="utf-8")
 l4 = section_between(spec_template, "## L4", "## L5")
-check(
-    bool(l4) and all(phrase in l4 for phrase in (
-        "L4 declares control behavior only",
-        "reuse / no-internal-change constraints must name exceptions",
-        "conflict with L5",
-    )),
-    "L4 implementation constraints name L5 exceptions",
-)
+check_skill_prose(l4, "L4 implementation constraints name L5 exceptions")
 
 print("== Outcome-first run contract ==")
 run_contract = section_between(playbook, "## Run contract", "## Steps")
-check(
-    bool(run_contract) and all(f"**{control}**" in run_contract for control in (
-        "Goal", "Success", "Evidence", "Stop", "Confirm",
-    )),
-    "orchestrator names all five run-contract controls",
-)
-check(
-    bool(run_contract) and all(phrase in run_contract for phrase in (
-        "external, destructive, costly, or scope-expanding",
-        "same blocking finding survives two repair -> re-evaluate cycles",
-        "smallest next decision",
-    )),
-    "orchestrator defines confirmation and stop boundaries",
-)
+check_skill_prose(run_contract, "orchestrator names all five run-contract controls")
+check_skill_prose(run_contract, "orchestrator defines confirmation and stop boundaries")
 
 ux_spec = (PKG / "skills" / "ux-spec" / "SKILL.md").read_text(encoding="utf-8")
 l6 = section_between(spec_template, "## L6", "---")
-check(
-    bool(l6)
-    and "必备证据" in l6
-    and "every L6 item" in ux_spec
-    and "says what evidence will prove it" in ux_spec,
+check_skill_prose(
+    f"{l6}\n{ux_spec}",
     "ux-spec binds each success criterion to required evidence",
+    extra=bool(l6),
 )
 
 run_checks = section_between(evaluator, "### 2. Run checks", "### 3. Emit point-back findings")
-check(
-    bool(run_checks) and all(phrase in run_checks for phrase in (
-        "Record an evidence ledger",
-        "result:    pass|fail|blocked|N/A",
-        "unavailable required proof is `blocked`",
-    )),
+check_skill_prose(
+    run_checks,
     "ui-evaluator requires an evidence ledger and blocks missing proof",
 )
-check(
-    bool(verdict) and "every required evidence row passes" in verdict,
-    "ui-evaluator pass requires all evidence rows",
-)
+check_skill_prose(verdict, "ui-evaluator pass requires all evidence rows")
 
 print()
 if failures:
