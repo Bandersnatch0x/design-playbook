@@ -331,6 +331,29 @@ check(
     "SaaS detector ledger demonstrates hit clear and blocked",
 )
 
+composition_fixture = PKG / "examples" / "craft-detectors" / "composition-contrast.md"
+composition_text = (
+    composition_fixture.read_text(encoding="utf-8")
+    if composition_fixture.exists() else ""
+)
+composition_rows = re.findall(
+    r"^\| ([^|]+) \| (CRAFT-\d{2}) \| (hit|clear) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \|$",
+    composition_text,
+    re.M,
+)
+for detector_id in detector_ids[:5]:
+    rows = [row for row in composition_rows if row[1] == detector_id]
+    check(
+        len(rows) == 2 and {row[2] for row in rows} == {"hit", "clear"},
+        f"{detector_id} contrast has hit and clear",
+    )
+    hit_rows = [row for row in rows if row[2] == "hit"]
+    check(
+        len(hit_rows) == 1
+        and all(cell.strip() and cell.strip() != "-" for cell in hit_rows[0][3:]),
+        f"{detector_id} hit has evidence exception owner and fix",
+    )
+
 print("== Dogfood 004 regression guards ==")
 
 
