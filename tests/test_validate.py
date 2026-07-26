@@ -83,6 +83,24 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("ui-evaluator blocks unattended acceptance", result.stdout)
         self.assertIn("VALIDATION FAILED", result.stdout)
 
+    def test_craft_detector_required_field_drift_fails(self) -> None:
+        catalog = (
+            self.root / "packages" / "design-playbook" / "skills"
+            / "craft-guard" / "references" / "detectors.md"
+        )
+        text = catalog.read_text(encoding="utf-8")
+        self.assertIn("**Rendered signals:**", text)
+        catalog.write_text(
+            text.replace("**Rendered signals:**", "**Visual signals:**", 1),
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("CRAFT-01 detector contract", result.stdout)
+        self.assertIn("VALIDATION FAILED", result.stdout)
+
     def test_codex_plugin_json_version_drift_fails(self) -> None:
         # Issue 07 acceptance: bump漏改 .codex-plugin/plugin.json ->
         # validate FAIL (gate catches Claude/Codex version drift).
