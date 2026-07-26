@@ -24,7 +24,7 @@
 | v0.6.0 release | done (v0.6.0, 2026-07-24; design-baseline ADR-0012 + G5 LF hash; tag a065e7b pushed + GitHub Release) |
 | frontend floor graduate | done (2026-07-25; required CI gate `29c80f3`; Ubuntu run `30165226282` green) |
 | v0.6.0 gate 5 smoke | done (2026-07-25; isolated second-session marketplace install; plugin v0.6.0 + 2 MCP servers resolved) |
-| Preview decision transaction | active (2026-07-26; tickets `01`-`03` resolved; frontier `04`) |
+| Preview decision transaction | done (2026-07-26; tickets `01`-`04` resolved; implementation `94b2e64`; Ubuntu run `30183789524` green incl. exact frontend marker) |
 
 ## v0 ship checklist (5/5 pass)
 
@@ -47,8 +47,7 @@
 
 ## Still open（2026-07-25 刷新）
 
-1. Preview decision transaction：`.scratch/preview-decision-transaction/`；`01`-`03` resolved，frontier `04-gate-compatibility-and-release`（ready-for-agent）
-2. 3b community catalog：人工阻塞（region + 账号）
+1. 3b community catalog：人工阻塞（region + 账号）
 
 **Package commands (ship):** design-io · ux-spec · ui-review
 **Monorepo commands (maintain):** product-next · product-grill · product-dogfood
