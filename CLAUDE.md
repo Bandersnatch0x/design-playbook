@@ -14,6 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Commands | `packages/design-playbook/commands/` |
 | MCP adapters | `packages/design-playbook/mcp/{preview,evidence}/` + 包根 `.mcp.json`（ADR-0009；sibling 包为兼容启动器） |
 | Codex | `packages/design-playbook/codex/AGENTS.md` |
+| npm / pi | `packages/design-playbook/package.json`（`pi` manifest + `pi-package` keyword → pi.dev gallery） |
 | 自有示例 | `packages/design-playbook/examples/` |
 | 产品 workflow | `docs/agents/product-workflow.md` |
 | 阶段指针 | `.scratch/design-playbook-v0/phase.md` |

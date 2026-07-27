@@ -164,6 +164,52 @@ if isinstance(amj, dict):
             check((ROOT / agents_path).is_dir(),
                   f".agents marketplace plugins[0].source.path exists: {agents_path}")
 
+print("== npm / pi publish manifest ==")
+# packages/design-playbook/package.json is the third publish surface: pi has
+# no marketplace, and the pi.dev gallery indexes npm for the `pi-package`
+# keyword. Drop the keyword and the package silently vanishes from the
+# gallery while `pi install` keeps working — no runtime symptom to catch it.
+npm_json = PKG / "package.json"
+npmj = _read_json(npm_json)
+check(bool(npmj), f"package.json present: {npm_json.relative_to(ROOT)}")
+if isinstance(npmj, dict) and npmj:
+    npm_version = npmj.get("version")
+    check(
+        bool(npm_version) and npm_version == claude_version,
+        f"package.json version matches Claude plugin.json "
+        f"(npm={npm_version!r}, claude={claude_version!r})",
+    )
+    keywords = npmj.get("keywords", [])
+    keywords = keywords if isinstance(keywords, list) else []
+    check("pi-package" in keywords,
+          "package.json keywords include 'pi-package' (pi.dev gallery indexing)")
+
+    # pi resolves these relative to the package root; a stale path means the
+    # installed package loads zero skills with no error at install time.
+    pi_manifest = npmj.get("pi", {})
+    pi_manifest = pi_manifest if isinstance(pi_manifest, dict) else {}
+    check(bool(pi_manifest), "package.json has a 'pi' manifest")
+    for pi_key, expected_dir in (("skills", "skills"), ("prompts", "commands")):
+        entries = pi_manifest.get(pi_key, [])
+        entries = entries if isinstance(entries, list) else []
+        check(bool(entries), f"package.json pi.{pi_key} declared")
+        for entry in entries:
+            if not isinstance(entry, str):
+                check(False, f"package.json pi.{pi_key} entry is a string")
+                continue
+            check((PKG / entry).is_dir(),
+                  f"package.json pi.{pi_key} target exists on disk: {entry}")
+        check(any(isinstance(e, str) and e.rstrip("/").endswith(expected_dir)
+                  for e in entries),
+              f"package.json pi.{pi_key} points at {expected_dir}/")
+
+    # The npm tarball is the only surface pi users ever see. `files` must ship
+    # skills + commands, or the gallery listing installs an empty package.
+    files_field = npmj.get("files", [])
+    files_field = files_field if isinstance(files_field, list) else []
+    for shipped in ("skills", "commands", "mcp"):
+        check(shipped in files_field, f"package.json files[] ships {shipped}/")
+
 print("== Skill frontmatter ==")
 for skill_dir in sorted((PKG / "skills").iterdir()):
     sm = skill_dir / "SKILL.md"

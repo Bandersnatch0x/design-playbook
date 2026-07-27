@@ -43,3 +43,6 @@ __pycache__/
 # External-reference research notes (not version-controlled; avoid
 # third-party attribution/attribution drift. Keep local only.)
 docs/research/
+
+# firecrawl scratch output
+.firecrawl/

@@ -58,6 +58,48 @@ After install, skills and commands are **namespaced** by the plugin name:
 
 Bare `/design-io` is **not** the installed name — always use the `design-playbook:` prefix.
 
+## Install (pi)
+
+Published to npm, listed in the [pi package gallery](https://pi.dev/packages).
+
+```bash
+pi install npm:design-playbook
+```
+
+pi has no plugin namespace — skills are `/skill:<name>`, commands are bare `/<name>`:
+
+| Invoke | Role |
+| --- | --- |
+| `/skill:design-playbook` | Orchestrator skill (model-invoked) |
+| `/skill:ux-spec` … `/skill:ui-evaluator` | Same eight skills as above |
+| `/design-io` · `/ux-spec` · `/ui-review` | Pipeline / spec-only / review commands |
+
+pi ships no built-in MCP, so `preview*` and `observe*` skip by default (ADR-0009 absent→skip; the pipeline still runs spec → picker → fill → craft → accept). To enable both gates, install an MCP adapter and register the bundled servers in your project `.mcp.json`:
+
+```bash
+pi install npm:pi-mcp-adapter
+```
+
+```json
+{
+  "mcpServers": {
+    "design-playbook-preview": {
+      "command": "python",
+      "args": ["<pkg>/mcp/preview/server.py"],
+      "timeout": 3600000
+    },
+    "design-playbook-evidence": {
+      "command": "python",
+      "args": ["<pkg>/mcp/evidence/server.py"],
+      "env": { "DESIGN_PLAYBOOK_RUN_ROOT": "." },
+      "timeout": 3600000
+    }
+  }
+}
+```
+
+`<pkg>` is the installed package root — `~/.pi/agent/npm/node_modules/design-playbook` for a user install, `.pi/npm/node_modules/design-playbook` for a project install. Evidence also needs `pip install playwright && playwright install chromium`.
+
 ## Stack with other skills
 
 | Package | Use for |

@@ -22,7 +22,7 @@ python scripts/release.py --apply            # also creates the vX.Y.Z tag
 python scripts/release.py --checks tree,tag  # run a subset (tree,version,validate,seam,adapter,tag)
 ```
 
-Gates: working tree clean (untracked files also block) · versions match across plugin.json + marketplace.json (3 sites) **and** README.md / README-zh.md badges + semver · release notes exist at `docs/releases/vX.Y.Z.md` · `validate.py` green (incl. bundled MCP layout) · seam test green · adapter floor self-check green (bundled path) · tag absent **or already pointing at HEAD** (idempotent re-run passes; a tag pointing elsewhere fails).
+Gates: working tree clean (untracked files also block) · versions match across plugin.json + marketplace.json + `.codex-plugin/plugin.json` + `package.json` (5 sites) **and** README.md / README-zh.md badges + semver · release notes exist at `docs/releases/vX.Y.Z.md` · `validate.py` green (incl. bundled MCP layout) · seam test green · adapter floor self-check green (bundled path) · tag absent **or already pointing at HEAD** (idempotent re-run passes; a tag pointing elsewhere fails).
 
 ## Prerequisites
 
@@ -39,10 +39,11 @@ Gates: working tree clean (untracked files also block) · versions match across 
 
 ## Version + tag + publish (manual, irreversible)
 
-- [ ] `plugin.json` + `marketplace.json` (3 sites) + README badge versions match (checked by `release.py`).
+- [ ] `plugin.json` + `marketplace.json` + `.codex-plugin/plugin.json` + `package.json` (5 sites) + README badge versions match (checked by `release.py`).
 - [ ] `python scripts/release.py --apply` creates `vX.Y.Z` tag.
 - [ ] `git push origin main && git push origin vX.Y.Z`.
 - [ ] GitHub Release at `vX.Y.Z`; body = `docs/releases/X.Y.Z.md`.
+- [ ] `cd packages/design-playbook && npm publish` — the pi.dev gallery indexes npm for the `pi-package` keyword, so skipping this leaves pi users on the previous version with no other signal. Check the tarball first with `npm pack --dry-run`.
 - [ ] Smoke: a second session `/plugin marketplace add <owner>/<repo>` + install works end-to-end.
 
 ## "Not yet" (do not block v0.x)

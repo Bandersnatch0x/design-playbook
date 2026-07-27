@@ -81,6 +81,21 @@ def codex_plugin_version() -> str:
     return version if isinstance(version, str) else ""
 
 
+def npm_package_version() -> str:
+    """Version declared in the npm/pi publish manifest.
+
+    ``packages/design-playbook/package.json`` is what feeds the pi package
+    gallery, which indexes npm rather than this repo. A bump that skips it
+    leaves the gallery listing a stale version forever, since the gallery
+    only ever sees published tarballs.
+    """
+    payload = read_json(PKG / "package.json")
+    if payload is None:
+        return ""
+    version = payload.get("version", "")
+    return version if isinstance(version, str) else ""
+
+
 def check_tree() -> None:
     print("== 1. working tree clean ==")
     status = git("status", "--porcelain", "--untracked-files=all")
@@ -98,6 +113,7 @@ def check_version() -> None:
     print("== 2. version consistency ==")
     version = plugin_version()
     codex_version = codex_plugin_version()
+    npm_version = npm_package_version()
     marketplace = read_json(ROOT / ".claude-plugin" / "marketplace.json")
     if marketplace is None:
         return
@@ -112,14 +128,15 @@ def check_version() -> None:
 
     if not SEMVER.fullmatch(version):
         fail(f"plugin.json version not semver: {version!r}")
-    elif version == metadata_version == marketplace_version == codex_version:
-        ok(f"versions match across 4 manifest sites: {version}")
+    elif version == metadata_version == marketplace_version == codex_version == npm_version:
+        ok(f"versions match across 5 manifest sites: {version}")
     else:
         fail(
             f"version mismatch: plugin.json={version!r} "
             f"marketplace.meta={metadata_version!r} "
             f"marketplace.plugin={marketplace_version!r} "
-            f"codex.plugin={codex_version!r}"
+            f"codex.plugin={codex_version!r} "
+            f"package.json={npm_version!r}"
         )
 
     badge_re = re.compile(r"badge/Version-(\d+\.\d+\.\d+)-")
