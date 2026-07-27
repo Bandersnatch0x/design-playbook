@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **v0.6.0 released**（2026-07-24，tag `a065e7b` 已 push + GitHub Release 已发布：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.6.0）。design-baseline 现有产品 DESIGN.md 门禁（ADR-0012，prepare/confirm/verify + state.json）+ G5 LF-normalized `prototype_html_hash`（Windows autocrlf vs Linux CI）。release gate 6/6 全绿。frontend floor 已 graduate 为 required CI gate（`29c80f3`；Ubuntu run `30165226282` 全绿）。2nd-session install smoke 已通过（Claude Code 2.1.218；隔离 `CLAUDE_CONFIG_DIR`；GitHub HTTPS marketplace + v0.6.0 plugin + 2 MCP servers）。3b community catalog 仍 **BLOCKED**（region + 账号）。
+**Current:** **v0.7.0 released**（2026-07-27，tag `1a3efba` 已 push + GitHub Release：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.7.0）。三大块：preview durable decision transaction（ADR-0013，`mcp/preview/transaction.py`）+ advisory craft detector protocol（ADR-0014，`skills/craft-guard/references/detectors.md`）+ **npm/pi 发布面**（`packages/design-playbook/package.json`，`pi-package` keyword + pi manifest；已 `npm publish` design-playbook@0.7.0，registry 200，pi.dev gallery 下轮索引可检索）。版本站点升为 7 处（新增 package.json，release/validate gate 已同步为 5 manifest sites）。release gate 6/6 全绿。3b community catalog 仍 **BLOCKED**（region + 账号）。
 
 | Phase | Status |
 | --- | --- |
@@ -27,6 +27,7 @@
 | Preview decision transaction | done (2026-07-26; tickets `01`-`04` resolved; implementation `94b2e64`; Ubuntu run `30183789524` green incl. exact frontend marker) |
 | validate.py phrase table | done (2026-07-26; ticket `14` resolved; implementation `5d3733b`; Ubuntu run `30206845177` green) |
 | craft detectors | done (2026-07-27; tickets `01`-`04` resolved; implementation `0d40450`; Ubuntu run `30210795805` green) |
+| v0.7.0 release | done (v0.7.0, 2026-07-27; ADR-0013 preview transaction + ADR-0014 craft detectors + npm/pi surface; tag 1a3efba pushed + GitHub Release; npm publish design-playbook@0.7.0) |
 
 ## v0 ship checklist (5/5 pass)
 
