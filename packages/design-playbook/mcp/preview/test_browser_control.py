@@ -11,11 +11,10 @@ Covers the secure-ship 0.4.4 ticket 01 acceptance:
 - ``do_POST`` fails closed (``confirmed=False``, ``floor_pass=False``) on the
   three rejection paths: token missing, token reused, round mismatch.
 - a normal human confirm with the token still records ``confirmed=True`` and
-  ``floor_pass=True``; ``_write_confirm`` still records ``prototype_html_hash``.
+  ``floor_pass=True``; the durable decision transaction records ``prototype_html_hash``.
 """
 from __future__ import annotations
 
-import json
 import re
 import socket
 import sys
@@ -34,7 +33,6 @@ import browser  # noqa: E402
 from confirm import (  # noqa: E402
     _DecisionSession,
     _generate_decision_token,
-    _write_confirm,
     prototype_html_digest,
 )
 
@@ -423,35 +421,6 @@ class TrustBoundaryIntegrationTests(unittest.TestCase):
 # --------------------------------------------------------------------------- #
 # Confirm record hash (existing trusted-side behavior unchanged)             #
 # --------------------------------------------------------------------------- #
-
-
-class ConfirmRecordHashTests(unittest.TestCase):
-    def test_write_confirm_records_prototype_html_hash(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            preview_dir = Path(tmp)
-            proto = preview_dir / "round-1.html"
-            proto_bytes = b"<html><body><h1>hash me</h1></body></html>"
-            proto.write_bytes(proto_bytes)
-            from confirm import prototype_html_digest
-
-            expected = prototype_html_digest(proto_bytes)
-
-            out = _write_confirm(
-                preview_dir,
-                round_n=1,
-                report_ref="report.md",
-                selected=["确认通过"],
-                feedback="ok",
-                prototype_html_hash=expected,
-                confirmed=True,
-                floor_pass=True,
-            )
-            record = json.loads(out.read_text(encoding="utf-8"))
-
-        self.assertTrue(record["confirmed"])
-        self.assertTrue(record["floor_pass"])
-        self.assertEqual(record["prototype_html_hash"], expected)
-        self.assertEqual(record["round"], 1)
 
 
 # --------------------------------------------------------------------------- #

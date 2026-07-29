@@ -1,20 +1,18 @@
-"""ADR-0008 floor logic + confirm/log records + prototype target resolution.
+"""ADR-0008 floor logic, G5 trust token, and prototype target resolution.
 
 Sibling module split from server.py; behavior unchanged. Holds the
-feedback-floor check, confirm JSON + log writers, prototype path helpers,
-and the ``--self-check`` floor cases.
+feedback-floor check, the G5 one-time decision token + first-decision-wins
+session, the prototype html digest primitive, and the ``--self-check``
+floor cases.
 """
 from __future__ import annotations
 
 import hashlib
-import json
 import secrets
 import sys
 import threading
 from pathlib import Path
 from typing import Any
-
-from util import _now_iso
 
 
 def prototype_html_digest(raw: bytes) -> str:
@@ -56,73 +54,6 @@ def _ensure_prototype(path_arg: str | None, html: str | None, round_n: int,
     return target
 
 
-
-def _append_log(preview_dir: Path, *, round_n: int, report_ref: str,
-                feedback: str, aborted: bool, selected: list[str],
-                anchors: list[dict[str, Any]] | None = None,
-                floor_pass: bool | None = None,
-                floor_failure: str = "",
-                rejected: bool = False,
-                rejection: str = "") -> None:
-    preview_dir.mkdir(parents=True, exist_ok=True)
-    log_path = preview_dir / "log.md"
-    if not log_path.is_file():
-        log_path.write_text("# preview log\n", encoding="utf-8")
-    block = (
-        f"\n## round {round_n}\n"
-        f"- report_ref: {report_ref}\n"
-        f"- timestamp: {_now_iso()}\n"
-        f"- feedback: {feedback or ''}\n"
-        f"- selected: {', '.join(selected) if selected else ''}\n"
-        f"- aborted: {str(aborted).lower()}\n"
-        f"- anchors: {len(anchors or [])}\n"
-    )
-    if floor_pass is not None:
-        block += f"- floor_pass: {str(floor_pass).lower()}\n"
-        if floor_failure:
-            block += f"- floor_failure: {floor_failure}\n"
-    # LOW-4 (secure-ship-0.4.4): persist G5 fail-closed rejections (forged
-    # token / replay / round mismatch) to log.md so the event is auditable
-    # on disk, not just in the ephemeral MCP payload. Only emitted when a
-    # decision was actually rejected — a normal confirm/revise/abort leaves
-    # no rejection line.
-    if rejected:
-        block += "- rejected: true\n"
-        if rejection:
-            block += f"- rejection: {rejection}\n"
-    if anchors:
-        for i, a in enumerate(anchors, 1):
-            sel = a.get("selector") or ""
-            note = a.get("comment") or ""
-            label = a.get("label") or ""
-            block += f"  - [{i}] {sel} | {label} | {note}\n"
-    with log_path.open("a", encoding="utf-8") as fh:
-        fh.write(block)
-
-
-
-def _write_confirm(preview_dir: Path, *, round_n: int, report_ref: str,
-                   selected: list[str], feedback: str,
-                   confirmed: bool, floor_pass: bool,
-                   prototype_html_hash: str,
-                   floor_failure: str = "") -> Path:
-    record = {
-        "round": round_n,
-        "report_ref": report_ref,
-        "confirmed": confirmed,
-        "floor_pass": floor_pass,
-        "selected_options": selected,
-        "feedback": feedback,
-        "timestamp": _now_iso(),
-        "prototype_path": f"preview/round-{round_n}.html",
-        "prototype_html_hash": prototype_html_hash,
-    }
-    if floor_failure:
-        record["floor_failure"] = floor_failure
-    out = preview_dir / f"confirm-round-{round_n}.json"
-    out.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n",
-                   encoding="utf-8")
-    return out
 
 
 
