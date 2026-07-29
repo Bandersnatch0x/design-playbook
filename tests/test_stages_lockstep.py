@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Lockstep test: run_status.STAGES artifact markers agree with validate_run regexes.
+"""Lockstep test: run_status.STAGES preview/evidence markers agree with validate_run regexes.
 
 The STAGES tuple (scripts/run_status.py) hand-mirrors the Design I/O
-pipeline artifact filenames; validate_run.py encodes the same names as
-regex constants (CONFIRM_JSON / ROUND_HTML / DECISION_JSON) and
-_preview_integrity re-derives round numbers. A comment in run_status.py
-warns to "sync this table" when SKILL.md changes — this test turns that
-comment into a failing test for the cheapest-to-break invariant: the
-preview/evidence artifact names the two modules rely on must agree.
+pipeline artifact filenames; validate_run.py encodes the confirm/round
+names as regex constants (CONFIRM_JSON / ROUND_HTML). A comment in
+run_status.py warns to "sync this table" when SKILL.md changes — this
+test turns that comment into a failing test for the cheapest-to-break
+invariant: the confirm/round artifact names the two modules rely on must
+agree.
 
-See architecture candidate 5 (contract SSOT). Full unification is deferred
-to ADR-0010 P1; this catches silent drift until then.
+DECISION_JSON is not locked here: decision-round-N.json is a durable-gate
+internal artifact, not a STAGES marker, so there is no STAGES-side name
+to lock against. Full unification is deferred to ADR-0010 P1; this
+catches silent drift on the confirm/round scheme until then.
 """
 from __future__ import annotations
 
@@ -51,14 +53,27 @@ class StagesLockstepTests(unittest.TestCase):
             )
 
     def test_round_marker_matches_regex(self) -> None:
-        """Any round-N.html name STAGES uses must be accepted by ROUND_HTML."""
+        """The round-N.html sibling of STAGES' confirm marker must be accepted by ROUND_HTML.
+
+        STAGES does not enumerate round-N.html directly (only preview/log.md
+        and confirm-round-N.json), so derive the sibling of the confirm marker
+        — the same round-N.html the preview actually serves — and assert
+        ROUND_HTML accepts it. Without this derivation the loop would be empty
+        and the test would pass trivially (reviewer: vacuous-assertion HIGH).
+        """
         markers = _markers("preview")
-        round_markers = [Path(m).name for m in markers if "round" in m and m.endswith(".html")]
-        for leaf in round_markers:
-            self.assertIsNotNone(
-                ROUND_HTML.match(leaf),
-                f"ROUND_HTML rejects STAGES round marker {leaf!r}",
-            )
+        confirm = next(
+            (Path(m).name for m in markers
+             if m.endswith(".json") and "confirm" in m),
+            None,
+        )
+        self.assertIsNotNone(
+            confirm, "no confirm marker to derive the round html sibling from")
+        sibling = confirm.replace("confirm-", "").replace(".json", ".html")
+        self.assertIsNotNone(
+            ROUND_HTML.match(sibling),
+            f"ROUND_HTML rejects derived round marker {sibling!r}",
+        )
 
     def test_evidence_marker_present(self) -> None:
         """The evidence stage must declare the manifest.jsonl artifact validate_run reads."""
