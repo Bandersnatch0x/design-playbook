@@ -593,14 +593,22 @@ def _collect_via_browser(
             validated = session.validate(posted_round, posted_token)
             if not validated:
                 # Fail closed: missing / reused / mismatched token -> NOT confirmed.
-                result = with_prototype_hash({
-                    "choice": "",
-                    "feedback": feedback,
-                    "aborted": True,
-                    "anchors": anchors,
-                    "rejected": True,
-                    "rejection": session.last_rejection,
-                })
+                # First-decision-wins also guards the shared ``result`` slot:
+                # once a valid POST owns the result, a later rejected POST (replay,
+                # mismatch) must NOT clobber it — otherwise a double-click or
+                # browser retry after a valid confirm overwrites the confirmed
+                # result with an aborted/rejected one and G5 fails despite the
+                # user's confirm. Only mutate ``result`` before any valid
+                # decision has landed (session not yet locked).
+                if not session.locked:
+                    result = with_prototype_hash({
+                        "choice": "",
+                        "feedback": feedback,
+                        "aborted": True,
+                        "anchors": anchors,
+                        "rejected": True,
+                        "rejection": session.last_rejection,
+                    })
             else:
                 result = with_prototype_hash({
                     "choice": choice,
