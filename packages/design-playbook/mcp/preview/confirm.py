@@ -54,9 +54,6 @@ def _ensure_prototype(path_arg: str | None, html: str | None, round_n: int,
     return target
 
 
-
-
-
 def _check_feedback_floor(feedback: str,
                           anchors: list[dict[str, Any]]) -> tuple[bool, str]:
     """ADR-0008 preview feedback floor (structural, machine-checkable).
