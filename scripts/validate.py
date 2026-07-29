@@ -494,18 +494,20 @@ PROSE_PHRASES: dict[str, list[str]] = {
 }
 
 
-def validate_skill_prose(text: str, table: dict[str, list[str]]) -> list[str]:
-    """Return gate names whose required phrases are absent from text."""
-    return [
-        gate for gate, phrases in table.items()
-        if not text or any(phrase not in text for phrase in phrases)
-    ]
+def check_skill_prose(text: str, gate: str, *, extra: bool = True,
+                     anchor: str = "") -> None:
+    """Report one phrase-table gate through the standard validation surface.
 
-
-def check_skill_prose(text: str, gate: str, *, extra: bool = True) -> None:
-    """Report one phrase-table gate through the standard validation surface."""
-    missing = validate_skill_prose(text, {gate: PROSE_PHRASES[gate]})
-    check(extra and not missing, gate)
+    The failure message names the gate, the missing phrases, and the heading
+    anchor the section was sliced from — so prose drift is diagnosed in one
+    pass instead of leaving the author to grep PROSE_PHRASES for the cause.
+    """
+    missing = [p for p in PROSE_PHRASES[gate] if not text or p not in text]
+    if missing:
+        where = f" (in {anchor!r})" if anchor else ""
+        check(False, f"{gate}: missing {missing}{where}")
+    else:
+        check(extra, gate)
 
 
 def section_between(text: str, start: str, end: str) -> str:
@@ -533,7 +535,7 @@ def section_between(text: str, start: str, end: str) -> str:
 
 evaluator = (PKG / "skills" / "ui-evaluator" / "SKILL.md").read_text(encoding="utf-8")
 verdict = section_between(evaluator, "### 4. Verdict", "## Recirculate map")
-check_skill_prose(verdict, "ui-evaluator blocks unattended acceptance")
+check_skill_prose(verdict, "ui-evaluator blocks unattended acceptance", anchor="### 4. Verdict")
 
 playbook = (PKG / "skills" / "design-playbook" / "SKILL.md").read_text(encoding="utf-8")
 accept = section_between(playbook, "### 5. Accept", "## Recirculate")
@@ -541,21 +543,22 @@ check_skill_prose(
     accept,
     "orchestrator points to the authoritative evaluator verdict",
     extra="explicitly accepted" not in accept,
+    anchor="### 5. Accept",
 )
 
 fill = section_between(playbook, "### 3. Fill", "### 4. Craft")
-check_skill_prose(fill, "fill routes reused-component L5 conflicts back to spec")
+check_skill_prose(fill, "fill routes reused-component L5 conflicts back to spec", anchor="### 3. Fill")
 
 spec_template = (
     PKG / "skills" / "ux-spec" / "references" / "spec-template.md"
 ).read_text(encoding="utf-8")
 l4 = section_between(spec_template, "## L4", "## L5")
-check_skill_prose(l4, "L4 implementation constraints name L5 exceptions")
+check_skill_prose(l4, "L4 implementation constraints name L5 exceptions", anchor="## L4")
 
 print("== Outcome-first run contract ==")
 run_contract = section_between(playbook, "## Run contract", "## Steps")
-check_skill_prose(run_contract, "orchestrator names all five run-contract controls")
-check_skill_prose(run_contract, "orchestrator defines confirmation and stop boundaries")
+check_skill_prose(run_contract, "orchestrator names all five run-contract controls", anchor="## Run contract")
+check_skill_prose(run_contract, "orchestrator defines confirmation and stop boundaries", anchor="## Run contract")
 
 ux_spec = (PKG / "skills" / "ux-spec" / "SKILL.md").read_text(encoding="utf-8")
 l6 = section_between(spec_template, "## L6", "---")
@@ -563,15 +566,17 @@ check_skill_prose(
     f"{l6}\n{ux_spec}",
     "ux-spec binds each success criterion to required evidence",
     extra=bool(l6),
+    anchor="## L6",
 )
 
 run_checks = section_between(evaluator, "### 2. Run checks", "### 3. Emit point-back findings")
 check_skill_prose(
     run_checks,
     "ui-evaluator requires an evidence ledger and blocks missing proof",
+    anchor="### 2. Run checks",
 )
-check_skill_prose(run_checks, "ui-evaluator consumes craft detector ledger")
-check_skill_prose(verdict, "ui-evaluator pass requires all evidence rows")
+check_skill_prose(run_checks, "ui-evaluator consumes craft detector ledger", anchor="### 2. Run checks")
+check_skill_prose(verdict, "ui-evaluator pass requires all evidence rows", anchor="### 4. Verdict")
 
 print()
 if failures:
