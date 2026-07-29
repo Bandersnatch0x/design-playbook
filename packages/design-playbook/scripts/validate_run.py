@@ -348,6 +348,39 @@ def _resolve_report_ref(
     return None
 
 
+def _g5_no_valid_reason(candidates: list[tuple[Path, dict]]) -> list[str]:
+    """Attribute a G5 failure to its specific cause.
+
+    ``is_confirmed_valid`` is the single judgment of validity (shared with
+    ``run_status``); this helper only explains *why* no record was valid, so
+    the message stays diagnostic without re-encoding the rule.
+    """
+    confirmed = [
+        (path, data) for path, data in candidates
+        if data.get("confirmed") is True
+    ]
+    if not confirmed:
+        return [
+            "G5 preview: preview occurred but no confirm-round-*.json with "
+            "confirmed=true"
+        ]
+    path, data = confirmed[0]
+    if data.get("floor_pass") is not True:
+        reason = data.get("floor_failure") or "no floor_pass=true"
+        return [
+            f"G5 preview: confirmed record {path.name} failed feedback floor: "
+            f"{reason}"
+        ]
+    if data.get("aborted") is True:
+        return [
+            f"G5 preview: confirmed record {path.name} is aborted; an aborted "
+            f"round cannot satisfy the preview gate"
+        ]
+    return [
+        f"G5 preview: confirmed record {path.name} is not a valid confirm"
+    ]
+
+
 def check_preview(
         preview_dir: Path | None,
         decision_report: Path | None) -> list[str]:
@@ -404,30 +437,15 @@ def check_preview(
             "confirmed=true"
         ]
 
+    # G5 validity uses the single judgment shared with run_status
+    # (is_confirmed_valid). When no record is valid, attribute the failure to
+    # a specific cause so the message stays diagnostic.
     true_confirms = [
         (path, data) for path, data in current
-        if data.get("confirmed") is True
+        if is_confirmed_valid(data)
     ]
     if not true_confirms:
-        return [
-            "G5 preview: preview occurred but no confirm-round-*.json with "
-            "confirmed=true"
-        ]
-
-    # ADR-0008: a confirmed record must also pass the feedback floor. Older
-    # records without floor_pass (pre-ADR) cannot be distinguished from a
-    # floor-failure, so require floor_pass=true explicitly.
-    floor_fails = [
-        (path, data) for path, data in true_confirms
-        if data.get("floor_pass") is not True
-    ]
-    if floor_fails:
-        path, data = floor_fails[0]
-        reason = data.get("floor_failure") or "no floor_pass=true"
-        return [
-            f"G5 preview: confirmed record {path.name} failed feedback floor: "
-            f"{reason}"
-        ]
+        return _g5_no_valid_reason(current)
 
     # Prototype integrity: when the trusted side recorded a hash, the
     # prototype on disk must still match it (issue 02). Missing hash FAILs

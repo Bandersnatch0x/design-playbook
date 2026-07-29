@@ -345,6 +345,14 @@ def main() -> int:
     )
     expect_invalid(
         failures,
+        "g5-confirm-aborted-true",
+        spec,
+        pb,
+        "aborted",
+        *_g5_args(FAIL / "g5-confirm-aborted-true"),
+    )
+    expect_invalid(
+        failures,
         "g5-confirm-false-only",
         spec,
         pb,
