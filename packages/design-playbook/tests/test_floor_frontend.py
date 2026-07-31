@@ -19,6 +19,24 @@ from i18n import default_options  # noqa: E402
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
+
+def wait_submit_navigated(page, timeout_ms=3000) -> bool:
+    """Wait until the confirm POST has committed (URL left file:).
+
+    The submit lands on a chrome-error page (no server behind /decide); a
+    fixed sleep can race the next scenario's ``page.goto`` ("interrupted by
+    another navigation to chrome-error://chromewebdata/"). Poll the URL so
+    the navigation commits before the next page load.
+    """
+    import time
+    deadline = time.time() + timeout_ms / 1000.0
+    while time.time() < deadline:
+        if not page.url.startswith("file:"):
+            return True
+        page.wait_for_timeout(50)
+    return not page.url.startswith("file:")
+
+
 ROUND_N = 1
 SUMMARY = "verify run summary - list scene"
 OPTIONS = default_options()  # [confirm, revise] in the active locale
@@ -98,8 +116,7 @@ def main():
         page.fill('textarea[name="feedback"]', '确认通过,摘要列清晰')
         # submit allowed -> browser navigates to /decide (404 chrome-error)
         page.click('.dpb-drawer .dpb-btn-primary', timeout=2000)
-        page.wait_for_timeout(300)
-        nav_ok = not page.url.startswith('file:')
+        nav_ok = wait_submit_navigated(page)
         s2_ok = nav_ok
         print(f"  S2 feedback text: submit_allowed={nav_ok} url={page.url[:40]} -> {'OK' if s2_ok else 'FAIL'}")
         if not s2_ok:
@@ -120,8 +137,7 @@ def main():
         page.wait_for_selector(comment_sel)
         page.fill(comment_sel, 'fix spacing on this header')
         page.click('.dpb-drawer .dpb-btn-primary', timeout=2000)
-        page.wait_for_timeout(300)
-        nav_ok = not page.url.startswith('file:')
+        nav_ok = wait_submit_navigated(page)
         s3_ok = nav_ok
         print(f"  S3 anchor+comment: submit_allowed={nav_ok} url={page.url[:40]} -> {'OK' if s3_ok else 'FAIL'}")
         if not s3_ok:
@@ -136,8 +152,7 @@ def main():
         page.wait_for_timeout(200)
         page.fill('textarea[name="feedback"]', '太挤了')  # 3 chars, substantive
         page.click('.dpb-drawer .dpb-btn-primary', timeout=2000)
-        page.wait_for_timeout(300)
-        nav_ok = not page.url.startswith('file:')
+        nav_ok = wait_submit_navigated(page)
         s4_ok = nav_ok
         print(f"  S4 short CJK feedback (3 chars): submit_allowed={nav_ok} -> {'OK' if s4_ok else 'FAIL'}")
         if not s4_ok:
@@ -187,8 +202,7 @@ def main():
         page.wait_for_selector(comment_sel)
         page.fill(comment_sel, 'valid anchor note')
         page.click('.dpb-drawer .dpb-btn-primary', timeout=2000)
-        page.wait_for_timeout(300)
-        nav_ok = not page.url.startswith('file:')
+        nav_ok = wait_submit_navigated(page)
         s7_ok = nav_ok
         print(f"  S7 anchor-only (complete): submit_allowed={nav_ok} -> {'OK' if s7_ok else 'FAIL'}")
         if not s7_ok:
