@@ -57,6 +57,7 @@
 ## Dogfood (2026-08-01)
 
 - tarot embossed card page: full Design I/O run in-session (ux-spec → ui-picker → preview* real HITL via Playwright → fill → craft-guard → observe* live-host captures → ui-evaluator). `validate_run` RUN OK, `run_status` Pass, aggregate gate ok. 3 findings all fixed (reduced-motion / live-host re-capture / run-root stderr warning in evidence server). Commits `ea7958d` + `08fd295`.
+- event-stream monitor page + settings page: two more full Design I/O runs (`c2c92b9` + `16caf54`), both RUN OK, preview* real HITL (Playwright), observe* live-host captures. Settings run lesson: capture landed in the 700ms skeleton window — added `wait_for_state` async-init guidance to the orchestrator skill step 9.2 (`0fb50ab` + skill edit). Aggregate gate added to `validate.py` (`6944213`): 20 runs, repeat_blockers=0, rollup {blocked:3, pass:109}.
 
 ## Still open（2026-07-25 刷新）
 
