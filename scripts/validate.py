@@ -8,7 +8,9 @@ between this script (static structure gate), release.py (publish gate),
 and doctor.py (read-only diagnostic aggregator).
 """
 import json
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -580,6 +582,27 @@ check_skill_prose(
 )
 check_skill_prose(run_checks, "ui-evaluator consumes craft detector ledger", anchor="### 2. Run checks")
 check_skill_prose(verdict, "ui-evaluator pass requires all evidence rows", anchor="### 4. Verdict")
+
+print("== Run aggregate (v0.9) ==")
+try:
+    agg_env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    agg = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "aggregate_runs.py"), "--top", "5"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=ROOT, env=agg_env, timeout=180,
+    )
+    agg_data = json.loads(agg.stdout) if agg.returncode == 0 else None
+    if agg_data is None:
+        check(False, f"aggregate_runs exited {agg.returncode}: "
+                     f"{(agg.stdout + agg.stderr).strip()[-200:]}")
+    else:
+        total = agg_data.get("runs_total", 0)
+        repeat = len(agg_data.get("repeat_blockers", []))
+        check(total >= 1, f"aggregate_runs discovers >=1 dogfood run ({total})")
+        print(f"  info  runs={total} repeat_blockers={repeat} "
+              f"rollup={agg_data.get('rollup', {}).get('by_result', {})}")
+except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
+    check(False, f"aggregate_runs smoke failed: {exc}")
 
 print()
 if failures:
