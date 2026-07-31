@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>塔罗牌浮雕显示页 — round-1 原型</title>
+<style>
+  :root { --ink:#3a2e23; --card:#f5ead8; --gold:#b08d4f; --bg:#14100c; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:"Songti SC","Noto Serif CJK SC",serif; background:var(--bg); color:var(--card); }
+  header { display:flex; align-items:center; gap:16px; padding:16px 24px; border-bottom:1px solid #2a2319; }
+  h1 { font-size:20px; margin:0; letter-spacing:.1em; }
+  .counter { margin-left:auto; color:var(--gold); font-variant-numeric:tabular-nums; }
+  .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:24px; padding:32px; }
+  .tarot-card { aspect-ratio:5/8; border-radius:10px; position:relative; background:var(--card); color:var(--ink);
+    box-shadow: 0 0 0 1px #e9d9b8, 0 1px 0 1px #fff inset, 0 0 0 2px #6b5433, 0 6px 16px rgba(0,0,0,.5);
+    display:flex; align-items:center; justify-content:center; font-size:14px; }
+  .tarot-card[data-face="back"] { background: repeating-linear-gradient(45deg,#2d2318 0 2px,#37291b 2px 4px); color:var(--gold); }
+  .tarot-card[data-face="back"]::after { content:"☽"; font-size:28px; }
+  button { background:var(--gold); color:#1a140c; border:0; border-radius:6px; padding:8px 16px; font-family:inherit; cursor:pointer; }
+</style>
+</head>
+<body data-state="ready">
+  <header>
+    <h1>塔罗牌浮雕陈列</h1>
+    <button id="shuffle">洗牌</button>
+    <button id="flip-all">全部翻回</button>
+    <span class="counter" role="status">已翻开 0 / 12</span>
+  </header>
+  <main class="grid" id="grid">
+    <!-- 12 tarot-card 占位：结构/语义验证用 -->
+    <div class="tarot-card" data-face="back" role="button" tabindex="0" aria-label="卡 0 愚者（背面）"></div>
+    <div class="tarot-card" data-face="back" role="button" tabindex="0" aria-label="卡 1 魔术师（背面）"></div>
+    <div class="tarot-card" data-face="back" role="button" tabindex="0" aria-label="卡 2 女祭司（背面）"></div>
+    <div class="tarot-card" data-face="back" role="button" tabindex="0" aria-label="卡 3 皇后（背面）"></div>
+    <div class="tarot-card" data-face="back" role="button" tabindex="0" aria-label="卡 4 皇帝（背面）"></div>
+    <div class="tarot-card" data-face="back" role="button" tabindex="0" aria-label="卡 5 教皇（背面）"></div>
+    <div class="tarot-card" data-face="back" role="button" tabindex="0" aria-label="卡 6 恋人（背面）"></div>
+    <div class="tarot-card" data-face="back" role="button" tabindex="0" aria-label="卡 7 战车（背面）"></div>
+    <div class="tarot-card" data-face="back" role="button" tabindex="0" aria-label="卡 8 力量（背面）"></div>
+    <div class="tarot-card" data-face="back" role="button" tabindex="0" aria-label="卡 9 隐者（背面）"></div>
+    <div class="tarot-card" data-face="back" role="button" tabindex="0" aria-label="卡 10 命运之轮（背面）"></div>
+    <div class="tarot-card" data-face="back" role="button" tabindex="0" aria-label="卡 11 正义（背面）"></div>
+  </main>
+</body>
+</html>

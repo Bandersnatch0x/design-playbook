@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>塔罗牌浮雕陈列</title>
+<style>
+  :root {
+    --bg:#14100c; --panel:#1d1712; --line:#2a2319;
+    --paper:#f2e6cd; --paper-2:#e8d7b5; --ink:#3a2e23; --ink-soft:#6b5a44;
+    --gold:#b08d4f; --gold-hi:#e3c98a; --gold-lo:#7a5f30;
+    --serif:"Songti SC","STSong","Noto Serif CJK SC",serif;
+    --mono:"JetBrains Mono",ui-monospace,monospace;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; min-height:100vh;
+    background:
+      radial-gradient(1200px 600px at 20% -10%, #241b12 0%, transparent 60%),
+      radial-gradient(900px 500px at 90% 110%, #1c150d 0%, transparent 55%),
+      var(--bg);
+    color:var(--paper); font-family:var(--serif); padding-bottom:64px;
+  }
+  /* ---------- top bar ---------- */
+  header {
+    position:sticky; top:0; z-index:20;
+    display:flex; align-items:center; gap:14px;
+    padding:14px 26px; background:rgba(20,16,12,.92); backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);
+  }
+  h1 { font-size:19px; font-weight:600; letter-spacing:.22em; margin:0;
+    background:linear-gradient(180deg,var(--gold-hi),var(--gold)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .actions { display:flex; gap:10px; margin-left:8px; }
+  .counter { margin-left:auto; font-variant-numeric:tabular-nums; color:var(--gold-hi);
+    background:var(--panel); border:1px solid var(--line); border-radius:999px; padding:6px 14px; font-size:13px; }
+  button {
+    font-family:var(--serif); font-size:13.5px; letter-spacing:.08em;
+    color:#1c1409; background:linear-gradient(180deg,var(--gold-hi),var(--gold));
+    border:1px solid var(--gold-lo); border-radius:8px; padding:8px 16px; cursor:pointer;
+    box-shadow:0 1px 0 rgba(255,255,255,.35) inset, 0 2px 6px rgba(0,0,0,.4);
+  }
+  button:hover { filter:brightness(1.06); }
+  button:disabled { opacity:.45; cursor:wait; }
+  button:focus-visible, .tarot-card:focus-visible { outline:2px solid var(--gold-hi); outline-offset:3px; }
+  /* ---------- card grid ---------- */
+  .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:26px;
+    max-width:1180px; margin:36px auto 0; padding:0 30px; }
+  .tarot-card {
+    aspect-ratio:5/8; border-radius:12px; cursor:pointer;
+    position:relative; perspective:900px; background:transparent; border:0; padding:0;
+  }
+  .card-inner { position:absolute; inset:0; transform-style:preserve-3d;
+    transition:transform .6s cubic-bezier(.3,.8,.3,1); }
+  .tarot-card.flipped .card-inner { transform:rotateY(180deg); }
+  .face { position:absolute; inset:0; backface-visibility:hidden; border-radius:12px; overflow:hidden; }
+  /* ===== card back: embossed lattice ===== */
+  .face.back {
+    background:
+      repeating-linear-gradient(45deg, rgba(227,201,138,.07) 0 1px, transparent 1px 9px),
+      repeating-linear-gradient(-45deg, rgba(227,201,138,.07) 0 1px, transparent 1px 9px),
+      linear-gradient(160deg, #2e2417 0%, #241b10 55%, #1a130a 100%);
+    border:1px solid #0e0a06;
+    box-shadow:
+      inset 0 0 0 2px #4a3a22,
+      inset 0 0 0 3px rgba(0,0,0,.65),
+      inset 2px 2px 8px rgba(227,201,138,.28),
+      inset -3px -4px 10px rgba(0,0,0,.7),
+      0 10px 22px rgba(0,0,0,.55);
+  }
+  .face.back::before {
+    content:"☽"; position:absolute; inset:0; display:grid; place-items:center;
+    font-size:34px; color:var(--gold); text-shadow:0 1px 0 #000, 0 -1px 0 var(--gold-hi);
+  }
+  .face.back::after { /* embossed frame */
+    content:""; position:absolute; inset:10px; border:1px solid rgba(227,201,138,.4);
+    border-radius:7px; box-shadow:0 1px 0 rgba(0,0,0,.8), inset 0 1px 0 rgba(227,201,138,.25);
+  }
+  /* ===== card face: embossed relief ===== */
+  .face.front {
+    transform:rotateY(180deg);
+    background:
+      radial-gradient(120% 90% at 18% 12%, rgba(255,255,255,.5) 0%, transparent 34%),
+      radial-gradient(130% 100% at 85% 95%, rgba(122,95,48,.35) 0%, transparent 45%),
+      linear-gradient(150deg, var(--paper) 0%, var(--paper-2) 60%, #d9c59d 100%);
+    border:1px solid #8a7448;
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,.6),
+      inset 0 0 0 2px rgba(122,95,48,.45),
+      inset 0 0 0 3px rgba(255,252,240,.55),
+      inset 2px 2px 10px rgba(255,255,255,.7),
+      inset -3px -4px 12px rgba(122,95,48,.55),
+      0 10px 22px rgba(0,0,0,.55);
+    color:var(--ink); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+    padding:16px; text-align:center;
+  }
+  .face.front .roman { font-size:12px; letter-spacing:.3em; color:var(--gold-lo);
+    text-shadow:0 1px 0 rgba(255,255,255,.6); }
+  .face.front .name { font-size:21px; font-weight:700; letter-spacing:.16em; line-height:1.25;
+    text-shadow:0 1px 0 rgba(255,255,255,.55), 0 -1px 0 rgba(122,95,48,.25); }
+  .face.front .glyph { font-size:30px; margin:2px 0 4px; color:var(--gold-lo);
+    text-shadow:0 1px 0 rgba(255,255,255,.6), 0 -1px 1px rgba(122,95,48,.4); }
+  .face.front::after { content:""; position:absolute; inset:9px; border:1px solid rgba(122,95,48,.4);
+    border-radius:7px; box-shadow:0 1px 0 rgba(255,255,255,.55), inset 0 1px 0 rgba(122,95,48,.3); }
+  /* ---------- lightbox ---------- */
+  .lightbox {
+    position:fixed; inset:0; z-index:50; display:none; align-items:center; justify-content:center;
+    background:rgba(10,7,4,.78); backdrop-filter:blur(4px); }
+  .lightbox.open { display:flex; }
+  .lightbox-card {
+    width:min(300px,80vw); aspect-ratio:5/8; border-radius:14px; position:relative;
+    background:
+      radial-gradient(120% 90% at 18% 12%, rgba(255,255,255,.55) 0%, transparent 34%),
+      radial-gradient(130% 100% at 85% 95%, rgba(122,95,48,.4) 0%, transparent 45%),
+      linear-gradient(150deg, var(--paper) 0%, var(--paper-2) 60%, #d9c59d 100%);
+    border:1px solid #8a7448; color:var(--ink);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.6), inset 0 0 0 2px rgba(122,95,48,.45),
+      inset 2px 2px 12px rgba(255,255,255,.7), inset -3px -4px 14px rgba(122,95,48,.55),
+      0 24px 60px rgba(0,0,0,.75);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:24px; text-align:center; }
+  .lightbox-card .roman { font-size:13px; letter-spacing:.3em; color:var(--gold-lo); }
+  .lightbox-card .name { font-size:26px; font-weight:700; letter-spacing:.14em; }
+  .lightbox-card .glyph { font-size:42px; color:var(--gold-lo); margin:4px 0; }
+  .lightbox-card .meaning { font-size:14.5px; line-height:1.7; color:var(--ink-soft);
+    border-top:1px solid rgba(122,95,48,.35); padding-top:10px; }
+  .lightbox-card .close-hint { position:absolute; bottom:12px; font-size:11px; letter-spacing:.14em; color:var(--ink-soft); }
+  /* ---------- states ---------- */
+  .skeleton { aspect-ratio:5/8; border-radius:12px;
+    background:linear-gradient(110deg, #241d14 40%, #2f2517 50%, #241d14 60%);
+    background-size:200% 100%; animation:shimmer 1.2s linear infinite; }
+  @keyframes shimmer { to { background-position:-200% 0; } }
+  .empty-note { text-align:center; color:var(--ink-soft); padding:80px 0; font-size:15px; letter-spacing:.1em; }
+  .empty-note p { margin:8px 0; }
+  footer { text-align:center; margin-top:44px; color:#5c4c38; font-size:12px; letter-spacing:.12em; }
+  @media (max-width:900px){ .grid{ grid-template-columns:repeat(3,1fr); } }
+  @media (max-width:640px){ .grid{ grid-template-columns:repeat(2,1fr); } }
+</style>
+</head>
+<body data-state="ready">
+
+<header>
+  <h1>塔罗牌浮雕陈列</h1>
+  <div class="actions">
+    <button id="shuffle" type="button">洗牌</button>
+    <button id="flip-all" type="button">全部翻回</button>
+  </div>
+  <span class="counter" id="counter" role="status">已翻开 0 / 12</span>
+</header>
+
+<main class="grid" id="grid" aria-label="塔罗牌阵"></main>
+
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-labelledby="lb-name">
+  <div class="lightbox-card">
+    <div class="roman" id="lb-roman"></div>
+    <div class="name" id="lb-name"></div>
+    <div class="glyph" id="lb-glyph"></div>
+    <div class="meaning" id="lb-meaning"></div>
+    <div class="close-hint">Esc 或点击空白关闭</div>
+  </div>
+</div>
+
+<footer>设计 I/O 管道交付 · 浮雕视觉 · 2026-08-01</footer>
+
+<script>
+(() => {
+  const DECK = [
+    { n:0, roman:"0", name:"愚者", glyph:"〇", meaning:"新的开始，无拘无束，轻装前行。" },
+    { n:1, roman:"I", name:"魔术师", glyph:"☿", meaning:"意志与创造，将想法化为现实。" },
+    { n:2, roman:"II", name:"女祭司", glyph:"☽", meaning:"直觉与内在智慧，静观其变。" },
+    { n:3, roman:"III", name:"皇后", glyph:"♀", meaning:"丰饶与滋养，自然的生长。" },
+    { n:4, roman:"IV", name:"皇帝", glyph:"♂", meaning:"秩序与掌控，建立稳固结构。" },
+    { n:5, roman:"V", name:"教皇", glyph:"♄", meaning:"传统与指引，寻求共识。" },
+    { n:6, roman:"VI", name:"恋人", glyph:"♂♀", meaning:"结合与选择，价值观的共鸣。" },
+    { n:7, roman:"VII", name:"战车", glyph:"♃", meaning:"意志驱动，驾驭相反之力前行。" },
+    { n:8, roman:"VIII", name:"力量", glyph:"♌", meaning:"内在韧性，以柔克刚。" },
+    { n:9, roman:"IX", name:"隐者", glyph:"♍", meaning:"内省与独行，寻找光照。" },
+    { n:10, roman:"X", name:"命运之轮", glyph:"♆", meaning:"周期与转机，顺应流动。" },
+    { n:11, roman:"XI", name:"正义", glyph:"♎", meaning:"权衡与公正，因果自承。" },
+  ];
+  const grid = document.getElementById("grid");
+  const counter = document.getElementById("counter");
+  const shuffleBtn = document.getElementById("shuffle");
+  const flipAllBtn = document.getElementById("flip-all");
+  const lightbox = document.getElementById("lightbox");
+  const EMPTY = new URLSearchParams(location.search).get("empty") === "1";
+
+  let order = DECK.map((_, i) => i);
+  let flipped = 0;
+
+  function updateCounter() {
+    counter.textContent = `已翻开 ${flipped} / ${DECK.length}`;
+    counter.setAttribute("aria-label", counter.textContent);
+  }
+
+  function renderCard(i, idx) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "tarot-card";
+    card.dataset.index = idx;
+    card.setAttribute("role", "button");
+    const c = DECK[idx];
+    card.setAttribute("aria-label", c ? `${c.name}（背面）` : `卡 ${idx}`);
+    card.innerHTML = `
+      <span class="card-inner">
+        <span class="face back" aria-hidden="true"></span>
+        <span class="face front">
+          <span class="roman">${c ? c.roman : ""}</span>
+          <span class="name">${c ? c.name : ""}</span>
+          <span class="glyph" aria-hidden="true">${c ? c.glyph : ""}</span>
+        </span>
+      </span>`;
+    card.addEventListener("click", () => onCardClick(card, c));
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onCardClick(card, c); }
+    });
+    return card;
+  }
+
+  function onCardClick(card, c) {
+    if (EMPTY) return;
+    if (!card.classList.contains("flipped")) {
+      card.classList.add("flipped");
+      flipped += 1;
+      card.setAttribute("aria-label", `${c.name}`);
+      updateCounter();
+    } else {
+      openLightbox(c);
+    }
+  }
+
+  function openLightbox(c) {
+    document.getElementById("lb-roman").textContent = c.roman;
+    document.getElementById("lb-name").textContent = c.name;
+    document.getElementById("lb-glyph").textContent = c.glyph;
+    document.getElementById("lb-meaning").textContent = c.meaning;
+    lightbox.classList.add("open");
+  }
+  function closeLightbox() { lightbox.classList.remove("open"); }
+  lightbox.addEventListener("click", (e) => { if (e.target === lightbox) closeLightbox(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeLightbox(); });
+
+  function shuffle() {
+    if (EMPTY) return;
+    shuffleBtn.disabled = true;
+    // Fisher–Yates
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+    // flip all back, re-render in new order
+    grid.classList.add("shuffling");
+    grid.innerHTML = "";
+    flipped = 0; updateCounter();
+    order.forEach((idx, i) => grid.appendChild(renderCard(i, idx)));
+    setTimeout(() => {
+      grid.classList.remove("shuffling");
+      shuffleBtn.disabled = false;
+    }, 650);
+  }
+  shuffleBtn.addEventListener("click", shuffle);
+
+  flipAllBtn.addEventListener("click", () => {
+    if (EMPTY) return;
+    grid.querySelectorAll(".tarot-card.flipped").forEach(c => {
+      c.classList.remove("flipped");
+      const idx = +c.dataset.index;
+      c.setAttribute("aria-label", `${DECK[idx].name}（背面）`);
+    });
+    flipped = 0; updateCounter();
+  });
+
+  function init() {
+    if (EMPTY) {
+      document.body.dataset.state = "empty";
+      grid.innerHTML = `<div class="empty-note" style="grid-column:1/-1">
+        <p>牌库为空</p><p style="font-size:12.5px;color:#8a7448">已移除数据源；请重新加载牌阵。</p>
+        <button type="button" onclick="location.reload()">重新加载</button></div>`;
+      counter.textContent = `已翻开 0 / 0`;
+      return;
+    }
+    // loading skeleton first (L6.7)
+    document.body.dataset.state = "loading";
+    for (let i = 0; i < 12; i++) {
+      const s = document.createElement("div");
+      s.className = "skeleton"; s.setAttribute("aria-hidden", "true");
+      grid.appendChild(s);
+    }
+    setTimeout(() => {
+      document.body.dataset.state = "ready";
+      grid.innerHTML = "";
+      order.forEach((idx, i) => grid.appendChild(renderCard(i, idx)));
+      updateCounter();
+    }, 900);
+  }
+  init();
+})();
+</script>
+</body>
+</html>

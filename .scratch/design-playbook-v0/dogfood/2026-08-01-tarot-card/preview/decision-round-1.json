@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "decision_id": "0f9948d8ef274e5caeba66b04bf427e1",
+  "timestamp": "2026-08-01T02:36:36+08:00",
+  "binding": {
+    "digest": "805db336a24057271226f51086d026e334dc56300775cced9450f5eb4e8244bd",
+    "round": 1,
+    "prototype_html_hash": "231143ad20d87cd62768c744a3408a27ed33d4e7c5e542a1ad732b1d6adfa505",
+    "report_ref": "decision-report.md",
+    "summary": "塔罗牌浮雕显示页 round-1：牌阵网格（12 卡背）+ 洗牌/翻回控制 + 计数徽章。浮雕卡面为占位，聚焦 lightbox 未含。",
+    "options": [
+      "Confirm",
+      "Needs changes"
+    ]
+  },
+  "outcome": {
+    "confirmed": true,
+    "user_confirmed": true,
+    "floor_pass": true,
+    "floor_failure": "",
+    "selected_options": [
+      "Confirm"
+    ],
+    "feedback": "浮雕质感饱满，卡面层次清晰，可直接交付",
+    "anchors": [],
+    "aborted": false,
+    "rejected": false,
+    "rejection": ""
+  }
+}

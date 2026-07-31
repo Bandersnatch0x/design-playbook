@@ -1,0 +1,4 @@
+{
+  "format": "aria_snapshot",
+  "tree": "- banner:\n  - heading \"塔罗牌浮雕陈列\" [level=1]\n  - button \"洗牌\"\n  - button \"全部翻回\"\n  - status \"已翻开 0 / 12\"\n- main \"塔罗牌阵\":\n  - button \"愚者（背面）\": 0 愚者\n  - button \"魔术师（背面）\": I 魔术师\n  - button \"女祭司（背面）\": II 女祭司\n  - button \"皇后（背面）\": III 皇后\n  - button \"皇帝（背面）\": IV 皇帝\n  - button \"教皇（背面）\": V 教皇\n  - button \"恋人（背面）\": VI 恋人\n  - button \"战车（背面）\": VII 战车\n  - button \"力量（背面）\": VIII 力量\n  - button \"隐者（背面）\": IX 隐者\n  - button \"命运之轮（背面）\": X 命运之轮\n  - button \"正义（背面）\": XI 正义\n- contentinfo: 设计 I/O 管道交付 · 浮雕视觉 · 2026-08-01"
+}

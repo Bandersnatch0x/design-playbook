@@ -1,0 +1,14 @@
+{
+  "round": 1,
+  "report_ref": "decision-report.md",
+  "confirmed": true,
+  "floor_pass": true,
+  "selected_options": [
+    "Confirm"
+  ],
+  "feedback": "浮雕质感饱满，卡面层次清晰，可直接交付",
+  "timestamp": "2026-08-01T02:36:36+08:00",
+  "prototype_path": "preview/round-1.html",
+  "prototype_html_hash": "231143ad20d87cd62768c744a3408a27ed33d4e7c5e542a1ad732b1d6adfa505",
+  "decision_id": "0f9948d8ef274e5caeba66b04bf427e1"
+}
