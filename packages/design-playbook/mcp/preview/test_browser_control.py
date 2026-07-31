@@ -16,7 +16,9 @@ Covers the secure-ship 0.4.4 ticket 01 acceptance:
 from __future__ import annotations
 
 import re
+import shutil
 import socket
+import subprocess
 import sys
 import tempfile
 import threading
@@ -30,6 +32,7 @@ from urllib.parse import urlencode
 # Make sibling runtime modules importable under package-qualified discovery.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import browser  # noqa: E402
+import control as preview_control  # noqa: E402
 from confirm import (  # noqa: E402
     _DecisionSession,
     _generate_decision_token,
@@ -150,6 +153,38 @@ def _run_collect(
     client_error = port_box.get("client_error")
     assert not client_error, f"client thread error: {client_error}"
     return decision
+
+
+# --------------------------------------------------------------------------- #
+# Unit tests: external control resources                                      #
+# --------------------------------------------------------------------------- #
+
+
+class ControlResourceAssemblyTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("node"), "node is required for JavaScript syntax check")
+    def test_javascript_resource_is_valid_before_assembly(self) -> None:
+        result = subprocess.run(
+            ["node", "--check", str(Path(preview_control.__file__).with_name("control.js"))],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_build_control_assembles_complete_external_resources(self) -> None:
+        control = preview_control._build_control(
+            2,
+            "Review <unsafe> summary",
+            ["Confirm", "Revise"],
+        )
+
+        self.assertIn("<style>\n#dpb-preview-bar", control)
+        self.assertIn('id="dpb-decide-form"', control)
+        self.assertIn("window.DPB_I18N =", control)
+        self.assertIn("var reviseLabels =", control)
+        self.assertNotIn("<unsafe>", control)
+        self.assertNotRegex(control, r"\{(?:t_|summary_safe|primary_|secondary_|pill_)[^}]*\}")
 
 
 # --------------------------------------------------------------------------- #

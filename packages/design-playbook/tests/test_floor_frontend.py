@@ -6,7 +6,8 @@ drives multiple HITL-equivalent scenarios with playwright to verify the
 frontend submit handler + readiness logic blocks non-substantive feedback
 (empty, whitespace-only, incomplete anchors) and allows valid cases
 (non-empty feedback incl. short CJK, complete anchors). Mirrors the
-adapter floor's structural semantics — no minimum length (ADR-0008).
+adapter floor's structural semantics — no minimum length (ADR-0008). Also
+verifies the injected control follows live host/system color-scheme changes.
 """
 import sys, tempfile
 from pathlib import Path
@@ -223,17 +224,18 @@ def main():
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
         page.wait_for_timeout(200)
-        # leave everything empty, click the revise/secondary button
-        # Use the actual label from i18n
+        # leave everything empty and capture the submitted revise choice without
+        # depending on file:// -> 404 navigation timing.
         revise_label = SECONDARY[0]
-        try:
-            page.click('.dpb-drawer .dpb-btn-secondary', timeout=1000)
-        except:
-            page.click(f'button[value="{revise_label}"]', timeout=1000)
-        page.wait_for_timeout(300)
-        nav_ok = not page.url.startswith('file:')
-        s9_ok = nav_ok
-        print(f"  S9 empty + revise: submit_allowed={nav_ok} -> {'OK' if s9_ok else 'FAIL'}")
+        page.evaluate(CAPTURE_SUBMITTER_JS)
+        page.click('.dpb-drawer .dpb-btn-secondary', timeout=1000)
+        page.wait_for_timeout(100)
+        captured_revise = page.evaluate("() => window.__capturedSubmitter")
+        s9_ok = captured_revise == revise_label
+        print(
+            f"  S9 empty + revise: captured={captured_revise!r} "
+            f"(want {revise_label!r}) -> {'OK' if s9_ok else 'FAIL'}"
+        )
         if not s9_ok:
             failures.append("S9: revise should allow submit even with no substantive feedback")
 
@@ -512,6 +514,61 @@ def main():
         )
         if not s19_ok:
             failures.append("S19: annotate control should use stable text/control language, not platform emoji")
+
+        # --- S20: control theme follows live host overrides and system changes ---
+        page.emulate_media(color_scheme='dark')
+        page.goto(file_url, wait_until='domcontentloaded')
+        page.wait_for_selector('#dpb-preview-bar')
+
+        def control_theme():
+            return page.get_attribute('#dpb-preview-bar', 'data-theme')
+
+        initial_theme = control_theme()
+        page.evaluate("() => document.documentElement.setAttribute('data-theme', 'light')")
+        page.wait_for_timeout(100)
+        host_light = control_theme()
+        page.click('#dpb-open-primary')
+        page.click('#dpb-pin-toggle')
+        page.click('#hdr')
+        page.wait_for_timeout(100)
+        light_surface = page.evaluate("""() => ({
+          barBg: getComputedStyle(document.getElementById('dpb-preview-bar'))
+            .getPropertyValue('--dpb-bg').trim(),
+          headerBg: getComputedStyle(document.querySelector('.dpb-drawer-head')).backgroundImage,
+          floatTheme: document.getElementById('dpb-float-root')?.getAttribute('data-theme'),
+        })""")
+        page.evaluate("() => document.documentElement.setAttribute('data-theme', 'dark')")
+        page.wait_for_timeout(100)
+        host_dark = control_theme()
+        float_dark = page.get_attribute('#dpb-float-root', 'data-theme')
+        page.evaluate("() => document.documentElement.removeAttribute('data-theme')")
+        page.emulate_media(color_scheme='light')
+        page.wait_for_timeout(100)
+        system_light = control_theme()
+        float_system_light = page.get_attribute('#dpb-float-root', 'data-theme')
+        s20_ok = (
+            initial_theme == 'dark'
+            and host_light == 'light'
+            and light_surface['barBg'] == '#ffffff'
+            and 'rgb(243, 244, 246)' in light_surface['headerBg']
+            and light_surface['floatTheme'] == 'light'
+            and host_dark == 'dark'
+            and float_dark == 'dark'
+            and system_light == 'light'
+            and float_system_light == 'light'
+        )
+        print(
+            "  S20 live theme sync: "
+            f"initial={initial_theme!r} host_light={host_light!r} "
+            f"light_bg={light_surface['barBg']!r} "
+            f"float={light_surface['floatTheme']!r}/{float_dark!r}/{float_system_light!r} "
+            f"host_dark={host_dark!r} system_light={system_light!r} "
+            f"-> {'OK' if s20_ok else 'FAIL'}"
+        )
+        if not s20_ok:
+            failures.append(
+                "S20: control surfaces and annotations must follow live host/system themes"
+            )
 
         browser.close()
 
