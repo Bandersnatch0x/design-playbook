@@ -54,6 +54,10 @@
 
 三候选全落地：`3514ccb` confirm 集群折叠（confirm.py 删除，helpers 归主）+ digest lockstep 测试（`tests/test_digest_lockstep.py`）；`ae8f294` 共享确认记录解析（`read_confirm_record` + `_g5_no_valid_reason` 入 `_preview_integrity`，validate_run 820→788 行）。`_transport.py` lockstep 审计：共享代码非复制，无风险。G6 证据路径复查（08-01）：净干净；**M6 containment parity 测试 CUT**——读侧（validate_run）与写侧（evidence/server.py `_resolve_artifact_path`）各自独立测试充分（写：test_provider_rejects_*_paths；读：g6-symlink-escape fixture），差异后果仅为诊断不对称非完整性违约，跳过与 07-17 先例一致。
 
+## Dogfood (2026-08-01)
+
+- tarot embossed card page: full Design I/O run in-session (ux-spec → ui-picker → preview* real HITL via Playwright → fill → craft-guard → observe* live-host captures → ui-evaluator). `validate_run` RUN OK, `run_status` Pass, aggregate gate ok. 3 findings all fixed (reduced-motion / live-host re-capture / run-root stderr warning in evidence server). Commits `ea7958d` + `08fd295`.
+
 ## Still open（2026-07-25 刷新）
 
 1. 3b community catalog：人工阻塞（region + 账号）
