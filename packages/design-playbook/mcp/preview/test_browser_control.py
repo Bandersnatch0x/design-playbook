@@ -33,11 +33,11 @@ from urllib.parse import urlencode
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import browser  # noqa: E402
 import control as preview_control  # noqa: E402
-from confirm import (  # noqa: E402
+from browser import (  # noqa: E402
     _DecisionSession,
     _generate_decision_token,
-    prototype_html_digest,
 )
+from util import prototype_html_digest  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #

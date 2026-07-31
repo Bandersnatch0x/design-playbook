@@ -12,6 +12,7 @@ import html
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -23,14 +24,68 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
-from confirm import (
-    _DecisionSession,
-    _generate_decision_token,
-    prototype_html_digest,
-)
 from control import _build_control
 from i18n import lang, t
-from util import _log
+from util import _log, prototype_html_digest
+
+
+def _generate_decision_token() -> str:
+    """One-time URL-safe decision token (G5 trust boundary).
+
+    Proves a POST to /decide originated from the trusted parent control bar
+    (which renders the hidden field) rather than from prototype scripts running
+    inside the sandboxed iframe, which cannot read the parent DOM. Bound to a
+    single preview round via :class:`_DecisionSession`.
+    """
+    return secrets.token_urlsafe(32)
+
+
+class _DecisionSession:
+    """First-decision-wins token lock for a single preview round (G5).
+
+    ``validate`` returns ``True`` only for the first POST whose token matches
+    (constant-time) AND whose round matches. Every other POST — missing token,
+    reused token, mismatched round, or wrong token — is rejected so the caller
+    can fail the decision closed. The session grants at most one valid decision.
+    """
+
+    def __init__(self, round_n: int, token: str) -> None:
+        self.round_n = round_n
+        self._token = token
+        self._locked = False
+        self._lock = threading.Lock()
+        self.last_rejection: str = ""
+
+    @property
+    def locked(self) -> bool:
+        return self._locked
+
+    def validate(self, posted_round: int, posted_token: str | None) -> bool:
+        # LOW-1 (secure-ship-0.4.4): the check-then-set on ``_locked`` must
+        # be atomic. ThreadingHTTPServer handles each POST on its own
+        # thread, so two concurrent valid-token POSTs could both pass the
+        # ``if self._locked`` check and each consume the session. Hold the
+        # lock for the whole decision so first-decision-wins holds under
+        # real concurrency; the lock is uncontended in the single-POST
+        # happy path, so the cost is a no-op acquire/release.
+        with self._lock:
+            if not posted_token:
+                self.last_rejection = "missing"
+                return False
+            if posted_round != self.round_n:
+                self.last_rejection = "round_mismatch"
+                return False
+            if self._locked:
+                # First valid decision already consumed the session; every
+                # later POST (even with the correct token) is a replay.
+                self.last_rejection = "reuse"
+                return False
+            if not secrets.compare_digest(posted_token, self._token):
+                self.last_rejection = "invalid_token"
+                return False
+            self._locked = True
+            self.last_rejection = ""
+            return True
 
 
 def _screen_size() -> tuple[int, int]:
