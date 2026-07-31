@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **v0.7.0 released**（2026-07-27，tag `1a3efba` 已 push + GitHub Release：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.7.0）。三大块：preview durable decision transaction（ADR-0013，`mcp/preview/transaction.py`）+ advisory craft detector protocol（ADR-0014，`skills/craft-guard/references/detectors.md`）+ **npm/pi 发布面**（`packages/design-playbook/package.json`，`pi-package` keyword + pi manifest；已 `npm publish` design-playbook@0.7.0，registry 200，pi.dev gallery 下轮索引可检索）。版本站点升为 7 处（新增 package.json，release/validate gate 已同步为 5 manifest sites）。release gate 6/6 全绿。3b community catalog 仍 **BLOCKED**（region + 账号）。
+**Current:** **v0.8.0 released**（2026-07-31，tag `38d70fd` 已 push + GitHub Release：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.8.0；已 `npm publish` design-playbook@0.8.0，registry `latest=0.8.0`）。本版：G5 aborted confirm / rejected-POST race hardening + Preview control HTML/CSS/JS 资源拆分与自适应主题 + validate/stage/ROUND_HTML lockstep。release gate 6/6 全绿；release commit Ubuntu CI run `30621145035` green。隔离第二会话公开 marketplace add + install smoke PASS：plugin 0.8.0、8 skills、3 commands、2 MCP servers、3 Preview control resources，`claude plugin validate` green。3b community catalog 仍 **BLOCKED**（region + 账号）。
 
 | Phase | Status |
 | --- | --- |
@@ -28,6 +28,7 @@
 | validate.py phrase table | done (2026-07-26; ticket `14` resolved; implementation `5d3733b`; Ubuntu run `30206845177` green) |
 | craft detectors | done (2026-07-27; tickets `01`-`04` resolved; implementation `0d40450`; Ubuntu run `30210795805` green) |
 | v0.7.0 release | done (v0.7.0, 2026-07-27; ADR-0013 preview transaction + ADR-0014 craft detectors + npm/pi surface; tag 1a3efba pushed + GitHub Release; npm publish design-playbook@0.7.0) |
+| v0.8.0 release | done (v0.8.0, 2026-07-31; G5 hardening + Preview control resource split/adaptive theme + validation lockstep; tag 38d70fd pushed + GitHub Release; npm latest 0.8.0; isolated second-session install smoke PASS) |
 
 ## v0 ship checklist (5/5 pass)
 
