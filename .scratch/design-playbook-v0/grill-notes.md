@@ -101,3 +101,16 @@ Done during pivot: vendor lift removed from refs (ECS→generic, AccessKey→gen
 ## Grill complete
 
 All Q1–Q6 locked. Phase → **2-dogfood**.
+
+## v0.9 grill — cross-run aggregate (2026-08-01)
+
+Topic: 跨 run 聚合最小版。不新建 run ledger——复用现有 enforce 产物（plan.md/point-back.md/evidence/manifest.jsonl）；"跨 run 学习"以纯函数 enforce 化（repeat blocker 频次统计），不散文化。
+
+## Decisions locked
+
+- **2026-08-01 Q1:** 主菜 = 跨 run 聚合最小版。不做：散文学习、自动回灌基线、同 spec criterion 语义对齐。
+- **2026-08-01 Q2a:** run 发现 = 默认扫描 `.scratch/**/dogfood/*/` 含 `point-back.md` 的目录；`--runs` 参数可覆写。
+- **2026-08-01 Q2b:** 输出 = JSON（契约/enforce 面）+ 薄 markdown 视图。
+- **2026-08-01 Q3:** 主维度 = run rollup 表 + repeat blocker 检测（归一化 `observed` 文本跨 run 频次；纯统计，不下判断）。事实修正：criterion `L6.<n>` 编号 per-run/per-spec，跨 run 对齐仅在同 spec 时成立 → 首版不做。
+- **2026-08-01 Q4:** 落点 = `scripts/aggregate_runs.py`（deterministic seam，validate_run 同族）+ ui-evaluator 散文指针；零新命令面。
+- **2026-08-01 Q5:** 术语 `run aggregate` + `repeat blocker` 入 CONTEXT.md 词汇表。
