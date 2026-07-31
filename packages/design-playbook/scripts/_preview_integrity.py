@@ -19,8 +19,10 @@ the bare ``import _preview_integrity`` resolves in both the subprocess and
 the imported-module cases.
 """
 import hashlib
+import json
 import re
 from pathlib import Path
+from typing import Any
 
 
 def _round_from_name(name: str) -> int | None:
@@ -125,6 +127,56 @@ def _confirm_round(path: Path, data: dict) -> int | None:
             return None  # Mismatch: exclude from current
     # Prefer JSON round, fallback to filename
     return json_round if json_round is not None else filename_round
+
+
+def read_confirm_record(path: Path) -> tuple[Any | None, str | None]:
+    """Parse one ``confirm-round-<n>.json``; returns (data, None) on success.
+
+    On failure returns (None, reason) where reason is a bare diagnostic
+    (no G5/status prefix) — each caller adds its own prefix so the shared
+    wording stays host-neutral. Strict on read errors (OSError, Unicode,
+    malformed JSON); deliberately lenient on the *shape*: dict-ness is a
+    G5-specific rule, so ``run_status`` keeps tolerating non-dict payloads
+    while ``check_preview`` rejects them locally.
+    """
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        return None, f"invalid confirm record {path.name}: {exc}"
+    return data, None
+
+
+def _g5_no_valid_reason(candidates: list[tuple[Path, dict]]) -> list[str]:
+    """Attribute a G5 failure to its specific cause.
+
+    ``is_confirmed_valid`` is the single judgment of validity (shared with
+    ``run_status``); this helper only explains *why* no record was valid, so
+    the message stays diagnostic without re-encoding the rule.
+    """
+    confirmed = [
+        (path, data) for path, data in candidates
+        if data.get("confirmed") is True
+    ]
+    if not confirmed:
+        return [
+            "G5 preview: preview occurred but no confirm-round-*.json with "
+            "confirmed=true"
+        ]
+    path, data = confirmed[0]
+    if data.get("floor_pass") is not True:
+        reason = data.get("floor_failure") or "no floor_pass=true"
+        return [
+            f"G5 preview: confirmed record {path.name} failed feedback floor: "
+            f"{reason}"
+        ]
+    if data.get("aborted") is True:
+        return [
+            f"G5 preview: confirmed record {path.name} is aborted; an aborted "
+            f"round cannot satisfy the preview gate"
+        ]
+    return [
+        f"G5 preview: confirmed record {path.name} is not a valid confirm"
+    ]
 
 
 def _prototype_target(data: dict, run_root: Path) -> Path | None:

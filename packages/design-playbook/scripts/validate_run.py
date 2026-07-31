@@ -43,18 +43,20 @@ from pathlib import Path
 
 # G5 prototype-integrity helpers (issues 02 / 03) live in the sibling module
 # _preview_integrity.py (review H4: high-coherence split to bring this file
-# under 800 lines). check_preview uses the two private helpers; the two public
-# names use the explicit ``name as name`` re-export idiom so existing
+# under 800 lines). check_preview uses the three private helpers; the three
+# public names use the explicit ``name as name`` re-export idiom so existing
 # ``from validate_run import ...`` callers (scripts/run_status.py) keep
 # working unchanged. The sibling resolves via sys.path the same way run_status
 # imports this module (scripts/ is not a package).
 from _preview_integrity import (
     _confirm_round,
+    _g5_no_valid_reason,
     _verify_prototype_hash,
 )
 from _preview_integrity import (
     is_confirmed_valid as is_confirmed_valid,
     latest_numeric_round as latest_numeric_round,
+    read_confirm_record as read_confirm_record,
 )
 
 SPEC_LAYERS = ["L1", "L2", "L3", "L4", "L5", "L6"]
@@ -348,39 +350,6 @@ def _resolve_report_ref(
     return None
 
 
-def _g5_no_valid_reason(candidates: list[tuple[Path, dict]]) -> list[str]:
-    """Attribute a G5 failure to its specific cause.
-
-    ``is_confirmed_valid`` is the single judgment of validity (shared with
-    ``run_status``); this helper only explains *why* no record was valid, so
-    the message stays diagnostic without re-encoding the rule.
-    """
-    confirmed = [
-        (path, data) for path, data in candidates
-        if data.get("confirmed") is True
-    ]
-    if not confirmed:
-        return [
-            "G5 preview: preview occurred but no confirm-round-*.json with "
-            "confirmed=true"
-        ]
-    path, data = confirmed[0]
-    if data.get("floor_pass") is not True:
-        reason = data.get("floor_failure") or "no floor_pass=true"
-        return [
-            f"G5 preview: confirmed record {path.name} failed feedback floor: "
-            f"{reason}"
-        ]
-    if data.get("aborted") is True:
-        return [
-            f"G5 preview: confirmed record {path.name} is aborted; an aborted "
-            f"round cannot satisfy the preview gate"
-        ]
-    return [
-        f"G5 preview: confirmed record {path.name} is not a valid confirm"
-    ]
-
-
 def check_preview(
         preview_dir: Path | None,
         decision_report: Path | None) -> list[str]:
@@ -406,10 +375,9 @@ def check_preview(
     for path in entries:
         if not path.is_file() or not CONFIRM_JSON.match(path.name):
             continue
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-            return [f"G5 preview: invalid confirm record {path.name}: {exc}"]
+        data, err = read_confirm_record(path)
+        if err is not None:
+            return [f"G5 preview: {err}"]
         if not isinstance(data, dict):
             return [f"G5 preview: confirm record {path.name} is not an object"]
         confirms.append((path, data))
