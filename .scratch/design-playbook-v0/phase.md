@@ -29,6 +29,7 @@
 | craft detectors | done (2026-07-27; tickets `01`-`04` resolved; implementation `0d40450`; Ubuntu run `30210795805` green) |
 | v0.7.0 release | done (v0.7.0, 2026-07-27; ADR-0013 preview transaction + ADR-0014 craft detectors + npm/pi surface; tag 1a3efba pushed + GitHub Release; npm publish design-playbook@0.7.0) |
 | v0.8.0 release | done (v0.8.0, 2026-07-31; G5 hardening + Preview control resource split/adaptive theme + validation lockstep; tag 38d70fd pushed + GitHub Release; npm latest 0.8.0; isolated second-session install smoke PASS) |
+| v0.9.0 release | done (v0.9.0, 2026-08-01; cross-run aggregate `run aggregate`/`repeat blocker` + architecture review landed (confirm cluster collapse + shared confirm-record parsing); tag `<TAG>` pushed; tests 46+8+56 green) |
 
 ## v0 ship checklist (5/5 pass)
 
