@@ -82,6 +82,9 @@ if mcp_json.is_file():
               "plugin .mcp.json uses ${CLAUDE_PLUGIN_ROOT}")
 check((PKG / "mcp" / "preview" / "server.py").is_file(),
       "bundled preview runtime at mcp/preview/server.py")
+for resource_name in ("control.html", "control.css", "control.js"):
+    check((PKG / "mcp" / "preview" / resource_name).is_file(),
+          f"bundled preview frontend resource at mcp/preview/{resource_name}")
 check((PKG / "mcp" / "evidence" / "server.py").is_file(),
       "bundled evidence runtime at mcp/evidence/server.py")
 

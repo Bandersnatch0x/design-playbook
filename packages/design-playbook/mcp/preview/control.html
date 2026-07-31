@@ -1,0 +1,67 @@
+<div id="dpb-preview-bar" role="region" aria-label="{t_region}">
+  <form method="POST" action="/decide" id="dpb-decide-form">
+<input type="hidden" name="anchors_json" id="dpb-anchors-json" value="[]" />
+
+<!-- floating pill (default) -->
+<div class="dpb-pill">
+  <span class="dpb-pill-info">
+    <span class="dpb-round">{t_round}</span>
+    <p class="dpb-summary" title="{summary_safe}">{summary_safe}</p>
+  </span>
+  <span class="dpb-pill-ready" id="dpb-pill-ready" role="status">{t_not_ready}</span>
+  <span class="dpb-pill-actions">
+    {pill_secondary_html}
+    <button type="button" class="dpb-btn-ghost" id="dpb-open-drawer" aria-haspopup="dialog">
+      {t_annotate}<span class="dpb-badge-dot" id="dpb-pill-count">0</span>
+    </button>
+    <button type="button" class="dpb-btn-primary" id="dpb-open-primary" aria-haspopup="dialog">{t_pill_open}</button>
+  </span>
+  <span class="dpb-sr-only" id="dpb-pill-arm-status" role="alert"></span>
+</div>
+
+<!-- drawer (expanded) -->
+<dialog class="dpb-drawer" id="dpb-drawer" aria-label="{t_drawer_aria}">
+  <div class="dpb-drawer-head">
+    <span class="dpb-head-left">
+      <span class="dpb-round">{t_round}</span>
+      <h2 class="dpb-title">{summary_safe}</h2>
+    </span>
+    <button type="button" class="dpb-icon-btn" id="dpb-close-drawer" aria-label="{t_collapse}">−</button>
+  </div>
+  <div class="dpb-drawer-body">
+    <div class="dpb-pin-row">
+      <button type="button" class="dpb-pin-toggle" id="dpb-pin-toggle" aria-pressed="false">
+        <span aria-hidden="true">🎯</span><span class="dpb-pin-label">{t_pin_toggle}</span>
+      </button>
+      <span class="dpb-pin-count" id="dpb-pin-count">{t_pin_count}</span>
+    </div>
+
+    <div>
+      <p class="dpb-subhead">{t_anchors_head}</p>
+      <div class="dpb-anchors" id="dpb-anchors" aria-live="polite"></div>
+      <p class="dpb-empty">{t_anchors_empty}</p>
+    </div>
+
+    <div class="dpb-field">
+      <span class="dpb-label-row">
+        <span class="dpb-label">{t_field_label}</span>
+        <span class="dpb-hint" id="dpb-feedback-hint" role="alert">{t_field_hint}</span>
+      </span>
+      <textarea name="feedback" rows="2"
+        placeholder="{t_field_placeholder}"
+        autocomplete="off"></textarea>
+    </div>
+  </div>
+  <div class="dpb-drawer-foot">
+    <button type="submit" name="choice" value="__abort__" class="dpb-btn dpb-btn-danger" id="dpb-abort" title="{t_terminate_desc}" aria-description="{t_terminate_desc}">{t_terminate}</button>
+    <span class="dpb-sr-only" id="dpb-abort-status" role="alert"></span>
+    <div class="dpb-btns">
+      <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-draft" title="{t_draft_desc}" aria-description="{t_draft_desc}">{t_draft}</button>
+      {secondary_html}
+      <button type="submit" name="choice" value="{primary_val}" class="dpb-btn dpb-btn-primary" title="{t_confirm_desc}" aria-description="{t_confirm_desc}">{primary_label}</button>
+    </div>
+  </div>
+</dialog>
+  </form>
+</div>
+<div id="dpb-preview-spacer" aria-hidden="true"></div>
