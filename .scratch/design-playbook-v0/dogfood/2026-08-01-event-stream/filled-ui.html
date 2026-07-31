@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>事件流</title>
+<style>
+  :root {
+    --bg:#0e1116; --panel:#161b23; --line:#262e3a; --line-2:#2f3a4b;
+    --text:#d8dee9; --muted:#8b94a3; --accent:#6a8fc0;
+    --crit-bg:#5a1e1e; --crit-tx:#ff9a9a; --crit-bar:#e05252;
+    --warn-bg:#5a441e; --warn-tx:#ffd27a;
+    --info-bg:#1e3a5a; --info-tx:#9ac8ff;
+    --sans:"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",sans-serif;
+    --mono:ui-monospace,"JetBrains Mono",monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; background:var(--bg); color:var(--text);
+    font-family:var(--sans); padding-bottom:48px; }
+  header { position:sticky; top:0; z-index:10; display:flex; align-items:center; gap:12px;
+    padding:12px 22px; background:rgba(14,17,22,.94); backdrop-filter:blur(6px); border-bottom:1px solid var(--line); }
+  h1 { font-size:17px; margin:0; letter-spacing:.12em; font-weight:600; }
+  button { background:#2a3442; color:var(--text); border:1px solid #3a4658; border-radius:7px;
+    padding:7px 14px; cursor:pointer; font-family:var(--sans); font-size:13px; }
+  button:hover { background:#323e50; }
+  button:disabled { opacity:.5; cursor:wait; }
+  button:focus-visible, .event:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  #pause[aria-pressed="true"] { background:#3d4a2e; border-color:#5a6e40; color:#d6e8b0; }
+  .filters { display:flex; gap:6px; }
+  .filters button[aria-checked="true"] { background:#4a6a8a; border-color:#5d82a6; }
+  .count { margin-left:auto; color:var(--muted); font-variant-numeric:tabular-nums; font-size:13px; }
+  .list { max-width:980px; margin:18px auto 0; padding:0 22px; }
+  .event { display:flex; gap:12px; padding:11px 10px; border-bottom:1px solid var(--line);
+    align-items:baseline; cursor:pointer; border-radius:6px; }
+  .event:hover { background:var(--panel); }
+  .event .time { color:var(--muted); font-size:12px; width:74px; flex:none; font-family:var(--mono); }
+  .event .badge { font-size:11px; padding:2px 9px; border-radius:10px; flex:none; font-weight:600; }
+  .badge.critical { background:var(--crit-bg); color:var(--crit-tx); }
+  .badge.warning { background:var(--warn-bg); color:var(--warn-tx); }
+  .badge.info { background:var(--info-bg); color:var(--info-tx); }
+  .event .src { color:var(--muted); font-size:12px; width:96px; flex:none; font-family:var(--mono); }
+  .event .msg { flex:1; font-size:13.5px; }
+  .event.critical { box-shadow:inset 3px 0 0 var(--crit-bar); }
+  .event .detail { display:none; flex:1 1 100%; font-size:12.5px; color:var(--muted);
+    padding:6px 0 2px 8px; border-left:2px solid var(--line-2); margin-left:86px; }
+  .event.open .detail { display:block; }
+  .skeleton-row { height:42px; border-radius:6px; margin-bottom:6px;
+    background:linear-gradient(110deg, #141922 40%, #1d2532 50%, #141922 60%);
+    background-size:200% 100%; animation:shimmer 1.2s linear infinite; }
+  @keyframes shimmer { to { background-position:-200% 0; } }
+  .empty { text-align:center; color:var(--muted); padding:90px 0; font-size:14px; letter-spacing:.08em; }
+  .empty p { margin:8px 0; }
+  footer { text-align:center; margin-top:36px; color:#4a5468; font-size:12px; letter-spacing:.1em; }
+  @media (prefers-reduced-motion: reduce) { .skeleton-row { animation:none; } }
+</style>
+</head>
+<body data-state="ready">
+
+<header>
+  <h1>事件流</h1>
+  <button id="pause" type="button" aria-pressed="false">暂停</button>
+  <div class="filters" role="radiogroup" aria-label="级别筛选">
+    <button type="button" role="radio" aria-checked="true" data-f="all">全部</button>
+    <button type="button" role="radio" aria-checked="false" data-f="critical">关键</button>
+    <button type="button" role="radio" aria-checked="false" data-f="warning">警告</button>
+    <button type="button" role="radio" aria-checked="false" data-f="info">信息</button>
+  </div>
+  <span class="count" id="count" role="status">事件 0 · 关键 0</span>
+</header>
+
+<main class="list" id="list" aria-label="事件列表"></main>
+
+<footer>设计 I/O 管道交付 · 事件流 demo · 2026-08-01</footer>
+
+<script>
+(() => {
+  const EMPTY = new URLSearchParams(location.search).get("empty") === "1";
+  const EVENTS = [
+    { t:"10:02:11", s:"critical", src:"deploy", msg:"生产部署失败：健康检查超时", detail:"deploy/order-svc v214 于 30s 内 3 次失败健康检查；已回滚至 v213。run: prod-2026-08-01" },
+    { t:"10:01:40", s:"warning", src:"disk", msg:"节点 n3 磁盘使用率 82%", detail:"/var/lib/docker 已用 82%；阈值 80%。清理周期 06:00。" },
+    { t:"10:00:58", s:"info", src:"audit", msg:"密钥轮换完成（demo）", detail:"actor: deploy-bot · scope: api-secrets · rotated: 2 keys" },
+    { t:"09:59:12", s:"critical", src:"ingress", msg:"网关 5xx 突发：高峰 412/分", detail:"5m 窗口 5xx 率 4.8% > 阈值 3%；疑似上游超时（demo）" },
+    { t:"09:58:03", s:"info", src:"deploy", msg:"订单服务 v214 构建完成", detail:"commit a1b2c3d · registry: ghcr.io/demo/order-svc" },
+    { t:"09:57:21", s:"warning", src:"redis", msg:"内存碎片率 1.42", detail:"maxmemory 4GB；fragmentation 正常偏高，观察（demo）" },
+  ];
+  const SEV = { critical:"关键", warning:"警告", info:"信息" };
+  const list = document.getElementById("list");
+  const countEl = document.getElementById("count");
+  const pauseBtn = document.getElementById("pause");
+  let paused = false;
+  let filter = "all";
+  let total = 0, crit = 0;
+
+  function render() {
+    list.innerHTML = "";
+    EVENTS.concat(EXTRA).forEach((e, i) => {
+      if (filter !== "all" && e.s !== filter) return;
+      const row = document.createElement("div");
+      row.className = "event " + e.s;
+      row.tabIndex = 0;
+      row.setAttribute("role", "button");
+      row.setAttribute("aria-label", `事件：${e.msg}（${SEV[e.s]}）`);
+      row.innerHTML = `
+        <span class="time">${e.t}</span>
+        <span class="badge ${e.s}">${SEV[e.s]}</span>
+        <span class="src">${e.src}</span>
+        <span class="msg">${e.msg}</span>
+        <div class="detail">${e.detail}</div>`;
+      row.addEventListener("click", () => row.classList.toggle("open"));
+      row.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); row.classList.toggle("open"); }
+      });
+      list.appendChild(row);
+    });
+    countEl.textContent = `事件 ${total} · 关键 ${crit}`;
+    countEl.setAttribute("aria-label", countEl.textContent);
+  }
+
+  let EXTRA = [];
+  function tick() {
+    if (paused) return;
+    const h = new Date().toTimeString().slice(0, 8);
+    const pool = [
+      { t:h, s:"info", src:"scheduler", msg:"cron 作业完成：nightly-archive", detail:"job nightly-archive · 状态 ok · 7 项（demo 模拟）" },
+      { t:h, s:"warning", src:"metric", msg:"延迟 P95 上升至 640ms", detail:"service order-svc · 阈值 600ms（demo 模拟）" },
+    ];
+    const e = pool[Math.floor(Math.random() * pool.length)];
+    EXTRA.unshift(e);
+    if (EXTRA.length > 30) EXTRA.pop();
+    total += 1; if (e.s === "critical") crit += 1;
+    render();
+  }
+
+  pauseBtn.addEventListener("click", () => {
+    paused = !paused;
+    pauseBtn.setAttribute("aria-pressed", String(paused));
+    pauseBtn.textContent = paused ? "恢复" : "暂停";
+  });
+  document.querySelectorAll(".filters button").forEach((b) => {
+    b.addEventListener("click", () => {
+      document.querySelectorAll(".filters button").forEach(x => x.setAttribute("aria-checked", "false"));
+      b.setAttribute("aria-checked", "true");
+      filter = b.dataset.f;
+      render();
+    });
+  });
+
+  function init() {
+    if (EMPTY) {
+      document.body.dataset.state = "empty";
+      list.innerHTML = `<div class="empty" style="grid-column:1/-1">
+        <p>暂无事件</p><p style="font-size:12.5px;color:#5a6579">事件源未连接；请刷新重试。</p>
+        <button type="button" onclick="location.reload()">刷新</button></div>`;
+      return;
+    }
+    document.body.dataset.state = "loading";
+    for (let i = 0; i < 6; i++) {
+      const s = document.createElement("div");
+      s.className = "skeleton-row"; s.setAttribute("aria-hidden", "true");
+      list.appendChild(s);
+    }
+    setTimeout(() => {
+      document.body.dataset.state = "ready";
+      total = EVENTS.length;
+      crit = EVENTS.filter(e => e.s === "critical").length;
+      render();
+      setInterval(tick, 4000);
+    }, 800);
+  }
+  init();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "round": 1,
+  "report_ref": "decision-report.md",
+  "confirmed": true,
+  "floor_pass": true,
+  "selected_options": [
+    "Confirm"
+  ],
+  "feedback": "事件流结构清晰，级别徽章与筛选齐备，可交付",
+  "timestamp": "2026-08-01T02:57:05+08:00",
+  "prototype_path": "preview/round-1.html",
+  "prototype_html_hash": "bb7a9c629d4ddd6e6b11f7d3002f68a2e30f7b9116737fe25ef38be994fe5f71",
+  "decision_id": "4d35ad90ace34c0690a402dd8832ebbe"
+}

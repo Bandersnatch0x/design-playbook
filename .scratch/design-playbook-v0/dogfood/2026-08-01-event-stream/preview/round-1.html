@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>事件流监控页 — round-1 原型</title>
+<style>
+  :root { --bg:#0e1116; --panel:#161b23; --line:#262e3a; --text:#d8dee9; --muted:#8b94a3; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Microsoft YaHei","Noto Sans CJK SC",sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:12px; padding:12px 20px; border-bottom:1px solid var(--line); }
+  h1 { font-size:17px; margin:0; }
+  .count { margin-left:auto; color:var(--muted); font-variant-numeric:tabular-nums; }
+  button { background:#2a3442; color:var(--text); border:1px solid #3a4658; border-radius:6px; padding:6px 12px; cursor:pointer; font-family:inherit; }
+  .filters { display:flex; gap:6px; }
+  .filters .on { background:#4a6a8a; border-color:#5d82a6; }
+  .list { padding:8px 20px; }
+  .event { display:flex; gap:12px; padding:10px 8px; border-bottom:1px solid var(--line); align-items:baseline; }
+  .event .time { color:var(--muted); font-size:12px; width:70px; flex:none; }
+  .badge { font-size:11px; padding:2px 8px; border-radius:10px; flex:none; }
+  .badge.critical { background:#5a1e1e; color:#ff9a9a; }
+  .badge.warning { background:#5a441e; color:#ffd27a; }
+  .badge.info { background:#1e3a5a; color:#9ac8ff; }
+  .event.critical .bar { width:3px; background:#e05252; }
+  .src { color:var(--muted); font-size:12px; width:110px; flex:none; }
+</style>
+</head>
+<body data-state="ready">
+<header>
+  <h1>事件流</h1>
+  <button id="pause" aria-pressed="false">暂停</button>
+  <div class="filters" role="radiogroup" aria-label="级别筛选">
+    <button class="on" role="radio" aria-checked="true" data-f="all">全部</button>
+    <button role="radio" aria-checked="false" data-f="critical">关键</button>
+    <button role="radio" aria-checked="false" data-f="warning">警告</button>
+    <button role="radio" aria-checked="false" data-f="info">信息</button>
+  </div>
+  <span class="count" role="status">事件 3 · 关键 1</span>
+</header>
+<main class="list">
+  <div class="event critical" tabindex="0" aria-label="事件：部署失败（关键）">
+    <span class="bar"></span><span class="time">10:02:11</span>
+    <span class="badge critical">关键</span><span class="src">deploy</span><span>生产部署失败：健康检查超时</span>
+  </div>
+  <div class="event warning" tabindex="0" aria-label="事件：磁盘阈值（警告）">
+    <span class="time">10:01:40</span>
+    <span class="badge warning">警告</span><span class="src">disk</span><span>节点 n3 磁盘使用率 82%</span>
+  </div>
+  <div class="event" tabindex="0" aria-label="事件：配置变更（信息）">
+    <span class="time">10:00:58</span>
+    <span class="badge info">信息</span><span class="src">audit</span><span>密钥轮换完成（demo）</span>
+  </div>
+</main>
+</body>
+</html>

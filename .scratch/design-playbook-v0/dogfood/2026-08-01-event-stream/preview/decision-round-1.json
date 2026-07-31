@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "decision_id": "4d35ad90ace34c0690a402dd8832ebbe",
+  "timestamp": "2026-08-01T02:57:05+08:00",
+  "binding": {
+    "digest": "9e0810c7988695de2bcf1c7e7ed01d04ebd0953e9f276f44d75be572d9eee124",
+    "round": 1,
+    "prototype_html_hash": "bb7a9c629d4ddd6e6b11f7d3002f68a2e30f7b9116737fe25ef38be994fe5f71",
+    "report_ref": "decision-report.md",
+    "summary": "事件流监控页 round-1：事件列表（时间+级别徽章+来源+摘要）+ 暂停/恢复 + 级别筛选 + 计数。详情展开与模拟流为占位。",
+    "options": [
+      "Confirm",
+      "Needs changes"
+    ]
+  },
+  "outcome": {
+    "confirmed": true,
+    "user_confirmed": true,
+    "floor_pass": true,
+    "floor_failure": "",
+    "selected_options": [
+      "Confirm"
+    ],
+    "feedback": "事件流结构清晰，级别徽章与筛选齐备，可交付",
+    "anchors": [],
+    "aborted": false,
+    "rejected": false,
+    "rejection": ""
+  }
+}

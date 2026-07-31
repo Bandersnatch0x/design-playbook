@@ -1,0 +1,4 @@
+{
+  "format": "aria_snapshot",
+  "tree": "- banner:\n  - heading \"事件流\" [level=1]\n  - button \"暂停\"\n  - radiogroup \"级别筛选\":\n    - radio \"全部\" [checked]\n    - radio \"关键\"\n    - radio \"警告\"\n    - radio \"信息\"\n  - status \"事件 6 · 关键 2\"\n- main \"事件列表\":\n  - button \"事件：生产部署失败：健康检查超时（关键）\": 10:02:11 关键 deploy 生产部署失败：健康检查超时\n  - button \"事件：节点 n3 磁盘使用率 82%（警告）\": 10:01:40 警告 disk 节点 n3 磁盘使用率 82%\n  - button \"事件：密钥轮换完成（demo）（信息）\": 10:00:58 信息 audit 密钥轮换完成（demo）\n  - button \"事件：网关 5xx 突发：高峰 412/分（关键）\": 09:59:12 关键 ingress 网关 5xx 突发：高峰 412/分\n  - button \"事件：订单服务 v214 构建完成（信息）\": 09:58:03 信息 deploy 订单服务 v214 构建完成\n  - button \"事件：内存碎片率 1.42（警告）\": 09:57:21 警告 redis 内存碎片率 1.42\n- contentinfo: 设计 I/O 管道交付 · 事件流 demo · 2026-08-01"
+}
