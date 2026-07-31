@@ -24,9 +24,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _transport import ToolError, serve_stdio  # noqa: E402
 
 import browser
-from confirm import _self_check_floor
 from i18n import default_options
-from transaction import PreviewTransactionError, run_preview_transaction
+from transaction import (
+    PreviewTransactionError,
+    _self_check_floor,
+    run_preview_transaction,
+)
 
 TOOL_NAME = "preview_prototype"
 

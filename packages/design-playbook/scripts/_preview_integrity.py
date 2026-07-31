@@ -159,7 +159,7 @@ def prototype_html_digest(raw: bytes) -> str:
     and a Linux CI runner validating the same git blob. Line-ending noise is
     not a prototype content change for G5 integrity (issue 02 / T01).
 
-    Must stay in lockstep with ``mcp/preview/confirm.prototype_html_digest``.
+    Must stay in lockstep with ``mcp/preview/util.prototype_html_digest``.
     """
     return hashlib.sha256(
         raw.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
@@ -169,7 +169,7 @@ def prototype_html_digest(raw: bytes) -> str:
 def _verify_prototype_hash(data: dict, run_root: Path) -> list[str]:
     """Verify ``prototype_html_hash`` when the confirm record carries one.
 
-    The hash is written by the trusted-side ``confirm.py`` as
+    The hash is written by the trusted-side ``util.py`` as
     ``prototype_html_digest(<prototype bytes>)`` (LF-normalized SHA-256);
     the validator (also trusted) recomputes it from the prototype html
     currently on disk and compares. The hash source stays on the trusted
