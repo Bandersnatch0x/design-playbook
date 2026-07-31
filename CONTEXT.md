@@ -37,6 +37,8 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 | **G6** | Conditional `validate_run.py` gate: if a ledger `observed` references an `evidence/` artifact, require the artifact to exist and a manifest entry to bind it to the matching L6.<n> | always-on evidence gate; scanning Fill source; judging pass/fail from the manifest |
 | **Blocking** | Acceptance failure that must recirculate (L5/L6, unsafe ops, …) | optional polish |
 | **Dogfood** | Run Design I/O on a real UI ask to test *process*, keep answer not demo code | shipping the throwaway page |
+| **run aggregate** | Cross-run rollup from `scripts/aggregate_runs.py`: per-run status table + repeat-blocker frequencies over `.scratch/**/dogfood/*/` runs; JSON is the contract surface, markdown the view | a run ledger; prose “lessons” |
+| **repeat blocker** | A blocker whose normalized `observed` text recurs across runs; systemic-defect signal; counting only, never judging (v0.9) | “we should learn…” narratives |
 | **SSOT** | Single source of truth for a declaration snippet | dual-edit attachments + references |
 | **Native-feel** | Desktop app indistinguishable from native; render-surface seam + native conventions; declared by `native-craft` | “theme Electron”, “web page in a window” |
 
@@ -73,6 +75,7 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 
 ## Active effort
 
+- **v0.9 cross-run aggregate (grill done, to-tickets):** `.scratch/v0.9-cross-run-aggregate/` — `scripts/aggregate_runs.py` run rollup + repeat-blocker detection; JSON + markdown view; `run aggregate` / `repeat blocker` terms (CONTEXT glossary)
 - v0 polish: `.scratch/design-playbook-v0/phase.md` + `docs/agents/product-workflow.md`
 - **Elevate (wayfinder Clear → implement):** `.scratch/elevate-structure-install-skills/map.md` — structure/install/skill-workflow decisions **Clear**; implement tickets 01–05 landed, 06 release gate = human (remote/tag/smoke)
 - **Pipeline plan+preview (implement Clear):** `.scratch/pipeline-plan-preview/map.md` — skill 序列 + G5 + optional `packages/design-playbook-preview/` landed
