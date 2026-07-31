@@ -49,6 +49,10 @@
 
 `.scratch/architecture-review-20260717/map.md` — 4 候选经三方辩论 + 代码核验：#3 report_ref 三处（CUT，Explore 误判，server.py 无路径解析）、#4 Gate Protocol（CUT，issue 04 明文禁 G7 + 六 gate 签名不齐）、#1 manifest schema（DEFER post-v1，字段有意 prose-only 属 capture≠judge 边界）、#2 validate.py phrase-table（可选小做，bool guard 已防静默 false-pass）。**净结论：预 release 零代码改动**，run-seam 现状是健康的有意契约边界。
 
+## Architecture review (2026-08-01, Preview 决策路径)
+
+三候选全落地：`3514ccb` confirm 集群折叠（confirm.py 删除，helpers 归主）+ digest lockstep 测试（`tests/test_digest_lockstep.py`）；`ae8f294` 共享确认记录解析（`read_confirm_record` + `_g5_no_valid_reason` 入 `_preview_integrity`，validate_run 820→788 行）。`_transport.py` lockstep 审计：共享代码非复制，无风险。G6 证据路径复查（08-01）：净干净；**M6 containment parity 测试 CUT**——读侧（validate_run）与写侧（evidence/server.py `_resolve_artifact_path`）各自独立测试充分（写：test_provider_rejects_*_paths；读：g6-symlink-escape fixture），差异后果仅为诊断不对称非完整性违约，跳过与 07-17 先例一致。
+
 ## Still open（2026-07-25 刷新）
 
 1. 3b community catalog：人工阻塞（region + 账号）
