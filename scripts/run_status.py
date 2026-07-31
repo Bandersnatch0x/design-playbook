@@ -24,7 +24,11 @@ ROOT = Path(__file__).resolve().parent.parent
 _VALIDATE_RUN_DIR = ROOT / "packages" / "design-playbook" / "scripts"
 if str(_VALIDATE_RUN_DIR) not in sys.path:
     sys.path.insert(0, str(_VALIDATE_RUN_DIR))
-from validate_run import is_confirmed_valid, latest_numeric_round  # noqa: E402
+from validate_run import (  # noqa: E402
+    is_confirmed_valid,
+    latest_numeric_round,
+    read_confirm_record,
+)
 
 # Ordered pipeline stages used only for status/resume narration.
 #
@@ -193,9 +197,8 @@ def next_action(states: list[StageState], run_root: Path) -> str:
         if confirm is None:
             return ("Preview artifacts exist without a confirm for the latest "
                     "round — finish preview* HITL (G5) before fill.")
-        try:
-            payload = json.loads(confirm.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        payload, err = read_confirm_record(confirm)
+        if err is not None:
             return f"Preview confirm unreadable ({confirm.name}); re-run preview*."
         # Reuse validate_run.is_confirmed_valid as the single judgment of a
         # usable confirm (issue 03). Fail closed on abort / floor-failure:
