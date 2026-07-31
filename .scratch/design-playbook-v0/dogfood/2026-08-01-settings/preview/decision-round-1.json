@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "decision_id": "48499a7034de40ddbfa896638a7d1c3c",
+  "timestamp": "2026-08-01T03:02:20+08:00",
+  "binding": {
+    "digest": "28cb0a6688b451d73e508270f04353c8b51320d18b9c64e940e6b6dc114f1529",
+    "round": 1,
+    "prototype_html_hash": "282fa3ade6afd19664c75d651b39c42e5b6a452fcb6770927069ff6e7cbc57fd",
+    "report_ref": "decision-report.md",
+    "summary": "系统设置页 round-1：外观/通知/系统/语言四组 + 开关 + 保存/重置。保存持久化与确认对话框为占位。",
+    "options": [
+      "Confirm",
+      "Needs changes"
+    ]
+  },
+  "outcome": {
+    "confirmed": true,
+    "user_confirmed": true,
+    "floor_pass": true,
+    "floor_failure": "",
+    "selected_options": [
+      "Confirm"
+    ],
+    "feedback": "设置分组清晰，开关与语言选择齐备，可交付",
+    "anchors": [],
+    "aborted": false,
+    "rejected": false,
+    "rejection": ""
+  }
+}

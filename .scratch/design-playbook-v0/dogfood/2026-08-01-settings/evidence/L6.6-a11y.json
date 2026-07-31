@@ -1,0 +1,4 @@
+{
+  "format": "aria_snapshot",
+  "tree": "- banner:\n  - heading \"设置\" [level=1]\n  - status: 未保存\n- main:\n  - region \"外观\":\n    - heading \"外观\" [level=2]\n    - text: 深色模式 深色背景降低夜间干扰\n    - switch \"深色模式\"\n  - region \"通知\":\n    - heading \"通知\" [level=2]\n    - text: 桌面通知 关键事件弹窗提醒\n    - switch \"桌面通知\" [checked]\n  - region \"系统\":\n    - heading \"系统\" [level=2]\n    - text: 自动更新 夜间静默安装\n    - switch \"自动更新\"\n  - region \"语言\":\n    - heading \"语言\" [level=2]\n    - text: 界面语言\n    - combobox \"界面语言\":\n      - option \"简体中文\" [selected]\n      - option \"English\"\n  - button \"保存\"\n  - button \"重置\"\n- contentinfo: 设计 I/O 管道交付 · 设置 demo · 2026-08-01"
+}

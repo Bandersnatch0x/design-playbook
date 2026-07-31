@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>设置</title>
+<style>
+  :root {
+    --bg:#f4f2ed; --panel:#fff; --line:#ddd6c8; --line-2:#c9c1af;
+    --text:#2c2a26; --muted:#8a8375; --accent:#7a5f30; --accent-hi:#9a7a40;
+    --ok:#3d6b3f; --danger:#9c3b2e;
+    --sans:"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",sans-serif;
+  }
+  body.dark {
+    --bg:#141210; --panel:#1d1a16; --line:#332e26; --line-2:#443d31;
+    --text:#e8e2d5; --muted:#9a917f; --accent:#c0a05a; --accent-hi:#d9bc78;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; background:var(--bg); color:var(--text);
+    font-family:var(--sans); transition:background .25s, color .25s; }
+  header { display:flex; align-items:center; gap:12px; padding:14px 24px; border-bottom:1px solid var(--line); }
+  h1 { font-size:18px; margin:0; letter-spacing:.1em; }
+  #status { margin-left:auto; font-size:12.5px; color:var(--muted); }
+  #status.saved { color:var(--ok); }
+  main { max-width:660px; margin:22px auto 0; padding:0 24px; }
+  .group { background:var(--panel); border:1px solid var(--line); border-radius:10px; margin-bottom:14px; overflow:hidden; }
+  .group h2 { font-size:12.5px; color:var(--muted); font-weight:600; letter-spacing:.12em;
+    padding:12px 18px 4px; margin:0; }
+  .row { display:flex; align-items:center; gap:14px; padding:13px 18px; border-top:1px solid var(--line); }
+  .row:first-of-type { border-top:0; }
+  .row .meta { flex:1; }
+  .row label { display:block; font-size:14px; }
+  .row .helper { color:var(--muted); font-size:12px; margin-top:2px; }
+  .switch { width:46px; height:25px; border-radius:13px; background:var(--line-2); position:relative; cursor:pointer; flex:none; }
+  .switch::after { content:""; position:absolute; top:2.5px; left:2.5px; width:20px; height:20px;
+    border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.35); transition:left .18s; }
+  .switch[aria-checked="true"] { background:var(--accent); }
+  .switch[aria-checked="true"]::after { left:23.5px; }
+  .switch:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  select { padding:7px 10px; border:1px solid var(--line); border-radius:7px; background:var(--panel);
+    color:var(--text); font-family:var(--sans); font-size:13.5px; }
+  .actions { display:flex; gap:10px; margin-top:4px; }
+  button { font-family:var(--sans); font-size:13.5px; border-radius:8px; padding:9px 20px; cursor:pointer; }
+  #save { background:var(--accent); color:#fff; border:1px solid var(--accent); }
+  #save:hover { background:var(--accent-hi); }
+  #save:disabled { opacity:.55; cursor:wait; }
+  #reset { background:transparent; color:var(--muted); border:1px solid var(--line-2); }
+  #reset:hover { color:var(--danger); border-color:var(--danger); }
+  button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .skeleton-row { height:50px; border-radius:8px; margin-bottom:10px;
+    background:linear-gradient(110deg, #ece7da 40%, #f5f0e2 50%, #ece7da 60%);
+    background-size:200% 100%; animation:shimmer 1.2s linear infinite; }
+  body.dark .skeleton-row { background:linear-gradient(110deg, #1e1b16 40%, #282420 50%, #1e1b16 60%); }
+  @keyframes shimmer { to { background-position:-200% 0; } }
+  .empty { text-align:center; color:var(--muted); padding:90px 0; font-size:14px; }
+  .empty p { margin:8px 0; }
+  footer { text-align:center; margin-top:34px; color:var(--muted); font-size:12px; letter-spacing:.1em; }
+  @media (prefers-reduced-motion: reduce) { .skeleton-row, body, .switch::after { transition:none; animation:none; } }
+</style>
+</head>
+<body data-state="ready">
+
+<header>
+  <h1 id="title">设置</h1>
+  <span id="status" role="status">未保存</span>
+</header>
+
+<main id="main">
+  <section class="group" aria-labelledby="g-appearance">
+    <h2 id="g-appearance">外观</h2>
+    <div class="row">
+      <div class="meta"><label for="dark">深色模式</label><div class="helper" id="h-dark">深色背景降低夜间干扰</div></div>
+      <div class="switch" id="dark" role="switch" aria-checked="false" tabindex="0" aria-label="深色模式" aria-describedby="h-dark"></div>
+    </div>
+  </section>
+  <section class="group" aria-labelledby="g-notify">
+    <h2 id="g-notify">通知</h2>
+    <div class="row">
+      <div class="meta"><label for="notify">桌面通知</label><div class="helper" id="h-notify">关键事件弹窗提醒</div></div>
+      <div class="switch" id="notify" role="switch" aria-checked="true" tabindex="0" aria-label="桌面通知" aria-describedby="h-notify"></div>
+    </div>
+  </section>
+  <section class="group" aria-labelledby="g-system">
+    <h2 id="g-system">系统</h2>
+    <div class="row">
+      <div class="meta"><label for="auto">自动更新</label><div class="helper" id="h-auto">夜间静默安装</div></div>
+      <div class="switch" id="auto" role="switch" aria-checked="false" tabindex="0" aria-label="自动更新" aria-describedby="h-auto"></div>
+    </div>
+  </section>
+  <section class="group" aria-labelledby="g-lang">
+    <h2 id="g-lang">语言</h2>
+    <div class="row">
+      <div class="meta"><label for="lang">界面语言</label></div>
+      <select id="lang" aria-label="界面语言">
+        <option value="zh">简体中文</option>
+        <option value="en">English</option>
+      </select>
+    </div>
+  </section>
+  <div class="actions">
+    <button id="save" type="button">保存</button>
+    <button id="reset" type="button">重置</button>
+  </div>
+</main>
+
+<footer>设计 I/O 管道交付 · 设置 demo · 2026-08-01</footer>
+
+<script>
+(() => {
+  const EMPTY = new URLSearchParams(location.search).get("empty") === "1";
+  const KEY = "dp-settings-demo-v1";
+  const statusEl = document.getElementById("status");
+  const saveBtn = document.getElementById("save");
+  const DEFAULTS = { dark: false, notify: true, auto: false, lang: "zh" };
+
+  function load() {
+    try { return { ...DEFAULTS, ...(JSON.parse(localStorage.getItem(KEY)) || {}) }; }
+    catch { return { ...DEFAULTS }; }
+  }
+  let state = EMPTY ? { ...DEFAULTS } : load();
+  let dirty = false;
+
+  function apply() {
+    document.body.classList.toggle("dark", state.dark);
+    document.getElementById("dark").setAttribute("aria-checked", String(state.dark));
+    document.getElementById("notify").setAttribute("aria-checked", String(state.notify));
+    document.getElementById("auto").setAttribute("aria-checked", String(state.auto));
+    document.getElementById("lang").value = state.lang;
+    document.getElementById("title").textContent = state.lang === "en" ? "Settings" : "设置";
+  }
+  function markDirty() {
+    dirty = true;
+    statusEl.textContent = "未保存";
+    statusEl.classList.remove("saved");
+  }
+  document.querySelectorAll(".switch").forEach((sw) => {
+    sw.addEventListener("click", () => { state[sw.id] = !state[sw.id]; apply(); markDirty(); });
+    sw.addEventListener("keydown", (e) => {
+      if (e.key === " " || e.key === "Enter") { e.preventDefault(); state[sw.id] = !state[sw.id]; apply(); markDirty(); }
+    });
+  });
+  document.getElementById("lang").addEventListener("change", (e) => { state.lang = e.target.value; apply(); markDirty(); });
+
+  saveBtn.addEventListener("click", () => {
+    saveBtn.disabled = true;
+    try { localStorage.setItem(KEY, JSON.stringify(state)); }
+    catch { /* sandboxed storage may be refused; feedback still shows */ }
+    setTimeout(() => {
+      saveBtn.disabled = false;
+      dirty = false;
+      statusEl.textContent = "已保存";
+      statusEl.classList.add("saved");
+    }, 300);
+  });
+  document.getElementById("reset").addEventListener("click", () => {
+    if (!confirm("恢复默认设置？")) return;
+    state = { ...DEFAULTS };
+    apply(); markDirty();
+  });
+
+  function init() {
+    if (EMPTY) {
+      document.body.dataset.state = "empty";
+      document.getElementById("main").innerHTML =
+        `<div class="empty"><p>暂无设置项</p><p style="font-size:12.5px">配置源未连接；请重载。</p>
+         <button id="reload" type="button" onclick="location.reload()">重载</button></div>`;
+      return;
+    }
+    document.body.dataset.state = "loading";
+    const skeleton = document.createElement("div");
+    skeleton.innerHTML = Array(4).fill('<div class="skeleton-row" aria-hidden="true"></div>').join("");
+    document.getElementById("main").prepend(skeleton);
+    setTimeout(() => {
+      skeleton.remove();
+      document.body.dataset.state = "ready";
+      apply();
+    }, 700);
+  }
+  init();
+})();
+</script>
+</body>
+</html>
