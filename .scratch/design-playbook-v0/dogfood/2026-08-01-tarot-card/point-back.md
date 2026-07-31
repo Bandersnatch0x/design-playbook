@@ -7,7 +7,7 @@ Produced by **ui-evaluator** after Design I/O (ux-spec → plan → ui-picker �
 criterion: L6.1
 required: 首屏渲染完整卡背牌阵（非空白、每卡可辨认）；证据 = 首屏 viewport 截图
 observed: evidence/L6.1-ready.png
-note: provider 捕获（observed_state=ready，body[data-state] 实测）；截图 638KB 非空
+note: provider 捕获（observed_state=ready，body[data-state] 实测）；截图 638KB 非空；surface: live（http.server 起 live host 后复采）
 result: pass
 
 criterion: L6.2
@@ -63,3 +63,9 @@ result: pass
 Pass
 
 七条 L6 全 pass（4 条 provider 捕获 + 3 条 playwright/源码核验）；零 blocking findings；preview* 经真实 HITL（Playwright 点击）确认，floor_pass=true，G5 满足；token 全走 var(--*) 角色令牌。三项低/中 finding 均点回声明层（observe* seam ×2、craft ×1），非阻断。
+
+## Repairs (post-eval fixes, 2026-08-01)
+
+- closes: observe* 使用了 mirror 面（file:// 静态页，无 dev server），未在 live host 复采 -> recirculate -> fix（http.server 起 live host，L6.1/L6.2/L6.3/L6.6 复采，manifest surface: live）-> re-eval -> 0 open
+- closes: evidence 适配器 run-root 未配置——`DESIGN_PLAYBOOK_RUN_ROOT` 未设，provider 写到 repo-root/evidence/（相对 cwd），编排器手动迁移入 run evidence/；若 host workspace 非 run 根会污染错误目录 -> recirculate -> fix（server `_run_root()` 未设/相对时 stderr 警告；root .mcp.json `"."` 语义已在 server docstring + warning 显性化）-> re-eval -> 0 open
+- closes: 翻牌/洗牌动画未尊重 prefers-reduced-motion -> recirculate -> fix（`@media (prefers-reduced-motion: reduce)` 关闭 rotateY/shuffle/shimmer 过渡）-> re-eval -> 0 open

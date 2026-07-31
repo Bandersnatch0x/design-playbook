@@ -144,7 +144,19 @@ def _captured(
 
 def _run_root() -> Path:
     configured = os.environ.get(RUN_ROOT_ENV)
-    return Path(configured).resolve() if configured else Path.cwd().resolve()
+    if not configured or configured == ".":
+        # cwd-relative default silently mis-roots multi-run workspaces (the
+        # root .mcp.json ships DESIGN_PLAYBOOK_RUN_ROOT="."). Surface it:
+        # artifacts land under <cwd>/evidence/, which is not a run dir when
+        # the host workspace is the repo root.
+        _log(
+            "WARNING: DESIGN_PLAYBOOK_RUN_ROOT is unset or '.' (cwd-relative); "
+            f"artifacts resolve under {Path.cwd().resolve()}/evidence/. "
+            "Set DESIGN_PLAYBOOK_RUN_ROOT to the run root when the host "
+            "workspace is not the intended run directory."
+        )
+        return Path.cwd().resolve()
+    return Path(configured).resolve()
 
 
 def _resolve_artifact_path(artifact_path: str) -> Path:

@@ -133,6 +133,10 @@
   footer { text-align:center; margin-top:44px; color:#5c4c38; font-size:12px; letter-spacing:.12em; }
   @media (max-width:900px){ .grid{ grid-template-columns:repeat(3,1fr); } }
   @media (max-width:640px){ .grid{ grid-template-columns:repeat(2,1fr); } }
+  @media (prefers-reduced-motion: reduce) {
+    .card-inner { transition:none; }
+    .skeleton { animation:none; }
+  }
 </style>
 </head>
 <body data-state="ready">
