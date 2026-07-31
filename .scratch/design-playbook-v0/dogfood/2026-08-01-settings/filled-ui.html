@@ -40,6 +40,15 @@
   select { padding:7px 10px; border:1px solid var(--line); border-radius:7px; background:var(--panel);
     color:var(--text); font-family:var(--sans); font-size:13.5px; }
   .actions { display:flex; gap:10px; margin-top:4px; }
+  dialog { border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--text);
+    padding:22px 26px; width:min(360px,86vw); font-family:var(--sans); box-shadow:0 18px 50px rgba(0,0,0,.35); }
+  dialog::backdrop { background:rgba(20,16,10,.5); }
+  dialog h2 { font-size:15px; margin:0 0 8px; }
+  dialog p { font-size:13px; color:var(--muted); margin:0 0 18px; }
+  .cr-actions { display:flex; gap:10px; justify-content:flex-end; }
+  #cr-ok { background:var(--danger); color:#fff; border:1px solid var(--danger); }
+  #cr-ok:hover { filter:brightness(1.1); }
+  #cr-cancel { background:transparent; color:var(--muted); border:1px solid var(--line-2); }
   button { font-family:var(--sans); font-size:13.5px; border-radius:8px; padding:9px 20px; cursor:pointer; }
   #save { background:var(--accent); color:#fff; border:1px solid var(--accent); }
   #save:hover { background:var(--accent-hi); }
@@ -101,6 +110,15 @@
     <button id="save" type="button">保存</button>
     <button id="reset" type="button">重置</button>
   </div>
+
+  <dialog id="confirm-reset" aria-labelledby="cr-title" aria-describedby="cr-desc">
+    <h2 id="cr-title">恢复默认设置？</h2>
+    <p id="cr-desc">所有设置将回到默认值，当前变更会丢失。</p>
+    <div class="cr-actions">
+      <button id="cr-cancel" type="button">取消</button>
+      <button id="cr-ok" type="button">恢复默认</button>
+    </div>
+  </dialog>
 </main>
 
 <footer>设计 I/O 管道交付 · 设置 demo · 2026-08-01</footer>
@@ -152,8 +170,11 @@
       statusEl.classList.add("saved");
     }, 300);
   });
-  document.getElementById("reset").addEventListener("click", () => {
-    if (!confirm("恢复默认设置？")) return;
+  const resetDialog = document.getElementById("confirm-reset");
+  document.getElementById("reset").addEventListener("click", () => resetDialog.showModal());
+  document.getElementById("cr-cancel").addEventListener("click", () => resetDialog.close());
+  document.getElementById("cr-ok").addEventListener("click", () => {
+    resetDialog.close();
     state = { ...DEFAULTS };
     apply(); markDirty();
   });

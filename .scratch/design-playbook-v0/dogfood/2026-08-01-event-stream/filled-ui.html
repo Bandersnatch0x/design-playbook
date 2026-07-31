@@ -48,10 +48,12 @@
     background:linear-gradient(110deg, #141922 40%, #1d2532 50%, #141922 60%);
     background-size:200% 100%; animation:shimmer 1.2s linear infinite; }
   @keyframes shimmer { to { background-position:-200% 0; } }
+  .event.new { animation:rowflash .3s ease-out; }
+  @keyframes rowflash { from { background:#2a3442; } to { background:transparent; } }
   .empty { text-align:center; color:var(--muted); padding:90px 0; font-size:14px; letter-spacing:.08em; }
   .empty p { margin:8px 0; }
   footer { text-align:center; margin-top:36px; color:#4a5468; font-size:12px; letter-spacing:.1em; }
-  @media (prefers-reduced-motion: reduce) { .skeleton-row { animation:none; } }
+  @media (prefers-reduced-motion: reduce) { .skeleton-row { animation:none; } .event.new { animation:none; } }
 </style>
 </head>
 <body data-state="ready">
@@ -129,6 +131,11 @@
     if (EXTRA.length > 30) EXTRA.pop();
     total += 1; if (e.s === "critical") crit += 1;
     render();
+    const first = list.querySelector(".event");
+    if (first) {
+      first.classList.add("new");
+      setTimeout(() => first.classList.remove("new"), 350);
+    }
   }
 
   pauseBtn.addEventListener("click", () => {

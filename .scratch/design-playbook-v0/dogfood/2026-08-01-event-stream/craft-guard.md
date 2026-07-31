@@ -5,7 +5,7 @@
 ## CRAFT rows
 
 - **CRAFT-01 加载层级**：初始骨架行（shimmer，tier 2）；无无界 spinner。
-- **CRAFT-02 动效目的**：骨架 shimmer（加载反馈）；事件追加为 DOM 重排（无动画，监控页避免干扰）；`prefers-reduced-motion` 已加（shimmer 关闭）。
+- **CRAFT-02 动效目的**：骨架 shimmer（加载反馈）；新事件行 .new 高亮 300ms（rowflash，感知提示）；`prefers-reduced-motion` 已加（shimmer + rowflash 关闭）。
 - **CRAFT-03 层级**：h1 → 事件行（时间/徽章/来源/摘要基线对齐）→ 详情（弱化 muted）。关键级左侧警示条 + 徽章双编码。
 - **CRAFT-04 CJK 排版**：`Microsoft YaHei / PingFang SC / Noto Sans CJK SC` 系统栈；无外部字体；13-13.5px 正文，等宽时间/来源列（mono 栈）。
 - **CRAFT-05 焦点可见**：事件行 `:focus-visible` 描边；键盘展开（Enter/Space）；暂停按钮 aria-pressed 两态。

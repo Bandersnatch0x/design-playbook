@@ -54,6 +54,11 @@ result: pass
   fix: 产品集成时接 i18n 基建；页面开关/分组结构不受影响
   severity: low
 
+## Repairs (post-eval fixes, 2026-08-01)
+
+- closes: 重置使用原生 confirm() 对话框，视觉突兀且与页面主题不一致 -> recirculate -> fix（自绘 `<dialog>` 主题弹层：showModal + Esc/取消/恢复默认，焦点 autofocus，::backdrop 遮罩）-> re-eval（dialog open + reset 生效）-> 0 open
+- closes: 语言切换仅更新头部标题（demo 范围），非完整 i18n -> 接受：spec L1 非目标声明范围内，非缺陷（不开）
+
 ## Verdict
 
 Pass

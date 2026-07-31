@@ -54,6 +54,11 @@ result: pass
   fix: 可选：新事件行短暂高亮（300ms）增强感知，不影响 reduced-motion
   severity: low
 
+## Repairs (post-eval fixes, 2026-08-01)
+
+- closes: 事件追加无进入动画（监控页密度优先，CRAFT-02 有意为之），新事件视觉提示仅靠位置 -> recirculate -> fix（新行 .new 高亮 300ms rowflash，reduced-motion 下关闭）-> re-eval（运行时轮询观测 .new 类出现）-> 0 open
+- closes: 模拟流事件数据（deploy/disk/redis 等）为 demo 占位，非真实数据源 -> 接受：spec L1 非目标声明范围内（无后端 demo），非缺陷（不开）
+
 ## Verdict
 
 Pass

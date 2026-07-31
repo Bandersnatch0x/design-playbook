@@ -15,4 +15,4 @@
 
 ## Findings → ui-evaluator
 
-- 重置用原生 `confirm()` 对话框，视觉突兀（source: craft，low；建议自绘确认弹层）
+- 重置已改自绘 `<dialog>` 确认弹层（主题令牌 + showModal + Esc/取消/恢复默认；CRAFT-02 reduced-motion 兼容）
