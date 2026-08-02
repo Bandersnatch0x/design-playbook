@@ -18,6 +18,7 @@ whose names did not match any keyword. See review item M3.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -50,6 +51,7 @@ def _run_stdio(
     *,
     cwd: Path | None = None,
     no_site: bool = False,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     wire_input = "".join(
         json.dumps(request, ensure_ascii=False) + "\n" for request in requests
@@ -67,6 +69,7 @@ def _run_stdio(
         timeout=timeout,
         check=False,
         cwd=cwd,
+        env=env,
     )
 
 
@@ -203,6 +206,57 @@ class EvidencePurePathTests(unittest.TestCase):
                     self.assertEqual(payload["result"], "failed")
                     self.assertEqual(payload["observed_state"], "unknown")
             self.assertFalse(outside.exists())
+
+    def test_run_root_warning_only_without_run_marker_and_once(self) -> None:
+        """Default RUN_ROOT ('.'/unset) must not warn when cwd is a run dir.
+
+        Shipped defaults (root .mcp.json RUN_ROOT="." / external installs
+        unset) are correct usage when cwd is the run dir — warning there is a
+        100% false positive. Warn only when cwd lacks a run marker
+        (plan.md / point-back.md), and only once per process.
+        """
+        def _call(request_id: int) -> dict:
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": "tools/call",
+                "params": {
+                    "name": "execute_capture_plan",
+                    "arguments": {
+                        "url": "about:blank",
+                        "type": "screenshot",
+                        "state": "ok",
+                        "actions": [],
+                        # Rejected before Playwright import, but after
+                        # _run_root() — cheap way to reach the warning path.
+                        "artifact_path": "spec.md",
+                    },
+                },
+            }
+
+        requests = [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+            _call(2),
+            _call(3),
+        ]
+        env = {k: v for k, v in os.environ.items() if k != "DESIGN_PLAYBOOK_RUN_ROOT"}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bare = Path(tmp)
+            completed = _run_stdio(requests, timeout=15, cwd=bare, env=env)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(
+                completed.stderr.count("DESIGN_PLAYBOOK_RUN_ROOT is unset or '.'"),
+                1,
+                completed.stderr,
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            (run_dir / "plan.md").write_text("# plan", encoding="utf-8")
+            completed = _run_stdio(requests, timeout=15, cwd=run_dir, env=env)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertNotIn("DESIGN_PLAYBOOK_RUN_ROOT is unset", completed.stderr)
 
     def test_provider_rejects_non_evidence_subtree_paths(self) -> None:
         """G6 containment: artifact_path must already live under evidence/."""

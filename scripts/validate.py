@@ -584,25 +584,31 @@ check_skill_prose(run_checks, "ui-evaluator consumes craft detector ledger", anc
 check_skill_prose(verdict, "ui-evaluator pass requires all evidence rows", anchor="### 4. Verdict")
 
 print("== Run aggregate (v0.9) ==")
-try:
-    agg_env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
-    agg = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "aggregate_runs.py"), "--top", "5"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-        cwd=ROOT, env=agg_env, timeout=180,
-    )
-    agg_data = json.loads(agg.stdout) if agg.returncode == 0 else None
-    if agg_data is None:
-        check(False, f"aggregate_runs exited {agg.returncode}: "
-                     f"{(agg.stdout + agg.stderr).strip()[-200:]}")
-    else:
-        total = agg_data.get("runs_total", 0)
-        repeat = len(agg_data.get("repeat_blockers", []))
-        check(total >= 1, f"aggregate_runs discovers >=1 dogfood run ({total})")
-        print(f"  info  runs={total} repeat_blockers={repeat} "
-              f"rollup={agg_data.get('rollup', {}).get('by_result', {})}")
-except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
-    check(False, f"aggregate_runs smoke failed: {exc}")
+# Smoke only runs where a dogfood corpus exists. Fixture copies (e.g.
+# tests/test_validate.py: scripts + package + catalogs, no .scratch) are
+# legitimate static-gate inputs, so an absent corpus is a skip, not a FAIL.
+if not any((ROOT / ".scratch").glob("**/dogfood/*/point-back.md")):
+    print("  info  no dogfood runs under .scratch - aggregate smoke skipped")
+else:
+    try:
+        agg_env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+        agg = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "aggregate_runs.py"), "--top", "5"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            cwd=ROOT, env=agg_env, timeout=180,
+        )
+        agg_data = json.loads(agg.stdout) if agg.returncode == 0 else None
+        if agg_data is None:
+            check(False, f"aggregate_runs exited {agg.returncode}: "
+                         f"{(agg.stdout + agg.stderr).strip()[-200:]}")
+        else:
+            total = agg_data.get("runs_total", 0)
+            repeat = len(agg_data.get("repeat_blockers", []))
+            check(total >= 1, f"aggregate_runs discovers >=1 dogfood run ({total})")
+            print(f"  info  runs={total} repeat_blockers={repeat} "
+                  f"rollup={agg_data.get('rollup', {}).get('by_result', {})}")
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
+        check(False, f"aggregate_runs smoke failed: {exc}")
 
 print()
 if failures:

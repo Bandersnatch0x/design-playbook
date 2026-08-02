@@ -31,6 +31,8 @@ jobs:
           python3 tests/test_doctor.py
           python3 tests/test_run_status.py
           python3 tests/test_design_baseline.py
+          python3 tests/test_validate.py
+          python3 tests/test_aggregate_runs.py
       - name: Syntax check (all Python)
         # py_compile is the always-on syntax gate. The MCP stdio suites now
         # also run as required gates below (ticket 06): preview mocks its
@@ -59,6 +61,8 @@ jobs:
             tests/test_doctor.py \
             tests/test_run_status.py \
             tests/test_design_baseline.py \
+            tests/test_validate.py \
+            tests/test_aggregate_runs.py \
             packages/design-playbook/scripts/validate_run.py
 
       # ----------------------------------------------------------------

@@ -28,6 +28,7 @@ VALIDATE = ROOT / "scripts" / "validate.py"
 def _run(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [*args], cwd=cwd, capture_output=True, text=True, check=False,
+        encoding="utf-8", errors="replace",
     )
 
 
