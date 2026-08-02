@@ -142,20 +142,33 @@ def _captured(
     }
 
 
+_RUN_MARKERS = ("plan.md", "point-back.md")
+_warned_run_root = False
+
+
 def _run_root() -> Path:
     configured = os.environ.get(RUN_ROOT_ENV)
     if not configured or configured == ".":
         # cwd-relative default silently mis-roots multi-run workspaces (the
-        # root .mcp.json ships DESIGN_PLAYBOOK_RUN_ROOT="."). Surface it:
-        # artifacts land under <cwd>/evidence/, which is not a run dir when
-        # the host workspace is the repo root.
-        _log(
-            "WARNING: DESIGN_PLAYBOOK_RUN_ROOT is unset or '.' (cwd-relative); "
-            f"artifacts resolve under {Path.cwd().resolve()}/evidence/. "
-            "Set DESIGN_PLAYBOOK_RUN_ROOT to the run root when the host "
-            "workspace is not the intended run directory."
-        )
-        return Path.cwd().resolve()
+        # root .mcp.json ships DESIGN_PLAYBOOK_RUN_ROOT="."). Warn only when
+        # cwd does not look like a run dir (no run marker file) — the shipped
+        # default resolving to a real run dir is correct usage, not a
+        # misconfig — and only once per process to avoid per-capture spam.
+        root = Path.cwd().resolve()
+        global _warned_run_root
+        if not _warned_run_root and not any(
+            (root / marker).is_file() for marker in _RUN_MARKERS
+        ):
+            _warned_run_root = True
+            _log(
+                "WARNING: DESIGN_PLAYBOOK_RUN_ROOT is unset or '.' "
+                f"(cwd-relative) and {root} has no run marker "
+                f"({' / '.join(_RUN_MARKERS)}); artifacts resolve under "
+                f"{root}/evidence/. Set DESIGN_PLAYBOOK_RUN_ROOT to the run "
+                "root when the host workspace is not the intended run "
+                "directory."
+            )
+        return root
     return Path(configured).resolve()
 
 

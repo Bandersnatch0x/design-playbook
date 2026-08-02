@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **v0.8.0 released**（2026-07-31，tag `38d70fd` 已 push + GitHub Release：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.8.0；已 `npm publish` design-playbook@0.8.0，registry `latest=0.8.0`）。本版：G5 aborted confirm / rejected-POST race hardening + Preview control HTML/CSS/JS 资源拆分与自适应主题 + validate/stage/ROUND_HTML lockstep。release gate 6/6 全绿；release commit Ubuntu CI run `30621145035` green。隔离第二会话公开 marketplace add + install smoke PASS：plugin 0.8.0、8 skills、3 commands、2 MCP servers、3 Preview control resources，`claude plugin validate` green。3b community catalog 仍 **BLOCKED**（region + 账号）。
+**Current:** **v0.9.0 released**（2026-08-01，tag `0fbc774` 已 push + GitHub Release：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.9.0；已 `npm publish` design-playbook@0.9.0，registry `latest=0.9.0`）。本版：cross-run aggregate（`scripts/aggregate_runs.py`：run discovery + per-run rollup + repeat-blocker 频次表 + JSON/`--md` 输出）+ confirm 集群折叠 / 共享确认记录解析重构。发布时实扫 17 runs，88 pass / 3 blocked，repeat blockers = 0。3b community catalog 仍 **BLOCKED**（region + 账号）。v0.9 范围圆桌决议（2026-08-02，`.scratch/v0.9-cycle/roundtable-synthesis.md`）：run-root WARNING 收窄后**不单独发 v0.9.1**，攒到下个主题；repeat_blockers 不断言化（入场券 = 首次真实 repeat>0 并闭环，届时落 release.py）；doctor 与 aggregate 保持独立；下一主题 = 跨 run 复盘能力回流进包（最小起步：skill 指引 + 输出格式约定），template-zone 从候选摘除。
 
 | Phase | Status |
 | --- | --- |

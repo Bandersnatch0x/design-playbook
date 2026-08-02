@@ -45,6 +45,7 @@ Gates: working tree clean (untracked files also block) · versions match across 
 - [ ] GitHub Release at `vX.Y.Z`; body = `docs/releases/X.Y.Z.md`.
 - [ ] `cd packages/design-playbook && npm publish` — the pi.dev gallery indexes npm for the `pi-package` keyword, so skipping this leaves pi users on the previous version with no other signal. Check the tarball first with `npm pack --dry-run`.
 - [ ] Smoke: a second session `/plugin marketplace add <owner>/<repo>` + install works end-to-end.
+- [ ] Sync `.scratch/design-playbook-v0/phase.md` **header** (`**Current:**` line: version, tag, Release URL, npm latest) — the phase table row alone is not enough; the header is a second write point and has drifted before (v0.8.0 header survived the v0.9.0 release).
 
 ## "Not yet" (do not block v0.x)
 
