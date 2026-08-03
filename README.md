@@ -79,7 +79,7 @@ Eight model-invoked skills (`/design-playbook:<name>`):
 | `native-craft` | 🖥️ Native-feel desktop declaration |
 | `ui-evaluator` | ✅ Point-back acceptance + recirculate |
 
-**Commands:** `design-io` (full pipeline) · `ux-spec` (spec only) · `ui-review` (accept only)
+**Commands:** `design-io` (full pipeline) · `ux-spec` (spec only) · `ui-review` (accept only) · `run-review` (cross-run)
 
 ## 🔗 Stack with ecosystem
 
