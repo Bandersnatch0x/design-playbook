@@ -233,6 +233,37 @@ for cmd in sorted((PKG / "commands").glob("*.md")):
     head = fm[1] if len(fm) >= 3 else ""
     check(bool(re.search(r"^description:\s*\S", head, re.M)), f"{cmd.name} has description frontmatter")
 
+print("== Release identity (ADR-0015): version vs command inventory ==")
+# Stable-main invariant: the plugin version must admit exactly the shipped
+# command set. main is the public install surface, so unreleased capability
+# must never ship under a released version — a new command requires a
+# version entry that admits it, and a version entry requires its inventory
+# on disk (OPP-01). Every declared version line must be listed here.
+COMMAND_INVENTORY: dict[tuple[int, int], frozenset[str]] = {
+    (0, 9): frozenset({"design-io", "ux-spec", "ui-review"}),
+    (0, 10): frozenset({"design-io", "ux-spec", "ui-review", "run-review"}),
+}
+shipped_commands = frozenset(p.stem for p in (PKG / "commands").glob("*.md"))
+version_text = pj.get("version", "")
+try:
+    major, minor = (int(x) for x in version_text.split(".", 2)[:2])
+except (ValueError, TypeError):
+    major = minor = None
+inv_key = (major, minor) if major is not None else None
+if inv_key in COMMAND_INVENTORY:
+    expected = COMMAND_INVENTORY[inv_key]
+    check(
+        shipped_commands == expected,
+        f"version {version_text} expects commands {sorted(expected)}, "
+        f"shipped {sorted(shipped_commands)} (ADR-0015 stable main)",
+    )
+else:
+    check(
+        False,
+        f"version {version_text} has no declared command inventory "
+        f"(ADR-0015); add an entry to COMMAND_INVENTORY in scripts/validate.py",
+    )
+
 print("== Clean runtime surface (no upstream/vendor residue) ==")
 # Attribution files (README, NOTICE) legitimately credit sources; scan runtime only.
 banned = re.compile(r"cloudai|阿里云|alibaba-cloud-design|\bACD\b|\bECS\b|演示附件|manuscript|#636AF1", re.I)
