@@ -172,8 +172,6 @@ def gate_status(run_dir: Path) -> dict[str, str]:
 
 
 def normalize(text: str) -> str:
-    # Sync with packages/design-playbook/commands/run-review.md (SSOT) and
-    # tests/test_normalize_lockstep.py — casefold + collapse whitespace.
     return " ".join(text.casefold().split())
 
 

@@ -23,12 +23,12 @@ PKG = ROOT / "packages" / "design-playbook"
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 
 # Gate 1 structural expectations. Keep these in sync with
-# docs/agents/release-checklist.md ("eight skills + four commands" — ADR-0011
-# added reference-intake; v0.10 added run-review) when the plugin surface
-# grows or shrinks; the checklist wording and this floor are the two
-# authorities a reviewer eyeballs, and doctor.py is the machine echo.
+# docs/agents/release-checklist.md ("seven skills + three commands" — ADR-0011
+# added reference-intake) when the plugin surface grows or shrinks; the
+# checklist wording and this floor are the two authorities a reviewer eyeballs,
+# and doctor.py is the machine echo.
 GATE1_EXPECTED_SKILLS = 8
-GATE1_EXPECTED_COMMANDS = 4
+GATE1_EXPECTED_COMMANDS = 3
 GATE1_EXPECTED_PLUGIN_NAME = "design-playbook"
 
 failures: list[str] = []

@@ -33,7 +33,6 @@ jobs:
           python3 tests/test_design_baseline.py
           python3 tests/test_validate.py
           python3 tests/test_aggregate_runs.py
-          python3 tests/test_normalize_lockstep.py
       - name: Syntax check (all Python)
         # py_compile is the always-on syntax gate. The MCP stdio suites now
         # also run as required gates below (ticket 06): preview mocks its
@@ -64,7 +63,6 @@ jobs:
             tests/test_design_baseline.py \
             tests/test_validate.py \
             tests/test_aggregate_runs.py \
-            tests/test_normalize_lockstep.py \
             packages/design-playbook/scripts/validate_run.py
 
       # ----------------------------------------------------------------
