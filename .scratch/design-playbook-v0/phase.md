@@ -59,6 +59,10 @@
 - tarot embossed card page: full Design I/O run in-session (ux-spec → ui-picker → preview* real HITL via Playwright → fill → craft-guard → observe* live-host captures → ui-evaluator). `validate_run` RUN OK, `run_status` Pass, aggregate gate ok. 3 findings all fixed (reduced-motion / live-host re-capture / run-root stderr warning in evidence server). Commits `ea7958d` + `08fd295`.
 - event-stream monitor page + settings page: two more full Design I/O runs (`c2c92b9` + `16caf54`), both RUN OK, preview* real HITL (Playwright), observe* live-host captures. Settings run lesson: capture landed in the 700ms skeleton window — added `wait_for_state` async-init guidance to the orchestrator skill step 9.2 (`0fb50ab` + skill edit). Aggregate gate added to `validate.py` (`6944213`): 20 runs, repeat_blockers=0, rollup {blocked:3, pass:109}.
 
+## v0.10 run review (2026-08-03)
+
+- 圆桌决议落地：新 command `run-review`（第四 command，`.scratch/v0.10-run-review/` 四票全 resolved）。实现经 Orca 委托 grok worker（run `run_5bf575c510d8`），产物：`commands/run-review.md`（run-review/v1 契约 + 条件式 validate_run seam + repeat blocker 频次表 + 禁止块）、doctor GATE1 3→4、README/checklist/CI 同步、orchestrator pointer、`tests/test_normalize_lockstep.py`（shipped 文案 SSOT，aggregate_runs follower）。gate 独立复核全绿。待随 v0.10.0 发布（Fixed 段带 run-root WARNING 收窄 + wait_for_state 指引）。
+
 ## Still open（2026-07-25 刷新）
 
 1. 3b community catalog：人工阻塞（region + 账号）

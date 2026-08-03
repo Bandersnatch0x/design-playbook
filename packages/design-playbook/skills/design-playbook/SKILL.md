@@ -195,6 +195,8 @@ Invoke **ui-evaluator**. Issues must **point back** to a declaration.
 
 **Done when:** the report includes the criterion-shaped evidence ledger (`criterion / required / observed / result`) and findings as `issue / source / fix / severity`; the authoritative verdict completion criterion in `ui-evaluator` is met; **and** you show the user a short **run artifact index** (paths under `.scratch/<run>/`) so declaration products are discoverable — at minimum: `design-baseline/` (if triggered), `reference/` (if any), `spec.md`, `plan.md`, `decision-report.md`, `preview/` (if any), Fill surface path, `evidence/` (if any), `point-back.md`. One block is enough; do not only leave paths buried in tool logs.
 
+Cross-run review of multiple `.scratch/<run>/` runs lives in command **run-review** (cross-run, not a step of this run).
+
 Machine seam (optional local check): `python scripts/validate_run.py <spec.md> <point-back.md> [--preview-dir <preview/>] [--decision-report <report>] [--evidence-dir <evidence/>] [--run-root <run>]`.
 
 ## Recirculate
