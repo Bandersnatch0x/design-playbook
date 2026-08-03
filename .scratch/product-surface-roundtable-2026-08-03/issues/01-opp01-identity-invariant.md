@@ -44,6 +44,7 @@ commands, (0,10) → +run-review). Shipped command set must equal the
 declared set for the plugin version; an unknown version line fails the
 gate until an entry is declared. Red-to-green test
 `test_extra_command_without_version_admission_fails`. Consequence:
-feature/v0.10-run-review (version still 0.9.1, 4 commands) now fails
-validate until bumped to 0.10.0 — intended release gate. The full
+feature/v0.10-run-review (tip `cdc49eb`: version 0.9.0, 4 commands) will
+fail this gate once it rebases onto main and picks up the check, until
+bumped to 0.10.0 — intended release gate. The full
 distribution inventory matrix (OPP-03) remains a follow-up.
