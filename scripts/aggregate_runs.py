@@ -172,10 +172,9 @@ def gate_status(run_dir: Path) -> dict[str, str]:
 
 
 def normalize(text: str) -> str:
-    # Shared normalization rule (casefold + collapse whitespace, char-for-char
-    # equality after). CONTEXT.md "repeat blocker" owns the across-runs domain
-    # meaning; count = distinct runs (OPP-21). When v0.10 run-review merges
-    # back, re-point this comment at its command text as SSOT.
+    # Sync with packages/design-playbook/commands/run-review.md (SSOT) and
+    # tests/test_normalize_lockstep.py: casefold + collapse whitespace,
+    # then char-for-char equality. Repeat count is distinct runs (OPP-21).
     return " ".join(text.casefold().split())
 
 
