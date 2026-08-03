@@ -224,7 +224,7 @@ def aggregate(runs: list[Path], root: Path, top: int) -> dict:
                         "results": {},
                     })
                     if meta["id"] not in blk["runs"]:
-                        blk["runs"].append(str(meta["id"]))
+                        blk["runs"].append(meta["id"])
                         blk["count"] += 1
                     blk["results"][result] = blk["results"].get(result, 0) + 1
         payload["runs"].append(run_rec)
