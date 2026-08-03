@@ -90,6 +90,24 @@ class AggregateRunsTest(unittest.TestCase):
         self.assertEqual(top["count"], 2)
         self.assertEqual(set(top["runs"]), {"2026-01-02-002-block", "2026-01-03-003-block"})
 
+    def test_single_run_duplicate_observed_is_not_repeat(self) -> None:
+        """A repeat blocker requires the same normalized observed ACROSS runs.
+
+        OPP-21: count is the number of distinct runs carrying the blocker,
+        not the number of non-pass ledger rows. Two identical non-pass rows
+        inside one run must not satisfy count>=2.
+        """
+        run_dir = (
+            self.cwd / ".scratch" / "aggregate-test-effort" / "dogfood"
+            / "2026-01-01-001-pass"
+        )
+        make_run(run_dir, blocked=["single-run blocker", "single-run blocker"])
+        payload = self._payload()
+        self.assertNotIn(
+            "single-run blocker",
+            {b["text"] for b in payload["repeat_blockers"]},
+        )
+
     def test_override_runs(self) -> None:
         run_a = self.cwd / ".scratch" / "aggregate-test-effort" / "dogfood" / "2026-01-01-001-pass"
         payload = self._payload("--runs", str(run_a))
