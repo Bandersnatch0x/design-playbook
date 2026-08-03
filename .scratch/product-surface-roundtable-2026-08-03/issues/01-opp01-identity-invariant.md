@@ -1,6 +1,6 @@
 # OPP-01 — Enforce version↔inventory identity invariant
 
-Status: open
+Status: resolved
 Type: task
 Source: product-surface roundtable 2026-08-03 (`.scratch/product-surface-roundtable-2026-08-03/roundtable.md`)
 
@@ -36,3 +36,14 @@ If the public marketplace can reliably pin an immutable release tag AND `main` i
 ## Comments
 
 - Created 2026-08-03 after the channel-model grill (ADR-0015).
+## Answer
+
+Implemented 2026-08-03 (`f712dfb`): `scripts/validate.py` gains a
+version-vs-command inventory check (COMMAND_INVENTORY map; (0,9) → 3
+commands, (0,10) → +run-review). Shipped command set must equal the
+declared set for the plugin version; an unknown version line fails the
+gate until an entry is declared. Red-to-green test
+`test_extra_command_without_version_admission_fails`. Consequence:
+feature/v0.10-run-review (version still 0.9.1, 4 commands) now fails
+validate until bumped to 0.10.0 — intended release gate. The full
+distribution inventory matrix (OPP-03) remains a follow-up.

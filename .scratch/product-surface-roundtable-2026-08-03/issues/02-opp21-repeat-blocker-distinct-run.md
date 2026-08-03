@@ -1,6 +1,6 @@
 # OPP-21 — Fix distinct-run repeat-blocker counting
 
-Status: open
+Status: resolved
 Type: task
 Source: product-surface roundtable 2026-08-03 (`.scratch/product-surface-roundtable-2026-08-03/roundtable.md`)
 
@@ -43,3 +43,11 @@ Only if the domain definition is deliberately changed to "recurring rows" instea
 ## Comments
 
 - Created 2026-08-03. Fix belongs on `main` (repo-only tool, no installable surface).
+## Answer
+
+Implemented 2026-08-03 (`68726a7`): `scripts/aggregate_runs.py`
+increments the repeat-blocker `count` once per distinct run carrying the
+normalized key (moved the increment inside the `runs` dedup guard);
+`results` keeps row-level per-result statistics. Red-to-green test
+`test_single_run_duplicate_observed_is_not_repeat`. Real corpus still
+reports `_none_` (20 runs, 0 repeats); full aggregate suite green.
