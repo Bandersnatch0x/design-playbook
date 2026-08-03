@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **v0.9.0 released**（2026-08-01，tag `0fbc774` 已 push + GitHub Release：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.9.0；已 `npm publish` design-playbook@0.9.0，registry `latest=0.9.0`）。本版：cross-run aggregate（`scripts/aggregate_runs.py`：run discovery + per-run rollup + repeat-blocker 频次表 + JSON/`--md` 输出）+ confirm 集群折叠 / 共享确认记录解析重构。发布时实扫 17 runs，88 pass / 3 blocked，repeat blockers = 0。3b community catalog 仍 **BLOCKED**（region + 账号）。v0.9 范围圆桌决议（2026-08-02，`.scratch/v0.9-cycle/roundtable-synthesis.md`）：run-root WARNING 收窄后**不单独发 v0.9.1**，攒到下个主题；repeat_blockers 不断言化（入场券 = 首次真实 repeat>0 并闭环，届时落 release.py）；doctor 与 aggregate 保持独立；下一主题 = 跨 run 复盘能力回流进包（最小起步：skill 指引 + 输出格式约定），template-zone 从候选摘除。
+**Current:** **v0.9.1 released**（2026-08-03，patch，tag `779630a` on `release/v0.9.1`（cut from `a3d754c`，不含 v0.10 run-review）；GitHub Release：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.9.1；npm `latest=0.9.1`）。本版 Fixed：evidence run-root WARNING 收窄（出厂默认恒触发假阳性 → 仅无 run 标记时、每进程一次）+ orchestrator step 9.2 `wait_for_state` async-init 指引。**main 的 marketplace 目录有意保持 0.9.0** 直到 v0.10.0（main 已含 run-review minor 素材，patch 不从 HEAD 切）。v0.10 run-review 已在 main 落地待发（`e714c57`）。v0.9 范围圆桌决议（2026-08-02，`.scratch/v0.9-cycle/roundtable-synthesis.md`）：repeat_blockers 不断言化（入场券 = 首次真实 repeat>0 并闭环，届时落 release.py）；doctor 与 aggregate 保持独立。3b community catalog 仍 **BLOCKED**（region + 账号）。
 
 | Phase | Status |
 | --- | --- |
@@ -30,6 +30,7 @@
 | v0.7.0 release | done (v0.7.0, 2026-07-27; ADR-0013 preview transaction + ADR-0014 craft detectors + npm/pi surface; tag 1a3efba pushed + GitHub Release; npm publish design-playbook@0.7.0) |
 | v0.8.0 release | done (v0.8.0, 2026-07-31; G5 hardening + Preview control resource split/adaptive theme + validation lockstep; tag 38d70fd pushed + GitHub Release; npm latest 0.8.0; isolated second-session install smoke PASS) |
 | v0.9.0 release | done (v0.9.0, 2026-08-01; cross-run aggregate `run aggregate`/`repeat blocker` + architecture review landed (confirm cluster collapse + shared confirm-record parsing); tag `v0.9.0` pushed; tests 46+8+56 green; GitHub Release + npm publish 0.9.0; isolated second-session marketplace add + install smoke PASS (plugin 0.9.0, 8 skills, 3 commands, 2 MCP servers, 3 control resources, `claude plugin validate` green)) |
+| v0.9.1 release | done (v0.9.1, 2026-08-03; patch cut from `a3d754c` on `release/v0.9.1` excluding v0.10 run-review; Fixed: run-root WARNING narrowed + wait_for_state guidance; release gate PASSED; tag + GitHub Release + npm 0.9.1; gate-5 second-session install smoke pending human) |
 
 ## v0 ship checklist (5/5 pass)
 
@@ -61,7 +62,7 @@
 
 ## v0.10 run review (2026-08-03)
 
-- 圆桌决议落地：新 command `run-review`（第四 command，`.scratch/v0.10-run-review/` 四票全 resolved）。实现经 Orca 委托 grok worker（run `run_5bf575c510d8`），产物：`commands/run-review.md`（run-review/v1 契约 + 条件式 validate_run seam + repeat blocker 频次表 + 禁止块）、doctor GATE1 3→4、README/checklist/CI 同步、orchestrator pointer、`tests/test_normalize_lockstep.py`（shipped 文案 SSOT，aggregate_runs follower）。gate 独立复核全绿。待随 v0.10.0 发布（Fixed 段带 run-root WARNING 收窄 + wait_for_state 指引）。
+- 圆桌决议落地：新 command `run-review`（第四 command，`.scratch/v0.10-run-review/` 四票全 resolved）。实现经 Orca 委托 grok worker（run `run_5bf575c510d8`），产物：`commands/run-review.md`（run-review/v1 契约 + 条件式 validate_run seam + repeat blocker 频次表 + 禁止块）、doctor GATE1 3→4、README/checklist/CI 同步、orchestrator pointer、`tests/test_normalize_lockstep.py`（shipped 文案 SSOT，aggregate_runs follower）。gate 独立复核全绿。待发 v0.10.0（Fixed 素材已先行随 v0.9.1 patch 发出，2026-08-03）。
 
 ## Still open（2026-07-25 刷新）
 
