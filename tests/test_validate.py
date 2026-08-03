@@ -203,6 +203,24 @@ class ValidateGateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("source.path exists", result.stdout)
         self.assertIn("./packages/nonexistent", result.stdout)
+    def test_extra_command_without_version_admission_fails(self) -> None:
+        # OPP-01 / ADR-0015: main must never expose unreleased capability
+        # under a released version. A 4th command while plugin.json still
+        # declares 0.9.x must fail the gate.
+        fake = (
+            self.root / "packages" / "design-playbook" / "commands"
+            / "fake-review.md"
+        )
+        fake.write_text(
+            "---\ndescription: hypothetical fourth command\n---\nbody\n",
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("expects commands", result.stdout)
+        self.assertIn("VALIDATION FAILED", result.stdout)
 
 
 if __name__ == "__main__":
