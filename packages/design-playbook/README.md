@@ -55,7 +55,6 @@ After install, skills and commands are **namespaced** by the plugin name:
 | `/design-playbook:design-io` | Full pipeline command |
 | `/design-playbook:ux-spec` | Spec-only command |
 | `/design-playbook:ui-review` | Review command |
-| `/design-playbook:run-review` | Cross-run review command |
 
 Bare `/design-io` is **not** the installed name — always use the `design-playbook:` prefix.
 
@@ -73,7 +72,7 @@ pi has no plugin namespace — skills are `/skill:<name>`, commands are bare `/<
 | --- | --- |
 | `/skill:design-playbook` | Orchestrator skill (model-invoked) |
 | `/skill:ux-spec` … `/skill:ui-evaluator` | Same eight skills as above |
-| `/design-io` · `/ux-spec` · `/ui-review` · `/run-review` | Pipeline / spec-only / review / cross-run commands |
+| `/design-io` · `/ux-spec` · `/ui-review` | Pipeline / spec-only / review commands |
 
 pi ships no built-in MCP, so `preview*` and `observe*` skip by default (ADR-0009 absent→skip; the pipeline still runs spec → picker → fill → craft → accept). To enable both gates, install an MCP adapter and register the bundled servers in your project `.mcp.json`:
 
@@ -117,7 +116,7 @@ pi install npm:pi-mcp-adapter
 .mcp.json              ← bundled MCP servers, launched via ${CLAUDE_PLUGIN_ROOT} (ADR-0009)
 mcp/{preview,evidence}/← MCP adapter runtimes (preview_prototype / execute_capture_plan)
 skills/<name>/SKILL.md ← model-invoked skills
-commands/<name>.md     ← slash commands (design-io, ux-spec, ui-review, run-review)
+commands/<name>.md     ← slash commands (design-io, ux-spec, ui-review only)
 codex/AGENTS.md        ← Codex bridge notes
 examples/              ← self-authored onboarding samples
 LICENSE · NOTICE       ← authored-only scope
