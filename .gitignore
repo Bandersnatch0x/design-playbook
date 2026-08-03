@@ -35,10 +35,11 @@ Thumbs.db
 __pycache__/
 *.pyc
 
-# Local tool artifacts (codegraph / graphify / playwright-cli)
+# Local tool artifacts (codegraph / graphify / playwright-cli / pi-subagents)
 .codegraph/
 .graphify/
 .playwright-cli/
+.pi-subagents/
 
 # External-reference research notes (not version-controlled; avoid
 # third-party attribution/attribution drift. Keep local only.)
