@@ -18,17 +18,22 @@ import subprocess
 import sys
 from pathlib import Path
 
+# scripts/ must resolve even when doctor.py is imported in-process
+# (tests/test_doctor.py) rather than run as `python scripts/doctor.py`.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _checks
+
 ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "packages" / "design-playbook"
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 
-# Gate 1 structural expectations. Keep these in sync with
-# docs/agents/release-checklist.md ("seven skills + three commands" — ADR-0011
-# added reference-intake) when the plugin surface grows or shrinks; the
-# checklist wording and this floor are the two authorities a reviewer eyeballs,
-# and doctor.py is the machine echo.
+# Gate 1 structural expectations. Skills count is doctor-local (validate.py
+# does not enforce it); the command set is derived from the shared policy
+# module scripts/_checks.py (ADR-0015 / OPP-01 mirror rule) so doctor and
+# validate can never disagree on what a version line ships. Keep the
+# checklist wording in docs/agents/release-checklist.md in sync when the
+# plugin surface grows or shrinks.
 GATE1_EXPECTED_SKILLS = 8
-GATE1_EXPECTED_COMMANDS = 3
 GATE1_EXPECTED_PLUGIN_NAME = "design-playbook"
 
 failures: list[str] = []
@@ -85,10 +90,19 @@ def check_layout() -> None:
 # comparison (release.py additionally checks README badges + release notes).
 # Keep in sync when version sites change.
 def check_gate1_smoke() -> None:
+    plugin = read_json(PKG / ".claude-plugin" / "plugin.json")
+    plugin_version = plugin.get("version", "") if isinstance(plugin, dict) else ""
+    expected_cmds = _checks.expected_commands(plugin_version)
+    if expected_cmds is None:
+        expected_cmds = frozenset()
+        fail(
+            f"plugin.json version {plugin_version!r} has no declared command "
+            f"inventory (ADR-0015); add it to scripts/_checks.py"
+        )
     print(
         "== gate 1 structural smoke "
         f"({GATE1_EXPECTED_SKILLS} skills / "
-        f"{GATE1_EXPECTED_COMMANDS} commands / namespace) =="
+        f"{len(expected_cmds)} commands / namespace) =="
     )
     # Semi-automated gate 1 (release-checklist): the static counts a human
     # would eyeball in /help. The dynamic `claude --plugin-dir` load + /help
@@ -101,11 +115,14 @@ def check_gate1_smoke() -> None:
         fail(f"expected {GATE1_EXPECTED_SKILLS} skills, got {len(skill_dirs)}")
     commands_dir = PKG / "commands"
     cmds = sorted(commands_dir.glob("*.md")) if commands_dir.is_dir() else []
-    if len(cmds) == GATE1_EXPECTED_COMMANDS:
-        ok(f"{GATE1_EXPECTED_COMMANDS} commands present")
+    shipped_names = frozenset(p.stem for p in cmds)
+    if shipped_names == expected_cmds:
+        ok(f"{len(expected_cmds)} commands present")
     else:
-        fail(f"expected {GATE1_EXPECTED_COMMANDS} commands, got {len(cmds)}")
-    plugin = read_json(PKG / ".claude-plugin" / "plugin.json")
+        fail(
+            f"expected commands {sorted(expected_cmds)}, "
+            f"got {sorted(shipped_names)}"
+        )
     if plugin is not None:
         if plugin.get("name") == GATE1_EXPECTED_PLUGIN_NAME:
             ok(f"plugin.json name = {GATE1_EXPECTED_PLUGIN_NAME}")

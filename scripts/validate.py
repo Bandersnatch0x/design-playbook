@@ -14,6 +14,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+# scripts/ must resolve even when validate.py is imported in-process rather
+# than run as `python scripts/validate.py` (mirrors doctor.py's guard).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _checks
+
 ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "packages" / "design-playbook"
 failures: list[str] = []
@@ -234,24 +239,14 @@ for cmd in sorted((PKG / "commands").glob("*.md")):
     check(bool(re.search(r"^description:\s*\S", head, re.M)), f"{cmd.name} has description frontmatter")
 
 print("== Release identity (ADR-0015): version vs command inventory ==")
-# Stable-main invariant: the plugin version must admit exactly the shipped
+# Stable-main invariant enforced from the shared policy module
+# (scripts/_checks.py): the plugin version must admit exactly the shipped
 # command set. main is the public install surface, so unreleased capability
-# must never ship under a released version — a new command requires a
-# version entry that admits it, and a version entry requires its inventory
-# on disk (OPP-01). Every declared version line must be listed here.
-COMMAND_INVENTORY: dict[tuple[int, int], frozenset[str]] = {
-    (0, 9): frozenset({"design-io", "ux-spec", "ui-review"}),
-    (0, 10): frozenset({"design-io", "ux-spec", "ui-review", "run-review"}),
-}
-shipped_commands = frozenset(p.stem for p in (PKG / "commands").glob("*.md"))
+# must never ship under a released version (OPP-01).
 version_text = pj.get("version", "")
-try:
-    major, minor = (int(x) for x in version_text.split(".", 2)[:2])
-except (ValueError, TypeError):
-    major = minor = None
-inv_key = (major, minor) if major is not None else None
-if inv_key in COMMAND_INVENTORY:
-    expected = COMMAND_INVENTORY[inv_key]
+shipped_commands = frozenset(p.stem for p in (PKG / "commands").glob("*.md"))
+expected = _checks.expected_commands(version_text)
+if expected is not None:
     check(
         shipped_commands == expected,
         f"version {version_text} expects commands {sorted(expected)}, "
@@ -261,7 +256,7 @@ else:
     check(
         False,
         f"version {version_text} has no declared command inventory "
-        f"(ADR-0015); add an entry to COMMAND_INVENTORY in scripts/validate.py",
+        f"(ADR-0015); add an entry to COMMAND_INVENTORY in scripts/_checks.py",
     )
 
 print("== Clean runtime surface (no upstream/vendor residue) ==")
