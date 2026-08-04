@@ -18,7 +18,7 @@ jobs:
     name: Validate plugin (static + MCP stdio contracts)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Validate
         run: python3 scripts/validate.py
       - name: Doctor (skip floor self-check for speed)
