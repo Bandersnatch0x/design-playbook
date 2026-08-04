@@ -53,7 +53,7 @@ Commands live under `packages/design-playbook/commands/` (pipeline) and monorepo
 
 ```text
 # path of record (catalog at repo root)
-/plugin marketplace add <owner>/<repo>            # or <abs-to-repo-root> locally
+/plugin marketplace add https://github.com/Bandersnatch0x/design-playbook.git  # or <abs-to-repo-root> locally
 /plugin install design-playbook@design-playbook
 # dev load
 claude --plugin-dir <abs>/packages/design-playbook

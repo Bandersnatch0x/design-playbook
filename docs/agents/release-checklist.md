@@ -35,7 +35,7 @@ Gates: working tree clean (untracked files also block) · versions match across 
 - [ ] **2. Six-gate dogfood:** `/design-playbook:design-io <real product UI ask>` passes all six gates (L5/L6 before UI; decision report before code; point-back findings; no Done-when skip; generality; recirculate closure). Log under `.scratch/design-playbook-v0/dogfood/`.
 - [ ] **3. Validate:** `python scripts/validate.py` green (also in `release.py` and CI); `claude plugin validate` too if your Claude Code version has it.
 - [ ] **4. Clean surface:** covered by `scripts/validate.py` (runtime surface; attribution files excluded).
-- [ ] **5. Install docs copy-paste:** the root README install trio resolves - `/plugin marketplace add <owner>/<repo>` then `/plugin install design-playbook@design-playbook` succeeds in a second session/machine.
+- [ ] **5. Install docs copy-paste:** the root README install pair resolves - `/plugin marketplace add https://github.com/Bandersnatch0x/design-playbook.git` then `/plugin install design-playbook@design-playbook` succeeds in a second session/machine.
 
 ## Version + tag + publish (manual, irreversible)
 
@@ -44,7 +44,7 @@ Gates: working tree clean (untracked files also block) · versions match across 
 - [ ] `git push origin main && git push origin vX.Y.Z`.
 - [ ] GitHub Release at `vX.Y.Z`; body = `docs/releases/X.Y.Z.md`.
 - [ ] `cd packages/design-playbook && npm publish` — the pi.dev gallery indexes npm for the `pi-package` keyword, so skipping this leaves pi users on the previous version with no other signal. Check the tarball first with `npm pack --dry-run`.
-- [ ] Smoke: a second session `/plugin marketplace add <owner>/<repo>` + install works end-to-end.
+- [ ] Smoke: a second session `/plugin marketplace add https://github.com/Bandersnatch0x/design-playbook.git` + install works end-to-end.
 - [ ] Sync `.scratch/design-playbook-v0/phase.md` **header** (`**Current:**` line: version, tag, Release URL, npm latest) — the phase table row alone is not enough; the header is a second write point and has drifted before (v0.8.0 header survived the v0.9.0 release).
 
 ## "Not yet" (do not block v0.x)

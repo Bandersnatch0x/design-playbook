@@ -6,11 +6,11 @@
 
 ### *Design I/O for coding agents — declarations + contracts that make UI generation constrained, reviewable, and recirculatable.*
 
-[![Version](https://img.shields.io/badge/Version-0.9.2-2DD4BF?style=flat-square&logo=semver&logoColor=black)](.#)
+[![Version](https://img.shields.io/badge/Version-0.10.0-2DD4BF?style=flat-square&logo=semver&logoColor=black)](.#)
 [![License](https://img.shields.io/badge/License-MIT-2DD4BF?style=flat-square&logo=opensourceinitiative&logoColor=black)](./packages/design-playbook/LICENSE)
 [![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-2DD4BF?style=flat-square&logo=claude&logoColor=black)](.#)
 [![Skills](https://img.shields.io/badge/Skills-8-2DD4BF?style=flat-square)](.#)
-[![Commands](https://img.shields.io/badge/Commands-3-2DD4BF?style=flat-square)](.#)
+[![Commands](https://img.shields.io/badge/Commands-4-2DD4BF?style=flat-square)](.#)
 [![Codex](https://img.shields.io/badge/Codex-ready-2DD4BF?style=flat-square)](./packages/design-playbook/codex/AGENTS.md)
 
 *Not another style/palette pack. Compose with `ui-ux-pro-max` + `frontend-design`; this plugin owns the **pipeline and acceptance**.*
@@ -33,7 +33,7 @@ A Claude Code / Codex plugin. One predictable pass per run — **Design I/O**: `
 **Claude Code**
 
 ```text
-/plugin marketplace add <owner>/<repo>
+/plugin marketplace add https://github.com/Bandersnatch0x/design-playbook.git
 /plugin install design-playbook@design-playbook
 ```
 

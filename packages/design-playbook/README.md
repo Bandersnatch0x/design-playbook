@@ -9,7 +9,7 @@ Declarations + contracts — not a style CSV pack. Compose with [ui-ux-pro-max](
 Path of record (published) - the marketplace catalog lives at the **repo root**, not in this package:
 
 ```text
-/plugin marketplace add <owner>/<repo>
+/plugin marketplace add https://github.com/Bandersnatch0x/design-playbook.git
 /plugin install design-playbook@design-playbook
 ```
 

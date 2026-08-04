@@ -6,11 +6,11 @@
 
 ### *给 coding agent 的 Design I/O — 用声明 + 契约让 UI 生成可控、可验收、可回流。*
 
-[![Version](https://img.shields.io/badge/Version-0.9.2-2DD4BF?style=flat-square&logo=semver&logoColor=black)](.#)
+[![Version](https://img.shields.io/badge/Version-0.10.0-2DD4BF?style=flat-square&logo=semver&logoColor=black)](.#)
 [![License](https://img.shields.io/badge/License-MIT-2DD4BF?style=flat-square&logo=opensourceinitiative&logoColor=black)](./packages/design-playbook/LICENSE)
 [![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-2DD4BF?style=flat-square&logo=claude&logoColor=black)](.#)
 [![Skills](https://img.shields.io/badge/Skills-8-2DD4BF?style=flat-square)](.#)
-[![Commands](https://img.shields.io/badge/Commands-3-2DD4BF?style=flat-square)](.#)
+[![Commands](https://img.shields.io/badge/Commands-4-2DD4BF?style=flat-square)](.#)
 [![Codex](https://img.shields.io/badge/Codex-ready-2DD4BF?style=flat-square)](./packages/design-playbook/codex/AGENTS.md)
 
 *不是又一套风格/色板库。与 `ui-ux-pro-max` + `frontend-design` 互补；本插件管**链路与验收**。*
@@ -31,7 +31,7 @@ Claude Code / Codex 插件。每次跑同一条可预测链路 — **Design I/O*
 ## 📦 安装
 
 ```text
-/plugin marketplace add <owner>/<repo>
+/plugin marketplace add https://github.com/Bandersnatch0x/design-playbook.git
 /plugin install design-playbook@design-playbook
 ```
 
@@ -65,7 +65,7 @@ claude --plugin-dir <绝对路径>/packages/design-playbook      # 开发加载�
 | `native-craft` | 🖥️ 桌面原生手感声明 |
 | `ui-evaluator` | ✅ point-back 验收 + 回流 |
 
-**命令**：`design-io`（全链路）· `ux-spec`（只出 spec）· `ui-review`（只验收）
+**命令**：`design-io`（全链路）· `ux-spec`（只出 spec）· `ui-review`（只验收）· `run-review`（跨 run 复盘）
 
 ## 🔗 与生态组合
 

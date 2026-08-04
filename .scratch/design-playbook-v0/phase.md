@@ -70,5 +70,5 @@
 
 1. 3b community catalog：人工阻塞（region + 账号）
 
-**Package commands (ship):** design-io · ux-spec · ui-review
+**Package commands (ship):** design-io · ux-spec · ui-review · run-review
 **Monorepo commands (maintain):** product-next · product-grill · product-dogfood
