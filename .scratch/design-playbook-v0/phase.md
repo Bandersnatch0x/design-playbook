@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **v0.10.0 released**（2026-08-04，minor，run review；tag `aed0e87` on `main`；GitHub Release：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.10.0；npm `latest=0.10.0`，shasum `b4b9b3b`）。新增第四 command `run-review`：`run-review/v1` markdown 契约、真实 `validate_run.py` gate / `not checked` 分支、repeat-blocker 逐字频次表、禁止语义聚类与 baseline 回写；安装文档改显式 HTTPS。release gate、全套 CI 等价 suites、二次会话公共 marketplace + npm install smoke 全绿（8 skills、4 commands、2 MCP）。**渠道决策（ADR-0015，2026-08-03）：main = stable channel**——版本与可安装 inventory 恒等于最新正式发布；未发布能力留在 feature/release branch，经 release transaction（gate 全过 → 同一 commit 合 main + tag + 发布）才进 main。v0.9 范围圆桌决议（2026-08-02，`.scratch/v0.9-cycle/roundtable-synthesis.md`）：repeat_blockers 不断言化（入场券 = 首次真实 repeat>0 并闭环，届时落 release.py）；doctor 与 aggregate 保持独立。3b community catalog 仍 **BLOCKED**（region + 账号）。
+**Current:** **v0.10.0 released**（2026-08-04，minor，run review；tag `aed0e87` on `main`；GitHub Release：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.10.0；npm `latest=0.10.0`，shasum `b4b9b3b`）。新增第四 command `run-review`：`run-review/v1` markdown 契约、真实 `validate_run.py` gate / `not checked` 分支、repeat-blocker 逐字频次表、禁止语义聚类与 baseline 回写；安装文档改显式 HTTPS。release gate、全套 CI 等价 suites、二次会话公共 marketplace + npm install smoke 全绿（8 skills、4 commands、2 MCP）。**渠道决策（ADR-0015，2026-08-03）：main = stable channel**——版本与可安装 inventory 恒等于最新正式发布；未发布能力留在 feature/release branch，经 release transaction（gate 全过 → 同一 commit 合 main + tag + 发布）才进 main。v0.9 范围圆桌决议（2026-08-02，`.scratch/v0.9-cycle/roundtable-synthesis.md`）：repeat_blockers 不断言化（入场券 = 首次真实 repeat>0 并闭环，届时落 release.py）；doctor 与 aggregate 保持独立。3b community catalog 已刷新 v0.10.0 提交包，状态 **READY FOR HUMAN SUBMIT**；匿名 Console 入口现为 HTTP 200，最终认证/账号 gate 待人工。
 
 | Phase | Status |
 | --- | --- |
@@ -67,9 +67,9 @@
 
 - 圆桌决议落地并随 v0.10.0 发布：新 command `run-review`（第四 command，`.scratch/v0.10-run-review/` 四票全 resolved）。实现经 Orca 委托 grok worker（run `run_5bf575c510d8`），产物：`commands/run-review.md`（run-review/v1 契约 + 条件式 validate_run seam + repeat blocker 频次表 + 禁止块）、doctor GATE1 3→4、README/checklist/CI 同步、orchestrator pointer、`tests/test_normalize_lockstep.py`（shipped 文案 SSOT，aggregate_runs follower）。release commit/tag `aed0e87`；GitHub Release + npm + second-session install smoke 全绿。Fixed 素材已先行随 v0.9.1 patch 发出（2026-08-03）。
 
-## Still open（2026-07-25 刷新）
+## Still open（2026-08-04 刷新）
 
-1. 3b community catalog：人工阻塞（region + 账号）
+1. 3b community catalog：v0.10.0 提交包已刷新（`v0.4-cycle/community-catalog-checklist.md`）；agent-side gate 全绿，待可用认证账号人工提交表单并回填 ticket ID。
 
 **Package commands (ship):** design-io · ux-spec · ui-review · run-review
 **Monorepo commands (maintain):** product-next · product-grill · product-dogfood
