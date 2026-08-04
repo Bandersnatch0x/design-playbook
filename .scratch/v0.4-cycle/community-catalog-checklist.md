@@ -1,8 +1,8 @@
 # Community catalog submission checklist (`@claude-community`)
 
-**Status:** **READY FOR HUMAN SUBMIT — authenticated account required** (refreshed 2026-08-04).
+**Status:** **READY FOR HUMAN SUBMIT — PAUSED BY USER** (refreshed 2026-08-04).
 
-Package and public channels are ready. Agent-side checks are complete; final form authentication and POST remain human-only.
+Package and public channels are ready. Agent-side checks are complete; final form authentication and POST remain human-only. Distribution work is paused by user decision on 2026-08-04; resume from this file without rebuilding the submission pack unless a newer release has shipped.
 
 Submission pin: `aed0e87540278529b5c89160b52c21ff1e938c7b` (tag **v0.10.0**).
 Decision source: v0.4-cycle issue 03 Theme 3b; v0.9-cycle Q4 retained community distribution as the external-signal path after `run-review` shipped.
