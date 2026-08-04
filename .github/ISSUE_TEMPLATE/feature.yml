@@ -1,0 +1,51 @@
+name: ✨ Feature / design suggestion
+description: Propose a new skill, command, pipeline step, or vocabulary extension.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / gap
+      description: What Design I/O workflow is hard, missing, or ambiguous today?
+      placeholder: When doing X, there is no declaration for Y, so the evaluator has nothing to point back to.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Describe the new skill, command, declaration, or contract behavior. Include example input/output if possible.
+      placeholder: |
+        Add a `responsive-grid` declaration under `ux-spec` with ...
+        Example run artifact shape:
+        ```markdown
+        ## L?.?
+        ```
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which installable surface would change?
+      description: Product changes live only in `packages/design-playbook/`.
+      options:
+        - Skill
+        - Command
+        - MCP adapter
+        - Vocabulary / CONTEXT.md
+        - Workflow / docs
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      placeholder: Could this be solved by composing existing skills? Why not?
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked existing skills/commands in `packages/design-playbook/` and this is not already covered.
+          required: true

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 📖 Installation docs
+    url: https://github.com/Bandersnatch0x/design-playbook#-install
+    about: Check the README install section before filing an install issue.
+  - name: 🎬 Showcase
+    url: https://github.com/Bandersnatch0x/design-playbook/tree/main/packages/design-playbook/showcase
+    about: See a full Design I/O pass example.
