@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **v0.9.2 released**（2026-08-04，patch，release-identity marker，tag `4cfda8a` on `main`；GitHub Release：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.9.2；npm `latest=0.9.2`）。本版无可安装面变更（与 v0.9.1 逐字节一致，仅版本字段）；为 ADR-0015 stable-main 恢复 + repo 侧 gate 硬化落已发布标记（OPP-01 version↔inventory invariant 落 `scripts/_checks.py` 共享策略、OPP-21 distinct-run 计数、checklist gate-1 修正）；二次会话 install smoke（gate 5）PASS（公共 HTTPS marketplace + npm；Claude Code 2.1.220 的 `owner/repo` 简写选择 SSH，显式 HTTPS 文档修复列入 v0.10）。**渠道决策（ADR-0015，2026-08-03）：main = stable channel**——版本与可安装 inventory 恒等于最新正式发布；未发布能力留在 feature/release branch，经 release transaction（gate 全过 → 同一 commit 合 main + tag + 发布）才进 main。main 已由 corrective commit 恢复为 v0.9.1 inventory（3 commands、无 run-review）；v0.10 run-review 素材在 `feature/v0.10-run-review`（含 `.scratch/v0.10-run-review/` 决策记录）。v0.9 范围圆桌决议（2026-08-02，`.scratch/v0.9-cycle/roundtable-synthesis.md`）：repeat_blockers 不断言化（入场券 = 首次真实 repeat>0 并闭环，届时落 release.py）；doctor 与 aggregate 保持独立。3b community catalog 仍 **BLOCKED**（region + 账号）。
+**Current:** **v0.10.0 released**（2026-08-04，minor，run review；tag `aed0e87` on `main`；GitHub Release：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.10.0；npm `latest=0.10.0`，shasum `b4b9b3b`）。新增第四 command `run-review`：`run-review/v1` markdown 契约、真实 `validate_run.py` gate / `not checked` 分支、repeat-blocker 逐字频次表、禁止语义聚类与 baseline 回写；安装文档改显式 HTTPS。release gate、全套 CI 等价 suites、二次会话公共 marketplace + npm install smoke 全绿（8 skills、4 commands、2 MCP）。**渠道决策（ADR-0015，2026-08-03）：main = stable channel**——版本与可安装 inventory 恒等于最新正式发布；未发布能力留在 feature/release branch，经 release transaction（gate 全过 → 同一 commit 合 main + tag + 发布）才进 main。v0.9 范围圆桌决议（2026-08-02，`.scratch/v0.9-cycle/roundtable-synthesis.md`）：repeat_blockers 不断言化（入场券 = 首次真实 repeat>0 并闭环，届时落 release.py）；doctor 与 aggregate 保持独立。3b community catalog 仍 **BLOCKED**（region + 账号）。
 
 | Phase | Status |
 | --- | --- |
@@ -33,6 +33,7 @@
 | v0.9.1 release | done (v0.9.1, 2026-08-03; patch cut from `a3d754c` on `release/v0.9.1` excluding v0.10 run-review; Fixed: run-root WARNING narrowed + wait_for_state guidance; release gate PASSED; tag + GitHub Release + npm 0.9.1; isolated second-session tag marketplace install + public npm artifact smoke PASS: plugin 0.9.1, 8 skills, 3 commands, 2 MCP servers, strict validate + both `tools/list` green; public main marketplace had remained 0.9.0 pre-ADR-0015 — see channel-restore row) |
 | channel-restore (ADR-0015) | done (2026-08-03; stable main + gate-then-merge + stable docs 决策; main corrective commit 恢复 v0.9.1 inventory: 版本 0.9.1、3 commands、回补 release note; v0.10 run-review → `feature/v0.10-run-review`; OPP-01/OPP-21 tickets 落盘) |
 | v0.9.2 release | done (v0.9.2, 2026-08-04; release-identity marker: 零可安装面变更（与 v0.9.1 逐字节一致，仅版本字段），标记 channel-restore + OPP-01/OPP-21 gate 硬化; release gate PASSED + 全套本地 suites 绿; tag `4cfda8a` + GitHub Release + npm 0.9.2 (shasum `c4150e9`); 二次会话 install smoke PASS，证据见 `evidence/gate5-install-smoke-v0.9.2-2026-08-04/result.md`) |
+| v0.10.0 release | done (v0.10.0, 2026-08-04; fourth command `run-review` + `run-review/v1` markdown contract + normalize lockstep; explicit HTTPS install path; release commit/tag `aed0e87`; GitHub Release + npm latest 0.10.0 (shasum `b4b9b3b`); release gate + CI-equivalent suites + second-session public marketplace/npm smoke PASS，证据见 `evidence/gate5-install-smoke-v0.10.0-2026-08-04/result.md`) |
 
 ## v0 ship checklist (5/5 pass)
 
@@ -64,7 +65,7 @@
 
 ## v0.10 run review (2026-08-03)
 
-- 圆桌决议落地：新 command `run-review`（第四 command，`.scratch/v0.10-run-review/` 四票全 resolved）。实现经 Orca 委托 grok worker（run `run_5bf575c510d8`），产物：`commands/run-review.md`（run-review/v1 契约 + 条件式 validate_run seam + repeat blocker 频次表 + 禁止块）、doctor GATE1 3→4、README/checklist/CI 同步、orchestrator pointer、`tests/test_normalize_lockstep.py`（shipped 文案 SSOT，aggregate_runs follower）。gate 独立复核全绿。待发 v0.10.0（Fixed 素材已先行随 v0.9.1 patch 发出，2026-08-03）。
+- 圆桌决议落地并随 v0.10.0 发布：新 command `run-review`（第四 command，`.scratch/v0.10-run-review/` 四票全 resolved）。实现经 Orca 委托 grok worker（run `run_5bf575c510d8`），产物：`commands/run-review.md`（run-review/v1 契约 + 条件式 validate_run seam + repeat blocker 频次表 + 禁止块）、doctor GATE1 3→4、README/checklist/CI 同步、orchestrator pointer、`tests/test_normalize_lockstep.py`（shipped 文案 SSOT，aggregate_runs follower）。release commit/tag `aed0e87`；GitHub Release + npm + second-session install smoke 全绿。Fixed 素材已先行随 v0.9.1 patch 发出（2026-08-03）。
 
 ## Still open（2026-07-25 刷新）
 
