@@ -53,7 +53,7 @@ node scripts/screenshot-showcase.mjs   # repo-root script; needs playwright-core
 ## Reproduce in your session
 
 ```text
-/plugin marketplace add <owner>/<repo>
+/plugin marketplace add https://github.com/Bandersnatch0x/design-playbook.git
 /plugin install design-playbook@design-playbook
 /design-playbook:design-io 在 SwarSight 加一个模拟运行队列监控页
 ```
