@@ -34,6 +34,7 @@
 | channel-restore (ADR-0015) | done (2026-08-03; stable main + gate-then-merge + stable docs 决策; main corrective commit 恢复 v0.9.1 inventory: 版本 0.9.1、3 commands、回补 release note; v0.10 run-review → `feature/v0.10-run-review`; OPP-01/OPP-21 tickets 落盘) |
 | v0.9.2 release | done (v0.9.2, 2026-08-04; release-identity marker: 零可安装面变更（与 v0.9.1 逐字节一致，仅版本字段），标记 channel-restore + OPP-01/OPP-21 gate 硬化; release gate PASSED + 全套本地 suites 绿; tag `4cfda8a` + GitHub Release + npm 0.9.2 (shasum `c4150e9`); 二次会话 install smoke PASS，证据见 `evidence/gate5-install-smoke-v0.9.2-2026-08-04/result.md`) |
 | v0.10.0 release | done (v0.10.0, 2026-08-04; fourth command `run-review` + `run-review/v1` markdown contract + normalize lockstep; explicit HTTPS install path; release commit/tag `aed0e87`; GitHub Release + npm latest 0.10.0 (shasum `b4b9b3b`); release gate + CI-equivalent suites + second-session public marketplace/npm smoke PASS，证据见 `evidence/gate5-install-smoke-v0.10.0-2026-08-04/result.md`) |
+| install smoke automation | done (2026-08-04; `scripts/install_smoke.py`: isolated Claude install + exact inventory + strict validate + real MCP handshakes + clean npm consumer; JSON/Markdown evidence; 11 deterministic tests + live smoke PASS, temporary cleanup verified) |
 
 ## v0 ship checklist (5/5 pass)
 
