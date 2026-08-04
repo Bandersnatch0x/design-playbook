@@ -1,0 +1,77 @@
+name: 🧩 Installation / setup issue
+description: Marketplace install fails, plugin won't load, or CLI setup is unclear.
+labels: ["bug", "install"]
+body:
+  - type: dropdown
+    id: host
+    attributes:
+      label: Host
+      description: Which agent host are you installing into?
+      options:
+        - Claude Code
+        - Codex
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: host_version
+    attributes:
+      label: Host version
+      description: e.g. Claude Code 2.1.220
+      placeholder: Claude Code 2.1.220
+  - type: input
+    id: plugin_version
+    attributes:
+      label: Plugin / npm version
+      description: Version shown after install, or `npm view design-playbook dist-tags.latest`.
+      placeholder: 0.10.0
+  - type: dropdown
+    id: install_path
+    attributes:
+      label: Install path used
+      description: Which documented path did you follow?
+      options:
+        - HTTPS marketplace (`https://github.com/Bandersnatch0x/design-playbook.git`)
+        - SSH marketplace (`Bandersnatch0x/design-playbook`)
+        - npm / local dev (`--plugin-dir`)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should happen
+      placeholder: Plugin installs and `/design-playbook:design-io` is available.
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happens
+      placeholder: Command fails with an error, or plugin does not appear in installed plugins.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / output
+      description: Paste the command output, including any error messages. Redact sensitive paths.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`scripts/doctor.py` output"
+      description: If you cloned the repo, run `python scripts/doctor.py` and paste the output.
+  - type: input
+    id: os
+    attributes:
+      label: OS / environment
+      placeholder: Windows 11 / macOS 14 / Ubuntu 22.04
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      options:
+        - label: I read the README install section and tried the HTTPS marketplace path first.
+          required: true
+        - label: I redacted sensitive tokens / paths from the logs.
+          required: true

@@ -1,0 +1,62 @@
+name: 🐛 Run issue
+description: A Design I/O run produced wrong output, failed mid-run, or recirculated unexpectedly.
+labels: ["bug", "run"]
+body:
+  - type: input
+    id: command
+    attributes:
+      label: Command / skill used
+      description: e.g. `/design-playbook:design-io`, `/design-playbook:ui-review`
+      placeholder: /design-playbook:design-io
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Plugin version
+      placeholder: 0.10.0
+  - type: textarea
+    id: run_contract
+    attributes:
+      label: Run contract
+      description: The five controls you set before the run — Goal, Success, Evidence, Stop, Confirm.
+      placeholder: |
+        - Goal: generate a login form
+        - Success: responsive, accessible, matches reference
+        - Evidence: screenshots + HTML
+        - Stop: after 2 recirculate rounds
+        - Confirm: before writing Fill
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      placeholder: A responsive login form and a closed evidence ledger.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      placeholder: The evaluator flagged a false positive on L6.3 and recirculated indefinitely.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Install plugin via HTTPS marketplace
+        2. Run `/design-playbook:design-io build a login form`
+        3. ...
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: Artifact pointers
+      description: Paths under `.scratch/<run>/` that show the failure (spec, decision report, ledger, evidence manifest).
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      placeholder: Host version, OS, whether MCP preview/evidence adapters were present.

@@ -77,9 +77,7 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 
 ## Active effort
 
-- **v0.9 cross-run aggregate (grill done, to-tickets):** `.scratch/v0.9-cross-run-aggregate/` — `scripts/aggregate_runs.py` run rollup + repeat-blocker detection; JSON + markdown view; `run aggregate` / `repeat blocker` terms (CONTEXT glossary)
-- v0 polish: `.scratch/design-playbook-v0/phase.md` + `docs/agents/product-workflow.md`
-- **Elevate (wayfinder Clear → implement):** `.scratch/elevate-structure-install-skills/map.md` — structure/install/skill-workflow decisions **Clear**; implement tickets 01–05 landed, 06 release gate = human (remote/tag/smoke)
-- **Pipeline plan+preview (implement Clear):** `.scratch/pipeline-plan-preview/map.md` — skill 序列 + G5 + optional `packages/design-playbook-preview/` landed
-- **Criterion-addressable evidence (implement Clear):** `.scratch/criterion-addressable-evidence/map.md` — G6 + step 8 `(observe*)` + vocabulary + optional `packages/design-playbook-evidence/` (`execute_capture_plan`); dogfood 004 (manual) + 005 (live provider) + 007 (real Claude host, portable config) green
-- **Architecture review (2026-07-17):** `.scratch/architecture-review-20260717/map.md` — run-seam review; pre-release **zero code changes**
+- **v0.10.0 released (2026-08-04):** fourth command `run-review` + explicit HTTPS install docs; tag `aed0e87`, GitHub Release, npm `latest=0.10.0`. Evidence: `.scratch/design-playbook-v0/evidence/gate5-install-smoke-v0.10.0-2026-08-04/result.md`.
+- **Install smoke automation landed (2026-08-04):** `scripts/install_smoke.py` runs isolated marketplace install, exact inventory check, real MCP handshakes, npm consumer validation; `tests/test_install_smoke.py` has 11 deterministic tests; wired into `.github/workflows/ci.yml` and `docs/agents/release-checklist.md`.
+- **Distribution paused:** `@claude-community` catalog submission pack ready but paused by user decision. Resumption requires a human with an eligible Anthropic Console account at https://platform.claude.com/plugins/submit.
+- **No active feature cycle:** per ADR-0015, `main` stays equal to latest formal release (`0.10.0`). Next product version waits for external user signal or resolved distribution blocker.
