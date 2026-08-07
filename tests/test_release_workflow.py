@@ -74,6 +74,16 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("NODE_AUTH_TOKEN", self.workflow)
         self.assertNotIn("--provenance", self.workflow)
 
+    def test_setup_actions_use_node24_runtime(self) -> None:
+        self.assertEqual(
+            self.publish_steps["Setup Python"]["uses"],
+            "actions/setup-python@v7",
+        )
+        self.assertEqual(
+            self.publish_steps["Setup Node"]["uses"],
+            "actions/setup-node@v7",
+        )
+
     def test_public_state_matrix_is_enforced_before_publish(self) -> None:
         valid_cases = {
             ("push", False, False, False): "publish",
