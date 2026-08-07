@@ -135,9 +135,28 @@ The Design I/O run is a **declared, host-neutral contract** over plain-Markdown 
 
 Run artifacts land under `.scratch/<run>/` (`design-baseline/`, `plan.md`, `preview/`, `evidence/manifest.jsonl`, `point-back.md`); see the orchestrator skill for what lands when. That is where to look — and manually intervene — when a run stalls.
 
+### Stuck / resume
+
+```text
+python <pkg>/scripts/run_status.py .scratch/<run>          # text phases + next action
+python <pkg>/scripts/run_status.py .scratch/<run> --json   # machine-readable
+python <pkg>/scripts/run_status.py --list                  # newest runs under .scratch/
+```
+
+The status command reuses the packaged validator’s G5 confirm rules. It is part of the installed package — not monorepo-only tooling.
+
+### Doctor
+
+```text
+python <pkg>/scripts/doctor.py
+python <pkg>/scripts/doctor.py --json
+```
+
+One packaged diagnosis for interpreter, package surface, optional Playwright, and run-root configuration. Distinguishes `ok` / `degraded` / `broken` with repair actions.
+
 **Bundled MCP (v0.3+):** Preview (`mcp/preview/`) and Evidence (`mcp/evidence/`) runtimes ship inside this package and are registered by `.mcp.json` (`${CLAUDE_PLUGIN_ROOT}`). Sibling monorepo dirs remain compatibility launchers/docs. The orchestrator still **probes** MCP `tools/list` and skips `preview*` / `observe*` when tools are absent. Evidence provider writes artifacts only — never the manifest. **`DESIGN_PLAYBOOK_RUN_ROOT`:** default `"."` in `.mcp.json` is the **MCP process cwd**, not the chat workspace — for a host-app dogfood, set an **absolute** path to `.scratch/<run>/` (see [`mcp/evidence/README.md`](mcp/evidence/README.md)). Capture responses include `written_path` (absolute) so mis-rooted writes are visible without a filesystem search.
 
-What is **deterministically enforced** today: plugin install/structure (`scripts/validate.py`) and the run-artifact shape (`scripts/validate_run.py` — L1–L6 present; every top-level L6 item ordered `Given -> When -> Then`; one non-empty four-field evidence ledger row per `L6.<n>` with allowed results; four non-empty finding fields with non-empty source; exactly one explicit `## Verdict` of `Pass` or `Recirculate`; Pass requires every evidence result to be `pass` and exactly one issue-linked `0 blocking` closure per blocking finding; exit 0/`RUN OK`, exit 1/`RUN INVALID`, exit 2/`RUN ERROR`; regression-tested by `tests/test_validate_run.py`, which also validates the showcase artifacts directly; **G5** is a *conditional* preview-confirm gate — enforced only when preview artifacts exist / `--preview-dir` is used; **G6** is a *conditional* evidence-binding gate — enforced only when a ledger `observed` references an `evidence/` artifact / `--evidence-dir` is used; opt-in **strict mode** via `--require-preview` / `--require-evidence` / `--strict`). The `observe*` step probes MCP tool `execute_capture_plan` and is skipped when absent. Everything else in the pipeline is agent-executed craft judgment, not a machine gate.
+What is **deterministically enforced** today: repository install/structure CI checks and the run-artifact shape (`scripts/validate_run.py` — L1–L6 present; every top-level L6 item ordered `Given -> When -> Then`; one non-empty four-field evidence ledger row per `L6.<n>` with allowed results; four non-empty finding fields with non-empty source; exactly one explicit `## Verdict` of `Pass` or `Recirculate`; Pass requires every evidence result to be `pass` and exactly one issue-linked `0 blocking` closure per blocking finding; exit 0/`RUN OK`, exit 1/`RUN INVALID`, exit 2/`RUN ERROR`; regression-tested by `tests/test_validate_run.py`, which also validates the showcase artifacts directly; **G5** is a *conditional* preview-confirm gate — enforced only when preview artifacts exist / `--preview-dir` is used; **G6** is a *conditional* evidence-binding gate — enforced only when a ledger `observed` references an `evidence/` artifact / `--evidence-dir` is used; opt-in **strict mode** via `--require-preview` / `--require-evidence` / `--strict`). The `observe*` step probes MCP tool `execute_capture_plan` and is skipped when absent. Everything else in the pipeline is agent-executed craft judgment, not a machine gate.
 
 ## Codex
 

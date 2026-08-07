@@ -9,6 +9,8 @@ description: UI craft and feedback quality. Use when polishing product UI (motio
 
 When a verified design-baseline binding exists (`status: ready`), use that path as the project-specific visual baseline. Report clear divergence (density, type, spacing, shape, motion, or primitive treatment) to `ui-evaluator` with source set to the bound path; do not replace valid project choices with this skill's generic taste defaults.
 
+When a persistent contract v1 is bound for the run (`contract-bind.json` / `scripts/contract_v1.py`), honor decided visual/craft constraints from that contract and reject unknown contract schema versions. Do not invent page/component inheritance layers.
+
 ## Apply (checklist)
 
 Treat as exhaustive for the surface under edit.
@@ -42,7 +44,7 @@ Treat as exhaustive for the surface under edit.
 
 ### AI slop → target look
 
-For implemented UI, run all eight checks in [`references/detectors.md`](references/detectors.md) against rendered UI plus relevant source. Write exactly one `clear|hit|blocked` row per detector to `.scratch/<run>/craft-guard.md`. Detector output is advisory: record evidence, exception check, and positive fix; leave declaration source, severity, and verdict to `ui-evaluator`. Missing proof is `blocked`, not a silent clear.
+For implemented UI, enable detectors from the active spec/contract (or the full catalog when none is declared). Run enabled checks from [`references/detectors.md`](references/detectors.md) against rendered UI plus relevant source. Write exactly one `hit|clear|blocked|N/A` row per **enabled** detector to `.scratch/<run>/craft-guard.md`. **N/A requires an observable reason** (blank N/A is invalid). Unknown detector IDs fail at this stage. Detector output is advisory: record evidence, exception check, and positive fix; leave declaration source, severity, and verdict to `ui-evaluator`. Missing proof is `blocked`, not a silent clear.
 
 | Push toward | Instead of default sludge |
 | --- | --- |
