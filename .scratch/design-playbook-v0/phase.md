@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **v0.11.0 released**（2026-08-07，minor，local canvas versions；release commit/tag `34ef294` on `main`；GitHub Release：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.11.0；npm `latest=0.11.0`，shasum `04e2b75`）。新增 immutable named versions、`timeline()` / `state_at()` 历史回放、独立线性 `fork()` 与 anchor v2；preview 事务改为跨进程序列化、candidate-bound confirmation、append-only atomic replacement 与显式 committed/projection 失败语义。release gate、183 tests + 67 subtests、main CI、公共 marketplace + npm install smoke 全绿（8 skills、4 commands、2 MCP）。**渠道决策（ADR-0015，2026-08-03）：main = stable channel**——版本与可安装 inventory 恒等于最新正式发布；未发布能力留在 feature/release branch，经 release transaction（gate 全过 → 同一 commit 合 main + tag + 发布）才进 main。v0.9 范围圆桌决议（2026-08-02，`.scratch/v0.9-cycle/roundtable-synthesis.md`）：repeat_blockers 不断言化（入场券 = 首次真实 repeat>0 并闭环，届时落 release.py）；doctor 与 aggregate 保持独立。3b community catalog 状态仍为 **PAUSED BY USER**；恢复时需可用认证账号完成表单。
+**Current:** **v0.11.1 released**（2026-08-07，patch；commit/tag `d6e4d47` on `main`；GitHub Release：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.11.1；npm `latest=0.11.1`，shasum `291b036`，SLSA provenance verified）。GitHub Actions run `31196686506` 通过 OIDC Trusted Publishing 完成 npm 发布与 Release 创建；公开 marketplace + npm install smoke `retry1` 全绿（8 skills、4 commands、2 MCP）。本次同时修复 Canvas 新锚点延迟聚焦抢回用户焦点的问题。**渠道决策（ADR-0015）：main = stable channel**；community catalog 仍为 **PAUSED BY USER**。
 
 | Phase | Status |
 | --- | --- |
