@@ -24,6 +24,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from _diagnostics import Finding, finding
+
 
 def _round_from_name(name: str) -> int | None:
     """Extract the numeric round from a ``round-<n>.html`` or
@@ -146,7 +148,7 @@ def read_confirm_record(path: Path) -> tuple[Any | None, str | None]:
     return data, None
 
 
-def _g5_no_valid_reason(candidates: list[tuple[Path, dict]]) -> list[str]:
+def _g5_no_valid_reason(candidates: list[tuple[Path, dict]]) -> list[Finding]:
     """Attribute a G5 failure to its specific cause.
 
     ``is_confirmed_valid`` is the single judgment of validity (shared with
@@ -158,25 +160,45 @@ def _g5_no_valid_reason(candidates: list[tuple[Path, dict]]) -> list[str]:
         if data.get("confirmed") is True
     ]
     if not confirmed:
-        return [
+        return [finding(
+            "G5.no_confirmed",
             "G5 preview: preview occurred but no confirm-round-*.json with "
-            "confirmed=true"
-        ]
+            "confirmed=true",
+            owner="preview/",
+            expected="confirm-round-*.json with confirmed=true",
+            actual="no valid confirmed record in current round",
+            repair="Complete preview* HITL and write a confirmed confirm-round",
+        )]
     path, data = confirmed[0]
     if data.get("floor_pass") is not True:
         reason = data.get("floor_failure") or "no floor_pass=true"
-        return [
+        return [finding(
+            "G5.floor_fail",
             f"G5 preview: confirmed record {path.name} failed feedback floor: "
-            f"{reason}"
-        ]
+            f"{reason}",
+            owner=f"preview/{path.name}",
+            expected="floor_pass=true on confirmed record",
+            actual=str(reason),
+            repair="Revise with substantive feedback and re-confirm",
+        )]
     if data.get("aborted") is True:
-        return [
+        return [finding(
+            "G5.aborted",
             f"G5 preview: confirmed record {path.name} is aborted; an aborted "
-            f"round cannot satisfy the preview gate"
-        ]
-    return [
-        f"G5 preview: confirmed record {path.name} is not a valid confirm"
-    ]
+            f"round cannot satisfy the preview gate",
+            owner=f"preview/{path.name}",
+            expected="non-aborted confirmed record",
+            actual="aborted=true",
+            repair="Start a new preview round and confirm it",
+        )]
+    return [finding(
+        "G5.invalid_confirm",
+        f"G5 preview: confirmed record {path.name} is not a valid confirm",
+        owner=f"preview/{path.name}",
+        expected="confirmed=true and floor_pass=true",
+        actual=path.name,
+        repair="Rewrite confirm-round with a valid confirm payload",
+    )]
 
 
 def _prototype_target(data: dict, run_root: Path) -> Path | None:
@@ -218,7 +240,7 @@ def prototype_html_digest(raw: bytes) -> str:
     ).hexdigest()
 
 
-def _verify_prototype_hash(data: dict, run_root: Path) -> list[str]:
+def _verify_prototype_hash(data: dict, run_root: Path) -> list[Finding]:
     """Verify ``prototype_html_hash`` when the confirm record carries one.
 
     The hash is written by the trusted-side ``util.py`` as
@@ -232,20 +254,35 @@ def _verify_prototype_hash(data: dict, run_root: Path) -> list[str]:
     """
     stored = data.get("prototype_html_hash")
     if not isinstance(stored, str) or not stored:
-        return [
+        return [finding(
+            "G5.missing_hash",
             "G5 preview: confirmed record missing prototype_html_hash "
-            "(pre-0.4.4 record or hand-written — re-run preview*)"
-        ]
+            "(pre-0.4.4 record or hand-written — re-run preview*)",
+            owner="preview/",
+            expected="prototype_html_hash on confirmed record",
+            actual="missing",
+            repair="Re-run preview* so the adapter writes the hash",
+        )]
     target = _prototype_target(data, run_root)
     if target is None:
-        return [
+        return [finding(
+            "G5.missing_prototype",
             "G5 preview: confirmed record carries prototype_html_hash but "
-            "its prototype html is missing"
-        ]
+            "its prototype html is missing",
+            owner="preview/",
+            expected="preview/round-<n>.html on disk",
+            actual="prototype html missing or outside preview/",
+            repair="Restore the prototype html or re-run preview*",
+        )]
     digest = prototype_html_digest(target.read_bytes())
     if digest != stored:
-        return [
+        return [finding(
+            "G5.hash_mismatch",
             "G5 preview: confirmed record prototype_html_hash mismatch "
-            "(prototype altered after confirm)"
-        ]
+            "(prototype altered after confirm)",
+            owner=str(target.name),
+            expected=stored,
+            actual=digest,
+            repair="Re-confirm after prototype changes, or restore the confirmed html",
+        )]
     return []

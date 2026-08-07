@@ -25,8 +25,9 @@ Usage:
       [--preview-dir <path>] [--decision-report <path>]
       [--evidence-dir <path>] [--run-root <path>]
       [--require-preview] [--require-evidence] [--strict]
+      [--format text|json]
 Exit 0 + "RUN OK"; exit 1 + one line per artifact violation; exit 2 on usage
-or artifact I/O errors.
+or artifact I/O errors. JSON mode projects the same findings as a list.
 
 Strict quality mode (opt-in):
   --require-preview   fail when preview did not occur (G5 must fire)
@@ -40,6 +41,17 @@ import os
 import re
 import sys
 from pathlib import Path
+
+# Structured diagnostics (vNext ticket 02): one Finding model feeds text and
+# JSON projections. Rule IDs stay stable; text keeps historical messages.
+from _diagnostics import (
+    OUTPUT_FORMATS,
+    Finding,
+    finding,
+    render_json,
+    render_text,
+    usage_finding,
+)
 
 # G5 prototype-integrity helpers (issues 02 / 03) live in the sibling module
 # _preview_integrity.py (review H4: high-coherence split to bring this file
@@ -58,6 +70,11 @@ from _preview_integrity import (
     latest_numeric_round as latest_numeric_round,
     read_confirm_record as read_confirm_record,
 )
+
+try:
+    from g7_contract_drift import check_g7 as check_g7
+except ImportError:  # pragma: no cover - optional until package scripts co-locate
+    check_g7 = None  # type: ignore[assignment]
 
 SPEC_LAYERS = ["L1", "L2", "L3", "L4", "L5", "L6"]
 FINDING_FIELDS = ("issue", "source", "fix", "severity")
@@ -91,15 +108,29 @@ def _l6_items(text: str) -> list[str]:
     )]
 
 
-def check_spec(text: str) -> list[str]:
-    errs = []
+def check_spec(text: str) -> list[Finding]:
+    errs: list[Finding] = []
     for layer in SPEC_LAYERS:
         # heading like "## L6 验收标准" or "## L6"
         if not re.search(rf"^#+\s*{layer}\b", text, re.M):
-            errs.append(f"G1 spec: missing {layer}")
+            errs.append(finding(
+                "G1.missing_layer",
+                f"G1 spec: missing {layer}",
+                owner="spec.md",
+                expected=f"heading for {layer}",
+                actual="missing",
+                repair=f"Add a top-level {layer} section to the spec",
+            ))
     items = _l6_items(text)
     if not items:
-        errs.append("G1 spec: L6 has no top-level acceptance criteria")
+        errs.append(finding(
+            "G1.no_criteria",
+            "G1 spec: L6 has no top-level acceptance criteria",
+            owner="spec.md#L6",
+            expected=">=1 top-level L6 criterion",
+            actual="0",
+            repair="Add Given/When/Then acceptance criteria under L6",
+        ))
     for number, item in enumerate(items, 1):
         positions = {
             keyword: re.search(rf"\b{keyword}\b", item, re.I)
@@ -107,13 +138,25 @@ def check_spec(text: str) -> list[str]:
         }
         missing = [name for name, match in positions.items() if not match]
         if missing:
-            errs.append(
-                f"G1 spec: L6.{number} missing {', '.join(missing)}")
+            errs.append(finding(
+                "G1.missing_gwt",
+                f"G1 spec: L6.{number} missing {', '.join(missing)}",
+                owner=f"spec.md#L6.{number}",
+                expected="Given, When, Then present",
+                actual=f"missing {', '.join(missing)}",
+                repair=f"Complete Given/When/Then for L6.{number}",
+            ))
             continue
         if not (positions["Given"].start() < positions["When"].start() <
                 positions["Then"].start()):
-            errs.append(
-                f"G1 spec: L6.{number} must order Given -> When -> Then")
+            errs.append(finding(
+                "G1.gwt_order",
+                f"G1 spec: L6.{number} must order Given -> When -> Then",
+                owner=f"spec.md#L6.{number}",
+                expected="Given -> When -> Then order",
+                actual="out of order",
+                repair=f"Reorder keywords for L6.{number}",
+            ))
     return errs
 
 
@@ -144,38 +187,85 @@ def _evidence(text: str) -> list[dict[str, list[str]]]:
     return rows
 
 
-def _check_evidence(text: str, expected_l6: int, is_pass: bool) -> list[str]:
-    errs = []
+def _check_evidence(
+        text: str, expected_l6: int, is_pass: bool) -> list[Finding]:
+    errs: list[Finding] = []
     rows = _evidence(text)
     if not rows:
-        return ["G2 evidence: no criterion-shaped ledger entries"]
+        return [finding(
+            "G2.no_evidence_rows",
+            "G2 evidence: no criterion-shaped ledger entries",
+            owner="point-back.md#evidence",
+            expected="one evidence row per L6 criterion",
+            actual="0 rows",
+            repair="Add criterion/required/observed/result rows for each L6 item",
+        )]
 
     seen_l6: dict[int, int] = {}
     for i, row in enumerate(rows, 1):
         for field in EVIDENCE_FIELDS:
             values = row[field]
             if not values:
-                errs.append(f"G2 evidence: row {i} missing {field}:")
+                errs.append(finding(
+                    "G2.missing_field",
+                    f"G2 evidence: row {i} missing {field}:",
+                    owner=f"point-back.md#evidence.row{i}",
+                    expected=f"{field}: value",
+                    actual="missing",
+                    repair=f"Add {field}: on evidence row {i}",
+                ))
             elif not any(values):
-                errs.append(f"G2 evidence: row {i} has empty {field}")
+                errs.append(finding(
+                    "G2.empty_field",
+                    f"G2 evidence: row {i} has empty {field}",
+                    owner=f"point-back.md#evidence.row{i}",
+                    expected=f"non-empty {field}",
+                    actual="empty",
+                    repair=f"Fill {field} on evidence row {i}",
+                ))
             elif len(values) > 1:
-                errs.append(f"G2 evidence: row {i} repeats {field}:")
+                errs.append(finding(
+                    "G2.repeated_field",
+                    f"G2 evidence: row {i} repeats {field}:",
+                    owner=f"point-back.md#evidence.row{i}",
+                    expected=f"single {field}",
+                    actual=f"{len(values)} values",
+                    repair=f"Keep one {field} on evidence row {i}",
+                ))
 
         criterion = row["criterion"][0] if row["criterion"] else ""
         result = row["result"][0].casefold() if row["result"] else ""
         if result and result not in VALID_RESULTS:
-            errs.append(
-                f"G2 evidence: row {i} has invalid result '{row['result'][0]}'")
+            errs.append(finding(
+                "G2.invalid_result",
+                f"G2 evidence: row {i} has invalid result '{row['result'][0]}'",
+                owner=f"point-back.md#evidence.row{i}",
+                expected="pass|fail|blocked|n/a",
+                actual=row["result"][0],
+                repair=f"Set result on row {i} to an allowed value",
+            ))
         if is_pass and result and result != "pass":
-            errs.append(
+            errs.append(finding(
+                "G3.pass_requires_result",
                 f"G3 evidence: Pass requires row {i} result pass, got "
-                f"'{row['result'][0]}'")
+                f"'{row['result'][0]}'",
+                owner=f"point-back.md#evidence.row{i}",
+                expected="pass",
+                actual=row["result"][0],
+                repair="Change verdict to Recirculate or fix the failed evidence",
+            ))
 
         l6_ref = re.fullmatch(r"L6\.(\d+)", criterion.strip(), re.I)
         if not l6_ref and criterion:
-            errs.append(
+            errs.append(finding(
+                "G2.criterion_shape",
                 f"G2 evidence: row {i} criterion must be exactly L6.<n>, got "
-                f"'{criterion}'")
+                f"'{criterion}'",
+                owner=f"point-back.md#evidence.row{i}",
+                expected="L6.<n>",
+                actual=criterion,
+                repair=f"Set criterion on row {i} to L6.<n>",
+            ))
         elif l6_ref:
             number = int(l6_ref.group(1))
             seen_l6[number] = seen_l6.get(number, 0) + 1
@@ -183,11 +273,32 @@ def _check_evidence(text: str, expected_l6: int, is_pass: bool) -> list[str]:
     for number in range(1, expected_l6 + 1):
         count = seen_l6.get(number, 0)
         if count == 0:
-            errs.append(f"G2 evidence: missing ledger row for L6.{number}")
+            errs.append(finding(
+                "G2.missing_l6_row",
+                f"G2 evidence: missing ledger row for L6.{number}",
+                owner="point-back.md#evidence",
+                expected=f"row for L6.{number}",
+                actual="missing",
+                repair=f"Add an evidence row for L6.{number}",
+            ))
         elif count > 1:
-            errs.append(f"G2 evidence: repeated ledger rows for L6.{number}")
+            errs.append(finding(
+                "G2.repeated_l6_row",
+                f"G2 evidence: repeated ledger rows for L6.{number}",
+                owner="point-back.md#evidence",
+                expected="exactly one row",
+                actual=str(count),
+                repair=f"Keep a single evidence row for L6.{number}",
+            ))
     for number in sorted(set(seen_l6) - set(range(1, expected_l6 + 1))):
-        errs.append(f"G2 evidence: ledger references unknown L6.{number}")
+        errs.append(finding(
+            "G2.unknown_l6",
+            f"G2 evidence: ledger references unknown L6.{number}",
+            owner="point-back.md#evidence",
+            expected=f"L6.1..L6.{expected_l6}",
+            actual=f"L6.{number}",
+            repair="Remove the unknown L6 row or add the criterion to the spec",
+        ))
     return errs
 
 
@@ -195,12 +306,26 @@ def _normalise_issue(value: str) -> str:
     return " ".join(value.casefold().split())
 
 
-def _verdict(text: str) -> tuple[str | None, list[str]]:
+def _verdict(text: str) -> tuple[str | None, list[Finding]]:
     headings = list(re.finditer(r"^#+\s*Verdict\s*$", text, re.I | re.M))
     if not headings:
-        return None, ["G3 point-back: missing explicit Verdict section"]
+        return None, [finding(
+            "G3.missing_verdict",
+            "G3 point-back: missing explicit Verdict section",
+            owner="point-back.md#Verdict",
+            expected="## Verdict with Pass or Recirculate",
+            actual="missing",
+            repair="Add an explicit Verdict section",
+        )]
     if len(headings) > 1:
-        return None, ["G3 point-back: repeated Verdict section"]
+        return None, [finding(
+            "G3.repeated_verdict",
+            "G3 point-back: repeated Verdict section",
+            owner="point-back.md#Verdict",
+            expected="exactly one Verdict section",
+            actual=str(len(headings)),
+            repair="Keep a single Verdict section",
+        )]
 
     start = headings[0].end()
     next_heading = re.search(r"^#+\s+", text[start:], re.M)
@@ -210,40 +335,73 @@ def _verdict(text: str) -> tuple[str | None, list[str]]:
         r"^\s*(?:[-*]\s*)?\*{0,2}(Pass|Recirculate)\b",
         body, re.I | re.M)
     if len(values) != 1:
-        return None, [
+        return None, [finding(
+            "G3.verdict_count",
             "G3 point-back: Verdict section must contain exactly one "
-            "Pass or Recirculate verdict"]
+            "Pass or Recirculate verdict",
+            owner="point-back.md#Verdict",
+            expected="exactly one Pass or Recirculate",
+            actual=str(len(values)),
+            repair="State exactly one Pass or Recirculate verdict",
+        )]
     return values[0].casefold(), []
 
 
-def check_pointback(text: str, expected_l6: int) -> list[str]:
-    errs = []
-    findings = _findings(text)
+def check_pointback(text: str, expected_l6: int) -> list[Finding]:
+    errs: list[Finding] = []
+    pb_findings = _findings(text)
     verdict, verdict_errs = _verdict(text)
     errs += verdict_errs
     is_pass = verdict == "pass"
     errs += _check_evidence(text, expected_l6, is_pass)
-    if not findings:
+    if not pb_findings:
         if not is_pass:
-            errs.append("G3 point-back: no findings and no Pass verdict")
+            errs.append(finding(
+                "G3.no_findings_without_pass",
+                "G3 point-back: no findings and no Pass verdict",
+                owner="point-back.md",
+                expected="Pass verdict or at least one finding",
+                actual="no findings and not Pass",
+                repair="Set Verdict to Pass or record findings",
+            ))
         return errs
 
     blocking: list[tuple[int, str]] = []
-    for i, finding in enumerate(findings, 1):
+    for i, pb_finding in enumerate(pb_findings, 1):
         for field in FINDING_FIELDS:
-            values = finding[field]
+            values = pb_finding[field]
             if not values:
-                errs.append(f"G2 point-back: finding {i} missing {field}:")
+                errs.append(finding(
+                    "G2.finding_missing_field",
+                    f"G2 point-back: finding {i} missing {field}:",
+                    owner=f"point-back.md#finding.{i}",
+                    expected=f"{field}: value",
+                    actual="missing",
+                    repair=f"Add {field}: on finding {i}",
+                ))
             elif not any(values):
                 suffix = " (breaks routing)" if field == "source" else ""
-                errs.append(
-                    f"G2 point-back: finding {i} has empty {field}{suffix}")
+                errs.append(finding(
+                    "G2.finding_empty_field",
+                    f"G2 point-back: finding {i} has empty {field}{suffix}",
+                    owner=f"point-back.md#finding.{i}",
+                    expected=f"non-empty {field}",
+                    actual="empty",
+                    repair=f"Fill {field} on finding {i}",
+                ))
             elif len(values) > 1:
-                errs.append(f"G2 point-back: finding {i} repeats {field}:")
+                errs.append(finding(
+                    "G2.finding_repeated_field",
+                    f"G2 point-back: finding {i} repeats {field}:",
+                    owner=f"point-back.md#finding.{i}",
+                    expected=f"single {field}",
+                    actual=f"{len(values)} values",
+                    repair=f"Keep one {field} on finding {i}",
+                ))
 
-        severity = finding["severity"][0] if finding["severity"] else ""
+        severity = pb_finding["severity"][0] if pb_finding["severity"] else ""
         if re.search(r"(?<!non-)\bblocking\b", severity, re.I):
-            issue = finding["issue"][0] if finding["issue"] else ""
+            issue = pb_finding["issue"][0] if pb_finding["issue"] else ""
             blocking.append((i, issue))
 
     if is_pass and blocking:
@@ -251,25 +409,49 @@ def check_pointback(text: str, expected_l6: int) -> list[str]:
             _normalise_issue(target) for target in CLOSURE_LINE.findall(text)
         ]
         if not closure_targets:
-            errs.append(
-                "G4 point-back: Pass verdict but no '0 blocking' closure trail")
+            errs.append(finding(
+                "G4.missing_closure_trail",
+                "G4 point-back: Pass verdict but no '0 blocking' closure trail",
+                owner="point-back.md#closure",
+                expected="closes: <issue> -> 0 blocking",
+                actual="missing",
+                repair="Record a 0-blocking closure for each blocking finding",
+            ))
         else:
             known_targets = {_normalise_issue(issue) for _, issue in blocking}
             for i, issue in blocking:
                 target = _normalise_issue(issue)
                 matches = closure_targets.count(target)
                 if matches == 0:
-                    errs.append(
+                    errs.append(finding(
+                        "G4.unmatched_closure",
                         f"G4 point-back: blocking finding {i} has no matching "
-                        f"closure trail for issue '{issue}'")
+                        f"closure trail for issue '{issue}'",
+                        owner=f"point-back.md#finding.{i}",
+                        expected=f"closes: {issue} -> 0 blocking",
+                        actual="no matching closure",
+                        repair=f"Add a closure trail for issue '{issue}'",
+                    ))
                 elif matches > 1:
-                    errs.append(
+                    errs.append(finding(
+                        "G4.duplicate_closure",
                         f"G4 point-back: blocking finding {i} has {matches} "
-                        f"matching closure trails for issue '{issue}'")
+                        f"matching closure trails for issue '{issue}'",
+                        owner=f"point-back.md#finding.{i}",
+                        expected="exactly one matching closure",
+                        actual=str(matches),
+                        repair=f"Keep one closure trail for issue '{issue}'",
+                    ))
             for target in sorted(set(closure_targets) - known_targets):
-                errs.append(
+                errs.append(finding(
+                    "G4.orphan_closure",
                     "G4 point-back: closure trail targets no blocking finding: "
-                    f"'{target}'")
+                    f"'{target}'",
+                    owner="point-back.md#closure",
+                    expected="closure targets a blocking finding issue",
+                    actual=target,
+                    repair="Remove the orphan closure or restore the finding",
+                ))
     return errs
 
 
@@ -352,7 +534,7 @@ def _resolve_report_ref(
 
 def check_preview(
         preview_dir: Path | None,
-        decision_report: Path | None) -> list[str]:
+        decision_report: Path | None) -> list[Finding]:
     """G5 conditional preview confirmation gate.
 
     A preview run is satisfied only by a *current* confirmed record: the
@@ -370,16 +552,37 @@ def check_preview(
     try:
         entries = list(preview_dir.iterdir())
     except OSError as exc:
-        return [f"G5 preview: cannot read preview dir: {exc}"]
+        return [finding(
+            "G5.preview_unreadable",
+            f"G5 preview: cannot read preview dir: {exc}",
+            owner="preview/",
+            expected="readable preview directory",
+            actual=str(exc),
+            repair="Fix preview directory permissions or path",
+        )]
 
     for path in entries:
         if not path.is_file() or not CONFIRM_JSON.match(path.name):
             continue
         data, err = read_confirm_record(path)
         if err is not None:
-            return [f"G5 preview: {err}"]
+            return [finding(
+                "G5.invalid_confirm_record",
+                f"G5 preview: {err}",
+                owner=f"preview/{path.name}",
+                expected="valid confirm-round JSON object",
+                actual=err,
+                repair="Rewrite the confirm record as valid JSON",
+            )]
         if not isinstance(data, dict):
-            return [f"G5 preview: confirm record {path.name} is not an object"]
+            return [finding(
+                "G5.confirm_not_object",
+                f"G5 preview: confirm record {path.name} is not an object",
+                owner=f"preview/{path.name}",
+                expected="JSON object",
+                actual=type(data).__name__,
+                repair="Rewrite confirm-round as a JSON object",
+            )]
         confirms.append((path, data))
 
     run_root = preview_dir.parent
@@ -395,15 +598,25 @@ def check_preview(
 
     if not current:
         if latest is not None:
-            return [
+            return [finding(
+                "G5.stale_round",
                 f"G5 preview: latest round {latest} has no "
                 f"confirm-round-{latest}.json (stale confirmation; only an "
-                f"older round may be confirmed)"
-            ]
-        return [
+                f"older round may be confirmed)",
+                owner="preview/",
+                expected=f"confirm-round-{latest}.json",
+                actual="stale older confirm only",
+                repair=f"Confirm the latest round ({latest})",
+            )]
+        return [finding(
+            "G5.no_confirmed",
             "G5 preview: preview occurred but no confirm-round-*.json with "
-            "confirmed=true"
-        ]
+            "confirmed=true",
+            owner="preview/",
+            expected="confirm-round-*.json with confirmed=true",
+            actual="none",
+            repair="Complete preview* HITL and write a confirmed confirm-round",
+        )]
 
     # G5 validity uses the single judgment shared with run_status
     # (is_confirmed_valid). When no record is valid, attribute the failure to
@@ -428,12 +641,24 @@ def check_preview(
         try:
             wanted = decision_report.resolve()
         except OSError as exc:
-            return [f"G5 preview: cannot resolve --decision-report: {exc}"]
+            return [finding(
+                "G5.decision_report_unresolvable",
+                f"G5 preview: cannot resolve --decision-report: {exc}",
+                owner="--decision-report",
+                expected="resolvable decision report path",
+                actual=str(exc),
+                repair="Pass a resolvable --decision-report path",
+            )]
         if not wanted.is_file():
-            return [
+            return [finding(
+                "G5.decision_report_missing",
                 f"G5 preview: --decision-report does not exist: "
-                f"{decision_report}"
-            ]
+                f"{decision_report}",
+                owner="--decision-report",
+                expected="existing decision report file",
+                actual=str(decision_report),
+                repair="Create the decision report or fix the path",
+            )]
 
     for path, data in true_confirms:
         ref = data.get("report_ref")
@@ -446,14 +671,24 @@ def check_preview(
             return []
 
     if wanted is not None:
-        return [
+        return [finding(
+            "G5.report_ref_mismatch",
             "G5 preview: no confirmed record whose report_ref matches "
-            f"--decision-report ({wanted.name})"
-        ]
-    return [
+            f"--decision-report ({wanted.name})",
+            owner="preview/",
+            expected=f"report_ref resolving to {wanted.name}",
+            actual="no matching confirmed record",
+            repair="Confirm against the current decision report",
+        )]
+    return [finding(
+        "G5.report_ref_unresolved",
         "G5 preview: confirmed record report_ref does not resolve to an "
-        "existing decision report"
-    ]
+        "existing decision report",
+        owner="preview/",
+        expected="report_ref to an existing decision report",
+        actual="unresolved report_ref",
+        repair="Fix report_ref or restore the decision report file",
+    )]
 
 
 EVIDENCE_PREFIX = "evidence/"
@@ -507,7 +742,7 @@ def check_evidence(
         pointback_text: str,
         expected_l6: int,
         evidence_dir: Path | None,
-        run_root: Path | None) -> list[str]:
+        run_root: Path | None) -> list[Finding]:
     """G6 conditional evidence-binding gate.
 
     Triggers only when a ledger ``observed`` references an ``evidence/``
@@ -523,7 +758,7 @@ def check_evidence(
     valid_criterion_ids = {f"L6.{n}" for n in range(1, expected_l6 + 1)}
     evidence_root = (root / "evidence").resolve()
 
-    errs: list[str] = []
+    errs: list[Finding] = []
     for criterion, observed in _ledger_observed(pointback_text):
         # LOW-3: case-insensitive prefix. The write boundary treats paths
         # case-insensitively on case-insensitive filesystems (Windows), so
@@ -545,23 +780,41 @@ def check_evidence(
         # which under the new Codex manifest could overwrite spec / source).
         observed_path = Path(canonical)
         if observed_path.is_absolute() or ".." in observed_path.parts:
-            errs.append(
+            errs.append(finding(
+                "G6.escape",
                 f"G6 evidence: {criterion} observed escapes evidence/ "
-                f"subtree: {observed}")
+                f"subtree: {observed}",
+                owner=f"point-back.md#{criterion}",
+                expected="observed path inside evidence/",
+                actual=observed,
+                repair="Point observed at an artifact under evidence/",
+            ))
             continue
         try:
             resolved = (root / canonical).resolve()
         except OSError:
-            errs.append(
+            errs.append(finding(
+                "G6.escape",
                 f"G6 evidence: {criterion} observed escapes evidence/ "
-                f"subtree: {observed}")
+                f"subtree: {observed}",
+                owner=f"point-back.md#{criterion}",
+                expected="observed path inside evidence/",
+                actual=observed,
+                repair="Point observed at an artifact under evidence/",
+            ))
             continue
         try:
             resolved.relative_to(evidence_root)
         except ValueError:
-            errs.append(
+            errs.append(finding(
+                "G6.escape",
                 f"G6 evidence: {criterion} observed escapes evidence/ "
-                f"subtree: {observed}")
+                f"subtree: {observed}",
+                owner=f"point-back.md#{criterion}",
+                expected="observed path inside evidence/",
+                actual=observed,
+                repair="Point observed at an artifact under evidence/",
+            ))
             continue
         # M6: defence in depth — mirror evidence/server.py
         # _resolve_artifact_path. ``Path.resolve`` and ``os.path.realpath``
@@ -572,13 +825,25 @@ def check_evidence(
             Path(os.path.realpath(resolved)).relative_to(
                 os.path.realpath(evidence_root))
         except ValueError:
-            errs.append(
+            errs.append(finding(
+                "G6.escape",
                 f"G6 evidence: {criterion} observed escapes evidence/ "
-                f"subtree: {observed}")
+                f"subtree: {observed}",
+                owner=f"point-back.md#{criterion}",
+                expected="observed path inside evidence/",
+                actual=observed,
+                repair="Point observed at an artifact under evidence/",
+            ))
             continue
         if not resolved.is_file():
-            errs.append(
-                f"G6 evidence: {criterion} artifact missing: {observed}")
+            errs.append(finding(
+                "G6.artifact_missing",
+                f"G6 evidence: {criterion} artifact missing: {observed}",
+                owner=f"evidence/{leaf}",
+                expected="artifact file on disk",
+                actual="missing",
+                repair=f"Capture or restore {observed}",
+            ))
             continue
         # ledger observed is run-root-relative ("evidence/<name>"); manifest
         # artifact is evidence/-relative ("<name>", no prefix) per ticket 01.
@@ -603,25 +868,77 @@ def check_evidence(
             ]
             if unknown:
                 crit = unknown[0].get("criterion")
-                errs.append(
-                    f"G6 evidence: manifest binds unknown criterion {crit}")
+                errs.append(finding(
+                    "G6.unknown_criterion",
+                    f"G6 evidence: manifest binds unknown criterion {crit}",
+                    owner="evidence/manifest.jsonl",
+                    expected=f"criterion in L6.1..L6.{expected_l6}",
+                    actual=str(crit),
+                    repair="Bind the artifact to a declared L6 criterion",
+                ))
             else:
-                errs.append(
+                errs.append(finding(
+                    "G6.no_binding",
                     f"G6 evidence: {criterion} no manifest entry binding "
-                    f"{observed}")
+                    f"{observed}",
+                    owner="evidence/manifest.jsonl",
+                    expected=f"manifest entry for {criterion} -> {leaf}",
+                    actual="no binding",
+                    repair="Append a manifest line binding criterion and artifact",
+                ))
             continue
         latest = max(bound, key=lambda m: m.get("ts", ""))
         if latest.get("criterion") not in valid_criterion_ids:
-            errs.append(
+            errs.append(finding(
+                "G6.unknown_criterion",
                 f"G6 evidence: manifest binds unknown criterion "
-                f"{latest.get('criterion')}")
+                f"{latest.get('criterion')}",
+                owner="evidence/manifest.jsonl",
+                expected=f"criterion in L6.1..L6.{expected_l6}",
+                actual=str(latest.get("criterion")),
+                repair="Bind the artifact to a declared L6 criterion",
+            ))
             continue
-        # artifact exists + bound -> valid; observed_state/result are the
-        # evaluator's call, not G6's.
+        # Capture contract v1 (ADR-0018): bound evidence must embed schemaVersion=1
+        # plus viewport. Unversioned rows have no compatibility reader — recapture.
+        capture = latest.get("capture") if isinstance(latest.get("capture"), dict) else {}
+        request = latest.get("request")
+        if not isinstance(request, dict):
+            request = capture.get("request") if isinstance(capture.get("request"), dict) else {}
+        version = None
+        if isinstance(request, dict):
+            version = request.get("schemaVersion")
+        if version is None and isinstance(capture, dict):
+            version = capture.get("schemaVersion")
+        if version != 1:
+            errs.append(finding(
+                "G6.capture_schema",
+                f"G6 evidence: {criterion} capture missing schemaVersion=1 "
+                f"(got {version!r}); recapture with capture contract v1",
+                owner="evidence/manifest.jsonl",
+                expected="schemaVersion=1 with viewport on the bound entry",
+                actual=repr(version),
+                repair="Recapture the artifact with execute_capture_plan schemaVersion=1",
+            ))
+            continue
+        viewport = request.get("viewport") if isinstance(request, dict) else None
+        if not isinstance(viewport, dict):
+            errs.append(finding(
+                "G6.capture_viewport",
+                f"G6 evidence: {criterion} capture missing viewport snapshot; "
+                "recapture with capture contract v1",
+                owner="evidence/manifest.jsonl",
+                expected="viewport width/height/devicePixelRatio/colorScheme",
+                actual="missing",
+                repair="Recapture and embed the provider request snapshot",
+            ))
+            continue
+        # artifact exists + bound + capture contract v1 -> valid; result is
+        # the evaluator's call, not G6's.
     return errs
 
 
-def check_manifest_ts_warnings(evidence_dir: Path | None) -> list[str]:
+def check_manifest_ts_warnings(evidence_dir: Path | None) -> list[Finding]:
     """Soft signal: all manifest rows share one ``ts`` (likely batch bind).
 
     Not a hard gate — root fix is orchestrator per-capture append (SKILL step 8).
@@ -641,12 +958,59 @@ def check_manifest_ts_warnings(evidence_dir: Path | None) -> list[str]:
     if len(ts_vals) < 2:
         return []
     if len(set(ts_vals)) == 1:
-        return [
+        return [finding(
+            "G6.batch_ts",
             "G6 evidence: all manifest entries share one ts "
             f"({ts_vals[0]}); prefer per-capture append "
-            "(batch bind weakens multi-entry latest-by-ts)"
-        ]
+            "(batch bind weakens multi-entry latest-by-ts)",
+            owner="evidence/manifest.jsonl",
+            expected="distinct per-capture timestamps",
+            actual=ts_vals[0],
+            repair="Append manifest entries at capture time, not in batch",
+            severity="warning",
+        )]
     return []
+
+
+def check_superseded_ledger_warnings(
+        pointback_text: str,
+        evidence_dir: Path | None) -> list[Finding]:
+    """Warn when a ledger cites an artifact that is not the latest binding."""
+    if evidence_dir is None or not evidence_dir.is_dir():
+        return []
+    entries = _manifest_entries(evidence_dir)
+    if not entries:
+        return []
+    # Latest artifact per criterion by ts.
+    latest_by_crit: dict[str, str] = {}
+    for crit in {e.get("criterion") for e in entries if isinstance(e.get("criterion"), str)}:
+        candidates = [
+            e for e in entries
+            if e.get("criterion") == crit and isinstance(e.get("artifact"), str)
+        ]
+        if not candidates:
+            continue
+        latest = max(candidates, key=lambda m: m.get("ts", ""))
+        latest_by_crit[crit] = latest["artifact"]
+
+    warns: list[Finding] = []
+    for criterion, observed in _ledger_observed(pointback_text):
+        if not observed.casefold().startswith(EVIDENCE_PREFIX):
+            continue
+        leaf = observed[len(EVIDENCE_PREFIX):]
+        current = latest_by_crit.get(criterion)
+        if current and leaf != current:
+            warns.append(finding(
+                "G6.superseded_artifact",
+                f"G6 evidence: {criterion} ledger cites {observed} but latest "
+                f"manifest binding is evidence/{current}",
+                owner=f"point-back.md#{criterion}",
+                expected=f"evidence/{current}",
+                actual=observed,
+                repair="Update the ledger to the current artifact or recapture",
+                severity="warning",
+            ))
+    return warns
 
 
 def _ledger_has_evidence_binding(pointback_text: str) -> bool:
@@ -665,10 +1029,12 @@ def run(
         evidence_dir: str | None = None,
         run_root: str | None = None,
         require_preview: bool = False,
-        require_evidence: bool = False) -> tuple[list[str], list[str]]:
+        require_evidence: bool = False,
+        contract_project: str | None = None,
+        contract_run: str | None = None) -> tuple[list[Finding], list[Finding]]:
     """Return ``(errors, warnings)``. Errors fail the run; warnings do not."""
-    errs: list[str] = []
-    warns: list[str] = []
+    errs: list[Finding] = []
+    warns: list[Finding] = []
     spec_text = Path(spec_path).read_text(encoding="utf-8")
     pointback_text = Path(pb_path).read_text(encoding="utf-8")
     errs += check_spec(spec_text)
@@ -676,26 +1042,54 @@ def run(
     pd = Path(preview_dir) if preview_dir else None
     dr = Path(decision_report) if decision_report else None
     if require_preview and not preview_occurred(pd):
-        errs.append(
+        errs.append(finding(
+            "G5.require_preview",
             "G5 preview: --require-preview set but preview did not occur "
-            "(pass --preview-dir with preview artifacts)"
-        )
+            "(pass --preview-dir with preview artifacts)",
+            owner="--require-preview",
+            expected="preview artifacts present",
+            actual="preview did not occur",
+            repair="Pass --preview-dir with preview artifacts or drop the flag",
+        ))
     errs += check_preview(pd, dr)
     ed = Path(evidence_dir) if evidence_dir else None
     rr = Path(run_root) if run_root else None
     if require_evidence:
         if ed is None or not ed.is_dir():
-            errs.append(
+            errs.append(finding(
+                "G6.require_evidence_dir",
                 "G6 evidence: --require-evidence set but --evidence-dir "
-                "is missing or not a directory"
-            )
+                "is missing or not a directory",
+                owner="--require-evidence",
+                expected="existing --evidence-dir",
+                actual="missing or not a directory",
+                repair="Pass --evidence-dir to a real evidence directory",
+            ))
         elif not _ledger_has_evidence_binding(pointback_text):
-            errs.append(
+            errs.append(finding(
+                "G6.require_evidence_binding",
                 "G6 evidence: --require-evidence set but no ledger "
-                "`observed` references an evidence/ artifact"
-            )
+                "`observed` references an evidence/ artifact",
+                owner="point-back.md#evidence",
+                expected="at least one observed: evidence/… row",
+                actual="no evidence/ binding",
+                repair="Bind at least one L6 criterion to an evidence artifact",
+            ))
     errs += check_evidence(pointback_text, len(_l6_items(spec_text)), ed, rr)
     warns += check_manifest_ts_warnings(ed)
+    warns += check_superseded_ledger_warnings(pointback_text, ed)
+    if contract_project and contract_run:
+        if check_g7 is None:
+            errs.append(finding(
+                "G7.missing_binding",
+                "G7 contract: g7_contract_drift module unavailable",
+                owner="validate_run.py",
+                expected="packaged g7_contract_drift.py",
+                actual="import failed",
+                repair="Install the design-playbook scripts package intact",
+            ))
+        else:
+            errs += check_g7(Path(contract_project), Path(contract_run))
     return errs, warns
 
 
@@ -742,6 +1136,22 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="shorthand for --require-preview --require-evidence",
     )
+    parser.add_argument(
+        "--format",
+        default="text",
+        dest="output_format",
+        help="output projection: text (default) or json",
+    )
+    parser.add_argument(
+        "--contract-project",
+        default=None,
+        help="optional project dir containing contract.json for G7",
+    )
+    parser.add_argument(
+        "--contract-run",
+        default=None,
+        help="optional run dir containing contract-bind.json for G7",
+    )
     args = parser.parse_args(argv[1:])
     if args.strict:
         args.require_preview = True
@@ -756,6 +1166,15 @@ def main(argv: list[str]) -> int:
         # argparse already printed usage
         code = exc.code if isinstance(exc.code, int) else 2
         return code if code else 2
+
+    fmt = (args.output_format or "text").casefold()
+    if fmt not in OUTPUT_FORMATS:
+        bad = usage_finding(
+            f"unknown --format {args.output_format!r}; expected text or json"
+        )
+        print(f"RUN ERROR: {bad.message}")
+        return 2
+
     try:
         errs, warns = run(
             args.spec,
@@ -766,21 +1185,28 @@ def main(argv: list[str]) -> int:
             run_root=args.run_root,
             require_preview=args.require_preview,
             require_evidence=args.require_evidence,
+            contract_project=args.contract_project,
+            contract_run=args.contract_run,
         )
     except (OSError, UnicodeError) as exc:
-        print(f"RUN ERROR: cannot read artifacts: {exc}")
+        if fmt == "json":
+            print(render_json([finding(
+                "USAGE.io_error",
+                f"cannot read artifacts: {exc}",
+                owner="validate_run.py",
+                expected="readable spec and point-back paths",
+                actual=str(exc),
+                repair="Fix paths or file encodings",
+            )], []))
+        else:
+            print(f"RUN ERROR: cannot read artifacts: {exc}")
         return 2
-    if errs:
-        print("RUN INVALID:")
-        for e in errs:
-            print(f"  FAIL  {e}")
-        for w in warns:
-            print(f"  WARN  {w}")
-        return 1
-    print("RUN OK: artifacts satisfy the deterministic seam")
-    for w in warns:
-        print(f"  WARN  {w}")
-    return 0
+
+    if fmt == "json":
+        print(render_json(errs, warns), end="")
+    else:
+        print(render_text(errs, warns), end="")
+    return 1 if errs else 0
 
 
 if __name__ == "__main__":

@@ -759,6 +759,192 @@ def main() -> int:
     else:
         print("  ok    strict --require-preview passes with confirmed preview")
 
+    # --- Structured diagnostics (vNext ticket 02) ---
+    # JSON/text projections share one finding model: rule_id, severity, owner,
+    # expected, actual, repair. Text keeps historical message substrings.
+    required_json_fields = (
+        "rule_id", "severity", "owner", "expected", "actual", "repair", "message")
+    structured_cases = [
+        (
+            "G1",
+            FAIL / "g1-missing-when.spec.md",
+            FAIL / "g1-spec-no-criteria.point-back.md",
+            (),
+            "G1.",
+        ),
+        (
+            "G2",
+            PASS / "zero-findings.spec.md",
+            FAIL / "g2-missing-evidence.point-back.md",
+            (),
+            "G2.",
+        ),
+        (
+            "G3",
+            PASS / "zero-findings.spec.md",
+            FAIL / "g3-missing-verdict.point-back.md",
+            (),
+            "G3.",
+        ),
+        (
+            "G4",
+            FAIL / "g4-underloop.spec.md",
+            FAIL / "g4-underloop.point-back.md",
+            (),
+            "G4.",
+        ),
+        (
+            "G5",
+            PASS / "zero-findings.spec.md",
+            PASS / "zero-findings.point-back.md",
+            tuple(_g5_args(FAIL / "g5-preview-without-confirm")),
+            "G5.",
+        ),
+        (
+            "G6",
+            PASS / "zero-findings.spec.md",
+            FAIL / "g6-missing-artifact" / "point-back.md",
+            tuple(_g6_args(FAIL / "g6-missing-artifact")),
+            "G6.",
+        ),
+    ]
+    for gate, spec, pointback, extra, prefix in structured_cases:
+        text_result = run(spec, pointback, *extra)
+        json_result = run(spec, pointback, "--format", "json", *extra)
+        if text_result.returncode != 1:
+            failures.append(
+                f"structured/{gate}/text: expected exit 1, got "
+                f"{text_result.returncode}; stdout={text_result.stdout!r}")
+            continue
+        if json_result.returncode != 1:
+            failures.append(
+                f"structured/{gate}/json: expected exit 1, got "
+                f"{json_result.returncode}; stdout={json_result.stdout!r}")
+            continue
+        try:
+            payload = json.loads(json_result.stdout)
+        except json.JSONDecodeError as exc:
+            failures.append(f"structured/{gate}/json: invalid JSON: {exc}")
+            continue
+        if not isinstance(payload, list) or not payload:
+            failures.append(
+                f"structured/{gate}/json: expected non-empty list, got "
+                f"{payload!r}")
+            continue
+        first = payload[0]
+        missing = [key for key in required_json_fields if key not in first]
+        if missing:
+            failures.append(
+                f"structured/{gate}/json: missing fields {missing} in {first!r}")
+            continue
+        if not str(first.get("rule_id", "")).startswith(prefix):
+            failures.append(
+                f"structured/{gate}/json: rule_id {first.get('rule_id')!r} "
+                f"does not start with {prefix!r}")
+            continue
+        if first.get("severity") != "error":
+            failures.append(
+                f"structured/{gate}/json: severity must be error for "
+                f"artifact failures, got {first.get('severity')!r}")
+            continue
+        if first.get("message") not in text_result.stdout:
+            failures.append(
+                f"structured/{gate}: text projection missing JSON message "
+                f"{first.get('message')!r}")
+            continue
+        print(f"  ok    structured/{gate} text+json share rule {first['rule_id']}")
+
+    unknown_fmt = run(
+        PASS / "zero-findings.spec.md",
+        PASS / "zero-findings.point-back.md",
+        "--format", "sarif",
+    )
+    if unknown_fmt.returncode != 2 or "unknown --format" not in unknown_fmt.stdout:
+        failures.append(
+            "structured/unknown-format: expected exit 2 with usage diagnostic; "
+            f"got {unknown_fmt.returncode} {unknown_fmt.stdout!r}")
+    else:
+        print("  ok    structured/unknown-format exits 2")
+
+    # Warnings must not flip a structurally valid run to exit 1.
+    with tempfile.TemporaryDirectory() as tmp:
+        run_root = Path(tmp)
+        evidence = run_root / "evidence"
+        artifact = evidence / "L6.1.png"
+        _write_text(artifact, "png")
+        shared_ts = "2026-07-21T00:00:00+08:00"
+        capture_request = {
+            "schemaVersion": 1,
+            "viewport": {
+                "width": 1280,
+                "height": 800,
+                "devicePixelRatio": 1.0,
+                "colorScheme": "light",
+            },
+            "freeze": {
+                "enabled": True,
+                "waitFonts": True,
+                "networkIdle": False,
+            },
+        }
+        _write_text(
+            evidence / "manifest.jsonl",
+            "\n".join(
+                json.dumps({
+                    "criterion": "L6.1",
+                    "artifact": "L6.1.png",
+                    "ts": shared_ts,
+                    "request": capture_request,
+                    "capture": {
+                        "type": "screenshot",
+                        "schemaVersion": 1,
+                        "request": capture_request,
+                    },
+                })
+                for _ in range(2)
+            ) + "\n",
+        )
+        pb = run_root / "point-back.md"
+        _write_text(pb, _g6_probe_pointback("evidence/L6.1.png"))
+        warn_text = run(
+            PASS / "zero-findings.spec.md",
+            pb,
+            "--evidence-dir", str(evidence),
+            "--run-root", str(run_root),
+        )
+        warn_json = run(
+            PASS / "zero-findings.spec.md",
+            pb,
+            "--format", "json",
+            "--evidence-dir", str(evidence),
+            "--run-root", str(run_root),
+        )
+        if warn_text.returncode != 0 or "WARN" not in warn_text.stdout:
+            failures.append(
+                "structured/warning-text: expected exit 0 with WARN; "
+                f"got {warn_text.returncode} {warn_text.stdout!r}")
+        elif warn_json.returncode != 0:
+            failures.append(
+                f"structured/warning-json: expected exit 0, got "
+                f"{warn_json.returncode} {warn_json.stdout!r}")
+        else:
+            try:
+                warn_payload = json.loads(warn_json.stdout)
+            except json.JSONDecodeError as exc:
+                failures.append(f"structured/warning-json: invalid JSON: {exc}")
+            else:
+                severities = {
+                    item.get("severity")
+                    for item in warn_payload
+                    if isinstance(item, dict)
+                }
+                if "warning" not in severities or "error" in severities:
+                    failures.append(
+                        "structured/warning-json: expected warning-only "
+                        f"findings, got {warn_payload!r}")
+                else:
+                    print("  ok    structured/warning stays exit 0")
+
     # --- ADR-0008 frontend floor JS intercept (playwright) ---
     # CI has no playwright (see ci.yml: browser suites stay local/release).
     # Skip when unavailable so seam stays green; run locally when installed.
