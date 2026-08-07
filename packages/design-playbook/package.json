@@ -27,6 +27,9 @@
     "skills",
     "commands",
     "mcp",
+    "scripts",
+    "examples",
+    "codex",
     "NOTICE",
     "!**/__pycache__"
   ],

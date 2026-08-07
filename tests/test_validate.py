@@ -66,6 +66,45 @@ class ValidateGateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("VALIDATION PASSED", result.stdout)
 
+    def test_missing_public_package_reference_fails(self) -> None:
+        readme = self.root / "packages" / "design-playbook" / "README.md"
+        with readme.open("a", encoding="utf-8") as handle:
+            handle.write("\nRun `scripts/missing-public-tool.py`.\n")
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("README.md", result.stdout)
+        self.assertIn("scripts/missing-public-tool.py", result.stdout)
+        self.assertIn("target exists", result.stdout)
+
+    def test_existing_but_unpublished_package_reference_fails(self) -> None:
+        package_json = self.root / "packages" / "design-playbook" / "package.json"
+        payload = json.loads(package_json.read_text(encoding="utf-8"))
+        payload["files"] = [entry for entry in payload["files"] if entry != "scripts"]
+        package_json.write_text(json.dumps(payload), encoding="utf-8")
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("skills/design-playbook/SKILL.md", result.stdout)
+        self.assertIn("scripts/validate_run.py", result.stdout)
+        self.assertIn("included by package.json files[]", result.stdout)
+
+    def test_non_package_references_are_ignored(self) -> None:
+        readme = self.root / "packages" / "design-playbook" / "README.md"
+        with readme.open("a", encoding="utf-8") as handle:
+            handle.write(
+                "\nIgnore `https://example.com/scripts/tool.py`, "
+                "`.scratch/<run>/evidence/result.json`, `src/app.py`, and "
+                "[host source](src/app.py).\n"
+            )
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("VALIDATION PASSED", result.stdout)
+
     def test_skill_heading_rename_fails_named_prose_gate(self) -> None:
         evaluator = (
             self.root / "packages" / "design-playbook" / "skills"

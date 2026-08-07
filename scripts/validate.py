@@ -213,12 +213,23 @@ if isinstance(npmj, dict) and npmj:
                   for e in entries),
               f"package.json pi.{pi_key} points at {expected_dir}/")
 
-    # The npm tarball is the only surface pi users ever see. `files` must ship
-    # skills + commands, or the gallery listing installs an empty package.
+    # The npm tarball is the only surface pi users ever see. Keep its public
+    # instructions and the inventory that backs them in lockstep.
     files_field = npmj.get("files", [])
     files_field = files_field if isinstance(files_field, list) else []
-    for shipped in ("skills", "commands", "mcp"):
+    for shipped in ("skills", "commands", "mcp", "scripts", "examples"):
         check(shipped in files_field, f"package.json files[] ships {shipped}/")
+
+    for reference in _checks.discover_package_references(PKG):
+        target = PKG / reference.target
+        label = f"{reference.surface} -> {reference.target}"
+        exists = target.exists()
+        check(exists, f"public package reference target exists: {label}")
+        if exists:
+            check(
+                _checks.package_file_is_published(reference.target, files_field),
+                f"public package reference included by package.json files[]: {label}",
+            )
 
 print("== Skill frontmatter ==")
 for skill_dir in sorted((PKG / "skills").iterdir()):
