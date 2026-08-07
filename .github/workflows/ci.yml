@@ -155,3 +155,11 @@ jobs:
           python3 packages/design-playbook/tests/test_floor_frontend.py \
             | tee /tmp/frontend-floor.log
           grep -Fx "FRONTEND FLOOR TEST PASSED" /tmp/frontend-floor.log
+
+      - name: Preview canvas version-control e2e (require chromium)
+        if: steps.pw_install.outcome == 'success'
+        run: |
+          python3 -c "from playwright.sync_api import sync_playwright"
+          python3 -m pytest \
+            packages/design-playbook/tests/test_e2e_canvas_vc.py \
+            -v

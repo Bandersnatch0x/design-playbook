@@ -6,6 +6,7 @@ and result construction for one Preview decision.
 """
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
@@ -15,7 +16,12 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, Iterator
+from typing import Any, BinaryIO, Callable, Iterator
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 from control import _format_feedback
 from i18n import CONFIRM_LABELS
@@ -132,6 +138,15 @@ class TransactionConflict(PreviewTransactionError):
 
 LOCK_HEARTBEAT_SECONDS = 30
 LOCK_STALE_SECONDS = LOCK_HEARTBEAT_SECONDS * 3
+DIRECTORY_LOCK_TIMEOUT_SECONDS = 5.0
+DIRECTORY_LOCK_STALE_SECONDS = 30.0
+DIRECTORY_LOCK_HEARTBEAT_SECONDS = 10.0
+DIRECTORY_LOCK_POLL_SECONDS = 0.01
+PROJECTION_LOCK_NAME = ".preview-projection.lock"
+
+
+class DirectoryLockError(OSError):
+    """A shared Preview-directory lease could not be acquired or maintained."""
 
 
 def _lock_metadata(path: Path) -> dict[str, Any]:
@@ -185,6 +200,191 @@ def _claim_stale_lock(
             guard.unlink()
         except FileNotFoundError:
             pass
+
+
+def _lock_owner(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return ""
+
+
+def _try_lock_guard(guard: Path) -> BinaryIO | None:
+    """Try an OS-backed transition lock that the kernel releases on crash."""
+    handle = guard.open("a+b")
+    try:
+        handle.seek(0, os.SEEK_END)
+        if handle.tell() == 0:
+            handle.write(b"\0")
+            handle.flush()
+        handle.seek(0)
+        try:
+            if os.name == "nt":
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            handle.close()
+            if exc.errno in {errno.EACCES, errno.EAGAIN}:
+                return None
+            raise
+        return handle
+    except BaseException as exc:
+        if not handle.closed:
+            handle.close()
+        if isinstance(exc, OSError) and exc.errno in {
+            errno.EACCES, errno.EAGAIN,
+        }:
+            return None
+        raise
+
+
+def _release_lock_guard(handle: BinaryIO) -> None:
+    try:
+        handle.seek(0)
+        if os.name == "nt":
+            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    finally:
+        handle.close()
+
+
+def _directory_lock_is_stale(path: Path, stale_seconds: float) -> bool:
+    try:
+        return time.time() - path.stat().st_mtime >= stale_seconds
+    except FileNotFoundError:
+        return False
+
+
+def _try_acquire_directory_lease(
+    path: Path, owner_id: str, stale_seconds: float,
+) -> BinaryIO | None:
+    """Acquire a lease and retain its OS fence for the full critical section."""
+    guard = path.with_suffix(path.suffix + ".recovery")
+    guard_handle = _try_lock_guard(guard)
+    if guard_handle is None:
+        return None
+    try:
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            if not _directory_lock_is_stale(path, stale_seconds):
+                _release_lock_guard(guard_handle)
+                return None
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+            try:
+                fd = os.open(
+                    path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            except FileExistsError:
+                _release_lock_guard(guard_handle)
+                return None
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
+                fh.write(owner_id)
+                fh.flush()
+                os.fsync(fh.fileno())
+        except BaseException:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+            raise
+        return guard_handle
+    except BaseException:
+        if not guard_handle.closed:
+            _release_lock_guard(guard_handle)
+        raise
+
+
+@contextmanager
+def _directory_lock(
+    preview_dir: Path,
+    lock_name: str,
+    *,
+    timeout_seconds: float | None = None,
+    stale_seconds: float | None = None,
+    heartbeat_seconds: float | None = None,
+    poll_seconds: float | None = None,
+) -> Iterator[None]:
+    """Hold an OS-fenced, heartbeat-backed Preview directory lease."""
+    timeout = (
+        DIRECTORY_LOCK_TIMEOUT_SECONDS
+        if timeout_seconds is None else timeout_seconds
+    )
+    stale = (
+        DIRECTORY_LOCK_STALE_SECONDS
+        if stale_seconds is None else stale_seconds
+    )
+    heartbeat_interval = (
+        DIRECTORY_LOCK_HEARTBEAT_SECONDS
+        if heartbeat_seconds is None else heartbeat_seconds
+    )
+    poll = DIRECTORY_LOCK_POLL_SECONDS if poll_seconds is None else poll_seconds
+    preview_dir.mkdir(parents=True, exist_ok=True)
+    path = preview_dir / lock_name
+    owner_id = uuid.uuid4().hex
+    deadline = time.monotonic() + timeout
+
+    guard_handle = _try_acquire_directory_lease(path, owner_id, stale)
+    while guard_handle is None:
+        if time.monotonic() >= deadline:
+            raise DirectoryLockError(f"directory lock timed out: {path}")
+        time.sleep(poll)
+        guard_handle = _try_acquire_directory_lease(path, owner_id, stale)
+
+    stopped = threading.Event()
+    heartbeat_errors: list[DirectoryLockError] = []
+
+    def heartbeat() -> None:
+        while not stopped.wait(heartbeat_interval):
+            if _lock_owner(path) != owner_id:
+                heartbeat_errors.append(DirectoryLockError(
+                    f"directory lock ownership lost: {path}"))
+                return
+            try:
+                os.utime(path, None)
+            except OSError as exc:
+                heartbeat_errors.append(DirectoryLockError(
+                    f"directory lock heartbeat failed: {path}: {exc}"))
+                return
+
+    thread = threading.Thread(target=heartbeat, daemon=True)
+    thread.start()
+    body_error: BaseException | None = None
+    try:
+        yield
+    except BaseException as exc:
+        body_error = exc
+        raise
+    finally:
+        stopped.set()
+        thread.join(timeout=1)
+        lease_error = heartbeat_errors[0] if heartbeat_errors else None
+        guard = path.with_suffix(path.suffix + ".recovery")
+        try:
+            if _lock_owner(path) != owner_id:
+                lease_error = lease_error or DirectoryLockError(
+                    f"directory lock ownership lost: {path}")
+            else:
+                try:
+                    path.unlink()
+                except FileNotFoundError:
+                    lease_error = lease_error or DirectoryLockError(
+                        f"directory lock ownership lost: {path}")
+        finally:
+            try:
+                _release_lock_guard(guard_handle)
+            except OSError as exc:
+                lease_error = lease_error or DirectoryLockError(
+                    f"directory lock guard cleanup failed: {guard}: {exc}")
+        if lease_error is not None:
+            if body_error is None:
+                raise lease_error
+            body_error.add_note(str(lease_error))
 
 
 @contextmanager
@@ -307,6 +507,8 @@ def _load_entry(path: Path) -> dict[str, Any] | None:
     round_n = _round_from_path(path)
     binding = entry.get("binding") if isinstance(entry, dict) else None
     outcome = entry.get("outcome") if isinstance(entry, dict) else None
+    prototype_mode = entry.get("prototype_mode") if isinstance(entry, dict) else None
+    prototype_path = entry.get("prototype_path") if isinstance(entry, dict) else None
     binding_valid = False
     if isinstance(binding, dict):
         try:
@@ -335,6 +537,10 @@ def _load_entry(path: Path) -> dict[str, Any] | None:
         or not isinstance(outcome.get("user_confirmed"), bool)
         or not isinstance(outcome.get("floor_pass"), bool)
         or not isinstance(outcome.get("aborted"), bool)
+        or prototype_mode not in (None, "html", "path")
+        or prototype_mode == "path" and (
+            not isinstance(prototype_path, str) or not prototype_path.strip()
+        )
     ):
         raise TransactionConflict(
             f"round decision metadata is invalid; use next round: {path}",
@@ -368,6 +574,41 @@ def _confirm_record(entry: dict[str, Any]) -> dict[str, Any]:
     }
     if outcome.get("floor_failure"):
         record["floor_failure"] = outcome["floor_failure"]
+    return record
+
+
+class ConfirmRecordError(ValueError):
+    """A durable confirm artifact does not match its decision authority."""
+
+
+def _load_confirm_for_entry(
+    preview_dir: Path, entry: dict[str, Any], *, allow_legacy: bool = True,
+) -> dict[str, Any] | None:
+    binding = entry["binding"]
+    outcome = entry["outcome"]
+    round_n = int(binding["round"])
+    path = preview_dir / f"confirm-round-{round_n}.json"
+    if not path.is_file():
+        return None
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ConfirmRecordError(f"confirm record unreadable: {path}") from exc
+    if not isinstance(record, dict):
+        raise ConfirmRecordError(f"confirm record invalid: {path}")
+    expected = _confirm_record(entry)
+    if "decision_id" not in record:
+        if not allow_legacy:
+            raise ConfirmRecordError(f"legacy confirm record is invalid: {path}")
+        del expected["decision_id"]
+    elif not isinstance(record.get("decision_id"), str):
+        raise ConfirmRecordError(f"confirm record invalid: {path}")
+    elif record["decision_id"] != entry["decision_id"]:
+        raise ConfirmRecordError(f"confirm decision mismatch: {path}")
+    if not outcome.get("user_confirmed"):
+        raise ConfirmRecordError(f"confirm record is unexpected: {path}")
+    if record != expected:
+        raise ConfirmRecordError(f"confirm record invalid: {path}")
     return record
 
 
@@ -415,37 +656,45 @@ def _valid_entries(preview_dir: Path) -> list[dict[str, Any]]:
     return entries
 
 
-def _commit_projections(preview_dir: Path, entry: dict[str, Any]) -> str:
+def _commit_projections_unlocked(preview_dir: Path, entry: dict[str, Any]) -> str:
     binding = entry["binding"]
     outcome = entry["outcome"]
     confirm_path = preview_dir / f"confirm-round-{binding['round']}.json"
-    if outcome["user_confirmed"]:
-        existing_confirm = None
-        if confirm_path.is_file():
-            try:
-                existing_confirm = json.loads(confirm_path.read_text(encoding="utf-8"))
-            except (OSError, UnicodeError, json.JSONDecodeError):
-                existing_confirm = None
-        if existing_confirm and existing_confirm.get("decision_id") not in {
-            None, entry["decision_id"]
-        }:
+    if confirm_path.is_file():
+        try:
+            _load_confirm_for_entry(preview_dir, entry, allow_legacy=False)
+        except ConfirmRecordError as exc:
             raise TransactionConflict(
-                f"confirm belongs to another decision; use next round: {confirm_path}",
+                f"{exc}; use next round: {confirm_path}",
                 retryable=False, round_n=int(binding["round"]),
                 decision_id=str(entry["decision_id"]), artifact=str(confirm_path),
-            )
-        if existing_confirm and "decision_id" not in existing_confirm:
-            raise TransactionConflict(
-                f"legacy confirm cannot be overwritten; use next round: {confirm_path}",
-                retryable=False, round_n=int(binding["round"]),
-                decision_id=str(entry["decision_id"]), artifact=str(confirm_path),
-            )
+            ) from exc
+    elif outcome["user_confirmed"]:
         _atomic_write(confirm_path, _json_text(_confirm_record(entry)))
+    if outcome["user_confirmed"]:
         confirm_result = str(confirm_path)
     else:
         confirm_result = ""
-    _atomic_write(preview_dir / "log.md", _render_log(_valid_entries(preview_dir)))
+    # log.md projection incl. versions section (wayfinder canvas-upgrade 05a);
+    # _render_versions_log degrades to _render_log when no version files exist.
+    from versions import _render_versions_log
+    _atomic_write(preview_dir / "log.md", _render_versions_log(preview_dir))
     return confirm_result
+
+
+def _commit_projections(preview_dir: Path, entry: dict[str, Any]) -> str:
+    binding = entry["binding"]
+    try:
+        with _directory_lock(preview_dir, PROJECTION_LOCK_NAME):
+            return _commit_projections_unlocked(preview_dir, entry)
+    except DirectoryLockError as exc:
+        raise PreviewTransactionError(
+            f"Preview projection lock failed: {exc}",
+            retryable=True,
+            round_n=int(binding["round"]),
+            decision_id=str(entry["decision_id"]),
+            artifact=str(preview_dir / PROJECTION_LOCK_NAME),
+        ) from exc
 
 
 def _result(entry: dict[str, Any], confirm_path: str) -> dict[str, Any]:
@@ -594,6 +843,8 @@ def _run_locked(
         "schema_version": ENTRY_SCHEMA_VERSION,
         "decision_id": decision_id,
         "timestamp": _now_iso(),
+        "prototype_mode": "path" if path_arg else "html",
+        "prototype_path": str(prototype),
         "binding": binding,
         "outcome": {
             "confirmed": confirmed,

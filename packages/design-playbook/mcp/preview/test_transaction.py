@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import threading
@@ -13,6 +14,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import transaction  # noqa: E402
+import versions  # noqa: E402
 from transaction import (  # noqa: E402
     PreviewTransactionError,
     TransactionConflict,
@@ -21,6 +23,47 @@ from transaction import (  # noqa: E402
 
 
 class PreviewDecisionTransactionTests(unittest.TestCase):
+    def test_path_mode_persists_replayable_prototype_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            prototype = Path(tmp) / "round-1.html"
+            prototype.write_text("<html>path mode</html>", encoding="utf-8")
+
+            run_preview_transaction(
+                path_arg=str(prototype), html=None, summary="summary", round_n=1,
+                report_ref="report.md", options=["确认通过", "需要修改"],
+                collect=lambda *args: {
+                    "choice": "确认通过", "feedback": "清晰",
+                    "anchors": [], "aborted": False,
+                },
+            )
+
+            entry = json.loads(
+                (Path(tmp) / "decision-round-1.json").read_text(encoding="utf-8"))
+            self.assertEqual(entry["prototype_mode"], "path")
+            self.assertEqual(entry["prototype_path"], str(prototype))
+            replay = versions.state_at(Path(tmp), 1)
+            self.assertIsNone(replay["prototype_html"])
+            self.assertEqual(replay["prototype_path"], str(prototype))
+            with self.assertRaisesRegex(versions.VersionError, "path-mode"):
+                versions.fork(
+                    Path(tmp), branch="alt", from_round=1,
+                    new_dir=Path(tmp) / "fork-alt",
+                    report_ref="alt.md", summary="alternate",
+                )
+
+    def test_path_mode_requires_nonempty_prototype_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            prototype = Path(tmp) / "prototype.html"
+            prototype.write_text("<html>path mode</html>", encoding="utf-8")
+            self._run(prototype)
+            entry_path = Path(tmp) / "decision-round-1.json"
+            entry = json.loads(entry_path.read_text(encoding="utf-8"))
+            entry["prototype_path"] = " "
+            entry_path.write_text(transaction._json_text(entry), encoding="utf-8")
+
+            with self.assertRaisesRegex(TransactionConflict, "metadata is invalid"):
+                self._run(prototype)
+
     def test_confirm_pass_commits_confirm_and_audit_artifacts(self) -> None:
         seen: list[tuple[Path, str, list[str], int]] = []
 
@@ -156,6 +199,59 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             log = (Path(tmp) / "log.md").read_text(encoding="utf-8")
             self.assertEqual(log.count(first["decision_id"]), 1)
             self.assertNotIn("corrupt projection", log)
+
+    def test_same_binding_retry_preserves_invalid_confirm(self) -> None:
+        cases = {
+            "malformed": "{",
+            "non-object": "[]",
+            "legacy": None,
+            "other-decision": {"decision_id": "other"},
+            "tampered": {"feedback": "tampered"},
+        }
+        for label, mutation in cases.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
+                prototype = Path(tmp) / "round-1.html"
+                prototype.write_text("reviewed", encoding="utf-8")
+                self._run(prototype)
+                preview_dir = Path(tmp)
+                entry = transaction._load_entry(
+                    preview_dir / "decision-round-1.json")
+                self.assertIsNotNone(entry)
+                expected = transaction._confirm_record(entry)
+                if label == "legacy":
+                    del expected["decision_id"]
+                    invalid_text = transaction._json_text(expected)
+                elif isinstance(mutation, dict):
+                    invalid_text = transaction._json_text({**expected, **mutation})
+                else:
+                    invalid_text = mutation
+                confirm_path = preview_dir / "confirm-round-1.json"
+                confirm_path.write_text(invalid_text, encoding="utf-8")
+
+                with self.assertRaises(TransactionConflict):
+                    self._run(prototype)
+
+                self.assertEqual(
+                    confirm_path.read_text(encoding="utf-8"), invalid_text)
+
+    def test_unconfirmed_retry_preserves_unexpected_confirm(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            prototype = Path(tmp) / "round-1.html"
+            prototype.write_text("reviewed", encoding="utf-8")
+            collect = lambda *args: {
+                "choice": "需要修改", "feedback": "adjust spacing",
+                "anchors": [], "aborted": False,
+            }
+            self._run(prototype, collect=collect)
+            confirm_path = Path(tmp) / "confirm-round-1.json"
+            invalid_text = "{"
+            confirm_path.write_text(invalid_text, encoding="utf-8")
+
+            with self.assertRaises(TransactionConflict):
+                self._run(prototype, collect=collect)
+
+            self.assertEqual(
+                confirm_path.read_text(encoding="utf-8"), invalid_text)
 
     def test_changed_binding_and_legacy_confirm_fail_closed(self) -> None:
         variants = (
@@ -312,6 +408,148 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
 
             self.assertEqual(errors, [])
             self.assertFalse(lock.exists())
+
+    def test_old_owner_cannot_delete_replacement_directory_lease(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            preview_dir = Path(tmp)
+            lock_name = ".lease.lock"
+            lock_path = preview_dir / lock_name
+            guard_path = lock_path.with_suffix(lock_path.suffix + ".recovery")
+            old_lease = transaction._directory_lock(
+                preview_dir, lock_name, timeout_seconds=1,
+                stale_seconds=1, heartbeat_seconds=10, poll_seconds=0.001,
+            )
+            old_lease.__enter__()
+
+            owner_checked = threading.Event()
+            allow_old_release = threading.Event()
+            replacement_entered = threading.Event()
+            release_replacement = threading.Event()
+            old_errors: list[BaseException] = []
+            replacement_errors: list[BaseException] = []
+            real_lock_owner = transaction._lock_owner
+
+            def pause_old_owner_check(path: Path) -> str:
+                owner = real_lock_owner(path)
+                if threading.current_thread().name == "old-release":
+                    owner_checked.set()
+                    if not allow_old_release.wait(timeout=2):
+                        raise TimeoutError("old release was not resumed")
+                return owner
+
+            def release_old() -> None:
+                try:
+                    old_lease.__exit__(None, None, None)
+                except BaseException as exc:
+                    old_errors.append(exc)
+
+            def hold_replacement() -> None:
+                try:
+                    with transaction._directory_lock(
+                        preview_dir, lock_name, timeout_seconds=1,
+                        stale_seconds=1, heartbeat_seconds=10,
+                        poll_seconds=0.001,
+                    ):
+                        replacement_entered.set()
+                        release_replacement.wait(timeout=2)
+                except BaseException as exc:
+                    replacement_errors.append(exc)
+
+            with mock.patch.object(
+                transaction, "_lock_owner", side_effect=pause_old_owner_check,
+            ):
+                old_thread = threading.Thread(
+                    target=release_old, name="old-release")
+                old_thread.start()
+                self.assertTrue(owner_checked.wait(timeout=1))
+
+                replacement_thread = threading.Thread(target=hold_replacement)
+                stale_time = time.time() - 2
+                os.utime(lock_path, (stale_time, stale_time))
+                os.utime(guard_path, (stale_time, stale_time))
+                replacement_thread.start()
+                replacement_entered.wait(timeout=0.1)
+                allow_old_release.set()
+                self.assertTrue(replacement_entered.wait(timeout=1))
+                old_thread.join(timeout=1)
+                lock_survived_old_release = lock_path.is_file()
+                release_replacement.set()
+                replacement_thread.join(timeout=1)
+
+            self.assertFalse(old_thread.is_alive())
+            self.assertFalse(replacement_thread.is_alive())
+            self.assertEqual(old_errors, [])
+            self.assertEqual(replacement_errors, [])
+            self.assertTrue(lock_survived_old_release)
+
+    def test_directory_lease_reports_ownership_loss(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            preview_dir = Path(tmp)
+            lock_name = ".lease.lock"
+            lock_path = preview_dir / lock_name
+
+            with self.assertRaisesRegex(
+                transaction.DirectoryLockError, "ownership lost",
+            ):
+                with transaction._directory_lock(
+                    preview_dir, lock_name, timeout_seconds=1,
+                    stale_seconds=1, heartbeat_seconds=10,
+                    poll_seconds=0.001,
+                ):
+                    lock_path.write_text("replacement-owner", encoding="utf-8")
+
+            self.assertEqual(
+                lock_path.read_text(encoding="utf-8"), "replacement-owner")
+
+    def test_active_directory_lease_cannot_be_reclaimed_after_stale_gap(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            preview_dir = Path(tmp)
+            lock_name = ".lease.lock"
+            lock_path = preview_dir / lock_name
+            active_lease = transaction._directory_lock(
+                preview_dir, lock_name, timeout_seconds=1,
+                stale_seconds=0.05, heartbeat_seconds=10,
+                poll_seconds=0.001,
+            )
+            active_lease.__enter__()
+            stale_time = time.time() - 1
+            os.utime(lock_path, (stale_time, stale_time))
+
+            replacement_entered = threading.Event()
+            release_replacement = threading.Event()
+            replacement_errors: list[BaseException] = []
+            active_errors: list[BaseException] = []
+
+            def hold_replacement() -> None:
+                try:
+                    with transaction._directory_lock(
+                        preview_dir, lock_name, timeout_seconds=1,
+                        stale_seconds=0.05, heartbeat_seconds=10,
+                        poll_seconds=0.001,
+                    ):
+                        replacement_entered.set()
+                        release_replacement.wait(timeout=2)
+                except BaseException as exc:
+                    replacement_errors.append(exc)
+
+            replacement_thread = threading.Thread(target=hold_replacement)
+            replacement_thread.start()
+            entered_while_active = replacement_entered.wait(timeout=0.1)
+            if entered_while_active:
+                release_replacement.set()
+                replacement_thread.join(timeout=1)
+            try:
+                active_lease.__exit__(None, None, None)
+            except BaseException as exc:
+                active_errors.append(exc)
+            self.assertTrue(replacement_entered.wait(timeout=1))
+            release_replacement.set()
+            replacement_thread.join(timeout=1)
+
+            self.assertFalse(entered_while_active)
+            self.assertEqual(active_errors, [])
+            self.assertEqual(replacement_errors, [])
+            self.assertFalse(replacement_thread.is_alive())
 
     def test_stale_lock_requires_matching_binding(self) -> None:
         for binding_matches in (True, False):
