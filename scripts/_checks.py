@@ -7,6 +7,10 @@ thresholds — change the map here, never at both call sites.
 """
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
+
 # Version line → exact shipped command set (ADR-0015 stable main / OPP-01).
 # main is the public install surface, so unreleased capability must never
 # ship under a released version: a new command requires a version entry
@@ -14,7 +18,14 @@ from __future__ import annotations
 COMMAND_INVENTORY: dict[tuple[int, int], frozenset[str]] = {
     (0, 9): frozenset({"design-io", "ux-spec", "ui-review"}),
     (0, 10): frozenset({"design-io", "ux-spec", "ui-review", "run-review"}),
-    (0, 11): frozenset({"design-io", "ux-spec", "ui-review", "run-review"}),
+    (0, 11): frozenset({
+        "design-io",
+        "ux-spec",
+        "ui-review",
+        "run-review",
+        "run-status",
+        "doctor",
+    }),
 }
 
 
@@ -33,3 +44,119 @@ def expected_commands(version: str) -> frozenset[str] | None:
     if key is None:
         return None
     return COMMAND_INVENTORY.get(key)
+
+
+@dataclass(frozen=True, order=True)
+class PackageReference:
+    """A public package surface and the package-relative path it names."""
+
+    surface: str
+    target: str
+
+
+_MARKDOWN_LINK = re.compile(r"\]\(\s*<?([^\s)>]+)>?")
+_PACKAGE_PATH = re.compile(
+    r"(?<![A-Za-z0-9_./:-])"
+    r"((?:packages/design-playbook/)?(?:scripts|examples)/[A-Za-z0-9_./<>-]*"
+    r"|skills/[A-Za-z0-9_.-]+/references/[A-Za-z0-9_./<>-]+"
+    r")"
+)
+_PUBLIC_SURFACE_PATTERNS = (
+    "README.md",
+    "commands/**/*.md",
+    "skills/**/*.md",
+)
+
+
+def _normalize_package_target(
+    surface: Path,
+    package_root: Path,
+    raw: str,
+    *,
+    relative_to_surface: bool,
+) -> str | None:
+    target = raw.strip().strip("`'\"").split("#", 1)[0].split("?", 1)[0]
+    target = target.replace("\\", "/").rstrip(".,;:")
+    if not target or target.startswith(("#", "/", ".scratch/")):
+        return None
+    if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", target):
+        return None
+    if "<" in target or ">" in target:
+        return None
+
+    package_prefix = "packages/design-playbook/"
+    if target.startswith(package_prefix):
+        target = target[len(package_prefix):]
+    elif relative_to_surface:
+        local_roots = ("scripts/", "examples/", "skills/", "commands/", "mcp/", "codex/", "references/")
+        relative_target = target.lstrip("./")
+        if not relative_target.startswith(local_roots) and "references" not in surface.parts:
+            return None
+        absolute = (surface.parent / target).resolve()
+        try:
+            target = absolute.relative_to(package_root.resolve()).as_posix()
+        except ValueError:
+            return None
+    elif target.startswith(("scripts/", "examples/", "skills/")):
+        pass
+    elif target.startswith(("references/", "./references/", "../")):
+        absolute = (surface.parent / target).resolve()
+        try:
+            target = absolute.relative_to(package_root.resolve()).as_posix()
+        except ValueError:
+            return None
+    else:
+        return None
+
+    normalized = PurePosixPath(target).as_posix().lstrip("./")
+    if normalized == ".." or normalized.startswith("../"):
+        return None
+    return normalized
+
+
+def discover_package_references(package_root: Path) -> tuple[PackageReference, ...]:
+    """Find package-local paths named by shipped public Markdown surfaces."""
+    surfaces: set[Path] = set()
+    for pattern in _PUBLIC_SURFACE_PATTERNS:
+        surfaces.update(path for path in package_root.glob(pattern) if path.is_file())
+
+    found: set[PackageReference] = set()
+    for surface in surfaces:
+        text = surface.read_text(encoding="utf-8")
+        link_candidates = {match.group(1) for match in _MARKDOWN_LINK.finditer(text)}
+        candidates = [(raw, True) for raw in link_candidates]
+        candidates.extend(
+            (match.group(1), False)
+            for match in _PACKAGE_PATH.finditer(text)
+            if match.group(1) not in link_candidates
+        )
+        for raw, relative_to_surface in candidates:
+            target = _normalize_package_target(
+                surface,
+                package_root,
+                raw,
+                relative_to_surface=relative_to_surface,
+            )
+            if target is not None:
+                found.add(PackageReference(surface.relative_to(package_root).as_posix(), target))
+    return tuple(sorted(found))
+
+
+def package_file_is_published(target: str, files_field: list[object]) -> bool:
+    """Whether an npm files[] allowlist includes a package-relative target."""
+    included = False
+    target_path = PurePosixPath(target)
+    for raw_entry in files_field:
+        if not isinstance(raw_entry, str):
+            continue
+        excluded = raw_entry.startswith("!")
+        entry = raw_entry[1:] if excluded else raw_entry
+        entry = entry.replace("\\", "/").strip("/")
+        if not entry:
+            continue
+        matches = target == entry or target.startswith(f"{entry}/")
+        if any(char in entry for char in "*?["):
+            matches = target_path.match(entry)
+        if matches:
+            included = not excluded
+    return included
