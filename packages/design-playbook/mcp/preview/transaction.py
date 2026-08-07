@@ -444,7 +444,10 @@ def _commit_projections(preview_dir: Path, entry: dict[str, Any]) -> str:
         confirm_result = str(confirm_path)
     else:
         confirm_result = ""
-    _atomic_write(preview_dir / "log.md", _render_log(_valid_entries(preview_dir)))
+    # log.md projection incl. versions section (wayfinder canvas-upgrade 05a);
+    # _render_versions_log degrades to _render_log when no version files exist.
+    from versions import _render_versions_log
+    _atomic_write(preview_dir / "log.md", _render_versions_log(preview_dir))
     return confirm_result
 
 

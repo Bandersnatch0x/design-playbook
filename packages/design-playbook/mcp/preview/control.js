@@ -55,6 +55,69 @@
   var floatRoot = null;
   var floatMap = {};  // selector -> bubble element
 
+  // wayfinder canvas-upgrade 07: draft persistence (per-run localStorage) + anchor undo.
+  var historyStack = [];
+  var DRAFT_KEY = window.DPB_DRAFT_KEY || "";
+
+  function pushHistory() {
+    historyStack.push(JSON.stringify(anchors.map(function (a) {
+      return { selector: a.selector, label: a.label, comment: a.comment, tag: a.tag };
+    })));
+    if (historyStack.length > 50) historyStack.shift();
+  }
+
+  function restoreAnchorsFromData(list) {
+    anchors = (list || []).map(function (p) {
+      var el = null;
+      try { if (p.selector) el = document.querySelector(p.selector); } catch (e) {}
+      return { selector: p.selector, label: p.label, comment: p.comment, tag: p.tag, el: el };
+    }).filter(function (a) { return a.selector; });
+    anchors.forEach(function (a) { if (a.el) a.el.classList.add("dpb-pin-target"); });
+  }
+
+  function undo() {
+    if (!historyStack.length) return;
+    var prev = null;
+    try { prev = JSON.parse(historyStack.pop()); } catch (e) { return; }
+    restoreAnchorsFromData(prev);
+    render();
+    setReadiness();
+    saveDraft();
+  }
+
+  function saveDraft() {
+    if (!DRAFT_KEY) return;
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        feedback: field ? field.value : "",
+        anchors: anchors.map(function (a) {
+          return { selector: a.selector, label: a.label, comment: a.comment, tag: a.tag };
+        })
+      }));
+    } catch (e) { /* quota / private-mode: draft is best-effort */ }
+  }
+
+  function loadDraft() {
+    if (!DRAFT_KEY) return;
+    var raw = null;
+    try { raw = localStorage.getItem(DRAFT_KEY); } catch (e) { return; }
+    if (!raw) return;
+    var data = null;
+    try { data = JSON.parse(raw); } catch (e) { return; }
+    if (!data || typeof data !== "object") return;
+    if (field && typeof data.feedback === "string") field.value = data.feedback;
+    if (Array.isArray(data.anchors)) {
+      restoreAnchorsFromData(data.anchors);
+      render();
+      setReadiness();
+    }
+  }
+
+  function clearDraft() {
+    if (!DRAFT_KEY) return;
+    try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+  }
+
   function ensureFloatRoot() {
 if (floatRoot) return floatRoot;
 floatRoot = document.createElement("div");
@@ -450,6 +513,10 @@ if (abortArmed && abortBtn && !e.target.closest("#dpb-abort")) {
 }
   });
 
+  // wayfinder canvas-upgrade 07: restore any persisted draft (feedback +
+  // anchors) before computing initial readiness, so a refresh keeps the run.
+  loadDraft();
+
   // Initial readiness (may enable direct confirm on pill primary)
   setReadiness();
 
@@ -474,6 +541,12 @@ return Array.prototype.filter.call(nodes, function (el) {
 if (e.key === "Escape") {
   if (pinOn) { setPin(false); return; }
   if (bar.classList.contains("is-open")) { e.preventDefault(); closeDrawer(); }
+  return;
+}
+// wayfinder canvas-upgrade 07: Ctrl/Cmd+Z undoes the last anchor change
+// (add / remove / committed comment edit).
+if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) {
+  if (!e.shiftKey) { e.preventDefault(); undo(); }
   return;
 }
 if (e.key !== "Tab") return;
@@ -530,6 +603,7 @@ for (var i = 0; i < anchors.length; i++) {
     return;
   }
 }
+pushHistory();
 el.classList.add("dpb-pin-target");
 anchors.push({
   selector: selector,
@@ -539,6 +613,7 @@ anchors.push({
   el: el
 });
 render();
+saveDraft();
 // focus newest comment input
 setTimeout(function () {
   var inputs = listEl.querySelectorAll("input[data-i]");
@@ -565,6 +640,7 @@ if (!selector) return;
 for (var i = 0; i < anchors.length; i++) {
   if (anchors[i].selector === selector) return;
 }
+pushHistory();
 anchors.push({
   selector: selector,
   label: labelForTag(tag, selector),
@@ -573,6 +649,7 @@ anchors.push({
   el: null
 });
 render();
+saveDraft();
 setTimeout(function () {
   var inputs = listEl.querySelectorAll("input[data-i]");
   if (inputs.length) inputs[inputs.length - 1].focus();
@@ -588,6 +665,16 @@ anchors[i].comment = t.value;
 syncHidden();
 ensureBubble(anchors[i], i);
 setReadiness();
+saveDraft();
+  });
+
+  // wayfinder canvas-upgrade 07: comment edits enter the undo stack at their
+  // commit point (change = blur/Enter), not on every keystroke.
+  listEl.addEventListener("change", function (e) {
+    var t = e.target;
+    if (!t || !t.getAttribute) return;
+    if (t.getAttribute("data-i") == null) return;
+    pushHistory();
   });
 
   listEl.addEventListener("click", function (e) {
@@ -614,9 +701,11 @@ if (a) {
   if (a.el) a.el.classList.remove("dpb-pin-target");
   removeBubble(a.selector);
 }
+pushHistory();
 anchors.splice(i, 1);
 render();
 setReadiness();
+saveDraft();
   });
 
   // reposition floats on scroll/resize with requestAnimationFrame throttling
@@ -641,13 +730,14 @@ setReadiness();
 syncHidden();
 var submitter = e.submitter;
 var choice = submitter && submitter.name === "choice" ? submitter.value : "";
-if (!choice || choice === "__abort__") return;
+if (!choice || choice === "__abort__") { clearDraft(); return; }
 var isRevise = !!reviseLabels[choice] || /修改|revise|change/i.test(choice);
 // For revise actions (e.g. "需要修改"), allow even without substantive feedback (the point is to request changes).
 // Only enforce floor for actual confirm actions.
 if (isRevise || isSubstantive()) {
   if (field) field.removeAttribute("aria-invalid");
   if (hint) hint.classList.remove("is-on");
+  clearDraft();  // real submit: drop the persisted draft
   return;
 }
 e.preventDefault();
@@ -664,6 +754,7 @@ field.addEventListener("input", function () {
     if (hint) hint.classList.remove("is-on");
   }
   setReadiness();
+  saveDraft();
 });
   }
 })();

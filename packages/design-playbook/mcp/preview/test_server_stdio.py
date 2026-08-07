@@ -295,7 +295,16 @@ class PreviewCollectShutdownTests(unittest.TestCase):
 
     def test_modify_submission_returns_dom_anchor_and_closes_owned_window(self) -> None:
         port_box: dict[str, int] = {}
-        anchor = {"selector": "#submit", "comment": "\u6309\u94ae\u5c42\u7ea7\u4e0d\u6e05\u6670", "label": "Retry", "tag": ""}
+        # anchor schema v2 (wayfinder canvas-upgrade 05b): node_id + features
+        # are additive; round 1, index 0, selector "#submit".
+        anchor = {
+            "selector": "#submit",
+            "comment": "\u6309\u94ae\u5c42\u7ea7\u4e0d\u6e05\u6670",
+            "label": "Retry",
+            "tag": "",
+            "node_id": browser._anchor_node_id(1, 0, "#submit"),
+            "features": {"tag": ""},
+        }
 
         def submit_modify() -> None:
             from urllib.parse import quote

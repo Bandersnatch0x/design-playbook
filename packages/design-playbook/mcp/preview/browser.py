@@ -8,6 +8,7 @@ transaction.py.
 from __future__ import annotations
 
 import ctypes
+import hashlib
 import html
 import json
 import os
@@ -335,7 +336,35 @@ def _stop_http_server(
 
 
 
-def _parse_anchors(raw: str) -> list[dict[str, Any]]:
+def _anchor_node_id(round_n: int, index: int, selector: str) -> str:
+    """Round-local stable anchor id (schema v2; changes across rounds by design).
+
+    Identifies the anchor within a round's decision entry; it is NOT stable
+    across rounds (a changed prototype legitimately re-targets elements).
+    """
+    return hashlib.sha256(
+        f"{round_n}|{index}|{selector}".encode("utf-8")).hexdigest()[:8]
+
+
+def _anchor_features(item: dict, tag: str) -> dict[str, Any]:
+    """Reconnect hints derived from the anchor's existing fields (v2, optional).
+
+    Not a promise of automatic cross-round re-linking (sandboxed iframe limits,
+    assets/current-canvas-matrix.md §5/§7): hints are stored so a later manual
+    re-pin can propose candidates.
+    """
+    features: dict[str, Any] = {"tag": tag or ""}
+    label = str(item.get("label") or "")
+    quoted = re.search(r'"([^"]+)"', label)
+    if quoted:
+        features["text"] = quoted.group(1)[:80]
+    classes = re.findall(r"\.([A-Za-z][\w-]*)", str(item.get("selector") or ""))
+    if classes:
+        features["classes"] = classes[:8]
+    return features
+
+
+def _parse_anchors(raw: str, round_n: int = 0) -> list[dict[str, Any]]:
     if not raw or not raw.strip():
         return []
     try:
@@ -345,18 +374,23 @@ def _parse_anchors(raw: str) -> list[dict[str, Any]]:
     if not isinstance(data, list):
         return []
     out: list[dict[str, Any]] = []
-    for item in data:
+    for index, item in enumerate(data):
         if not isinstance(item, dict):
             continue
         selector = str(item.get("selector") or "").strip()
         if not selector:
             continue
-        out.append({
+        tag = str(item.get("tag") or "").strip()[:40]
+        anchor: dict[str, Any] = {
             "selector": selector,
             "label": str(item.get("label") or "").strip()[:120],
             "comment": str(item.get("comment") or "").strip()[:500],
-            "tag": str(item.get("tag") or "").strip()[:40],
-        })
+            "tag": tag,
+        }
+        if round_n > 0:
+            anchor["node_id"] = _anchor_node_id(round_n, index, selector)
+            anchor["features"] = _anchor_features(item, tag)
+        out.append(anchor)
     return out[:40]
 
 
@@ -636,14 +670,15 @@ def _collect_via_browser(
             form = parse_qs(body)
             choice = (form.get("choice") or ["__abort__"])[0]
             feedback = (form.get("feedback") or [""])[0]
-            anchors = _parse_anchors((form.get("anchors_json") or ["[]"])[0])
-            # G5: validate the one-time decision token before trusting choice.
-            # A sandboxed prototype cannot read the hidden token, so a forged
-            # fetch('/decide', ...) arrives without it and fails closed.
             try:
                 posted_round = int((form.get("dpb_round") or [""])[0])
             except (ValueError, TypeError):
                 posted_round = -1
+            anchors = _parse_anchors(
+                (form.get("anchors_json") or ["[]"])[0], posted_round)
+            # G5: validate the one-time decision token before trusting choice.
+            # A sandboxed prototype cannot read the hidden token, so a forged
+            # fetch('/decide', ...) arrives without it and fails closed.
             posted_token = (form.get("dpb_token") or [None])[0]
             validated = session.validate(posted_round, posted_token)
             if not validated:
