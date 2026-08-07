@@ -319,7 +319,9 @@ class OrchestrationTests(unittest.TestCase):
             elif cmd[1:3] == ["plugin", "install"]:
                 assert env is not None
                 config = Path(env["CLAUDE_CONFIG_DIR"])
-                install = config / "plugins" / "cache" / "design-playbook" / "0.10.0"
+                install = (
+                    config / "plugins" / "cache" / "design-playbook" / expected["version"]
+                )
                 shutil.copytree(smoke.PKG, install)
                 _write_json(
                     config / "plugins" / "installed_plugins.json",
@@ -346,10 +348,13 @@ class OrchestrationTests(unittest.TestCase):
                 assert cwd is not None
                 target = cwd / "node_modules" / smoke.NPM_PACKAGE
                 shutil.copytree(smoke.PKG, target)
-            elif cmd[0] == "npm" and cmd[1:3] == ["view", f"{smoke.NPM_PACKAGE}@0.10.0"]:
+            elif cmd[0] == "npm" and cmd[1:3] == [
+                "view",
+                f"{smoke.NPM_PACKAGE}@{expected['version']}",
+            ]:
                 stdout = json.dumps(
                     {
-                        "version": "0.10.0",
+                        "version": expected["version"],
                         "dist.shasum": "fixture-sum",
                         "dist.tarball": "https://registry.example/pkg.tgz",
                     }
@@ -360,11 +365,10 @@ class OrchestrationTests(unittest.TestCase):
 
     def test_mocked_full_flow_passes_and_collects_all_surfaces(self) -> None:
         expected = smoke._source_expectations()
-        self.assertEqual(expected["version"], "0.10.0")
         with tempfile.TemporaryDirectory() as tmp:
             work_root = Path(tmp) / "work"
             config = smoke.SmokeConfig(
-                version="0.10.0",
+                version=expected["version"],
                 source=smoke.DEFAULT_SOURCE,
                 output_dir=Path(tmp) / "evidence",
                 claude_bin="claude",
@@ -404,7 +408,7 @@ class OrchestrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             work_root = Path(tmp) / "work"
             config = smoke.SmokeConfig(
-                version="0.10.0",
+                version=smoke._source_expectations()["version"],
                 source=smoke.DEFAULT_SOURCE,
                 output_dir=Path(tmp) / "evidence",
             )
