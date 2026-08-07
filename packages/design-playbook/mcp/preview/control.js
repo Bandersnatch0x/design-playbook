@@ -289,6 +289,11 @@ syncHidden();
 updateCounts();
   }
 
+  function focusNewestAnchorInput() {
+var inputs = listEl.querySelectorAll("input[data-i]");
+if (inputs.length) inputs[inputs.length - 1].focus();
+  }
+
   function updateCounts() {
 var n = anchors.length;
 if (pinCountEl) pinCountEl.textContent = (I18N.pin_count_pre || "") + n + (I18N.pin_count_post || "");
@@ -631,10 +636,7 @@ anchors.push({
 render();
 saveDraft();
 // focus newest comment input
-setTimeout(function () {
-  var inputs = listEl.querySelectorAll("input[data-i]");
-  if (inputs.length) inputs[inputs.length - 1].focus();
-}, 0);
+focusNewestAnchorInput();
   }, true);
 
   // G5 sandbox bridge: accept pin anchors postMessaged from the cross-origin
@@ -666,10 +668,7 @@ anchors.push({
 });
 render();
 saveDraft();
-setTimeout(function () {
-  var inputs = listEl.querySelectorAll("input[data-i]");
-  if (inputs.length) inputs[inputs.length - 1].focus();
-}, 0);
+focusNewestAnchorInput();
   });
 
   listEl.addEventListener("input", function (e) {

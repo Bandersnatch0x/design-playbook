@@ -231,11 +231,20 @@ class FrontendInteractionTests(unittest.TestCase):
                 page.click("#dpb-open-drawer")  # pin mode on
                 page.click("#a")
                 page.wait_for_selector("#dpb-anchors .dpb-anchor")
-                page.click("#b")
+                page.evaluate(
+                    """() => {
+                        document.querySelector('#b').click();
+                        document.querySelector('#dpb-close-drawer').focus();
+                        return new Promise(resolve => setTimeout(resolve, 0));
+                    }"""
+                )
                 page.wait_for_function(
                     "document.querySelectorAll('#dpb-anchors .dpb-anchor').length === 2")
                 # Ctrl/Cmd+Z undoes the second pin
-                page.locator("#dpb-close-drawer").focus()
+                self.assertEqual(
+                    page.evaluate("document.activeElement.id"),
+                    "dpb-close-drawer",
+                )
                 page.keyboard.press("Control+Z")
                 page.wait_for_function(
                     "document.querySelectorAll('#dpb-anchors .dpb-anchor').length === 1")
