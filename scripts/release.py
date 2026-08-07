@@ -2,8 +2,9 @@
 """Release gate for design-playbook.
 
 Run with no arguments for a side-effect-free dry run. Pass ``--apply`` to
-create the version tag after every selected check passes. Pushing commits or
-tags and publishing the GitHub release remain explicit human actions.
+create the version tag after every selected check passes. The human atomically
+pushes ``main`` and that tag; ``.github/workflows/release.yml`` then publishes
+npm through Trusted Publishing and creates the GitHub Release.
 
 See docs/agents/release-checklist.md 'Validation surfaces' for the split
 between validate.py (static structure gate), this script (publish gate),
@@ -281,10 +282,11 @@ def main() -> int:
             checks[name]()
 
     print()
-    print("== manual (irreversible / human) ==")
-    print("  - git push origin main")
-    print(f"  - git push origin {tag}  (after --apply)")
-    print(f"  - GitHub Release @ {tag}, body = docs/releases/{tag}.md")
+    print("== next (irreversible tag push) ==")
+    print(f"  - git push --atomic origin main {tag}  (after --apply)")
+    print("  - Actions Release workflow: npm publish -> verify -> GitHub Release")
+    print(f"  - recovery only: gh workflow run release.yml --ref {tag} "
+          f"-f tag={tag} -f recovery=true")
     print("  - 2nd-session install smoke (release-checklist gate 5)")
 
     print()

@@ -48,13 +48,24 @@ Defaults come from the local package manifest and exact source inventory. The sc
 - [ ] **4. Clean surface:** covered by `scripts/validate.py` (runtime surface; attribution files excluded).
 - [ ] **5. Install docs copy-paste:** after public main/npm update, `python scripts/install_smoke.py` passes from an isolated config and writes JSON/Markdown evidence. Interactive `/help` remains a human check.
 
-## Version + tag + publish (manual, irreversible)
+## One-time release automation setup
+
+- [ ] npmjs.com `design-playbook` Trusted Publisher: GitHub owner `Bandersnatch0x`, repository `design-playbook`, workflow `release.yml`, environment `npm`, allowed action `npm publish`.
+- [ ] GitHub environment `npm`: restrict deployment to release tags and configure the desired reviewer policy.
+- [ ] Protect `refs/tags/v*` from deletion and retargeting with a repository ruleset.
+- [ ] Do not configure `NPM_TOKEN` / `NODE_AUTH_TOKEN`; `.github/workflows/release.yml` uses GitHub OIDC with npm Trusted Publishing.
+- [ ] After the first successful OIDC publish, disable traditional token publishing where appropriate and revoke obsolete npm automation tokens and GitHub secrets.
+
+The requirements and the `D:/code_space/pi-switch` comparison are recorded in `.scratch/design-playbook-v0/research/npm-trusted-publishing.md`.
+
+## Version + tag + publish (tag-triggered, irreversible)
 
 - [ ] `plugin.json` + `marketplace.json` + `.codex-plugin/plugin.json` + `package.json` (5 sites) + README badge versions match (checked by `release.py`).
 - [ ] `python scripts/release.py --apply` creates `vX.Y.Z` tag.
-- [ ] `git push origin main && git push origin vX.Y.Z`.
-- [ ] GitHub Release at `vX.Y.Z`; body = `docs/releases/X.Y.Z.md`.
-- [ ] `cd packages/design-playbook && npm publish` — the pi.dev gallery indexes npm for the `pi-package` keyword, so skipping this leaves pi users on the previous version with no other signal. Check the tarball first with `npm pack --dry-run`.
+- [ ] Atomically push the release commit and tag: `git push --atomic origin main vX.Y.Z`.
+- [ ] Monitor the `Release` workflow: it re-runs the release gate and full tests, inspects the tarball, publishes npm through OIDC, verifies the registry and provenance, then creates the GitHub Release from `docs/releases/vX.Y.Z.md`.
+- [ ] Verify npm provenance and `latest=vX.Y.Z`; the pi.dev gallery indexes npm for the `pi-package` keyword.
+- [ ] Partial-state recovery only (`npm` exists, GitHub Release missing): `gh workflow run release.yml --ref vX.Y.Z -f tag=vX.Y.Z -f recovery=true`. Normal runs fail on an existing npm version instead of silently skipping it.
 - [ ] Smoke: `python scripts/install_smoke.py` passes against public main + npm; retain or move its `result.json` / `result.md` under the release evidence directory.
 - [ ] Sync `.scratch/design-playbook-v0/phase.md` **header** (`**Current:**` line: version, tag, Release URL, npm latest) — the phase table row alone is not enough; the header is a second write point and has drifted before (v0.8.0 header survived the v0.9.0 release).
 
