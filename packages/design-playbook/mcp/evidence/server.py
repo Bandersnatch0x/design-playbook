@@ -30,12 +30,25 @@ from _transport import serve_stdio  # noqa: E402
 TOOL_NAME = "execute_capture_plan"
 SERVER_NAME = "design-playbook-evidence"
 SERVER_VERSION = "0.1.0"
+CAPTURE_SCHEMA_VERSION = 1
 CAPTURE_TYPES = frozenset({"screenshot", "a11y tree", "interaction trace"})
+COLOR_SCHEMES = frozenset({"light", "dark", "no-preference"})
 ALLOWED_ARGUMENTS = frozenset(
-    {"url", "type", "state", "actions", "artifact_path", "overwrite"}
+    {
+        "schemaVersion",
+        "url",
+        "type",
+        "state",
+        "actions",
+        "artifact_path",
+        "overwrite",
+        "viewport",
+        "freeze",
+    }
 )
 RUN_ROOT_ENV = "DESIGN_PLAYBOOK_RUN_ROOT"
 EVIDENCE_SUBDIR = "evidence"
+RECAPTURE_HINT = "recapture with capture contract schemaVersion=1"
 
 
 def _log(msg: str) -> None:
@@ -46,14 +59,21 @@ def _tool_schema() -> dict[str, Any]:
     return {
         "name": TOOL_NAME,
         "description": (
-            "Execute a capture plan snapshot: navigate, run actions, write one "
-            "artifact (screenshot / a11y tree / interaction trace). Returns "
-            "capture result only (artifact, observed_state, result, error, "
-            "written_path absolute) — never writes manifest; never judges criteria."
+            "Execute a capture plan snapshot under capture contract v1: require "
+            "schemaVersion=1 plus explicit viewport, apply deterministic freeze "
+            "by default, write one artifact (screenshot / a11y tree / "
+            "interaction trace). Returns capture result only (artifact, "
+            "observed_state, result, error, written_path, request) — never "
+            "writes manifest; never judges criteria."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
+                "schemaVersion": {
+                    "type": "integer",
+                    "description": "Capture contract version. Only 1 is supported.",
+                    "const": CAPTURE_SCHEMA_VERSION,
+                },
                 "url": {
                     "type": "string",
                     "description": "Target host URL (or file://) to capture.",
@@ -97,15 +117,61 @@ def _tool_schema() -> dict[str, Any]:
                     ),
                     "default": False,
                 },
+                "viewport": {
+                    "type": "object",
+                    "description": (
+                        "Required capture viewport. Provider does not invent "
+                        "desktop defaults."
+                    ),
+                    "properties": {
+                        "width": {"type": "integer", "minimum": 1},
+                        "height": {"type": "integer", "minimum": 1},
+                        "devicePixelRatio": {"type": "number", "minimum": 0.1},
+                        "colorScheme": {
+                            "type": "string",
+                            "enum": sorted(COLOR_SCHEMES),
+                        },
+                    },
+                    "required": [
+                        "width",
+                        "height",
+                        "devicePixelRatio",
+                        "colorScheme",
+                    ],
+                    "additionalProperties": False,
+                },
+                "freeze": {
+                    "type": "object",
+                    "description": (
+                        "Deterministic freeze controls. Defaults: enabled=true, "
+                        "waitFonts=true, networkIdle=false."
+                    ),
+                    "properties": {
+                        "enabled": {"type": "boolean", "default": True},
+                        "waitFonts": {"type": "boolean", "default": True},
+                        "networkIdle": {"type": "boolean", "default": False},
+                    },
+                    "additionalProperties": False,
+                },
             },
-            "required": ["url", "type", "state", "artifact_path"],
+            "required": [
+                "schemaVersion",
+                "url",
+                "type",
+                "state",
+                "artifact_path",
+                "viewport",
+            ],
             "additionalProperties": False,
         },
     }
 
 
 def _failed(
-    artifact: str, error: str, written_path: str = "",
+    artifact: str,
+    error: str,
+    written_path: str = "",
+    request: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Capture failure payload.
 
@@ -115,23 +181,30 @@ def _failed(
     attempted. Exposing the absolute path makes cwd / RUN_ROOT misconfig
     visible to the orchestrator without a post-hoc filesystem search.
     """
-    return {
+    payload = {
         "artifact": artifact,
         "observed_state": "unknown",
         "result": "failed",
         "error": error,
         "written_path": written_path,
     }
+    if request is not None:
+        payload["request"] = request
+    return payload
 
 
 def _captured(
-    artifact: str, observed_state: str, written_path: str,
+    artifact: str,
+    observed_state: str,
+    written_path: str,
+    request: dict[str, Any],
 ) -> dict[str, Any]:
     """Successful capture payload.
 
     ``written_path`` is always the absolute path of the written artifact
     (resolved under DESIGN_PLAYBOOK_RUN_ROOT or process cwd). Relative
     ``artifact`` stays the run-root-relative path for manifest binding.
+    ``request`` echoes the normalized capture contract for manifest embedding.
     """
     return {
         "artifact": artifact,
@@ -139,7 +212,88 @@ def _captured(
         "result": "captured",
         "error": "",
         "written_path": written_path,
+        "request": request,
     }
+
+
+def parse_capture_contract(args: dict[str, Any]) -> dict[str, Any]:
+    """Validate capture contract v1 fields and return a normalized request.
+
+    Raises ValueError with a recapture instruction for missing/unknown versions
+    or incomplete viewport. Pure — no browser side effects.
+    """
+    if "schemaVersion" not in args:
+        raise ValueError(
+            f"capture contract schemaVersion is required; {RECAPTURE_HINT}"
+        )
+    version = args.get("schemaVersion")
+    if version != CAPTURE_SCHEMA_VERSION:
+        raise ValueError(
+            f"unsupported capture schemaVersion {version!r}; {RECAPTURE_HINT}"
+        )
+    viewport = args.get("viewport")
+    if not isinstance(viewport, dict):
+        raise ValueError(
+            f"viewport object is required for schemaVersion=1; {RECAPTURE_HINT}"
+        )
+    width = viewport.get("width")
+    height = viewport.get("height")
+    dpr = viewport.get("devicePixelRatio")
+    scheme = viewport.get("colorScheme")
+    if not isinstance(width, int) or width < 1:
+        raise ValueError("viewport.width must be a positive integer")
+    if not isinstance(height, int) or height < 1:
+        raise ValueError("viewport.height must be a positive integer")
+    if not isinstance(dpr, (int, float)) or dpr <= 0:
+        raise ValueError("viewport.devicePixelRatio must be a positive number")
+    if scheme not in COLOR_SCHEMES:
+        raise ValueError(
+            f"viewport.colorScheme must be one of {sorted(COLOR_SCHEMES)}; "
+            f"got {scheme!r}"
+        )
+
+    freeze_raw = args.get("freeze")
+    if freeze_raw is None:
+        freeze_raw = {}
+    if not isinstance(freeze_raw, dict):
+        raise ValueError("freeze must be an object when provided")
+    freeze = {
+        "enabled": freeze_raw.get("enabled", True),
+        "waitFonts": freeze_raw.get("waitFonts", True),
+        "networkIdle": freeze_raw.get("networkIdle", False),
+    }
+    for key in ("enabled", "waitFonts", "networkIdle"):
+        if not isinstance(freeze[key], bool):
+            raise ValueError(f"freeze.{key} must be a boolean")
+
+    return {
+        "schemaVersion": CAPTURE_SCHEMA_VERSION,
+        "viewport": {
+            "width": width,
+            "height": height,
+            "devicePixelRatio": float(dpr),
+            "colorScheme": scheme,
+        },
+        "freeze": freeze,
+    }
+
+
+def _apply_freeze(page: Any, freeze: dict[str, Any]) -> None:
+    """Disable motion and optionally wait for fonts / network idle."""
+    if freeze.get("enabled", True):
+        page.add_style_tag(
+            content=(
+                "*, *::before, *::after {"
+                "animation: none !important;"
+                "transition: none !important;"
+                "caret-color: transparent !important;"
+                "}"
+            )
+        )
+    if freeze.get("waitFonts", True):
+        page.evaluate("() => document.fonts ? document.fonts.ready : Promise.resolve()")
+    if freeze.get("networkIdle", False):
+        page.wait_for_load_state("networkidle", timeout=30_000)
 
 
 _RUN_MARKERS = ("plan.md", "point-back.md")
@@ -375,6 +529,15 @@ def execute_capture_plan(args: dict[str, Any]) -> dict[str, Any]:
             f"unsupported argument(s): {names}; provider accepts Runtime Object fields only"
         )
 
+    # Capture contract first: fail closed before path resolution so unversioned
+    # requests never partially execute (ADR-0018).
+    try:
+        request = parse_capture_contract(args)
+    except ValueError as exc:
+        artifact = args.get("artifact_path")
+        label = artifact if isinstance(artifact, str) else ""
+        return _failed(label, str(exc))
+
     url = args.get("url")
     cap_type = args.get("type")
     state = args.get("state")
@@ -406,11 +569,13 @@ def execute_capture_plan(args: dict[str, Any]) -> dict[str, Any]:
     try:
         out_path = _resolve_artifact_path(rel)
     except ValueError as exc:
-        return _failed(rel, str(exc))
+        return _failed(rel, str(exc), request=request)
     abs_written = str(out_path)
     # Refuse every case variant of the manifest execution-record SSOT.
     if out_path.name.casefold() == "manifest.jsonl":
-        return _failed(rel, "provider never writes manifest.jsonl", abs_written)
+        return _failed(
+            rel, "provider never writes manifest.jsonl", abs_written, request=request
+        )
     # G6 write boundary: refuse to overwrite an existing artifact unless the
     # caller explicitly opts in via overwrite=true. Checked before any
     # Playwright launch so a misconfigured re-run cannot clobber prior evidence.
@@ -420,6 +585,7 @@ def execute_capture_plan(args: dict[str, Any]) -> dict[str, Any]:
             f"artifact already exists: {out_path} "
             "(pass overwrite=true to replace)",
             abs_written,
+            request=request,
         )
 
     try:
@@ -429,20 +595,37 @@ def execute_capture_plan(args: dict[str, Any]) -> dict[str, Any]:
             rel,
             f"playwright not installed: {exc}",
             abs_written,
+            request=request,
         )
 
+    viewport = request["viewport"]
+    freeze = request["freeze"]
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             try:
-                context = browser.new_context(viewport={"width": 1280, "height": 800})
+                context = browser.new_context(
+                    viewport={
+                        "width": viewport["width"],
+                        "height": viewport["height"],
+                    },
+                    device_scale_factor=viewport["devicePixelRatio"],
+                    color_scheme=viewport["colorScheme"],
+                )
                 page = context.new_page()
-                page.goto(url.strip(), wait_until="domcontentloaded", timeout=30_000)
+                wait_until = (
+                    "networkidle" if freeze.get("networkIdle") else "domcontentloaded"
+                )
+                page.goto(url.strip(), wait_until=wait_until, timeout=30_000)
+                _apply_freeze(page, freeze)
 
                 if cap_type == "interaction trace":
                     _write_interaction_trace(context, page, out_path, actions)
+                    # Re-apply freeze after actions for the traced session.
+                    _apply_freeze(page, freeze)
                 else:
                     _run_actions(page, actions)
+                    _apply_freeze(page, freeze)
                     if cap_type == "screenshot":
                         _write_screenshot(page, out_path)
                     elif cap_type == "a11y tree":
@@ -453,16 +636,17 @@ def execute_capture_plan(args: dict[str, Any]) -> dict[str, Any]:
                 browser.close()
     except Exception as exc:  # noqa: BLE001 — surface as capture failure
         _log(f"capture failed: {exc}")
-        return _failed(rel, str(exc), abs_written)
+        return _failed(rel, str(exc), abs_written, request=request)
 
     if not out_path.is_file():
         return _failed(
             rel,
             f"artifact not written: {out_path}",
             abs_written,
+            request=request,
         )
 
-    return _captured(rel, observed, abs_written)
+    return _captured(rel, observed, abs_written, request)
 
 
 if __name__ == "__main__":

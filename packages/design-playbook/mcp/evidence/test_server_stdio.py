@@ -91,6 +91,27 @@ def _responses(completed: subprocess.CompletedProcess[str]) -> list[dict]:
     ]
 
 
+
+
+def _v1_capture_args(**overrides):
+    """Minimal capture-contract v1 payload for process-boundary tests."""
+    args = {
+        "schemaVersion": 1,
+        "url": "about:blank",
+        "type": "screenshot",
+        "state": "ok",
+        "actions": [],
+        "artifact_path": "evidence/x.png",
+        "viewport": {
+            "width": 390,
+            "height": 844,
+            "devicePixelRatio": 2.0,
+            "colorScheme": "light",
+        },
+    }
+    args.update(overrides)
+    return args
+
 def _structured(call_response: dict) -> dict:
     result = call_response["result"]
     if result.get("structuredContent") is not None:
@@ -107,6 +128,67 @@ class EvidencePurePathTests(unittest.TestCase):
     containment / overwrite opt-in / JSON-RPC parse-error all
     short-circuit first, so they pass with or without chromium.
     """
+
+    def test_parse_capture_contract_requires_schema_and_viewport(self) -> None:
+        sys.path.insert(0, str(SERVER.parent))
+        import server as evidence_server  # noqa: E402
+
+        with self.assertRaises(ValueError) as missing:
+            evidence_server.parse_capture_contract({"url": "about:blank"})
+        self.assertIn("schemaVersion is required", str(missing.exception))
+        self.assertIn("recapture", str(missing.exception).lower())
+
+        with self.assertRaises(ValueError) as unknown:
+            evidence_server.parse_capture_contract({
+                "schemaVersion": 99,
+                "viewport": {
+                    "width": 1,
+                    "height": 1,
+                    "devicePixelRatio": 1,
+                    "colorScheme": "light",
+                },
+            })
+        self.assertIn("unsupported capture schemaVersion", str(unknown.exception))
+
+        parsed = evidence_server.parse_capture_contract({
+            "schemaVersion": 1,
+            "viewport": {
+                "width": 390,
+                "height": 844,
+                "devicePixelRatio": 2,
+                "colorScheme": "dark",
+            },
+        })
+        self.assertEqual(parsed["schemaVersion"], 1)
+        self.assertEqual(parsed["viewport"]["colorScheme"], "dark")
+        self.assertTrue(parsed["freeze"]["enabled"])
+        self.assertFalse(parsed["freeze"]["networkIdle"])
+
+    def test_missing_schema_version_fails_closed_over_stdio(self) -> None:
+        requests = [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": "execute_capture_plan",
+                    "arguments": {
+                        "url": "about:blank",
+                        "type": "screenshot",
+                        "state": "ok",
+                        "actions": [],
+                        "artifact_path": "evidence/x.png",
+                    },
+                },
+            },
+        ]
+        completed = _run_stdio(requests, timeout=15)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = _structured(_responses(completed)[1])
+        self.assertEqual(payload["result"], "failed")
+        self.assertIn("schemaVersion", payload["error"])
+        self.assertIn("recapture", payload["error"].lower())
 
     def test_tools_list_exposes_execute_capture_plan(self) -> None:
         requests = [
@@ -191,6 +273,9 @@ class EvidencePurePathTests(unittest.TestCase):
                             "params": {
                                 "name": "execute_capture_plan",
                                 "arguments": {
+                        "schemaVersion": 1,
+                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
+
                                     "url": "about:blank",
                                     "type": "screenshot",
                                     "state": "ok",
@@ -223,6 +308,9 @@ class EvidencePurePathTests(unittest.TestCase):
                 "params": {
                     "name": "execute_capture_plan",
                     "arguments": {
+                        "schemaVersion": 1,
+                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
+
                         "url": "about:blank",
                         "type": "screenshot",
                         "state": "ok",
@@ -280,6 +368,9 @@ class EvidencePurePathTests(unittest.TestCase):
                             "params": {
                                 "name": "execute_capture_plan",
                                 "arguments": {
+                        "schemaVersion": 1,
+                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
+
                                     "url": "about:blank",
                                     "type": "screenshot",
                                     "state": "ok",
@@ -318,6 +409,9 @@ class EvidencePurePathTests(unittest.TestCase):
                     "params": {
                         "name": "execute_capture_plan",
                         "arguments": {
+                        "schemaVersion": 1,
+                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
+
                             "url": html.resolve().as_uri(),
                             "type": "screenshot",
                             "state": "error",
@@ -347,6 +441,9 @@ class EvidencePurePathTests(unittest.TestCase):
                         "params": {
                             "name": "execute_capture_plan",
                             "arguments": {
+                        "schemaVersion": 1,
+                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
+
                                 "url": "about:blank",
                                 "type": "screenshot",
                                 "state": "ok",
@@ -423,6 +520,9 @@ class EvidenceCaptureTests(unittest.TestCase):
                     "params": {
                         "name": "execute_capture_plan",
                         "arguments": {
+                        "schemaVersion": 1,
+                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
+
                             "url": url,
                             "type": "screenshot",
                             "state": "error",
@@ -479,6 +579,9 @@ class EvidenceCaptureTests(unittest.TestCase):
                     "params": {
                         "name": "execute_capture_plan",
                         "arguments": {
+                        "schemaVersion": 1,
+                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
+
                             "url": html.resolve().as_uri(),
                             "type": "screenshot",
                             "state": "ok",
@@ -527,6 +630,9 @@ class EvidenceCaptureTests(unittest.TestCase):
                             "params": {
                                 "name": "execute_capture_plan",
                                 "arguments": {
+                        "schemaVersion": 1,
+                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
+
                                     "url": html.resolve().as_uri(),
                                     "type": capture_type,
                                     "state": "error",
@@ -596,6 +702,9 @@ class EvidenceCaptureTests(unittest.TestCase):
                             "params": {
                                 "name": "execute_capture_plan",
                                 "arguments": {
+                        "schemaVersion": 1,
+                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
+
                                     "url": html.resolve().as_uri(),
                                     "type": "screenshot",
                                     "state": expected_state,
@@ -614,13 +723,11 @@ class EvidenceCaptureTests(unittest.TestCase):
                     self.assertTrue((root / artifact_rel).is_file())
 
     def test_failure_paths_never_echo_requested_state_as_observed(self) -> None:
-        base_arguments = {
-            "url": "http://127.0.0.1:1/unreachable",
-            "type": "screenshot",
-            "state": "requested-error",
-            "actions": [],
-            "artifact_path": "evidence/failure.png",
-        }
+        base_arguments = _v1_capture_args(
+            url="http://127.0.0.1:1/unreachable",
+            state="requested-error",
+            artifact_path="evidence/failure.png",
+        )
         cases = [
             ("navigation failure", base_arguments, False),
             (
@@ -676,6 +783,9 @@ class EvidenceCaptureTests(unittest.TestCase):
                     "params": {
                         "name": "execute_capture_plan",
                         "arguments": {
+                        "schemaVersion": 1,
+                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
+
                             "url": html.resolve().as_uri(),
                             "type": "screenshot",
                             "state": "error",
