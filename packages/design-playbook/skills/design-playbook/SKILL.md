@@ -27,7 +27,7 @@ Pause for explicit confirmation before an external, destructive, costly, or scop
 
 ## Steps
 
-> **Stage-list mirror (monorepo maintainers only):** repo-root `scripts/run_status.py` → `STAGES` mirrors this section's steps and artifact filenames for status/resume narration. **Not shipped** with the installable plugin package (`packages/design-playbook/`). Plugin users ignore this pointer. If you add/remove a step or change an artifact filename here, update that monorepo table.
+> **Stage-list mirror:** packaged `scripts/run_status.py` -> `STAGES` mirrors this section's steps and artifact filenames for status/resume narration. If you add/remove a step or change an artifact filename here, update that table.
 
 Do in order. Data flow:
 
@@ -110,15 +110,10 @@ Invoke **ui-picker**. Map scene → template + component semantics. Read its `re
 
 ### 6. preview* (optional external MCP adapter)
 
-After the decision report exists, probe MCP `tools/list` for **`preview_prototype`**.
+After the decision report exists, probe MCP `tools/list` for **`preview_prototype`**. Load operating detail only when present: [`references/load-map.md`](references/load-map.md) + [`references/preview-ops.md`](references/preview-ops.md).
 
-- **Absent** → skip preview; go to Fill (current behavior). No preview artifacts required.
-- **Present** → run the preview loop in this orchestrator (not inside `ui-picker`):
-  1. Host agent generates a disposable prototype HTML (structure-semantics floor: readable scene, named template regions, key component roles as placeholders). Path under `.scratch/<run>/preview/round-{n}.html`.
-  2. Call `preview_prototype` with `path` (preferred) or `html`, plus `summary`, `round`, `report_ref` (current decision report), optional `options`.
-  3. Adapter shows the prototype, collects feedback, applies the **feedback floor** (ADR-0008: non-empty feedback, OR ≥1 anchor with non-empty selector + non-empty comment), writes confirm/log under `.scratch/<run>/preview/`. A confirm that fails the floor is written with `confirmed: false` + `floor_failure` reason — it does **not** count as a confirm.
-  4. On “需要修改” (or `confirmed: false` from a floor failure): append feedback to `preview/log.md`, revise the decision report in place (mark round), generate next prototype; **same blocker two repair rounds without new evidence → stop the loop and report**.
-  5. On confirmed: the tool's `confirmed=true` is **not authoritative on its own** — the confirm record must also carry `floor_pass: true`. Proceed to Fill only with the confirmed + floor-passed decision report (+ plan pointers).
+- **Absent** → skip preview; go to Fill. Narrate step + reason + enable path (G5 not triggered).
+- **Present** → follow `preview-ops.md` (prototype → HITL → floor → confirm). Proceed to Fill only with `confirmed=true` and `floor_pass=true`.
 
 **Native desktop:** still run Web preview when the adapter exists; coverage is **render-surface seam and above** only. Note that limitation once in `preview/log.md`. Do not skip preview solely because the route is native (skip only when the adapter is missing).
 
@@ -159,13 +154,13 @@ After craft, probe MCP `tools/list` for **`execute_capture_plan`**.
 - **Absent** → skip; `ui-evaluator` ledger `observed` stays free-text (current behavior). G6 not triggered.
 - **Present** → for each L6 criterion whose proof is a runtime state, run the evidence loop in this orchestrator (not inside any skill):
   1. **Derive** a capture plan from L6 `Given -> When -> Then` (in memory, not on disk): `Given`/`When` → `state` + `actions`; `Then` → required proof (already in the ledger `required` field). Do not add or remove verification intent; L6 wins on conflict.
-  2. **Execute**: call `execute_capture_plan({url, type, state, actions, artifact_path})`. The provider returns `{artifact, observed_state, result, error, written_path}` and never sees the criterion. Prefer `written_path` (absolute) when locating the file; if it points outside `.scratch/<run>/`, fix `DESIGN_PLAYBOOK_RUN_ROOT` / cwd before binding. `artifact_path` must start with `evidence/` (e.g., `evidence/empty-state.png`, not `empty-state.png`) — the provider resolves it under `<run_root>/evidence/` and refuses absolute paths, `..` segments, or anything that escapes that subtree (`mcp/evidence/server.py` `_resolve_artifact_path`); a bare filename is rejected because it would land outside the evidence subtree. **Async-init timing**: when the page has an async init (skeleton/loading before `body[data-state]` reaches the target state), include a `wait_for_state` action for that state before the capture action. A capture that lands mid-init records the loading state honestly (`observed_state: loading`), which proves the wrong criterion (dogfood 2026-08-01 settings run).
+  2. **Execute**: call `execute_capture_plan` under **capture contract v1** (ADR-0018): required `schemaVersion: 1`, explicit `viewport` (`width`, `height`, `devicePixelRatio`, `colorScheme`), plus `url`, `type`, `state`, `actions`, `artifact_path`. Optional `freeze` defaults to `{enabled: true, waitFonts: true, networkIdle: false}` — freeze is on by default in observe*. Missing/unknown schema versions fail closed with a recapture instruction; there is no dual-read for unversioned evidence. The provider returns `{artifact, observed_state, result, error, written_path, request}` and never sees the criterion. Prefer `written_path` (absolute) when locating the file; if it points outside `.scratch/<run>/`, fix `DESIGN_PLAYBOOK_RUN_ROOT` / cwd before binding. `artifact_path` must start with `evidence/` (e.g., `evidence/empty-state.png`, not `empty-state.png`) — the provider resolves it under `<run_root>/evidence/` and refuses absolute paths, `..` segments, or anything that escapes that subtree (`mcp/evidence/server.py` `_resolve_artifact_path`); a bare filename is rejected because it would land outside the evidence subtree. **Async-init timing**: when the page has an async init (skeleton/loading before `body[data-state]` reaches the target state), include a `wait_for_state` action for that state before the capture action. A capture that lands mid-init records the loading state honestly (`observed_state: loading`), which proves the wrong criterion (dogfood 2026-08-01 settings run).
   3. **Bind** (orchestrator owns the manifest; provider never writes it). After **each** successful or failed capture, **immediately append** one line to `.scratch/<run>/evidence/manifest.jsonl` — do not batch-rewrite the file at the end. Rules:
      - **`observed_state` / `result` / `error`**: copy the provider return **verbatim**. If the provider returns `unknown`, write `unknown` — never overwrite with the requested `state` (request intent lives only under `capture.state`).
-     - **Embedded capture snapshot**: store the full call parameters used (`url` including query string, `type`, `state`, `actions`, `artifact_path`). Omit nothing that would be needed to re-run the capture.
+     - **Embedded capture snapshot**: store the full call parameters used (`schemaVersion`, `viewport`, `freeze`, `url` including query string, `type`, `state`, `actions`, `artifact_path`) and echo the provider `request` object. Omit nothing that would be needed to re-run the capture.
      - **`ts`**: wall-clock of **this** capture's completion (ISO-8601). Distinct captures must not share one batch timestamp.
      - Also record: criterion ref, `artifact` (run-root-relative), optional `artifact_sha256`, optional `written_path` from the provider.
-  4. **Manual provider**: when no ecosystem provider is present but a human operates + screenshots to `artifact_path`, write the same-format manifest entry (`capture.provider: "manual"`); `observed_state` is what the human actually saw, not the planned label.
+  4. **Manual provider**: when no ecosystem provider is present but a human operates + screenshots to `artifact_path`, write the same-format manifest entry (`capture.provider: "manual"`) **including schemaVersion=1 and viewport**; `observed_state` is what the human actually saw, not the planned label.
 - v1 capture types: `screenshot` / `a11y tree` / `interaction trace`.
 
 **Capture surface (url choice — honesty, not a machine gate):**
@@ -217,5 +212,7 @@ When a finding has no owner or you need the observable -> declaration routing, u
 
 `plan`, `preview*`, and `observe*` are orchestrator steps (plus optional external MCPs for preview and observe), not rows in this table. `design-baseline?` is a conditional existing-product orchestrator gate (ADR-0012); `reference-intake?` is a conditional skill step (ADR-0011), not a machine gate.
 
-Slash (installed plugin, namespaced): `/design-playbook:design-io` · `/design-playbook:ux-spec` · `/design-playbook:ui-review`.
+Greenfield first-run route and pause table: [`references/first-run.md`](references/first-run.md).
+
+Slash (installed plugin, namespaced): `/design-playbook:design-io` · `/design-playbook:ux-spec` · `/design-playbook:ui-review` · `/design-playbook:run-status` · `/design-playbook:doctor`.
 With `claude --plugin-dir` the same command files apply under the plugin namespace.

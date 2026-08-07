@@ -38,7 +38,9 @@ Walk every applicable row (exhaustive for bound declarations):
 
 Dimension selection, 回流示例, the preview-seam health check (required when the run produced `preview/` artifacts), and the **observe\* mirror-surface** finding (required when any manifest capture notes `surface: mirror`): [`references/rubric.md`](references/rubric.md).
 
-When `.scratch/<run>/craft-guard.md` exists, consume all eight `CRAFT-01` through `CRAFT-08` rows as supporting craft input. Detector rows are advisory: verify their rendered/source evidence and exception checks, then use the authoritative recirculate map below to choose declaration source and assign severity. A detector never decides source, severity, or verdict. Carry every `blocked` row into evaluation as a craft proof gap. Implemented UI cannot claim complete craft Pass while required rendered or source proof is blocked; planning-only work may record an explicit `N/A` rationale without claiming rendered inspection. Keep craft detector rows out of the G6 manifest and L6 evidence ledger: they are craft-stage audit records, not runtime artifacts or criterion results.
+When L6 proof includes an `a11y tree` artifact, interpret it with [`references/a11y-tree.md`](references/a11y-tree.md) (names, roles, states, keyboard path, focus, material omissions). Record accessibility evidence on the owning user-risk criterion; do not invent separate taste standards.
+
+When `.scratch/<run>/craft-guard.md` exists, consume all eight `CRAFT-01` through `CRAFT-08` rows as supporting craft input when the full catalog is enabled, or every **enabled** subset row when the contract declares a smaller detector set. Summarize enabled count and N/A rate; **warn** when all enabled rows are N/A or any N/A lacks an observable reason. Detector rows are advisory: verify their rendered/source evidence and exception checks, then use the authoritative recirculate map below to choose declaration source and assign severity. A detector never decides source, severity, or verdict. Carry every `blocked` row into evaluation as a craft proof gap. Implemented UI cannot claim complete craft Pass while required rendered or source proof is blocked; planning-only work may record an explicit `N/A` rationale without claiming rendered inspection. Keep craft detector rows out of the G6 manifest and L6 evidence ledger: they are craft-stage audit records, not runtime artifacts or criterion results.
 
 Record an evidence ledger before writing findings. Every L6 criterion has exactly one row:
 
@@ -85,6 +87,8 @@ For a repaired blocker, record exactly one closure line whose issue text is iden
 **Done when:** the explicit verdict is structurally unique; blocking sources are non-empty; every blocking finding has exactly one matching closure before `Pass`. A blocking finding cannot be waived inside a Pass artifact. Without a user in the loop, blocking findings remain in recirculate and the run requests a decision; only after an explicit user decision that updates the owning declaration or severity — recorded against the user's statement or decision record — may the evaluator re-evaluate; the final Pass artifact contains no blocking severity.
 
 The artifact shape behind this verdict is machine-checkable: `scripts/validate_run.py` gates L1-L6, ordered `Given -> When -> Then` in every top-level L6 item, one non-empty four-field evidence row per `L6.<n>`, allowed evidence results, all-pass evidence for `Pass`, four non-empty finding fields, one explicit verdict, and one exact issue-linked closure per blocking finding. These checks are the completion criteria above, not extra prose.
+
+After Recirculate, use [`references/repair.md`](references/repair.md) for the smallest owning declaration and which evidence to invalidate.
 
 ## Recirculate map (authoritative)
 
