@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **v0.11.1 released**（2026-08-07，patch；commit/tag `d6e4d47` on `main`；GitHub Release：https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.11.1；npm `latest=0.11.1`，shasum `291b036`，SLSA provenance verified）。GitHub Actions run `31196686506` 通过 OIDC Trusted Publishing 完成 npm 发布与 Release 创建；公开 marketplace + npm install smoke `retry1` 全绿（8 skills、4 commands、2 MCP）。本次同时修复 Canvas 新锚点延迟聚焦抢回用户焦点的问题。**渠道决策（ADR-0015）：main = stable channel**；community catalog 仍为 **PAUSED BY USER**。
+**Current:** **vNext implement landed on main (unreleased)** — 2026-08-08. Commits `d77ab65`…`34508ec`: ADR-0016–0020, package-ref integrity, capture contract v1, structured G1–G6 diagnostics, persistent contract + G7, packaged `run-status`/`doctor`, skill load-map/first-run/a11y/repair. Local `VALIDATION PASSED` + contract/G7/integration suites green. Surface dogfood `2026-08-08-vnext-surfaces` pass for package machinery; **live HITL design-io dogfood still owed before minor release**. Baseline still **v0.11.1 released**. Next: interactive host dogfood → version **0.12.0** release prep (commands grew; not a patch). **渠道决策（ADR-0015）：main = stable channel**；community catalog 仍为 **PAUSED BY USER**。
 
 | Phase | Status |
 | --- | --- |
@@ -36,6 +36,12 @@
 | v0.10.0 release | done (v0.10.0, 2026-08-04; fourth command `run-review` + `run-review/v1` markdown contract + normalize lockstep; explicit HTTPS install path; release commit/tag `aed0e87`; GitHub Release + npm latest 0.10.0 (shasum `b4b9b3b`); release gate + CI-equivalent suites + second-session public marketplace/npm smoke PASS，证据见 `evidence/gate5-install-smoke-v0.10.0-2026-08-04/result.md`) |
 | v0.11.0 release | done (v0.11.0, 2026-08-07; local canvas named versions + `timeline()` / `state_at()` / `fork()` + anchor v2; hardened cross-process preview transactions and canvas undo; release commit/tag `34ef294`; CI run `31177155507` green; GitHub Release + npm latest 0.11.0 (shasum `04e2b75`); public marketplace/npm smoke PASS，证据见 `evidence/gate5-install-smoke-v0.11.0-2026-08-07/result.md`) |
 | install smoke automation | done (2026-08-07; `scripts/install_smoke.py`: isolated Claude install + exact inventory + strict validate + real MCP handshakes + clean npm consumer; JSON/Markdown evidence; Windows console output encoding-safe; 12 deterministic tests + live smoke PASS, temporary cleanup verified) |
+| v0.11.1 release | done (v0.11.1, 2026-08-07; canvas anchor focus fix; tag + npm + marketplace smoke) |
+| vNext grill → tickets | done (2026-08-08; 5 open questions locked; ADR-0016–0020; `.scratch/design-playbook-vnext/` spec + 12 tickets) |
+| vNext implement | done (2026-08-08; 12 tickets resolved on main; 5 feature commits after `0990250`; see Current) |
+| vNext surface dogfood | done-partial (2026-08-08; packaged contract/G7/capture-parse/status/doctor/validate; log `dogfood/2026-08-08-vnext-surfaces.md`; live HITL/observe still open) |
+| vNext live dogfood | next (interactive `/design-playbook:design-io` with preview* + observe* schema v1) |
+| v0.12.0 release prep | blocked on live dogfood |
 
 ## v0 ship checklist (5/5 pass)
 
