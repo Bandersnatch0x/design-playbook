@@ -235,11 +235,64 @@ class FrontendInteractionTests(unittest.TestCase):
                 page.wait_for_function(
                     "document.querySelectorAll('#dpb-anchors .dpb-anchor').length === 2")
                 # Ctrl/Cmd+Z undoes the second pin
+                page.locator("#dpb-close-drawer").focus()
                 page.keyboard.press("Control+Z")
                 page.wait_for_function(
                     "document.querySelectorAll('#dpb-anchors .dpb-anchor').length === 1")
                 self.assertEqual(
                     page.locator("#dpb-anchors .dpb-anchor").count(), 1)
+                self.assertTrue(page.locator("#a").evaluate(
+                    "el => el.classList.contains('dpb-pin-target')"))
+                self.assertFalse(page.locator("#b").evaluate(
+                    "el => el.classList.contains('dpb-pin-target')"))
+            finally:
+                pw.close()
+
+    def test_comment_input_uses_native_undo_without_removing_anchor(self) -> None:
+        if sync_playwright is None:  # pragma: no cover
+            self.skipTest("playwright not installed")
+        with sync_playwright() as p:
+            pw = p.chromium.launch(headless=True)
+            try:
+                page = self._page(pw)
+                page.wait_for_selector("#dpb-preview-bar .dpb-pill")
+                page.click("#dpb-open-drawer")
+                page.click("#a")
+                comment = page.locator('#dpb-anchors input[data-i="0"]')
+                comment.press_sequentially("draft comment")
+
+                page.keyboard.press("Control+Z")
+
+                self.assertEqual(
+                    page.locator("#dpb-anchors .dpb-anchor").count(), 1)
+                self.assertNotEqual(comment.input_value(), "draft comment")
+            finally:
+                pw.close()
+
+    def test_undo_restores_committed_comment_without_removing_anchor(self) -> None:
+        if sync_playwright is None:  # pragma: no cover
+            self.skipTest("playwright not installed")
+        with sync_playwright() as p:
+            pw = p.chromium.launch(headless=True)
+            try:
+                page = self._page(pw)
+                page.wait_for_selector("#dpb-preview-bar .dpb-pill")
+                page.click("#dpb-open-drawer")
+                page.click("#a")
+                comment = page.locator('#dpb-anchors input[data-i="0"]')
+                comment.fill("before")
+                page.locator("#dpb-close-drawer").focus()
+                comment.fill("after")
+                page.locator("#dpb-close-drawer").focus()
+
+                page.keyboard.press("Control+Z")
+
+                self.assertEqual(
+                    page.locator("#dpb-anchors .dpb-anchor").count(), 1)
+                self.assertEqual(
+                    page.input_value('#dpb-anchors input[data-i="0"]'),
+                    "before",
+                )
             finally:
                 pw.close()
 

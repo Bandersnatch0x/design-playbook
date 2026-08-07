@@ -59,14 +59,25 @@
   var historyStack = [];
   var DRAFT_KEY = window.DPB_DRAFT_KEY || "";
 
-  function pushHistory() {
-    historyStack.push(JSON.stringify(anchors.map(function (a) {
+  function anchorSnapshot() {
+    return JSON.stringify(anchors.map(function (a) {
       return { selector: a.selector, label: a.label, comment: a.comment, tag: a.tag };
-    })));
+    }));
+  }
+
+  function pushHistorySnapshot(snapshot) {
+    historyStack.push(snapshot);
     if (historyStack.length > 50) historyStack.shift();
   }
 
+  function pushHistory() {
+    pushHistorySnapshot(anchorSnapshot());
+  }
+
   function restoreAnchorsFromData(list) {
+    anchors.forEach(function (a) {
+      if (a.el) a.el.classList.remove("dpb-pin-target");
+    });
     anchors = (list || []).map(function (p) {
       var el = null;
       try { if (p.selector) el = document.querySelector(p.selector); } catch (e) {}
@@ -537,6 +548,10 @@ return Array.prototype.filter.call(nodes, function (el) {
     (el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement);
 });
   }
+  function isTextEditingTarget(target) {
+if (!target || !target.closest) return false;
+return !!target.closest('input, textarea, [contenteditable]:not([contenteditable="false"])');
+  }
   document.addEventListener("keydown", function (e) {
 if (e.key === "Escape") {
   if (pinOn) { setPin(false); return; }
@@ -546,6 +561,7 @@ if (e.key === "Escape") {
 // wayfinder canvas-upgrade 07: Ctrl/Cmd+Z undoes the last anchor change
 // (add / remove / committed comment edit).
 if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) {
+  if (isTextEditingTarget(e.target)) return;
   if (!e.shiftKey) { e.preventDefault(); undo(); }
   return;
 }
@@ -668,13 +684,23 @@ setReadiness();
 saveDraft();
   });
 
+  listEl.addEventListener("focusin", function (e) {
+    var t = e.target;
+    if (!t || !t.getAttribute) return;
+    if (t.getAttribute("data-i") == null) return;
+    t._dpbHistoryBefore = anchorSnapshot();
+  });
+
   // wayfinder canvas-upgrade 07: comment edits enter the undo stack at their
   // commit point (change = blur/Enter), not on every keystroke.
   listEl.addEventListener("change", function (e) {
     var t = e.target;
     if (!t || !t.getAttribute) return;
     if (t.getAttribute("data-i") == null) return;
-    pushHistory();
+    if (t._dpbHistoryBefore != null && t._dpbHistoryBefore !== anchorSnapshot()) {
+      pushHistorySnapshot(t._dpbHistoryBefore);
+    }
+    delete t._dpbHistoryBefore;
   });
 
   listEl.addEventListener("click", function (e) {
