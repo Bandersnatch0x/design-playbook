@@ -54,6 +54,12 @@ class SmokeFailure(RuntimeError):
     """Expected smoke failure with a concise evidence-safe message."""
 
 
+def _console(message: str) -> None:
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    safe_message = message.encode(encoding, errors="backslashreplace").decode(encoding)
+    print(safe_message)
+
+
 @dataclass(frozen=True)
 class SmokeConfig:
     version: str
@@ -72,11 +78,11 @@ class Recorder:
 
     def pass_(self, name: str, detail: str) -> None:
         self.checks.append({"name": name, "status": "pass", "detail": detail})
-        print(f"  ok    {name}: {detail}")
+        _console(f"  ok    {name}: {detail}")
 
     def fail(self, name: str, detail: str) -> None:
         self.checks.append({"name": name, "status": "fail", "detail": detail})
-        print(f"  FAIL  {name}: {detail}")
+        _console(f"  FAIL  {name}: {detail}")
 
     def stage(
         self,
@@ -754,12 +760,12 @@ def main(argv: list[str] | None = None) -> int:
     if result["status"] == "pass" and not config.keep_temp:
         cleanup_temporary_root(result)
         json_path, md_path = write_evidence(result, output_dir)
-    print(f"JSON: {json_path}")
-    print(f"Markdown: {md_path}")
+    _console(f"JSON: {json_path}")
+    _console(f"Markdown: {md_path}")
     if result["status"] == "pass":
-        print("INSTALL SMOKE PASSED")
+        _console("INSTALL SMOKE PASSED")
         return 0
-    print(f"INSTALL SMOKE FAILED: {result.get('error', '')}")
+    _console(f"INSTALL SMOKE FAILED: {result.get('error', '')}")
     return 1
 
 

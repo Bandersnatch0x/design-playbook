@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import shutil
 import subprocess
@@ -403,6 +404,38 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual(exit_code, 1)
         self.assertEqual(payload["status"], "fail")
         self.assertIn("requested version 9.9.9", payload["error"])
+
+    def test_cli_failure_is_printable_on_gbk_console(self) -> None:
+        result = {
+            "schema_version": 1,
+            "status": "fail",
+            "started_at": "2026-08-07T00:00:00+00:00",
+            "completed_at": "2026-08-07T00:00:01+00:00",
+            "source": smoke.DEFAULT_SOURCE,
+            "expected": {"version": smoke._source_expectations()["version"]},
+            "runtime": {},
+            "checks": [],
+            "installed": None,
+            "npm": None,
+            "temporary_root": {"path": "", "retained": False, "owned": False},
+            "warnings": [],
+            "error": "marketplace failed: \u2718 clone error",
+        }
+        stdout_bytes = io.BytesIO()
+        stdout = io.TextIOWrapper(stdout_bytes, encoding="gbk", errors="strict")
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(
+            smoke, "run_smoke", return_value=result
+        ), mock.patch.object(sys, "stdout", stdout):
+            output = Path(tmp) / "evidence"
+            exit_code = smoke.main(["--output-dir", str(output)])
+            stdout.flush()
+            payload = json.loads((output / "result.json").read_text(encoding="utf-8"))
+
+        console = stdout_bytes.getvalue().decode("gbk")
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(payload["error"], "marketplace failed: \u2718 clone error")
+        self.assertIn(r"\u2718 clone error", console)
 
     def test_failure_is_recorded_in_result(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
