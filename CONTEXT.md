@@ -77,7 +77,7 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 
 ## Active effort
 
-- **v0.11.0 released (2026-08-07):** local canvas named versions, historical replay/forking, anchor v2, and hardened preview transactions; release commit/tag `34ef294`, GitHub Release, npm `latest=0.11.0`. Evidence: `.scratch/design-playbook-v0/evidence/gate5-install-smoke-v0.11.0-2026-08-07/result.md`.
+- **v0.11.1 released (2026-08-07):** npm Trusted Publishing is live through GitHub Actions OIDC with SLSA provenance; Canvas anchor focus no longer races a later user focus change. Release commit/tag `d6e4d47`; workflow run `31196686506`; GitHub Release; npm `latest=0.11.1`. Evidence: `.scratch/design-playbook-v0/evidence/install-smoke-v0.11.1-2026-08-07-retry1/result.md`.
 - **Install smoke automation hardened (2026-08-07):** `scripts/install_smoke.py` runs isolated marketplace install, exact inventory check, real MCP handshakes, npm consumer validation, and encoding-safe console output; `tests/test_install_smoke.py` has 12 deterministic tests; wired into `.github/workflows/ci.yml` and `docs/agents/release-checklist.md`.
 - **Distribution paused:** `@claude-community` catalog submission pack ready but paused by user decision. Resumption requires a human with an eligible Anthropic Console account at https://platform.claude.com/plugins/submit.
-- **No active feature cycle:** per ADR-0015, `main` stays equal to latest formal release (`0.11.0`). Next product version waits for external user signal or resolved distribution blocker.
+- **No active feature cycle:** per ADR-0015, `main` stays equal to latest formal release (`0.11.1`). Next product version waits for external user signal or resolved distribution blocker.
