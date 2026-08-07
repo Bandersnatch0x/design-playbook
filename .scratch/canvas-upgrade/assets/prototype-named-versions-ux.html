@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>06 原型 — 命名版本 + 时间线 + 回看 + fork（G5 反馈画布）</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --surface:#fff; --elev:#f0f2f5; --line:#e3e6ea; --line2:#c9cfd6;
+    --ink:#1a1d24; --muted:#6b7280; --accent:#0f766e; --accent-ink:#fff;
+    --accent-soft:#d1fae5; --danger:#dc2626; --amber:#b45309; --amber-soft:#fef3c7;
+    --blue:#1d4ed8; --blue-soft:#dbeafe; --radius:10px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{font:13px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--ink); background:var(--bg); padding:24px;}
+  .page-note{max-width:960px; margin:0 auto 14px; color:var(--muted); font-size:12px;}
+  .page-note b{color:var(--ink);}
+  .stage{max-width:960px; margin:0 auto; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--surface); position:relative; min-height:520px; box-shadow:0 10px 30px rgba(20,30,50,.08);}
+  .proto-bar{display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--elev); border-bottom:1px solid var(--line);}
+  .proto-bar .dot{width:10px;height:10px;border-radius:50%;background:#c9cfd6;}
+  .proto-bar .dot.on{background:var(--accent);}
+  .proto-bar .url{flex:1; font-size:12px; color:var(--muted); background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:4px 10px;}
+  .proto-body{min-height:380px; position:relative; background:repeating-linear-gradient(0deg, transparent, transparent 24px, #eef1f4 24px, #eef1f4 25px), repeating-linear-gradient(90deg, transparent, transparent 24px, #eef1f4 24px, #eef1f4 25px);}
+  .mock-ui{max-width:420px; margin:36px auto 0; background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:0 4px 14px rgba(20,30,50,.06); overflow:hidden;}
+  .mock-nav{display:flex; gap:6px; padding:10px 12px; border-bottom:1px solid var(--line); background:var(--elev);}
+  .mock-nav span{width:34px;height:6px;border-radius:3px;background:#d7dce2;}
+  .mock-nav span:first-child{width:60px; background:var(--accent); opacity:.5;}
+  .mock-hero{display:grid; gap:10px; padding:14px;}
+  .mock-hero .t{width:70%; height:12px; border-radius:6px; background:#e8ecf0;}
+  .mock-hero .t.w{width:45%;}
+  .mock-hero .btn{height:26px; width:110px; border-radius:6px; background:var(--accent); opacity:.85;}
+  .mock-cards{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; padding:0 14px 14px;}
+  .mock-cards i{height:64px; border-radius:8px; background:#eef1f4; border:1px solid var(--line);}
+  .dpb-pill{position:absolute; right:18px; bottom:18px; display:inline-flex; align-items:center; gap:8px; padding:8px 8px 8px 14px; background:var(--surface); border:1px solid var(--line2); border-radius:999px; box-shadow:0 8px 24px rgba(20,30,50,.14);}
+  .dpb-round{height:22px; padding:0 8px; border-radius:999px; font-size:11px; font-weight:700; color:var(--accent); background:var(--accent-soft); display:inline-flex; align-items:center;}
+  .dpb-summary{font-size:12px; font-weight:600; color:var(--ink); max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .dpb-btn{appearance:none; cursor:pointer; height:30px; padding:0 12px; border-radius:999px; border:1px solid var(--line2); background:var(--surface); color:var(--ink); font:600 12px/1 system-ui; display:inline-flex; align-items:center; gap:6px;}
+  .dpb-btn:hover{border-color:var(--accent); color:var(--accent);}
+  .dpb-btn.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
+  .dpb-btn.primary:hover{opacity:.9;}
+  .badge{display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:999px; font-size:10.5px; font-weight:700;}
+  .badge.confirmed{color:var(--accent); background:var(--accent-soft);}
+  .badge.revised{color:var(--amber); background:var(--amber-soft);}
+  .badge.fork{color:var(--blue); background:var(--blue-soft);}
+  .drawer{position:absolute; right:18px; bottom:18px; width:420px; max-height:480px; background:var(--surface); border:1px solid var(--line2); border-radius:16px; box-shadow:0 16px 48px rgba(20,30,50,.22); display:none; flex-direction:column; overflow:hidden;}
+  .drawer.open{display:flex;}
+  .drawer-head{display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid var(--line); background:var(--elev);}
+  .drawer-head .l{display:flex; align-items:center; gap:8px; min-width:0;}
+  .drawer-head h3{font-size:13px; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .tabs{display:flex; gap:2px; padding:8px 14px 0;}
+  .tab{padding:7px 12px; border-radius:8px 8px 0 0; border:1px solid transparent; border-bottom:0; background:transparent; color:var(--muted); font:600 12px/1 system-ui; cursor:pointer;}
+  .tab.active{background:var(--surface); color:var(--ink); border-color:var(--line); position:relative; top:1px;}
+  .tab .cnt{margin-left:5px; font-size:10.5px; background:var(--accent); color:#fff; border-radius:999px; padding:1px 6px;}
+  .tab-body{display:none; padding:12px 14px 14px; overflow:auto; min-height:240px; max-height:300px; flex-direction:column; gap:10px;}
+  .tab-body.active{display:flex;}
+  .subhead{font-size:11px; font-weight:700; letter-spacing:.05em; color:var(--muted); text-transform:uppercase;}
+  .tl-item{display:flex; align-items:flex-start; gap:10px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:var(--surface); cursor:pointer;}
+  .tl-item:hover{border-color:var(--accent);}
+  .tl-item .rail{display:flex; flex-direction:column; align-items:center; gap:3px;}
+  .tl-item .rail .n{width:22px;height:22px;border-radius:50%;background:var(--elev); border:1px solid var(--line2); display:grid; place-items:center; font-size:11px; font-weight:700; color:var(--muted);}
+  .tl-item .rail .n.v{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .tl-item .rail .n.f{background:var(--blue); border-color:var(--blue); color:#fff;}
+  .tl-item .meta{flex:1; min-width:0;}
+  .tl-item .meta .nm{font-size:12.5px; font-weight:650; display:flex; align-items:center; gap:6px;}
+  .tl-item .meta .tm{font-size:11px; color:var(--muted); margin-top:2px;}
+  .tl-item .meta .act{font-size:11px; color:var(--muted); margin-top:3px;}
+  .tl-item .go{font-size:11px; color:var(--accent); font-weight:700; align-self:center; white-space:nowrap;}
+  .name-row{display:flex; gap:8px;}
+  .name-row input{flex:1; height:32px; padding:0 10px; border:1px solid var(--line2); border-radius:8px; font:inherit; outline:none;}
+  .name-row input:focus{border-color:var(--accent); box-shadow:0 0 0 2px rgba(15,118,110,.15);}
+  .hint{font-size:11px; color:var(--muted);}
+  .kv{display:grid; gap:4px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:var(--elev);}
+  .kv .k{font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; font-weight:700;}
+  .kv .v{font-size:12.5px; font-weight:600;}
+  .kv .v code{font-weight:500; color:var(--accent);}
+  .anchor{display:grid; grid-template-columns:20px 1fr; gap:8px; padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--elev);}
+  .anchor .n{font-weight:700; color:var(--accent); font-size:11px; padding-top:3px;}
+  .anchor .sel{font-size:11px; color:var(--muted); margin-bottom:4px;}
+  .anchor input{width:100%; height:28px; padding:0 8px; border:1px solid var(--line2); border-radius:6px; font:inherit;}
+  .field{display:grid; gap:6px;}
+  .field textarea{width:100%; min-height:52px; padding:8px 10px; border:1px solid var(--line2); border-radius:8px; font:inherit; resize:vertical;}
+  .drawer-foot{display:flex; justify-content:space-between; align-items:center; gap:8px; padding:12px 14px; border-top:1px solid var(--line); background:var(--elev);}
+  .drawer-foot .btns{display:flex; gap:8px;}
+  .dpb-btn.danger{color:var(--danger); border-color:transparent; background:transparent;}
+  .dpb-btn.danger:hover{background:var(--danger); color:#fff;}
+  .overlay-note{position:absolute; left:14px; top:14px; background:var(--amber-soft); border:1px solid #f59e0b66; color:var(--amber); font-size:11.5px; font-weight:600; padding:6px 10px; border-radius:8px; display:none;}
+  .overlay-note.on{display:block;}
+  .undo-toast{position:absolute; left:50%; bottom:14px; transform:translateX(-50%); background:var(--ink); color:#fff; font-size:11.5px; padding:6px 12px; border-radius:999px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.2);}
+  .undo-toast.on{display:block;}
+</style>
+</head>
+<body>
+
+<p class="page-note"><b>06 原型</b> — 在现有 G5 pill/drawer 上叠加"版本"面板：命名版本、时间线回看、回放、fork 派生。纯 mock，非产品代码。点右下 pill 的"批注"开 drawer，切 <b>版本</b> tab 体验。</p>
+
+<div class="stage">
+  <div class="proto-bar">
+    <span class="dot on"></span>
+    <span class="url">file:///…/preview/round-3.html — 事件流监控页（mock）</span>
+  </div>
+  <div class="proto-body">
+    <div class="overlay-note" id="overlayNote">已回到 round 1 状态（非破坏性回看 — 当前链未变）</div>
+
+    <!-- mock 原型 -->
+    <div class="mock-ui">
+      <div class="mock-nav"><span></span><span></span><span></span></div>
+      <div class="mock-hero">
+        <div class="t"></div><div class="t w"></div>
+        <div class="btn"></div>
+      </div>
+      <div class="mock-cards"><i></i><i></i><i></i></div>
+    </div>
+
+    <!-- pill -->
+    <div class="dpb-pill">
+      <span class="dpb-round">round 3</span>
+      <span class="dpb-summary">事件流监控页 · 桌面端</span>
+      <button class="dpb-btn" onclick="openDrawer()">批注 <b id="pillCnt" style="color:var(--accent)">2</b></button>
+      <button class="dpb-btn primary" onclick="saveVersionPrompt()">确认</button>
+    </div>
+
+    <!-- drawer -->
+    <div class="drawer" id="drawer">
+      <div class="drawer-head">
+        <div class="l">
+          <span class="dpb-round">round 3</span>
+          <h3>事件流监控页 · 桌面端</h3>
+        </div>
+        <button class="dpb-btn" onclick="closeDrawer()">−</button>
+      </div>
+
+      <div class="tabs">
+        <button class="tab" data-t="review" onclick="tab('review')">评审<span class="cnt">2</span></button>
+        <button class="tab active" data-t="versions" onclick="tab('versions')">版本<span class="cnt">3</span></button>
+      </div>
+
+      <!-- 版本面板 -->
+      <div class="tab-body active" id="tab-versions">
+        <div class="name-row">
+          <input id="verName" placeholder="给当前 round 命名，如「确认版·桌面端」">
+          <button class="dpb-btn primary" onclick="saveVersion()">保存版本</button>
+        </div>
+        <div class="hint">保存 = 写 version-&lt;seq&gt;.json（append-only，不可覆盖）。已命名：round 1「初稿」、round 3「确认版·桌面端」。</div>
+
+        <div class="subhead">时间线（decision ∪ version，按时间）</div>
+        <div class="tl" id="timeline">
+          <!-- JS 渲染 -->
+        </div>
+
+        <div class="subhead">分支</div>
+        <div class="kv">
+          <span class="k">fork</span>
+          <span class="v">从 round 1「初稿」派生 → <code>preview/fork-alt/</code>（独立链，round 重计）</span>
+        </div>
+        <button class="dpb-btn" style="align-self:flex-start" onclick="forkIt()">＋ 从此轮派生分支</button>
+      </div>
+
+      <!-- 评审面板 -->
+      <div class="tab-body" id="tab-review">
+        <div class="anchor">
+          <span class="n">1</span>
+          <div><div class="sel">div.summary-card &gt; h2</div><input value="字号偏大，间距再紧凑些"></div>
+        </div>
+        <div class="anchor">
+          <span class="n">2</span>
+          <div><div class="sel">#chart-wrap &gt; svg</div><input value="图表加 loading 态"></div>
+        </div>
+        <div class="field">
+          <div class="subhead">整体反馈</div>
+          <textarea placeholder="整体意见…"></textarea>
+        </div>
+      </div>
+
+      <div class="drawer-foot">
+        <button class="dpb-btn danger" onclick="toast('终止（二次确认 arm）——mock')">终止</button>
+        <div class="btns">
+          <button class="dpb-btn" onclick="closeDrawer()">草稿</button>
+          <button class="dpb-btn primary" onclick="saveVersionPrompt()">确认通过</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="undo-toast" id="undoToast">已撤销上次操作（Ctrl/Cmd+Z）</div>
+  </div>
+</div>
+
+<script>
+  // ---- mock 数据：3 个 round + 2 个命名版本 + 1 个 fork ----
+  const DECISIONS = [
+    {round:1, kind:"confirmed", name:"初稿", time:"10:41:02", digest:"a1b2c3", aborted:false},
+    {round:2, kind:"revised",   name:null,    time:"10:44:37", digest:"d4e5f6", aborted:false},
+    {round:3, kind:"confirmed", name:"确认版·桌面端", time:"10:52:18", digest:"g7h8i9", aborted:false},
+  ];
+  let versions = [
+    {seq:1, name:"初稿",          round:1, kind:"confirmed", time:"10:41:05"},
+    {seq:2, name:"确认版·桌面端", round:3, kind:"confirmed", time:"10:52:20"},
+  ];
+  const FORKS = [{branch:"alt", from:1, dir:"preview/fork-alt/", time:"10:55:00"}];
+  let seq = 3;
+
+  const $ = id => document.getElementById(id);
+
+  function openDrawer(){ $("drawer").classList.add("open"); renderTimeline(); }
+  function closeDrawer(){ $("drawer").classList.remove("open"); }
+  function tab(name){
+    document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active", t.dataset.t===name));
+    document.querySelectorAll(".tab-body").forEach(b=>b.classList.toggle("active", b.id==="tab-"+name));
+  }
+  function badge(kind){
+    return kind==="confirmed" ? '<span class="badge confirmed">已确认</span>'
+         : kind==="revised"   ? '<span class="badge revised">已修订</span>'
+         : '<span class="badge fork">分支</span>';
+  }
+  function renderTimeline(){
+    const tl = $("timeline");
+    // 合并 decision + version + fork，按时间排序（mock 手排）
+    const items = [
+      {type:"d", round:1, v:false, label:"round 1", sub:"确认 · 初稿", act:"feedback: 整体可以，标题放大", time:"10:41:02", kind:"confirmed"},
+      {type:"v", round:1, v:true, label:"初稿", sub:"命名版本 · round 1", act:"", time:"10:41:05", kind:"confirmed"},
+      {type:"d", round:2, v:false, label:"round 2", sub:"修订 · 收到反馈重做", act:"feedback: 桌面端布局调整", time:"10:44:37", kind:"revised"},
+      {type:"d", round:3, v:false, label:"round 3", sub:"确认 · 当前", act:"feedback: 通过", time:"10:52:18", kind:"confirmed"},
+      {type:"v", round:3, v:true, label:"确认版·桌面端", sub:"命名版本 · round 3", act:"", time:"10:52:20", kind:"confirmed"},
+      {type:"f", round:1, v:false, label:"fork: alt", sub:"从 round 1 派生 → preview/fork-alt/", act:"独立链，round 重计", time:"10:55:00", kind:"fork"},
+    ];
+    tl.innerHTML = items.map((it,i)=>`
+      <div class="tl-item" onclick="${it.type==="d"?'replayRound('+it.round+')':it.type==="v"?'replayRound('+it.round+')':'forkIt()'}">
+        <div class="rail">
+          <span class="n ${it.v?'v':it.type==='f'?'f':''}">${it.type==="f"?"⑂":it.type==="v"?"✦":it.round}</span>
+        </div>
+        <div class="meta">
+          <div class="nm">${it.label} ${badge(it.kind)}</div>
+          <div class="tm">${it.time} · ${it.sub}</div>
+          ${it.act?'<div class="act">'+it.act+'</div>':''}
+        </div>
+        <span class="go">${it.type==="d"?"回看 ⟶":it.type==="v"?"打开 ⟶":"派生 ⟶"}</span>
+      </div>`).join("");
+  }
+  function saveVersionPrompt(){
+    $("drawer").classList.add("open"); tab("versions");
+    $("verName").focus();
+  }
+  function saveVersion(){
+    const name = $("verName").value.trim();
+    if(!name){ alert("命名不能为空"); return; }
+    versions.push({seq:seq++, name, round:3, kind:"confirmed", time:"10:5X:00"});
+    $("verName").value="";
+    $("pillCnt").textContent = 2;
+    renderTimeline(); toast("已保存版本「"+name+"」→ version-"+seq+" 待写（mock）");
+  }
+  function replayRound(n){
+    $("overlayNote").classList.add("on");
+    $("overlayNote").textContent = "已回到 round "+n+" 状态（state_at("+n+") 只读回放 — 当前链未变，非破坏性）";
+    setTimeout(()=>$("overlayNote").classList.remove("on"), 2600);
+  }
+  function forkIt(){
+    $("overlayNote").classList.add("on");
+    $("overlayNote").textContent = "fork 派生示意：preview/fork-alt/ 独立链，round 从 1 重计，fork.json 记录来源 round 1 / digest a1b2c3";
+    setTimeout(()=>$("overlayNote").classList.remove("on"), 3000);
+  }
+  function toast(msg){
+    const t=$("undoToast"); t.textContent=msg; t.classList.add("on");
+    setTimeout(()=>t.classList.remove("on"), 2000);
+  }
+</script>
+</body>
+</html>

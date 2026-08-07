@@ -58,6 +58,11 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
     # a revise regardless of UI language). Keys are JSON-quoted/escaped.
     revise_js = ", ".join(
         f"{json.dumps(lbl, ensure_ascii=False)}: 1" for lbl in sorted(REVISE_LABELS))
+    # Draft persistence key (wayfinder canvas-upgrade 07): per-run isolation so
+    # one preview run's draft never leaks into another page/run.
+    import hashlib
+    draft_key = "dpb.draft." + hashlib.sha256(
+        f"{round_n}|{summary}".encode("utf-8")).hexdigest()[:16]
     primary_bits: list[str] = []
     secondary_bits: list[str] = []
     confirm_desc = html_lib.escape(t("confirm_desc"), quote=True)
@@ -118,8 +123,8 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
     i18n_json = (
         json.dumps({k: t(k) for k in JS_KEYS}, ensure_ascii=False)
         .replace("</", "<\\/")
-        .replace(" ", "\\u2028")
-        .replace(" ", "\\u2029")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
     )
 
     html_tpl, css_tpl, js_tpl = _load_resources()
@@ -155,6 +160,7 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         f"<style>\n{css_tpl}\n</style>\n"
         f"{html_formatted}\n"
         f"<script>window.DPB_I18N = {i18n_json};</script>\n"
+        f"<script>window.DPB_DRAFT_KEY = {json.dumps(draft_key)};</script>\n"
         f"<script>\n{js_formatted}\n</script>"
     )
 

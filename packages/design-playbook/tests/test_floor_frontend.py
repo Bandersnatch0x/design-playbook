@@ -81,9 +81,13 @@ def main():
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
         page = browser.new_page()
+        # wayfinder canvas-upgrade 07: draft persistence is per-run, but these
+        # scenarios share one round+summary key; clear localStorage before each
+        # navigation so one scenario's draft never leaks into the next.
         # capture console + the POST (form action /decide will 404 but we
         # only care whether submit was prevented: if prevented, URL stays
         # file://; if allowed, browser navigates to /decide and errors).
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
 
@@ -109,6 +113,7 @@ def main():
             failures.append("S1b: empty in-drawer confirm must be blocked")
 
         # --- Scenario 2: feedback text -> submit allowed ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -123,6 +128,7 @@ def main():
             failures.append("S2: feedback-text confirm not allowed through")
 
         # --- Scenario 3: anchor with comment -> submit allowed ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -146,6 +152,7 @@ def main():
         # --- Scenario 4: short feedback is allowed (structural floor, no min length) ---
         # CJK-first: 3-char "太挤了" is substantive feedback; semantic junk is G6's
         # job, not the floor's (ADR-0008).
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -159,6 +166,7 @@ def main():
             failures.append("S4: short CJK feedback must be allowed (no min-length floor)")
 
         # --- Scenario 5: whitespace-only feedback is blocked (trimmed before non-empty check) ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -173,6 +181,7 @@ def main():
             failures.append("S5: whitespace-only feedback must be blocked")
 
         # --- Scenario 6: feedback present + incomplete anchor (no comment) still blocked ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -191,6 +200,7 @@ def main():
             failures.append("S6: feedback + incomplete anchor must be blocked")
 
         # --- Scenario 7: complete anchor only (no feedback text) is allowed ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -209,6 +219,7 @@ def main():
             failures.append("S7: complete anchor without text must be allowed")
 
         # --- Scenario 8: live readiness indicator + multiple anchors edge cases ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -234,6 +245,7 @@ def main():
 
         # --- Scenario 9: revise (e.g. "需要修改") should be allowed even with empty/no feedback ---
         # Revise is for requesting changes; floor enforcement is mainly for confirm.
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -256,6 +268,7 @@ def main():
         # --- S10: pill primary direct-confirm is two-step arm→submit when ready ---
         # 二级保护: first click arms (no submit), second click submits confirm.
         # Guards the "null"-choice regression + accidental one-click confirm.
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -298,6 +311,7 @@ def main():
             )
 
         # --- S11: draft button keeps notes and closes without deciding (no submit) ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -320,6 +334,7 @@ def main():
             failures.append("S11: draft button should close drawer without triggering submit")
 
         # --- S12: pill primary label switches to confirm label when ready ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -336,6 +351,7 @@ def main():
             failures.append("S12: pill primary label should update to confirm label when ready")
 
         # --- S13: pill primary label restores when readiness flips back (I13) ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -354,6 +370,7 @@ def main():
             failures.append("S13: pill primary label should restore when readiness flips back to not-ready")
 
         # --- S14: abort requires a second click (I18 two-step confirm) ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -374,6 +391,7 @@ def main():
             failures.append("S14: abort needs arm(1st)+submit(2nd); first must not navigate")
 
         # --- S14b: arming resets when drawer closes (I18 leak fix) ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -390,6 +408,7 @@ def main():
             failures.append("S14b: abort arming should reset when drawer closes")
 
         # --- S15: Ctrl+Enter in feedback submits the CONFIRM (I8) ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -405,6 +424,7 @@ def main():
         captured = page.evaluate("() => window.__capturedSubmitter")
         s15_ok = captured == PRIMARY_OPT  # must be the confirm, not abort/revise
         # S15b: Ctrl+Enter with drawer CLOSED must NOT submit (handler only on textarea)
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.keyboard.press('Control+Enter')
@@ -416,6 +436,7 @@ def main():
             failures.append("S15: Ctrl+Enter should submit the CONFIRM (not abort/revise) when open; nothing when closed")
 
         # --- S16: clicking elsewhere in drawer cancels abort arming (8b34387) ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -433,6 +454,7 @@ def main():
             failures.append("S16: clicking elsewhere in drawer must cancel abort arming")
 
         # --- S17: pill confirm arm undoes without submit (timeout / annotate click) ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -481,6 +503,7 @@ def main():
             )
 
         # --- S18: footer decision controls expose non-empty consequence descriptions ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
@@ -517,6 +540,7 @@ def main():
             )
 
         # --- S19: familiar control text is not prefixed by platform emoji ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-open-drawer')
         annotate_text = page.locator('#dpb-open-drawer').inner_text()
@@ -531,6 +555,7 @@ def main():
 
         # --- S20: control theme follows live host overrides and system changes ---
         page.emulate_media(color_scheme='dark')
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
 
