@@ -14,6 +14,7 @@ from __future__ import annotations
 COMMAND_INVENTORY: dict[tuple[int, int], frozenset[str]] = {
     (0, 9): frozenset({"design-io", "ux-spec", "ui-review"}),
     (0, 10): frozenset({"design-io", "ux-spec", "ui-review", "run-review"}),
+    (0, 11): frozenset({"design-io", "ux-spec", "ui-review", "run-review"}),
 }
 
 
