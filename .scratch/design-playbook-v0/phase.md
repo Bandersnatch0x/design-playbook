@@ -40,7 +40,7 @@
 | vNext grill → tickets | done (2026-08-08; 5 open questions locked; ADR-0016–0020; `.scratch/design-playbook-vnext/` spec + 12 tickets) |
 | vNext implement | done (2026-08-08; 12 tickets resolved on main; 5 feature commits after `0990250`; see Current) |
 | vNext surface dogfood | done-partial (2026-08-08; packaged contract/G7/capture-parse/status/doctor/validate; log `dogfood/2026-08-08-vnext-surfaces.md`; live HITL/observe still open) |
-| vNext live dogfood | next (interactive `/design-playbook:design-io` with preview* + observe* schema v1) |
+| vNext live dogfood | next (interactive `/design-playbook:design-io` with preview* + observe* schema v1); checklist `docs/agents/vnext-live-dogfood.md` + `python scripts/vnext_live_dogfood.py preflight` |
 | v0.12.0 release prep | blocked on live dogfood |
 
 ## v0 ship checklist (5/5 pass)
