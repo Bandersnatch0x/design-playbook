@@ -34,7 +34,8 @@ from transaction import (
     _render_log,
     _valid_entries,
 )
-from util import _now_iso, prototype_html_digest
+from integrity import prototype_html_digest
+from util import _now_iso
 
 VERSION_SCHEMA_VERSION = 1
 MAX_NAME_LENGTH = 80

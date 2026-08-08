@@ -13,8 +13,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import transaction  # noqa: E402
-import util  # noqa: E402
 import versions  # noqa: E402
+from integrity import prototype_html_digest  # noqa: E402
 from versions import (  # noqa: E402
     VersionCommittedError,
     VersionError,
@@ -32,7 +32,7 @@ def _seed_round(
     preview_dir: Path, round_n: int, html: str,
     *, confirmed: bool = True, feedback: str = "ok",
 ) -> dict:
-    digest = util.prototype_html_digest(html.encode("utf-8"))
+    digest = prototype_html_digest(html.encode("utf-8"))
     binding = transaction._binding(
         round_n=round_n, prototype_hash=digest, report_ref="r.md",
         summary="s", options=["确认通过", "需要修改"])
@@ -447,7 +447,7 @@ class ForkTests(unittest.TestCase):
             src = Path(tmp) / "preview"
             src.mkdir()
             # path-mode style: decision entry but no round-N.html snapshot
-            digest = util.prototype_html_digest(b"<html>x</html>")
+            digest = prototype_html_digest(b"<html>x</html>")
             binding = transaction._binding(
                 round_n=1, prototype_hash=digest, report_ref="r.md",
                 summary="s", options=["确认通过", "需要修改"])

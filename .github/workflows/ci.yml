@@ -32,6 +32,7 @@ jobs:
           python3 tests/test_release.py
           python3 tests/test_doctor.py
           python3 tests/test_run_status.py
+          python3 tests/test_stages_registry.py
           python3 tests/test_design_baseline.py
           python3 tests/test_validate.py
           python3 tests/test_aggregate_runs.py
@@ -49,9 +50,11 @@ jobs:
         run: |
           python3 -m py_compile \
             packages/design-playbook/mcp/preview/server.py \
+            packages/design-playbook/mcp/preview/integrity.py \
             packages/design-playbook/mcp/preview/transaction.py \
             packages/design-playbook/mcp/evidence/server.py \
             packages/design-playbook/mcp/test_transport.py \
+            packages/design-playbook/mcp/preview/test_integrity.py \
             packages/design-playbook/mcp/preview/test_server_stdio.py \
             packages/design-playbook/mcp/preview/test_transaction.py \
             packages/design-playbook/mcp/evidence/test_server_stdio.py \
@@ -67,6 +70,7 @@ jobs:
             tests/test_release.py \
             tests/test_doctor.py \
             tests/test_run_status.py \
+            tests/test_stages_registry.py \
             tests/test_design_baseline.py \
             tests/test_validate.py \
             tests/test_aggregate_runs.py \
@@ -94,6 +98,7 @@ jobs:
         run: |
           python3 -m pytest \
             packages/design-playbook/mcp/test_transport.py \
+            packages/design-playbook/mcp/preview/test_integrity.py \
             packages/design-playbook/mcp/preview/test_transaction.py \
             packages/design-playbook/mcp/preview/test_server_stdio.py \
             -v

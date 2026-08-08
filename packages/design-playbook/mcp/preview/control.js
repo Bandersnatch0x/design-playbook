@@ -890,9 +890,8 @@ saveDraft();
   window.addEventListener("scroll", repositionAll, true);
   window.addEventListener("resize", repositionAll);
 
-  // ADR-0008: confirm requires substantive feedback too -
+  // ADR-0008 advisory UX check; Python Preview integrity is authoritative.
   // (non-empty feedback OR >=1 anchor) AND all anchors complete.
-  // Frontend mirrors adapter _check_feedback_floor via isSubstantive().
   var reviseLabels = {__DPB_REVISE_LABELS__};
   form.addEventListener("submit", function (e) {
 syncHidden();

@@ -35,7 +35,6 @@ Strict quality mode (opt-in):
   --strict            shorthand for both require flags
 """
 import argparse
-import hashlib
 import json
 import os
 import re
@@ -53,23 +52,13 @@ from _diagnostics import (
     usage_finding,
 )
 
-# G5 prototype-integrity helpers (issues 02 / 03) live in the sibling module
-# _preview_integrity.py (review H4: high-coherence split to bring this file
-# under 800 lines). check_preview uses the three private helpers; the three
-# public names use the explicit ``name as name`` re-export idiom so existing
-# ``from validate_run import ...`` callers (scripts/run_status.py) keep
-# working unchanged. The sibling resolves via sys.path the same way run_status
-# imports this module (scripts/ is not a package).
-from _preview_integrity import (
-    _confirm_round,
-    _g5_no_valid_reason,
-    _verify_prototype_hash,
-)
-from _preview_integrity import (
-    is_confirmed_valid as is_confirmed_valid,
-    latest_numeric_round as latest_numeric_round,
-    read_confirm_record as read_confirm_record,
-)
+# Preview integrity rules live with the bundled Preview runtime. This scripts/
+# directory is not a package, so the read adapter adds that sibling runtime
+# exactly once; replacing sys.path adapters is Candidate 5, not this deepening.
+_PREVIEW_RUNTIME_DIR = Path(__file__).resolve().parent.parent / "mcp" / "preview"
+if str(_PREVIEW_RUNTIME_DIR) not in sys.path:
+    sys.path.insert(0, str(_PREVIEW_RUNTIME_DIR))
+from integrity import ConfirmRecord, PreviewSnapshot, inspect_preview  # noqa: E402
 
 try:
     from g7_contract_drift import check_g7 as check_g7
@@ -88,9 +77,6 @@ EVIDENCE_FIELDS = ("criterion", "required", "observed", "result")
 EVIDENCE_LINE = re.compile(
     r"^(criterion|required|observed|result):[ \t]*(.*)$", re.I | re.M)
 VALID_RESULTS = {"pass", "fail", "blocked", "n/a"}
-ROUND_HTML = re.compile(r"^round-\d+\.html$", re.I)
-CONFIRM_JSON = re.compile(r"^confirm-round-\d+\.json$", re.I)
-DECISION_JSON = re.compile(r"^decision-round-(\d+)\.json$", re.I)
 
 
 def _l6_body(text: str) -> str:
@@ -455,58 +441,9 @@ def check_pointback(text: str, expected_l6: int) -> list[Finding]:
     return errs
 
 
-def _valid_decision_entry(path: Path) -> bool:
-    """Recognize transaction audit/recovery authority, never confirmation."""
-    match = DECISION_JSON.match(path.name)
-    if not match or not path.is_file():
-        return False
-    try:
-        entry = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
-        return False
-    if not isinstance(entry, dict) or entry.get("schema_version") != 1:
-        return False
-    binding = entry.get("binding")
-    outcome = entry.get("outcome")
-    if not (
-        isinstance(entry.get("decision_id"), str)
-        and bool(entry["decision_id"])
-        and isinstance(binding, dict)
-        and binding.get("round") == int(match.group(1))
-        and isinstance(binding.get("prototype_html_hash"), str)
-        and isinstance(binding.get("report_ref"), str)
-        and isinstance(binding.get("summary"), str)
-        and isinstance(binding.get("options"), list)
-        and all(isinstance(item, str) for item in binding["options"])
-        and isinstance(outcome, dict)
-    ):
-        return False
-    fields = {
-        "round": binding["round"],
-        "prototype_html_hash": binding["prototype_html_hash"],
-        "report_ref": binding["report_ref"],
-        "summary": binding["summary"],
-        "options": binding["options"],
-    }
-    canonical = json.dumps(
-        fields, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-    return binding.get("digest") == hashlib.sha256(canonical).hexdigest()
-
-
 def preview_occurred(preview_dir: Path | None) -> bool:
-    """True for historical signals or a valid durable decision entry."""
-    if preview_dir is None or not preview_dir.is_dir():
-        return False
-    if (preview_dir / "log.md").is_file():
-        return True
-    try:
-        return any(
-            p.is_file()
-            and (bool(ROUND_HTML.match(p.name)) or _valid_decision_entry(p))
-            for p in preview_dir.iterdir())
-    except OSError:
-        return False
+    """Project Preview integrity occurrence for G5/strict-mode callers."""
+    return preview_dir is not None and inspect_preview(preview_dir).occurred
 
 
 def _resolve_report_ref(
@@ -532,70 +469,145 @@ def _resolve_report_ref(
     return None
 
 
-def check_preview(
-        preview_dir: Path | None,
-        decision_report: Path | None) -> list[Finding]:
-    """G5 conditional preview confirmation gate.
-
-    A preview run is satisfied only by a *current* confirmed record: the
-    record must belong to the latest numeric round (issues 02 / 03 — accepting
-    any historical confirmed round let a stale round-1 confirm mask an
-    undecided round-2), must pass the ADR-0008 feedback floor, and — when the
-    trusted side wrote ``prototype_html_hash`` — the prototype html on disk
-    must still hash to it (issue 02).
-    """
-    if not preview_occurred(preview_dir):
-        return []
-
-    assert preview_dir is not None  # for type checkers
-    confirms: list[tuple[Path, dict]] = []
-    try:
-        entries = list(preview_dir.iterdir())
-    except OSError as exc:
+def _g5_no_valid_reason(current: tuple[ConfirmRecord, ...]) -> list[Finding]:
+    """Explain invalid current confirms without owning integrity rules."""
+    confirmed = [
+        record for record in current
+        if isinstance(record.data, dict) and record.data.get("confirmed") is True
+    ]
+    if not confirmed:
         return [finding(
-            "G5.preview_unreadable",
-            f"G5 preview: cannot read preview dir: {exc}",
+            "G5.no_confirmed",
+            "G5 preview: preview occurred but no confirm-round-*.json with "
+            "confirmed=true",
             owner="preview/",
-            expected="readable preview directory",
-            actual=str(exc),
-            repair="Fix preview directory permissions or path",
+            expected="confirm-round-*.json with confirmed=true",
+            actual="no valid confirmed record in current round",
+            repair="Complete preview* HITL and write a confirmed confirm-round",
         )]
+    record = confirmed[0]
+    data = record.data
+    assert isinstance(data, dict)
+    if data.get("floor_pass") is not True:
+        reason = data.get("floor_failure") or "no floor_pass=true"
+        return [finding(
+            "G5.floor_fail",
+            f"G5 preview: confirmed record {record.path.name} failed feedback floor: "
+            f"{reason}",
+            owner=f"preview/{record.path.name}",
+            expected="floor_pass=true on confirmed record",
+            actual=str(reason),
+            repair="Revise with substantive feedback and re-confirm",
+        )]
+    if data.get("aborted") is True:
+        return [finding(
+            "G5.aborted",
+            f"G5 preview: confirmed record {record.path.name} is aborted; an aborted "
+            "round cannot satisfy the preview gate",
+            owner=f"preview/{record.path.name}",
+            expected="non-aborted confirmed record",
+            actual="aborted=true",
+            repair="Start a new preview round and confirm it",
+        )]
+    return [finding(
+        "G5.invalid_confirm",
+        f"G5 preview: confirmed record {record.path.name} is not a valid confirm",
+        owner=f"preview/{record.path.name}",
+        expected="confirmed=true and floor_pass=true",
+        actual=record.path.name,
+        repair="Rewrite confirm-round with a valid confirm payload",
+    )]
 
-    for path in entries:
-        if not path.is_file() or not CONFIRM_JSON.match(path.name):
-            continue
-        data, err = read_confirm_record(path)
-        if err is not None:
+
+def _g5_fact_findings(snapshot: PreviewSnapshot) -> list[Finding]:
+    """Project host-neutral Preview integrity facts into G5 diagnostics."""
+    for fact in snapshot.facts:
+        owner = f"preview/{fact.path.name}" if fact.path is not None else "preview/"
+        if fact.code == "preview_unreadable":
+            return [finding(
+                "G5.preview_unreadable",
+                f"G5 preview: cannot read preview dir: {fact.detail}",
+                owner="preview/",
+                expected="readable preview directory",
+                actual=fact.detail,
+                repair="Fix preview directory permissions or path",
+            )]
+        if fact.code == "invalid_confirm_record":
             return [finding(
                 "G5.invalid_confirm_record",
-                f"G5 preview: {err}",
-                owner=f"preview/{path.name}",
+                f"G5 preview: {fact.detail}",
+                owner=owner,
                 expected="valid confirm-round JSON object",
-                actual=err,
+                actual=fact.detail,
                 repair="Rewrite the confirm record as valid JSON",
             )]
-        if not isinstance(data, dict):
+        if fact.code == "confirm_not_object":
             return [finding(
                 "G5.confirm_not_object",
-                f"G5 preview: confirm record {path.name} is not an object",
-                owner=f"preview/{path.name}",
+                f"G5 preview: {fact.detail}",
+                owner=owner,
                 expected="JSON object",
-                actual=type(data).__name__,
+                actual=fact.actual,
                 repair="Rewrite confirm-round as a JSON object",
             )]
-        confirms.append((path, data))
+        if fact.code == "missing_hash":
+            return [finding(
+                "G5.missing_hash",
+                "G5 preview: confirmed record missing prototype_html_hash "
+                "(pre-0.4.4 record or hand-written — re-run preview*)",
+                owner="preview/",
+                expected="prototype_html_hash on confirmed record",
+                actual="missing",
+                repair="Re-run preview* so the adapter writes the hash",
+            )]
+        if fact.code == "missing_prototype":
+            return [finding(
+                "G5.missing_prototype",
+                "G5 preview: confirmed record carries prototype_html_hash but "
+                "its prototype html is missing",
+                owner="preview/",
+                expected="preview/round-<n>.html on disk",
+                actual="prototype html missing or outside preview/",
+                repair="Restore the prototype html or re-run preview*",
+            )]
+        if fact.code == "hash_mismatch":
+            round_name = (
+                f"round-{snapshot.current_round}.html"
+                if snapshot.current_round is not None else "preview/"
+            )
+            return [finding(
+                "G5.hash_mismatch",
+                "G5 preview: confirmed record prototype_html_hash mismatch "
+                "(prototype altered after confirm)",
+                owner=round_name,
+                expected=fact.expected,
+                actual=fact.actual,
+                repair="Re-confirm after prototype changes, or restore the confirmed html",
+            )]
+    return []
 
-    run_root = preview_dir.parent
-    latest = latest_numeric_round(run_root)
 
-    # Keep only records that belong to the current (max numeric) round. When
-    # latest is None (preview/ has no round-* artifacts — log.md only) fall
-    # back to considering every confirm we found.
-    current: list[tuple[Path, dict]] = [
-        (path, data) for path, data in confirms
-        if latest is None or _confirm_round(path, data) == latest
-    ]
+def check_preview(
+        preview_dir: Path | None,
+        decision_report: Path | None,
+        snapshot: PreviewSnapshot | None = None) -> list[Finding]:
+    """G5 conditional gate projected from one Preview integrity snapshot."""
+    if preview_dir is None:
+        return []
+    snapshot = snapshot or inspect_preview(preview_dir)
+    if not snapshot.occurred:
+        return []
 
+    fact_findings = _g5_fact_findings(snapshot)
+    if fact_findings and fact_findings[0].rule_id in {
+        "G5.preview_unreadable",
+        "G5.invalid_confirm_record",
+        "G5.confirm_not_object",
+    }:
+        return fact_findings
+
+    current = snapshot.current_confirms
+    latest = snapshot.current_round
     if not current:
         if latest is not None:
             return [finding(
@@ -618,23 +630,11 @@ def check_preview(
             repair="Complete preview* HITL and write a confirmed confirm-round",
         )]
 
-    # G5 validity uses the single judgment shared with run_status
-    # (is_confirmed_valid). When no record is valid, attribute the failure to
-    # a specific cause so the message stays diagnostic.
-    true_confirms = [
-        (path, data) for path, data in current
-        if is_confirmed_valid(data)
-    ]
+    true_confirms = tuple(record for record in current if record.valid)
     if not true_confirms:
         return _g5_no_valid_reason(current)
-
-    # Prototype integrity: when the trusted side recorded a hash, the
-    # prototype on disk must still match it (issue 02). Missing hash FAILs
-    # (adapter always writes it post-0.4.4).
-    for _path, data in true_confirms:
-        hash_errs = _verify_prototype_hash(data, run_root)
-        if hash_errs:
-            return hash_errs
+    if fact_findings:
+        return fact_findings
 
     wanted: Path | None = None
     if decision_report is not None:
@@ -660,7 +660,9 @@ def check_preview(
                 repair="Create the decision report or fix the path",
             )]
 
-    for path, data in true_confirms:
+    for record in true_confirms:
+        data = record.data
+        assert isinstance(data, dict)
         ref = data.get("report_ref")
         if not isinstance(ref, str) or not ref.strip():
             continue
@@ -1040,8 +1042,11 @@ def run(
     errs += check_spec(spec_text)
     errs += check_pointback(pointback_text, len(_l6_items(spec_text)))
     pd = Path(preview_dir) if preview_dir else None
+    preview_snapshot = inspect_preview(pd) if pd is not None else None
     dr = Path(decision_report) if decision_report else None
-    if require_preview and not preview_occurred(pd):
+    if require_preview and (
+        preview_snapshot is None or not preview_snapshot.occurred
+    ):
         errs.append(finding(
             "G5.require_preview",
             "G5 preview: --require-preview set but preview did not occur "
@@ -1051,7 +1056,7 @@ def run(
             actual="preview did not occur",
             repair="Pass --preview-dir with preview artifacts or drop the flag",
         ))
-    errs += check_preview(pd, dr)
+    errs += check_preview(pd, dr, preview_snapshot)
     ed = Path(evidence_dir) if evidence_dir else None
     rr = Path(run_root) if run_root else None
     if require_evidence:
