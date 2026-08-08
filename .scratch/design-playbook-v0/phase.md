@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **vNext implement landed on main (unreleased)** — 2026-08-08. Commits `d77ab65`…`34508ec`: ADR-0016–0020, package-ref integrity, capture contract v1, structured G1–G6 diagnostics, persistent contract + G7, packaged `run-status`/`doctor`, skill load-map/first-run/a11y/repair. Local `VALIDATION PASSED` + contract/G7/integration suites green. Surface dogfood `2026-08-08-vnext-surfaces` pass for package machinery; **live HITL design-io dogfood still owed before minor release**. Baseline still **v0.11.1 released**. Next: interactive host dogfood → version **0.12.0** release prep (commands grew; not a patch). **渠道决策（ADR-0015）：main = stable channel**；community catalog 仍为 **PAUSED BY USER**。
+**Current:** **v0.12.0 release prep ready (local, untagged)** — 2026-08-08. Versions bumped to **0.12.0** across plugin/npm/marketplace/README; `COMMAND_INVENTORY` has `(0, 12)`; release notes `docs/releases/v0.12.0.md`. Includes vNext (ADR-0016–0020, contract v1, G7, `run-status`/`doctor`) + preview Scheme A′ control interaction. Live dogfood `2026-08-08-vnext-live` **pass**. Local gates green. **Next:** commit(s) → `python scripts/release.py` dry-run → `--apply` tag only when user asks → push atomic + install smoke. **渠道决策（ADR-0015）：main = stable channel**；community catalog 仍为 **PAUSED BY USER**.
 
 | Phase | Status |
 | --- | --- |
@@ -41,7 +41,8 @@
 | vNext implement | done (2026-08-08; 12 tickets resolved on main; 5 feature commits after `0990250`; see Current) |
 | vNext surface dogfood | done-partial (2026-08-08; packaged contract/G7/capture-parse/status/doctor/validate; log `dogfood/2026-08-08-vnext-surfaces.md`; live HITL/observe still open) |
 | vNext live dogfood | done (2026-08-08; run `dogfood/2026-08-08-vnext-live`; real HITL confirm-round-2 + HTTP fill-host observe v1; G5/G6/G7 verify green; log `2026-08-08-vnext-live.md` verdict **pass**) |
-| v0.12.0 release prep | next |
+| preview control A′ | done (2026-08-08; abort popover + clamp/trap/cancel, pill revise submit, quick feedback, Ctrl+Enter floor, Esc/outside disarm pill arm; floor S1–S25 + control markup tests green) |
+| v0.12.0 release prep | in-progress (version surfaces + notes + inventory; tag/publish/smoke only on explicit ask) |
 
 ## v0 ship checklist (5/5 pass)
 

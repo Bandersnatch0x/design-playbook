@@ -26,6 +26,16 @@ COMMAND_INVENTORY: dict[tuple[int, int], frozenset[str]] = {
         "run-status",
         "doctor",
     }),
+    # 0.12 keeps the 0.11 command surface; inventory key must match product minor
+    # so doctor/run-status are not “0.11 inventory under 0.12 product”.
+    (0, 12): frozenset({
+        "design-io",
+        "ux-spec",
+        "ui-review",
+        "run-review",
+        "run-status",
+        "doctor",
+    }),
 }
 
 
