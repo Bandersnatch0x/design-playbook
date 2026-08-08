@@ -15,6 +15,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import transaction  # noqa: E402
 import versions  # noqa: E402
+from integrity import prototype_html_digest  # noqa: E402
 from transaction import (  # noqa: E402
     PreviewTransactionError,
     TransactionConflict,
@@ -558,7 +559,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
                 prototype.write_text("reviewed", encoding="utf-8")
                 digest = transaction._binding(
                     round_n=1,
-                    prototype_hash=transaction.prototype_html_digest(
+                    prototype_hash=prototype_html_digest(
                         prototype.read_bytes()
                     ),
                     report_ref="report.md", summary="summary",

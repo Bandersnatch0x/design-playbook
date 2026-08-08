@@ -25,7 +25,8 @@ else:
 
 from control import _format_feedback
 from i18n import CONFIRM_LABELS
-from util import _now_iso, prototype_html_digest
+from integrity import evaluate_feedback_floor, prototype_html_digest
+from util import _now_iso
 
 BrowserCollector = Callable[[Path, str, list[str], int], dict[str, Any]]
 ENTRY_SCHEMA_VERSION = 1
@@ -54,36 +55,6 @@ def _ensure_prototype(path_arg: str | None, html: str | None, round_n: int,
     return target
 
 
-def _check_feedback_floor(feedback: str,
-                          anchors: list[dict[str, Any]]) -> tuple[bool, str]:
-    """ADR-0008 preview feedback floor (structural, machine-checkable).
-
-    Passes when:
-    - (non-empty feedback OR >=1 anchor present) as trigger, AND
-    - every present anchor (if any) has non-empty selector AND non-empty comment.
-
-    Deliberately structural, no minimum length: short CJK feedback like
-    "太挤了" is substantive; semantic junk (ADR-0008's "安师大" case) is
-    ui-evaluator's job (G6), not the floor's.
-    Returns (floor_pass, floor_failure_reason).
-    """
-    feedback = (feedback or "").strip()
-    trigger = bool(feedback) or bool(anchors)
-    if not trigger:
-        return False, "confirm with no substantive feedback: empty feedback and no anchor"
-    if anchors:
-        for a in anchors:
-            if not isinstance(a, dict):
-                return False, "anchor is not an object"
-            sel = str(a.get("selector") or "").strip()
-            note = str(a.get("comment") or "").strip()
-            if not sel or not note:
-                return False, (
-                    "anchor missing non-empty selector and comment: "
-                    f"selector={sel!r} comment={note!r}")
-    return True, ""
-
-
 def _self_check_floor() -> None:
     """ADR-0008 floor branch logic self-check (ponytail: one runnable check)."""
     cases = [
@@ -109,7 +80,7 @@ def _self_check_floor() -> None:
          [{"selector": "h2", "comment": "x"}], True),
     ]
     for label, fb, anc, want in cases:
-        got, _ = _check_feedback_floor(fb, anc)
+        got = evaluate_feedback_floor(fb, anc).passed
         assert got == want, f"{label}: want {want}, got {got}"
     print("FLOOR SELF-CHECK PASSED")
 
@@ -829,7 +800,8 @@ def _run_locked(
         floor_pass = False
         floor_failure = str(submission.get("floor_failure") or "")
     else:
-        floor_pass, floor_failure = _check_feedback_floor(raw_feedback, anchors)
+        floor = evaluate_feedback_floor(raw_feedback, anchors)
+        floor_pass, floor_failure = floor.passed, floor.reason
     confirmed = user_confirmed and floor_pass
 
     served_hash = str(submission.get("prototype_html_hash") or prototype_hash)

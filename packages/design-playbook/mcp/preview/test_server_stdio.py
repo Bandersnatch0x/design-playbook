@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # Browser behavior is tested through its owning adapter, not server re-exports.
 import browser  # noqa: E402
 import transaction  # noqa: E402
+from integrity import prototype_html_digest  # noqa: E402
 
 
 SERVER = Path(__file__).with_name("server.py")
@@ -117,7 +118,7 @@ class PreviewMcpStdioTests(unittest.TestCase):
         options = ["确认通过", "需要修改"]
         binding = transaction._binding(
             round_n=1,
-            prototype_hash=transaction.prototype_html_digest(html.encode("utf-8")),
+            prototype_hash=prototype_html_digest(html.encode("utf-8")),
             report_ref="report.md", summary="review", options=options,
         )
         with tempfile.TemporaryDirectory() as tmp:

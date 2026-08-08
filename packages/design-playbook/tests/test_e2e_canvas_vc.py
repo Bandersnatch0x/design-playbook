@@ -28,6 +28,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "mcp" / "preview"))
 import browser  # noqa: E402
 import control as preview_control  # noqa: E402
+from integrity import prototype_html_digest  # noqa: E402
 import transaction  # noqa: E402
 import versions  # noqa: E402
 from i18n import default_options  # noqa: E402
@@ -57,7 +58,7 @@ def _serve(proto_html: str, summary: str, options: list[str], round_n: int):
     control = browser._inject_token_fields(control, token, round_n)
     page = browser._build_parent_page(proto_html, control)
     session = browser._DecisionSession(round_n, token)
-    box: dict = {"result": None, "proto_hash": browser.prototype_html_digest(
+    box: dict = {"result": None, "proto_hash": prototype_html_digest(
         proto_html.encode("utf-8"))}
 
     class Handler(BaseHTTPRequestHandler):

@@ -37,7 +37,7 @@ from browser import (  # noqa: E402
     _DecisionSession,
     _generate_decision_token,
 )
-from util import prototype_html_digest  # noqa: E402
+from integrity import prototype_html_digest  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #

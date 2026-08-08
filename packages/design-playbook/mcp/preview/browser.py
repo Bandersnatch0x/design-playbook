@@ -27,7 +27,8 @@ from urllib.parse import parse_qs
 
 from control import _build_control
 from i18n import lang, t
-from util import _log, prototype_html_digest
+from integrity import prototype_html_digest
+from util import _log
 
 
 def _generate_decision_token() -> str:
