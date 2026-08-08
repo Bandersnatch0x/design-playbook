@@ -49,11 +49,13 @@
   var pillCountEl = document.getElementById("dpb-pill-count");
   var drawerEl = document.getElementById("dpb-drawer");
   var pillReadyEl = document.getElementById("dpb-pill-ready");
+  var pillFeedback = document.getElementById("dpb-pill-feedback");
   var anchors = [];
   var pinOn = false;
   var hoverEl = null;
   var floatRoot = null;
   var floatMap = {};  // selector -> bubble element
+  var syncingFeedback = false;  // avoid feedback loop between pill input and drawer textarea
 
   // wayfinder canvas-upgrade 07: draft persistence (per-run localStorage) + anchor undo.
   var historyStack = [];
@@ -96,6 +98,24 @@
     saveDraft();
   }
 
+  function feedbackValue() {
+    return (field && field.value || "").trim();
+  }
+
+  function setFeedbackValue(value, source) {
+    // Single feedback state: pill 1-line input and drawer textarea stay in sync.
+    syncingFeedback = true;
+    try {
+      var next = value == null ? "" : String(value);
+      if (field && source !== "field" && field.value !== next) field.value = next;
+      if (pillFeedback && source !== "pill" && pillFeedback.value !== next) {
+        pillFeedback.value = next;
+      }
+    } finally {
+      syncingFeedback = false;
+    }
+  }
+
   function saveDraft() {
     if (!DRAFT_KEY) return;
     try {
@@ -116,7 +136,7 @@
     var data = null;
     try { data = JSON.parse(raw); } catch (e) { return; }
     if (!data || typeof data !== "object") return;
-    if (field && typeof data.feedback === "string") field.value = data.feedback;
+    if (typeof data.feedback === "string") setFeedbackValue(data.feedback, null);
     if (Array.isArray(data.anchors)) {
       restoreAnchorsFromData(data.anchors);
       render();
@@ -307,16 +327,40 @@ setReadiness();
   // I4: ADR-0008 substantive predicate (mirror of adapter floor) + live readiness.
   // Structural only, no minimum length (ADR-0008: semantic junk is G6's job).
   function isSubstantive() {
-var value = (field && field.value || "").trim();
+var value = feedbackValue();
 var anchorsComplete = !anchors.length || anchors.every(function (a) {
   return (a && (a.selector || "").trim() && (a.comment || "").trim());
 });
 return (value.length > 0 || anchors.length) && anchorsComplete;
   }
+
+  function focusFeedback() {
+// Status chip / not-ready paths: prefer visible pill quick input, else drawer textarea.
+var pillVisible = !!(pillFeedback && pillFeedback.offsetParent !== null
+  && !bar.classList.contains("is-open"));
+if (pillVisible) {
+  pillFeedback.focus();
+  return;
+}
+if (!bar.classList.contains("is-open")) openDrawer();
+setTimeout(function () { if (field) field.focus(); }, 0);
+  }
+
+  // Scheme A′: Ctrl/Cmd+Enter always routes confirm through isSubstantive floor.
+  function trySubmitPrimary() {
+if (isSubstantive()) {
+  submitPrimary();
+  return;
+}
+if (field) field.setAttribute("aria-invalid", "true");
+if (hint) hint.classList.add("is-on");
+focusFeedback();
+  }
   var lastReady = null;
   var pillOpenLabel = null;  // I13: original pill-primary label, restored on ready->not-ready flip
   var openPrimary = document.getElementById("dpb-open-primary");
-  // Pill direct-confirm 二级保护: first click arms, second submits (mirrors abort arm).
+  // Pill confirm mis-tap protection: first click arms, second submits (A′ arm path).
+  // Abort uses popover; pill confirm keeps arm so the resting pill stays one control.
   var CONFIRM_ARM_MS = 4000;
   var pillConfirmArmed = false;
   var pillConfirmTimer = null;
@@ -328,6 +372,7 @@ var wasArmed = pillConfirmArmed;
 if (openPrimary && pillConfirmArmed) {
   pillConfirmArmed = false;
   openPrimary.classList.remove("is-armed");
+  openPrimary.removeAttribute("aria-pressed");
   if (pillConfirmReadyLabel !== null) openPrimary.textContent = pillConfirmReadyLabel;
 }
 if (pillArmStatus) {
@@ -406,11 +451,18 @@ setTimeout(function () { if (closeBtn) closeBtn.focus(); }, 0);
   }
   function closeDrawer() {
 bar.classList.remove("is-open");
-resetAbortArmed();  // I18: clear abort arming when drawer closes (no stale armed state on reopen)
+hideAbortPopover();  // Scheme A′: dismiss abort popover when drawer closes
 resetPillConfirmArmed();  // pill reappears disarmed
 if (pinOn) setPin(false);
 if (drawerEl && drawerEl.open && typeof drawerEl.close === "function") drawerEl.close();
 if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
+  }
+
+  // Shared: submit the confirm (drawer primary). Used by pill-primary arm path
+  // and trySubmitPrimary (Ctrl+Enter) so confirm always hits the same submitter.
+  function submitPrimary() {
+var targetBtn = document.querySelector(".dpb-drawer .dpb-btn-primary");
+if (targetBtn) form.requestSubmit(targetBtn); else form.requestSubmit();
   }
 
   // I2: 批注 (annotate) and the not-ready pill primary used to both just open
@@ -420,21 +472,15 @@ if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
 openDrawer();
 setPin(true);
   });
-  // Shared: submit the confirm (drawer primary). Used by pill-primary direct
-  // confirm (handlePillPrimary) and Ctrl+Enter (I8) to avoid divergent targets.
-  function submitPrimary() {
-var targetBtn = document.querySelector(".dpb-drawer .dpb-btn-primary");
-if (targetBtn) form.requestSubmit(targetBtn); else form.requestSubmit();
-  }
   function handlePillPrimary(e) {
     if (isSubstantive()) {
-      // 二级保护: ready pill primary is arm → confirm (not one-click submit).
-      // Accidental click on a resting "确认通过" must not kill the review session.
+      // Mis-tap protection: arm→confirm on pill (A′). Drawer confirm stays direct.
       e.preventDefault();
       if (!pillConfirmArmed) {
         pillConfirmArmed = true;
         if (pillConfirmReadyLabel === null) pillConfirmReadyLabel = openPrimary.textContent;
         openPrimary.classList.add("is-armed");
+        openPrimary.setAttribute("aria-pressed", "true");
         openPrimary.textContent = I18N.confirm_confirm || "";
         if (pillArmStatus) pillArmStatus.textContent = I18N.confirm_confirm || "";
         pillConfirmTimer = setTimeout(function () { resetPillConfirmArmed(true); }, CONFIRM_ARM_MS);
@@ -448,16 +494,19 @@ if (targetBtn) form.requestSubmit(targetBtn); else form.requestSubmit();
     }
   }
   if (openPrimary) openPrimary.addEventListener("click", handlePillPrimary);
-  var pillReviseBtns = bar.querySelectorAll('[data-pill-revise]');
-  for (var ri = 0; ri < pillReviseBtns.length; ri++) {
-    pillReviseBtns[ri].addEventListener("click", function () {
-      resetPillConfirmArmed();
-      openDrawer();
-      setTimeout(function () { if (field) field.focus(); }, 0);
-    });
-  }
+  // Scheme A′: pill revise is type=submit — no open-drawer handler.
   if (closeBtn) closeBtn.addEventListener("click", closeDrawer);
   if (pinBtn) pinBtn.addEventListener("click", function () { setPin(!pinOn); });
+  // Status chip focuses the feedback field (pill quick input or drawer textarea).
+  if (pillReadyEl) {
+pillReadyEl.addEventListener("click", function () { focusFeedback(); });
+  }
+  // Outside click cancels a pending pill confirm arm (not a second accidental submit).
+  document.addEventListener("click", function (e) {
+if (!pillConfirmArmed) return;
+if (e.target && e.target.closest && e.target.closest("#dpb-open-primary")) return;
+resetPillConfirmArmed(true);
+  }, true);
   // P1.5: click on scrim (outside drawer) closes the drawer. Fires only when pin
   // is OFF (CSS sets scrim pointer-events:none while body.dpb-pin-mode is on, so
   // pin-on clicks reach the page for element selection, not the scrim).
@@ -470,63 +519,120 @@ if (bar.classList.contains("is-open") && !pinOn && e.target === bar) closeDrawer
   var draftBtn = document.getElementById("dpb-draft");
   if (draftBtn) draftBtn.addEventListener("click", function () { closeDrawer(); });
 
-  // I8: Ctrl/Cmd+Enter in the feedback textarea submits the confirm (primary) action
-  if (field) {
-field.addEventListener("keydown", function (e) {
+  // Pill quick feedback: single state with drawer textarea (wide layouts only in CSS).
+  if (pillFeedback) {
+pillFeedback.addEventListener("input", function () {
+  if (syncingFeedback) return;
+  setFeedbackValue(pillFeedback.value, "pill");
+  if (isSubstantive()) {
+    if (field) field.removeAttribute("aria-invalid");
+    if (hint) hint.classList.remove("is-on");
+  }
+  setReadiness();
+  saveDraft();
+});
+pillFeedback.addEventListener("keydown", function (e) {
   if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
     e.preventDefault();
-    submitPrimary();
+    trySubmitPrimary();
   }
 });
   }
 
-  // I18: abort requires a second click within the confirm window (prevents accidental
-  // session kill). First click arms the button for ABORT_ARM_MS; second click submits __abort__.
-  // Armed state is announced to screen readers via the #dpb-abort-status alert
-  // region (the visible textContent swap alone is not reliably announced).
-  // 4000ms: at 2000ms a hesitant user's second click landed AFTER expiry and
-  // just re-armed, so the button felt dead no matter how often it was clicked.
-  var ABORT_ARM_MS = 4000;
+  // I8 / A′: Ctrl/Cmd+Enter submits confirm only when isSubstantive (floor gate).
+  if (field) {
+field.addEventListener("keydown", function (e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+    e.preventDefault();
+    trySubmitPrimary();
+  }
+});
+  }
+
+  // Scheme A′: abort uses an explicit second-confirm popover (not 4s arm).
   var abortBtn = document.getElementById("dpb-abort");
   var abortStatus = document.getElementById("dpb-abort-status");
-  var abortArmed = false;
-  var abortTimer = null;
-  var abortLabel = "";
-  // announceCancel: when true (4s timeout), write "cancelled" to the sr-only
-  // status so screen readers hear the arm expire; other paths clear silently.
-  function resetAbortArmed(announceCancel) {
-if (abortTimer) { clearTimeout(abortTimer); abortTimer = null; }
-var wasArmed = abortArmed;
-if (abortBtn && abortArmed) {
-  abortArmed = false;
-  abortBtn.textContent = abortLabel;
+  var abortPopover = document.getElementById("dpb-abort-popover");
+  var abortCancel = document.getElementById("dpb-abort-cancel");
+  var abortConfirm = document.getElementById("dpb-abort-confirm");
+
+  function abortPopoverOpen() {
+return !!(abortPopover && !abortPopover.hidden);
+  }
+  function positionAbortPopover() {
+// Prefer fixed coords from the abort button so the popover is not clipped by
+// drawer bounds and stays on-screen on narrow footers.
+if (!abortPopover || !abortBtn || abortPopover.hidden) return;
+var rect = abortBtn.getBoundingClientRect();
+var pad = 8;
+var estW = Math.min(260, Math.max(200, window.innerWidth * 0.45));
+var estH = 110;
+var left = rect.right + pad;
+var top = rect.top;
+if (left + estW > window.innerWidth - pad) {
+  left = Math.max(pad, rect.left - estW - pad);
+}
+if (top + estH > window.innerHeight - pad) {
+  top = Math.max(pad, window.innerHeight - estH - pad);
+}
+if (top < pad) top = pad;
+abortPopover.classList.add("is-fixed");
+abortPopover.style.setProperty("--dpb-pop-left", left + "px");
+abortPopover.style.setProperty("--dpb-pop-top", top + "px");
+  }
+  function clearAbortPopoverPosition() {
+if (!abortPopover) return;
+abortPopover.classList.remove("is-fixed");
+abortPopover.style.removeProperty("--dpb-pop-left");
+abortPopover.style.removeProperty("--dpb-pop-top");
+  }
+  function showAbortPopover() {
+if (!abortPopover) return;
+abortPopover.hidden = false;
+positionAbortPopover();
+if (abortBtn) {
+  abortBtn.setAttribute("aria-expanded", "true");
+  abortBtn.classList.add("is-armed");
+}
+if (abortStatus) abortStatus.textContent = I18N.terminate_confirm || "";
+setTimeout(function () {
+  if (abortConfirm && typeof abortConfirm.focus === "function") abortConfirm.focus();
+}, 0);
+  }
+  function hideAbortPopover(announceCancel) {
+var wasOpen = abortPopoverOpen();
+if (abortPopover) abortPopover.hidden = true;
+clearAbortPopoverPosition();
+if (abortBtn) {
+  abortBtn.setAttribute("aria-expanded", "false");
   abortBtn.classList.remove("is-armed");
 }
 if (abortStatus) {
-  abortStatus.textContent = (announceCancel && wasArmed)
+  abortStatus.textContent = (announceCancel && wasOpen)
     ? (I18N.abort_cancelled || "")
     : "";
 }
   }
   if (abortBtn) {
-abortLabel = abortBtn.textContent;
 abortBtn.addEventListener("click", function (e) {
-  if (!abortArmed) {
-    e.preventDefault();
-    abortArmed = true;
-    abortBtn.textContent = I18N.terminate_confirm || "";
-    abortBtn.classList.add("is-armed");
-    if (abortStatus) abortStatus.textContent = I18N.terminate_confirm || "";
-    abortTimer = setTimeout(function () { resetAbortArmed(true); }, ABORT_ARM_MS);
-  }  // else: let the submit proceed (choice=__abort__)
+  e.preventDefault();
+  e.stopPropagation();
+  if (abortPopoverOpen()) hideAbortPopover();
+  else showAbortPopover();
 });
   }
-  // MEDIUM: clicking elsewhere in the drawer cancels abort arming (not just
-  // ESC / 4s timeout); the abort button's own click is excluded via closest.
+  if (abortCancel) {
+abortCancel.addEventListener("click", function () { hideAbortPopover(true); });
+  }
+  // Click elsewhere in the drawer dismisses the abort popover (not the confirm
+  // submit control itself).
   if (drawerEl) drawerEl.addEventListener("click", function (e) {
-if (abortArmed && abortBtn && !e.target.closest("#dpb-abort")) {
-  resetAbortArmed();
-}
+if (!abortPopoverOpen()) return;
+if (e.target.closest && e.target.closest(".dpb-abort-wrap")) return;
+hideAbortPopover(true);
+  });
+  window.addEventListener("resize", function () {
+if (abortPopoverOpen()) positionAbortPopover();
   });
 
   // wayfinder canvas-upgrade 07: restore any persisted draft (feedback +
@@ -541,7 +647,7 @@ if (abortArmed && abortBtn && !e.target.closest("#dpb-abort")) {
   // the prototype so keyboard users can move focus onto page elements.
   if (drawerEl) drawerEl.addEventListener("close", function () {
 bar.classList.remove("is-open");
-resetAbortArmed();  // I18: defense-in-depth - clear arming if a future path closes the dialog directly
+hideAbortPopover();  // defense-in-depth if dialog closes outside closeDrawer
 if (pinOn) setPin(false);
   });
   function drawerFocusables() {
@@ -557,8 +663,30 @@ return Array.prototype.filter.call(nodes, function (el) {
 if (!target || !target.closest) return false;
 return !!target.closest('input, textarea, [contenteditable]:not([contenteditable="false"])');
   }
+  function abortPopoverFocusables() {
+if (!abortPopover || abortPopover.hidden) return [];
+var sel = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+var nodes = abortPopover.querySelectorAll(sel);
+return Array.prototype.filter.call(nodes, function (el) {
+  return !el.hasAttribute("disabled") && el.tabIndex !== -1 &&
+    (el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement);
+});
+  }
   document.addEventListener("keydown", function (e) {
 if (e.key === "Escape") {
+  if (abortPopoverOpen()) {
+    e.preventDefault();
+    hideAbortPopover(true);
+    if (abortBtn && typeof abortBtn.focus === "function") abortBtn.focus();
+    return;
+  }
+  // Esc undoes a pending pill confirm arm without opening/closing the drawer.
+  if (pillConfirmArmed) {
+    e.preventDefault();
+    resetPillConfirmArmed(true);
+    if (openPrimary && typeof openPrimary.focus === "function") openPrimary.focus();
+    return;
+  }
   if (pinOn) { setPin(false); return; }
   if (bar.classList.contains("is-open")) { e.preventDefault(); closeDrawer(); }
   return;
@@ -571,6 +699,21 @@ if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) {
   return;
 }
 if (e.key !== "Tab") return;
+// When abort popover is open, trap Tab inside the popover (not the whole drawer).
+if (abortPopoverOpen()) {
+  var popList = abortPopoverFocusables();
+  if (!popList.length) return;
+  var pFirst = popList[0];
+  var pLast = popList[popList.length - 1];
+  var pActive = document.activeElement;
+  var pOutside = !abortPopover.contains(pActive);
+  if (e.shiftKey) {
+    if (pOutside || pActive === pFirst) { e.preventDefault(); pLast.focus(); }
+  } else {
+    if (pOutside || pActive === pLast) { e.preventDefault(); pFirst.focus(); }
+  }
+  return;
+}
 if (!bar.classList.contains("is-open") || pinOn) return;  // pinOn: let Tab escape to prototype
 var list = drawerFocusables();
 if (!list.length) return;
@@ -774,6 +917,8 @@ if (!bar.classList.contains("is-open")) openDrawer();
   });
   if (field) {
 field.addEventListener("input", function () {
+  if (syncingFeedback) return;
+  setFeedbackValue(field.value, "field");
   if (isSubstantive()) {
     field.removeAttribute("aria-invalid");
     if (hint) hint.classList.remove("is-on");

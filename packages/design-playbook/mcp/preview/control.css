@@ -27,7 +27,9 @@
 --dpb-note-bg: #1f2430;
 --dpb-note-ink: #f3f4f6;
 --dpb-radius: 10px;
---dpb-control-h: 40px;
+/* Scheme A′: unify interactive targets — pill 36 / drawer footer 40 */
+--dpb-control-h: 36px;
+--dpb-drawer-control-h: 40px;
   }
   #dpb-preview-bar {
 font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -104,7 +106,7 @@ text-overflow: ellipsis; white-space: nowrap;
 display: inline-flex; align-items: center; gap: 6px;
   }
   #dpb-preview-bar .dpb-pill .dpb-btn-ghost {
-appearance: none; cursor: pointer; height: 32px; padding: 0 12px;
+appearance: none; cursor: pointer; height: var(--dpb-control-h); padding: 0 12px;
 border-radius: 999px; border: 1px solid var(--dpb-line-strong);
 background: var(--dpb-surface); color: var(--dpb-soft);
 font: 650 12.5px/1 system-ui, sans-serif;
@@ -125,7 +127,7 @@ background: var(--dpb-accent);
   }
   #dpb-preview-bar .dpb-pill .dpb-badge-dot.is-on { display: inline-flex; }
   #dpb-preview-bar .dpb-pill .dpb-btn-primary {
-appearance: none; cursor: pointer; height: 32px; padding: 0 16px;
+appearance: none; cursor: pointer; height: var(--dpb-control-h); padding: 0 16px;
 border-radius: 999px; border: 1px solid var(--dpb-accent-deep);
 background: var(--dpb-accent); color: var(--dpb-accent-ink);
 font: 650 12.5px/1 system-ui, sans-serif;
@@ -153,7 +155,7 @@ outline: 2px solid var(--dpb-accent); outline-offset: 2px;
   }
   /* secondary action surfaced on the pill (e.g. the revise label) */
   #dpb-preview-bar .dpb-pill .dpb-btn-pill-secondary {
-appearance: none; cursor: pointer; height: 32px; padding: 0 14px;
+appearance: none; cursor: pointer; height: var(--dpb-control-h); padding: 0 14px;
 border-radius: 999px; border: 1px solid var(--dpb-line-strong);
 background: var(--dpb-elev); color: var(--dpb-soft);
 font: 650 12.5px/1 system-ui, sans-serif;
@@ -171,11 +173,32 @@ outline: 2px solid var(--dpb-accent); outline-offset: 2px;
 /* Per debate: do not hide revise on mobile; allow stacking if needed */
   }
 
+  /* pill quick 1-line feedback — wide only; same state as drawer textarea */
+  #dpb-preview-bar .dpb-pill .dpb-pill-feedback {
+appearance: none; box-sizing: border-box;
+width: 160px; max-width: 22vw; height: var(--dpb-control-h);
+margin: 0; padding: 0 12px;
+border-radius: 999px; border: 1px solid var(--dpb-line-strong);
+background: var(--dpb-surface); color: var(--dpb-ink);
+font: 500 12.5px/1 system-ui, sans-serif; outline: none;
+transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+  }
+  #dpb-preview-bar .dpb-pill .dpb-pill-feedback::placeholder { color: var(--dpb-placeholder); }
+  #dpb-preview-bar .dpb-pill .dpb-pill-feedback:hover {
+border-color: var(--dpb-border-hover); background: var(--dpb-elev);
+  }
+  #dpb-preview-bar .dpb-pill .dpb-pill-feedback:focus {
+border-color: var(--dpb-accent); box-shadow: 0 0 0 3px rgba(20,184,166,.22);
+background: var(--dpb-input-focus);
+  }
+
   /* ---- drawer (expanded state) ---- */
+  /* z-index 1001 > bar (1000) > float notes (999): drawer sits above pill chrome */
   #dpb-preview-bar dialog.dpb-drawer {
 position: fixed;
 right: 24px;
 bottom: 24px;
+z-index: 1001;
 margin: 0;
 width: 380px;
 max-width: calc(100vw - 48px);
@@ -185,7 +208,8 @@ background: var(--dpb-bg);
 border: 1px solid var(--dpb-line);
 border-radius: 16px;
 box-shadow: 0 16px 48px rgba(0,0,0,.22), 0 4px 12px rgba(0,0,0,.12);
-overflow: hidden;
+/* visible so abort popover can extend past the foot without being clipped */
+overflow: visible;
 color: var(--dpb-ink);
 padding: 0;
   }
@@ -209,6 +233,7 @@ pointer-events: none;  /* P1.5: let pin-mode clicks reach prototype elements */
 display: flex; align-items: center; justify-content: space-between;
 gap: 10px; padding: 12px 14px;
 border-bottom: 1px solid var(--dpb-line);
+border-radius: 16px 16px 0 0;
 background: linear-gradient(180deg, var(--dpb-chrome), var(--dpb-bg));
   }
   #dpb-preview-bar .dpb-drawer-head .dpb-head-left {
@@ -244,7 +269,7 @@ color: var(--dpb-muted); text-transform: uppercase;
 
   /* pin toggle in drawer */
   #dpb-preview-bar .dpb-pin-toggle {
-appearance: none; cursor: pointer; height: 34px; padding: 0 12px;
+appearance: none; cursor: pointer; height: var(--dpb-control-h); padding: 0 12px;
 border-radius: 8px; border: 1px solid var(--dpb-line-strong);
 background: var(--dpb-surface); color: var(--dpb-soft);
 font: 650 12.5px/1 system-ui, sans-serif;
@@ -330,9 +355,17 @@ display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
   /* I4: neutral hint up-front; .is-on only adds emphasis (was red-danger-only). */
   #dpb-preview-bar .dpb-hint { margin: 0; font-size: 12px; color: var(--dpb-muted); display: block; }
   #dpb-preview-bar .dpb-hint.is-on { color: var(--dpb-danger); font-weight: 600; }
-  /* I4: pill readiness indicator (live status on the resting pill). */
+  /* I4 / A′: readiness chip — click focuses feedback (pill or drawer). */
   #dpb-preview-bar .dpb-pill .dpb-pill-ready {
+appearance: none; cursor: pointer; border: 0; background: transparent;
+padding: 0 4px; margin: 0;
 font-size: 11px; color: var(--dpb-muted); white-space: nowrap;
+font-family: inherit; line-height: 1.2;
+border-radius: 6px;
+}
+  #dpb-preview-bar .dpb-pill .dpb-pill-ready:hover { color: var(--dpb-ink); }
+  #dpb-preview-bar .dpb-pill .dpb-pill-ready:focus-visible {
+outline: 2px solid var(--dpb-accent); outline-offset: 2px;
   }
   #dpb-preview-bar .dpb-pill .dpb-pill-ready.is-ready {
 color: var(--dpb-ready); font-weight: 600;
@@ -355,16 +388,19 @@ border-color: var(--dpb-danger); box-shadow: 0 0 0 3px rgba(248,113,113,.18);
 
   /* footer actions */
   #dpb-preview-bar .dpb-drawer-foot {
+position: relative; z-index: 2;
 display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between;
 align-items: center; padding: 12px 14px;
 border-top: 1px solid var(--dpb-line);
+border-radius: 0 0 16px 16px;
 background: linear-gradient(180deg, var(--dpb-bg), var(--dpb-chrome));
+overflow: visible;
   }
   #dpb-preview-bar .dpb-btns {
 display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center;
   }
   #dpb-preview-bar .dpb-btn {
-appearance: none; cursor: pointer; box-sizing: border-box; height: var(--dpb-control-h);
+appearance: none; cursor: pointer; box-sizing: border-box; height: var(--dpb-drawer-control-h);
 min-width: 96px; padding: 0 16px; border-radius: var(--dpb-radius);
 font: 650 13px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
 border: 1px solid transparent;
@@ -389,10 +425,36 @@ min-width: 72px; background: transparent; color: var(--dpb-muted); border-color:
 min-width: 72px; background: transparent; color: var(--dpb-danger); border-color: transparent;
   }
   #dpb-preview-bar .dpb-btn-danger:hover { color: #fff; background: var(--dpb-danger); border-color: var(--dpb-danger); }
-  #dpb-preview-bar .dpb-btn-danger.is-armed { color: #fff; background: var(--dpb-danger); border-color: var(--dpb-danger); font-weight: 700; animation: dpb-abort-pulse 1s ease-in-out infinite; }
-  /* ring pulse (not opacity) so the armed label stays at full contrast */
-  @keyframes dpb-abort-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(248,113,113,.55); } 50% { box-shadow: 0 0 0 7px rgba(248,113,113,.12); } }
-  /* visually hidden live region (screen-reader announcements, e.g. abort arming) */
+  #dpb-preview-bar .dpb-btn-danger.is-armed { color: #fff; background: var(--dpb-danger); border-color: var(--dpb-danger); font-weight: 700; }
+  /* Scheme A′ abort second-confirm popover (replaces 4s arm) */
+  #dpb-preview-bar .dpb-abort-wrap {
+position: relative; display: inline-flex; align-items: center;
+  }
+  /* Default: to the right of Abort. JS may set --dpb-pop-left/bottom for clamp. */
+  #dpb-preview-bar .dpb-popover {
+position: absolute; left: 100%; bottom: 0; z-index: 3;
+margin-left: 8px;
+min-width: 200px; max-width: min(260px, 55vw);
+padding: 10px 12px; border-radius: 12px;
+background: var(--dpb-bg); color: var(--dpb-ink);
+border: 1px solid var(--dpb-line-strong);
+box-shadow: 0 12px 32px rgba(0,0,0,.28), 0 2px 8px rgba(0,0,0,.14);
+  }
+  #dpb-preview-bar .dpb-popover.is-fixed {
+position: fixed; margin-left: 0; left: var(--dpb-pop-left, 0);
+bottom: auto; top: var(--dpb-pop-top, 0); right: auto;
+  }
+  #dpb-preview-bar .dpb-popover[hidden] { display: none !important; }
+  #dpb-preview-bar .dpb-popover-msg {
+margin: 0 0 10px; font-size: 12.5px; line-height: 1.4; color: var(--dpb-soft);
+  }
+  #dpb-preview-bar .dpb-popover-actions {
+display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center;
+  }
+  #dpb-preview-bar .dpb-popover-actions .dpb-btn {
+min-width: 0; height: var(--dpb-control-h); padding: 0 12px; font-size: 12.5px;
+  }
+  /* visually hidden live region (screen-reader announcements, e.g. abort popover) */
   #dpb-preview-bar .dpb-sr-only {
 position: absolute; width: 1px; height: 1px; overflow: hidden;
 clip-path: inset(50%); white-space: nowrap;
@@ -464,19 +526,20 @@ cursor: default !important;
 #dpb-preview-bar { right: 12px; bottom: 12px; }
 #dpb-preview-bar .dpb-drawer { width: calc(100vw - 24px); }
 #dpb-preview-bar .dpb-pill .dpb-pill-info { display: none; }
+/* A′: hide pill quick input on narrow; drawer textarea remains the editor */
+#dpb-preview-bar .dpb-pill .dpb-pill-feedback { display: none; }
 #dpb-preview-bar .dpb-drawer-body { padding: 10px 10px 14px; }
 #dpb-preview-bar .dpb-drawer-foot { justify-content: flex-start; flex-wrap: wrap; }
-#dpb-preview-bar .dpb-btn.dpb-btn-danger { flex: 0 0 auto; }
+#dpb-preview-bar .dpb-abort-wrap { flex: 0 0 auto; }
 #dpb-preview-bar .dpb-btns { flex: 1 1 auto; }
 #dpb-preview-bar .dpb-btns .dpb-btn { flex: 1 1 auto; min-width: 0; }
   }
   @media (prefers-reduced-motion: reduce) {
 #dpb-preview-bar .dpb-btn,
 #dpb-preview-bar textarea[name="feedback"],
+#dpb-preview-bar .dpb-pill .dpb-pill-feedback,
 .dpb-float-note { transition: none; }
 #dpb-preview-bar .dpb-btn:active { transform: none; }
 .dpb-pin-flash { animation: none; }
-/* armed state still reads via solid danger fill + bold label, no pulse */
-#dpb-preview-bar .dpb-btn-danger.is-armed { animation: none; }
 #dpb-preview-bar .dpb-pill .dpb-btn-primary.is-armed { animation: none; }
   }

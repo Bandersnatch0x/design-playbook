@@ -8,7 +8,11 @@
     <span class="dpb-round">{t_round}</span>
     <p class="dpb-summary" title="{summary_safe}">{summary_safe}</p>
   </span>
-  <span class="dpb-pill-ready" id="dpb-pill-ready" role="status">{t_not_ready}</span>
+  <button type="button" class="dpb-pill-ready" id="dpb-pill-ready"
+    aria-live="polite" title="{t_ready_hint}">{t_not_ready}</button>
+  <input type="text" class="dpb-pill-feedback" id="dpb-pill-feedback"
+    autocomplete="off" placeholder="{t_quick_feedback_placeholder}"
+    aria-label="{t_quick_feedback_placeholder}" />
   <span class="dpb-pill-actions">
     {pill_secondary_html}
     <button type="button" class="dpb-btn-ghost" id="dpb-open-drawer" aria-haspopup="dialog">
@@ -53,7 +57,16 @@
     </div>
   </div>
   <div class="dpb-drawer-foot">
-    <button type="submit" name="choice" value="__abort__" class="dpb-btn dpb-btn-danger" id="dpb-abort" title="{t_terminate_desc}" aria-description="{t_terminate_desc}">{t_terminate}</button>
+    <div class="dpb-abort-wrap">
+      <button type="button" class="dpb-btn dpb-btn-danger" id="dpb-abort" title="{t_terminate_desc}" aria-description="{t_terminate_desc}" aria-haspopup="dialog" aria-expanded="false" aria-controls="dpb-abort-popover">{t_terminate}</button>
+      <div class="dpb-popover" id="dpb-abort-popover" role="dialog" aria-label="{t_abort_popover_aria}" hidden>
+        <p class="dpb-popover-msg" id="dpb-abort-popover-msg">{t_terminate_confirm}</p>
+        <div class="dpb-popover-actions">
+          <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-abort-cancel">{t_cancel}</button>
+          <button type="submit" name="choice" value="__abort__" class="dpb-btn dpb-btn-danger" id="dpb-abort-confirm">{t_terminate_confirm_go}</button>
+        </div>
+      </div>
+    </div>
     <span class="dpb-sr-only" id="dpb-abort-status" role="alert"></span>
     <div class="dpb-btns">
       <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-draft" title="{t_draft_desc}" aria-description="{t_draft_desc}">{t_draft}</button>
