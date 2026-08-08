@@ -369,43 +369,59 @@ def main():
         if not s13_ok:
             failures.append("S13: pill primary label should restore when readiness flips back to not-ready")
 
-        # --- S14: abort requires a second click (I18 two-step confirm) ---
+        # --- S14: abort requires explicit popover second confirm (Scheme A′) ---
         page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
         page.wait_for_timeout(200)
-        abort_btn = page.query_selector('#dpb-abort')
-        abort_armed_before = page.evaluate("() => document.getElementById('dpb-abort').classList.contains('is-armed')")
-        abort_btn.click()  # first click should arm, not submit
+        popover_hidden_before = page.evaluate(
+            "() => document.getElementById('dpb-abort-popover').hidden")
+        page.click('#dpb-abort')  # first click opens popover, does not submit
         page.wait_for_timeout(100)
-        stayed_after_arm = page.url.startswith('file:')
-        abort_armed_after = page.evaluate("() => document.getElementById('dpb-abort').classList.contains('is-armed')")
-        # close+reopen should reset arming (I18 leak fix); then first click arms, second submits
-        abort_btn.click()  # second click while armed -> should submit __abort__ (navigate)
-        page.wait_for_timeout(300)
-        aborted_nav = not page.url.startswith('file:')
-        s14_ok = (not abort_armed_before) and stayed_after_arm and abort_armed_after and aborted_nav
-        print(f"  S14 abort two-step: armed_before={abort_armed_before} armed_after_1st={abort_armed_after} aborted_on_2nd={aborted_nav} -> {'OK' if s14_ok else 'FAIL'}")
+        stayed_after_open = page.url.startswith('file:')
+        popover_open = page.evaluate(
+            "() => !document.getElementById('dpb-abort-popover').hidden")
+        page.evaluate(CAPTURE_SUBMITTER_JS)
+        page.click('#dpb-abort-confirm')  # second confirm submits __abort__
+        page.wait_for_timeout(200)
+        captured_abort = page.evaluate("() => window.__capturedSubmitter")
+        s14_ok = (
+            popover_hidden_before and stayed_after_open and popover_open
+            and captured_abort == "__abort__"
+        )
+        print(
+            f"  S14 abort popover: hidden_before={popover_hidden_before} "
+            f"open_after_1st={popover_open} captured={captured_abort!r} "
+            f"stayed_after_open={stayed_after_open} -> {'OK' if s14_ok else 'FAIL'}"
+        )
         if not s14_ok:
-            failures.append("S14: abort needs arm(1st)+submit(2nd); first must not navigate")
+            failures.append(
+                "S14: abort needs popover open then #dpb-abort-confirm submit; first must not navigate"
+            )
 
-        # --- S14b: arming resets when drawer closes (I18 leak fix) ---
+        # --- S14b: abort popover closes when drawer closes ---
         page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
         page.wait_for_timeout(200)
-        page.click('#dpb-abort')  # arm
+        page.click('#dpb-abort')  # open popover
         page.wait_for_timeout(50)
-        armed_before_close = page.evaluate("() => document.getElementById('dpb-abort').classList.contains('is-armed')")
-        page.click('#dpb-close-drawer')  # collapse drawer -> should reset arming
+        open_before_close = page.evaluate(
+            "() => !document.getElementById('dpb-abort-popover').hidden")
+        page.click('#dpb-close-drawer')  # collapse drawer -> dismiss popover
         page.wait_for_timeout(50)
-        armed_after_close = page.evaluate("() => document.getElementById('dpb-abort').classList.contains('is-armed')")
-        s14b_ok = armed_before_close and (not armed_after_close)
-        print(f"  S14b abort reset on close: armed_before={armed_before_close} armed_after={armed_after_close} -> {'OK' if s14b_ok else 'FAIL'}")
+        open_after_close = page.evaluate(
+            "() => { const p = document.getElementById('dpb-abort-popover'); "
+            "return p ? !p.hidden : false; }")
+        s14b_ok = open_before_close and (not open_after_close)
+        print(
+            f"  S14b abort popover reset on close: open_before={open_before_close} "
+            f"open_after={open_after_close} -> {'OK' if s14b_ok else 'FAIL'}"
+        )
         if not s14b_ok:
-            failures.append("S14b: abort arming should reset when drawer closes")
+            failures.append("S14b: abort popover should close when drawer closes")
 
         # --- S15: Ctrl+Enter in feedback submits the CONFIRM (I8) ---
         page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
@@ -435,23 +451,29 @@ def main():
         if not s15_ok:
             failures.append("S15: Ctrl+Enter should submit the CONFIRM (not abort/revise) when open; nothing when closed")
 
-        # --- S16: clicking elsewhere in drawer cancels abort arming (8b34387) ---
+        # --- S16: clicking elsewhere in drawer dismisses abort popover ---
         page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
         page.wait_for_timeout(200)
-        page.click('#dpb-abort')  # first click arms
+        page.click('#dpb-abort')  # open popover
         page.wait_for_timeout(100)
-        armed = page.evaluate("() => document.getElementById('dpb-abort').classList.contains('is-armed')")
-        page.click('textarea[name="feedback"]')  # click elsewhere in drawer -> cancel arm
+        open_before = page.evaluate(
+            "() => !document.getElementById('dpb-abort-popover').hidden")
+        # Click drawer chrome outside .dpb-abort-wrap (not the popover itself)
+        page.click('#dpb-pin-toggle')
         page.wait_for_timeout(100)
-        armed_after_cancel = page.evaluate("() => document.getElementById('dpb-abort').classList.contains('is-armed')")
+        open_after = page.evaluate(
+            "() => !document.getElementById('dpb-abort-popover').hidden")
         stayed = page.url.startswith('file:')
-        s16_ok = armed and not armed_after_cancel and stayed
-        print(f"  S16 drawer-click cancels abort arm: armed={armed} after_cancel={armed_after_cancel} stayed={stayed} -> {'OK' if s16_ok else 'FAIL'}")
+        s16_ok = open_before and not open_after and stayed
+        print(
+            f"  S16 drawer-click dismisses abort popover: open={open_before} "
+            f"after={open_after} stayed={stayed} -> {'OK' if s16_ok else 'FAIL'}"
+        )
         if not s16_ok:
-            failures.append("S16: clicking elsewhere in drawer must cancel abort arming")
+            failures.append("S16: clicking elsewhere in drawer must dismiss abort popover")
 
         # --- S17: pill confirm arm undoes without submit (timeout / annotate click) ---
         page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
@@ -552,6 +574,154 @@ def main():
         )
         if not s19_ok:
             failures.append("S19: annotate control should use stable text/control language, not platform emoji")
+
+        # --- S21: pill revise is a real submit (Scheme A′; not open-drawer only) ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
+        page.goto(file_url, wait_until='domcontentloaded')
+        page.wait_for_selector('#dpb-preview-bar')
+        page.set_viewport_size({"width": 1100, "height": 800})
+        page.fill('#dpb-pill-feedback', 'quick revise from pill')
+        page.wait_for_timeout(100)
+        page.evaluate(CAPTURE_SUBMITTER_JS)
+        page.click('.dpb-pill .dpb-btn-pill-secondary')
+        page.wait_for_timeout(150)
+        captured_pill_revise = page.evaluate("() => window.__capturedSubmitter")
+        drawer_after_pill_revise = page.evaluate(
+            "() => { const d = document.getElementById('dpb-drawer'); return !!(d && d.open); }")
+        s21_ok = captured_pill_revise == SECONDARY[0] and not drawer_after_pill_revise
+        print(
+            f"  S21 pill revise submit: captured={captured_pill_revise!r} "
+            f"(want {SECONDARY[0]!r}) drawer_open={drawer_after_pill_revise} "
+            f"-> {'OK' if s21_ok else 'FAIL'}"
+        )
+        if not s21_ok:
+            failures.append("S21: pill revise must submit revise choice, not only open drawer")
+
+        # --- S22: pill quick feedback syncs with drawer textarea; status chip focuses ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
+        page.goto(file_url, wait_until='domcontentloaded')
+        page.wait_for_selector('#dpb-preview-bar')
+        page.set_viewport_size({"width": 1100, "height": 800})
+        page.fill('#dpb-pill-feedback', 'synced from pill')
+        page.wait_for_timeout(80)
+        drawer_val = page.evaluate(
+            "() => document.querySelector('textarea[name=\"feedback\"]').value")
+        # Annotate opens the drawer even when ready (pill primary would arm confirm)
+        page.click('#dpb-open-drawer')
+        page.wait_for_timeout(150)
+        page.fill('textarea[name="feedback"]', 'synced from drawer')
+        page.wait_for_timeout(80)
+        page.click('#dpb-close-drawer')
+        page.wait_for_timeout(120)
+        pill_val = page.evaluate(
+            "() => document.getElementById('dpb-pill-feedback').value")
+        page.click('#dpb-pill-ready')
+        page.wait_for_timeout(80)
+        focused = page.evaluate(
+            "() => document.activeElement && document.activeElement.id")
+        s22_ok = (
+            drawer_val == 'synced from pill'
+            and pill_val == 'synced from drawer'
+            and focused == 'dpb-pill-feedback'
+        )
+        print(
+            f"  S22 quick feedback + status focus: drawer_after_pill={drawer_val!r} "
+            f"pill_after_drawer={pill_val!r} focus={focused!r} "
+            f"-> {'OK' if s22_ok else 'FAIL'}"
+        )
+        if not s22_ok:
+            failures.append(
+                "S22: pill/drawer feedback must stay single-state; status chip focuses pill input"
+            )
+
+        # --- S23: Ctrl+Enter blocked when not ready (A′ floor path) ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
+        page.goto(file_url, wait_until='domcontentloaded')
+        page.wait_for_selector('#dpb-preview-bar')
+        page.click('#dpb-open-primary')
+        page.wait_for_timeout(150)
+        page.evaluate(CAPTURE_SUBMITTER_JS)
+        page.focus('textarea[name="feedback"]')
+        page.keyboard.press('Control+Enter')
+        page.wait_for_timeout(150)
+        captured_empty = page.evaluate("() => window.__capturedSubmitter")
+        invalid = page.evaluate(
+            "() => document.querySelector('textarea[name=\"feedback\"]')"
+            ".getAttribute('aria-invalid') === 'true'")
+        s23_ok = captured_empty is None and invalid
+        print(
+            f"  S23 Ctrl+Enter not-ready: captured={captured_empty!r} "
+            f"aria_invalid={invalid} -> {'OK' if s23_ok else 'FAIL'}"
+        )
+        if not s23_ok:
+            failures.append(
+                "S23: Ctrl+Enter without substantive feedback must not submit; mark invalid"
+            )
+
+        # --- S24: Esc + outside click undo pill confirm arm without submit ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
+        page.goto(file_url, wait_until='domcontentloaded')
+        page.wait_for_selector('#dpb-preview-bar')
+        page.set_viewport_size({"width": 1100, "height": 800})
+        page.fill('#dpb-pill-feedback', 'ready for esc undo')
+        page.wait_for_timeout(80)
+        page.evaluate(CAPTURE_SUBMITTER_JS)
+        page.click('#dpb-open-primary')  # arm
+        page.wait_for_timeout(80)
+        armed_before_esc = page.evaluate(
+            "() => document.getElementById('dpb-open-primary').classList.contains('is-armed')")
+        page.keyboard.press('Escape')
+        page.wait_for_timeout(80)
+        armed_after_esc = page.evaluate(
+            "() => document.getElementById('dpb-open-primary').classList.contains('is-armed')")
+        captured_esc = page.evaluate("() => window.__capturedSubmitter")
+        page.click('#dpb-open-primary')  # arm again
+        page.wait_for_timeout(80)
+        armed_before_outside = page.evaluate(
+            "() => document.getElementById('dpb-open-primary').classList.contains('is-armed')")
+        page.click('#dpb-pill-feedback')  # outside primary → cancel arm
+        page.wait_for_timeout(80)
+        armed_after_outside = page.evaluate(
+            "() => document.getElementById('dpb-open-primary').classList.contains('is-armed')")
+        captured_out = page.evaluate("() => window.__capturedSubmitter")
+        s24_ok = (
+            armed_before_esc and not armed_after_esc and captured_esc is None
+            and armed_before_outside and not armed_after_outside and captured_out is None
+        )
+        print(
+            f"  S24 pill arm Esc/outside: esc={armed_before_esc}->{armed_after_esc} "
+            f"out={armed_before_outside}->{armed_after_outside} "
+            f"no_submit={captured_esc is None and captured_out is None} "
+            f"-> {'OK' if s24_ok else 'FAIL'}"
+        )
+        if not s24_ok:
+            failures.append(
+                "S24: Esc and outside click must undo pill confirm arm without submit"
+            )
+
+        # --- S25: abort cancel button dismisses popover without submit ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
+        page.goto(file_url, wait_until='domcontentloaded')
+        page.wait_for_selector('#dpb-preview-bar')
+        page.click('#dpb-open-drawer')
+        page.wait_for_timeout(120)
+        page.evaluate(CAPTURE_SUBMITTER_JS)
+        page.click('#dpb-abort')
+        page.wait_for_timeout(80)
+        open_before = page.evaluate(
+            "() => !document.getElementById('dpb-abort-popover').hidden")
+        page.click('#dpb-abort-cancel')
+        page.wait_for_timeout(80)
+        open_after = page.evaluate(
+            "() => !document.getElementById('dpb-abort-popover').hidden")
+        captured_cancel = page.evaluate("() => window.__capturedSubmitter")
+        s25_ok = open_before and not open_after and captured_cancel is None
+        print(
+            f"  S25 abort cancel: open={open_before} after={open_after} "
+            f"captured={captured_cancel!r} -> {'OK' if s25_ok else 'FAIL'}"
+        )
+        if not s25_ok:
+            failures.append("S25: abort Cancel must dismiss popover without submitting")
 
         # --- S20: control theme follows live host overrides and system changes ---
         page.emulate_media(color_scheme='dark')

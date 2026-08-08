@@ -81,11 +81,10 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         )
         (primary_bits if primary else secondary_bits).append(bit)
     secondary_html = "\n".join(secondary_bits)
-    # secondary actions surfaced on the floating pill (so revise is not hidden in the drawer)
-    # Second replace rewrites the full class attr; a third partial replace would be dead.
+    # Scheme A′: pill revise is a real submit (same choice value as drawer secondary).
+    # Keep type=submit name=choice; only restyle for the pill.
     pill_secondary_html = "\n".join(
-        b.replace('type="submit" name="choice"', 'type="button" data-pill-revise')
-         .replace('class="dpb-btn dpb-btn-secondary"', 'class="dpb-btn-pill-secondary"')
+        b.replace('class="dpb-btn dpb-btn-secondary"', 'class="dpb-btn-pill-secondary"')
         for b in secondary_bits
     )
     summary_safe = html_lib.escape(summary)
@@ -113,9 +112,12 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         "pin_on",
         "pin_off",
         "terminate_confirm",
-        "abort_cancelled",  # 4s-timeout a11y broadcast (window.DPB_I18N.abort_cancelled)
-        "confirm_confirm",  # pill direct-confirm arm label
+        "terminate_confirm_go",
+        "abort_cancelled",  # popover dismiss a11y broadcast
+        "abort_popover_aria",
+        "confirm_confirm",  # pill direct-confirm arm label (mis-tap protection)
         "confirm_cancelled",  # 4s-timeout a11y broadcast for pill arm undo
+        "quick_feedback_placeholder",
     )
     # json.dumps is JS-safe for quotes/backslashes; also neutralize </script>
     # and U+2028/2029 (pre-ES2019 JS string breaks) in case translations ever
@@ -151,6 +153,14 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         t_field_placeholder=html_lib.escape(t("field_placeholder"), quote=True),
         t_terminate=html_lib.escape(t("terminate")),
         t_terminate_desc=html_lib.escape(t("terminate_desc"), quote=True),
+        t_terminate_confirm=html_lib.escape(t("terminate_confirm")),
+        t_terminate_confirm_go=html_lib.escape(t("terminate_confirm_go")),
+        t_abort_popover_aria=html_lib.escape(t("abort_popover_aria"), quote=True),
+        t_cancel=html_lib.escape(t("cancel")),
+        t_quick_feedback_placeholder=html_lib.escape(
+            t("quick_feedback_placeholder"), quote=True
+        ),
+        t_ready_hint=html_lib.escape(t("ready_hint"), quote=True),
         t_draft=html_lib.escape(t("draft")),
         t_draft_desc=html_lib.escape(t("draft_desc"), quote=True),
         t_confirm_desc=html_lib.escape(t("confirm_desc"), quote=True),

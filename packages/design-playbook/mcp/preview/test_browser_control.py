@@ -186,6 +186,38 @@ class ControlResourceAssemblyTests(unittest.TestCase):
         self.assertNotIn("<unsafe>", control)
         self.assertNotRegex(control, r"\{(?:t_|summary_safe|primary_|secondary_|pill_)[^}]*\}")
 
+    def test_build_control_scheme_a_prime_surface(self) -> None:
+        """Scheme A′ control chrome contracts (abort popover, pill revise submit)."""
+        control = preview_control._build_control(
+            1,
+            "A-prime surface",
+            ["Confirm", "Needs changes"],
+        )
+        # Abort: button opens popover; real submit lives on #dpb-abort-confirm
+        self.assertIn('id="dpb-abort"', control)
+        self.assertIn('id="dpb-abort-popover"', control)
+        self.assertIn('id="dpb-abort-confirm"', control)
+        self.assertIn('id="dpb-abort-cancel"', control)
+        self.assertRegex(
+            control,
+            r'<button type="submit" name="choice" value="__abort__"[^>]*id="dpb-abort-confirm"',
+        )
+        self.assertNotRegex(
+            control,
+            r'<button type="submit" name="choice" value="__abort__"[^>]*id="dpb-abort"',
+        )
+        # Pill revise is a real submit (not type=button open-drawer only)
+        self.assertIn('class="dpb-btn-pill-secondary"', control)
+        self.assertRegex(
+            control,
+            r'<button type="submit" name="choice" value="Needs changes" class="dpb-btn-pill-secondary"',
+        )
+        # Pill quick feedback + readiness chip
+        self.assertIn('id="dpb-pill-feedback"', control)
+        self.assertIn('id="dpb-pill-ready"', control)
+        self.assertIn("z-index: 1001", control)
+        self.assertIn("z-index: 999", control)
+
 
 # --------------------------------------------------------------------------- #
 # Unit tests: token + session logic                                           #
