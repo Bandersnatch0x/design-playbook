@@ -40,8 +40,8 @@
 | vNext grill → tickets | done (2026-08-08; 5 open questions locked; ADR-0016–0020; `.scratch/design-playbook-vnext/` spec + 12 tickets) |
 | vNext implement | done (2026-08-08; 12 tickets resolved on main; 5 feature commits after `0990250`; see Current) |
 | vNext surface dogfood | done-partial (2026-08-08; packaged contract/G7/capture-parse/status/doctor/validate; log `dogfood/2026-08-08-vnext-surfaces.md`; live HITL/observe still open) |
-| vNext live dogfood | done-partial (2026-08-08; run `dogfood/2026-08-08-vnext-live`; G5/G6/G7/capture-v1/verify green; human preview click not exercised — log `2026-08-08-vnext-live.md`) |
-| v0.12.0 release prep | next (live dogfood pass-with-skips-on-HITL-click unblocks prep) |
+| vNext live dogfood | done (2026-08-08; run `dogfood/2026-08-08-vnext-live`; real HITL confirm-round-2 + HTTP fill-host observe v1; G5/G6/G7 verify green; log `2026-08-08-vnext-live.md` verdict **pass**) |
+| v0.12.0 release prep | next |
 
 ## v0 ship checklist (5/5 pass)
 
