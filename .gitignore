@@ -15,6 +15,7 @@ dist-ssr
 
 # Local agent planning, research, dogfood, and temporary artifacts.
 .scratch/
+.workbuddy/
 
 # Stray debug screenshots at repo root (showcase/screenshots/ is tracked).
 /*.png
