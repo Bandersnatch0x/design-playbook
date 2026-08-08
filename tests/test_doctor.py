@@ -12,6 +12,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCTOR = ROOT / "scripts" / "doctor.py"
+sys.path.insert(0, str(ROOT / "scripts"))
+from _checks import expected_commands  # noqa: E402
 
 
 def _load_doctor_module():
@@ -45,7 +47,14 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("mcp/preview/server.py", result.stdout)
         self.assertIn("gate 1 structural smoke", result.stdout)
         self.assertIn("8 skills present", result.stdout)
-        self.assertIn("4 commands present", result.stdout)
+        # Lockstep with COMMAND_INVENTORY / plugin version (was hardcoded 4 pre-0.12).
+        plugin = json.loads(
+            (ROOT / "packages/design-playbook/.claude-plugin/plugin.json")
+            .read_text(encoding="utf-8")
+        )
+        cmds = expected_commands(str(plugin.get("version", "")))
+        self.assertIsNotNone(cmds)
+        self.assertIn(f"{len(cmds)} commands present", result.stdout)
         # Issue 07: doctor must surface the Codex dual-publish manifest
         # (ADR-0009) so drift between Claude and Codex surfaces is visible
         # in the read-only diagnostic, mirroring validate.py.
