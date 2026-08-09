@@ -52,12 +52,14 @@ jobs:
             packages/design-playbook/mcp/preview/server.py \
             packages/design-playbook/mcp/preview/integrity.py \
             packages/design-playbook/mcp/preview/transaction.py \
+            packages/design-playbook/mcp/preview/versions.py \
             packages/design-playbook/mcp/evidence/server.py \
             packages/design-playbook/mcp/evidence/capture_contract.py \
             packages/design-playbook/mcp/test_transport.py \
             packages/design-playbook/mcp/preview/test_integrity.py \
             packages/design-playbook/mcp/preview/test_server_stdio.py \
             packages/design-playbook/mcp/preview/test_transaction.py \
+            packages/design-playbook/mcp/preview/test_versions.py \
             packages/design-playbook/mcp/evidence/test_server_stdio.py \
             packages/design-playbook/mcp/evidence/test_capture_contract.py \
             packages/design-playbook-preview/server.py \
@@ -109,6 +111,7 @@ jobs:
             packages/design-playbook/mcp/test_transport.py \
             packages/design-playbook/mcp/preview/test_integrity.py \
             packages/design-playbook/mcp/preview/test_transaction.py \
+            packages/design-playbook/mcp/preview/test_versions.py \
             packages/design-playbook/mcp/preview/test_server_stdio.py \
             packages/design-playbook/mcp/evidence/test_capture_contract.py \
             -v
