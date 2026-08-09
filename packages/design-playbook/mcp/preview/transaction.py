@@ -272,7 +272,7 @@ def _try_acquire_directory_lease(
 
 
 @contextmanager
-def _directory_lock(
+def directory_lock(
     preview_dir: Path,
     lock_name: str,
     *,
@@ -397,7 +397,7 @@ def _round_lock(
                 return
             metadata["heartbeat"] = time.time()
             try:
-                _atomic_write(path, json.dumps(metadata, sort_keys=True))
+                atomic_write(path, json.dumps(metadata, sort_keys=True))
             except OSError as exc:
                 heartbeat_errors.append(exc)
                 return
@@ -422,7 +422,7 @@ def _round_lock(
                 pass
 
 
-def _atomic_write(path: Path, content: str) -> None:
+def atomic_write(path: Path, content: str) -> None:
     """Flush a same-directory temporary file before atomically replacing path."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
@@ -440,7 +440,7 @@ def _atomic_write(path: Path, content: str) -> None:
         raise
 
 
-def _json_text(value: dict[str, Any]) -> str:
+def json_text(value: dict[str, Any]) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2) + "\n"
 
 
@@ -461,7 +461,7 @@ def _binding(
     return {"digest": hashlib.sha256(canonical).hexdigest(), **fields}
 
 
-def _load_entry(path: Path) -> dict[str, Any] | None:
+def load_entry(path: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     try:
@@ -552,7 +552,7 @@ class ConfirmRecordError(ValueError):
     """A durable confirm artifact does not match its decision authority."""
 
 
-def _load_confirm_for_entry(
+def load_confirm_for_entry(
     preview_dir: Path, entry: dict[str, Any], *, allow_legacy: bool = True,
 ) -> dict[str, Any] | None:
     binding = entry["binding"]
@@ -583,7 +583,7 @@ def _load_confirm_for_entry(
     return record
 
 
-def _render_log(entries: list[dict[str, Any]]) -> str:
+def render_log(entries: list[dict[str, Any]]) -> str:
     blocks = ["# preview log\n"]
     for entry in sorted(
         entries, key=lambda item: (str(item["timestamp"]), str(item["decision_id"]))
@@ -618,10 +618,10 @@ def _render_log(entries: list[dict[str, Any]]) -> str:
     return "".join(blocks)
 
 
-def _valid_entries(preview_dir: Path) -> list[dict[str, Any]]:
+def valid_entries(preview_dir: Path) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     for path in preview_dir.glob("decision-round-*.json"):
-        entry = _load_entry(path)
+        entry = load_entry(path)
         if entry is not None:
             entries.append(entry)
     return entries
@@ -633,7 +633,7 @@ def _commit_projections_unlocked(preview_dir: Path, entry: dict[str, Any]) -> st
     confirm_path = preview_dir / f"confirm-round-{binding['round']}.json"
     if confirm_path.is_file():
         try:
-            _load_confirm_for_entry(preview_dir, entry, allow_legacy=False)
+            load_confirm_for_entry(preview_dir, entry, allow_legacy=False)
         except ConfirmRecordError as exc:
             raise TransactionConflict(
                 f"{exc}; use next round: {confirm_path}",
@@ -641,22 +641,22 @@ def _commit_projections_unlocked(preview_dir: Path, entry: dict[str, Any]) -> st
                 decision_id=str(entry["decision_id"]), artifact=str(confirm_path),
             ) from exc
     elif outcome["user_confirmed"]:
-        _atomic_write(confirm_path, _json_text(_confirm_record(entry)))
+        atomic_write(confirm_path, json_text(_confirm_record(entry)))
     if outcome["user_confirmed"]:
         confirm_result = str(confirm_path)
     else:
         confirm_result = ""
     # log.md projection incl. versions section (wayfinder canvas-upgrade 05a);
-    # _render_versions_log degrades to _render_log when no version files exist.
-    from design_playbook.mcp.preview.versions import _render_versions_log
-    _atomic_write(preview_dir / "log.md", _render_versions_log(preview_dir))
+    # render_versions_log degrades to render_log when no version files exist.
+    from design_playbook.mcp.preview.versions import render_versions_log
+    atomic_write(preview_dir / "log.md", render_versions_log(preview_dir))
     return confirm_result
 
 
 def _commit_projections(preview_dir: Path, entry: dict[str, Any]) -> str:
     binding = entry["binding"]
     try:
-        with _directory_lock(preview_dir, PROJECTION_LOCK_NAME):
+        with directory_lock(preview_dir, PROJECTION_LOCK_NAME):
             return _commit_projections_unlocked(preview_dir, entry)
     except DirectoryLockError as exc:
         raise PreviewTransactionError(
@@ -712,7 +712,7 @@ def run_preview_transaction(
         report_ref=report_ref, summary=summary, options=options,
     )
     entry_path = preview_dir / f"decision-round-{round_n}.json"
-    existing = _load_entry(entry_path)
+    existing = load_entry(entry_path)
     decision_id = str(existing.get("decision_id") if existing else uuid.uuid4().hex)
     try:
         with _round_lock(
@@ -733,7 +733,7 @@ def run_preview_transaction(
         if not entry_path.is_file():
             artifact = entry_path
         else:
-            entry = _load_entry(entry_path)
+            entry = load_entry(entry_path)
             needs_confirm = bool(entry and entry["outcome"].get("user_confirmed"))
             if needs_confirm and not confirm_path.is_file():
                 artifact = confirm_path
@@ -763,7 +763,7 @@ def _run_locked(
         prototype_hash = prototype_html_digest(html.encode("utf-8"))
         prototype = preview_dir / f"round-{round_n}.html"
 
-    existing = _load_entry(entry_path)
+    existing = load_entry(entry_path)
     if existing is not None:
         if existing["binding"].get("digest") != binding["digest"]:
             raise TransactionConflict(
@@ -831,6 +831,6 @@ def _run_locked(
             "rejection": str(submission.get("rejection") or ""),
         },
     }
-    _atomic_write(entry_path, _json_text(entry))
+    atomic_write(entry_path, json_text(entry))
     confirm_path = _commit_projections(preview_dir, entry)
     return _result(entry, confirm_path)
