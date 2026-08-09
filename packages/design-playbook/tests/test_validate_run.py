@@ -465,6 +465,74 @@ def main() -> int:
         FAIL / "g6-pass-without-valid-binding" / "point-back.md",
         "G6 evidence", *_g6_args(FAIL / "g6-pass-without-valid-binding"))
 
+    # --- G6 capture-contract snapshot full shape (ADR-0018) ---
+    # Bound evidence must embed a full provider-echoed request snapshot:
+    # schemaVersion=1, complete viewport, and freeze. Malformed viewport
+    # shape or missing freeze fail closed (was lax under the old partial
+    # hand-written checks); existing rule IDs/messages stay for the
+    # schema-version and missing-viewport rows.
+    capture_cases = [
+        ("g6-capture-missing-schema",
+         {"viewport": {"width": 1280, "height": 800,
+                       "devicePixelRatio": 1.0, "colorScheme": "light"}},
+         "G6.capture_schema", "missing schemaVersion=1"),
+        ("g6-capture-missing-viewport",
+         {"schemaVersion": 1},
+         "G6.capture_viewport", "missing viewport snapshot"),
+        ("g6-capture-viewport-shape",
+         {"schemaVersion": 1,
+          "viewport": {"width": 1280, "height": 800}},
+         "G6.capture_viewport_shape", "viewport snapshot malformed"),
+        ("g6-capture-missing-freeze",
+         {"schemaVersion": 1,
+          "viewport": {"width": 1280, "height": 800,
+                       "devicePixelRatio": 1.0, "colorScheme": "light"}},
+         "G6.capture_freeze", "freeze snapshot missing"),
+        ("g6-capture-bad-freeze-shape",
+         {"schemaVersion": 1,
+          "viewport": {"width": 1280, "height": 800,
+                       "devicePixelRatio": 1.0, "colorScheme": "light"},
+          "freeze": {"enabled": True}},
+         "G6.capture_freeze", "freeze snapshot malformed"),
+    ]
+    for name, request, rule_id, message in capture_cases:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp)
+            evidence = run_root / "evidence"
+            _write_text(evidence / "L6.1.png", "png")
+            _write_text(
+                evidence / "manifest.jsonl",
+                json.dumps({
+                    "criterion": "L6.1",
+                    "artifact": "L6.1.png",
+                    "ts": "2026-07-21T00:00:00+08:00",
+                    "request": request,
+                    "capture": {
+                        "type": "screenshot",
+                        "schemaVersion": 1,
+                        "request": request,
+                    },
+                }) + "\n",
+            )
+            g6_pb = run_root / "point-back.md"
+            _write_text(g6_pb, _g6_probe_pointback("evidence/L6.1.png"))
+            args = ["--evidence-dir", str(evidence),
+                    "--run-root", str(run_root)]
+            result = run(g6_spec, g6_pb, *args)
+            json_result = run(g6_spec, g6_pb, "--format", "json", *args)
+            ok = (
+                result.returncode == 1
+                and message in result.stdout
+                and json_result.returncode == 1
+                and json.loads(json_result.stdout)[0].get("rule_id") == rule_id
+            )
+            if not ok:
+                failures.append(
+                    f"{name}: expected exit 1 with {rule_id} ({message!r}); "
+                    f"text={result.stdout!r} json={json_result.stdout!r}")
+            else:
+                print(f"  ok    {name} fails closed with {rule_id}")
+
     # --- G5 latest numeric round + prototype hash (issues 02 / 03) ---
     # round-1 confirmed, round-2 prototype exists with NO confirm: the
     # round-1 confirm is stale and must not satisfy the gate.

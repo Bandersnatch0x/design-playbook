@@ -60,6 +60,14 @@ if str(_PREVIEW_RUNTIME_DIR) not in sys.path:
     sys.path.insert(0, str(_PREVIEW_RUNTIME_DIR))
 from integrity import ConfirmRecord, PreviewSnapshot, inspect_preview  # noqa: E402
 
+# Capture contract rules live with the bundled Evidence runtime (ADR-0018
+# enforcement site 3): G6 validates bound manifest request snapshots through
+# validate_capture_snapshot instead of hand-written partial checks.
+_EVIDENCE_RUNTIME_DIR = Path(__file__).resolve().parent.parent / "mcp" / "evidence"
+if str(_EVIDENCE_RUNTIME_DIR) not in sys.path:
+    sys.path.insert(0, str(_EVIDENCE_RUNTIME_DIR))
+from capture_contract import validate_capture_snapshot  # noqa: E402
+
 try:
     from g7_contract_drift import check_g7 as check_g7
 except ImportError:  # pragma: no cover - optional until package scripts co-locate
@@ -740,6 +748,60 @@ def _manifest_entries(evidence_dir: Path) -> list[dict]:
     return entries
 
 
+def _g6_capture_findings(criterion: str, snapshot: object) -> list[Finding]:
+    """Project capture-contract snapshot facts into G6 diagnostics.
+
+    ADR-0018 enforcement site 3: the bound entry's request snapshot is
+    validated through validate_capture_snapshot (full shape, fail-closed on
+    malformed viewport or missing freeze). Existing rule IDs and wording are
+    preserved for the schema/version and viewport-present checks; malformed
+    viewport shape and missing/malformed freeze surface as new rule IDs.
+    """
+    for fact in validate_capture_snapshot(snapshot):
+        if fact.code in ("missing_schema_version", "unsupported_schema_version"):
+            return [finding(
+                "G6.capture_schema",
+                f"G6 evidence: {criterion} capture missing schemaVersion=1 "
+                f"(got {fact.actual}); recapture with capture contract v1",
+                owner="evidence/manifest.jsonl",
+                expected="schemaVersion=1 with viewport on the bound entry",
+                actual=fact.actual,
+                repair="Recapture the artifact with execute_capture_plan schemaVersion=1",
+            )]
+        if fact.code == "missing_viewport":
+            return [finding(
+                "G6.capture_viewport",
+                f"G6 evidence: {criterion} capture missing viewport snapshot; "
+                "recapture with capture contract v1",
+                owner="evidence/manifest.jsonl",
+                expected="viewport width/height/devicePixelRatio/colorScheme",
+                actual="missing",
+                repair="Recapture and embed the provider request snapshot",
+            )]
+        if fact.code == "bad_viewport_shape":
+            return [finding(
+                "G6.capture_viewport_shape",
+                f"G6 evidence: {criterion} capture viewport snapshot malformed: "
+                f"{fact.detail}; recapture with capture contract v1",
+                owner="evidence/manifest.jsonl",
+                expected="viewport width/height/devicePixelRatio/colorScheme",
+                actual=fact.detail,
+                repair="Recapture and embed the provider request snapshot",
+            )]
+        if fact.code in ("missing_freeze", "bad_freeze_shape"):
+            return [finding(
+                "G6.capture_freeze",
+                f"G6 evidence: {criterion} capture freeze snapshot "
+                f"{'missing' if fact.code == 'missing_freeze' else 'malformed'}: "
+                f"{fact.detail}; recapture with capture contract v1",
+                owner="evidence/manifest.jsonl",
+                expected="freeze enabled/waitFonts/networkIdle booleans",
+                actual=fact.detail,
+                repair="Recapture and embed the provider request snapshot",
+            )]
+    return []
+
+
 def check_evidence(
         pointback_text: str,
         expected_l6: int,
@@ -901,39 +963,18 @@ def check_evidence(
                 repair="Bind the artifact to a declared L6 criterion",
             ))
             continue
-        # Capture contract v1 (ADR-0018): bound evidence must embed schemaVersion=1
-        # plus viewport. Unversioned rows have no compatibility reader — recapture.
+        # Capture contract v1 (ADR-0018): bound evidence must embed a full
+        # provider-echoed request snapshot — schemaVersion=1, complete
+        # viewport, and freeze. Unversioned or partial snapshots have no
+        # compatibility reader — recapture. Validated through the contract
+        # module's read authority (fail-closed on malformed shape).
         capture = latest.get("capture") if isinstance(latest.get("capture"), dict) else {}
         request = latest.get("request")
         if not isinstance(request, dict):
             request = capture.get("request") if isinstance(capture.get("request"), dict) else {}
-        version = None
-        if isinstance(request, dict):
-            version = request.get("schemaVersion")
-        if version is None and isinstance(capture, dict):
-            version = capture.get("schemaVersion")
-        if version != 1:
-            errs.append(finding(
-                "G6.capture_schema",
-                f"G6 evidence: {criterion} capture missing schemaVersion=1 "
-                f"(got {version!r}); recapture with capture contract v1",
-                owner="evidence/manifest.jsonl",
-                expected="schemaVersion=1 with viewport on the bound entry",
-                actual=repr(version),
-                repair="Recapture the artifact with execute_capture_plan schemaVersion=1",
-            ))
-            continue
-        viewport = request.get("viewport") if isinstance(request, dict) else None
-        if not isinstance(viewport, dict):
-            errs.append(finding(
-                "G6.capture_viewport",
-                f"G6 evidence: {criterion} capture missing viewport snapshot; "
-                "recapture with capture contract v1",
-                owner="evidence/manifest.jsonl",
-                expected="viewport width/height/devicePixelRatio/colorScheme",
-                actual="missing",
-                repair="Recapture and embed the provider request snapshot",
-            ))
+        capture_findings = _g6_capture_findings(criterion, request)
+        if capture_findings:
+            errs.extend(capture_findings)
             continue
         # artifact exists + bound + capture contract v1 -> valid; result is
         # the evaluator's call, not G6's.
