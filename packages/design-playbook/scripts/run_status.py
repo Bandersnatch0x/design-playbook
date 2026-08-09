@@ -38,28 +38,16 @@ elif ROOT.name == "design-playbook":
 else:
     ROOT = Path.cwd()
 
-# Ordered pipeline stages used only for status/resume narration.
-#
-# Mirror of packages/design-playbook/skills/design-playbook/SKILL.md Steps
-# (baseline / reference / spec / plan / decision / preview / fill / craft / evidence / accept).
-# This script ships with the installable plugin package. When you add/remove
-# a step or change an artifact filename in SKILL.md, sync this table.
-STAGES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    # DesignBaseline deep module (ADR-0012): state.json is the sole gate artifact.
-    # Draft/evidence are not authority and must not mark the stage present —
-    # orphan drafts without state.json are incomplete noise, not a resume stage.
-    ("baseline", "design-baseline", ("design-baseline/state.json",)),
-    ("reference", "reference-intake", ("reference/contract.md", "reference/manifest.json")),
-    ("spec", "ux-spec", ("spec.md",)),
-    ("plan", "plan", ("plan.md",)),
-    ("decision", "ui-picker", ("decision-report.md",)),
-    # Preview presence is derived by Preview integrity, not static markers.
-    ("preview", "preview*", ()),
-    ("fill", "fill", ("filled-ui.html", "filled-ui.md")),
-    ("craft", "craft-guard", ("craft-guard.md",)),
-    ("evidence", "observe*", ("evidence/manifest.jsonl",)),
-    ("accept", "ui-evaluator", ("point-back.md",)),
-)
+# Stage registry and shared artifact names live in the packaged scripts dir
+# (ADR-0021): STAGES mirrors skills/design-playbook/SKILL.md Steps; the
+# artifact-name constants are shared with validate_run.py. When this file is
+# the monorepo root copy, the registry is the sibling under
+# packages/design-playbook/scripts; when installed, this very directory
+# (same _PACKAGE_ROOT resolution as the preview runtime above).
+_SCRIPTS_RUNTIME_DIR = _PACKAGE_ROOT / "scripts"
+if str(_SCRIPTS_RUNTIME_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_RUNTIME_DIR))
+from stages import POINT_BACK, STAGES  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -97,7 +85,7 @@ def discover_runs(scratch: Path) -> list[Path]:
 
 
 def verdict_of(run_root: Path) -> str | None:
-    path = run_root / "point-back.md"
+    path = run_root / POINT_BACK
     if not path.is_file():
         return None
     text = path.read_text(encoding="utf-8")
