@@ -16,23 +16,18 @@ from pathlib import Path
 # Package-local scripts directory (works for installed plugin and monorepo
 # copy). Preview integrity lives with the bundled Preview runtime.
 _SCRIPTS_DIR = Path(__file__).resolve().parent
-# When this file is the monorepo root copy (scripts/run_status.py), the
-# package scripts dir is the sibling under packages/design-playbook/scripts.
-# Prefer the local package when this is the installed copy.
-_PACKAGE_ROOT = _SCRIPTS_DIR.parent
-if not (_PACKAGE_ROOT / "mcp" / "preview" / "integrity.py").is_file():
-    _PACKAGE_ROOT = (
-        _SCRIPTS_DIR.parent / "packages" / "design-playbook"
-    )
-_PREVIEW_RUNTIME_DIR = _PACKAGE_ROOT / "mcp" / "preview"
-if str(_PREVIEW_RUNTIME_DIR) not in sys.path:
-    sys.path.insert(0, str(_PREVIEW_RUNTIME_DIR))
-from integrity import PreviewSnapshot, inspect_preview  # noqa: E402
+
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = _SCRIPTS_DIR.parent
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+from design_playbook.mcp.preview.integrity import PreviewSnapshot, inspect_preview  # noqa: E402
 
 # Repo/package root for default --scratch discovery only.
 ROOT = _SCRIPTS_DIR.parent
 if (ROOT / "packages" / "design-playbook").is_dir():
-    pass  # monorepo root scripts/run_status.py
+    pass  # monorepo layout: package under packages/design-playbook
 elif ROOT.name == "design-playbook":
     pass  # package root when run from packages/design-playbook/scripts
 else:
@@ -40,14 +35,8 @@ else:
 
 # Stage registry and shared artifact names live in the packaged scripts dir
 # (ADR-0021): STAGES mirrors skills/design-playbook/SKILL.md Steps; the
-# artifact-name constants are shared with validate_run.py. When this file is
-# the monorepo root copy, the registry is the sibling under
-# packages/design-playbook/scripts; when installed, this very directory
-# (same _PACKAGE_ROOT resolution as the preview runtime above).
-_SCRIPTS_RUNTIME_DIR = _PACKAGE_ROOT / "scripts"
-if str(_SCRIPTS_RUNTIME_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS_RUNTIME_DIR))
-from stages import POINT_BACK, STAGES  # noqa: E402
+# artifact-name constants are shared with validate_run.py.
+from design_playbook.scripts.stages import POINT_BACK, STAGES  # noqa: E402
 
 
 @dataclass(frozen=True)

@@ -41,9 +41,15 @@ import re
 import sys
 from pathlib import Path
 
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parents[1]
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+
 # Structured diagnostics (vNext ticket 02): one Finding model feeds text and
 # JSON projections. Rule IDs stay stable; text keeps historical messages.
-from _diagnostics import (
+from design_playbook.scripts._diagnostics import (  # noqa: E402
     OUTPUT_FORMATS,
     Finding,
     finding,
@@ -52,28 +58,24 @@ from _diagnostics import (
     usage_finding,
 )
 
-# Preview integrity rules live with the bundled Preview runtime. This scripts/
-# directory is not a package, so the read adapter adds that sibling runtime
-# exactly once; replacing sys.path adapters is Candidate 5, not this deepening.
-_PREVIEW_RUNTIME_DIR = Path(__file__).resolve().parent.parent / "mcp" / "preview"
-if str(_PREVIEW_RUNTIME_DIR) not in sys.path:
-    sys.path.insert(0, str(_PREVIEW_RUNTIME_DIR))
-from integrity import ConfirmRecord, PreviewSnapshot, inspect_preview  # noqa: E402
+# Preview integrity rules live with the bundled Preview runtime (C1 / ADR-0004).
+from design_playbook.mcp.preview.integrity import (  # noqa: E402
+    ConfirmRecord,
+    PreviewSnapshot,
+    inspect_preview,
+)
 
 # Capture contract rules live with the bundled Evidence runtime (ADR-0018
 # enforcement site 3): G6 validates bound manifest request snapshots through
 # validate_capture_snapshot instead of hand-written partial checks.
-_EVIDENCE_RUNTIME_DIR = Path(__file__).resolve().parent.parent / "mcp" / "evidence"
-if str(_EVIDENCE_RUNTIME_DIR) not in sys.path:
-    sys.path.insert(0, str(_EVIDENCE_RUNTIME_DIR))
-from capture_contract import validate_capture_snapshot  # noqa: E402
+from design_playbook.mcp.evidence.capture_contract import validate_capture_snapshot  # noqa: E402
 
-# Stage registry + shared artifact names live in this same scripts dir
-# (ADR-0021); sibling import, no adapter needed.
-from stages import EVIDENCE_PREFIX  # noqa: E402
+# Stage registry + shared artifact names live in the packaged scripts dir
+# (ADR-0021).
+from design_playbook.scripts.stages import EVIDENCE_PREFIX  # noqa: E402
 
 try:
-    from g7_contract_drift import check_g7 as check_g7
+    from design_playbook.scripts.g7_contract_drift import check_g7 as check_g7
 except ImportError:  # pragma: no cover - optional until package scripts co-locate
     check_g7 = None  # type: ignore[assignment]
 

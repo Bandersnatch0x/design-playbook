@@ -21,16 +21,21 @@ import sys
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parents[2]
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+
 # Shared stdio JSON-RPC framing + single-tool dispatch live one level up in
 # mcp/_transport.py (both bundled adapters speak the same wire format and
 # run the same JSON-RPC protocol; ADR-0009).
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _transport import serve_stdio  # noqa: E402
+from design_playbook.mcp._transport import serve_stdio  # noqa: E402
 
 # Capture contract v1 rules live in the sibling contract module (ADR-0018
 # enforcement site 1): parse authority, snapshot validator, and the schema
 # fragment this server composes into the tool schema.
-from capture_contract import (  # noqa: E402
+from design_playbook.mcp.evidence.capture_contract import (  # noqa: E402
     capture_contract_schema_fragment,
     parse_capture_contract,
 )

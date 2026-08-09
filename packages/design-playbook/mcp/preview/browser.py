@@ -25,10 +25,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
-from control import _build_control
-from i18n import lang, t
-from integrity import prototype_html_digest
-from util import _log
+from design_playbook.mcp.preview.control import _build_control
+from design_playbook.mcp.preview.i18n import lang, t
+from design_playbook.mcp.preview.integrity import prototype_html_digest
+from design_playbook.mcp.preview.util import _log
 
 
 def _generate_decision_token() -> str:

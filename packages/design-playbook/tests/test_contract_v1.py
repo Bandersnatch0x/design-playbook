@@ -9,10 +9,13 @@ import unittest
 from pathlib import Path
 
 PACKAGE = Path(__file__).resolve().parents[1]
-SCRIPTS = PACKAGE / "scripts"
-sys.path.insert(0, str(SCRIPTS))
 
-import contract_v1 as cv  # noqa: E402
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+if str(PACKAGE) not in sys.path:
+    sys.path.insert(0, str(PACKAGE))
+
+from design_playbook.scripts import contract_v1 as cv  # noqa: E402
 
 
 def _field(value: str, *, provenance: str = "inferred", resolution: str = "assumed",

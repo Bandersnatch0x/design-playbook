@@ -13,9 +13,14 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "packages" / "design-playbook" / "scripts"))
+PKG = ROOT / "packages" / "design-playbook"
 
-from stages import (  # noqa: E402
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+if str(PKG) not in sys.path:
+    sys.path.insert(0, str(PKG))
+
+from design_playbook.scripts.stages import (  # noqa: E402
     DECISION_REPORT,
     EVIDENCE_MANIFEST,
     EVIDENCE_PREFIX,

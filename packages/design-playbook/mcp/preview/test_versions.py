@@ -11,11 +11,15 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import transaction  # noqa: E402
-import versions  # noqa: E402
-from integrity import prototype_html_digest  # noqa: E402
-from versions import (  # noqa: E402
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parents[2]
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+from design_playbook.mcp.preview import transaction  # noqa: E402
+from design_playbook.mcp.preview import versions  # noqa: E402
+from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
+from design_playbook.mcp.preview.versions import (  # noqa: E402
     VersionCommittedError,
     VersionError,
     VersionProjectionError,

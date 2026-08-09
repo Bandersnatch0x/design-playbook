@@ -12,10 +12,15 @@ verifies the injected control follows live host/system color-scheme changes.
 import sys, tempfile
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent / "mcp" / "preview"))
-import control as preview_control  # noqa: E402
-from i18n import default_options  # noqa: E402
+PACKAGE = Path(__file__).resolve().parents[1]
+
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+if str(PACKAGE) not in sys.path:
+    sys.path.insert(0, str(PACKAGE))
+
+from design_playbook.mcp.preview import control as preview_control  # noqa: E402
+from design_playbook.mcp.preview.i18n import default_options  # noqa: E402
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
