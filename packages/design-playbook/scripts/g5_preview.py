@@ -18,11 +18,6 @@ from design_playbook.mcp.preview.integrity import (
 )
 
 
-def preview_occurred(preview_dir: Path | None) -> bool:
-    """Project Preview integrity occurrence for G5/strict-mode callers."""
-    return preview_dir is not None and inspect_preview(preview_dir).occurred
-
-
 def _resolve_report_ref(
         ref: str, preview_dir: Path,
         decision_report: Path | None) -> Path | None:

@@ -85,6 +85,7 @@ jobs:
             packages/design-playbook/scripts/g2_g4_pointback.py \
             packages/design-playbook/scripts/g5_preview.py \
             packages/design-playbook/scripts/g6_evidence.py \
+            packages/design-playbook/scripts/g6_warnings.py \
             packages/design-playbook/scripts/stages.py \
             packages/design-playbook/scripts/run_status.py \
             packages/design-playbook/design_playbook.py \
