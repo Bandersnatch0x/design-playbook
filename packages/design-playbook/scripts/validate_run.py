@@ -60,9 +60,9 @@ from design_playbook.scripts._diagnostics import (  # noqa: E402
 from design_playbook.scripts.g1_spec import _l6_items, check_spec  # noqa: E402
 from design_playbook.scripts.g2_g4_pointback import check_pointback  # noqa: E402
 from design_playbook.scripts.g5_preview import check_preview  # noqa: E402
-from design_playbook.scripts.g6_evidence import (  # noqa: E402
+from design_playbook.scripts.g6_evidence import check_evidence  # noqa: E402
+from design_playbook.scripts.g6_warnings import (  # noqa: E402
     _ledger_has_evidence_binding,
-    check_evidence,
     check_manifest_ts_warnings,
     check_superseded_ledger_warnings,
 )

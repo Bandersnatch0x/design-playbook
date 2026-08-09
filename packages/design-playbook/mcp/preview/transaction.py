@@ -55,7 +55,7 @@ def _ensure_prototype(path_arg: str | None, html: str | None, round_n: int,
     return target
 
 
-def _self_check_floor() -> None:
+def self_check_floor() -> None:
     """ADR-0008 floor branch logic self-check (ponytail: one runnable check)."""
     cases = [
         ("empty + no anchors", "", [], False),

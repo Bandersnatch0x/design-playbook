@@ -32,8 +32,8 @@ from design_playbook.mcp.preview import browser  # noqa: E402
 from design_playbook.mcp.preview.i18n import default_options  # noqa: E402
 from design_playbook.mcp.preview.transaction import (  # noqa: E402
     PreviewTransactionError,
-    _self_check_floor,
     run_preview_transaction,
+    self_check_floor,
 )
 
 TOOL_NAME = "preview_prototype"
@@ -123,7 +123,7 @@ def handle_preview_prototype(args: dict[str, Any]) -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--self-check":
-        _self_check_floor()
+        self_check_floor()
     else:
         serve_stdio(
             "design-playbook-preview",
