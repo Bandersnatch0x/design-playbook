@@ -26,6 +26,12 @@ import unittest
 import zipfile
 from pathlib import Path
 
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parents[2]
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+
 SERVER = Path(__file__).resolve().with_name("server.py")
 FIXTURE_HTML = """<!DOCTYPE html>
 <html>
@@ -132,8 +138,7 @@ class EvidencePurePathTests(unittest.TestCase):
     def test_parse_capture_contract_requires_schema_and_viewport(self) -> None:
         # Parse authority lives in the contract module (ADR-0018 site 1);
         # server.py re-exports the same object for the stdio boundary.
-        sys.path.insert(0, str(SERVER.parent))
-        import capture_contract  # noqa: E402
+        from design_playbook.mcp.evidence import capture_contract
 
         with self.assertRaises(ValueError) as missing:
             capture_contract.parse_capture_contract({"url": "about:blank"})

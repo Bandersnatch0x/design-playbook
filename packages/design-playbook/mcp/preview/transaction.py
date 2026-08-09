@@ -23,10 +23,10 @@ if os.name == "nt":
 else:
     import fcntl
 
-from control import _format_feedback
-from i18n import CONFIRM_LABELS
-from integrity import evaluate_feedback_floor, prototype_html_digest
-from util import _now_iso
+from design_playbook.mcp.preview.control import _format_feedback
+from design_playbook.mcp.preview.i18n import CONFIRM_LABELS
+from design_playbook.mcp.preview.integrity import evaluate_feedback_floor, prototype_html_digest
+from design_playbook.mcp.preview.util import _now_iso
 
 BrowserCollector = Callable[[Path, str, list[str], int], dict[str, Any]]
 ENTRY_SCHEMA_VERSION = 1
@@ -648,7 +648,7 @@ def _commit_projections_unlocked(preview_dir: Path, entry: dict[str, Any]) -> st
         confirm_result = ""
     # log.md projection incl. versions section (wayfinder canvas-upgrade 05a);
     # _render_versions_log degrades to _render_log when no version files exist.
-    from versions import _render_versions_log
+    from design_playbook.mcp.preview.versions import _render_versions_log
     _atomic_write(preview_dir / "log.md", _render_versions_log(preview_dir))
     return confirm_result
 

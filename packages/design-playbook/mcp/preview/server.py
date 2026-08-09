@@ -17,15 +17,20 @@ import sys
 from pathlib import Path
 from typing import Any
 
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parents[2]
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+
 # Shared stdio JSON-RPC framing + single-tool dispatch live one level up in
 # mcp/_transport.py (both bundled adapters speak the same wire format and
 # run the same JSON-RPC protocol; ADR-0009).
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _transport import ToolError, serve_stdio  # noqa: E402
+from design_playbook.mcp._transport import ToolError, serve_stdio  # noqa: E402
 
-import browser
-from i18n import default_options
-from transaction import (
+from design_playbook.mcp.preview import browser  # noqa: E402
+from design_playbook.mcp.preview.i18n import default_options  # noqa: E402
+from design_playbook.mcp.preview.transaction import (  # noqa: E402
     PreviewTransactionError,
     _self_check_floor,
     run_preview_transaction,

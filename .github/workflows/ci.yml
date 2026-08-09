@@ -66,7 +66,6 @@ jobs:
             scripts/release.py \
             scripts/release_state.py \
             scripts/doctor.py \
-            scripts/run_status.py \
             scripts/install_smoke.py \
             packages/design-playbook/skills/design-baseline/scripts/design_baseline.py \
             tests/test_release.py \
@@ -80,7 +79,10 @@ jobs:
             tests/test_install_smoke.py \
             tests/test_release_workflow.py \
             packages/design-playbook/scripts/validate_run.py \
-            packages/design-playbook/scripts/stages.py
+            packages/design-playbook/scripts/stages.py \
+            packages/design-playbook/scripts/run_status.py \
+            packages/design-playbook/design_playbook.py \
+            packages/design-playbook/scripts/__init__.py
 
       # ----------------------------------------------------------------
       # ticket 06: MCP stdio gates (required, merge-blocking).

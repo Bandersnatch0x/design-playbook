@@ -113,9 +113,12 @@ def preflight() -> int:
     except ImportError:
         _warn("playwright not installed — observe* must skip or install first")
 
-    sys.path.insert(0, str(PKG / "mcp" / "evidence"))
+    # One import seam (ADR-0022): package root on sys.path once, then absolute
+    # design_playbook.* imports below. No per-runtime sys.path adapters.
+    if str(PKG) not in sys.path:
+        sys.path.insert(0, str(PKG))
     try:
-        import server as evidence  # type: ignore
+        from design_playbook.mcp.evidence import server as evidence
 
         try:
             evidence.parse_capture_contract({"url": "about:blank"})

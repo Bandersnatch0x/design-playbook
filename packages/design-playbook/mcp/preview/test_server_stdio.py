@@ -15,16 +15,15 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-# Sibling modules live next to this file. pytest's default prepend mode only
-# puts this dir on sys.path[0] when it has no __init__.py; mcp/preview/ is now
-# a package (see __init__.py) so the two same-named test_server_stdio.py files
-# in preview/ and evidence/ collect under package-qualified names without an
-# import-mismatch — so make the sibling dir importable explicitly here.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parents[2]
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
 # Browser behavior is tested through its owning adapter, not server re-exports.
-import browser  # noqa: E402
-import transaction  # noqa: E402
-from integrity import prototype_html_digest  # noqa: E402
+from design_playbook.mcp.preview import browser  # noqa: E402
+from design_playbook.mcp.preview import transaction  # noqa: E402
+from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
 
 
 SERVER = Path(__file__).with_name("server.py")

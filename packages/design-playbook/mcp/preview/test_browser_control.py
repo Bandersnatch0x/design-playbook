@@ -29,15 +29,18 @@ from typing import Any
 from unittest import mock
 from urllib.parse import urlencode
 
-# Make sibling runtime modules importable under package-qualified discovery.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import browser  # noqa: E402
-import control as preview_control  # noqa: E402
-from browser import (  # noqa: E402
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parents[2]
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+from design_playbook.mcp.preview import browser  # noqa: E402
+from design_playbook.mcp.preview import control as preview_control  # noqa: E402
+from design_playbook.mcp.preview.browser import (  # noqa: E402
     _DecisionSession,
     _generate_decision_token,
 )
-from integrity import prototype_html_digest  # noqa: E402
+from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #

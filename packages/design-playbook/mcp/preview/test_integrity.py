@@ -9,9 +9,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parents[2]
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
 
-from integrity import (  # noqa: E402
+from design_playbook.mcp.preview.integrity import (  # noqa: E402
     evaluate_feedback_floor,
     inspect_preview,
     prototype_html_digest,

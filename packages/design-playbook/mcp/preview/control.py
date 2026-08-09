@@ -12,7 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from i18n import CONFIRM_LABELS, REVISE_LABELS, t
+from design_playbook.mcp.preview.i18n import CONFIRM_LABELS, REVISE_LABELS, t
 
 HERE = Path(__file__).resolve().parent
 

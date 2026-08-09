@@ -22,7 +22,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-from transaction import (
+from design_playbook.mcp.preview.transaction import (
     ConfirmRecordError,
     DirectoryLockError,
     PROJECTION_LOCK_NAME,
@@ -34,8 +34,8 @@ from transaction import (
     _render_log,
     _valid_entries,
 )
-from integrity import prototype_html_digest
-from util import _now_iso
+from design_playbook.mcp.preview.integrity import prototype_html_digest
+from design_playbook.mcp.preview.util import _now_iso
 
 VERSION_SCHEMA_VERSION = 1
 MAX_NAME_LENGTH = 80

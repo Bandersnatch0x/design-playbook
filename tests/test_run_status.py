@@ -11,7 +11,8 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-RUN_STATUS = ROOT / "scripts" / "run_status.py"
+# Single source is the packaged copy (ADR-0022); the root dev copy is gone.
+RUN_STATUS = ROOT / "packages" / "design-playbook" / "scripts" / "run_status.py"
 
 
 def _run(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:

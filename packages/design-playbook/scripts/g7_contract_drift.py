@@ -11,8 +11,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from _diagnostics import Finding, finding
-from contract_v1 import (
+from design_playbook.scripts._diagnostics import Finding, finding
+from design_playbook.scripts.contract_v1 import (
     BIND_SNAPSHOT_FILENAME,
     CONTRACT_FILENAME,
     DECISIONS_FILENAME,
