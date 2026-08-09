@@ -79,7 +79,8 @@ jobs:
             tests/test_normalize_lockstep.py \
             tests/test_install_smoke.py \
             tests/test_release_workflow.py \
-            packages/design-playbook/scripts/validate_run.py
+            packages/design-playbook/scripts/validate_run.py \
+            packages/design-playbook/scripts/stages.py
 
       # ----------------------------------------------------------------
       # ticket 06: MCP stdio gates (required, merge-blocking).

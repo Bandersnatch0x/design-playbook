@@ -68,6 +68,10 @@ if str(_EVIDENCE_RUNTIME_DIR) not in sys.path:
     sys.path.insert(0, str(_EVIDENCE_RUNTIME_DIR))
 from capture_contract import validate_capture_snapshot  # noqa: E402
 
+# Stage registry + shared artifact names live in this same scripts dir
+# (ADR-0021); sibling import, no adapter needed.
+from stages import EVIDENCE_PREFIX  # noqa: E402
+
 try:
     from g7_contract_drift import check_g7 as check_g7
 except ImportError:  # pragma: no cover - optional until package scripts co-locate
@@ -699,9 +703,6 @@ def check_preview(
         actual="unresolved report_ref",
         repair="Fix report_ref or restore the decision report file",
     )]
-
-
-EVIDENCE_PREFIX = "evidence/"
 
 
 def _ledger_observed(text: str) -> list[tuple[str, str]]:
