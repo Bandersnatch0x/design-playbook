@@ -27,12 +27,18 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _transport import serve_stdio  # noqa: E402
 
+# Capture contract v1 rules live in the sibling contract module (ADR-0018
+# enforcement site 1): parse authority, snapshot validator, and the schema
+# fragment this server composes into the tool schema.
+from capture_contract import (  # noqa: E402
+    capture_contract_schema_fragment,
+    parse_capture_contract,
+)
+
 TOOL_NAME = "execute_capture_plan"
 SERVER_NAME = "design-playbook-evidence"
 SERVER_VERSION = "0.1.0"
-CAPTURE_SCHEMA_VERSION = 1
 CAPTURE_TYPES = frozenset({"screenshot", "a11y tree", "interaction trace"})
-COLOR_SCHEMES = frozenset({"light", "dark", "no-preference"})
 ALLOWED_ARGUMENTS = frozenset(
     {
         "schemaVersion",
@@ -48,7 +54,6 @@ ALLOWED_ARGUMENTS = frozenset(
 )
 RUN_ROOT_ENV = "DESIGN_PLAYBOOK_RUN_ROOT"
 EVIDENCE_SUBDIR = "evidence"
-RECAPTURE_HINT = "recapture with capture contract schemaVersion=1"
 
 
 def _log(msg: str) -> None:
@@ -56,6 +61,7 @@ def _log(msg: str) -> None:
 
 
 def _tool_schema() -> dict[str, Any]:
+    contract = capture_contract_schema_fragment()
     return {
         "name": TOOL_NAME,
         "description": (
@@ -69,11 +75,9 @@ def _tool_schema() -> dict[str, Any]:
         "inputSchema": {
             "type": "object",
             "properties": {
-                "schemaVersion": {
-                    "type": "integer",
-                    "description": "Capture contract version. Only 1 is supported.",
-                    "const": CAPTURE_SCHEMA_VERSION,
-                },
+                # Runtime Object fields stay with the provider; the capture
+                # contract fields (schemaVersion/viewport/freeze) compose in
+                # from the contract module fragment (ADR-0018 site 1).
                 "url": {
                     "type": "string",
                     "description": "Target host URL (or file://) to capture.",
@@ -117,50 +121,14 @@ def _tool_schema() -> dict[str, Any]:
                     ),
                     "default": False,
                 },
-                "viewport": {
-                    "type": "object",
-                    "description": (
-                        "Required capture viewport. Provider does not invent "
-                        "desktop defaults."
-                    ),
-                    "properties": {
-                        "width": {"type": "integer", "minimum": 1},
-                        "height": {"type": "integer", "minimum": 1},
-                        "devicePixelRatio": {"type": "number", "minimum": 0.1},
-                        "colorScheme": {
-                            "type": "string",
-                            "enum": sorted(COLOR_SCHEMES),
-                        },
-                    },
-                    "required": [
-                        "width",
-                        "height",
-                        "devicePixelRatio",
-                        "colorScheme",
-                    ],
-                    "additionalProperties": False,
-                },
-                "freeze": {
-                    "type": "object",
-                    "description": (
-                        "Deterministic freeze controls. Defaults: enabled=true, "
-                        "waitFonts=true, networkIdle=false."
-                    ),
-                    "properties": {
-                        "enabled": {"type": "boolean", "default": True},
-                        "waitFonts": {"type": "boolean", "default": True},
-                        "networkIdle": {"type": "boolean", "default": False},
-                    },
-                    "additionalProperties": False,
-                },
+                **contract["properties"],
             },
             "required": [
-                "schemaVersion",
                 "url",
                 "type",
                 "state",
                 "artifact_path",
-                "viewport",
+                *contract["required"],
             ],
             "additionalProperties": False,
         },
@@ -213,68 +181,6 @@ def _captured(
         "error": "",
         "written_path": written_path,
         "request": request,
-    }
-
-
-def parse_capture_contract(args: dict[str, Any]) -> dict[str, Any]:
-    """Validate capture contract v1 fields and return a normalized request.
-
-    Raises ValueError with a recapture instruction for missing/unknown versions
-    or incomplete viewport. Pure — no browser side effects.
-    """
-    if "schemaVersion" not in args:
-        raise ValueError(
-            f"capture contract schemaVersion is required; {RECAPTURE_HINT}"
-        )
-    version = args.get("schemaVersion")
-    if version != CAPTURE_SCHEMA_VERSION:
-        raise ValueError(
-            f"unsupported capture schemaVersion {version!r}; {RECAPTURE_HINT}"
-        )
-    viewport = args.get("viewport")
-    if not isinstance(viewport, dict):
-        raise ValueError(
-            f"viewport object is required for schemaVersion=1; {RECAPTURE_HINT}"
-        )
-    width = viewport.get("width")
-    height = viewport.get("height")
-    dpr = viewport.get("devicePixelRatio")
-    scheme = viewport.get("colorScheme")
-    if not isinstance(width, int) or width < 1:
-        raise ValueError("viewport.width must be a positive integer")
-    if not isinstance(height, int) or height < 1:
-        raise ValueError("viewport.height must be a positive integer")
-    if not isinstance(dpr, (int, float)) or dpr <= 0:
-        raise ValueError("viewport.devicePixelRatio must be a positive number")
-    if scheme not in COLOR_SCHEMES:
-        raise ValueError(
-            f"viewport.colorScheme must be one of {sorted(COLOR_SCHEMES)}; "
-            f"got {scheme!r}"
-        )
-
-    freeze_raw = args.get("freeze")
-    if freeze_raw is None:
-        freeze_raw = {}
-    if not isinstance(freeze_raw, dict):
-        raise ValueError("freeze must be an object when provided")
-    freeze = {
-        "enabled": freeze_raw.get("enabled", True),
-        "waitFonts": freeze_raw.get("waitFonts", True),
-        "networkIdle": freeze_raw.get("networkIdle", False),
-    }
-    for key in ("enabled", "waitFonts", "networkIdle"):
-        if not isinstance(freeze[key], bool):
-            raise ValueError(f"freeze.{key} must be a boolean")
-
-    return {
-        "schemaVersion": CAPTURE_SCHEMA_VERSION,
-        "viewport": {
-            "width": width,
-            "height": height,
-            "devicePixelRatio": float(dpr),
-            "colorScheme": scheme,
-        },
-        "freeze": freeze,
     }
 
 
