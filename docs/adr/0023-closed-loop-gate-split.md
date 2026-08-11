@@ -43,13 +43,15 @@ orchestrator, one cohesive file per gate (or gate group):
   `_g5_no_valid_reason`, `_g5_fact_findings`, `check_preview`. Projects the
   bundled Preview integrity snapshot (C1 / ADR-0004); never owns integrity
   rules.
-- `scripts/g6_evidence.py` — G6: `_ledger_observed`, `_manifest_entries`,
-  `_g6_capture_findings`, `check_evidence`,
-  `check_manifest_ts_warnings`, `check_superseded_ledger_warnings`,
-  `_ledger_has_evidence_binding`. Validates bound manifest request
-  snapshots through the bundled `validate_capture_snapshot` (ADR-0018
-  enforcement site 3); consumes `EVIDENCE_PREFIX` from `stages.py`
-  (ADR-0021).
+- `scripts/g6_records.py` — shared G6 input model: `ledger_observed` and
+  `manifest_entries`, consumed by both hard-gate and warning policy.
+- `scripts/g6_evidence.py` — G6 hard gate: `_g6_capture_findings` and
+  `check_evidence`. Validates bound manifest request snapshots through the
+  bundled `validate_capture_snapshot` (ADR-0018 enforcement site 3).
+- `scripts/g6_warnings.py` — G6 advisory policy:
+  `check_manifest_ts_warnings`, `check_superseded_ledger_warnings`, and
+  `_ledger_has_evidence_binding`. Consumes `EVIDENCE_PREFIX` from
+  `stages.py` (ADR-0021).
 
 `scripts/validate_run.py` keeps exactly the orchestration surface: the
 module docstring (usage / strict-mode contract), the one bootstrap (ADR-0022),

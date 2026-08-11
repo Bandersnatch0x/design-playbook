@@ -118,7 +118,7 @@ CONTEXT.md  .scratch/             ← glossary, specs, tickets, dogfood logs
 
 Runs land their artifacts under `.scratch/<run>/` in your project — see the [package README](./packages/design-playbook/README.md) and `SKILL.md` steps 3, 5, 8.
 
-**Maintainer helpers (repo root, not a product CLI):** `scripts/doctor.py` (install health), `scripts/run_status.py` (derive status/resume from run artifacts), `scripts/release.py` (tag gate), `scripts/validate.py` (static plugin surface).
+**Maintainer helpers:** `scripts/doctor.py` (install health), `packages/design-playbook/scripts/run_status.py` (derive status/resume from run artifacts), `scripts/release.py` (tag gate), `scripts/validate.py` (static plugin surface).
 
 Root = GitHub front door + engineering shell · Package = only runtime surface · `product-*` maintainer commands stay at root, never in the package.
 

@@ -27,14 +27,13 @@ from design_playbook.scripts.stages import (  # noqa: E402
     POINT_BACK,
     SPEC_MD,
     STAGES,
+    STAGES_BY_KEY,
 )
 
 
 def _markers(key: str) -> tuple[str, ...]:
-    for stage_key, _skill, markers in STAGES:
-        if stage_key == key:
-            return markers
-    return ()
+    stage = STAGES_BY_KEY.get(key)
+    return stage.markers if stage is not None else ()
 
 
 class StagesRegistryTests(unittest.TestCase):
@@ -45,7 +44,7 @@ class StagesRegistryTests(unittest.TestCase):
         self.assertIn(EVIDENCE_MANIFEST, _markers("evidence"))
 
     def test_stage_order_matches_pipeline(self) -> None:
-        keys = [key for key, _skill, _markers in STAGES]
+        keys = [stage.key for stage in STAGES]
         self.assertEqual(keys, [
             "baseline", "reference", "spec", "plan", "decision",
             "preview", "fill", "craft", "evidence", "accept",
@@ -67,6 +66,14 @@ class StagesRegistryTests(unittest.TestCase):
         self.assertEqual(SPEC_MD, "spec.md")
         # Prefix relationship: the manifest lives under evidence/.
         self.assertTrue(EVIDENCE_MANIFEST.startswith(EVIDENCE_PREFIX))
+
+    def test_regular_stages_declare_resume_actions(self) -> None:
+        for stage in STAGES:
+            with self.subTest(stage=stage.key):
+                if stage.key in {"preview", "accept"}:
+                    self.assertIsNone(stage.resume_action)
+                else:
+                    self.assertTrue(stage.resume_action)
 
 
 if __name__ == "__main__":

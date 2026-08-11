@@ -892,25 +892,24 @@ saveDraft();
 
   // ADR-0008 advisory UX check; Python Preview integrity is authoritative.
   // (non-empty feedback OR >=1 anchor) AND all anchors complete.
-  var reviseLabels = {__DPB_REVISE_LABELS__};
   form.addEventListener("submit", function (e) {
 syncHidden();
 var submitter = e.submitter;
 var choice = submitter && submitter.name === "choice" ? submitter.value : "";
 if (!choice || choice === "__abort__") { clearDraft(); return; }
-var isRevise = !!reviseLabels[choice] || /修改|revise|change/i.test(choice);
-// For revise actions (e.g. "需要修改"), allow even without substantive feedback (the point is to request changes).
-// Only enforce floor for actual confirm actions.
-if (isRevise || isSubstantive()) {
+if (isSubstantive()) {
   if (field) field.removeAttribute("aria-invalid");
   if (hint) hint.classList.remove("is-on");
   clearDraft();  // real submit: drop the persisted draft
   return;
 }
 e.preventDefault();
-if (field) { field.setAttribute("aria-invalid", "true"); field.focus(); }
-if (hint) hint.classList.add("is-on");
 if (!bar.classList.contains("is-open")) openDrawer();
+if (field) {
+  field.setAttribute("aria-invalid", "true");
+  setTimeout(function () { field.focus(); }, 0);
+}
+if (hint) hint.classList.add("is-on");
 // I1: do NOT force pin mode on - that was an intent guess; the user may want
 // overall feedback, not element selection.
   });

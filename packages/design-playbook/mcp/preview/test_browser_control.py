@@ -185,7 +185,8 @@ class ControlResourceAssemblyTests(unittest.TestCase):
         self.assertIn("<style>\n#dpb-preview-bar", control)
         self.assertIn('id="dpb-decide-form"', control)
         self.assertIn("window.DPB_I18N =", control)
-        self.assertIn("var reviseLabels =", control)
+        self.assertNotIn("reviseLabels", control)
+        self.assertIn("isSubstantive()", control)
         self.assertNotIn("<unsafe>", control)
         self.assertNotRegex(control, r"\{(?:t_|summary_safe|primary_|secondary_|pill_)[^}]*\}")
 

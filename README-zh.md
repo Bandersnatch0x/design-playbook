@@ -103,7 +103,7 @@ CONTEXT.md  .scratch/             ← 词汇表、spec、票、dogfood 日志
 
 运行产物落在你项目的 `.scratch/<run>/` 下——见[package README](./packages/design-playbook/README.md)与 `SKILL.md` steps 3、5、8。
 
-**维护脚本（仓库根，不是产品 CLI）：** `scripts/doctor.py`（安装健康检查）、`scripts/run_status.py`（从 run 产物推导 status/resume）、`scripts/release.py`（发版门禁）、`scripts/validate.py`（静态插件表面）。
+**维护脚本：** `scripts/doctor.py`（安装健康检查）、`packages/design-playbook/scripts/run_status.py`（从 run 产物推导 status/resume）、`scripts/release.py`（发版门禁）、`scripts/validate.py`（静态插件表面）。
 
 仓库根 = GitHub 门面 + 工程壳 · package = 唯一运行时表面 · `product-*` 维护命令只留根，绝不进 package。
 

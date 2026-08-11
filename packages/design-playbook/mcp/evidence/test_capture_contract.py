@@ -17,6 +17,7 @@ to the write side's normalization.
 """
 from __future__ import annotations
 
+import math
 import sys
 import unittest
 from pathlib import Path
@@ -30,6 +31,7 @@ if str(_PKG_ROOT) not in sys.path:
 from design_playbook.mcp.evidence.capture_contract import (  # noqa: E402
     CAPTURE_SCHEMA_VERSION,
     COLOR_SCHEMES,
+    MIN_VIEWPORT_DPR,
     RECAPTURE_HINT,
     capture_contract_schema_fragment,
     parse_capture_contract,
@@ -76,6 +78,14 @@ class CaptureContractParseTests(unittest.TestCase):
         self.assertIn("unsupported capture schemaVersion 99", str(ctx.exception))
         self.assertIn(RECAPTURE_HINT, str(ctx.exception))
 
+    def test_schema_version_rejects_boolean(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            parse_capture_contract({
+                "schemaVersion": True,
+                "viewport": dict(_FULL_VIEWPORT),
+            })
+        self.assertIn("unsupported capture schemaVersion True", str(ctx.exception))
+
     def test_viewport_object_required(self) -> None:
         for bad in (None, 42, "1280x800", [], True):
             with self.subTest(bad=bad):
@@ -92,8 +102,22 @@ class CaptureContractParseTests(unittest.TestCase):
             ({"width": 1280, "height": -1, "devicePixelRatio": 1, "colorScheme": "light"},
              "viewport.height must be a positive integer"),
             ({"width": 1280, "height": 800, "devicePixelRatio": 0, "colorScheme": "light"},
-             "viewport.devicePixelRatio must be a positive number"),
+             "viewport.devicePixelRatio must be a number greater than or equal to"),
+            ({"width": True, "height": 800, "devicePixelRatio": 1, "colorScheme": "light"},
+             "viewport.width must be a positive integer"),
+            ({"width": 1280, "height": True, "devicePixelRatio": 1, "colorScheme": "light"},
+             "viewport.height must be a positive integer"),
+            ({"width": 1280, "height": 800, "devicePixelRatio": True, "colorScheme": "light"},
+             "viewport.devicePixelRatio must be a number greater than or equal to"),
+            ({"width": 1280, "height": 800, "devicePixelRatio": 0.01, "colorScheme": "light"},
+             "viewport.devicePixelRatio must be a number greater than or equal to"),
+            ({"width": 1280, "height": 800, "devicePixelRatio": math.nan, "colorScheme": "light"},
+             "viewport.devicePixelRatio must be a number greater than or equal to"),
+            ({"width": 1280, "height": 800, "devicePixelRatio": math.inf, "colorScheme": "light"},
+             "viewport.devicePixelRatio must be a number greater than or equal to"),
             ({"width": 1280, "height": 800, "devicePixelRatio": 1, "colorScheme": "sepia"},
+             "viewport.colorScheme must be one of"),
+            ({"width": 1280, "height": 800, "devicePixelRatio": 1, "colorScheme": []},
              "viewport.colorScheme must be one of"),
         ]
         for viewport, expected in cases:
@@ -197,6 +221,10 @@ class CaptureContractValidateTests(unittest.TestCase):
         self.assertEqual(facts[0].code, "unsupported_schema_version")
         self.assertEqual(facts[0].actual, "99")
 
+        facts = validate_capture_snapshot(_full_request(schemaVersion=True))
+        self.assertEqual(facts[0].code, "unsupported_schema_version")
+        self.assertEqual(facts[0].actual, "True")
+
     def test_missing_or_non_dict_viewport_is_missing_viewport_fact(self) -> None:
         for viewport in (None, "1280x800", 42, []):
             with self.subTest(viewport=viewport):
@@ -208,10 +236,24 @@ class CaptureContractValidateTests(unittest.TestCase):
         # Was lax: viewport dict with partial fields passed the old G6 check.
         cases = [
             ({"width": 1280, "height": 800},  # missing dpr + colorScheme
-             "viewport.devicePixelRatio must be a positive number"),
+             "viewport.devicePixelRatio must be a number greater than or equal to"),
             ({"width": 0, "height": 800, "devicePixelRatio": 1, "colorScheme": "light"},
              "viewport.width must be a positive integer"),
+            ({"width": True, "height": 800, "devicePixelRatio": 1, "colorScheme": "light"},
+             "viewport.width must be a positive integer"),
+            ({"width": 1280, "height": True, "devicePixelRatio": 1, "colorScheme": "light"},
+             "viewport.height must be a positive integer"),
+            ({"width": 1280, "height": 800, "devicePixelRatio": True, "colorScheme": "light"},
+             "viewport.devicePixelRatio must be a number greater than or equal to"),
+            ({"width": 1280, "height": 800, "devicePixelRatio": 0.01, "colorScheme": "light"},
+             "viewport.devicePixelRatio must be a number greater than or equal to"),
+            ({"width": 1280, "height": 800, "devicePixelRatio": math.nan, "colorScheme": "light"},
+             "viewport.devicePixelRatio must be a number greater than or equal to"),
+            ({"width": 1280, "height": 800, "devicePixelRatio": math.inf, "colorScheme": "light"},
+             "viewport.devicePixelRatio must be a number greater than or equal to"),
             ({"width": 1280, "height": 800, "devicePixelRatio": 1, "colorScheme": "sepia"},
+             "viewport.colorScheme must be one of"),
+            ({"width": 1280, "height": 800, "devicePixelRatio": 1, "colorScheme": {}},
              "viewport.colorScheme must be one of"),
         ]
         for viewport, expected in cases:
@@ -273,6 +315,10 @@ class CaptureContractSchemaFragmentTests(unittest.TestCase):
         self.assertEqual(
             fragment["properties"]["schemaVersion"]["type"],
             "integer",
+        )
+        self.assertEqual(
+            fragment["properties"]["viewport"]["properties"]["devicePixelRatio"]["minimum"],
+            MIN_VIEWPORT_DPR,
         )
 
     def test_viewport_full_shape_required_and_closed(self) -> None:
