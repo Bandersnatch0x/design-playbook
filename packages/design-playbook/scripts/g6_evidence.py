@@ -1,4 +1,4 @@
-"""G6 evidence-binding gate (ADR-0023, ADR-0025).
+"""G6 evidence-binding gate (ADR-0023, ADR-0025, ADR-0026).
 
 Conditional: if a ledger ``observed`` references an ``evidence/`` artifact,
 require the artifact to exist and a manifest entry to bind it to the
@@ -10,17 +10,20 @@ request snapshots validate through the bundled Evidence runtime's
 Ledger rows are no longer parsed here (ADR-0025): the ``(criterion, observed)``
 pairs come from ``g6_records.ledger_observed``, the G6 projection over the
 single Evidence ledger syntax-facts module (``mcp.evidence.ledger_syntax``).
-This module owns only G6 binding policy and diagnostics.
+Artifact path containment is no longer enforced here (ADR-0026): it is
+delegated to ``mcp.evidence.containment.read_artifact``, whose stable reason
+codes this module maps to G6.escape and G6.artifact_missing. This module
+owns only G6 binding policy and diagnostics.
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from design_playbook.scripts._diagnostics import Finding, finding
 from design_playbook.scripts.g6_records import ledger_observed, manifest_entries
 from design_playbook.scripts.stages import EVIDENCE_PREFIX
 from design_playbook.mcp.evidence.capture_contract import validate_capture_snapshot
+from design_playbook.mcp.evidence import containment
 
 
 def _g6_capture_findings(criterion: str, snapshot: object) -> list[Finding]:
@@ -95,8 +98,6 @@ def check_evidence(
     root = run_root if run_root is not None else evidence_dir.parent
     entries = manifest_entries(evidence_dir)
     valid_criterion_ids = {f"L6.{n}" for n in range(1, expected_l6 + 1)}
-    evidence_root = (root / "evidence").resolve()
-
     errs: list[Finding] = []
     for criterion, observed in ledger_observed(pointback_text):
         # LOW-3: case-insensitive prefix. The write boundary treats paths
@@ -113,76 +114,33 @@ def check_evidence(
             continue  # free-text observation; G6 does not apply
         leaf = observed[len(EVIDENCE_PREFIX):]
         canonical = EVIDENCE_PREFIX + leaf
-        # Containment (issue 04 / G6): the observed path must resolve *inside*
-        # the evidence/ subtree. Reject any ".." segment, absolute paths, and
-        # post-resolve escapes (e.g. ``evidence/../spec.md`` -> run root,
-        # which under the new Codex manifest could overwrite spec / source).
-        observed_path = Path(canonical)
-        if observed_path.is_absolute() or ".." in observed_path.parts:
-            errs.append(finding(
-                "G6.escape",
-                f"G6 evidence: {criterion} observed escapes evidence/ "
-                f"subtree: {observed}",
-                owner=f"point-back.md#{criterion}",
-                expected="observed path inside evidence/",
-                actual=observed,
-                repair="Point observed at an artifact under evidence/",
-            ))
-            continue
-        try:
-            resolved = (root / canonical).resolve()
-        except OSError:
-            errs.append(finding(
-                "G6.escape",
-                f"G6 evidence: {criterion} observed escapes evidence/ "
-                f"subtree: {observed}",
-                owner=f"point-back.md#{criterion}",
-                expected="observed path inside evidence/",
-                actual=observed,
-                repair="Point observed at an artifact under evidence/",
-            ))
-            continue
-        try:
-            resolved.relative_to(evidence_root)
-        except ValueError:
-            errs.append(finding(
-                "G6.escape",
-                f"G6 evidence: {criterion} observed escapes evidence/ "
-                f"subtree: {observed}",
-                owner=f"point-back.md#{criterion}",
-                expected="observed path inside evidence/",
-                actual=observed,
-                repair="Point observed at an artifact under evidence/",
-            ))
-            continue
-        # M6: defence in depth — mirror evidence/server.py
-        # _resolve_artifact_path. ``Path.resolve`` and ``os.path.realpath``
-        # can disagree on symlink chains across platforms, so a symlink under
-        # evidence/ that resolves outside must also be rejected on the read
-        # side (the write side already rejects it).
-        try:
-            Path(os.path.realpath(resolved)).relative_to(
-                os.path.realpath(evidence_root))
-        except ValueError:
-            errs.append(finding(
-                "G6.escape",
-                f"G6 evidence: {criterion} observed escapes evidence/ "
-                f"subtree: {observed}",
-                owner=f"point-back.md#{criterion}",
-                expected="observed path inside evidence/",
-                actual=observed,
-                repair="Point observed at an artifact under evidence/",
-            ))
-            continue
-        if not resolved.is_file():
-            errs.append(finding(
-                "G6.artifact_missing",
-                f"G6 evidence: {criterion} artifact missing: {observed}",
-                owner=f"evidence/{leaf}",
-                expected="artifact file on disk",
-                actual="missing",
-                repair=f"Capture or restore {observed}",
-            ))
+        # Containment (ADR-0026): the observed path must resolve *inside*
+        # the evidence/ subtree. The single containment module owns canonical
+        # resolution and every escape rejection (absolute paths, ``..``,
+        # resolution failures, canonical escapes, observed symlink escapes);
+        # G6 maps its stable reason codes to G6.escape (resolution-time
+        # escapes) and G6.artifact_missing (not a regular file).
+        result = containment.read_artifact(canonical, root)
+        if not result.ok:
+            if result.reason == containment.REASON_NOT_REGULAR_FILE:
+                errs.append(finding(
+                    "G6.artifact_missing",
+                    f"G6 evidence: {criterion} artifact missing: {observed}",
+                    owner=f"evidence/{leaf}",
+                    expected="artifact file on disk",
+                    actual="missing",
+                    repair=f"Capture or restore {observed}",
+                ))
+            else:
+                errs.append(finding(
+                    "G6.escape",
+                    f"G6 evidence: {criterion} observed escapes evidence/ "
+                    f"subtree: {observed}",
+                    owner=f"point-back.md#{criterion}",
+                    expected="observed path inside evidence/",
+                    actual=observed,
+                    repair="Point observed at an artifact under evidence/",
+                ))
             continue
         # ledger observed is run-root-relative ("evidence/<name>"); manifest
         # artifact is evidence/-relative ("<name>", no prefix) per ticket 01.
