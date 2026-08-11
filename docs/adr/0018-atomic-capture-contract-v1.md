@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted (vNext grill Q3, 2026-08-08)
+Accepted (vNext grill Q3, 2026-08-08). Artifact-path containment ownership is
+superseded by ADR-0026; capture contract v1 and its atomic release rule remain
+in force.
 
 ## Context
 
@@ -38,4 +40,3 @@ The provider boundary remains unchanged in one important respect: it receives no
 2. Provider (`mcp/evidence/server.py`) retains Runtime Object fields, path/overwrite boundaries, and Playwright I/O only; it imports the contract module for schema/parse.
 3. G6 (`scripts/validate_run.py`) validates bound manifest request snapshots through `validate_capture_snapshot` — schemaVersion=1, full viewport shape, freeze — replacing the previous partial hand-written checks (schemaVersion + viewport-dict only).
 4. The orchestrator derives and embeds the provider-echoed request snapshot unchanged, so real snapshots always carry freeze defaults; hand-written minimal fixtures were upgraded to full shape.
-
