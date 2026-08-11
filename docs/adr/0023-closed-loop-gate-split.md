@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted (C6, 2026-08-09)
+Accepted (C6, 2026-08-09). Evidence ledger and Verdict parsing ownership is
+superseded by ADR-0025; the gate split, policy ownership, diagnostics, and
+orchestration order remain in force.
 
 ## Context
 

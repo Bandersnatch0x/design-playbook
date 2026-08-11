@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted (C6, 2026-08-09)
+Accepted (C6, 2026-08-09). Preview versions lifecycle and removal policy is
+superseded by ADR-0027; transaction primitive ownership and lock policy remain
+in force.
 
 ## Context
 

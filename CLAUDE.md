@@ -26,11 +26,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Issue tracker
 
-Local markdown under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+GitHub Issues in `Bandersnatch0x/design-playbook`, operated with `gh`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-`Status:` line roles. See `docs/agents/triage-labels.md`.
+Canonical GitHub issue labels. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
