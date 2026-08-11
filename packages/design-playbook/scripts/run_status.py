@@ -36,7 +36,7 @@ else:
 # Stage registry and shared artifact names live in the packaged scripts dir
 # (ADR-0021): STAGES mirrors skills/design-playbook/SKILL.md Steps; the
 # artifact-name constants are shared with validate_run.py.
-from design_playbook.scripts.stages import POINT_BACK, STAGES  # noqa: E402
+from design_playbook.scripts.stages import POINT_BACK, STAGES, STAGES_BY_KEY  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -56,12 +56,17 @@ def inspect_run(
 ) -> list[StageState]:
     snapshot = preview_snapshot or inspect_preview(run_root / "preview")
     states: list[StageState] = []
-    for key, skill, markers in STAGES:
-        if key == "preview":
+    for stage in STAGES:
+        if stage.key == "preview":
             found = [f"preview/{source}" for source in snapshot.occurrence_sources]
         else:
-            found = [m for m in markers if _exists(run_root, m)]
-        states.append(StageState(key=key, skill=skill, present=bool(found), evidence=found))
+            found = [marker for marker in stage.markers if _exists(run_root, marker)]
+        states.append(StageState(
+            key=stage.key,
+            skill=stage.skill,
+            present=bool(found),
+            evidence=found,
+        ))
     return states
 
 
@@ -142,6 +147,37 @@ def _baseline_next_action(run_root: Path) -> str | None:
             "complete prepare/confirm (or re-run prepare) before Fill.")
 
 
+def _preview_next_action(snapshot: PreviewSnapshot) -> str:
+    confirm = snapshot.canonical_current_confirm
+    if confirm is None:
+        invalid = next(
+            (
+                fact
+                for fact in snapshot.facts
+                if fact.code == "invalid_confirm_record" and fact.path is not None
+            ),
+            None,
+        )
+        if invalid is not None:
+            return f"Preview confirm unreadable ({invalid.path.name}); re-run preview*."
+        return ("Preview artifacts exist without a confirm for the latest "
+                "round — finish preview* HITL (G5) before fill.")
+    payload = confirm.data
+    if isinstance(payload, dict) and payload.get("aborted") is True:
+        return (f"Preview ABORTED in {confirm.path.name} — must not proceed to "
+                f"fill; re-run preview* from the current round.")
+    # Status narrates the transaction outcome only. Prototype facts remain
+    # G5's fail-closed concern; run_status does not become a second gate.
+    if confirm.valid:
+        return "Preview confirmed and floor passed — resume at fill."
+    if isinstance(payload, dict) and payload.get("confirmed") is True:
+        reason = payload.get("floor_failure") or "floor_pass is not true"
+        return (f"Preview confirmed in {confirm.path.name} but feedback floor "
+                f"failed ({reason}) — must not proceed to fill; re-run "
+                f"preview* HITL.")
+    return "Preview open without decision — complete preview* confirm/revise."
+
+
 def next_action(
     states: list[StageState],
     run_root: Path,
@@ -160,59 +196,19 @@ def next_action(
         if verdict and "recirculate" in verdict.lower():
             return "Verdict is Recirculate — repair from point-back findings, then re-run ui-evaluator."
         return "point-back.md present — confirm ## Verdict, then stop or recirculate."
-    if "evidence" in present and "accept" not in present:
-        return "Resume at ui-evaluator (accept) with evidence ledger bound."
-    if "craft" in present and "accept" not in present:
-        return "Resume at observe* (if adapter present) or ui-evaluator."
-    if "fill" in present and "craft" not in present:
-        return "Resume at craft-guard, then observe*/ui-evaluator."
-    if "preview" in present and "fill" not in present:
-        confirm = snapshot.canonical_current_confirm
-        if confirm is None:
-            invalid = next(
-                (
-                    fact
-                    for fact in snapshot.facts
-                    if fact.code == "invalid_confirm_record"
-                    and fact.path is not None
-                ),
-                None,
-            )
-            if invalid is not None:
-                return (
-                    f"Preview confirm unreadable ({invalid.path.name}); "
-                    "re-run preview*."
-                )
-            return ("Preview artifacts exist without a confirm for the latest "
-                    "round — finish preview* HITL (G5) before fill.")
-        payload = confirm.data
-        if isinstance(payload, dict) and payload.get("aborted") is True:
-            return (f"Preview ABORTED in {confirm.path.name} — must not proceed to "
-                    f"fill; re-run preview* from the current round.")
-        # Status narrates the transaction outcome only. Prototype facts remain
-        # G5's fail-closed concern; run_status does not become a second gate.
-        if confirm.valid:
-            return "Preview confirmed and floor passed — resume at fill."
-        if isinstance(payload, dict) and payload.get("confirmed") is True:
-            reason = payload.get("floor_failure") or "floor_pass is not true"
-            return (f"Preview confirmed in {confirm.path.name} but feedback floor "
-                    f"failed ({reason}) — must not proceed to fill; re-run "
-                    f"preview* HITL.")
-        return "Preview open without decision — complete preview* confirm/revise."
-    if "decision" in present and "preview" not in present and "fill" not in present:
-        return "Resume at preview* (if adapter present) or fill."
-    if "plan" in present and "decision" not in present:
-        return "Resume at ui-picker (decision-report)."
-    if "spec" in present and "decision" not in present and "plan" not in present:
-        return "Resume at plan? (optional) or ui-picker."
-    if "reference" in present and "spec" not in present:
-        return "Resume at ux-spec (reference contract present)."
-    if "baseline" in present and "reference" not in present and "spec" not in present:
-        return "Design baseline bound — resume at reference-intake? (if needed) or ux-spec."
     if not present:
         return "No run artifacts — start with /design-playbook:design-io <ask> (design-baseline?, reference-intake?, or ux-spec)."
-    # partial unknown
-    last = [s for s in states if s.present][-1]
+
+    for state in reversed(states):
+        if not state.present or state.key == "accept":
+            continue
+        if state.key == "preview":
+            return _preview_next_action(snapshot)
+        stage = STAGES_BY_KEY.get(state.key)
+        if stage is not None and stage.resume_action is not None:
+            return stage.resume_action
+
+    last = [state for state in states if state.present][-1]
     return f"Latest artifact stage: {last.key} ({last.skill}). Continue the orchestrator sequence from there."
 
 

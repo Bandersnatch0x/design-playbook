@@ -9,58 +9,13 @@ request snapshots validate through the bundled Evidence runtime's
 """
 from __future__ import annotations
 
-import json
 import os
-import re
 from pathlib import Path
 
 from design_playbook.scripts._diagnostics import Finding, finding
+from design_playbook.scripts.g6_records import ledger_observed, manifest_entries
 from design_playbook.scripts.stages import EVIDENCE_PREFIX
 from design_playbook.mcp.evidence.capture_contract import validate_capture_snapshot
-
-
-def _ledger_observed(text: str) -> list[tuple[str, str]]:
-    """Return (criterion, observed) pairs for each evidence row.
-
-    The G6 evidence path is the leading token of the observed line; trailing
-    commentary after whitespace, a (full/half-width) paren, or a
-    (full/half-width) comma / colon is tolerated so authors can annotate
-    ``evidence/`` rows without a false-positive G6 fail (issue 03). Free-text
-    observed is unaffected — G6 only checks evidence/ rows, and a leading
-    token starting with ``evidence/`` never appears in free text.
-
-    Keep the tolerated separators in sync with skills/ui-evaluator/SKILL.md
-    (which teaches authors what punctuation may follow the artifact path).
-    """
-    pairs: list[tuple[str, str]] = []
-    for block in re.split(r"\n\s*\n", text):
-        crit = re.search(r"^criterion:\s*(\S+)", block, re.I | re.M)
-        obs = re.search(r"^observed:\s*(.+)$", block, re.I | re.M)
-        if crit and obs:
-            raw = obs.group(1).strip()
-            lead = re.match(r"[^\s（(,，:：]+", raw)
-            observed = lead.group(0) if lead else raw
-            pairs.append((crit.group(1).strip(), observed))
-    return pairs
-
-
-def _manifest_entries(evidence_dir: Path) -> list[dict]:
-    """Read .scratch/<run>/evidence/manifest.jsonl; one dict per non-empty line."""
-    path = evidence_dir / "manifest.jsonl"
-    if not path.is_file():
-        return []
-    entries: list[dict] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            data = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(data, dict):
-            entries.append(data)
-    return entries
 
 
 def _g6_capture_findings(criterion: str, snapshot: object) -> list[Finding]:
@@ -133,12 +88,12 @@ def check_evidence(
     if evidence_dir is None or not evidence_dir.is_dir():
         return []
     root = run_root if run_root is not None else evidence_dir.parent
-    entries = _manifest_entries(evidence_dir)
+    entries = manifest_entries(evidence_dir)
     valid_criterion_ids = {f"L6.{n}" for n in range(1, expected_l6 + 1)}
     evidence_root = (root / "evidence").resolve()
 
     errs: list[Finding] = []
-    for criterion, observed in _ledger_observed(pointback_text):
+    for criterion, observed in ledger_observed(pointback_text):
         # LOW-3: case-insensitive prefix. The write boundary treats paths
         # case-insensitively on case-insensitive filesystems (Windows), so
         # ``EVIDENCE/<x>`` lands in the evidence/ subtree on disk; the read

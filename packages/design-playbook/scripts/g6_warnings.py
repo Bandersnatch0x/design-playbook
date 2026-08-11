@@ -9,8 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from design_playbook.scripts._diagnostics import Finding, finding
+from design_playbook.scripts.g6_records import ledger_observed, manifest_entries
 from design_playbook.scripts.stages import EVIDENCE_PREFIX
-from design_playbook.scripts.g6_evidence import _ledger_observed, _manifest_entries
 
 
 def check_manifest_ts_warnings(evidence_dir: Path | None) -> list[Finding]:
@@ -23,7 +23,7 @@ def check_manifest_ts_warnings(evidence_dir: Path | None) -> list[Finding]:
     """
     if evidence_dir is None or not evidence_dir.is_dir():
         return []
-    entries = _manifest_entries(evidence_dir)
+    entries = manifest_entries(evidence_dir)
     if len(entries) < 2:
         return []
     ts_vals = [
@@ -53,7 +53,7 @@ def check_superseded_ledger_warnings(
     """Warn when a ledger cites an artifact that is not the latest binding."""
     if evidence_dir is None or not evidence_dir.is_dir():
         return []
-    entries = _manifest_entries(evidence_dir)
+    entries = manifest_entries(evidence_dir)
     if not entries:
         return []
     # Latest artifact per criterion by ts.
@@ -69,7 +69,7 @@ def check_superseded_ledger_warnings(
         latest_by_crit[crit] = latest["artifact"]
 
     warns: list[Finding] = []
-    for criterion, observed in _ledger_observed(pointback_text):
+    for criterion, observed in ledger_observed(pointback_text):
         if not observed.casefold().startswith(EVIDENCE_PREFIX):
             continue
         leaf = observed[len(EVIDENCE_PREFIX):]
@@ -89,7 +89,7 @@ def check_superseded_ledger_warnings(
 
 
 def _ledger_has_evidence_binding(pointback_text: str) -> bool:
-    for _criterion, observed in _ledger_observed(pointback_text):
+    for _criterion, observed in ledger_observed(pointback_text):
         # Match check_evidence: case-insensitive evidence/ prefix (LOW-3).
         if observed.casefold().startswith(EVIDENCE_PREFIX):
             return True

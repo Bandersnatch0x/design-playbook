@@ -28,6 +28,7 @@
     "commands",
     "mcp",
     "scripts",
+    "design_playbook.py",
     "examples",
     "codex",
     "NOTICE",

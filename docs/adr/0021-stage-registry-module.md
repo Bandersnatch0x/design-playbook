@@ -26,30 +26,29 @@ Adding one more consumer means hand-syncing another literal set.
 Ship a package-internal stage registry module at
 `packages/design-playbook/scripts/stages.py`:
 
-- `STAGES` — the ordered (key, skill, markers) table currently in
-  `run_status.py`, now the single mirror of `SKILL.md` steps.
+- `STAGES` — the ordered `StageSpec` table, now the single mirror of
+  `SKILL.md` steps. Each regular stage carries its key, skill, markers, and
+  resume action; Preview and Accept remain explicit integrity/verdict cases.
 - Shared artifact-name constants consumed by both `run_status.py` and
   `validate_run.py`: `EVIDENCE_PREFIX`, `EVIDENCE_MANIFEST`,
   `POINT_BACK`, `DECISION_REPORT`, `SPEC_MD`. `STAGES` markers reference
   these constants where they overlap, so the table and the constants
   cannot disagree.
-- `run_status.py` (both copies, still byte-identical) imports `STAGES`
-  and `POINT_BACK`; `validate_run.py` imports `EVIDENCE_PREFIX` (G6 only,
-  this deepening). No gate message text changes.
+- The packaged `run_status.py` imports `STAGES`, `STAGES_BY_KEY`, and
+  `POINT_BACK`; `validate_run.py` imports `EVIDENCE_PREFIX` (G6 only).
+  No status or gate message text changes.
 - Preview presence stays derived by Preview integrity; `decisions.jsonl`
   stays with the persistent contract.
 
-The registry is data + naming authority only: no behavior changes, no new
-run-state SSOT.
+The registry is data + naming + regular resume-narration authority only: no
+new run-state SSOT. Baseline, Preview, and Accept retain their specialized
+runtime checks in `run_status.py`.
 
 ## Consequences
 
 - One drift surface for stage/artifact naming: change a name in
   `stages.py` and the mirror comment stays correct by construction.
 - `run_status`/`validate_run` no longer hand-sync artifact literals.
-- Root `scripts/run_status.py` reaches the package registry through the
-  existing `_PACKAGE_ROOT` resolution (one more sys.path adapter — the
-  known Candidate 5 friction, not fixed here).
-- Scripts directory stays non-package; the module is a sibling import
-  inside the same scripts dir, plus the existing adapter for the root
-  copy.
+- ADR-0022 subsequently removed the duplicate root `scripts/run_status.py`;
+  the packaged scripts directory is importable through the single
+  `design_playbook.*` seam.

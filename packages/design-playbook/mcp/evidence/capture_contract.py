@@ -14,11 +14,13 @@ Named ``capture_contract.py`` to avoid collision with
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
 CAPTURE_SCHEMA_VERSION = 1
 COLOR_SCHEMES = frozenset({"light", "dark", "no-preference"})
+MIN_VIEWPORT_DPR = 0.1
 RECAPTURE_HINT = "recapture with capture contract schemaVersion=1"
 FREEZE_DEFAULTS = {
     "enabled": True,
@@ -37,6 +39,10 @@ class CaptureFact:
     actual: str = ""
 
 
+def _is_schema_version(value: object) -> bool:
+    return type(value) is int and value == CAPTURE_SCHEMA_VERSION
+
+
 def _bad_viewport(viewport: dict[str, Any]) -> str | None:
     """First malformed viewport field, or None when the shape is valid.
 
@@ -47,13 +53,20 @@ def _bad_viewport(viewport: dict[str, Any]) -> str | None:
     height = viewport.get("height")
     dpr = viewport.get("devicePixelRatio")
     scheme = viewport.get("colorScheme")
-    if not isinstance(width, int) or width < 1:
+    if type(width) is not int or width < 1:
         return "viewport.width must be a positive integer"
-    if not isinstance(height, int) or height < 1:
+    if type(height) is not int or height < 1:
         return "viewport.height must be a positive integer"
-    if not isinstance(dpr, (int, float)) or dpr <= 0:
-        return "viewport.devicePixelRatio must be a positive number"
-    if scheme not in COLOR_SCHEMES:
+    if (
+        type(dpr) not in (int, float)
+        or not math.isfinite(dpr)
+        or dpr < MIN_VIEWPORT_DPR
+    ):
+        return (
+            "viewport.devicePixelRatio must be a number greater than or equal "
+            f"to {MIN_VIEWPORT_DPR}"
+        )
+    if not isinstance(scheme, str) or scheme not in COLOR_SCHEMES:
         return (
             f"viewport.colorScheme must be one of {sorted(COLOR_SCHEMES)}; "
             f"got {scheme!r}"
@@ -82,7 +95,7 @@ def parse_capture_contract(args: dict[str, Any]) -> dict[str, Any]:
             f"capture contract schemaVersion is required; {RECAPTURE_HINT}"
         )
     version = args.get("schemaVersion")
-    if version != CAPTURE_SCHEMA_VERSION:
+    if not _is_schema_version(version):
         raise ValueError(
             f"unsupported capture schemaVersion {version!r}; {RECAPTURE_HINT}"
         )
@@ -144,7 +157,7 @@ def validate_capture_snapshot(snapshot: object) -> list[CaptureFact]:
             actual=("None" if snapshot is None else type(snapshot).__name__),
         )]
     version = snapshot.get("schemaVersion")
-    if version != CAPTURE_SCHEMA_VERSION:
+    if not _is_schema_version(version):
         return [CaptureFact(
             ("missing_schema_version" if version is None
              else "unsupported_schema_version"),
@@ -211,7 +224,10 @@ def capture_contract_schema_fragment() -> dict[str, Any]:
                 "properties": {
                     "width": {"type": "integer", "minimum": 1},
                     "height": {"type": "integer", "minimum": 1},
-                    "devicePixelRatio": {"type": "number", "minimum": 0.1},
+                    "devicePixelRatio": {
+                        "type": "number",
+                        "minimum": MIN_VIEWPORT_DPR,
+                    },
                     "colorScheme": {
                         "type": "string",
                         "enum": sorted(COLOR_SCHEMES),
