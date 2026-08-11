@@ -47,9 +47,12 @@ class VNextIntegrationTests(unittest.TestCase):
         self.assertIn(payload["level"], ("ok", "degraded", "broken"))
 
     def test_contract_bind_and_g7_roundtrip(self) -> None:
-        sys.path.insert(0, str(SCRIPTS))
-        import contract_v1 as cv
-        import g7_contract_drift as g7
+        # One import seam (ADR-0022): package root on sys.path once, then
+        # absolute design_playbook.* imports. No per-runtime path adapters.
+        if str(PACKAGE) not in sys.path:
+            sys.path.insert(0, str(PACKAGE))
+        from design_playbook.scripts import contract_v1 as cv
+        from design_playbook.scripts import g7_contract_drift as g7
 
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp) / "project"

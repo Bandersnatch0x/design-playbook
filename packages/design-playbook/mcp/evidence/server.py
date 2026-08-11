@@ -18,21 +18,33 @@ from __future__ import annotations
 import json
 import os
 import sys
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path
 from typing import Any
+
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parents[2]
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
 
 # Shared stdio JSON-RPC framing + single-tool dispatch live one level up in
 # mcp/_transport.py (both bundled adapters speak the same wire format and
 # run the same JSON-RPC protocol; ADR-0009).
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from _transport import serve_stdio  # noqa: E402
+from design_playbook.mcp._transport import serve_stdio  # noqa: E402
+
+# Capture contract v1 rules live in the sibling contract module (ADR-0018
+# enforcement site 1): parse authority, snapshot validator, and the schema
+# fragment this server composes into the tool schema.
+from design_playbook.mcp.evidence.capture_contract import (  # noqa: E402
+    capture_contract_schema_fragment,
+    parse_capture_contract,
+)
+from design_playbook.mcp.evidence import containment  # noqa: E402
 
 TOOL_NAME = "execute_capture_plan"
 SERVER_NAME = "design-playbook-evidence"
 SERVER_VERSION = "0.1.0"
-CAPTURE_SCHEMA_VERSION = 1
 CAPTURE_TYPES = frozenset({"screenshot", "a11y tree", "interaction trace"})
-COLOR_SCHEMES = frozenset({"light", "dark", "no-preference"})
 ALLOWED_ARGUMENTS = frozenset(
     {
         "schemaVersion",
@@ -47,8 +59,6 @@ ALLOWED_ARGUMENTS = frozenset(
     }
 )
 RUN_ROOT_ENV = "DESIGN_PLAYBOOK_RUN_ROOT"
-EVIDENCE_SUBDIR = "evidence"
-RECAPTURE_HINT = "recapture with capture contract schemaVersion=1"
 
 
 def _log(msg: str) -> None:
@@ -56,6 +66,7 @@ def _log(msg: str) -> None:
 
 
 def _tool_schema() -> dict[str, Any]:
+    contract = capture_contract_schema_fragment()
     return {
         "name": TOOL_NAME,
         "description": (
@@ -69,11 +80,9 @@ def _tool_schema() -> dict[str, Any]:
         "inputSchema": {
             "type": "object",
             "properties": {
-                "schemaVersion": {
-                    "type": "integer",
-                    "description": "Capture contract version. Only 1 is supported.",
-                    "const": CAPTURE_SCHEMA_VERSION,
-                },
+                # Runtime Object fields stay with the provider; the capture
+                # contract fields (schemaVersion/viewport/freeze) compose in
+                # from the contract module fragment (ADR-0018 site 1).
                 "url": {
                     "type": "string",
                     "description": "Target host URL (or file://) to capture.",
@@ -117,50 +126,14 @@ def _tool_schema() -> dict[str, Any]:
                     ),
                     "default": False,
                 },
-                "viewport": {
-                    "type": "object",
-                    "description": (
-                        "Required capture viewport. Provider does not invent "
-                        "desktop defaults."
-                    ),
-                    "properties": {
-                        "width": {"type": "integer", "minimum": 1},
-                        "height": {"type": "integer", "minimum": 1},
-                        "devicePixelRatio": {"type": "number", "minimum": 0.1},
-                        "colorScheme": {
-                            "type": "string",
-                            "enum": sorted(COLOR_SCHEMES),
-                        },
-                    },
-                    "required": [
-                        "width",
-                        "height",
-                        "devicePixelRatio",
-                        "colorScheme",
-                    ],
-                    "additionalProperties": False,
-                },
-                "freeze": {
-                    "type": "object",
-                    "description": (
-                        "Deterministic freeze controls. Defaults: enabled=true, "
-                        "waitFonts=true, networkIdle=false."
-                    ),
-                    "properties": {
-                        "enabled": {"type": "boolean", "default": True},
-                        "waitFonts": {"type": "boolean", "default": True},
-                        "networkIdle": {"type": "boolean", "default": False},
-                    },
-                    "additionalProperties": False,
-                },
+                **contract["properties"],
             },
             "required": [
-                "schemaVersion",
                 "url",
                 "type",
                 "state",
                 "artifact_path",
-                "viewport",
+                *contract["required"],
             ],
             "additionalProperties": False,
         },
@@ -216,68 +189,6 @@ def _captured(
     }
 
 
-def parse_capture_contract(args: dict[str, Any]) -> dict[str, Any]:
-    """Validate capture contract v1 fields and return a normalized request.
-
-    Raises ValueError with a recapture instruction for missing/unknown versions
-    or incomplete viewport. Pure — no browser side effects.
-    """
-    if "schemaVersion" not in args:
-        raise ValueError(
-            f"capture contract schemaVersion is required; {RECAPTURE_HINT}"
-        )
-    version = args.get("schemaVersion")
-    if version != CAPTURE_SCHEMA_VERSION:
-        raise ValueError(
-            f"unsupported capture schemaVersion {version!r}; {RECAPTURE_HINT}"
-        )
-    viewport = args.get("viewport")
-    if not isinstance(viewport, dict):
-        raise ValueError(
-            f"viewport object is required for schemaVersion=1; {RECAPTURE_HINT}"
-        )
-    width = viewport.get("width")
-    height = viewport.get("height")
-    dpr = viewport.get("devicePixelRatio")
-    scheme = viewport.get("colorScheme")
-    if not isinstance(width, int) or width < 1:
-        raise ValueError("viewport.width must be a positive integer")
-    if not isinstance(height, int) or height < 1:
-        raise ValueError("viewport.height must be a positive integer")
-    if not isinstance(dpr, (int, float)) or dpr <= 0:
-        raise ValueError("viewport.devicePixelRatio must be a positive number")
-    if scheme not in COLOR_SCHEMES:
-        raise ValueError(
-            f"viewport.colorScheme must be one of {sorted(COLOR_SCHEMES)}; "
-            f"got {scheme!r}"
-        )
-
-    freeze_raw = args.get("freeze")
-    if freeze_raw is None:
-        freeze_raw = {}
-    if not isinstance(freeze_raw, dict):
-        raise ValueError("freeze must be an object when provided")
-    freeze = {
-        "enabled": freeze_raw.get("enabled", True),
-        "waitFonts": freeze_raw.get("waitFonts", True),
-        "networkIdle": freeze_raw.get("networkIdle", False),
-    }
-    for key in ("enabled", "waitFonts", "networkIdle"):
-        if not isinstance(freeze[key], bool):
-            raise ValueError(f"freeze.{key} must be a boolean")
-
-    return {
-        "schemaVersion": CAPTURE_SCHEMA_VERSION,
-        "viewport": {
-            "width": width,
-            "height": height,
-            "devicePixelRatio": float(dpr),
-            "colorScheme": scheme,
-        },
-        "freeze": freeze,
-    }
-
-
 def _apply_freeze(page: Any, freeze: dict[str, Any]) -> None:
     """Disable motion and optionally wait for fonts / network idle."""
     if freeze.get("enabled", True):
@@ -329,52 +240,54 @@ def _run_root() -> Path:
 def _resolve_artifact_path(artifact_path: str) -> Path:
     """Resolve ``artifact_path`` to an absolute path under ``<run_root>/evidence/``.
 
-    G6 write boundary (issue 04):
-      * reject absolute paths (POSIX + Windows + native);
-      * reject any ``..`` segment in the requested path (defence in depth
-        before resolution — also catches ``evidence/../spec.md``);
-      * the resolved candidate must stay under ``<run_root>/evidence/``;
-      * explicit ``realpath`` check so a symlink chain that resolves out of
-        the evidence subtree is rejected even when ``Path.resolve`` and
-        ``os.path.realpath`` disagree across platforms.
+    Delegates containment to the single Evidence artifact containment module
+    (ADR-0026): ``containment.write_target`` owns the canonical resolution and
+    every escape rejection (absolute paths, ``..``, resolution failures,
+    canonical escapes, observed symlink escapes). This site maps the stable
+    reason codes to the Provider's existing ValueError payloads so
+    ``execute_capture_plan`` captures them via its existing ``except ValueError``
+    path. Callers must not add another preflight check (ADR-0026 TOCTOU limit).
 
     The caller is responsible for providing a path that already starts with
     ``evidence/``; we do not prepend it (``spec.md`` and ``skills/x`` are
     refused because they land outside the evidence subtree).
     """
-    requested = Path(artifact_path)
-    if (
-        requested.is_absolute()
-        or PureWindowsPath(artifact_path).is_absolute()
-        or PurePosixPath(artifact_path).is_absolute()
-    ):
-        raise ValueError("artifact_path must be relative to the configured run root")
+    result = containment.write_target(artifact_path, _run_root())
+    if result.ok:
+        return result.path  # type: ignore[return-value]
+    raise ValueError(_reason_message(result.reason))
 
-    if any(part == ".." for part in requested.parts):
-        raise ValueError("artifact_path must not contain '..' segments")
 
-    root = _run_root()
-    evidence_root = (root / EVIDENCE_SUBDIR).resolve(strict=False)
-    candidate = (root / requested).resolve(strict=False)
-    try:
-        candidate.relative_to(evidence_root)
-    except ValueError as exc:
-        raise ValueError(
-            "artifact_path must stay under the evidence/ subtree"
-        ) from exc
+def _reason_message(reason: str) -> str:
+    """Provider message for a containment reason code (ADR-0026).
 
-    # Defence in depth: realpath must also stay under evidence/. Catches
-    # symlink chains that Path.resolve may normalise differently per platform.
-    try:
-        Path(os.path.realpath(candidate)).relative_to(
-            os.path.realpath(evidence_root)
-        )
-    except ValueError as exc:
-        raise ValueError(
-            "artifact_path symlink escapes the evidence/ subtree"
-        ) from exc
+    Returns the existing ValueError wording for every escape class so the
+    capture-failure payload stays compatible. An unmapped code (a future
+    reason added to containment.py without a matching entry here) degrades
+    to a generic message instead of raising KeyError mid-capture.
+    """
+    return _REASON_MESSAGES.get(
+        reason,
+        f"artifact_path was rejected by containment ({reason})",
+    )
 
-    return candidate
+
+# Reason-code -> Provider message mapping (ADR-0026). The Provider keeps its
+# existing ValueError wording for every escape class so its capture-failure
+# payload stays compatible; resolution_failure is the one new surface (the
+# old inline resolver propagated OSError uncaught).
+_REASON_MESSAGES = {
+    containment.REASON_ABSOLUTE_PATH:
+        "artifact_path must be relative to the configured run root",
+    containment.REASON_DOTDOT_SEGMENT:
+        "artifact_path must not contain '..' segments",
+    containment.REASON_RESOLUTION_FAILURE:
+        "artifact_path could not be resolved under the evidence/ subtree",
+    containment.REASON_CANONICAL_ESCAPE:
+        "artifact_path must stay under the evidence/ subtree",
+    containment.REASON_SYMLINK_ESCAPE:
+        "artifact_path symlink escapes the evidence/ subtree",
+}
 
 
 def _run_actions(page: Any, actions: list[dict[str, Any]]) -> None:

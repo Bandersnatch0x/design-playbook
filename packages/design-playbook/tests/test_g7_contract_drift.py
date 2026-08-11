@@ -8,11 +8,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
-sys.path.insert(0, str(SCRIPTS))
+PACKAGE = Path(__file__).resolve().parents[1]
 
-import contract_v1 as cv  # noqa: E402
-import g7_contract_drift as g7  # noqa: E402
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+if str(PACKAGE) not in sys.path:
+    sys.path.insert(0, str(PACKAGE))
+
+from design_playbook.scripts import contract_v1 as cv  # noqa: E402
+from design_playbook.scripts import g7_contract_drift as g7  # noqa: E402
 
 
 def _seed(project: Path) -> None:

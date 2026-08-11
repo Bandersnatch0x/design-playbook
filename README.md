@@ -6,7 +6,7 @@
 
 ### *Design I/O for coding agents — declarations + contracts that make UI generation constrained, reviewable, and recirculatable.*
 
-[![Version](https://img.shields.io/badge/Version-0.12.0-2DD4BF?style=flat-square&logo=semver&logoColor=black)](.#)
+[![Version](https://img.shields.io/badge/Version-0.13.0-2DD4BF?style=flat-square&logo=semver&logoColor=black)](.#)
 [![License](https://img.shields.io/badge/License-MIT-2DD4BF?style=flat-square&logo=opensourceinitiative&logoColor=black)](./packages/design-playbook/LICENSE)
 [![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-2DD4BF?style=flat-square&logo=claude&logoColor=black)](.#)
 [![Skills](https://img.shields.io/badge/Skills-8-2DD4BF?style=flat-square)](.#)
@@ -118,7 +118,7 @@ CONTEXT.md  .scratch/             ← glossary, specs, tickets, dogfood logs
 
 Runs land their artifacts under `.scratch/<run>/` in your project — see the [package README](./packages/design-playbook/README.md) and `SKILL.md` steps 3, 5, 8.
 
-**Maintainer helpers (repo root, not a product CLI):** `scripts/doctor.py` (install health), `scripts/run_status.py` (derive status/resume from run artifacts), `scripts/release.py` (tag gate), `scripts/validate.py` (static plugin surface).
+**Maintainer helpers:** `scripts/doctor.py` (install health), `packages/design-playbook/scripts/run_status.py` (derive status/resume from run artifacts), `scripts/release.py` (tag gate), `scripts/validate.py` (static plugin surface).
 
 Root = GitHub front door + engineering shell · Package = only runtime surface · `product-*` maintainer commands stay at root, never in the package.
 

@@ -1,5 +1,16 @@
 """Local version control for Preview runs: event sourcing + named snapshots.
 
+Compatibility-only lifecycle (ADR-0027). This module is frozen: no new
+authoring command, caller, schema, or feature behavior is added here.
+Existing read behavior (``state_at``, ``timeline``, ``list_versions``,
+``render_versions_log``, ``refresh_version_projection``) and ``fork`` remain
+compatible while production transactions depend on ``render_versions_log``
+for log projection. Physical removal is targeted for v1.0.0 as project
+migration policy, not a SemVer requirement; see
+``docs/deprecations/preview-versions.md`` for the removal checklist and the
+long-lived owner that must absorb compatibility reading and log projection
+before this module can be deleted.
+
 Extends transaction.py's append-only decision entries with:
 
 - named versions (``version-<seq>.json`` — meta-events, append-only)
@@ -22,28 +33,25 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-from transaction import (
+from design_playbook.mcp.preview.transaction import (
     ConfirmRecordError,
     DirectoryLockError,
     PROJECTION_LOCK_NAME,
-    _atomic_write,
-    _directory_lock,
-    _json_text,
-    _load_confirm_for_entry,
-    _load_entry,
-    _render_log,
-    _valid_entries,
+    atomic_write,
+    directory_lock,
+    json_text,
+    load_confirm_for_entry,
+    load_entry,
+    render_log,
+    valid_entries,
 )
-from util import _now_iso, prototype_html_digest
+from design_playbook.mcp.preview.integrity import prototype_html_digest
+from design_playbook.mcp.preview.util import _now_iso
 
 VERSION_SCHEMA_VERSION = 1
 MAX_NAME_LENGTH = 80
 MAX_NOTE_LENGTH = 200
 VALID_KINDS = {"confirmed", "revised", "custom"}
-VERSION_LOCK_TIMEOUT_SECONDS = 5.0
-VERSION_LOCK_STALE_SECONDS = 30.0
-VERSION_LOCK_HEARTBEAT_SECONDS = 10.0
-VERSION_LOCK_POLL_SECONDS = 0.01
 VERSION_LOCK_NAME = ".versions.lock"
 
 
@@ -98,16 +106,13 @@ def _version_path(preview_dir: Path, seq: int) -> Path:
 
 @contextmanager
 def _version_lock(preview_dir: Path) -> Iterator[None]:
-    """Serialize directory-wide version sequence allocation and projection."""
+    """Serialize directory-wide version sequence allocation and projection.
+
+    Reuses transaction's single directory-lock policy (ADR-0024); only the
+    lock filename is version-specific.
+    """
     try:
-        with _directory_lock(
-            preview_dir,
-            VERSION_LOCK_NAME,
-            timeout_seconds=VERSION_LOCK_TIMEOUT_SECONDS,
-            stale_seconds=VERSION_LOCK_STALE_SECONDS,
-            heartbeat_seconds=VERSION_LOCK_HEARTBEAT_SECONDS,
-            poll_seconds=VERSION_LOCK_POLL_SECONDS,
-        ):
+        with directory_lock(preview_dir, VERSION_LOCK_NAME):
             yield
     except DirectoryLockError as exc:
         raise VersionError(f"version writer lock failed: {exc}") from exc
@@ -161,6 +166,12 @@ def create_named_version(
 ) -> dict[str, Any]:
     """Write an append-only ``version-<seq>.json`` meta-event for a round.
 
+    Deprecated (ADR-0027): Preview versions are in a compatibility-only
+    lifecycle. This authoring entry point is frozen - do not add new callers
+    or extend its behavior. It remains for backward-compatible artifact
+    creation while the migration to the long-lived owner is pending; see
+    ``docs/deprecations/preview-versions.md``.
+
     The named round must already have a durable decision entry. Versions are
     immutable: a rename is a new version event, never an overwrite.
     """
@@ -176,7 +187,7 @@ def create_named_version(
     path: Path | None = None
     try:
         with _version_lock(preview_dir):
-            entry = _load_entry(preview_dir / f"decision-round-{round_n}.json")
+            entry = load_entry(preview_dir / f"decision-round-{round_n}.json")
             if entry is None:
                 raise VersionError(f"round {round_n} has no decision entry")
             seq = _next_seq(preview_dir)
@@ -196,7 +207,7 @@ def create_named_version(
             }
             if note:
                 record["note"] = (note or "").strip()[:MAX_NOTE_LENGTH]
-            _atomic_write(path, _json_text(record))
+            atomic_write(path, json_text(record))
             try:
                 _refresh_log(preview_dir)
             except Exception as exc:
@@ -225,9 +236,9 @@ def create_named_version(
         raise
 
 
-def _render_versions_log(preview_dir: Path) -> str:
+def render_versions_log(preview_dir: Path) -> str:
     """log.md projection incl. versions section (authority = entry/version files)."""
-    blocks = [_render_log(_valid_entries(preview_dir))]
+    blocks = [render_log(valid_entries(preview_dir))]
     versions = sorted(_valid_versions(preview_dir), key=lambda v: v["seq"])
     if versions:
         lines = ["", "## versions"]
@@ -241,8 +252,8 @@ def _render_versions_log(preview_dir: Path) -> str:
 
 def _refresh_log(preview_dir: Path) -> None:
     try:
-        with _directory_lock(preview_dir, PROJECTION_LOCK_NAME):
-            _atomic_write(preview_dir / "log.md", _render_versions_log(preview_dir))
+        with directory_lock(preview_dir, PROJECTION_LOCK_NAME):
+            atomic_write(preview_dir / "log.md", render_versions_log(preview_dir))
     except DirectoryLockError as exc:
         raise VersionError(f"version projection lock failed: {exc}") from exc
 
@@ -265,7 +276,7 @@ def state_at(preview_dir: Path, round_n: int) -> dict[str, Any]:
     confirm record if confirmed, and all named versions at or before N.
     Raises VersionError when N has no decision entry.
     """
-    entry = _load_entry(preview_dir / f"decision-round-{round_n}.json")
+    entry = load_entry(preview_dir / f"decision-round-{round_n}.json")
     if entry is None:
         raise VersionError(f"round {round_n} has no decision entry")
     prototype = preview_dir / f"round-{round_n}.html"
@@ -297,7 +308,7 @@ def state_at(preview_dir: Path, round_n: int) -> dict[str, Any]:
         raise VersionError(
             f"invalid prototype mode for round {round_n}: {prototype_mode!r}")
     try:
-        confirm = _load_confirm_for_entry(preview_dir, entry)
+        confirm = load_confirm_for_entry(preview_dir, entry)
     except ConfirmRecordError as exc:
         raise VersionError(str(exc)) from exc
     versions = [v for v in _valid_versions(preview_dir) if v["round"] <= round_n]
@@ -317,7 +328,7 @@ def state_at(preview_dir: Path, round_n: int) -> dict[str, Any]:
 def timeline(preview_dir: Path) -> list[dict[str, Any]]:
     """Unified, timestamp-ordered view: decision events + named versions."""
     items: list[dict[str, Any]] = []
-    for entry in _valid_entries(preview_dir):
+    for entry in valid_entries(preview_dir):
         item = dict(entry)
         item["event_type"] = "decision"
         items.append(item)
@@ -338,6 +349,12 @@ def fork(
     new_dir: Path, report_ref: str, summary: str,
 ) -> dict[str, Any]:
     """Derive an independent linear chain from round N of source_dir.
+
+    Deprecated (ADR-0027): Preview versions are in a compatibility-only
+    lifecycle. This authoring entry point is frozen - do not add new callers
+    or extend its behavior. It remains for backward-compatible chain
+    derivation while the migration to the long-lived owner is pending; see
+    ``docs/deprecations/preview-versions.md``.
 
     The new chain lives in ``new_dir`` and re-numbers rounds from 1 (G5
     single-thread invariant is preserved per directory). ``fork.json`` records
@@ -367,13 +384,13 @@ def fork(
     lock_name = f".{new_dir.name}.fork.lock"
     staging = parent / f".{new_dir.name}.{uuid.uuid4().hex}.tmp"
     try:
-        with _directory_lock(parent, lock_name):
+        with directory_lock(parent, lock_name):
             if new_dir.exists() or new_dir.is_symlink():
                 raise VersionError(f"fork destination already exists: {new_dir}")
             staging.mkdir(exist_ok=False)
             try:
-                _atomic_write(staging / "round-1.html", src["prototype_html"])
-                _atomic_write(staging / "fork.json", _json_text(record))
+                atomic_write(staging / "round-1.html", src["prototype_html"])
+                atomic_write(staging / "fork.json", json_text(record))
                 staging.rename(new_dir)
             except BaseException as exc:
                 try:

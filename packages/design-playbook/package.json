@@ -1,6 +1,6 @@
 {
   "name": "design-playbook",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Design I/O for coding agents: controllable UI generation via declarations (spec/domain/craft/design/components/template) and contracts (skill/evaluator). Use for product UI—console, dashboard, agent-ops, CJK-first apps.",
   "keywords": [
     "pi-package",
@@ -28,6 +28,7 @@
     "commands",
     "mcp",
     "scripts",
+    "design_playbook.py",
     "examples",
     "codex",
     "NOTICE",

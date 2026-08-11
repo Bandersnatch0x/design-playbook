@@ -11,11 +11,15 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import transaction  # noqa: E402
-import util  # noqa: E402
-import versions  # noqa: E402
-from versions import (  # noqa: E402
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parents[2]
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+from design_playbook.mcp.preview import transaction  # noqa: E402
+from design_playbook.mcp.preview import versions  # noqa: E402
+from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
+from design_playbook.mcp.preview.versions import (  # noqa: E402
     VersionCommittedError,
     VersionError,
     VersionProjectionError,
@@ -32,7 +36,7 @@ def _seed_round(
     preview_dir: Path, round_n: int, html: str,
     *, confirmed: bool = True, feedback: str = "ok",
 ) -> dict:
-    digest = util.prototype_html_digest(html.encode("utf-8"))
+    digest = prototype_html_digest(html.encode("utf-8"))
     binding = transaction._binding(
         round_n=round_n, prototype_hash=digest, report_ref="r.md",
         summary="s", options=["确认通过", "需要修改"])
@@ -57,13 +61,13 @@ def _seed_round(
         },
     }
     (preview_dir / f"round-{round_n}.html").write_text(html, encoding="utf-8")
-    transaction._atomic_write(
+    transaction.atomic_write(
         preview_dir / f"decision-round-{round_n}.json",
-        transaction._json_text(entry))
+        transaction.json_text(entry))
     if confirmed:
-        transaction._atomic_write(
+        transaction.atomic_write(
             preview_dir / f"confirm-round-{round_n}.json",
-            transaction._json_text(transaction._confirm_record(entry)))
+            transaction.json_text(transaction._confirm_record(entry)))
     return entry
 
 
@@ -233,11 +237,10 @@ class NamedVersionTests(unittest.TestCase):
                     contender_errors.append(exc)
 
             with (
-                mock.patch.object(versions, "VERSION_LOCK_STALE_SECONDS", 0.05),
-                mock.patch.object(versions, "VERSION_LOCK_HEARTBEAT_SECONDS", 0.01,
-                                  create=True),
-                mock.patch.object(versions, "VERSION_LOCK_TIMEOUT_SECONDS", 0.08),
-                mock.patch.object(versions, "VERSION_LOCK_POLL_SECONDS", 0.005),
+                mock.patch.object(transaction, "DIRECTORY_LOCK_STALE_SECONDS", 0.05),
+                mock.patch.object(transaction, "DIRECTORY_LOCK_HEARTBEAT_SECONDS", 0.01),
+                mock.patch.object(transaction, "DIRECTORY_LOCK_TIMEOUT_SECONDS", 0.08),
+                mock.patch.object(transaction, "DIRECTORY_LOCK_POLL_SECONDS", 0.005),
             ):
                 holder = threading.Thread(target=hold_lock)
                 holder.start()
@@ -266,7 +269,7 @@ class NamedVersionTests(unittest.TestCase):
             release_stale = threading.Event()
             transaction_done = threading.Event()
             errors: list[BaseException] = []
-            render = versions._render_versions_log
+            render = versions.render_versions_log
 
             def delayed_render(preview_dir: Path) -> str:
                 value = render(preview_dir)
@@ -291,7 +294,7 @@ class NamedVersionTests(unittest.TestCase):
                     transaction_done.set()
 
             with mock.patch.object(
-                versions, "_render_versions_log", side_effect=delayed_render,
+                versions, "render_versions_log", side_effect=delayed_render,
             ):
                 stale = threading.Thread(
                     target=refresh_version_projection, name="stale-projection")
@@ -447,7 +450,7 @@ class ForkTests(unittest.TestCase):
             src = Path(tmp) / "preview"
             src.mkdir()
             # path-mode style: decision entry but no round-N.html snapshot
-            digest = util.prototype_html_digest(b"<html>x</html>")
+            digest = prototype_html_digest(b"<html>x</html>")
             binding = transaction._binding(
                 round_n=1, prototype_hash=digest, report_ref="r.md",
                 summary="s", options=["确认通过", "需要修改"])
@@ -464,9 +467,9 @@ class ForkTests(unittest.TestCase):
                     "rejected": False, "rejection": "",
                 },
             }
-            transaction._atomic_write(
+            transaction.atomic_write(
                 src / "decision-round-1.json",
-                transaction._json_text(entry))
+                transaction.json_text(entry))
             state = state_at(src, 1)
             self.assertIsNone(state["prototype_html"])
             self.assertEqual(state["prototype_path"], str(src / "prototype.html"))
@@ -501,7 +504,7 @@ class ForkTests(unittest.TestCase):
             src.mkdir()
             _seed_round(src, 1, "<html>base</html>")
             new = Path(tmp) / "fork-alt"
-            atomic_write = versions._atomic_write
+            atomic_write = versions.atomic_write
 
             def fail_commit(path: Path, content: str) -> None:
                 if path.name == "fork.json":
@@ -509,7 +512,7 @@ class ForkTests(unittest.TestCase):
                 atomic_write(path, content)
 
             with mock.patch.object(
-                versions, "_atomic_write", side_effect=fail_commit,
+                versions, "atomic_write", side_effect=fail_commit,
             ):
                 with self.assertRaisesRegex(
                     VersionError, "fork initialization failed",
@@ -530,7 +533,7 @@ class ForkTests(unittest.TestCase):
             src.mkdir()
             _seed_round(src, 1, "<html>base</html>")
             new = Path(tmp) / "fork-alt"
-            atomic_write = versions._atomic_write
+            atomic_write = versions.atomic_write
 
             def interrupt_commit(path: Path, content: str) -> None:
                 if path.name == "fork.json":
@@ -538,7 +541,7 @@ class ForkTests(unittest.TestCase):
                 atomic_write(path, content)
 
             with mock.patch.object(
-                versions, "_atomic_write", side_effect=interrupt_commit,
+                versions, "atomic_write", side_effect=interrupt_commit,
             ):
                 with self.assertRaises(SystemExit):
                     fork(

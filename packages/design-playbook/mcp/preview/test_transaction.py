@@ -12,10 +12,15 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import transaction  # noqa: E402
-import versions  # noqa: E402
-from transaction import (  # noqa: E402
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parents[2]
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+from design_playbook.mcp.preview import transaction  # noqa: E402
+from design_playbook.mcp.preview import versions  # noqa: E402
+from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
+from design_playbook.mcp.preview.transaction import (  # noqa: E402
     PreviewTransactionError,
     TransactionConflict,
     run_preview_transaction,
@@ -59,7 +64,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             entry_path = Path(tmp) / "decision-round-1.json"
             entry = json.loads(entry_path.read_text(encoding="utf-8"))
             entry["prototype_path"] = " "
-            entry_path.write_text(transaction._json_text(entry), encoding="utf-8")
+            entry_path.write_text(transaction.json_text(entry), encoding="utf-8")
 
             with self.assertRaisesRegex(TransactionConflict, "metadata is invalid"):
                 self._run(prototype)
@@ -214,15 +219,15 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
                 prototype.write_text("reviewed", encoding="utf-8")
                 self._run(prototype)
                 preview_dir = Path(tmp)
-                entry = transaction._load_entry(
+                entry = transaction.load_entry(
                     preview_dir / "decision-round-1.json")
                 self.assertIsNotNone(entry)
                 expected = transaction._confirm_record(entry)
                 if label == "legacy":
                     del expected["decision_id"]
-                    invalid_text = transaction._json_text(expected)
+                    invalid_text = transaction.json_text(expected)
                 elif isinstance(mutation, dict):
-                    invalid_text = transaction._json_text({**expected, **mutation})
+                    invalid_text = transaction.json_text({**expected, **mutation})
                 else:
                     invalid_text = mutation
                 confirm_path = preview_dir / "confirm-round-1.json"
@@ -307,7 +312,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
                         "anchors": [], "aborted": False,
                     }
 
-                real_write = transaction._atomic_write
+                real_write = transaction.atomic_write
                 failed = False
 
                 def flaky_write(path: Path, content: str) -> None:
@@ -317,7 +322,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
                         raise OSError(f"injected {failed_name} failure")
                     real_write(path, content)
 
-                with mock.patch.object(transaction, "_atomic_write", side_effect=flaky_write):
+                with mock.patch.object(transaction, "atomic_write", side_effect=flaky_write):
                     with self.assertRaises(PreviewTransactionError) as caught:
                         self._run(prototype, collect=collect)
                 self.assertTrue(caught.exception.details["retryable"])
@@ -415,7 +420,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             lock_name = ".lease.lock"
             lock_path = preview_dir / lock_name
             guard_path = lock_path.with_suffix(lock_path.suffix + ".recovery")
-            old_lease = transaction._directory_lock(
+            old_lease = transaction.directory_lock(
                 preview_dir, lock_name, timeout_seconds=1,
                 stale_seconds=1, heartbeat_seconds=10, poll_seconds=0.001,
             )
@@ -445,7 +450,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
 
             def hold_replacement() -> None:
                 try:
-                    with transaction._directory_lock(
+                    with transaction.directory_lock(
                         preview_dir, lock_name, timeout_seconds=1,
                         stale_seconds=1, heartbeat_seconds=10,
                         poll_seconds=0.001,
@@ -491,7 +496,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 transaction.DirectoryLockError, "ownership lost",
             ):
-                with transaction._directory_lock(
+                with transaction.directory_lock(
                     preview_dir, lock_name, timeout_seconds=1,
                     stale_seconds=1, heartbeat_seconds=10,
                     poll_seconds=0.001,
@@ -506,7 +511,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             preview_dir = Path(tmp)
             lock_name = ".lease.lock"
             lock_path = preview_dir / lock_name
-            active_lease = transaction._directory_lock(
+            active_lease = transaction.directory_lock(
                 preview_dir, lock_name, timeout_seconds=1,
                 stale_seconds=0.05, heartbeat_seconds=10,
                 poll_seconds=0.001,
@@ -522,7 +527,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
 
             def hold_replacement() -> None:
                 try:
-                    with transaction._directory_lock(
+                    with transaction.directory_lock(
                         preview_dir, lock_name, timeout_seconds=1,
                         stale_seconds=0.05, heartbeat_seconds=10,
                         poll_seconds=0.001,
@@ -558,7 +563,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
                 prototype.write_text("reviewed", encoding="utf-8")
                 digest = transaction._binding(
                     round_n=1,
-                    prototype_hash=transaction.prototype_html_digest(
+                    prototype_hash=prototype_html_digest(
                         prototype.read_bytes()
                     ),
                     report_ref="report.md", summary="summary",
@@ -603,14 +608,14 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             prototype = Path(tmp) / "round-1.html"
             prototype.write_text("reviewed", encoding="utf-8")
-            real_write = transaction._atomic_write
+            real_write = transaction.atomic_write
 
             def fail_entry(path: Path, content: str) -> None:
                 if path.name == "decision-round-1.json":
                     raise OSError("injected entry failure")
                 real_write(path, content)
 
-            with mock.patch.object(transaction, "_atomic_write", side_effect=fail_entry):
+            with mock.patch.object(transaction, "atomic_write", side_effect=fail_entry):
                 with self.assertRaises(PreviewTransactionError) as caught:
                     self._run(prototype)
             self.assertTrue(caught.exception.details["retryable"])

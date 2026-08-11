@@ -24,7 +24,8 @@ def main() -> None:
     if not TARGET.is_file():
         sys.stderr.write(f"evidence runtime missing: {TARGET}\n")
         raise SystemExit(2)
-    sys.path.insert(0, str(TARGET.parent))
+    # The bundled server self-bootstraps the design_playbook package root
+    # (ADR-0022); no launcher-side path insert needed.
     sys.argv[0] = str(TARGET)
     runpy.run_path(str(TARGET), run_name="__main__")
 

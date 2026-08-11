@@ -36,6 +36,17 @@ COMMAND_INVENTORY: dict[tuple[int, int], frozenset[str]] = {
         "run-status",
         "doctor",
     }),
+    # 0.13 keeps the 0.12 command surface (refactor-only minor: import seam,
+    # gate split, contract-v1 deepening); inventory key must match product
+    # minor so the inventory never admits commands under a stale version.
+    (0, 13): frozenset({
+        "design-io",
+        "ux-spec",
+        "ui-review",
+        "run-review",
+        "run-status",
+        "doctor",
+    }),
 }
 
 
