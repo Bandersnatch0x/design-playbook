@@ -89,6 +89,8 @@ if mcp_json.is_file():
               "plugin .mcp.json uses ${CLAUDE_PLUGIN_ROOT}")
 check((PKG / "mcp" / "preview" / "server.py").is_file(),
       "bundled preview runtime at mcp/preview/server.py")
+check((PKG / "mcp" / "preview" / "integrity.py").is_file(),
+      "bundled preview integrity module at mcp/preview/integrity.py")
 for resource_name in ("control.html", "control.css", "control.js"):
     check((PKG / "mcp" / "preview" / resource_name).is_file(),
           f"bundled preview frontend resource at mcp/preview/{resource_name}")
@@ -219,6 +221,10 @@ if isinstance(npmj, dict) and npmj:
     files_field = files_field if isinstance(files_field, list) else []
     for shipped in ("skills", "commands", "mcp", "scripts", "examples"):
         check(shipped in files_field, f"package.json files[] ships {shipped}/")
+    check(
+        _checks.package_file_is_published("design_playbook.py", files_field),
+        "package.json files[] ships design_playbook.py",
+    )
 
     for reference in _checks.discover_package_references(PKG):
         target = PKG / reference.target

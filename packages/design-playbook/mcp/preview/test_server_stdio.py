@@ -15,15 +15,15 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-# Sibling modules live next to this file. pytest's default prepend mode only
-# puts this dir on sys.path[0] when it has no __init__.py; mcp/preview/ is now
-# a package (see __init__.py) so the two same-named test_server_stdio.py files
-# in preview/ and evidence/ collect under package-qualified names without an
-# import-mismatch — so make the sibling dir importable explicitly here.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parents[2]
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
 # Browser behavior is tested through its owning adapter, not server re-exports.
-import browser  # noqa: E402
-import transaction  # noqa: E402
+from design_playbook.mcp.preview import browser  # noqa: E402
+from design_playbook.mcp.preview import transaction  # noqa: E402
+from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
 
 
 SERVER = Path(__file__).with_name("server.py")
@@ -34,6 +34,21 @@ SERVER = Path(__file__).with_name("server.py")
 # human submit takes through the trusted control form (not a forged fetch).
 _TOKEN_RE = re.compile(r'name="dpb_token"\s+value="([^"]*)"')
 _ROUND_RE = re.compile(r'name="dpb_round"\s+value="([^"]*)"')
+
+
+class _FakeBrowserAdapter:
+    """Browser boundary fake for collector integration tests."""
+
+    def __init__(self) -> None:
+        self.opened_urls: list[str] = []
+        self.closed_handles: list[object] = []
+
+    def open(self, url: str) -> object:
+        self.opened_urls.append(url)
+        return mock.sentinel.browser_handle
+
+    def close(self, handle: object) -> None:
+        self.closed_handles.append(handle)
 
 
 def _fetch_decision_token(port: int, timeout: float = 3.0) -> tuple[str, int]:
@@ -117,7 +132,7 @@ class PreviewMcpStdioTests(unittest.TestCase):
         options = ["确认通过", "需要修改"]
         binding = transaction._binding(
             round_n=1,
-            prototype_hash=transaction.prototype_html_digest(html.encode("utf-8")),
+            prototype_hash=prototype_html_digest(html.encode("utf-8")),
             report_ref="report.md", summary="review", options=options,
         )
         with tempfile.TemporaryDirectory() as tmp:
@@ -261,6 +276,7 @@ class PreviewCollectShutdownTests(unittest.TestCase):
         client_thread = threading.Thread(target=sticky_client, daemon=True)
         client_thread.start()
 
+        fake_browser = _FakeBrowserAdapter()
         with tempfile.TemporaryDirectory() as tmp:
             proto = Path(tmp) / "proto.html"
             proto.write_text(
@@ -268,10 +284,8 @@ class PreviewCollectShutdownTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with mock.patch.object(browser, "HTTPServer", StashingHTTPServer), mock.patch.object(
-                browser, "_open_preview_window", return_value=(None, None)
-            ), mock.patch.object(browser, "_request_browser_window_close") as close_window, mock.patch.object(
-                browser, "_kill_browser_proc"
-            ) as kill_browser:
+                browser, "_default_browser_adapter", fake_browser
+            ):
                 started = time.monotonic()
                 decision = browser._collect_via_browser(
                     proto,
@@ -281,8 +295,8 @@ class PreviewCollectShutdownTests(unittest.TestCase):
                 )
                 elapsed = time.monotonic() - started
 
-        close_window.assert_called_once_with(None)
-        kill_browser.assert_called_once_with(None, None)
+        self.assertEqual(len(fake_browser.opened_urls), 1)
+        self.assertEqual(fake_browser.closed_handles, [mock.sentinel.browser_handle])
         sticky_done.wait(timeout=5)
         self.assertLess(
             elapsed,
@@ -343,6 +357,7 @@ class PreviewCollectShutdownTests(unittest.TestCase):
 
         client_thread = threading.Thread(target=submit_modify, daemon=True)
         client_thread.start()
+        fake_browser = _FakeBrowserAdapter()
         with tempfile.TemporaryDirectory() as tmp:
             proto = Path(tmp) / "proto.html"
             proto.write_text(
@@ -350,10 +365,8 @@ class PreviewCollectShutdownTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with mock.patch.object(browser, "HTTPServer", StashingHTTPServer), mock.patch.object(
-                browser, "_open_preview_window", return_value=(mock.sentinel.proc, "profile")
-            ), mock.patch.object(browser, "_request_browser_window_close") as close_window, mock.patch.object(
-                browser, "_kill_browser_proc"
-            ) as kill_browser, mock.patch.object(browser, "_rm_tree"):
+                browser, "_default_browser_adapter", fake_browser
+            ):
                 decision = browser._collect_via_browser(
                     proto, "summary", ["\u786e\u8ba4\u901a\u8fc7", "\u9700\u8981\u4fee\u6539"], 1
                 )
@@ -364,8 +377,8 @@ class PreviewCollectShutdownTests(unittest.TestCase):
         self.assertEqual(decision["feedback"], "\u8bf7\u8c03\u6574")
         self.assertEqual(decision["anchors"], [anchor])
         self.assertFalse(decision["aborted"])
-        close_window.assert_called_once_with(mock.sentinel.proc)
-        kill_browser.assert_called_once_with(mock.sentinel.proc, "profile")
+        self.assertEqual(len(fake_browser.opened_urls), 1)
+        self.assertEqual(fake_browser.closed_handles, [mock.sentinel.browser_handle])
 
     def test_post_with_bogus_token_is_rejected(self) -> None:
         """G5 stdio e2e: a forged POST carrying an arbitrary dpb_token (which
@@ -449,6 +462,7 @@ class PreviewCollectShutdownTests(unittest.TestCase):
 
         client_thread = threading.Thread(target=bogus_then_valid_client, daemon=True)
         client_thread.start()
+        fake_browser = _FakeBrowserAdapter()
         with tempfile.TemporaryDirectory() as tmp:
             proto = Path(tmp) / "proto.html"
             proto.write_text(
@@ -456,9 +470,7 @@ class PreviewCollectShutdownTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with mock.patch.object(browser, "HTTPServer", StashingHTTPServer), mock.patch.object(
-                browser, "_open_preview_window", return_value=(None, None)
-            ), mock.patch.object(browser, "_request_browser_window_close"), mock.patch.object(
-                browser, "_kill_browser_proc"
+                browser, "_default_browser_adapter", fake_browser
             ):
                 decision = browser._collect_via_browser(
                     proto,
@@ -473,6 +485,9 @@ class PreviewCollectShutdownTests(unittest.TestCase):
         self.assertEqual(decision["choice"], "确认通过")
         self.assertEqual(decision["feedback"], "ok")
         self.assertFalse(decision["aborted"])
+        self.assertEqual(len(fake_browser.opened_urls), 1)
+        self.assertEqual(fake_browser.closed_handles, [mock.sentinel.browser_handle])
+
     def test_replay_same_token_is_rejected(self) -> None:
         """G5 stdio e2e: first-decision-wins. The first valid POST locks the
         session and sets the confirmed result; a replayed second POST with
@@ -544,6 +559,7 @@ class PreviewCollectShutdownTests(unittest.TestCase):
 
         client_thread = threading.Thread(target=replay_client, daemon=True)
         client_thread.start()
+        fake_browser = _FakeBrowserAdapter()
         with tempfile.TemporaryDirectory() as tmp:
             proto = Path(tmp) / "proto.html"
             proto.write_text(
@@ -551,9 +567,7 @@ class PreviewCollectShutdownTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with mock.patch.object(browser, "HTTPServer", StashingHTTPServer), mock.patch.object(
-                browser, "_open_preview_window", return_value=(None, None)
-            ), mock.patch.object(browser, "_request_browser_window_close"), mock.patch.object(
-                browser, "_kill_browser_proc"
+                browser, "_default_browser_adapter", fake_browser
             ):
                 decision = browser._collect_via_browser(
                     proto,
@@ -568,6 +582,8 @@ class PreviewCollectShutdownTests(unittest.TestCase):
         self.assertEqual(decision["choice"], "确认通过")
         self.assertEqual(decision["feedback"], "ok")
         self.assertFalse(decision["aborted"])
+        self.assertEqual(len(fake_browser.opened_urls), 1)
+        self.assertEqual(fake_browser.closed_handles, [mock.sentinel.browser_handle])
 
     def test_stop_http_server_joins_serve_thread(self) -> None:
         http = browser.HTTPServer(("127.0.0.1", 0), browser.BaseHTTPRequestHandler)

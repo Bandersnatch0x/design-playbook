@@ -29,15 +29,18 @@ from typing import Any
 from unittest import mock
 from urllib.parse import urlencode
 
-# Make sibling runtime modules importable under package-qualified discovery.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import browser  # noqa: E402
-import control as preview_control  # noqa: E402
-from browser import (  # noqa: E402
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parents[2]
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+from design_playbook.mcp.preview import browser  # noqa: E402
+from design_playbook.mcp.preview import control as preview_control  # noqa: E402
+from design_playbook.mcp.preview.browser import (  # noqa: E402
     _DecisionSession,
     _generate_decision_token,
 )
-from util import prototype_html_digest  # noqa: E402
+from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
@@ -106,6 +109,29 @@ def _extract_token(page: str) -> str | None:
     return m.group(1) if m else None
 
 
+class _FakeBrowserAdapter:
+    """One fake owned-browser adapter (US-4 / Slice 4).
+
+    Replaces the old process/profile monkeypatch cluster: the real collector
+    and local HTTP exchange still run, while the owned-browser lifecycle is
+    faked so no OS browser launches and no process/profile internals are
+    patched. The interface mirrors ``BrowserInteraction`` (open/close only);
+    it owns no executable, PID, profile, or subprocess.
+    """
+
+    def __init__(self) -> None:
+        self.opened_urls: list[str] = []
+        self.closed_handles: list[object] = []
+
+    def open(self, url: str) -> object:
+        self.opened_urls.append(url)
+        # Opaque handle; the real adapter returns a (proc, profile) tuple.
+        return ("fake-owned-handle", None)
+
+    def close(self, handle: object) -> None:
+        self.closed_handles.append(handle)
+
+
 def _run_collect(
     proto_html: str,
     client_fn: Any,
@@ -113,14 +139,20 @@ def _run_collect(
     summary: str = "summary",
     options: list[str] | None = None,
     round_n: int = 1,
+    fake_adapter: _FakeBrowserAdapter | None = None,
 ) -> dict[str, Any]:
-    """Drive browser._collect_via_browser with a mocked owned window.
+    """Drive browser._collect_via_browser through one fake owned-browser
+    adapter (US-4).
 
     ``client_fn(port)`` runs in a thread and is expected to POST something to
-    /decide so the collect call terminates.
+    /decide so the collect call terminates. The real collector and local HTTP
+    exchange run; the owned browser lifecycle is faked so no OS browser
+    launches and no process/profile internals are patched.
     """
     if options is None:
         options = ["确认通过", "需要修改"]
+    if fake_adapter is None:
+        fake_adapter = _FakeBrowserAdapter()
     StashingHTTPServer, port_box = _stash_http(browser)
 
     def client_wrapper() -> None:
@@ -139,13 +171,14 @@ def _run_collect(
     with tempfile.TemporaryDirectory() as tmp:
         proto = Path(tmp) / "proto.html"
         proto.write_text(proto_html, encoding="utf-8")
-        with mock.patch.object(browser, "HTTPServer", StashingHTTPServer), mock.patch.object(
-            browser, "_open_preview_window", return_value=(None, None)
+        # US-4: ONE fake owned-browser adapter replaces the four
+        # mock.patch.object calls on _open_preview_window /
+        # _request_browser_window_close / _kill_browser_proc / _rm_tree.
+        with mock.patch.object(
+            browser, "HTTPServer", StashingHTTPServer
         ), mock.patch.object(
-            browser, "_request_browser_window_close"
-        ), mock.patch.object(
-            browser, "_kill_browser_proc"
-        ), mock.patch.object(browser, "_rm_tree"):
+            browser, "_default_browser_adapter", fake_adapter
+        ):
             decision = browser._collect_via_browser(proto, summary, options, round_n)
 
     client_thread.join(timeout=3)
@@ -182,7 +215,8 @@ class ControlResourceAssemblyTests(unittest.TestCase):
         self.assertIn("<style>\n#dpb-preview-bar", control)
         self.assertIn('id="dpb-decide-form"', control)
         self.assertIn("window.DPB_I18N =", control)
-        self.assertIn("var reviseLabels =", control)
+        self.assertNotIn("reviseLabels", control)
+        self.assertIn("isSubstantive()", control)
         self.assertNotIn("<unsafe>", control)
         self.assertNotRegex(control, r"\{(?:t_|summary_safe|primary_|secondary_|pill_)[^}]*\}")
 
@@ -693,6 +727,113 @@ class PinAnnotationBridgeTests(unittest.TestCase):
         sb = re.search(r'<iframe[^>]*\bsandbox="([^"]*)"', page)
         self.assertIsNotNone(sb)
         self.assertIn("allow-scripts", sb.group(1))
+
+
+# --------------------------------------------------------------------------- #
+# BrowserInteraction seam (US-4 / Slice 4: owned-browser adapter)             #
+# --------------------------------------------------------------------------- #
+
+
+class BrowserInteractionSeamTests(unittest.TestCase):
+    """US-4: a minimal BrowserInteraction seam (open(url) -> owned handle /
+    close(handle)) hides owned-browser OS/process/profile details behind one
+    adapter. Browser collection tests drive the real collector through one
+    fake adapter instead of patching process/profile internals.
+
+    Acceptance (architecture-deepening Slice 4):
+
+    - the adapter interface exposes no executable, PID, profile, subprocess,
+      or platform cleanup details;
+    - executable discovery, process launch, profile cleanup, terminate, and
+      kill remain production adapter implementation details;
+    - _collect_via_browser calls through the seam, not the raw private
+      helpers, so one fake replaces the old monkeypatch cluster.
+    """
+
+    def test_owned_browser_adapter_exposes_open_and_close(self) -> None:
+        adapter = browser.OwnedBrowserAdapter()
+        self.assertTrue(callable(getattr(adapter, "open", None)))
+        self.assertTrue(callable(getattr(adapter, "close", None)))
+
+    def test_seam_interface_hides_os_process_profile_details(self) -> None:
+        """The seam exposes no executable, PID, profile, subprocess, or
+        platform cleanup details (US-4 acceptance)."""
+        adapter = browser.OwnedBrowserAdapter()
+        public = {
+            name for name in dir(adapter)
+            if not name.startswith("_")
+        }
+        forbidden = {
+            "executable", "exe", "pid", "profile", "profile_dir",
+            "subprocess", "popen", "taskkill", "pkill", "terminate",
+            "kill", "kill_proc", "rm_tree", "rmtree", "cleanup",
+            "candidates", "browser_candidates", "open_preview_window",
+            "request_browser_window_close", "kill_browser_proc",
+        }
+        leaked = public & forbidden
+        self.assertFalse(
+            leaked, f"seam leaks OS/process/profile details: {leaked}"
+        )
+
+    def test_default_adapter_is_the_collect_injection_point(self) -> None:
+        """_collect_via_browser routes through _default_browser_adapter; one
+        fake replaces the whole owned-browser lifecycle."""
+        self.assertTrue(hasattr(browser, "_default_browser_adapter"))
+        adapter = browser._default_browser_adapter
+        self.assertTrue(callable(getattr(adapter, "open", None)))
+        self.assertTrue(callable(getattr(adapter, "close", None)))
+
+    def test_production_adapter_delegates_to_owned_browser_helpers(self) -> None:
+        """The production adapter delegates open/close to the module-level
+        owned-browser helpers by name, so the production path stays
+        unit-injectable at the helper seam (test_server_stdio patches the
+        helpers directly and must keep intercepting)."""
+        adapter = browser.OwnedBrowserAdapter()
+        with mock.patch.object(
+            browser, "_open_preview_window",
+            return_value=(mock.sentinel.proc, "profile-dir"),
+        ) as opened, mock.patch.object(
+            browser, "_request_browser_window_close"
+        ) as request_close, mock.patch.object(
+            browser, "_kill_browser_proc"
+        ) as kill_browser, mock.patch.object(browser, "_rm_tree") as rm_tree:
+            handle = adapter.open("http://127.0.0.1:1/")
+            adapter.close(handle)
+
+        opened.assert_called_once_with("http://127.0.0.1:1/")
+        request_close.assert_called_once_with(mock.sentinel.proc)
+        kill_browser.assert_called_once_with(mock.sentinel.proc, "profile-dir")
+        rm_tree.assert_called_once_with("profile-dir")
+
+    def test_collect_routes_through_adapter_not_raw_helpers(self) -> None:
+        """_collect_via_browser must call the adapter's open and close rather
+        than the raw owned-browser helpers. Proven indirectly by every
+        TrustBoundaryIntegrationTests case via _run_collect, which patches
+        ONLY _default_browser_adapter: if _collect_via_browser regressed to
+        calling _open_preview_window / _kill_browser_proc directly, those
+        tests would attempt a real OS browser launch and fail. This test
+        asserts the adapter is actually invoked end-to-end on a confirm."""
+        fake = _FakeBrowserAdapter()
+
+        def client(port: int) -> None:
+            page = _get_page(port)
+            token = _extract_token(page) or ""
+            _post_form(
+                port,
+                {
+                    "choice": "确认通过",
+                    "feedback": "ok",
+                    "anchors_json": "[]",
+                    "dpb_token": token,
+                    "dpb_round": "1",
+                },
+            )
+
+        _run_collect(
+            "<html><body>x</body></html>", client, fake_adapter=fake
+        )
+        self.assertEqual(len(fake.opened_urls), 1)
+        self.assertEqual(len(fake.closed_handles), 1)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,8 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-RUN_STATUS = ROOT / "scripts" / "run_status.py"
+# Single source is the packaged copy (ADR-0022); the root dev copy is gone.
+RUN_STATUS = ROOT / "packages" / "design-playbook" / "scripts" / "run_status.py"
 
 
 def _run(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -225,8 +226,8 @@ def _write_preview(run_root: Path, files: dict[str, str]) -> None:
 class RunStatusPreviewRoundTests(unittest.TestCase):
     """Issue 03: numeric round sort + fail-closed next_action.
 
-    The state machine must reuse the validator's judgment (latest_numeric_round
-    + is_confirmed_valid) so it cannot drift from G5. Aborted / floor-failed /
+    The state machine must reuse the Preview integrity snapshot so it cannot
+    drift from G5 on current round or confirm validity. Aborted / floor-failed /
     stale-confirm runs must fail closed — never direct the orchestrator to
     'resume at fill'.
     """
@@ -294,7 +295,7 @@ class RunStatusPreviewRoundTests(unittest.TestCase):
 
     def test_confirmed_without_floor_pass_fail_closed(self) -> None:
         # confirmed=true but floor_pass=false must NOT direct to fill.
-        # is_confirmed_valid requires both; reuse must reject this record.
+        # Preview integrity validity requires both; reuse must reject this record.
         with tempfile.TemporaryDirectory() as tmp:
             run_root = Path(tmp) / "run"
             run_root.mkdir()
@@ -329,9 +330,41 @@ class RunStatusPreviewRoundTests(unittest.TestCase):
             self.assertIn("resume at fill", payload["next"].lower(),
                           payload["next"])
 
-    def test_legacy_confirm_only_without_html_resumes_at_fill(self) -> None:
-        # Pre-html-schema runs: confirm-round-N.json with no round-N.html
-        # must still resolve via latest_numeric_round's combined scan.
+    def test_status_uses_canonical_confirm_filename_despite_json_round_mismatch(self) -> None:
+        # G5 excludes this record via round cross-check, but run_status has
+        # historically narrated the canonical current filename directly.
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run"
+            run_root.mkdir()
+            _write_preview(run_root, {
+                "round-2.html": "<html>2</html>",
+                "confirm-round-2.json": json.dumps({
+                    "round": 1, "confirmed": True, "floor_pass": True}),
+            })
+
+            result = _run(str(run_root), "--json")
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertIn("resume at fill", payload["next"].lower())
+
+    def test_round_html_marks_preview_stage_without_log_or_confirm(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run"
+            run_root.mkdir()
+            _write_preview(run_root, {"round-2.html": "<html>open</html>"})
+
+            result = _run(str(run_root), "--json")
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            by_key = {stage["key"]: stage for stage in payload["stages"]}
+            self.assertTrue(by_key["preview"]["present"])
+            self.assertIn("finish preview", payload["next"].lower())
+
+    def test_confirm_only_does_not_create_preview_occurrence(self) -> None:
+        # G5 occurrence requires log, round HTML, or a binding-valid decision.
+        # Align run status so a stray legacy confirm cannot invent a Preview run.
         with tempfile.TemporaryDirectory() as tmp:
             run_root = Path(tmp) / "run"
             run_root.mkdir()
@@ -339,11 +372,14 @@ class RunStatusPreviewRoundTests(unittest.TestCase):
                 "confirm-round-1.json": json.dumps({
                     "confirmed": True, "floor_pass": True}),
             })
+
             result = _run(str(run_root), "--json")
+
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             payload = json.loads(result.stdout)
-            self.assertIn("resume at fill", payload["next"].lower(),
-                          payload["next"])
+            by_key = {stage["key"]: stage for stage in payload["stages"]}
+            self.assertFalse(by_key["preview"]["present"])
+            self.assertNotIn("resume at fill", payload["next"].lower())
 
 
 if __name__ == "__main__":

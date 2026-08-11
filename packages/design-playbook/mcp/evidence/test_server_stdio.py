@@ -26,6 +26,12 @@ import unittest
 import zipfile
 from pathlib import Path
 
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parents[2]
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+
 SERVER = Path(__file__).resolve().with_name("server.py")
 FIXTURE_HTML = """<!DOCTYPE html>
 <html>
@@ -130,16 +136,17 @@ class EvidencePurePathTests(unittest.TestCase):
     """
 
     def test_parse_capture_contract_requires_schema_and_viewport(self) -> None:
-        sys.path.insert(0, str(SERVER.parent))
-        import server as evidence_server  # noqa: E402
+        # Parse authority lives in the contract module (ADR-0018 site 1);
+        # server.py re-exports the same object for the stdio boundary.
+        from design_playbook.mcp.evidence import capture_contract
 
         with self.assertRaises(ValueError) as missing:
-            evidence_server.parse_capture_contract({"url": "about:blank"})
+            capture_contract.parse_capture_contract({"url": "about:blank"})
         self.assertIn("schemaVersion is required", str(missing.exception))
         self.assertIn("recapture", str(missing.exception).lower())
 
         with self.assertRaises(ValueError) as unknown:
-            evidence_server.parse_capture_contract({
+            capture_contract.parse_capture_contract({
                 "schemaVersion": 99,
                 "viewport": {
                     "width": 1,
@@ -150,7 +157,7 @@ class EvidencePurePathTests(unittest.TestCase):
             })
         self.assertIn("unsupported capture schemaVersion", str(unknown.exception))
 
-        parsed = evidence_server.parse_capture_contract({
+        parsed = capture_contract.parse_capture_contract({
             "schemaVersion": 1,
             "viewport": {
                 "width": 390,
@@ -212,6 +219,14 @@ class EvidencePurePathTests(unittest.TestCase):
             [tool["name"] for tool in responses[1]["result"]["tools"]],
             ["execute_capture_plan"],
         )
+        # Schema composition (ADR-0018 site 1): the contract fragment merges
+        # into the provider tool schema — const/enum/required come from the
+        # contract module, not a hand-maintained twin.
+        schema = responses[1]["result"]["tools"][0]["inputSchema"]
+        self.assertEqual(schema["properties"]["schemaVersion"]["const"], 1)
+        self.assertIn("viewport", schema["required"])
+        self.assertIn("freeze", schema["properties"])
+        self.assertIn("viewport", schema["properties"])
 
     def test_provider_rejects_criterion_field(self) -> None:
         """Provider does not accept criterion (ticket 02 / map premise 9)."""

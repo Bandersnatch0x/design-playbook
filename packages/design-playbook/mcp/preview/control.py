@@ -12,7 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from i18n import CONFIRM_LABELS, REVISE_LABELS, t
+from design_playbook.mcp.preview.i18n import CONFIRM_LABELS, REVISE_LABELS, t
 
 HERE = Path(__file__).resolve().parent
 
@@ -54,10 +54,6 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
             return t("revise")
         return opt
 
-    # JS object literal of revise labels across all locales (frontend classifies
-    # a revise regardless of UI language). Keys are JSON-quoted/escaped.
-    revise_js = ", ".join(
-        f"{json.dumps(lbl, ensure_ascii=False)}: 1" for lbl in sorted(REVISE_LABELS))
     # Draft persistence key (wayfinder canvas-upgrade 07): per-run isolation so
     # one preview run's draft never leaks into another page/run.
     import hashlib
@@ -130,7 +126,7 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
     )
 
     html_tpl, css_tpl, js_tpl = _load_resources()
-    js_formatted = js_tpl.replace("__DPB_REVISE_LABELS__", revise_js)
+    js_formatted = js_tpl
     html_formatted = html_tpl.format(
         summary_safe=summary_safe,
         secondary_html=secondary_html,

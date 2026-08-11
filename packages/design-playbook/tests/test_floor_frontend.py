@@ -12,10 +12,15 @@ verifies the injected control follows live host/system color-scheme changes.
 import sys, tempfile
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent / "mcp" / "preview"))
-import control as preview_control  # noqa: E402
-from i18n import default_options  # noqa: E402
+PACKAGE = Path(__file__).resolve().parents[1]
+
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+if str(PACKAGE) not in sys.path:
+    sys.path.insert(0, str(PACKAGE))
+
+from design_playbook.mcp.preview import control as preview_control  # noqa: E402
+from design_playbook.mcp.preview.i18n import default_options  # noqa: E402
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
@@ -243,27 +248,44 @@ def main():
         if not s8_ok:
             failures.append("S8: readiness indicator must react correctly to feedback/anchors")
 
-        # --- Scenario 9: revise (e.g. "需要修改") should be allowed even with empty/no feedback ---
-        # Revise is for requesting changes; floor enforcement is mainly for confirm.
+        # --- Scenario 9: revise (e.g. "需要修改") is floor-gated like confirm ---
         page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.click('#dpb-open-primary')
         page.wait_for_timeout(200)
-        # leave everything empty and capture the submitted revise choice without
-        # depending on file:// -> 404 navigation timing.
+        # Leave everything empty. The submit event fires, but the advisory floor
+        # must prevent navigation, open the drawer, focus feedback, and show the hint.
         revise_label = SECONDARY[0]
         page.evaluate(CAPTURE_SUBMITTER_JS)
         page.click('.dpb-drawer .dpb-btn-secondary', timeout=1000)
         page.wait_for_timeout(100)
-        captured_revise = page.evaluate("() => window.__capturedSubmitter")
-        s9_ok = captured_revise == revise_label
+        state = page.evaluate("""() => {
+            const field = document.querySelector('textarea[name="feedback"]');
+            return {
+                captured: window.__capturedSubmitter,
+                staysOnPage: location.href.startsWith('file:'),
+                drawerOpen: document.getElementById('dpb-preview-bar').classList.contains('is-open'),
+                invalid: field && field.getAttribute('aria-invalid') === 'true',
+                hintOn: document.getElementById('dpb-feedback-hint').classList.contains('is-on'),
+                focused: document.activeElement === field,
+            };
+        }""")
+        captured_revise = state["captured"]
+        s9_ok = (
+            captured_revise == revise_label
+            and state["staysOnPage"]
+            and state["drawerOpen"]
+            and state["invalid"]
+            and state["hintOn"]
+            and state["focused"]
+        )
         print(
-            f"  S9 empty + revise: captured={captured_revise!r} "
-            f"(want {revise_label!r}) -> {'OK' if s9_ok else 'FAIL'}"
+            f"  S9 empty + revise: state={state!r} "
+            f"(want blocked + feedback focus) -> {'OK' if s9_ok else 'FAIL'}"
         )
         if not s9_ok:
-            failures.append("S9: revise should allow submit even with no substantive feedback")
+            failures.append("S9: revise must be blocked until feedback or complete anchors exist")
 
         # --- S10: pill primary direct-confirm is two-step arm→submit when ready ---
         # 二级保护: first click arms (no submit), second click submits confirm.

@@ -8,60 +8,37 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 # Package-local scripts directory (works for installed plugin and monorepo
-# copy). Sibling validate_run.py is the SSOT for G5 confirm judgment.
+# copy). Preview integrity lives with the bundled Preview runtime.
 _SCRIPTS_DIR = Path(__file__).resolve().parent
-# When this file is the monorepo root copy (scripts/run_status.py), the
-# package scripts dir is the sibling under packages/design-playbook/scripts.
-# Prefer the local directory when validate_run.py sits next to this file.
-_VALIDATE_RUN_DIR = _SCRIPTS_DIR
-if not (_VALIDATE_RUN_DIR / "validate_run.py").is_file():
-    _VALIDATE_RUN_DIR = (
-        _SCRIPTS_DIR.parent / "packages" / "design-playbook" / "scripts"
-    )
-if str(_VALIDATE_RUN_DIR) not in sys.path:
-    sys.path.insert(0, str(_VALIDATE_RUN_DIR))
-from validate_run import (  # noqa: E402
-    is_confirmed_valid,
-    latest_numeric_round,
-    read_confirm_record,
-)
+
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = _SCRIPTS_DIR.parent
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+from design_playbook.mcp.preview.integrity import PreviewSnapshot, inspect_preview  # noqa: E402
 
 # Repo/package root for default --scratch discovery only.
 ROOT = _SCRIPTS_DIR.parent
 if (ROOT / "packages" / "design-playbook").is_dir():
-    pass  # monorepo root scripts/run_status.py
+    pass  # monorepo layout: package under packages/design-playbook
 elif ROOT.name == "design-playbook":
     pass  # package root when run from packages/design-playbook/scripts
 else:
     ROOT = Path.cwd()
 
-# Ordered pipeline stages used only for status/resume narration.
-#
-# Mirror of packages/design-playbook/skills/design-playbook/SKILL.md Steps
-# (baseline / reference / spec / plan / decision / preview / fill / craft / evidence / accept).
-# This script ships with the installable plugin package. When you add/remove
-# a step or change an artifact filename in SKILL.md, sync this table.
-STAGES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    # DesignBaseline deep module (ADR-0012): state.json is the sole gate artifact.
-    # Draft/evidence are not authority and must not mark the stage present —
-    # orphan drafts without state.json are incomplete noise, not a resume stage.
-    ("baseline", "design-baseline", ("design-baseline/state.json",)),
-    ("reference", "reference-intake", ("reference/contract.md", "reference/manifest.json")),
-    ("spec", "ux-spec", ("spec.md",)),
-    ("plan", "plan", ("plan.md",)),
-    ("decision", "ui-picker", ("decision-report.md",)),
-    ("preview", "preview*", ("preview/log.md", "preview/confirm-round-1.json")),
-    ("fill", "fill", ("filled-ui.html", "filled-ui.md")),
-    ("craft", "craft-guard", ("craft-guard.md",)),
-    ("evidence", "observe*", ("evidence/manifest.jsonl",)),
-    ("accept", "ui-evaluator", ("point-back.md",)),
-)
+# Stage registry and shared artifact names live in the packaged scripts dir
+# (ADR-0021): STAGES mirrors skills/design-playbook/SKILL.md Steps; the
+# artifact-name constants are shared with validate_run.py. Verdict syntax
+# facts are parsed once in verdict_syntax (ADR-0025); run status projects
+# its status decision from the shared canonical value.
+from design_playbook.scripts.stages import POINT_BACK, STAGES, STAGES_BY_KEY  # noqa: E402
+from design_playbook.scripts.verdict_syntax import parse_verdict  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -76,11 +53,22 @@ def _exists(run_root: Path, relative: str) -> bool:
     return (run_root / relative).exists()
 
 
-def inspect_run(run_root: Path) -> list[StageState]:
+def inspect_run(
+    run_root: Path, preview_snapshot: PreviewSnapshot | None = None
+) -> list[StageState]:
+    snapshot = preview_snapshot or inspect_preview(run_root / "preview")
     states: list[StageState] = []
-    for key, skill, markers in STAGES:
-        found = [m for m in markers if _exists(run_root, m)]
-        states.append(StageState(key=key, skill=skill, present=bool(found), evidence=found))
+    for stage in STAGES:
+        if stage.key == "preview":
+            found = [f"preview/{source}" for source in snapshot.occurrence_sources]
+        else:
+            found = [marker for marker in stage.markers if _exists(run_root, marker)]
+        states.append(StageState(
+            key=stage.key,
+            skill=stage.skill,
+            present=bool(found),
+            evidence=found,
+        ))
     return states
 
 
@@ -92,46 +80,21 @@ def discover_runs(scratch: Path) -> list[Path]:
     return runs
 
 
-def latest_confirm(run_root: Path) -> Path | None:
-    """Confirm record for the latest numeric round, or None when undecided.
-
-    Reuses ``validate_run.latest_numeric_round`` as the single source of
-    "which round is current" (issues 02 / 03): numeric — not lexicographic —
-    so ``round-10`` > ``round-2``. The old ``sorted(glob(...))[-1]`` let a
-    historic round-1 confirm satisfy the gate while round-2 sat undecided.
-
-    Returns the path to ``confirm-round-<latest>.json`` when it exists, else
-    None (the latest round has only a prototype, or preview/ holds no round
-    artifacts). When preview/ has confirm files but no round-*.html, the
-    validator's combined scan still yields the max confirm round.
-    """
-    latest = latest_numeric_round(run_root)
-    if latest is None:
-        return None
-    path = run_root / "preview" / f"confirm-round-{latest}.json"
-    return path if path.is_file() else None
-
-
 def verdict_of(run_root: Path) -> str | None:
-    path = run_root / "point-back.md"
+    path = run_root / POINT_BACK
     if not path.is_file():
         return None
     text = path.read_text(encoding="utf-8")
-    for line in text.splitlines():
-        if line.lower().startswith("## verdict"):
-            # next non-empty line or same-line content
-            rest = line.split(":", 1)
-            if len(rest) == 2 and rest[1].strip():
-                return rest[1].strip()
-            continue
-        if "verdict" in line.lower() and ("pass" in line.lower() or "recirculate" in line.lower()):
-            if "pass" in line.lower() and "recirculate" not in line.lower():
-                return "Pass"
-            if "recirculate" in line.lower():
-                return "Recirculate"
-    if re.search(r"^##\s*Verdict\s*$[\s\S]*?\bPass\b", text, re.I | re.M):
+    # ADR-0025 sanctioned correction: a canonical Verdict is exposed only
+    # when exactly one valid Verdict exists. Missing, malformed, ambiguous,
+    # or repeated Verdict text yields no canonical value, so run status can
+    # never report ``Run complete (Pass)`` from anything other than one
+    # uniquely valid Pass. The previous permissive line/regex scan accepted
+    # Verdict text the G3 gate rejects; both consumers now share one parse.
+    facts = parse_verdict(text)
+    if facts.canonical == "pass":
         return "Pass"
-    if re.search(r"^##\s*Verdict\s*$[\s\S]*?\bRecirculate\b", text, re.I | re.M):
+    if facts.canonical == "recirculate":
         return "Recirculate"
     return None
 
@@ -181,65 +144,71 @@ def _baseline_next_action(run_root: Path) -> str | None:
             "complete prepare/confirm (or re-run prepare) before Fill.")
 
 
-def next_action(states: list[StageState], run_root: Path) -> str:
-    present = {s.key: s for s in states if s.present}
+def _preview_next_action(snapshot: PreviewSnapshot) -> str:
+    confirm = snapshot.canonical_current_confirm
+    if confirm is None:
+        invalid = next(
+            (
+                fact
+                for fact in snapshot.facts
+                if fact.code == "invalid_confirm_record" and fact.path is not None
+            ),
+            None,
+        )
+        if invalid is not None:
+            return f"Preview confirm unreadable ({invalid.path.name}); re-run preview*."
+        return ("Preview artifacts exist without a confirm for the latest "
+                "round — finish preview* HITL (G5) before fill.")
+    payload = confirm.data
+    if isinstance(payload, dict) and payload.get("aborted") is True:
+        return (f"Preview ABORTED in {confirm.path.name} — must not proceed to "
+                f"fill; re-run preview* from the current round.")
+    # Status narrates the transaction outcome only. Prototype facts remain
+    # G5's fail-closed concern; run_status does not become a second gate.
+    if confirm.valid:
+        return "Preview confirmed and floor passed — resume at fill."
+    if isinstance(payload, dict) and payload.get("confirmed") is True:
+        reason = payload.get("floor_failure") or "floor_pass is not true"
+        return (f"Preview confirmed in {confirm.path.name} but feedback floor "
+                f"failed ({reason}) — must not proceed to fill; re-run "
+                f"preview* HITL.")
+    return "Preview open without decision — complete preview* confirm/revise."
+
+
+def next_action(
+    states: list[StageState],
+    run_root: Path,
+    preview_snapshot: PreviewSnapshot | None = None,
+) -> str:
+    snapshot = preview_snapshot or inspect_preview(run_root / "preview")
+    present = {state.key: state for state in states if state.present}
     if "baseline" in present:
         blocked = _baseline_next_action(run_root)
         if blocked is not None:
             return blocked
     if "accept" in present:
         verdict = verdict_of(run_root)
-        if verdict and verdict.lower().startswith("pass"):
+        # verdict_of returns "Pass" only from one uniquely valid Pass
+        # (ADR-0025); exact equality avoids any string-prefix inference that
+        # could complete a run from malformed or repeated Verdict text.
+        if verdict == "Pass":
             return "Run complete (Pass). Ship or start a new run."
-        if verdict and "recirculate" in verdict.lower():
+        if verdict == "Recirculate":
             return "Verdict is Recirculate — repair from point-back findings, then re-run ui-evaluator."
         return "point-back.md present — confirm ## Verdict, then stop or recirculate."
-    if "evidence" in present and "accept" not in present:
-        return "Resume at ui-evaluator (accept) with evidence ledger bound."
-    if "craft" in present and "accept" not in present:
-        return "Resume at observe* (if adapter present) or ui-evaluator."
-    if "fill" in present and "craft" not in present:
-        return "Resume at craft-guard, then observe*/ui-evaluator."
-    if "preview" in present and "fill" not in present:
-        confirm = latest_confirm(run_root)
-        if confirm is None:
-            return ("Preview artifacts exist without a confirm for the latest "
-                    "round — finish preview* HITL (G5) before fill.")
-        payload, err = read_confirm_record(confirm)
-        if err is not None:
-            return f"Preview confirm unreadable ({confirm.name}); re-run preview*."
-        # Reuse validate_run.is_confirmed_valid as the single judgment of a
-        # usable confirm (issue 03). Fail closed on abort / floor-failure:
-        # never direct the orchestrator to fill on a non-positive decision.
-        # The old ``confirmed or aborted -> resume at fill`` was fail-open —
-        # it let aborted runs and floor-failed confirms reach fill, and it
-        # ignored floor_pass entirely. Wording deliberately avoids the phrase
-        # "resume at fill" so status consumers can grep cleanly.
-        if isinstance(payload, dict) and payload.get("aborted") is True:
-            return (f"Preview ABORTED in {confirm.name} — must not proceed to "
-                    f"fill; re-run preview* from the current round.")
-        if is_confirmed_valid(payload):
-            return "Preview confirmed and floor passed — resume at fill."
-        if isinstance(payload, dict) and payload.get("confirmed") is True:
-            reason = payload.get("floor_failure") or "floor_pass is not true"
-            return (f"Preview confirmed in {confirm.name} but feedback floor "
-                    f"failed ({reason}) — must not proceed to fill; re-run "
-                    f"preview* HITL.")
-        return "Preview open without decision — complete preview* confirm/revise."
-    if "decision" in present and "preview" not in present and "fill" not in present:
-        return "Resume at preview* (if adapter present) or fill."
-    if "plan" in present and "decision" not in present:
-        return "Resume at ui-picker (decision-report)."
-    if "spec" in present and "decision" not in present and "plan" not in present:
-        return "Resume at plan? (optional) or ui-picker."
-    if "reference" in present and "spec" not in present:
-        return "Resume at ux-spec (reference contract present)."
-    if "baseline" in present and "reference" not in present and "spec" not in present:
-        return "Design baseline bound — resume at reference-intake? (if needed) or ux-spec."
     if not present:
         return "No run artifacts — start with /design-playbook:design-io <ask> (design-baseline?, reference-intake?, or ux-spec)."
-    # partial unknown
-    last = [s for s in states if s.present][-1]
+
+    for state in reversed(states):
+        if not state.present or state.key == "accept":
+            continue
+        if state.key == "preview":
+            return _preview_next_action(snapshot)
+        stage = STAGES_BY_KEY.get(state.key)
+        if stage is not None and stage.resume_action is not None:
+            return stage.resume_action
+
+    last = [state for state in states if state.present][-1]
     return f"Latest artifact stage: {last.key} ({last.skill}). Continue the orchestrator sequence from there."
 
 
@@ -247,8 +216,9 @@ def render(run_root: Path, *, as_json: bool) -> int:
     if not run_root.is_dir():
         print(f"RUN STATUS ERROR: not a directory: {run_root}", file=sys.stderr)
         return 2
-    states = inspect_run(run_root)
-    action = next_action(states, run_root)
+    snapshot = inspect_preview(run_root / "preview")
+    states = inspect_run(run_root, snapshot)
+    action = next_action(states, run_root, snapshot)
     payload = {
         "run_root": str(run_root),
         "stages": [

@@ -24,13 +24,19 @@ from pathlib import Path
 from unittest import mock
 from urllib.parse import parse_qs
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent / "mcp" / "preview"))
-import browser  # noqa: E402
-import control as preview_control  # noqa: E402
-import transaction  # noqa: E402
-import versions  # noqa: E402
-from i18n import default_options  # noqa: E402
+PACKAGE = Path(__file__).resolve().parents[1]
+
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+if str(PACKAGE) not in sys.path:
+    sys.path.insert(0, str(PACKAGE))
+
+from design_playbook.mcp.preview import browser  # noqa: E402
+from design_playbook.mcp.preview import control as preview_control  # noqa: E402
+from design_playbook.mcp.preview import transaction  # noqa: E402
+from design_playbook.mcp.preview import versions  # noqa: E402
+from design_playbook.mcp.preview.i18n import default_options  # noqa: E402
+from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
 
 try:
     from playwright.sync_api import sync_playwright  # noqa: E402
@@ -57,7 +63,7 @@ def _serve(proto_html: str, summary: str, options: list[str], round_n: int):
     control = browser._inject_token_fields(control, token, round_n)
     page = browser._build_parent_page(proto_html, control)
     session = browser._DecisionSession(round_n, token)
-    box: dict = {"result": None, "proto_hash": browser.prototype_html_digest(
+    box: dict = {"result": None, "proto_hash": prototype_html_digest(
         proto_html.encode("utf-8"))}
 
     class Handler(BaseHTTPRequestHandler):

@@ -1,5 +1,7 @@
 # Triage Labels
 
+The engineering skills use five canonical triage roles. This file maps those roles to the GitHub labels used by this repository.
+
 | Label in mattpocock/skills | Label in our tracker | Meaning |
 | -------------------------- | -------------------- | ------- |
 | `needs-triage`             | `needs-triage`       | Maintainer needs to evaluate |
@@ -8,4 +10,4 @@
 | `ready-for-human`          | `ready-for-human`    | Requires human implementation |
 | `wontfix`                  | `wontfix`            | Will not be actioned |
 
-For local markdown tickets, put the role string on the `Status:` line.
+When a skill mentions a triage role, apply the corresponding GitHub label from this table.
