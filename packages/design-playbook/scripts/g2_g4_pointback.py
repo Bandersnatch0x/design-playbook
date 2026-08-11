@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 
 from design_playbook.scripts._diagnostics import Finding, finding
+from design_playbook.mcp.evidence.ledger_syntax import EVIDENCE_FIELDS, parse_ledger
 
 FINDING_FIELDS = ("issue", "source", "fix", "severity")
 FIELD_LINE = re.compile(
@@ -18,9 +19,6 @@ CLOSURE_LINE = re.compile(
     r"^\s*[-*]\s*closes:[ \t]*(.*?)[ \t]*->[^\n]*\b0 blocking\b",
     re.I | re.M,
 )
-EVIDENCE_FIELDS = ("criterion", "required", "observed", "result")
-EVIDENCE_LINE = re.compile(
-    r"^(criterion|required|observed|result):[ \t]*(.*)$", re.I | re.M)
 VALID_RESULTS = {"pass", "fail", "blocked", "n/a"}
 
 
@@ -38,23 +36,10 @@ def _findings(text: str) -> list[dict[str, list[str]]]:
     return findings
 
 
-def _evidence(text: str) -> list[dict[str, list[str]]]:
-    rows = []
-    for block in re.split(r"\n\s*\n", text):
-        matches = EVIDENCE_LINE.findall(block)
-        if not matches:
-            continue
-        fields = {field: [] for field in EVIDENCE_FIELDS}
-        for name, value in matches:
-            fields[name.lower()].append(value.strip())
-        rows.append(fields)
-    return rows
-
-
 def _check_evidence(
         text: str, expected_l6: int, is_pass: bool) -> list[Finding]:
     errs: list[Finding] = []
-    rows = _evidence(text)
+    rows = parse_ledger(text).rows
     if not rows:
         return [finding(
             "G2.no_evidence_rows",
@@ -68,7 +53,7 @@ def _check_evidence(
     seen_l6: dict[int, int] = {}
     for i, row in enumerate(rows, 1):
         for field in EVIDENCE_FIELDS:
-            values = row[field]
+            values = row.values(field)
             if not values:
                 errs.append(finding(
                     "G2.missing_field",
@@ -97,25 +82,28 @@ def _check_evidence(
                     repair=f"Keep one {field} on evidence row {i}",
                 ))
 
-        criterion = row["criterion"][0] if row["criterion"] else ""
-        result = row["result"][0].casefold() if row["result"] else ""
+        criterion_values = row.values("criterion")
+        criterion = criterion_values[0] if criterion_values else ""
+        result_values = row.values("result")
+        result_raw = result_values[0] if result_values else ""
+        result = result_raw.casefold()
         if result and result not in VALID_RESULTS:
             errs.append(finding(
                 "G2.invalid_result",
-                f"G2 evidence: row {i} has invalid result '{row['result'][0]}'",
+                f"G2 evidence: row {i} has invalid result '{result_raw}'",
                 owner=f"point-back.md#evidence.row{i}",
                 expected="pass|fail|blocked|n/a",
-                actual=row["result"][0],
+                actual=result_raw,
                 repair=f"Set result on row {i} to an allowed value",
             ))
         if is_pass and result and result != "pass":
             errs.append(finding(
                 "G3.pass_requires_result",
                 f"G3 evidence: Pass requires row {i} result pass, got "
-                f"'{row['result'][0]}'",
+                f"'{result_raw}'",
                 owner=f"point-back.md#evidence.row{i}",
                 expected="pass",
-                actual=row["result"][0],
+                actual=result_raw,
                 repair="Change verdict to Recirculate or fix the failed evidence",
             ))
 

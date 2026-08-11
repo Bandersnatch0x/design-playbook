@@ -1,4 +1,4 @@
-"""G6 evidence-binding gate (ADR-0023).
+"""G6 evidence-binding gate (ADR-0023, ADR-0025).
 
 Conditional: if a ledger ``observed`` references an ``evidence/`` artifact,
 require the artifact to exist and a manifest entry to bind it to the
@@ -6,6 +6,11 @@ matching L6.<n> (multi-entry: latest by ts wins). The soft manifest-ts and
 superseded-artifact warnings live in ``g6_warnings.py``. Bound manifest
 request snapshots validate through the bundled Evidence runtime's
 ``validate_capture_snapshot`` (ADR-0018 enforcement site 3).
+
+Ledger rows are no longer parsed here (ADR-0025): the ``(criterion, observed)``
+pairs come from ``g6_records.ledger_observed``, the G6 projection over the
+single Evidence ledger syntax-facts module (``mcp.evidence.ledger_syntax``).
+This module owns only G6 binding policy and diagnostics.
 """
 from __future__ import annotations
 
