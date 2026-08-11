@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path
 from typing import Any
 
 # One import seam (ADR-0022): package root on sys.path once, then absolute
@@ -39,6 +39,7 @@ from design_playbook.mcp.evidence.capture_contract import (  # noqa: E402
     capture_contract_schema_fragment,
     parse_capture_contract,
 )
+from design_playbook.mcp.evidence import containment  # noqa: E402
 
 TOOL_NAME = "execute_capture_plan"
 SERVER_NAME = "design-playbook-evidence"
@@ -58,7 +59,6 @@ ALLOWED_ARGUMENTS = frozenset(
     }
 )
 RUN_ROOT_ENV = "DESIGN_PLAYBOOK_RUN_ROOT"
-EVIDENCE_SUBDIR = "evidence"
 
 
 def _log(msg: str) -> None:
@@ -240,52 +240,40 @@ def _run_root() -> Path:
 def _resolve_artifact_path(artifact_path: str) -> Path:
     """Resolve ``artifact_path`` to an absolute path under ``<run_root>/evidence/``.
 
-    G6 write boundary (issue 04):
-      * reject absolute paths (POSIX + Windows + native);
-      * reject any ``..`` segment in the requested path (defence in depth
-        before resolution — also catches ``evidence/../spec.md``);
-      * the resolved candidate must stay under ``<run_root>/evidence/``;
-      * explicit ``realpath`` check so a symlink chain that resolves out of
-        the evidence subtree is rejected even when ``Path.resolve`` and
-        ``os.path.realpath`` disagree across platforms.
+    Delegates containment to the single Evidence artifact containment module
+    (ADR-0026): ``containment.write_target`` owns the canonical resolution and
+    every escape rejection (absolute paths, ``..``, resolution failures,
+    canonical escapes, observed symlink escapes). This site maps the stable
+    reason codes to the Provider's existing ValueError payloads so
+    ``execute_capture_plan`` captures them via its existing ``except ValueError``
+    path. Callers must not add another preflight check (ADR-0026 TOCTOU limit).
 
     The caller is responsible for providing a path that already starts with
     ``evidence/``; we do not prepend it (``spec.md`` and ``skills/x`` are
     refused because they land outside the evidence subtree).
     """
-    requested = Path(artifact_path)
-    if (
-        requested.is_absolute()
-        or PureWindowsPath(artifact_path).is_absolute()
-        or PurePosixPath(artifact_path).is_absolute()
-    ):
-        raise ValueError("artifact_path must be relative to the configured run root")
+    result = containment.write_target(artifact_path, _run_root())
+    if result.ok:
+        return result.path  # type: ignore[return-value]
+    raise ValueError(_REASON_MESSAGES[result.reason])
 
-    if any(part == ".." for part in requested.parts):
-        raise ValueError("artifact_path must not contain '..' segments")
 
-    root = _run_root()
-    evidence_root = (root / EVIDENCE_SUBDIR).resolve(strict=False)
-    candidate = (root / requested).resolve(strict=False)
-    try:
-        candidate.relative_to(evidence_root)
-    except ValueError as exc:
-        raise ValueError(
-            "artifact_path must stay under the evidence/ subtree"
-        ) from exc
-
-    # Defence in depth: realpath must also stay under evidence/. Catches
-    # symlink chains that Path.resolve may normalise differently per platform.
-    try:
-        Path(os.path.realpath(candidate)).relative_to(
-            os.path.realpath(evidence_root)
-        )
-    except ValueError as exc:
-        raise ValueError(
-            "artifact_path symlink escapes the evidence/ subtree"
-        ) from exc
-
-    return candidate
+# Reason-code -> Provider message mapping (ADR-0026). The Provider keeps its
+# existing ValueError wording for every escape class so its capture-failure
+# payload stays compatible; resolution_failure is the one new surface (the
+# old inline resolver propagated OSError uncaught).
+_REASON_MESSAGES = {
+    containment.REASON_ABSOLUTE_PATH:
+        "artifact_path must be relative to the configured run root",
+    containment.REASON_DOTDOT_SEGMENT:
+        "artifact_path must not contain '..' segments",
+    containment.REASON_RESOLUTION_FAILURE:
+        "artifact_path could not be resolved under the evidence/ subtree",
+    containment.REASON_CANONICAL_ESCAPE:
+        "artifact_path must stay under the evidence/ subtree",
+    containment.REASON_SYMLINK_ESCAPE:
+        "artifact_path symlink escapes the evidence/ subtree",
+}
 
 
 def _run_actions(page: Any, actions: list[dict[str, Any]]) -> None:
