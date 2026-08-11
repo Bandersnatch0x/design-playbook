@@ -11,6 +11,7 @@ import re
 
 from design_playbook.scripts._diagnostics import Finding, finding
 from design_playbook.mcp.evidence.ledger_syntax import EVIDENCE_FIELDS, parse_ledger
+from design_playbook.scripts.verdict_syntax import parse_verdict
 
 FINDING_FIELDS = ("issue", "source", "fix", "severity")
 FIELD_LINE = re.compile(
@@ -159,8 +160,12 @@ def _normalise_issue(value: str) -> str:
 
 
 def _verdict(text: str) -> tuple[str | None, list[Finding]]:
-    headings = list(re.finditer(r"^#+\s*Verdict\s*$", text, re.I | re.M))
-    if not headings:
+    # Verdict syntax facts are parsed once in verdict_syntax (ADR-0025); G3
+    # retains its diagnostic mapping and projects from the shared facts so
+    # rule IDs, messages, finding order, and accepted value forms stay
+    # compatible with the prior independent parser.
+    facts = parse_verdict(text)
+    if facts.heading_count == 0:
         return None, [finding(
             "G3.missing_verdict",
             "G3 point-back: missing explicit Verdict section",
@@ -169,34 +174,26 @@ def _verdict(text: str) -> tuple[str | None, list[Finding]]:
             actual="missing",
             repair="Add an explicit Verdict section",
         )]
-    if len(headings) > 1:
+    if facts.heading_count > 1:
         return None, [finding(
             "G3.repeated_verdict",
             "G3 point-back: repeated Verdict section",
             owner="point-back.md#Verdict",
             expected="exactly one Verdict section",
-            actual=str(len(headings)),
+            actual=str(facts.heading_count),
             repair="Keep a single Verdict section",
         )]
-
-    start = headings[0].end()
-    next_heading = re.search(r"^#+\s+", text[start:], re.M)
-    end = start + next_heading.start() if next_heading else len(text)
-    body = text[start:end]
-    values = re.findall(
-        r"^\s*(?:[-*]\s*)?\*{0,2}(Pass|Recirculate)\b",
-        body, re.I | re.M)
-    if len(values) != 1:
+    if facts.value_count != 1:
         return None, [finding(
             "G3.verdict_count",
             "G3 point-back: Verdict section must contain exactly one "
             "Pass or Recirculate verdict",
             owner="point-back.md#Verdict",
             expected="exactly one Pass or Recirculate",
-            actual=str(len(values)),
+            actual=str(facts.value_count),
             repair="State exactly one Pass or Recirculate verdict",
         )]
-    return values[0].casefold(), []
+    return facts.canonical, []
 
 
 def check_pointback(text: str, expected_l6: int) -> list[Finding]:

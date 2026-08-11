@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,8 +34,11 @@ else:
 
 # Stage registry and shared artifact names live in the packaged scripts dir
 # (ADR-0021): STAGES mirrors skills/design-playbook/SKILL.md Steps; the
-# artifact-name constants are shared with validate_run.py.
+# artifact-name constants are shared with validate_run.py. Verdict syntax
+# facts are parsed once in verdict_syntax (ADR-0025); run status projects
+# its status decision from the shared canonical value.
 from design_playbook.scripts.stages import POINT_BACK, STAGES, STAGES_BY_KEY  # noqa: E402
+from design_playbook.scripts.verdict_syntax import parse_verdict  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -83,21 +85,16 @@ def verdict_of(run_root: Path) -> str | None:
     if not path.is_file():
         return None
     text = path.read_text(encoding="utf-8")
-    for line in text.splitlines():
-        if line.lower().startswith("## verdict"):
-            # next non-empty line or same-line content
-            rest = line.split(":", 1)
-            if len(rest) == 2 and rest[1].strip():
-                return rest[1].strip()
-            continue
-        if "verdict" in line.lower() and ("pass" in line.lower() or "recirculate" in line.lower()):
-            if "pass" in line.lower() and "recirculate" not in line.lower():
-                return "Pass"
-            if "recirculate" in line.lower():
-                return "Recirculate"
-    if re.search(r"^##\s*Verdict\s*$[\s\S]*?\bPass\b", text, re.I | re.M):
+    # ADR-0025 sanctioned correction: a canonical Verdict is exposed only
+    # when exactly one valid Verdict exists. Missing, malformed, ambiguous,
+    # or repeated Verdict text yields no canonical value, so run status can
+    # never report ``Run complete (Pass)`` from anything other than one
+    # uniquely valid Pass. The previous permissive line/regex scan accepted
+    # Verdict text the G3 gate rejects; both consumers now share one parse.
+    facts = parse_verdict(text)
+    if facts.canonical == "pass":
         return "Pass"
-    if re.search(r"^##\s*Verdict\s*$[\s\S]*?\bRecirculate\b", text, re.I | re.M):
+    if facts.canonical == "recirculate":
         return "Recirculate"
     return None
 
@@ -191,9 +188,12 @@ def next_action(
             return blocked
     if "accept" in present:
         verdict = verdict_of(run_root)
-        if verdict and verdict.lower().startswith("pass"):
+        # verdict_of returns "Pass" only from one uniquely valid Pass
+        # (ADR-0025); exact equality avoids any string-prefix inference that
+        # could complete a run from malformed or repeated Verdict text.
+        if verdict == "Pass":
             return "Run complete (Pass). Ship or start a new run."
-        if verdict and "recirculate" in verdict.lower():
+        if verdict == "Recirculate":
             return "Verdict is Recirculate — repair from point-back findings, then re-run ui-evaluator."
         return "point-back.md present — confirm ## Verdict, then stop or recirculate."
     if not present:

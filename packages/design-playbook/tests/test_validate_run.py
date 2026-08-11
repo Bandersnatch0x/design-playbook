@@ -11,6 +11,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 PACKAGE = HERE.parent
 VALIDATOR = PACKAGE / "scripts" / "validate_run.py"
+RUN_STATUS = PACKAGE / "scripts" / "run_status.py"
 FIX = HERE / "fixtures"
 PASS = FIX / "pass"
 FAIL = FIX / "fail"
@@ -202,6 +203,58 @@ result: pass
 """
 
 
+def _verdict_probe_pointback(verdict_section: str) -> str:
+    """Build a point-back whose only variable is the Verdict section.
+
+    One non-blocking finding + 5 all-pass L6 evidence rows. Against the
+    zero-findings spec (5 L6 items) this passes G1/G2/G4 for both Pass and
+    Recirculate, so only G3 fires on a Verdict defect. Used by the
+    ADR-0025 Verdict syntax-facts regression (issue #11) to pin G3 rule IDs
+    and the run-status sanctioned correction.
+    """
+    return f"""# Point-back - verdict probe
+
+{verdict_section}
+## Findings
+
+```text
+issue: polish spacing on card header
+source: craft
+fix: tighten padding
+severity: low
+```
+
+## Evidence ledger
+
+```text
+criterion: L6.1
+required: declared proof for L6.1
+observed: fixture evidence for L6.1
+result: pass
+
+criterion: L6.2
+required: declared proof for L6.2
+observed: fixture evidence for L6.2
+result: pass
+
+criterion: L6.3
+required: declared proof for L6.3
+observed: fixture evidence for L6.3
+result: pass
+
+criterion: L6.4
+required: declared proof for L6.4
+observed: fixture evidence for L6.4
+result: pass
+
+criterion: L6.5
+required: declared proof for L6.5
+observed: fixture evidence for L6.5
+result: pass
+```
+"""
+
+
 def main() -> int:
     failures: list[str] = []
 
@@ -296,6 +349,125 @@ def main() -> int:
             "missing input must be an operational exit 2, not artifact exit 1")
     else:
         print("  ok    missing input exits 2")
+
+    # --- ADR-0025 Verdict syntax-facts (issue #11) ---
+    # G3 and run status now share one Verdict parse (verdict_syntax). Pin
+    # that the G3 gate still rejects every invalid Verdict cardinality with
+    # its stable rule IDs/messages, and that run status never reports
+    # `Run complete (Pass)` from missing/malformed/ambiguous/repeated text.
+    verdict_spec = PASS / "zero-findings.spec.md"
+
+    def _run_status_json(run_root: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(RUN_STATUS), str(run_root), "--json"],
+            capture_output=True, text=True,
+        )
+
+    # G3 gate: each invalid cardinality rejects with its stable diagnostic.
+    verdict_gate_cases = [
+        ("verdict/repeated-section",
+         "## Verdict\n\n**Pass.**\n\n## Verdict\n\n**Pass.**\n",
+         "repeated Verdict section"),
+        ("verdict/ambiguous-values",
+         "## Verdict\n\nPass\nRecirculate\n",
+         "exactly one Pass or Recirculate"),
+        ("verdict/no-value",
+         "## Verdict\n\nMaybe\n",
+         "exactly one Pass or Recirculate"),
+    ]
+    for name, verdict_section, diagnostic in verdict_gate_cases:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp)
+            _write_text(
+                run_root / "point-back.md",
+                _verdict_probe_pointback(verdict_section))
+            result = run(verdict_spec, run_root / "point-back.md")
+            if result.returncode != 1 or diagnostic not in result.stdout:
+                failures.append(
+                    f"{name}: expected exit 1 with {diagnostic!r}; "
+                    f"got {result.returncode} {result.stdout!r}")
+            else:
+                print(f"  ok    {name} rejects with {diagnostic!r}")
+
+    # G3 gate: exactly one valid Pass or Recirculate still passes.
+    for name, verdict_section in (
+            ("verdict/valid-pass", "## Verdict\n\n**Pass.**\n"),
+            ("verdict/valid-recirculate", "## Verdict\n\n**Recirculate.**\n"),
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp)
+            _write_text(
+                run_root / "point-back.md",
+                _verdict_probe_pointback(verdict_section))
+            result = run(verdict_spec, run_root / "point-back.md")
+            if result.returncode != 0 or "RUN OK" not in result.stdout:
+                failures.append(
+                    f"{name}: expected exit 0 RUN OK; "
+                    f"got {result.returncode} {result.stdout!r}")
+            else:
+                print(f"  ok    {name} is valid")
+
+    # Sanctioned correction (ADR-0025): run status must not report
+    # `Run complete (Pass)` from anything other than one uniquely valid Pass.
+    # Each case is a shape the old permissive line/regex scan accepted as
+    # Pass but the shared parser correctly rejects.
+    verdict_status_cases = [
+        ("verdict-status/missing-heading", ""),
+        ("verdict-status/repeated-section",
+         "## Verdict\n\n**Pass.**\n\n## Verdict\n\n**Pass.**\n"),
+        ("verdict-status/ambiguous-values",
+         "## Verdict\n\nPass\nRecirculate\n"),
+        ("verdict-status/no-value", "## Verdict\n\nMaybe\n"),
+        ("verdict-status/pass-outside-section",
+         "## Verdict\n\n## Notes\n\nPass\n"),
+        ("verdict-status/inline-colon-heading", "## Verdict: Pass\n"),
+        ("verdict-status/misshapen-heading", "## Verdict notes\n\nPass\n"),
+    ]
+    for name, verdict_section in verdict_status_cases:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp)
+            _write_text(run_root / "spec.md", "spec\n")
+            _write_text(
+                run_root / "point-back.md",
+                _verdict_probe_pointback(verdict_section))
+            result = _run_status_json(run_root)
+            if result.returncode != 0:
+                failures.append(
+                    f"{name}: run_status exited {result.returncode}; "
+                    f"{result.stdout!r} {result.stderr!r}")
+                continue
+            payload = json.loads(result.stdout)
+            if payload["verdict"] is not None:
+                failures.append(
+                    f"{name}: expected verdict None, got "
+                    f"{payload['verdict']!r}")
+            elif "Run complete (Pass)" in payload["next"]:
+                failures.append(
+                    f"{name}: run_status reported Run complete (Pass) from "
+                    f"invalid verdict: {payload['next']!r}")
+            else:
+                print(f"  ok    {name} does not complete the run")
+
+    # Regression guard: one uniquely valid Pass still completes the run.
+    with tempfile.TemporaryDirectory() as tmp:
+        run_root = Path(tmp)
+        _write_text(run_root / "spec.md", "spec\n")
+        _write_text(
+            run_root / "point-back.md",
+            _verdict_probe_pointback("## Verdict\n\n**Pass.**\n"))
+        result = _run_status_json(run_root)
+        if result.returncode != 0:
+            failures.append(
+                f"verdict-status/valid-pass: run_status exited "
+                f"{result.returncode}; {result.stdout!r} {result.stderr!r}")
+        else:
+            payload = json.loads(result.stdout)
+            if payload["verdict"] != "Pass" or "Run complete (Pass)" not in payload["next"]:
+                failures.append(
+                    f"verdict-status/valid-pass: expected verdict Pass and "
+                    f"Run complete (Pass); got {payload!r}")
+            else:
+                print("  ok    verdict-status/valid-pass completes the run")
 
     # --- G5 conditional preview gate (matrix B) ---
     spec, pb = _zero_findings_pair()
