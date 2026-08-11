@@ -255,7 +255,21 @@ def _resolve_artifact_path(artifact_path: str) -> Path:
     result = containment.write_target(artifact_path, _run_root())
     if result.ok:
         return result.path  # type: ignore[return-value]
-    raise ValueError(_REASON_MESSAGES[result.reason])
+    raise ValueError(_reason_message(result.reason))
+
+
+def _reason_message(reason: str) -> str:
+    """Provider message for a containment reason code (ADR-0026).
+
+    Returns the existing ValueError wording for every escape class so the
+    capture-failure payload stays compatible. An unmapped code (a future
+    reason added to containment.py without a matching entry here) degrades
+    to a generic message instead of raising KeyError mid-capture.
+    """
+    return _REASON_MESSAGES.get(
+        reason,
+        f"artifact_path was rejected by containment ({reason})",
+    )
 
 
 # Reason-code -> Provider message mapping (ADR-0026). The Provider keeps its

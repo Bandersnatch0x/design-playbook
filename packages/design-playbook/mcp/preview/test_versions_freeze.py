@@ -70,12 +70,19 @@ def _references_authoring(text: str) -> bool:
     ``create_named_version`` is a unique token. ``fork`` is a common word, so
     it only counts as a violation when the same file also references the
     versions module (qualified call or import), which avoids false positives
-    on unrelated uses of the word "fork".
+    on unrelated uses of the word "fork". The module-reference check covers
+    all three import forms: ``from .versions import ...``,
+    ``from design_playbook.mcp.preview.versions import ...``, and
+    ``from design_playbook.mcp.preview import versions`` / ``from . import
+    versions`` (module-import then ``versions.fork(...)`` qualified call).
     """
     if re.search(r"\bcreate_named_version\b", text):
         return True
     if re.search(r"\bfork\b", text) and re.search(
-        r"design_playbook\.mcp\.preview\.versions|from\s+\.versions\b",
+        r"design_playbook\.mcp\.preview\.versions"
+        r"|from\s+\.versions\b"
+        r"|from\s+design_playbook\.mcp\.preview\s+import\s+versions"
+        r"|from\s+\.\s+import\s+versions",
         text,
     ):
         return True
