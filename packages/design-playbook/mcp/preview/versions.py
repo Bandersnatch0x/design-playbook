@@ -1,5 +1,16 @@
 """Local version control for Preview runs: event sourcing + named snapshots.
 
+Compatibility-only lifecycle (ADR-0027). This module is frozen: no new
+authoring command, caller, schema, or feature behavior is added here.
+Existing read behavior (``state_at``, ``timeline``, ``list_versions``,
+``render_versions_log``, ``refresh_version_projection``) and ``fork`` remain
+compatible while production transactions depend on ``render_versions_log``
+for log projection. Physical removal is targeted for v1.0.0 as project
+migration policy, not a SemVer requirement; see
+``docs/deprecations/preview-versions.md`` for the removal checklist and the
+long-lived owner that must absorb compatibility reading and log projection
+before this module can be deleted.
+
 Extends transaction.py's append-only decision entries with:
 
 - named versions (``version-<seq>.json`` — meta-events, append-only)
@@ -154,6 +165,12 @@ def create_named_version(
     kind: str = "custom", note: str = "",
 ) -> dict[str, Any]:
     """Write an append-only ``version-<seq>.json`` meta-event for a round.
+
+    Deprecated (ADR-0027): Preview versions are in a compatibility-only
+    lifecycle. This authoring entry point is frozen - do not add new callers
+    or extend its behavior. It remains for backward-compatible artifact
+    creation while the migration to the long-lived owner is pending; see
+    ``docs/deprecations/preview-versions.md``.
 
     The named round must already have a durable decision entry. Versions are
     immutable: a rename is a new version event, never an overwrite.
@@ -332,6 +349,12 @@ def fork(
     new_dir: Path, report_ref: str, summary: str,
 ) -> dict[str, Any]:
     """Derive an independent linear chain from round N of source_dir.
+
+    Deprecated (ADR-0027): Preview versions are in a compatibility-only
+    lifecycle. This authoring entry point is frozen - do not add new callers
+    or extend its behavior. It remains for backward-compatible chain
+    derivation while the migration to the long-lived owner is pending; see
+    ``docs/deprecations/preview-versions.md``.
 
     The new chain lives in ``new_dir`` and re-numbers rounds from 1 (G5
     single-thread invariant is preserved per directory). ``fork.json`` records
