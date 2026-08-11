@@ -22,7 +22,7 @@ import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer as HTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import parse_qs
 
 from design_playbook.mcp.preview.control import _build_control
@@ -307,6 +307,55 @@ def _rm_tree(path: str | None) -> None:
         shutil.rmtree(path, ignore_errors=True)
     except Exception:  # noqa: BLE001
         pass
+
+
+
+class BrowserInteraction(Protocol):
+    """Seam for owning a browser window across one preview round (US-4).
+
+    ``open`` returns an opaque owned handle; ``close`` tears down the owned
+    browser and its private profile. The interface exposes no executable,
+    PID, profile, subprocess, or platform cleanup details - those stay inside
+    the production adapter as implementation details. Tests substitute one
+    fake adapter for the whole owned-browser lifecycle instead of patching
+    process/profile internals.
+    """
+
+    def open(self, url: str) -> Any:
+        """Open ``url`` in an owned browser window; return an opaque handle."""
+        ...
+
+    def close(self, handle: Any) -> None:
+        """Close the owned browser and release its private profile."""
+        ...
+
+
+class OwnedBrowserAdapter:
+    """Production :class:`BrowserInteraction` for the owned-Chromium lifecycle.
+
+    The adapter hides executable discovery, process launch, profile cleanup,
+    terminate, and kill behind ``open``/``close``. The module-level owned-
+    browser helpers (``_browser_candidates``, ``_open_preview_window``,
+    ``_request_browser_window_close``, ``_kill_browser_proc``, ``_rm_tree``)
+    are this adapter's implementation details. They are referenced by name
+    (not captured) so the production path stays unit-injectable at the helper
+    seam: callers that patch a helper still intercept the adapter's call.
+    """
+
+    def open(self, url: str) -> Any:
+        return _open_preview_window(url)
+
+    def close(self, handle: Any) -> None:
+        proc, profile = handle
+        _request_browser_window_close(proc)
+        _kill_browser_proc(proc, profile)
+        _rm_tree(profile)
+
+
+# Module-level default adapter. _collect_via_browser routes through this name
+# so a test can substitute one fake owned-browser adapter for the whole
+# collect flow (US-4) without patching process/profile internals.
+_default_browser_adapter: BrowserInteraction = OwnedBrowserAdapter()
 
 
 
@@ -737,7 +786,7 @@ def _collect_via_browser(
     thread.start()
     url = f"http://127.0.0.1:{port}/"
     _log(f"preview UI at {url}")
-    browser_proc, browser_profile = _open_preview_window(url)
+    handle = _default_browser_adapter.open(url)
     try:
         if not done.wait(timeout=1800):
             result = with_prototype_hash({
@@ -747,14 +796,14 @@ def _collect_via_browser(
                 "anchors": [],
             })
     finally:
-        # Hide for immediate visual feedback. Kill the owned Chromium next so
-        # keep-alive sockets cannot block HTTPServer.shutdown; response is
-        # already flushed before done.set(). Bound HTTP stop so MCP returns.
-        _request_browser_window_close(browser_proc)
-        _kill_browser_proc(browser_proc, browser_profile)
+        # Close the owned Chromium first so keep-alive sockets cannot block
+        # HTTPServer.shutdown; the response is already flushed before
+        # done.set(). The adapter hides window-hide + process kill + profile
+        # cleanup behind the seam; HTTP stop stays here so a bound MCP call
+        # always returns even if the adapter raises.
         try:
-            _stop_http_server(server, thread, timeout_s=1.5)
+            _default_browser_adapter.close(handle)
         finally:
-            _rm_tree(browser_profile)
+            _stop_http_server(server, thread, timeout_s=1.5)
     return result
 
