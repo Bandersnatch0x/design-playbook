@@ -646,10 +646,14 @@ def _commit_projections_unlocked(preview_dir: Path, entry: dict[str, Any]) -> st
         confirm_result = str(confirm_path)
     else:
         confirm_result = ""
-    # log.md projection incl. versions section (wayfinder canvas-upgrade 05a);
-    # render_versions_log degrades to render_log when no version files exist.
-    from design_playbook.mcp.preview.versions import render_versions_log
-    atomic_write(preview_dir / "log.md", render_versions_log(preview_dir))
+    # Historical version files remain visible in log.md through the dedicated
+    # compatibility owner (ADR-0027).
+    from design_playbook.mcp.preview.compatibility import render_versions_log
+    decision_log = render_log(valid_entries(preview_dir))
+    atomic_write(
+        preview_dir / "log.md",
+        render_versions_log(preview_dir, decision_log),
+    )
     return confirm_result
 
 

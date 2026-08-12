@@ -1,19 +1,11 @@
 #!/usr/bin/env python3
-"""Process-boundary tests for the evidence MCP stdio transport.
+"""Evidence MCP transport and capture-runtime interface tests.
 
-Tests are split into two classes so CI selects the group by class name:
-
-* ``EvidencePurePathTests`` — contract/path validation that never reaches
-  the Playwright import in ``execute_capture_plan``. Runs with or without
-  chromium (CI gate: ``pytest -k PurePath``).
-* ``EvidenceCaptureTests`` — real-browser captures (screenshot / a11y /
-  trace). Requires Playwright + chromium (CI gate: ``pytest -k Capture``).
-
-Class-name grouping is unittest-native (no ``conftest.py`` / marker
-registration needed) and any new test added to a class is picked up by
-its ``-k`` filter automatically. This replaces the previous
-hand-maintained ``-k`` keyword OR-list, which silently skipped new tests
-whose names did not match any keyword. See review item M3.
+``EvidencePurePathTests`` covers the narrow JSON-RPC wire/schema mapping and
+path validation that short-circuits before Playwright. ``EvidenceRuntimeTests``
+exercises the public runtime interface with a fake browser adapter.
+``EvidenceCaptureTests`` exercises that same interface with the production
+Playwright adapter for screenshot, a11y, and trace captures.
 """
 from __future__ import annotations
 
@@ -25,12 +17,15 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 # One import seam (ADR-0022): package root on sys.path once, then absolute
 # design_playbook.* imports below. No per-runtime sys.path adapters.
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
+
+from design_playbook.mcp.evidence import capture_runtime  # noqa: E402
 
 SERVER = Path(__file__).resolve().with_name("server.py")
 FIXTURE_HTML = """<!DOCTYPE html>
@@ -127,17 +122,9 @@ def _structured(call_response: dict) -> dict:
 
 
 class EvidencePurePathTests(unittest.TestCase):
-    """No-chromium contract/path validation.
-
-    These never reach the Playwright import in execute_capture_plan
-    (server.py): unknown-arg / manifest.jsonl / G6 evidence-subtree
-    containment / overwrite opt-in / JSON-RPC parse-error all
-    short-circuit first, so they pass with or without chromium.
-    """
+    """No-chromium transport and direct runtime-interface tests."""
 
     def test_parse_capture_contract_requires_schema_and_viewport(self) -> None:
-        # Parse authority lives in the contract module (ADR-0018 site 1);
-        # server.py re-exports the same object for the stdio boundary.
         from design_playbook.mcp.evidence import capture_contract
 
         with self.assertRaises(ValueError) as missing:
@@ -171,7 +158,7 @@ class EvidencePurePathTests(unittest.TestCase):
         self.assertTrue(parsed["freeze"]["enabled"])
         self.assertFalse(parsed["freeze"]["networkIdle"])
 
-    def test_missing_schema_version_fails_closed_over_stdio(self) -> None:
+    def test_missing_schema_version_maps_to_failed_stdio_payload(self) -> None:
         requests = [
             {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
             {
@@ -210,64 +197,29 @@ class EvidencePurePathTests(unittest.TestCase):
         completed = _run_stdio(requests, timeout=5)
         self.assertEqual(completed.returncode, 0, completed.stderr)
         responses = _responses(completed)
-        self.assertEqual([r["id"] for r in responses], [1, 2])
+        self.assertEqual([response["id"] for response in responses], [1, 2])
         self.assertEqual(
             responses[0]["result"]["serverInfo"]["name"],
             "design-playbook-evidence",
         )
-        self.assertEqual(
-            [tool["name"] for tool in responses[1]["result"]["tools"]],
-            ["execute_capture_plan"],
-        )
-        # Schema composition (ADR-0018 site 1): the contract fragment merges
-        # into the provider tool schema — const/enum/required come from the
-        # contract module, not a hand-maintained twin.
-        schema = responses[1]["result"]["tools"][0]["inputSchema"]
+        tools = responses[1]["result"]["tools"]
+        self.assertEqual([tool["name"] for tool in tools], ["execute_capture_plan"])
+        schema = tools[0]["inputSchema"]
         self.assertEqual(schema["properties"]["schemaVersion"]["const"], 1)
         self.assertIn("viewport", schema["required"])
         self.assertIn("freeze", schema["properties"])
-        self.assertIn("viewport", schema["properties"])
 
-    def test_provider_rejects_criterion_field(self) -> None:
-        """Provider does not accept criterion (ticket 02 / map premise 9)."""
-        requests = [
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "initialize",
-                "params": {"protocolVersion": "2025-06-18"},
-            },
-            {
-                "jsonrpc": "2.0",
-                "id": 2,
-                "method": "tools/call",
-                "params": {
-                    "name": "execute_capture_plan",
-                    "arguments": {
-                        "url": "about:blank",
-                        "type": "screenshot",
-                        "state": "ok",
-                        "actions": [],
-                        "artifact_path": "evidence/x.png",
-                        "criterion": "L6.3",
-                    },
-                },
-            },
-        ]
-        completed = _run_stdio(requests, timeout=15)
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        responses = _responses(completed)
-        result = responses[1]["result"]
-        # Either isError or structured result=failed — never silently accept criterion.
-        if result.get("isError"):
-            text = result["content"][0]["text"].lower()
-            self.assertIn("criterion", text)
-        else:
-            payload = _structured(responses[1])
-            self.assertEqual(payload["result"], "failed")
-            self.assertIn("criterion", payload["error"].lower())
+    def test_runtime_rejects_unknown_fields(self) -> None:
+        for forbidden in ("criterion", "criterion_ref", "criterion_id", "unexpected"):
+            with self.subTest(forbidden=forbidden), self.assertRaisesRegex(
+                ValueError, forbidden
+            ):
+                capture_runtime.execute_capture_plan(
+                    _v1_capture_args(**{forbidden: "L6.3"}),
+                    _FakeBrowserAdapter(),
+                )
 
-    def test_provider_rejects_manifest_variants_and_path_escape(self) -> None:
+    def test_runtime_rejects_manifest_variants_and_path_escape(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             outside = root.parent / f"{root.name}-outside.png"
@@ -278,202 +230,90 @@ class EvidencePurePathTests(unittest.TestCase):
                 str(outside.resolve()),
             ]
             for artifact_path in cases:
-                with self.subTest(artifact_path=artifact_path):
-                    requests = [
-                        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
-                        {
-                            "jsonrpc": "2.0",
-                            "id": 2,
-                            "method": "tools/call",
-                            "params": {
-                                "name": "execute_capture_plan",
-                                "arguments": {
-                        "schemaVersion": 1,
-                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
-
-                                    "url": "about:blank",
-                                    "type": "screenshot",
-                                    "state": "ok",
-                                    "actions": [],
-                                    "artifact_path": artifact_path,
-                                },
-                            },
-                        },
-                    ]
-                    completed = _run_stdio(requests, timeout=15, cwd=root)
-                    self.assertEqual(completed.returncode, 0, completed.stderr)
-                    payload = _structured(_responses(completed)[1])
-                    self.assertEqual(payload["result"], "failed")
-                    self.assertEqual(payload["observed_state"], "unknown")
+                with self.subTest(artifact_path=artifact_path), mock.patch.object(
+                    capture_runtime, "_run_root", return_value=root
+                ):
+                    payload = capture_runtime.execute_capture_plan(
+                        _v1_capture_args(artifact_path=artifact_path),
+                        _FakeBrowserAdapter(),
+                    )
+                self.assertEqual(payload["result"], "failed")
+                self.assertEqual(payload["observed_state"], "unknown")
             self.assertFalse(outside.exists())
 
-    def test_run_root_warning_only_without_run_marker_and_once(self) -> None:
-        """Default RUN_ROOT ('.'/unset) must not warn when cwd is a run dir.
+    def test_runtime_run_root_warning_respects_marker_and_warns_once(self) -> None:
+        import contextlib
+        import io
 
-        Shipped defaults (root .mcp.json RUN_ROOT="." / external installs
-        unset) are correct usage when cwd is the run dir — warning there is a
-        100% false positive. Warn only when cwd lacks a run marker
-        (plan.md / point-back.md), and only once per process.
-        """
-        def _call(request_id: int) -> dict:
-            return {
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "method": "tools/call",
-                "params": {
-                    "name": "execute_capture_plan",
-                    "arguments": {
-                        "schemaVersion": 1,
-                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
-
-                        "url": "about:blank",
-                        "type": "screenshot",
-                        "state": "ok",
-                        "actions": [],
-                        # Rejected before Playwright import, but after
-                        # _run_root() — cheap way to reach the warning path.
-                        "artifact_path": "spec.md",
-                    },
-                },
-            }
-
-        requests = [
-            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
-            _call(2),
-            _call(3),
-        ]
-        env = {k: v for k, v in os.environ.items() if k != "DESIGN_PLAYBOOK_RUN_ROOT"}
-
+        args = _v1_capture_args(artifact_path="spec.md")
+        env = {key: value for key, value in os.environ.items()
+               if key != capture_runtime.RUN_ROOT_ENV}
         with tempfile.TemporaryDirectory() as tmp:
             bare = Path(tmp)
-            completed = _run_stdio(requests, timeout=15, cwd=bare, env=env)
-            self.assertEqual(completed.returncode, 0, completed.stderr)
+            stderr = io.StringIO()
+            with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(
+                capture_runtime.Path, "cwd", return_value=bare.resolve()
+            ), mock.patch.object(
+                capture_runtime, "_warned_run_root", False
+            ), contextlib.redirect_stderr(stderr):
+                capture_runtime.execute_capture_plan(args, _FakeBrowserAdapter())
+                capture_runtime.execute_capture_plan(args, _FakeBrowserAdapter())
             self.assertEqual(
-                completed.stderr.count("DESIGN_PLAYBOOK_RUN_ROOT is unset or '.'"),
+                stderr.getvalue().count("DESIGN_PLAYBOOK_RUN_ROOT is unset or '.'"),
                 1,
-                completed.stderr,
             )
 
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp)
             (run_dir / "plan.md").write_text("# plan", encoding="utf-8")
-            completed = _run_stdio(requests, timeout=15, cwd=run_dir, env=env)
-            self.assertEqual(completed.returncode, 0, completed.stderr)
-            self.assertNotIn("DESIGN_PLAYBOOK_RUN_ROOT is unset", completed.stderr)
+            stderr = io.StringIO()
+            with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(
+                capture_runtime.Path, "cwd", return_value=run_dir.resolve()
+            ), mock.patch.object(
+                capture_runtime, "_warned_run_root", False
+            ), contextlib.redirect_stderr(stderr):
+                capture_runtime.execute_capture_plan(args, _FakeBrowserAdapter())
+            self.assertNotIn("DESIGN_PLAYBOOK_RUN_ROOT is unset", stderr.getvalue())
 
-    def test_provider_rejects_non_evidence_subtree_paths(self) -> None:
-        """G6 containment: artifact_path must already live under evidence/."""
+    def test_runtime_rejects_non_evidence_subtree_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "evidence").mkdir()
-            cases = [
-                "spec.md",              # would land at run root, not evidence/
-                "../spec.md",           # explicit .. segment
-                "evidence/../spec.md",  # .. segment that resolves out of evidence/
-                "skills/x",             # sibling subtree, not evidence/
-            ]
+            cases = ["spec.md", "../spec.md", "evidence/../spec.md", "skills/x"]
             for artifact_path in cases:
-                with self.subTest(artifact_path=artifact_path):
-                    requests = [
-                        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
-                        {
-                            "jsonrpc": "2.0",
-                            "id": 2,
-                            "method": "tools/call",
-                            "params": {
-                                "name": "execute_capture_plan",
-                                "arguments": {
-                        "schemaVersion": 1,
-                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
-
-                                    "url": "about:blank",
-                                    "type": "screenshot",
-                                    "state": "ok",
-                                    "actions": [],
-                                    "artifact_path": artifact_path,
-                                },
-                            },
-                        },
-                    ]
-                    completed = _run_stdio(requests, timeout=15, cwd=root)
-                    self.assertEqual(completed.returncode, 0, completed.stderr)
-                    payload = _structured(_responses(completed)[1])
-                    self.assertEqual(payload["result"], "failed", payload)
-                    self.assertEqual(payload["observed_state"], "unknown")
-            # None of these wrote anywhere outside evidence/.
+                with self.subTest(artifact_path=artifact_path), mock.patch.object(
+                    capture_runtime, "_run_root", return_value=root
+                ):
+                    payload = capture_runtime.execute_capture_plan(
+                        _v1_capture_args(artifact_path=artifact_path),
+                        _FakeBrowserAdapter(),
+                    )
+                self.assertEqual(payload["result"], "failed", payload)
+                self.assertEqual(payload["observed_state"], "unknown")
             self.assertFalse((root / "spec.md").exists())
             self.assertFalse((root / "skills").exists())
 
-    def test_provider_refuses_overwrite_without_opt_in(self) -> None:
-        """G6 write boundary: existing artifact is not overwritten by default."""
+    def test_runtime_refuses_overwrite_without_opt_in(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "evidence").mkdir()
-            html = root / "page.html"
-            html.write_text(FIXTURE_HTML, encoding="utf-8")
-            artifact_rel = "evidence/L6.3-error.png"
+            artifact = root / "evidence" / "L6.3-error.png"
+            artifact.parent.mkdir()
             sentinel = b"pre-existing-by-hand"
-            (root / artifact_rel).write_bytes(sentinel)
-
-            requests = [
-                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
-                {
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "execute_capture_plan",
-                        "arguments": {
-                        "schemaVersion": 1,
-                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
-
-                            "url": html.resolve().as_uri(),
-                            "type": "screenshot",
-                            "state": "error",
-                            "actions": [],
-                            "artifact_path": artifact_rel,
-                        },
-                    },
-                },
-            ]
-            completed = _run_stdio(requests, timeout=45, cwd=root)
-            self.assertEqual(completed.returncode, 0, completed.stderr)
-            payload = _structured(_responses(completed)[1])
+            artifact.write_bytes(sentinel)
+            fake = _FakeBrowserAdapter()
+            with mock.patch.object(capture_runtime, "_run_root", return_value=root):
+                payload = capture_runtime.execute_capture_plan(
+                    _v1_capture_args(
+                        url=(root / "page.html").resolve().as_uri(),
+                        state="error",
+                        artifact_path="evidence/L6.3-error.png",
+                    ),
+                    fake,
+                )
             self.assertEqual(payload["result"], "failed", payload)
             self.assertEqual(payload["observed_state"], "unknown")
-            # Pre-existing bytes preserved (write boundary held).
-            self.assertEqual((root / artifact_rel).read_bytes(), sentinel)
-
-    def test_provider_rejects_unknown_and_criterion_ref_fields(self) -> None:
-        for forbidden in ("criterion", "criterion_ref", "criterion_id", "unexpected"):
-            with self.subTest(forbidden=forbidden):
-                requests = [
-                    {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
-                    {
-                        "jsonrpc": "2.0",
-                        "id": 2,
-                        "method": "tools/call",
-                        "params": {
-                            "name": "execute_capture_plan",
-                            "arguments": {
-                        "schemaVersion": 1,
-                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
-
-                                "url": "about:blank",
-                                "type": "screenshot",
-                                "state": "ok",
-                                "actions": [],
-                                "artifact_path": "evidence/x.png",
-                                forbidden: "L6.3",
-                            },
-                        },
-                    },
-                ]
-                completed = _run_stdio(requests, timeout=15)
-                self.assertEqual(completed.returncode, 0, completed.stderr)
-                result = _responses(completed)[1]["result"]
-                self.assertTrue(result.get("isError"), result)
-                self.assertIn(forbidden, result["content"][0]["text"])
+            self.assertEqual(artifact.read_bytes(), sentinel)
+            self.assertEqual(fake.calls, [])
 
     def test_malformed_messages_return_parse_error_and_server_continues(self) -> None:
         ping = json.dumps({"jsonrpc": "2.0", "id": 2, "method": "ping"}).encode()
@@ -506,9 +346,91 @@ class EvidencePurePathTests(unittest.TestCase):
         self.assertEqual(bodies[0]["error"]["code"], -32700)
         self.assertEqual(bodies[1]["id"], 2)
 
+class _FakeBrowserAdapter:
+    def __init__(self, observed_state: str = "rendered", error: Exception | None = None):
+        self.observed_state = observed_state
+        self.error = error
+        self.calls: list[dict] = []
+
+    def capture(self, **request):
+        self.calls.append(request)
+        if self.error is not None:
+            raise self.error
+        request["out_path"].parent.mkdir(parents=True, exist_ok=True)
+        request["out_path"].write_bytes(b"fake-artifact")
+        return self.observed_state
+
+
+class EvidenceRuntimeTests(unittest.TestCase):
+    """Capture behavior through the runtime interface and a fake adapter."""
+
+    def test_runtime_writes_through_adapter_and_returns_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake = _FakeBrowserAdapter("ready")
+            with mock.patch.object(capture_runtime, "_run_root", return_value=root):
+                payload = capture_runtime.execute_capture_plan(
+                    _v1_capture_args(
+                        url="file:///fixture.html",
+                        actions=[{"do": "click", "selector": "#submit"}],
+                    ),
+                    fake,
+                )
+
+            self.assertEqual(payload["result"], "captured")
+            self.assertEqual(payload["observed_state"], "ready")
+            self.assertEqual(payload["artifact"], "evidence/x.png")
+            self.assertEqual(len(fake.calls), 1)
+            self.assertEqual(fake.calls[0]["url"], "file:///fixture.html")
+            self.assertEqual(fake.calls[0]["capture_type"], "screenshot")
+            self.assertEqual(
+                fake.calls[0]["actions"],
+                [{"do": "click", "selector": "#submit"}],
+            )
+            self.assertEqual(
+                fake.calls[0]["viewport"],
+                payload["request"]["viewport"],
+            )
+
+    def test_runtime_adapter_failure_preserves_failed_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake = _FakeBrowserAdapter(error=RuntimeError("capture unavailable"))
+            with mock.patch.object(capture_runtime, "_run_root", return_value=root):
+                payload = capture_runtime.execute_capture_plan(_v1_capture_args(), fake)
+
+            self.assertEqual(payload["result"], "failed")
+            self.assertEqual(payload["observed_state"], "unknown")
+            self.assertEqual(payload["error"], "capture unavailable")
+            self.assertFalse((root / "evidence" / "x.png").exists())
+
+    def test_runtime_refuses_existing_artifact_before_adapter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact = root / "evidence" / "x.png"
+            artifact.parent.mkdir()
+            artifact.write_bytes(b"original")
+            fake = _FakeBrowserAdapter()
+            with mock.patch.object(capture_runtime, "_run_root", return_value=root):
+                payload = capture_runtime.execute_capture_plan(_v1_capture_args(), fake)
+
+            self.assertEqual(payload["result"], "failed")
+            self.assertIn("artifact already exists", payload["error"])
+            self.assertEqual(fake.calls, [])
+            self.assertEqual(artifact.read_bytes(), b"original")
+
 
 class EvidenceCaptureTests(unittest.TestCase):
-    """Real-browser captures; require Playwright + chromium."""
+    """Production Playwright adapter integration; requires chromium."""
+
+    @staticmethod
+    def _capture(root: Path, arguments: dict) -> dict:
+        """Exercise the production runtime with its real browser adapter."""
+        with mock.patch.object(capture_runtime, "_run_root", return_value=root):
+            return capture_runtime.execute_capture_plan(
+                arguments,
+                capture_runtime.PlaywrightBrowserAdapter(),
+            )
 
     def test_screenshot_capture_writes_artifact_never_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -519,51 +441,23 @@ class EvidenceCaptureTests(unittest.TestCase):
             evidence.mkdir()
             artifact_rel = "evidence/L6.3-error.png"
             artifact_abs = root / artifact_rel
-            url = html.resolve().as_uri()
 
-            requests = [
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "initialize",
-                    "params": {"protocolVersion": "2025-06-18"},
-                },
-                {
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "execute_capture_plan",
-                        "arguments": {
-                        "schemaVersion": 1,
-                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
-
-                            "url": url,
-                            "type": "screenshot",
-                            "state": "error",
-                            "actions": [
-                                {"do": "click", "selector": "#submit"},
-                            ],
-                            "artifact_path": artifact_rel,
-                        },
-                    },
-                },
-            ]
-            completed = _run_stdio(requests, timeout=45, cwd=root)
-            self.assertEqual(completed.returncode, 0, completed.stderr)
-            responses = _responses(completed)
-            self.assertEqual([r["id"] for r in responses], [1, 2])
-            self.assertFalse(responses[1]["result"].get("isError", False), responses[1])
-            payload = _structured(responses[1])
+            payload = self._capture(
+                root,
+                _v1_capture_args(
+                    url=html.resolve().as_uri(),
+                    state="error",
+                    actions=[{"do": "click", "selector": "#submit"}],
+                    artifact_path=artifact_rel,
+                ),
+            )
             self.assertEqual(payload["result"], "captured")
             self.assertEqual(payload["observed_state"], "error")
             self.assertEqual(payload["error"], "")
             self.assertTrue(artifact_abs.is_file(), f"missing {artifact_abs}")
             self.assertGreater(artifact_abs.stat().st_size, 100)
-            # Provider must never write manifest.
             self.assertFalse((evidence / "manifest.jsonl").exists())
             self.assertEqual(payload["artifact"], artifact_rel)
-            # P0-1: absolute written_path so RUN_ROOT/cwd misconfig is visible
             self.assertIn("written_path", payload)
             self.assertEqual(
                 Path(payload["written_path"]).resolve(),
@@ -580,35 +474,14 @@ class EvidenceCaptureTests(unittest.TestCase):
                 encoding="utf-8",
             )
             artifact_rel = "evidence/L6.1-ok.png"
-            requests = [
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "initialize",
-                    "params": {"protocolVersion": "2025-06-18"},
-                },
-                {
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "execute_capture_plan",
-                        "arguments": {
-                        "schemaVersion": 1,
-                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
-
-                            "url": html.resolve().as_uri(),
-                            "type": "screenshot",
-                            "state": "ok",
-                            "actions": [],
-                            "artifact_path": artifact_rel,
-                        },
-                    },
-                },
-            ]
-            completed = _run_stdio(requests, timeout=45, cwd=root)
-            self.assertEqual(completed.returncode, 0, completed.stderr)
-            payload = _structured(_responses(completed)[1])
+            payload = self._capture(
+                root,
+                _v1_capture_args(
+                    url=html.resolve().as_uri(),
+                    state="ok",
+                    artifact_path=artifact_rel,
+                ),
+            )
             self.assertEqual(payload["result"], "captured")
             self.assertEqual(payload["observed_state"], "unknown")
 
@@ -627,61 +500,41 @@ class EvidenceCaptureTests(unittest.TestCase):
                     trace,
                 ),
             ]
-            for request_id, (capture_type, actions, artifact) in enumerate(
-                calls, start=2
-            ):
+            for capture_type, actions, artifact in calls:
                 with self.subTest(capture_type=capture_type):
-                    requests = [
-                        {
-                            "jsonrpc": "2.0",
-                            "id": 1,
-                            "method": "initialize",
-                            "params": {"protocolVersion": "2025-06-18"},
-                        },
-                        {
-                            "jsonrpc": "2.0",
-                            "id": request_id,
-                            "method": "tools/call",
-                            "params": {
-                                "name": "execute_capture_plan",
-                                "arguments": {
-                        "schemaVersion": 1,
-                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
-
-                                    "url": html.resolve().as_uri(),
-                                    "type": capture_type,
-                                    "state": "error",
-                                    "actions": actions,
-                                    "artifact_path": artifact.relative_to(root).as_posix(),
-                                },
-                            },
-                        },
-                    ]
-                    completed = _run_stdio(requests, timeout=45, cwd=root)
-                    self.assertEqual(completed.returncode, 0, completed.stderr)
-                    payload = _structured(_responses(completed)[1])
+                    payload = self._capture(
+                        root,
+                        _v1_capture_args(
+                            url=html.resolve().as_uri(),
+                            type=capture_type,
+                            state="error",
+                            actions=actions,
+                            artifact_path=artifact.relative_to(root).as_posix(),
+                        ),
+                    )
                     self.assertEqual(payload["result"], "captured", payload)
                     self.assertTrue(artifact.is_file(), artifact)
                     if capture_type == "a11y tree":
                         parsed = json.loads(artifact.read_text(encoding="utf-8"))
-                        self.assertIn("Export jobs", json.dumps(parsed, ensure_ascii=False))
-                        self.assertIn("Retry", json.dumps(parsed, ensure_ascii=False))
+                        serialized = json.dumps(parsed, ensure_ascii=False)
+                        self.assertIn("Export jobs", serialized)
+                        self.assertIn("Retry", serialized)
                     else:
                         with zipfile.ZipFile(artifact) as archive:
                             names = archive.namelist()
                         self.assertTrue(any(name.endswith("trace.trace") for name in names))
 
     def test_select_option_action_drives_native_select(self) -> None:
-        """select_option drives a native <select> by value or label (issue 02)."""
+        """select_option drives a native <select> by value or label."""
         select_html = """<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>select-fixture</title></head>
 <body data-state="idle">
-  <label for="pick">行业</label>
+  <label for="pick">Industry</label>
   <select id="pick">
-    <option value="">请选择</option>
-    <option value="a">软件 / 互联网</option>
-    <option value="b">制造业</option>
+    <option value="">Choose</option>
+    <option value="a">Software / Internet</option>
+    <option value="b">Manufacturing</option>
   </select>
   <script>
     document.getElementById("pick").addEventListener("change", (e) => {
@@ -693,7 +546,11 @@ class EvidenceCaptureTests(unittest.TestCase):
 """
         cases = [
             ("by value", {"do": "select_option", "selector": "#pick", "value": "b"}, "b"),
-            ("by label", {"do": "select_option", "selector": "#pick", "label": "软件 / 互联网"}, "a"),
+            (
+                "by label",
+                {"do": "select_option", "selector": "#pick", "label": "Software / Internet"},
+                "a",
+            ),
         ]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -703,37 +560,16 @@ class EvidenceCaptureTests(unittest.TestCase):
             for label, action, expected_state in cases:
                 with self.subTest(label=label):
                     artifact_rel = f"evidence/select-{label.replace(' ', '')}.png"
-                    requests = [
-                        {
-                            "jsonrpc": "2.0",
-                            "id": 1,
-                            "method": "initialize",
-                            "params": {"protocolVersion": "2025-06-18"},
-                        },
-                        {
-                            "jsonrpc": "2.0",
-                            "id": 2,
-                            "method": "tools/call",
-                            "params": {
-                                "name": "execute_capture_plan",
-                                "arguments": {
-                        "schemaVersion": 1,
-                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
-
-                                    "url": html.resolve().as_uri(),
-                                    "type": "screenshot",
-                                    "state": expected_state,
-                                    "actions": [action],
-                                    "artifact_path": artifact_rel,
-                                },
-                            },
-                        },
-                    ]
-                    completed = _run_stdio(requests, timeout=45, cwd=root)
-                    self.assertEqual(completed.returncode, 0, completed.stderr)
-                    payload = _structured(_responses(completed)[1])
+                    payload = self._capture(
+                        root,
+                        _v1_capture_args(
+                            url=html.resolve().as_uri(),
+                            state=expected_state,
+                            actions=[action],
+                            artifact_path=artifact_rel,
+                        ),
+                    )
                     self.assertEqual(payload["result"], "captured", payload)
-                    # select_option fired change -> body[data-state] reflects it
                     self.assertEqual(payload["observed_state"], expected_state, payload)
                     self.assertTrue((root / artifact_rel).is_file())
 
@@ -756,25 +592,20 @@ class EvidenceCaptureTests(unittest.TestCase):
             ),
             ("playwright unavailable", {**base_arguments, "url": "about:blank"}, True),
         ]
-        for label, arguments, no_site in cases:
+        for label, arguments, unavailable in cases:
             with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
-                requests = [
-                    {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
-                    {
-                        "jsonrpc": "2.0",
-                        "id": 2,
-                        "method": "tools/call",
-                        "params": {"name": "execute_capture_plan", "arguments": arguments},
-                    },
-                ]
-                completed = _run_stdio(
-                    requests,
-                    timeout=45,
-                    cwd=Path(tmp),
-                    no_site=no_site,
-                )
-                self.assertEqual(completed.returncode, 0, completed.stderr)
-                payload = _structured(_responses(completed)[1])
+                root = Path(tmp)
+                if unavailable:
+                    with mock.patch.object(
+                        capture_runtime,
+                        "PlaywrightBrowserAdapter",
+                        side_effect=ImportError("playwright unavailable"),
+                    ), mock.patch.object(
+                        capture_runtime, "_run_root", return_value=root
+                    ):
+                        payload = capture_runtime.execute_capture_plan(arguments)
+                else:
+                    payload = self._capture(root, arguments)
                 self.assertEqual(payload["result"], "failed")
                 self.assertEqual(payload["observed_state"], "unknown")
 
@@ -789,36 +620,18 @@ class EvidenceCaptureTests(unittest.TestCase):
             artifact = root / artifact_rel
             artifact.write_bytes(b"pre-existing-by-hand")
 
-            requests = [
-                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
-                {
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "execute_capture_plan",
-                        "arguments": {
-                        "schemaVersion": 1,
-                        "viewport": {"width": 390, "height": 844, "devicePixelRatio": 2.0, "colorScheme": "light"},
-
-                            "url": html.resolve().as_uri(),
-                            "type": "screenshot",
-                            "state": "error",
-                            "actions": [],
-                            "artifact_path": artifact_rel,
-                            "overwrite": True,
-                        },
-                    },
-                },
-            ]
-            completed = _run_stdio(requests, timeout=45, cwd=root)
-            self.assertEqual(completed.returncode, 0, completed.stderr)
-            payload = _structured(_responses(completed)[1])
+            payload = self._capture(
+                root,
+                _v1_capture_args(
+                    url=html.resolve().as_uri(),
+                    state="error",
+                    artifact_path=artifact_rel,
+                    overwrite=True,
+                ),
+            )
             self.assertEqual(payload["result"], "captured", payload)
-            # Sentinel replaced with a real screenshot (>100 bytes).
             self.assertGreater(artifact.stat().st_size, 100)
             self.assertNotEqual(artifact.read_bytes(), b"pre-existing-by-hand")
-
 
 if __name__ == "__main__":
     unittest.main()

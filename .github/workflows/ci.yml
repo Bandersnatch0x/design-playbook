@@ -119,10 +119,11 @@ jobs:
             -v
 
       - name: Evidence MCP stdio — pure-path tests (required, no Playwright)
-        # These never reach the Playwright import in execute_capture_plan
-        # (server.py): unknown-arg / manifest.jsonl / G6 evidence-subtree
-        # containment / overwrite opt-in / JSON-RPC parse-error all
-        # short-circuit first, so they pass with or without chromium.
+        # Direct runtime tests cover argument rejection, containment,
+        # run-root warnings, and overwrite behavior through
+        # execute_capture_plan with a fake browser adapter. Narrow stdio tests
+        # cover only schema and JSON-RPC transport behavior. Neither needs
+        # Chromium.
         # Selection is by class name (review item M3): every test in
         # EvidencePurePathTests runs here; EvidenceCaptureTests runs in the
         # chromium gate below. Unlike the previous -k keyword OR-list, new

@@ -26,7 +26,6 @@ are untouched.
 """
 from __future__ import annotations
 
-import json
 import shutil
 import uuid
 from contextlib import contextmanager
@@ -34,7 +33,6 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from design_playbook.mcp.preview.transaction import (
-    ConfirmRecordError,
     DirectoryLockError,
     PROJECTION_LOCK_NAME,
     atomic_write,
@@ -45,7 +43,7 @@ from design_playbook.mcp.preview.transaction import (
     render_log,
     valid_entries,
 )
-from design_playbook.mcp.preview.integrity import prototype_html_digest
+from design_playbook.mcp.preview import compatibility
 from design_playbook.mcp.preview.util import _now_iso
 
 VERSION_SCHEMA_VERSION = 1
@@ -119,40 +117,18 @@ def _version_lock(preview_dir: Path) -> Iterator[None]:
 
 
 def _load_version(path: Path) -> dict[str, Any] | None:
-    """Validate a named-version record. Raises VersionError on corrupt files."""
-    if not path.is_file():
-        return None
+    """Compatibility alias for the historical private reader."""
     try:
-        record = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise VersionError(f"version record unreadable: {path}") from exc
-    required = {
-        "schema_version", "seq", "version_id", "name", "kind", "round",
-        "decision_id", "timestamp",
-    }
-    if (
-        not isinstance(record, dict)
-        or record.get("schema_version") != VERSION_SCHEMA_VERSION
-        or not required.issubset(record)
-        or not isinstance(record.get("seq"), int)
-        or not isinstance(record.get("name"), str)
-        or not record["name"].strip()
-        or record.get("kind") not in VALID_KINDS
-        or not isinstance(record.get("round"), int)
-        or not isinstance(record.get("decision_id"), str)
-        or not isinstance(record.get("timestamp"), str)
-    ):
-        raise VersionError(f"version record invalid: {path}")
-    return record
+        return compatibility._load_version(path)
+    except compatibility.VersionError as exc:
+        raise VersionError(str(exc)) from exc
 
 
 def _valid_versions(preview_dir: Path) -> list[dict[str, Any]]:
-    records: list[dict[str, Any]] = []
-    for path in sorted(preview_dir.glob("version-*.json")):
-        record = _load_version(path)
-        if record is not None:
-            records.append(record)
-    return records
+    try:
+        return compatibility.list_versions(preview_dir)
+    except compatibility.VersionError as exc:
+        raise VersionError(str(exc)) from exc
 
 
 def _next_seq(preview_dir: Path) -> int:
@@ -238,16 +214,13 @@ def create_named_version(
 
 def render_versions_log(preview_dir: Path) -> str:
     """log.md projection incl. versions section (authority = entry/version files)."""
-    blocks = [render_log(valid_entries(preview_dir))]
-    versions = sorted(_valid_versions(preview_dir), key=lambda v: v["seq"])
-    if versions:
-        lines = ["", "## versions"]
-        for v in versions:
-            lines.append(
-                f"- [{v['seq']}] {v['name']} | round {v['round']} | "
-                f"{v['kind']} | {v['timestamp']}")
-        blocks.append("\n".join(lines))
-    return "".join(blocks)
+    try:
+        return compatibility.render_versions_log(
+            preview_dir,
+            render_log(valid_entries(preview_dir)),
+        )
+    except compatibility.VersionError as exc:
+        raise VersionError(str(exc)) from exc
 
 
 def _refresh_log(preview_dir: Path) -> None:
@@ -276,72 +249,36 @@ def state_at(preview_dir: Path, round_n: int) -> dict[str, Any]:
     confirm record if confirmed, and all named versions at or before N.
     Raises VersionError when N has no decision entry.
     """
-    entry = load_entry(preview_dir / f"decision-round-{round_n}.json")
-    if entry is None:
-        raise VersionError(f"round {round_n} has no decision entry")
-    prototype = preview_dir / f"round-{round_n}.html"
-    prototype_html = None
-    prototype_path = None
-    prototype_mode = entry.get("prototype_mode")
-    if prototype_mode is None:
-        # Schema-v1 entries written before prototype_mode used file presence.
-        prototype_mode = "html" if prototype.is_file() else "path"
-    if prototype_mode == "html":
-        if not prototype.is_file():
-            raise VersionError(f"prototype snapshot missing: {prototype}")
-        try:
-            prototype_bytes = prototype.read_bytes()
-            prototype_html = prototype_bytes.decode("utf-8")
-            prototype_html = prototype_html.replace("\r\n", "\n").replace("\r", "\n")
-        except (OSError, UnicodeError) as exc:
-            raise VersionError(f"prototype snapshot unreadable: {prototype}") from exc
-        expected_hash = str(entry["binding"].get("prototype_html_hash") or "")
-        actual_hash = prototype_html_digest(prototype_bytes)
-        if actual_hash != expected_hash:
-            raise VersionError(f"prototype digest mismatch: {prototype}")
-        prototype_path = str(prototype)
-    elif prototype_mode == "path":
-        stored_path = entry.get("prototype_path")
-        if isinstance(stored_path, str) and stored_path.strip():
-            prototype_path = stored_path
-    else:
-        raise VersionError(
-            f"invalid prototype mode for round {round_n}: {prototype_mode!r}")
+    decisions = compatibility.DecisionAccess(
+        load_entry=load_entry,
+        load_confirm_for_entry=load_confirm_for_entry,
+        valid_entries=valid_entries,
+    )
     try:
-        confirm = load_confirm_for_entry(preview_dir, entry)
-    except ConfirmRecordError as exc:
+        return compatibility.state_at(preview_dir, round_n, decisions)
+    except compatibility.VersionError as exc:
         raise VersionError(str(exc)) from exc
-    versions = [v for v in _valid_versions(preview_dir) if v["round"] <= round_n]
-    return {
-        "round": round_n,
-        "decision_id": entry["decision_id"],
-        "prototype_html": prototype_html,
-        "prototype_path": prototype_path,
-        "binding": entry["binding"],
-        "outcome": entry["outcome"],
-        "confirm": confirm,
-        "versions": versions,
-        "digest": entry["binding"]["digest"],
-    }
 
 
 def timeline(preview_dir: Path) -> list[dict[str, Any]]:
     """Unified, timestamp-ordered view: decision events + named versions."""
-    items: list[dict[str, Any]] = []
-    for entry in valid_entries(preview_dir):
-        item = dict(entry)
-        item["event_type"] = "decision"
-        items.append(item)
-    for record in _valid_versions(preview_dir):
-        item = dict(record)
-        item["event_type"] = "version"
-        items.append(item)
-    return sorted(items, key=lambda e: (str(e["timestamp"]), e.get("seq", 0)))
+    decisions = compatibility.DecisionAccess(
+        load_entry=load_entry,
+        load_confirm_for_entry=load_confirm_for_entry,
+        valid_entries=valid_entries,
+    )
+    try:
+        return compatibility.timeline(preview_dir, decisions)
+    except compatibility.VersionError as exc:
+        raise VersionError(str(exc)) from exc
 
 
 def list_versions(preview_dir: Path) -> list[dict[str, Any]]:
     """Named versions only, ascending seq."""
-    return sorted(_valid_versions(preview_dir), key=lambda v: v["seq"])
+    try:
+        return compatibility.list_versions(preview_dir)
+    except compatibility.VersionError as exc:
+        raise VersionError(str(exc)) from exc
 
 
 def fork(

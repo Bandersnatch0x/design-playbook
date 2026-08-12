@@ -69,7 +69,8 @@ from design_playbook.scripts.g6_warnings import (  # noqa: E402
 
 # Preview occurrence facts for the strict-mode G5 check; G5 rules themselves
 # live in g5_preview.py (C1 / ADR-0004 keeps the integrity rules bundled).
-from design_playbook.mcp.preview.integrity import inspect_preview  # noqa: E402
+from design_playbook.scripts.g6_records import ledger_observed  # noqa: E402
+from design_playbook.scripts.run_facts import RunFacts, capture_run_facts  # noqa: E402
 
 try:
     from design_playbook.scripts.g7_contract_drift import check_g7 as check_g7
@@ -87,16 +88,35 @@ def run(
         require_preview: bool = False,
         require_evidence: bool = False,
         contract_project: str | None = None,
-        contract_run: str | None = None) -> tuple[list[Finding], list[Finding]]:
+        contract_run: str | None = None,
+        run_facts: RunFacts | None = None) -> tuple[list[Finding], list[Finding]]:
     """Return ``(errors, warnings)``. Errors fail the run; warnings do not."""
     errs: list[Finding] = []
     warns: list[Finding] = []
-    spec_text = Path(spec_path).read_text(encoding="utf-8")
-    pointback_text = Path(pb_path).read_text(encoding="utf-8")
-    errs += check_spec(spec_text)
-    errs += check_pointback(pointback_text, len(_l6_items(spec_text)))
     pd = Path(preview_dir) if preview_dir else None
-    preview_snapshot = inspect_preview(pd) if pd is not None else None
+    ed = Path(evidence_dir) if evidence_dir else None
+    rr = Path(run_root) if run_root else None
+    facts = run_facts or capture_run_facts(
+        spec_path=Path(spec_path), pointback_path=Path(pb_path),
+        preview_dir=pd, evidence_dir=ed, run_root=rr,
+    )
+    if facts.read_errors:
+        failure = facts.read_errors[0]
+        if failure.code == "missing":
+            raise FileNotFoundError(
+                2, "No such file or directory", str(failure.path)
+            )
+        raise OSError(failure.message)
+    spec_text = facts.spec_text
+    pointback_text = facts.pointback_text
+    observed_rows = ledger_observed(pointback_text, facts.ledger)
+    entries = list(facts.manifest_entries)
+    errs += check_spec(spec_text)
+    errs += check_pointback(
+        pointback_text, len(_l6_items(spec_text)),
+        ledger_facts=facts.ledger, verdict_facts=facts.verdict,
+    )
+    preview_snapshot = facts.preview
     dr = Path(decision_report) if decision_report else None
     if require_preview and (
         preview_snapshot is None or not preview_snapshot.occurred
@@ -111,8 +131,6 @@ def run(
             repair="Pass --preview-dir with preview artifacts or drop the flag",
         ))
     errs += check_preview(pd, dr, preview_snapshot)
-    ed = Path(evidence_dir) if evidence_dir else None
-    rr = Path(run_root) if run_root else None
     if require_evidence:
         if ed is None or not ed.is_dir():
             errs.append(finding(
@@ -124,7 +142,7 @@ def run(
                 actual="missing or not a directory",
                 repair="Pass --evidence-dir to a real evidence directory",
             ))
-        elif not _ledger_has_evidence_binding(pointback_text):
+        elif not _ledger_has_evidence_binding(pointback_text, observed_rows):
             errs.append(finding(
                 "G6.require_evidence_binding",
                 "G6 evidence: --require-evidence set but no ledger "
@@ -134,9 +152,14 @@ def run(
                 actual="no evidence/ binding",
                 repair="Bind at least one L6 criterion to an evidence artifact",
             ))
-    errs += check_evidence(pointback_text, len(_l6_items(spec_text)), ed, rr)
-    warns += check_manifest_ts_warnings(ed)
-    warns += check_superseded_ledger_warnings(pointback_text, ed)
+    errs += check_evidence(
+        pointback_text, len(_l6_items(spec_text)), ed, rr,
+        observed_rows=observed_rows, entries=entries,
+    )
+    warns += check_manifest_ts_warnings(ed, entries=entries)
+    warns += check_superseded_ledger_warnings(
+        pointback_text, ed, observed_rows=observed_rows, entries=entries,
+    )
     if contract_project and contract_run:
         if check_g7 is None:
             errs.append(finding(

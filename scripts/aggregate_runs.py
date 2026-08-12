@@ -21,14 +21,18 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
-import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-VALIDATE_RUN = Path(__file__).resolve().parents[1] / "packages" / "design-playbook" / "scripts" / "validate_run.py"
+PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "packages" / "design-playbook"
+if str(PACKAGE_ROOT) not in sys.path:
+    sys.path.insert(0, str(PACKAGE_ROOT))
+
+from design_playbook.mcp.evidence.ledger_syntax import LedgerFacts, parse_ledger  # noqa: E402
+from design_playbook.scripts.run_facts import RunFacts, capture_run_facts  # noqa: E402
+from design_playbook.scripts.validate_run import run as validate_run  # noqa: E402
 
 DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
 SPEC_NAMES = ("spec.md", "01-spec.md")
@@ -79,96 +83,59 @@ def run_meta(run_dir: Path, root: Path) -> dict[str, str | None]:
     }
 
 
-def artifacts(run_dir: Path) -> dict[str, bool]:
-    spec = any((run_dir / s).is_file() for s in SPEC_NAMES)
+def artifacts(run_dir: Path, run_facts: RunFacts | None = None) -> dict[str, bool]:
+    facts = run_facts or capture_run_facts(run_root=run_dir)
+    existing = facts.existing_paths
+    spec = any(s in existing for s in SPEC_NAMES)
     return {
-        "plan": (run_dir / "plan.md").is_file(),
-        "point_back": (run_dir / "point-back.md").is_file(),
-        "evidence_manifest": (run_dir / "evidence" / "manifest.jsonl").is_file(),
-        "preview": (run_dir / "preview").is_dir(),
+        "plan": "plan.md" in existing,
+        "point_back": "point-back.md" in existing,
+        "evidence_manifest": "evidence/manifest.jsonl" in existing,
+        "preview": "preview" in existing,
         "spec": spec,
     }
 
 
-def ledger_rows(point_back_text: str) -> list[dict[str, str]]:
+def ledger_rows(
+        point_back_text: str, ledger_facts: LedgerFacts | None = None
+) -> list[dict[str, str]]:
     """Parse the evidence-ledger blocks (criterion/required/observed/result)."""
+    facts = ledger_facts or parse_ledger(point_back_text)
     rows: list[dict[str, str]] = []
-    lines = point_back_text.splitlines()
-    current: dict[str, str] | None = None
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if stripped.startswith("criterion:") or stripped.startswith("criterion :"):
-            if current:
-                rows.append(current)
-            current = {"criterion": stripped.split(":", 1)[1].strip()}
-            continue
-        if current is None:
-            continue
-        for key in ("required", "observed", "result"):
-            low = stripped.lower()
-            if low.startswith(key + ":") or low.startswith(key + " :"):
-                current[key] = stripped.split(":", 1)[1].strip()
-                break
-        if stripped.startswith("#") or stripped.startswith("##"):
-            if current:
-                rows.append(current)
-                current = None
-    if current:
-        rows.append(current)
+    for fact in facts.rows:
+        row: dict[str, str] = {}
+        for key in ("criterion", "required", "observed", "result"):
+            values = fact.values(key)
+            if values:
+                row[key] = values[0]
+        rows.append(row)
     return rows
 
 
-def _spec_path(run_dir: Path) -> Path | None:
-    for s in SPEC_NAMES:
-        p = run_dir / s
-        if p.is_file():
-            return p
-    return None
-
-
-def _read_text_lossy(path: Path) -> str:
-    """Read with UTF-8, falling back to GB18030 for legacy dogfood runs.
-
-    Early dogfood point-back files were authored with GBK-family encodings;
-    forcing UTF-8 mangles CJK observed text and defeats repeat-blocker
-    normalization. GB18030 is a superset of GBK/GB2312 and always decodes.
-    """
-    raw = path.read_bytes()
-    for enc in ("utf-8", "gb18030"):
-        try:
-            return raw.decode(enc)
-        except UnicodeDecodeError:
-            continue
-    return raw.decode("utf-8", errors="replace")
-
-
-def gate_status(run_dir: Path) -> dict[str, str]:
-    """Run validate_run over the run's spec+point-back; exit 0 = ok."""
-    spec = _spec_path(run_dir)
-    pb = run_dir / "point-back.md"
-    if spec is None or not pb.is_file():
+def gate_status(run_dir: Path, run_facts: RunFacts | None = None) -> dict[str, str]:
+    """Evaluate validate_run policy over the same immutable run snapshot."""
+    facts = run_facts or capture_run_facts(
+        run_root=run_dir, pointback_fallback_encoding="gb18030"
+    )
+    spec = facts.spec_path
+    if spec is None or "point-back.md" not in facts.existing_paths:
         return {"status": "skipped", "detail": "no spec.md + point-back.md pair"}
-    cmd = [sys.executable, str(VALIDATE_RUN), str(spec), str(pb)]
-    if (run_dir / "preview").is_dir():
-        cmd += ["--preview-dir", str(run_dir / "preview")]
-    if (run_dir / "evidence").is_dir():
-        cmd += ["--evidence-dir", str(run_dir / "evidence")]
-    cmd += ["--run-root", str(run_dir)]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return {"status": "error", "detail": str(exc)}
-    if proc.returncode == 0:
+        errors, _warnings = validate_run(
+            str(spec),
+            str(facts.pointback_path),
+            preview_dir=str(facts.preview_dir),
+            evidence_dir=str(facts.evidence_dir),
+            run_root=str(run_dir),
+            run_facts=facts,
+        )
+    except (OSError, UnicodeError):
+        # The historical subprocess exited non-zero for validator I/O errors;
+        # its RUN ERROR line was filtered, leaving this fallback projection.
+        return {"status": "fail", "detail": "violations"}
+    if not errors:
         return {"status": "ok", "detail": "RUN OK"}
-    first_err = ""
-    for line in (proc.stdout + proc.stderr).splitlines():
-        line = line.strip()
-        if line and "RUN" not in line:
-            first_err = line[:200]
-            break
-    return {"status": "fail", "detail": first_err or "violations"}
+    return {"status": "fail", "detail": f"FAIL  {errors[0].message}"[:200]}
 
 
 def normalize(text: str) -> str:
@@ -190,11 +157,14 @@ def aggregate(runs: list[Path], root: Path, top: int) -> dict:
     by_result: dict[str, int] = {}
     blockers: dict[str, dict] = {}
     for run_dir in runs:
+        facts = capture_run_facts(
+            run_root=run_dir, pointback_fallback_encoding="gb18030"
+        )
         meta = run_meta(run_dir, root)
-        art = artifacts(run_dir)
-        gate = gate_status(run_dir)
-        pb_text = _read_text_lossy(run_dir / "point-back.md")
-        rows = ledger_rows(pb_text)
+        art = artifacts(run_dir, facts)
+        gate = gate_status(run_dir, facts)
+        pb_text = facts.pointback_text
+        rows = ledger_rows(pb_text, facts.ledger)
         run_rec = {
             "id": meta["id"],
             "date": meta["date"],

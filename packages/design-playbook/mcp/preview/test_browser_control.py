@@ -15,6 +15,7 @@ Covers the secure-ship 0.4.4 ticket 01 acceptance:
 """
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import socket
@@ -22,11 +23,9 @@ import subprocess
 import sys
 import tempfile
 import threading
-import time
 import unittest
 from pathlib import Path
 from typing import Any
-from unittest import mock
 from urllib.parse import urlencode
 
 # One import seam (ADR-0022): package root on sys.path once, then absolute
@@ -34,41 +33,14 @@ from urllib.parse import urlencode
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
-from design_playbook.mcp.preview import browser  # noqa: E402
+from design_playbook.mcp.preview import review_session  # noqa: E402
 from design_playbook.mcp.preview import control as preview_control  # noqa: E402
-from design_playbook.mcp.preview.browser import (  # noqa: E402
-    _DecisionSession,
-    _generate_decision_token,
-)
 from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
 # HTTP client helpers (raw sockets, mirroring test_server_stdio.py)            #
 # --------------------------------------------------------------------------- #
-
-
-def _stash_http(server_module: Any) -> tuple[type, dict[str, int]]:
-    """Wrap HTTPServer so the bound port is exposed to the client thread."""
-    real = server_module.HTTPServer
-    port_box: dict[str, int] = {}
-
-    class StashingHTTPServer(real):  # type: ignore[misc, valid-type]
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            super().__init__(*args, **kwargs)
-            port_box["port"] = self.server_address[1]
-
-    return StashingHTTPServer, port_box
-
-
-def _wait_for_port(port_box: dict[str, int], deadline: float = 5.0) -> int | None:
-    end = time.time() + deadline
-    while time.time() < end:
-        port = port_box.get("port")
-        if port:
-            return port
-        time.sleep(0.01)
-    return None
 
 
 def _http_round_trip(port: int, raw_request: bytes) -> bytes:
@@ -119,17 +91,33 @@ class _FakeBrowserAdapter:
     it owns no executable, PID, profile, or subprocess.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, client_fn: Any | None = None) -> None:
         self.opened_urls: list[str] = []
         self.closed_handles: list[object] = []
+        self.client_fn = client_fn
+        self.client_thread: threading.Thread | None = None
+        self.client_error: Exception | None = None
 
     def open(self, url: str) -> object:
         self.opened_urls.append(url)
+        if self.client_fn is not None:
+            port = int(url.split(":")[2].split("/")[0])
+
+            def run_client() -> None:
+                try:
+                    self.client_fn(port)
+                except Exception as exc:  # noqa: BLE001
+                    self.client_error = exc
+
+            self.client_thread = threading.Thread(target=run_client, daemon=True)
+            self.client_thread.start()
         # Opaque handle; the real adapter returns a (proc, profile) tuple.
         return ("fake-owned-handle", None)
 
     def close(self, handle: object) -> None:
         self.closed_handles.append(handle)
+        if self.client_thread is not None:
+            self.client_thread.join(timeout=3)
 
 
 def _run_collect(
@@ -141,7 +129,7 @@ def _run_collect(
     round_n: int = 1,
     fake_adapter: _FakeBrowserAdapter | None = None,
 ) -> dict[str, Any]:
-    """Drive browser._collect_via_browser through one fake owned-browser
+    """Drive review_session.collect_review through one fake owned-browser
     adapter (US-4).
 
     ``client_fn(port)`` runs in a thread and is expected to POST something to
@@ -152,40 +140,46 @@ def _run_collect(
     if options is None:
         options = ["确认通过", "需要修改"]
     if fake_adapter is None:
-        fake_adapter = _FakeBrowserAdapter()
-    StashingHTTPServer, port_box = _stash_http(browser)
-
-    def client_wrapper() -> None:
-        port = _wait_for_port(port_box)
-        if not port:
-            return
-        try:
-            client_fn(port)
-        except Exception as exc:  # noqa: BLE001
-            # Surface client-side failures for the main thread; do not hang.
-            port_box["client_error"] = repr(exc)
-
-    client_thread = threading.Thread(target=client_wrapper, daemon=True)
-    client_thread.start()
+        fake_adapter = _FakeBrowserAdapter(client_fn)
+    elif fake_adapter.client_fn is None:
+        fake_adapter.client_fn = client_fn
 
     with tempfile.TemporaryDirectory() as tmp:
         proto = Path(tmp) / "proto.html"
         proto.write_text(proto_html, encoding="utf-8")
-        # US-4: ONE fake owned-browser adapter replaces the four
-        # mock.patch.object calls on _open_preview_window /
-        # _request_browser_window_close / _kill_browser_proc / _rm_tree.
-        with mock.patch.object(
-            browser, "HTTPServer", StashingHTTPServer
-        ), mock.patch.object(
-            browser, "_default_browser_adapter", fake_adapter
-        ):
-            decision = browser._collect_via_browser(proto, summary, options, round_n)
+        decision = review_session.collect_review(
+            proto, summary, options, round_n, fake_adapter
+        )
 
-    client_thread.join(timeout=3)
-    assert not client_thread.is_alive(), "client thread still alive"
-    client_error = port_box.get("client_error")
-    assert not client_error, f"client thread error: {client_error}"
+    assert fake_adapter.client_thread is not None
+    assert not fake_adapter.client_thread.is_alive(), "client thread still alive"
+    assert fake_adapter.client_error is None, fake_adapter.client_error
     return decision
+
+
+def _collect_submitted_anchors(
+    submitted: list[dict[str, Any]], round_n: int
+) -> list[dict[str, Any]]:
+    def client(port: int) -> None:
+        page = _get_page(port)
+        token = _extract_token(page) or ""
+        _post_form(
+            port,
+            {
+                "choice": "确认通过",
+                "feedback": "anchor compatibility",
+                "anchors_json": json.dumps(submitted),
+                "dpb_token": token,
+                "dpb_round": str(round_n),
+            },
+        )
+
+    decision = _run_collect(
+        "<html><body>anchor compatibility</body></html>",
+        client,
+        round_n=round_n,
+    )
+    return decision["anchors"]
 
 
 # --------------------------------------------------------------------------- #
@@ -251,54 +245,6 @@ class ControlResourceAssemblyTests(unittest.TestCase):
         self.assertIn('id="dpb-pill-ready"', control)
         self.assertIn("z-index: 1001", control)
         self.assertIn("z-index: 999", control)
-
-
-# --------------------------------------------------------------------------- #
-# Unit tests: token + session logic                                           #
-# --------------------------------------------------------------------------- #
-
-
-class DecisionTokenUnitTests(unittest.TestCase):
-    def test_token_is_urlsafe_unique_and_long(self) -> None:
-        a = _generate_decision_token()
-        b = _generate_decision_token()
-        self.assertNotEqual(a, b)
-        # secrets.token_urlsafe(32) yields ~43 chars of [A-Za-z0-9_-]
-        self.assertGreaterEqual(len(a), 32)
-        self.assertRegex(a, r"^[A-Za-z0-9_-]+$")
-
-    def test_missing_token_rejected(self) -> None:
-        session = _DecisionSession(1, _generate_decision_token())
-        self.assertFalse(session.validate(1, None))
-        self.assertEqual(session.last_rejection, "missing")
-        self.assertFalse(session.validate(1, ""))
-        self.assertEqual(session.last_rejection, "missing")
-        self.assertFalse(session.locked)
-
-    def test_round_mismatch_rejected(self) -> None:
-        token = _generate_decision_token()
-        session = _DecisionSession(1, token)
-        self.assertFalse(session.validate(2, token))
-        self.assertEqual(session.last_rejection, "round_mismatch")
-        # A failed attempt must not consume the session.
-        self.assertTrue(session.validate(1, token))
-
-    def test_invalid_token_rejected(self) -> None:
-        session = _DecisionSession(1, _generate_decision_token())
-        self.assertFalse(session.validate(1, "not-the-real-token"))
-        self.assertEqual(session.last_rejection, "invalid_token")
-        self.assertFalse(session.locked)
-
-    def test_reuse_rejected_after_first_valid(self) -> None:
-        token = _generate_decision_token()
-        session = _DecisionSession(1, token)
-        self.assertTrue(session.validate(1, token))
-        self.assertTrue(session.locked)
-        # Second POST with the same token (replay) is rejected.
-        self.assertFalse(session.validate(1, token))
-        self.assertEqual(session.last_rejection, "reuse")
-        # Even a different token is rejected once locked.
-        self.assertFalse(session.validate(1, "other"))
 
 
 # --------------------------------------------------------------------------- #
@@ -465,6 +411,13 @@ class TrustBoundaryIntegrationTests(unittest.TestCase):
         self.assertNotIn("rejected", decision)
 
     def test_normal_confirm_with_token_passes(self) -> None:
+        submitted = [{
+            "selector": "div.card > h2",
+            "label": 'h2 "Title"',
+            "comment": "tighten spacing",
+            "tag": "h2",
+        }]
+
         def client(port: int) -> None:
             page = _get_page(port)
             token = _extract_token(page)
@@ -474,7 +427,7 @@ class TrustBoundaryIntegrationTests(unittest.TestCase):
                 {
                     "choice": "确认通过",
                     "feedback": "looks good, ship it",
-                    "anchors_json": "[]",
+                    "anchors_json": json.dumps(submitted),
                     "dpb_token": token,
                     "dpb_round": "1",
                 },
@@ -486,6 +439,11 @@ class TrustBoundaryIntegrationTests(unittest.TestCase):
         self.assertEqual(decision["choice"], "确认通过")
         self.assertEqual(decision["feedback"], "looks good, ship it")
         self.assertFalse(decision["aborted"])
+        self.assertEqual(decision["anchors"][0]["selector"], "div.card > h2")
+        self.assertEqual(decision["anchors"][0]["features"]["tag"], "h2")
+        self.assertEqual(decision["anchors"][0]["features"]["text"], "Title")
+        self.assertEqual(decision["anchors"][0]["features"]["classes"], ["card"])
+        self.assertRegex(decision["anchors"][0]["node_id"], r"^[0-9a-f]{8}$")
         self.assertEqual(
             decision["prototype_html_hash"],
             prototype_html_digest(
@@ -495,6 +453,69 @@ class TrustBoundaryIntegrationTests(unittest.TestCase):
         self.assertNotIn("confirmed", decision)
         self.assertNotIn("floor_pass", decision)
         self.assertNotIn("rejected", decision)
+
+    def test_anchor_node_ids_are_deterministic_and_round_scoped(self) -> None:
+        submitted = [
+            {
+                "selector": "div.card > h2",
+                "label": 'h2 "Title"',
+                "comment": "first",
+                "tag": "h2",
+            },
+            {
+                "selector": "div.card > h2",
+                "label": 'h2 "Title"',
+                "comment": "second",
+                "tag": "h2",
+            },
+        ]
+
+        round_three = _collect_submitted_anchors(submitted, 3)
+        repeated = _collect_submitted_anchors(submitted, 3)
+        round_four = _collect_submitted_anchors(submitted, 4)
+
+        self.assertEqual(
+            [anchor["node_id"] for anchor in round_three],
+            [anchor["node_id"] for anchor in repeated],
+        )
+        self.assertNotEqual(round_three[0]["node_id"], round_three[1]["node_id"])
+        self.assertNotEqual(round_three[0]["node_id"], round_four[0]["node_id"])
+
+    def test_round_zero_omits_anchor_v2_fields(self) -> None:
+        anchors = _collect_submitted_anchors(
+            [
+                {
+                    "selector": "p",
+                    "label": 'p "x"',
+                    "comment": "y",
+                    "tag": "p",
+                }
+            ],
+            0,
+        )
+
+        self.assertNotIn("node_id", anchors[0])
+        self.assertNotIn("features", anchors[0])
+
+    def test_submitted_compatibility_fields_preserve_base_anchor_fields(self) -> None:
+        anchors = _collect_submitted_anchors(
+            [
+                {
+                    "selector": "p",
+                    "label": "p",
+                    "comment": "y",
+                    "tag": "p",
+                    "node_id": "legacy-node",
+                    "features": {"tag": "legacy"},
+                }
+            ],
+            1,
+        )
+
+        self.assertEqual(
+            {key: anchors[0][key] for key in ("selector", "comment", "label", "tag")},
+            {"selector": "p", "comment": "y", "label": "p", "tag": "p"},
+        )
 
     def test_abort_with_token_is_recorded(self) -> None:
         def client(port: int) -> None:
@@ -536,7 +557,7 @@ def _bridge_inner_js() -> str:
     rather than the HTML wrapper. Strips the leading ``<script ...>`` and
     trailing ``</script>`` of the first script block in BRIDGE_SCRIPT.
     """
-    raw = browser.BRIDGE_SCRIPT
+    raw = review_session.BRIDGE_SCRIPT
     m = re.search(r"<script[^>]*>(.*)</script>\s*$", raw, re.DOTALL)
     assert m, f"BRIDGE_SCRIPT is not a single <script>...</script> block: {raw[:80]!r}"
     return m.group(1)
@@ -562,15 +583,15 @@ class PinAnnotationBridgeTests(unittest.TestCase):
         # The bridge is a self-contained <script>...</script> appended to the
         # prototype before escaping into srcdoc. It must be exactly one block
         # so _build_parent_page can concatenate it as a trailer.
-        self.assertTrue(browser.BRIDGE_SCRIPT.startswith("<script"))
-        self.assertTrue(browser.BRIDGE_SCRIPT.rstrip().endswith("</script>"))
+        self.assertTrue(review_session.BRIDGE_SCRIPT.startswith("<script"))
+        self.assertTrue(review_session.BRIDGE_SCRIPT.rstrip().endswith("</script>"))
         # exactly one <script...> open + one </script> close
         self.assertEqual(
-            len(re.findall(r"<script\b", browser.BRIDGE_SCRIPT)), 1,
+            len(re.findall(r"<script\b", review_session.BRIDGE_SCRIPT)), 1,
             "bridge must be a single <script> block",
         )
         self.assertEqual(
-            len(re.findall(r"</script>", browser.BRIDGE_SCRIPT)), 1,
+            len(re.findall(r"</script>", review_session.BRIDGE_SCRIPT)), 1,
             "bridge must close exactly one <script> block",
         )
 
@@ -603,28 +624,6 @@ class PinAnnotationBridgeTests(unittest.TestCase):
             completed.returncode, 0,
             f"bridge script is not valid JS: "
             f"{completed.stderr.decode('utf-8', 'replace')}",
-        )
-
-    def test_build_parent_page_injects_bridge_into_srcdoc(self) -> None:
-        page = browser._build_parent_page(
-            "<html><body>proto-marker-xyz</body></html>",
-            "<div>control</div>",
-        )
-        # The srcdoc attribute carries the escaped prototype + bridge. After
-        # unescaping the srcdoc payload we must find BOTH the prototype body
-        # and the bridge trailer.
-        m = re.search(r'<iframe[^>]*\bsrcdoc="([^"]*)"', page)
-        self.assertIsNotNone(m, "no srcdoc iframe in parent page")
-        import html as html_mod
-        payload = html_mod.unescape(m.group(1))
-        self.assertIn("proto-marker-xyz", payload)
-        self.assertIn("dpbPinAnchor", payload,
-                      "bridge trailer missing from srcdoc payload")
-        # bridge comes AFTER the prototype body (appended, not prepended)
-        self.assertLess(
-            payload.index("proto-marker-xyz"),
-            payload.index("dpbPinAnchor"),
-            "bridge must be appended after prototype body",
         )
 
     def test_bridge_contains_postMessage_with_dpbPinAnchor(self) -> None:
@@ -688,131 +687,8 @@ class PinAnnotationBridgeTests(unittest.TestCase):
         self.assertNotIn("XMLHttpRequest", js,
                          "bridge must not use XHR (postMessage is its only channel)")
 
-    def test_iframe_sandbox_still_excludes_allow_same_origin_with_bridge(self) -> None:
-        # Regression guard: injecting the bridge must NOT relax the sandbox.
-        # allow-same-origin would re-same-origin the iframe and let prototype
-        # scripts read the parent DOM (and the hidden token) — defeating G5.
-        page = browser._build_parent_page(
-            "<html><body>x</body></html>", "<div>control</div>"
-        )
-        m = re.search(r'<iframe[^>]*\bsandbox="([^"]*)"', page)
-        self.assertIsNotNone(m, "no sandboxed iframe in parent page")
-        sandbox_attr = m.group(1)
-        self.assertIn("allow-scripts", sandbox_attr)
-        self.assertNotIn(
-            "allow-same-origin", sandbox_attr,
-            "bridge injection must not re-add allow-same-origin (G5)",
-        )
-
-    def test_bridge_survives_prototype_with_closing_script_tag(self) -> None:
-        # If the prototype itself contains a literal </script> inside a script
-        # block, the bridge (also a <script>) is appended AFTER the escaped
-        # prototype into srcdoc. html.escape neutralizes every </script> in
-        # the prototype to &lt;/script&gt; so neither the prototype's nor the
-        # bridge's script boundaries leak across the srcdoc attribute. Assert
-        # the bridge marker still lands in the srcdoc payload intact.
-        proto = (
-            "<html><body><script>var x = 1; "
-            "console.log('</script>')</script><h1>hi</h1></body></html>"
-        )
-        page = browser._build_parent_page(proto, "<div>control</div>")
-        m = re.search(r'<iframe[^>]*\bsrcdoc="([^"]*)"', page)
-        self.assertIsNotNone(m)
-        import html as html_mod
-        payload = html_mod.unescape(m.group(1))
-        self.assertIn("dpbPinAnchor", payload,
-                      "bridge dropped by prototype </script> — escaping bug")
-        # And the sandbox attribute must not be corrupted by the prototype's
-        # quotes (the whole srcdoc is attribute-escaped).
-        sb = re.search(r'<iframe[^>]*\bsandbox="([^"]*)"', page)
-        self.assertIsNotNone(sb)
-        self.assertIn("allow-scripts", sb.group(1))
-
-
-# --------------------------------------------------------------------------- #
-# BrowserInteraction seam (US-4 / Slice 4: owned-browser adapter)             #
-# --------------------------------------------------------------------------- #
-
-
-class BrowserInteractionSeamTests(unittest.TestCase):
-    """US-4: a minimal BrowserInteraction seam (open(url) -> owned handle /
-    close(handle)) hides owned-browser OS/process/profile details behind one
-    adapter. Browser collection tests drive the real collector through one
-    fake adapter instead of patching process/profile internals.
-
-    Acceptance (architecture-deepening Slice 4):
-
-    - the adapter interface exposes no executable, PID, profile, subprocess,
-      or platform cleanup details;
-    - executable discovery, process launch, profile cleanup, terminate, and
-      kill remain production adapter implementation details;
-    - _collect_via_browser calls through the seam, not the raw private
-      helpers, so one fake replaces the old monkeypatch cluster.
-    """
-
-    def test_owned_browser_adapter_exposes_open_and_close(self) -> None:
-        adapter = browser.OwnedBrowserAdapter()
-        self.assertTrue(callable(getattr(adapter, "open", None)))
-        self.assertTrue(callable(getattr(adapter, "close", None)))
-
-    def test_seam_interface_hides_os_process_profile_details(self) -> None:
-        """The seam exposes no executable, PID, profile, subprocess, or
-        platform cleanup details (US-4 acceptance)."""
-        adapter = browser.OwnedBrowserAdapter()
-        public = {
-            name for name in dir(adapter)
-            if not name.startswith("_")
-        }
-        forbidden = {
-            "executable", "exe", "pid", "profile", "profile_dir",
-            "subprocess", "popen", "taskkill", "pkill", "terminate",
-            "kill", "kill_proc", "rm_tree", "rmtree", "cleanup",
-            "candidates", "browser_candidates", "open_preview_window",
-            "request_browser_window_close", "kill_browser_proc",
-        }
-        leaked = public & forbidden
-        self.assertFalse(
-            leaked, f"seam leaks OS/process/profile details: {leaked}"
-        )
-
-    def test_default_adapter_is_the_collect_injection_point(self) -> None:
-        """_collect_via_browser routes through _default_browser_adapter; one
-        fake replaces the whole owned-browser lifecycle."""
-        self.assertTrue(hasattr(browser, "_default_browser_adapter"))
-        adapter = browser._default_browser_adapter
-        self.assertTrue(callable(getattr(adapter, "open", None)))
-        self.assertTrue(callable(getattr(adapter, "close", None)))
-
-    def test_production_adapter_delegates_to_owned_browser_helpers(self) -> None:
-        """The production adapter delegates open/close to the module-level
-        owned-browser helpers by name, so the production path stays
-        unit-injectable at the helper seam (test_server_stdio patches the
-        helpers directly and must keep intercepting)."""
-        adapter = browser.OwnedBrowserAdapter()
-        with mock.patch.object(
-            browser, "_open_preview_window",
-            return_value=(mock.sentinel.proc, "profile-dir"),
-        ) as opened, mock.patch.object(
-            browser, "_request_browser_window_close"
-        ) as request_close, mock.patch.object(
-            browser, "_kill_browser_proc"
-        ) as kill_browser, mock.patch.object(browser, "_rm_tree") as rm_tree:
-            handle = adapter.open("http://127.0.0.1:1/")
-            adapter.close(handle)
-
-        opened.assert_called_once_with("http://127.0.0.1:1/")
-        request_close.assert_called_once_with(mock.sentinel.proc)
-        kill_browser.assert_called_once_with(mock.sentinel.proc, "profile-dir")
-        rm_tree.assert_called_once_with("profile-dir")
-
-    def test_collect_routes_through_adapter_not_raw_helpers(self) -> None:
-        """_collect_via_browser must call the adapter's open and close rather
-        than the raw owned-browser helpers. Proven indirectly by every
-        TrustBoundaryIntegrationTests case via _run_collect, which patches
-        ONLY _default_browser_adapter: if _collect_via_browser regressed to
-        calling _open_preview_window / _kill_browser_proc directly, those
-        tests would attempt a real OS browser launch and fail. This test
-        asserts the adapter is actually invoked end-to-end on a confirm."""
+    def test_collect_routes_through_browser_adapter(self) -> None:
+        """The public interface uses the supplied adapter end to end."""
         fake = _FakeBrowserAdapter()
 
         def client(port: int) -> None:

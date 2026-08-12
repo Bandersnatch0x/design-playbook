@@ -18,6 +18,7 @@ if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 from design_playbook.mcp.preview import transaction  # noqa: E402
 from design_playbook.mcp.preview import versions  # noqa: E402
+from design_playbook.mcp.preview import compatibility  # noqa: E402
 from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
 from design_playbook.mcp.preview.versions import (  # noqa: E402
     VersionCommittedError,
@@ -69,6 +70,14 @@ def _seed_round(
             preview_dir / f"confirm-round-{round_n}.json",
             transaction.json_text(transaction._confirm_record(entry)))
     return entry
+
+
+def _decision_access() -> compatibility.DecisionAccess:
+    return compatibility.DecisionAccess(
+        load_entry=transaction.load_entry,
+        load_confirm_for_entry=transaction.load_confirm_for_entry,
+        valid_entries=transaction.valid_entries,
+    )
 
 
 class NamedVersionTests(unittest.TestCase):
@@ -314,6 +323,47 @@ class NamedVersionTests(unittest.TestCase):
             log = (d / "log.md").read_text(encoding="utf-8")
             self.assertIn("## round 2", log)
             self.assertIn("initial", log)
+
+
+class CompatibilityInterfaceTests(unittest.TestCase):
+    def test_reads_historical_versions_state_timeline_and_log(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            preview_dir = Path(tmp)
+            _seed_round(preview_dir, 1, "<html>v1</html>")
+            record = create_named_version(
+                preview_dir,
+                round_n=1,
+                name="initial",
+                kind="confirmed",
+            )
+
+            self.assertEqual(compatibility.list_versions(preview_dir), [record])
+            state = compatibility.state_at(preview_dir, 1, _decision_access())
+            self.assertEqual(state["prototype_html"], "<html>v1</html>")
+            self.assertEqual(state["versions"], [record])
+            events = compatibility.timeline(preview_dir, _decision_access())
+            self.assertEqual(
+                {event["event_type"] for event in events},
+                {"decision", "version"},
+            )
+            projected = compatibility.render_versions_log(
+                preview_dir,
+                transaction.render_log(transaction.valid_entries(preview_dir)),
+            )
+            self.assertIn("## versions", projected)
+            self.assertIn("[1] initial | round 1 | confirmed", projected)
+
+    def test_log_projection_is_identical_without_version_records(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            preview_dir = Path(tmp)
+            _seed_round(preview_dir, 1, "<html>v1</html>")
+            decision_log = transaction.render_log(
+                transaction.valid_entries(preview_dir)
+            )
+            self.assertEqual(
+                compatibility.render_versions_log(preview_dir, decision_log),
+                decision_log,
+            )
 
 
 class StateAtTests(unittest.TestCase):

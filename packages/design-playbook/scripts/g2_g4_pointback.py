@@ -10,8 +10,8 @@ from __future__ import annotations
 import re
 
 from design_playbook.scripts._diagnostics import Finding, finding
-from design_playbook.mcp.evidence.ledger_syntax import EVIDENCE_FIELDS, parse_ledger
-from design_playbook.scripts.verdict_syntax import parse_verdict
+from design_playbook.mcp.evidence.ledger_syntax import EVIDENCE_FIELDS, LedgerFacts, parse_ledger
+from design_playbook.scripts.verdict_syntax import VerdictFacts, parse_verdict
 
 FINDING_FIELDS = ("issue", "source", "fix", "severity")
 FIELD_LINE = re.compile(
@@ -38,9 +38,10 @@ def _findings(text: str) -> list[dict[str, list[str]]]:
 
 
 def _check_evidence(
-        text: str, expected_l6: int, is_pass: bool) -> list[Finding]:
+        text: str, expected_l6: int, is_pass: bool,
+        ledger_facts: LedgerFacts | None = None) -> list[Finding]:
     errs: list[Finding] = []
-    rows = parse_ledger(text).rows
+    rows = (ledger_facts or parse_ledger(text)).rows
     if not rows:
         return [finding(
             "G2.no_evidence_rows",
@@ -159,12 +160,14 @@ def _normalise_issue(value: str) -> str:
     return " ".join(value.casefold().split())
 
 
-def _verdict(text: str) -> tuple[str | None, list[Finding]]:
+def _verdict(
+        text: str, verdict_facts: VerdictFacts | None = None
+) -> tuple[str | None, list[Finding]]:
     # Verdict syntax facts are parsed once in verdict_syntax (ADR-0025); G3
     # retains its diagnostic mapping and projects from the shared facts so
     # rule IDs, messages, finding order, and accepted value forms stay
     # compatible with the prior independent parser.
-    facts = parse_verdict(text)
+    facts = verdict_facts or parse_verdict(text)
     if facts.heading_count == 0:
         return None, [finding(
             "G3.missing_verdict",
@@ -196,13 +199,16 @@ def _verdict(text: str) -> tuple[str | None, list[Finding]]:
     return facts.canonical, []
 
 
-def check_pointback(text: str, expected_l6: int) -> list[Finding]:
+def check_pointback(
+        text: str, expected_l6: int, *,
+        ledger_facts: LedgerFacts | None = None,
+        verdict_facts: VerdictFacts | None = None) -> list[Finding]:
     errs: list[Finding] = []
     pb_findings = _findings(text)
-    verdict, verdict_errs = _verdict(text)
+    verdict, verdict_errs = _verdict(text, verdict_facts)
     errs += verdict_errs
     is_pass = verdict == "pass"
-    errs += _check_evidence(text, expected_l6, is_pass)
+    errs += _check_evidence(text, expected_l6, is_pass, ledger_facts)
     if not pb_findings:
         if not is_pass:
             errs.append(finding(

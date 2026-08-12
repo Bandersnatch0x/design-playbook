@@ -76,11 +76,36 @@ class AggregateRunsTest(unittest.TestCase):
         payload = self._payload()
         self.assertEqual(payload["runs_total"], 3)
         by_id = {r["id"]: r for r in payload["runs"]}
-        self.assertEqual(by_id["2026-01-01-001-pass"]["gate"]["status"], "ok")
+        self.assertEqual(
+            by_id["2026-01-01-001-pass"]["gate"],
+            {"status": "ok", "detail": "RUN OK"},
+        )
+        self.assertEqual(
+            by_id["2026-01-02-002-block"]["gate"],
+            {
+                "status": "fail",
+                "detail": (
+                    "FAIL  G3 evidence: Pass requires row 6 result pass, "
+                    "got 'blocked'"
+                ),
+            },
+        )
         self.assertEqual(by_id["2026-01-01-001-pass"]["date"], "2026-01-01")
         self.assertEqual(by_id["2026-01-01-001-pass"]["effort"], "aggregate-test-effort")
         self.assertFalse(by_id["2026-01-03-003-block"]["artifacts"]["plan"])
         self.assertTrue(by_id["2026-01-01-001-pass"]["artifacts"]["spec"])
+
+    def test_validator_io_failure_keeps_historical_gate_projection(self) -> None:
+        run_dir = self.cwd / "io-error-run"
+        make_run(run_dir)
+        (run_dir / "spec.md").write_bytes(b"\xff")
+
+        payload = self._payload("--runs", str(run_dir))
+
+        self.assertEqual(
+            payload["runs"][0]["gate"],
+            {"status": "fail", "detail": "violations"},
+        )
 
     def test_repeat_blocker_detection(self) -> None:
         payload = self._payload()

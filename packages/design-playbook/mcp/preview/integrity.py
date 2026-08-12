@@ -31,15 +31,42 @@ class IntegrityFact:
     actual: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class ConfirmRecord:
     path: Path
-    data: object
+    _data_json: str
     round: int | None
     valid: bool
     prototype_status: str
     expected_digest: str = ""
     actual_digest: str = ""
+
+    def __init__(
+        self,
+        path: Path,
+        data: object,
+        round: int | None,
+        valid: bool,
+        prototype_status: str,
+        expected_digest: str = "",
+        actual_digest: str = "",
+    ) -> None:
+        object.__setattr__(self, "path", path)
+        object.__setattr__(
+            self,
+            "_data_json",
+            json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+        )
+        object.__setattr__(self, "round", round)
+        object.__setattr__(self, "valid", valid)
+        object.__setattr__(self, "prototype_status", prototype_status)
+        object.__setattr__(self, "expected_digest", expected_digest)
+        object.__setattr__(self, "actual_digest", actual_digest)
+
+    @property
+    def data(self) -> object:
+        """Return a detached value so callers cannot mutate the snapshot."""
+        return json.loads(self._data_json)
 
 
 @dataclass(frozen=True)

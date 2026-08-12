@@ -132,14 +132,14 @@ class VersionsFreezeGuardTests(unittest.TestCase):
             f"authoring function (create_named_version/fork): {hits}")
 
     def test_transaction_still_imports_log_projection(self) -> None:
-        # ADR-0027 keeps read/projection compatible: transaction.py must still
-        # import render_versions_log. This guards against accidentally
-        # severing the production dependency before the migration owner is
-        # in place.
+        # ADR-0027 keeps read/projection compatible through the dedicated
+        # compatibility owner.
         transaction_path = (
             _PKG_ROOT / "mcp" / "preview" / "transaction.py")
         text = transaction_path.read_text(encoding="utf-8")
         self.assertIn("render_versions_log", text)
+        self.assertIn("preview.compatibility", text)
+        self.assertNotIn("preview.versions", text)
 
     def test_module_docstring_marks_deprecation(self) -> None:
         doc = (versions.__doc__ or "").strip()
@@ -159,10 +159,8 @@ class VersionsFreezeGuardTests(unittest.TestCase):
             DEPRECATION_DOC.is_file(),
             f"deprecation doc missing: {DEPRECATION_DOC}")
         text = DEPRECATION_DOC.read_text(encoding="utf-8")
-        # Long-lived owner for compatibility reading + log projection:
-        # the production Preview decision transaction module already imports
-        # render_versions_log, so it is the owner that must absorb the read
-        # path before versions.py can be deleted.
+        # Long-lived owner for compatibility reading + log projection.
+        self.assertIn("compatibility.py", text)
         self.assertIn("transaction", text)
         self.assertIn("render_versions_log", text)
         # v1.0.0 is project migration policy, not a SemVer requirement.

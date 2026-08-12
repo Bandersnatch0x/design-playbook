@@ -9,13 +9,16 @@ ledger parsing - the syntax facts come from one deep module (ADR-0025).
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from design_playbook.mcp.evidence.ledger_syntax import parse_ledger
+from design_playbook.mcp.evidence.ledger_syntax import LedgerFacts, parse_ledger
+from design_playbook.scripts.run_facts import capture_run_facts
 
 
-def ledger_observed(text: str) -> list[tuple[str, str]]:
+def ledger_observed(
+    text: str,
+    ledger_facts: LedgerFacts | None = None,
+) -> list[tuple[str, str]]:
     """Return ``(criterion, observed-token)`` pairs for each contributing row.
 
     Projects the G6 view from the single ledger syntax-facts module
@@ -36,7 +39,8 @@ def ledger_observed(text: str) -> list[tuple[str, str]]:
     teaches authors what punctuation may follow the artifact path).
     """
     pairs: list[tuple[str, str]] = []
-    for row in parse_ledger(text).rows:
+    facts = ledger_facts or parse_ledger(text)
+    for row in facts.rows:
         criterion_values = row.values("criterion")
         if not criterion_values or not criterion_values[0]:
             continue
@@ -49,18 +53,4 @@ def ledger_observed(text: str) -> list[tuple[str, str]]:
 
 def manifest_entries(evidence_dir: Path) -> list[dict]:
     """Read evidence/manifest.jsonl as one dict per non-empty valid line."""
-    path = evidence_dir / "manifest.jsonl"
-    if not path.is_file():
-        return []
-    entries: list[dict] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            data = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(data, dict):
-            entries.append(data)
-    return entries
+    return list(capture_run_facts(evidence_dir=evidence_dir).manifest_entries)

@@ -9,13 +9,13 @@ opaque origin). The bridge injected into the srcdoc captures clicks inside the
 iframe and postMessages ``{selector, tag}`` to the parent; the parent records
 the anchor only while pin mode is on.
 
-This drives the real sandbox path via ``browser._build_parent_page`` (not the
-same-origin direct-embed path covered by test_floor_frontend.py, which builds
-``proto.replace("</body>", control + "</body>")`` and exercises the parent's
-own document.click listener).
+This drives the real sandbox path through ``review_session.collect_review``
+with a Playwright ``BrowserInteraction`` adapter. The same-origin direct-embed
+path covered by test_floor_frontend.py remains a separate frontend test.
 """
 import sys
 import tempfile
+import threading
 from pathlib import Path
 
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -25,8 +25,7 @@ PACKAGE = Path(__file__).resolve().parents[1]
 if str(PACKAGE) not in sys.path:
     sys.path.insert(0, str(PACKAGE))
 
-from design_playbook.mcp.preview import browser  # noqa: E402
-from design_playbook.mcp.preview import control as preview_control  # noqa: E402
+from design_playbook.mcp.preview import review_session  # noqa: E402
 from design_playbook.mcp.preview.i18n import default_options  # noqa: E402
 
 from playwright.sync_api import sync_playwright  # noqa: E402
@@ -34,8 +33,6 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 ROUND_N = 1
 SUMMARY = "pin bridge e2e - sandbox iframe"
 OPTIONS = default_options()
-
-control = preview_control._build_control(ROUND_N, SUMMARY, OPTIONS)
 
 # Prototype with distinct anchorable elements (each has an id so cssPath
 # short-circuits to a stable selector).
@@ -47,173 +44,177 @@ proto = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <p>some body text</p>
 </body></html>"""
 
-# Real sandbox path: prototype + bridge live inside the srcdoc of a sandboxed
-# iframe; the control bar lives in the trusted parent.
-full = browser._build_parent_page(proto, control)
+class _PlaywrightPinAdapter:
+    """Drive the public review session and retain bridge observations."""
 
-tmp = Path(tempfile.mkdtemp())
-page_path = tmp / "page.html"
-page_path.write_text(full, encoding="utf-8")
-file_url = page_path.as_uri()
+    def __init__(self) -> None:
+        self.thread: threading.Thread | None = None
+        self.error: Exception | None = None
+        self.snapshots: dict[str, list[dict]] = {}
+        self.comment = ""
+        self.highlighted = False
 
+    def open(self, url: str) -> object:
+        def drive() -> None:
+            try:
+                with sync_playwright() as pw:
+                    browser = pw.chromium.launch(headless=True)
+                    try:
+                        page = browser.new_page()
+                        page.goto(url, wait_until="domcontentloaded")
+                        page.wait_for_selector("#dpb-preview-bar")
+                        proto_frame = page.frame_locator("iframe.dpb-proto-frame")
 
-def _hidden_anchors(page):
-    return page.evaluate(
-        "() => JSON.parse(document.getElementById('dpb-anchors-json').value || '[]')"
-    )
+                        def hidden() -> list[dict]:
+                            return page.evaluate(
+                                "() => JSON.parse(document.getElementById('dpb-anchors-json').value || '[]')"
+                            )
+
+                        def record(name: str) -> None:
+                            self.snapshots[name] = hidden()
+
+                        page.click("#dpb-open-primary")
+                        page.wait_for_timeout(200)
+                        page.click("#dpb-pin-toggle")
+                        page.wait_for_timeout(150)
+                        proto_frame.locator("#hdr").evaluate("el => el.click()")
+                        page.wait_for_timeout(350)
+                        record("s1")
+
+                        page.wait_for_selector(".dpb-anchor input, .dpb-anchor textarea")
+                        page.fill(".dpb-anchor input, .dpb-anchor textarea", "fix spacing on header")
+                        page.wait_for_timeout(150)
+                        self.comment = hidden()[0].get("comment", "")
+
+                        proto_frame.locator("#action").evaluate("el => el.click()")
+                        page.wait_for_timeout(350)
+                        record("s3")
+                        page.fill(
+                            '#dpb-anchors input[data-i="1"]',
+                            "clarify action label",
+                        )
+                        proto_frame.locator("#action").evaluate("el => el.click()")
+                        page.wait_for_timeout(350)
+                        record("s4")
+
+                        page.click("#dpb-pin-toggle")
+                        page.wait_for_timeout(150)
+                        proto_frame.locator("#hdr").evaluate("el => el.click()")
+                        page.wait_for_timeout(350)
+                        record("s5")
+
+                        page.click("#dpb-pin-toggle")
+                        page.wait_for_timeout(150)
+                        proto_frame.locator("#hdr").evaluate("el => el.click()")
+                        page.wait_for_timeout(250)
+                        self.highlighted = bool(
+                            proto_frame.locator("#hdr").evaluate(
+                                "el => el.classList.contains('dpb-pin-target')"
+                            )
+                        )
+                        record("s6")
+                        with page.expect_response(
+                            lambda response: response.url.endswith("/decide")
+                            and response.request.method == "POST"
+                        ):
+                            page.click(".dpb-drawer .dpb-btn-primary")
+                    finally:
+                        browser.close()
+            except Exception as exc:  # noqa: BLE001
+                self.error = exc
+
+        self.thread = threading.Thread(target=drive, daemon=True)
+        self.thread.start()
+        return self
+
+    def close(self, handle: object) -> None:
+        assert handle is self
+        assert self.thread is not None
+        self.thread.join(timeout=20)
+        if self.thread.is_alive():
+            raise AssertionError("Playwright pin adapter did not finish")
+        if self.error is not None:
+            raise self.error
 
 
 def main():
     failures = []
-    with sync_playwright() as pw:
-        b = pw.chromium.launch(headless=True)
-        page = b.new_page()
-        page.goto(file_url, wait_until="domcontentloaded")
-        page.wait_for_selector("#dpb-preview-bar")
+    adapter = _PlaywrightPinAdapter()
+    tmp = Path(tempfile.mkdtemp())
+    prototype = tmp / "prototype.html"
+    prototype.write_text(proto, encoding="utf-8")
+    decision = review_session.collect_review(
+        prototype, SUMMARY, OPTIONS, ROUND_N, adapter
+    )
 
-        # Frame locator into the sandboxed prototype iframe (opaque origin).
-        proto_frame = page.frame_locator("iframe.dpb-proto-frame")
+    hidden = adapter.snapshots.get("s1", [])
+    n_rows = len(hidden)
+    s1_ok = (
+        n_rows == 1
+        and hidden[0].get("selector") == "#hdr"
+        and hidden[0].get("tag") == "h2"
+        and hidden[0].get("label")
+    )
+    print(
+        f"  S1 iframe click -> anchor: rows={n_rows} hidden={hidden} "
+        f"-> {'OK' if s1_ok else 'FAIL'}"
+    )
+    if not s1_ok:
+        failures.append(
+            "S1: pin-on iframe click must produce one anchor "
+            "(selector=#hdr, tag=h2, non-empty label) in the parent list"
+        )
 
-        def click_in_frame(sel):
-            # Dispatch the click programmatically inside the iframe. The bridge
-            # is a capture-phase document listener, so a synthetic el.click()
-            # fires it. A real Playwright click() would instead resolve screen
-            # coordinates that the parent's drawer overlay can intercept (the
-            # drawer sits above the iframe); a human user simply clicks a
-            # visible iframe element, so the overlay is a harness artifact, not
-            # a bridge defect. Synthetic dispatch tests the actual bridge logic.
-            proto_frame.locator(sel).evaluate("el => el.click()")
+    s2_ok = adapter.comment == "fix spacing on header"
+    print(
+        f"  S2 comment on bridge anchor: comment={adapter.comment!r} "
+        f"-> {'OK' if s2_ok else 'FAIL'}"
+    )
+    if not s2_ok:
+        failures.append(
+            "S2: comment typed on a cross-origin anchor must serialize"
+        )
 
-        # --- S1: pin on + click iframe element -> anchor collected in parent ---
-        page.click("#dpb-open-primary")  # not substantive -> opens drawer
-        page.wait_for_timeout(200)
-        page.click("#dpb-pin-toggle")    # enable pin mode
-        page.wait_for_timeout(150)
-        click_in_frame("#hdr")        # click INSIDE the iframe
-        page.wait_for_timeout(350)
+    hidden3 = adapter.snapshots.get("s3", [])
+    n3 = len(hidden3)
+    s3_ok = (
+        n3 == 2
+        and hidden3[1].get("selector") == "#action"
+        and hidden3[1].get("tag") == "button"
+    )
+    print(
+        f"  S3 second iframe element: rows={n3} "
+        f"sel2={hidden3[1].get('selector') if len(hidden3) > 1 else None!r} "
+        f"-> {'OK' if s3_ok else 'FAIL'}"
+    )
+    if not s3_ok:
+        failures.append("S3: second distinct iframe click must add a second anchor")
 
-        n_rows = page.eval_on_selector_all(
-            "#dpb-anchors .dpb-anchor", "els => els.length"
-        )
-        hidden = _hidden_anchors(page)
-        s1_ok = (
-            n_rows == 1
-            and len(hidden) == 1
-            and hidden[0].get("selector") == "#hdr"
-            and hidden[0].get("tag") == "h2"
-            and hidden[0].get("label")  # labelForTag produced something
-        )
-        print(
-            f"  S1 iframe click -> anchor: rows={n_rows} hidden={hidden} "
-            f"-> {'OK' if s1_ok else 'FAIL'}"
-        )
-        if not s1_ok:
-            failures.append(
-                "S1: pin-on iframe click must produce one anchor "
-                "(selector=#hdr, tag=h2, non-empty label) in the parent list"
-            )
+    n4 = len(adapter.snapshots.get("s4", []))
+    s4_ok = n4 == 2
+    print(f"  S4 de-dupe same selector: rows={n4} -> {'OK' if s4_ok else 'FAIL'}")
+    if not s4_ok:
+        failures.append("S4: clicking the same iframe element again must not duplicate")
 
-        # --- S2: el is null cross-origin; comment input still works + serializes
-        comment_sel = ".dpb-anchor input, .dpb-anchor textarea"
-        page.wait_for_selector(comment_sel)
-        page.fill(comment_sel, "fix spacing on header")
-        page.wait_for_timeout(150)
-        hidden2 = _hidden_anchors(page)
-        s2_ok = (
-            len(hidden2) == 1
-            and hidden2[0].get("comment") == "fix spacing on header"
-        )
-        print(
-            f"  S2 comment on bridge anchor: comment="
-            f"{hidden2[0].get('comment') if hidden2 else None!r} "
-            f"-> {'OK' if s2_ok else 'FAIL'}"
-        )
-        if not s2_ok:
-            failures.append(
-                "S2: comment typed on a cross-origin anchor (el=null) must "
-                "serialize into anchors_json"
-            )
+    n5 = len(adapter.snapshots.get("s5", []))
+    s5_ok = n5 == 2
+    print(f"  S5 pin-off ignores bridge: rows={n5} -> {'OK' if s5_ok else 'FAIL'}")
+    if not s5_ok:
+        failures.append("S5: pin-off bridge messages must not add anchors")
 
-        # --- S3: second distinct iframe element -> second anchor ---
-        click_in_frame("#action")
-        page.wait_for_timeout(350)
-        n3 = page.eval_on_selector_all(
-            "#dpb-anchors .dpb-anchor", "els => els.length"
-        )
-        hidden3 = _hidden_anchors(page)
-        s3_ok = (
-            n3 == 2
-            and len(hidden3) == 2
-            and hidden3[1].get("selector") == "#action"
-            and hidden3[1].get("tag") == "button"
-        )
-        print(
-            f"  S3 second iframe element: rows={n3} "
-            f"sel2={hidden3[1].get('selector') if len(hidden3) > 1 else None!r} "
-            f"-> {'OK' if s3_ok else 'FAIL'}"
-        )
-        if not s3_ok:
-            failures.append(
-                "S3: second distinct iframe click must add a second anchor "
-                "(selector=#action, tag=button)"
-            )
+    s6_ok = adapter.highlighted
+    print(
+        f"  S6 iframe self-highlight: dpb-pin-target={adapter.highlighted} "
+        f"-> {'OK' if s6_ok else 'FAIL'}"
+    )
+    if not s6_ok:
+        failures.append("S6: bridge must add dpb-pin-target to the clicked element")
 
-        # --- S4: clicking the SAME element again de-dupes (no third row) ---
-        click_in_frame("#action")
-        page.wait_for_timeout(350)
-        n4 = page.eval_on_selector_all(
-            "#dpb-anchors .dpb-anchor", "els => els.length"
-        )
-        s4_ok = n4 == 2
-        print(
-            f"  S4 de-dupe same selector: rows={n4} "
-            f"-> {'OK' if s4_ok else 'FAIL'}"
-        )
-        if not s4_ok:
-            failures.append(
-                "S4: clicking the same iframe element again must not duplicate "
-                "the anchor (de-dupe by selector)"
-            )
-
-        # --- S5: pin OFF -> bridge message ignored (no new anchor) ---
-        page.click("#dpb-pin-toggle")  # disable pin
-        page.wait_for_timeout(150)
-        click_in_frame("#hdr")
-        page.wait_for_timeout(350)
-        n5 = page.eval_on_selector_all(
-            "#dpb-anchors .dpb-anchor", "els => els.length"
-        )
-        s5_ok = n5 == 2
-        print(
-            f"  S5 pin-off ignores bridge: rows={n5} "
-            f"-> {'OK' if s5_ok else 'FAIL'}"
-        )
-        if not s5_ok:
-            failures.append(
-                "S5: with pin off, bridge postMessages must not add anchors "
-                "(parent filters on pinOn)"
-            )
-
-        # --- S6: highlight CSS injected into iframe (dpb-pin-target on el) ---
-        page.click("#dpb-pin-toggle")  # pin back on
-        page.wait_for_timeout(150)
-        click_in_frame("#hdr")
-        page.wait_for_timeout(250)
-        highlighted = proto_frame.locator("#hdr").evaluate(
-            "el => el.classList.contains('dpb-pin-target')"
-        )
-        s6_ok = bool(highlighted)
-        print(
-            f"  S6 iframe self-highlight: dpb-pin-target={highlighted} "
-            f"-> {'OK' if s6_ok else 'FAIL'}"
-        )
-        if not s6_ok:
-            failures.append(
-                "S6: bridge must add dpb-pin-target to the clicked element "
-                "inside the iframe (in-frame highlight)"
-            )
-
-        b.close()
+    return_code = 0
+    if adapter.error is not None:
+        failures.append(f"adapter: {adapter.error}")
+    if decision.get("aborted") or not decision.get("choice"):
+        failures.append(f"review session did not confirm: {decision}")
 
     print()
     if failures:
@@ -222,7 +223,7 @@ def main():
             print(f"  - {f}")
         return 1
     print("PIN BRIDGE E2E TEST PASSED")
-    return 0
+    return return_code
 
 
 if __name__ == "__main__":
