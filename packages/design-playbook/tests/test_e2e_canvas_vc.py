@@ -19,10 +19,8 @@ import sys
 import tempfile
 import threading
 import unittest
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer as HTTPServer
 from pathlib import Path
 from unittest import mock
-from urllib.parse import parse_qs
 
 PACKAGE = Path(__file__).resolve().parents[1]
 
@@ -31,12 +29,11 @@ PACKAGE = Path(__file__).resolve().parents[1]
 if str(PACKAGE) not in sys.path:
     sys.path.insert(0, str(PACKAGE))
 
-from design_playbook.mcp.preview import browser  # noqa: E402
+from design_playbook.mcp.preview import review_session  # noqa: E402
 from design_playbook.mcp.preview import control as preview_control  # noqa: E402
 from design_playbook.mcp.preview import transaction  # noqa: E402
 from design_playbook.mcp.preview import versions  # noqa: E402
 from design_playbook.mcp.preview.i18n import default_options  # noqa: E402
-from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
 
 try:
     from playwright.sync_api import sync_playwright  # noqa: E402
@@ -56,97 +53,61 @@ PROTO = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 </body></html>"""
 
 
-def _serve(proto_html: str, summary: str, options: list[str], round_n: int):
-    """Real preview HTTP server (mirrors browser._collect_via_browser assembly)."""
-    control = preview_control._build_control(round_n, summary, options)
-    token = browser._generate_decision_token()
-    control = browser._inject_token_fields(control, token, round_n)
-    page = browser._build_parent_page(proto_html, control)
-    session = browser._DecisionSession(round_n, token)
-    box: dict = {"result": None, "proto_hash": prototype_html_digest(
-        proto_html.encode("utf-8"))}
+class _PlaywrightReviewAdapter:
+    """BrowserInteraction adapter that drives the real review interface."""
 
-    class Handler(BaseHTTPRequestHandler):
-        def log_message(self, fmt, *args):  # noqa: A003
-            pass
+    def __init__(self) -> None:
+        self.thread: threading.Thread | None = None
+        self.error: Exception | None = None
 
-        def do_GET(self):  # noqa: N802
-            if self.path not in ("/", "/index.html"):
-                self.send_error(404)
-                return
-            data = page.encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Connection", "close")
-            self.end_headers()
-            self.wfile.write(data)
-
-        def do_POST(self):  # noqa: N802
-            length = int(self.headers.get("Content-Length", "0"))
-            form = parse_qs(self.rfile.read(length).decode("utf-8"))
-            choice = (form.get("choice") or ["__abort__"])[0]
-            feedback = (form.get("feedback") or [""])[0]
+    def open(self, url: str) -> object:
+        def drive() -> None:
             try:
-                posted_round = int((form.get("dpb_round") or [""])[0])
-            except (ValueError, TypeError):
-                posted_round = -1
-            anchors = browser._parse_anchors(
-                (form.get("anchors_json") or ["[]"])[0], posted_round)
-            posted_token = (form.get("dpb_token") or [None])[0]
-            if session.validate(posted_round, posted_token):
-                box["result"] = {
-                    "choice": choice,
-                    "feedback": feedback,
-                    "aborted": choice == "__abort__",
-                    "anchors": anchors,
-                    "prototype_html_hash": box["proto_hash"],
-                }
-            reply = b"<html><body>done</body></html>"
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(reply)))
-            self.send_header("Connection", "close")
-            self.end_headers()
-            self.wfile.write(reply)
+                with sync_playwright() as p:
+                    browser = p.chromium.launch(headless=True)
+                    try:
+                        page = browser.new_page()
+                        page.goto(url)
+                        page.wait_for_selector("#dpb-preview-bar .dpb-pill")
+                        page.click("#dpb-open-drawer")
+                        page.frame_locator("iframe.dpb-proto-frame").locator("#hdr").click()
+                        page.wait_for_selector("#dpb-anchors .dpb-anchor")
+                        page.fill('#dpb-anchors input[data-i="0"]', "tighten spacing")
+                        page.fill('textarea[name="feedback"]', "looks good, ship it")
+                        page.click(".dpb-drawer .dpb-btn-primary")
+                        page.wait_for_load_state("domcontentloaded")
+                    finally:
+                        browser.close()
+            except Exception as exc:  # noqa: BLE001
+                self.error = exc
 
-    server = HTTPServer(("127.0.0.1", 0), Handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    return server, server.server_address[1], box
+        self.thread = threading.Thread(target=drive, daemon=True)
+        self.thread.start()
+        return self
+
+    def close(self, handle: object) -> None:
+        assert handle is self
+        assert self.thread is not None
+        self.thread.join(timeout=20)
+        if self.thread.is_alive():
+            raise AssertionError("Playwright review adapter did not finish")
+        if self.error is not None:
+            raise self.error
 
 
 class E2EFullFlowTests(unittest.TestCase):
     def test_real_browser_full_flow_and_vc(self) -> None:
         if sync_playwright is None:  # pragma: no cover
             self.skipTest("playwright not installed")
-        server, port, box = _serve(PROTO, SUMMARY, OPTIONS, ROUND_N)
-
         def collect(prototype: Path, summary: str, options: list[str],
                     round_n: int) -> dict:
-            with sync_playwright() as p:
-                pw = p.chromium.launch(headless=True)
-                try:
-                    page = pw.new_page()
-                    page.goto(f"http://127.0.0.1:{port}/")
-                    page.wait_for_selector("#dpb-preview-bar .dpb-pill")
-                    # 1. open drawer -> pin mode
-                    page.click("#dpb-open-drawer")
-                    # 2. pin an element INSIDE the sandboxed prototype iframe
-                    #    (G5 bridge path: iframe computes cssPath + postMessages)
-                    proto = page.frame_locator("iframe.dpb-proto-frame")
-                    proto.locator("#hdr").click()
-                    page.wait_for_selector("#dpb-anchors .dpb-anchor")
-                    # 3. comment + overall feedback
-                    page.fill('#dpb-anchors input[data-i="0"]', "层级清晰")
-                    page.fill('textarea[name="feedback"]', "整体不错，按钮再大一点")
-                    # 4. confirm (drawer primary submit -> real POST)
-                    page.click(".dpb-drawer .dpb-btn-primary")
-                    page.wait_for_load_state("domcontentloaded")
-                finally:
-                    pw.close()
-            assert box["result"] is not None, "server never received a valid POST"
-            return dict(box["result"])
-
+            return review_session.collect_review(
+                prototype,
+                summary,
+                options,
+                round_n,
+                _PlaywrightReviewAdapter(),
+            )
         with tempfile.TemporaryDirectory() as tmp:
             preview_dir = Path(tmp)
             with mock.patch.object(
@@ -203,10 +164,6 @@ class E2EFullFlowTests(unittest.TestCase):
             self.assertEqual(
                 (fork_dir / "round-1.html").read_text(encoding="utf-8"), PROTO)
             self.assertTrue((fork_dir / "fork.json").is_file())
-
-        server.shutdown()
-
-
 class FrontendInteractionTests(unittest.TestCase):
     """Undo (07) and draft persistence (07) — file:// scenarios."""
 

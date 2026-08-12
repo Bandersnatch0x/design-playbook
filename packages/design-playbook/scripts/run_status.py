@@ -37,8 +37,8 @@ else:
 # artifact-name constants are shared with validate_run.py. Verdict syntax
 # facts are parsed once in verdict_syntax (ADR-0025); run status projects
 # its status decision from the shared canonical value.
-from design_playbook.scripts.stages import POINT_BACK, STAGES, STAGES_BY_KEY  # noqa: E402
-from design_playbook.scripts.verdict_syntax import parse_verdict  # noqa: E402
+from design_playbook.scripts.stages import STAGES, STAGES_BY_KEY  # noqa: E402
+from design_playbook.scripts.run_facts import RunFacts, capture_run_facts  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -49,20 +49,18 @@ class StageState:
     evidence: list[str]
 
 
-def _exists(run_root: Path, relative: str) -> bool:
-    return (run_root / relative).exists()
-
-
 def inspect_run(
-    run_root: Path, preview_snapshot: PreviewSnapshot | None = None
+    run_root: Path, preview_snapshot: PreviewSnapshot | None = None,
+    run_facts: RunFacts | None = None,
 ) -> list[StageState]:
-    snapshot = preview_snapshot or inspect_preview(run_root / "preview")
+    facts = run_facts or capture_run_facts(run_root=run_root)
+    snapshot = preview_snapshot or facts.preview or inspect_preview(run_root / "preview")
     states: list[StageState] = []
     for stage in STAGES:
         if stage.key == "preview":
             found = [f"preview/{source}" for source in snapshot.occurrence_sources]
         else:
-            found = [marker for marker in stage.markers if _exists(run_root, marker)]
+            found = [marker for marker in stage.markers if marker in facts.existing_paths]
         states.append(StageState(
             key=stage.key,
             skill=stage.skill,
@@ -80,26 +78,25 @@ def discover_runs(scratch: Path) -> list[Path]:
     return runs
 
 
-def verdict_of(run_root: Path) -> str | None:
-    path = run_root / POINT_BACK
-    if not path.is_file():
+def verdict_of(run_root: Path, run_facts: RunFacts | None = None) -> str | None:
+    facts = run_facts or capture_run_facts(run_root=run_root)
+    if not facts.pointback_text:
         return None
-    text = path.read_text(encoding="utf-8")
     # ADR-0025 sanctioned correction: a canonical Verdict is exposed only
     # when exactly one valid Verdict exists. Missing, malformed, ambiguous,
     # or repeated Verdict text yields no canonical value, so run status can
     # never report ``Run complete (Pass)`` from anything other than one
     # uniquely valid Pass. The previous permissive line/regex scan accepted
     # Verdict text the G3 gate rejects; both consumers now share one parse.
-    facts = parse_verdict(text)
-    if facts.canonical == "pass":
+    verdict = facts.verdict
+    if verdict.canonical == "pass":
         return "Pass"
-    if facts.canonical == "recirculate":
+    if verdict.canonical == "recirculate":
         return "Recirculate"
     return None
 
 
-def _baseline_next_action(run_root: Path) -> str | None:
+def _baseline_next_action(facts: RunFacts) -> str | None:
     """Return a blocking resume hint when the DesignBaseline gate is incomplete.
 
     Reads only ``design-baseline/state.json`` (schema ``design-baseline/v1``),
@@ -110,16 +107,12 @@ def _baseline_next_action(run_root: Path) -> str | None:
     sources or re-verify the binding. ``verify()`` at Fill time is the
     forge-resistant gate.
     """
-    state_path = run_root / "design-baseline" / "state.json"
-    # Stage is only present when state.json exists, so a missing file here is
-    # a race/corruption case rather than the orphan-draft path.
-    if not state_path.is_file():
+    if facts.baseline_state_error is not None:
+        return "Design-baseline state.json is unreadable — re-run design-baseline prepare before Fill."
+    state = facts.baseline_state
+    if state is None:
         return ("Design-baseline state.json vanished mid-read — "
                 "re-run design-baseline prepare before Fill.")
-    try:
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return "Design-baseline state.json is unreadable — re-run design-baseline prepare before Fill."
     if not isinstance(state, dict):
         return "Design-baseline state.json is not an object — re-run design-baseline prepare before Fill."
 
@@ -179,15 +172,17 @@ def next_action(
     states: list[StageState],
     run_root: Path,
     preview_snapshot: PreviewSnapshot | None = None,
+    run_facts: RunFacts | None = None,
 ) -> str:
-    snapshot = preview_snapshot or inspect_preview(run_root / "preview")
+    facts = run_facts or capture_run_facts(run_root=run_root)
+    snapshot = preview_snapshot or facts.preview or inspect_preview(run_root / "preview")
     present = {state.key: state for state in states if state.present}
     if "baseline" in present:
-        blocked = _baseline_next_action(run_root)
+        blocked = _baseline_next_action(facts)
         if blocked is not None:
             return blocked
     if "accept" in present:
-        verdict = verdict_of(run_root)
+        verdict = verdict_of(run_root, facts)
         # verdict_of returns "Pass" only from one uniquely valid Pass
         # (ADR-0025); exact equality avoids any string-prefix inference that
         # could complete a run from malformed or repeated Verdict text.
@@ -216,9 +211,24 @@ def render(run_root: Path, *, as_json: bool) -> int:
     if not run_root.is_dir():
         print(f"RUN STATUS ERROR: not a directory: {run_root}", file=sys.stderr)
         return 2
-    snapshot = inspect_preview(run_root / "preview")
-    states = inspect_run(run_root, snapshot)
-    action = next_action(states, run_root, snapshot)
+    facts = capture_run_facts(run_root=run_root)
+    pointback_error = next(
+        (
+            error
+            for error in facts.read_errors
+            if error.artifact == "point_back" and error.code != "missing"
+        ),
+        None,
+    )
+    if pointback_error is not None:
+        print(
+            f"RUN STATUS ERROR: cannot read point-back.md: {pointback_error.message}",
+            file=sys.stderr,
+        )
+        return 2
+    snapshot = facts.preview or inspect_preview(run_root / "preview")
+    states = inspect_run(run_root, snapshot, facts)
+    action = next_action(states, run_root, snapshot, facts)
     payload = {
         "run_root": str(run_root),
         "stages": [
@@ -231,7 +241,7 @@ def render(run_root: Path, *, as_json: bool) -> int:
             for s in states
         ],
         "next": action,
-        "verdict": verdict_of(run_root),
+        "verdict": verdict_of(run_root, facts),
     }
     if as_json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))

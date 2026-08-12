@@ -13,7 +13,9 @@ from design_playbook.scripts.g6_records import ledger_observed, manifest_entries
 from design_playbook.scripts.stages import EVIDENCE_PREFIX
 
 
-def check_manifest_ts_warnings(evidence_dir: Path | None) -> list[Finding]:
+def check_manifest_ts_warnings(
+        evidence_dir: Path | None, *, entries: list[dict] | None = None
+) -> list[Finding]:
     """Soft signal: all manifest rows share one ``ts`` (likely batch bind).
 
     Not a hard gate — root fix is orchestrator per-capture append (SKILL step 8).
@@ -23,7 +25,7 @@ def check_manifest_ts_warnings(evidence_dir: Path | None) -> list[Finding]:
     """
     if evidence_dir is None or not evidence_dir.is_dir():
         return []
-    entries = manifest_entries(evidence_dir)
+    entries = entries if entries is not None else manifest_entries(evidence_dir)
     if len(entries) < 2:
         return []
     ts_vals = [
@@ -49,11 +51,13 @@ def check_manifest_ts_warnings(evidence_dir: Path | None) -> list[Finding]:
 
 def check_superseded_ledger_warnings(
         pointback_text: str,
-        evidence_dir: Path | None) -> list[Finding]:
+        evidence_dir: Path | None, *,
+        observed_rows: list[tuple[str, str]] | None = None,
+        entries: list[dict] | None = None) -> list[Finding]:
     """Warn when a ledger cites an artifact that is not the latest binding."""
     if evidence_dir is None or not evidence_dir.is_dir():
         return []
-    entries = manifest_entries(evidence_dir)
+    entries = entries if entries is not None else manifest_entries(evidence_dir)
     if not entries:
         return []
     # Latest artifact per criterion by ts.
@@ -69,7 +73,8 @@ def check_superseded_ledger_warnings(
         latest_by_crit[crit] = latest["artifact"]
 
     warns: list[Finding] = []
-    for criterion, observed in ledger_observed(pointback_text):
+    rows = observed_rows if observed_rows is not None else ledger_observed(pointback_text)
+    for criterion, observed in rows:
         if not observed.casefold().startswith(EVIDENCE_PREFIX):
             continue
         leaf = observed[len(EVIDENCE_PREFIX):]
@@ -88,8 +93,11 @@ def check_superseded_ledger_warnings(
     return warns
 
 
-def _ledger_has_evidence_binding(pointback_text: str) -> bool:
-    for _criterion, observed in ledger_observed(pointback_text):
+def _ledger_has_evidence_binding(
+        pointback_text: str,
+        observed_rows: list[tuple[str, str]] | None = None) -> bool:
+    rows = observed_rows if observed_rows is not None else ledger_observed(pointback_text)
+    for _criterion, observed in rows:
         # Match check_evidence: case-insensitive evidence/ prefix (LOW-3).
         if observed.casefold().startswith(EVIDENCE_PREFIX):
             return True

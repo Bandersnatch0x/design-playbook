@@ -2,7 +2,7 @@
 """Minimal stdio MCP server: single tool ``preview_prototype``.
 
 Entry point only: tool schema + handler. JSON-RPC stdio framing lives in
-``mcp/_transport.py``; browser HTTP collection lives in ``browser.py``;
+``mcp/_transport.py``; authenticated review lives in ``review_session.py``;
 decision authority and persistence live in ``transaction.py``. Control,
 confirm, utility, and locale details stay in their sibling modules. No
 third-party deps.
@@ -28,7 +28,7 @@ if str(_PKG_ROOT) not in sys.path:
 # run the same JSON-RPC protocol; ADR-0009).
 from design_playbook.mcp._transport import ToolError, serve_stdio  # noqa: E402
 
-from design_playbook.mcp.preview import browser  # noqa: E402
+from design_playbook.mcp.preview import review_session  # noqa: E402
 from design_playbook.mcp.preview.i18n import default_options  # noqa: E402
 from design_playbook.mcp.preview.transaction import (  # noqa: E402
     PreviewTransactionError,
@@ -115,7 +115,7 @@ def handle_preview_prototype(args: dict[str, Any]) -> dict[str, Any]:
             round_n=round_n,
             report_ref=report_ref,
             options=options,
-            collect=browser._collect_via_browser,
+            collect=review_session.collect_review,
         )
     except PreviewTransactionError as exc:
         raise ToolError(str(exc), exc.details) from exc

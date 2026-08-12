@@ -35,6 +35,22 @@ def _run(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str
 
 
 class RunStatusTests(unittest.TestCase):
+    def test_unreadable_point_back_is_an_operational_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-unreadable-point-back"
+            run_root.mkdir()
+            (run_root / "point-back.md").write_bytes(b"\xff")
+
+            for args in ((str(run_root),), (str(run_root), "--json")):
+                with self.subTest(args=args):
+                    result = _run(*args)
+                    self.assertEqual(result.returncode, 2)
+                    self.assertEqual(result.stdout, "")
+                    self.assertIn(
+                        "RUN STATUS ERROR: cannot read point-back.md:",
+                        result.stderr,
+                    )
+
     def test_status_from_spec_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run_root = Path(tmp) / "run-a"

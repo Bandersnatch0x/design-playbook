@@ -7,7 +7,7 @@ escape class at resolution time. It exposes two distinct operations -
 ``write_target`` (permits a nonexistent suffix; checks the existing resolved
 prefix) and ``read_artifact`` (additionally requires an existing regular
 file) - backed by one private canonical implementation and stable reason
-codes. The Provider (``server._resolve_artifact_path``) and G6
+codes. The Provider runtime (``capture_runtime._resolve_artifact_path``) and G6
 (``g6_evidence.check_evidence``) map those codes to their existing payloads,
 rule IDs, messages, and repair text without re-checking containment.
 
@@ -45,7 +45,7 @@ from design_playbook.mcp.evidence.containment import (  # noqa: E402
     read_artifact,
     write_target,
 )
-from design_playbook.mcp.evidence import server  # noqa: E402
+from design_playbook.mcp.evidence import capture_runtime  # noqa: E402
 from design_playbook.scripts.g6_evidence import check_evidence  # noqa: E402
 
 
@@ -402,18 +402,18 @@ class ToctouLimitTests(unittest.TestCase):
 
 
 class ProviderMappingTests(unittest.TestCase):
-    """server._resolve_artifact_path maps reason codes to the Provider's
+    """capture_runtime._resolve_artifact_path maps Provider reason codes.
     existing ValueError messages (preserved verbatim) and returns the
     resolved path on success."""
 
     def _patched_root(self, root: Path):  # type: ignore[no-untyped-def]
-        return patch.object(server, "_run_root", return_value=root)
+        return patch.object(capture_runtime, "_run_root", return_value=root)
 
     def test_returns_resolved_path_on_success(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = _evidence_run(tmp)
             with self._patched_root(root):
-                out = server._resolve_artifact_path("evidence/x.png")
+                out = capture_runtime._resolve_artifact_path("evidence/x.png")
             self.assertEqual(
                 out, (root / "evidence" / "x.png").resolve(strict=False))
 
@@ -422,7 +422,7 @@ class ProviderMappingTests(unittest.TestCase):
             root = _evidence_run(tmp)
             with self._patched_root(root):
                 with self.assertRaises(ValueError) as ctx:
-                    server._resolve_artifact_path("/etc/passwd")
+                    capture_runtime._resolve_artifact_path("/etc/passwd")
             self.assertIn(
                 "artifact_path must be relative to the configured run root",
                 str(ctx.exception))
@@ -432,7 +432,7 @@ class ProviderMappingTests(unittest.TestCase):
             root = _evidence_run(tmp)
             with self._patched_root(root):
                 with self.assertRaises(ValueError) as ctx:
-                    server._resolve_artifact_path("../spec.md")
+                    capture_runtime._resolve_artifact_path("../spec.md")
             self.assertIn(
                 "artifact_path must not contain '..' segments",
                 str(ctx.exception))
@@ -442,7 +442,7 @@ class ProviderMappingTests(unittest.TestCase):
             root = _evidence_run(tmp)
             with self._patched_root(root):
                 with self.assertRaises(ValueError) as ctx:
-                    server._resolve_artifact_path("spec.md")
+                    capture_runtime._resolve_artifact_path("spec.md")
             self.assertIn(
                 "artifact_path must stay under the evidence/ subtree",
                 str(ctx.exception))
@@ -459,7 +459,7 @@ class ProviderMappingTests(unittest.TestCase):
                 self.skipTest("symlinks unavailable on this OS")
             with self._patched_root(root):
                 with self.assertRaises(ValueError) as ctx:
-                    server._resolve_artifact_path("evidence/link.txt")
+                    capture_runtime._resolve_artifact_path("evidence/link.txt")
             # On platforms where resolve follows the symlink, the canonical
             # message is produced; where realpath disagrees, the symlink
             # message is produced. Both preserve the Provider's escape framing.
@@ -483,7 +483,7 @@ class ProviderMappingTests(unittest.TestCase):
                     side_effect=OSError("simulated resolution failure"),
                 ):
                     with self.assertRaises(ValueError):
-                        server._resolve_artifact_path("evidence/x.png")
+                        capture_runtime._resolve_artifact_path("evidence/x.png")
 
 
 class G6MappingTests(unittest.TestCase):

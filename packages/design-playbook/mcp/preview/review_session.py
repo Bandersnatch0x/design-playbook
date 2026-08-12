@@ -1,4 +1,4 @@
-"""Owned-Chromium preview window + local HTTP decide form.
+"""Authenticated Preview review behind one deep interface.
 
 Opens a centered app window, serves the prototype and trusted control bar,
 authenticates one raw submission, and tears down browser and server without
@@ -352,13 +352,6 @@ class OwnedBrowserAdapter:
         _rm_tree(profile)
 
 
-# Module-level default adapter. _collect_via_browser routes through this name
-# so a test can substitute one fake owned-browser adapter for the whole
-# collect flow (US-4) without patching process/profile internals.
-_default_browser_adapter: BrowserInteraction = OwnedBrowserAdapter()
-
-
-
 def _stop_http_server(
     server: HTTPServer,
     serve_thread: threading.Thread,
@@ -664,10 +657,13 @@ def _build_parent_page(prototype_html: str, control_html: str) -> str:
     )
 
 
-def _collect_via_browser(
+def collect_review(
         prototype: Path, summary: str, options: list[str],
-        round_n: int) -> dict[str, Any]:
+        round_n: int,
+        browser_adapter: BrowserInteraction | None = None,
+) -> dict[str, Any]:
     """Serve prototype + control form; block until user submits or aborts."""
+    adapter = browser_adapter or OwnedBrowserAdapter()
     result: dict[str, Any] = {
         "choice": "",
         "feedback": "",
@@ -786,7 +782,7 @@ def _collect_via_browser(
     thread.start()
     url = f"http://127.0.0.1:{port}/"
     _log(f"preview UI at {url}")
-    handle = _default_browser_adapter.open(url)
+    handle = adapter.open(url)
     try:
         if not done.wait(timeout=1800):
             result = with_prototype_hash({
@@ -802,7 +798,7 @@ def _collect_via_browser(
         # cleanup behind the seam; HTTP stop stays here so a bound MCP call
         # always returns even if the adapter raises.
         try:
-            _default_browser_adapter.close(handle)
+            adapter.close(handle)
         finally:
             _stop_http_server(server, thread, timeout_s=1.5)
     return result

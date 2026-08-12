@@ -34,7 +34,7 @@ def _load_resources() -> tuple[str, str, str]:
 def _build_control(round_n: int, summary: str, options: list[str]) -> str:
     """Build the injected confirm control-bar HTML (ADR-0008 floor-aware).
 
-    Shared by _collect_via_browser (runtime) and test_floor_frontend
+    Shared by collect_review (runtime) and test_floor_frontend
     (playwright) so the option/button markup is not duplicated across them.
     """
     confirm_cf = {c.casefold() for c in CONFIRM_LABELS}

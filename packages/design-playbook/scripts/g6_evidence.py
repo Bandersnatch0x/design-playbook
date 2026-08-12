@@ -84,7 +84,10 @@ def check_evidence(
         pointback_text: str,
         expected_l6: int,
         evidence_dir: Path | None,
-        run_root: Path | None) -> list[Finding]:
+        run_root: Path | None,
+        *,
+        observed_rows: list[tuple[str, str]] | None = None,
+        entries: list[dict] | None = None) -> list[Finding]:
     """G6 conditional evidence-binding gate.
 
     Triggers only when a ledger ``observed`` references an ``evidence/``
@@ -96,10 +99,11 @@ def check_evidence(
     if evidence_dir is None or not evidence_dir.is_dir():
         return []
     root = run_root if run_root is not None else evidence_dir.parent
-    entries = manifest_entries(evidence_dir)
+    entries = entries if entries is not None else manifest_entries(evidence_dir)
     valid_criterion_ids = {f"L6.{n}" for n in range(1, expected_l6 + 1)}
     errs: list[Finding] = []
-    for criterion, observed in ledger_observed(pointback_text):
+    rows = observed_rows if observed_rows is not None else ledger_observed(pointback_text)
+    for criterion, observed in rows:
         # LOW-3: case-insensitive prefix. The write boundary treats paths
         # case-insensitively on case-insensitive filesystems (Windows), so
         # ``EVIDENCE/<x>`` lands in the evidence/ subtree on disk; the read
