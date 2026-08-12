@@ -60,7 +60,10 @@ from design_playbook.scripts._diagnostics import (  # noqa: E402
 from design_playbook.scripts.g1_spec import _l6_items, check_spec  # noqa: E402
 from design_playbook.scripts.g2_g4_pointback import check_pointback  # noqa: E402
 from design_playbook.scripts.g5_preview import check_preview  # noqa: E402
-from design_playbook.scripts.g6_evidence import check_evidence  # noqa: E402
+from design_playbook.scripts.g6_evidence import (  # noqa: E402
+    check_evidence,
+    manifest_read_findings,
+)
 from design_playbook.scripts.g6_warnings import (  # noqa: E402
     _ledger_has_evidence_binding,
     check_manifest_ts_warnings,
@@ -100,8 +103,11 @@ def run(
         spec_path=Path(spec_path), pointback_path=Path(pb_path),
         preview_dir=pd, evidence_dir=ed, run_root=rr,
     )
-    if facts.read_errors:
-        failure = facts.read_errors[0]
+    operational_errors = tuple(
+        error for error in facts.read_errors if error.artifact != "manifest"
+    )
+    if operational_errors:
+        failure = operational_errors[0]
         if failure.code == "missing":
             raise FileNotFoundError(
                 2, "No such file or directory", str(failure.path)
@@ -111,6 +117,7 @@ def run(
     pointback_text = facts.pointback_text
     observed_rows = ledger_observed(pointback_text, facts.ledger)
     entries = list(facts.manifest_entries)
+    errs += manifest_read_findings(facts.read_errors)
     errs += check_spec(spec_text)
     errs += check_pointback(
         pointback_text, len(_l6_items(spec_text)),

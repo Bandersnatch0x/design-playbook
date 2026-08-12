@@ -705,6 +705,55 @@ def main() -> int:
             else:
                 print(f"  ok    {name} fails closed with {rule_id}")
 
+    with tempfile.TemporaryDirectory() as tmp:
+        run_root = Path(tmp)
+        evidence = run_root / "evidence"
+        manifest_spec, manifest_pb = _zero_findings_pair()
+        _write_text(
+            evidence / "manifest.jsonl",
+            "not-json\n[]\n",
+        )
+        text_result = run(
+            manifest_spec,
+            manifest_pb,
+            "--evidence-dir", str(evidence),
+            "--run-root", str(run_root),
+        )
+        json_result = run(
+            manifest_spec,
+            manifest_pb,
+            "--format", "json",
+            "--evidence-dir", str(evidence),
+            "--run-root", str(run_root),
+        )
+        payload = (
+            json.loads(json_result.stdout)
+            if json_result.returncode == 1
+            else []
+        )
+        manifest_findings = [
+            item for item in payload
+            if str(item.get("rule_id", "")).startswith("G6.manifest_")
+        ]
+        expected_rules = ["G6.manifest_json", "G6.manifest_entry"]
+        if (
+            text_result.returncode != 1
+            or json_result.returncode != 1
+            or [item.get("rule_id") for item in manifest_findings]
+            != expected_rules
+            or any(
+                item.get("message") not in text_result.stdout
+                for item in manifest_findings
+            )
+        ):
+            failures.append(
+                "g6-manifest-structured-errors: expected shared text/JSON "
+                f"findings {expected_rules}; text={text_result.stdout!r} "
+                f"json={json_result.stdout!r}"
+            )
+        else:
+            print("  ok    malformed manifest lines share G6 text+JSON findings")
+
     # --- G5 latest numeric round + prototype hash (issues 02 / 03) ---
     # round-1 confirmed, round-2 prototype exists with NO confirm: the
     # round-1 confirm is stale and must not satisfy the gate.
