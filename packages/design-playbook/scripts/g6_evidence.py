@@ -21,9 +21,43 @@ from pathlib import Path
 
 from design_playbook.scripts._diagnostics import Finding, finding
 from design_playbook.scripts.g6_records import ledger_observed, manifest_entries
+from design_playbook.scripts.run_facts import ArtifactReadFact
 from design_playbook.scripts.stages import EVIDENCE_PREFIX
 from design_playbook.mcp.evidence.capture_contract import validate_capture_snapshot
 from design_playbook.mcp.evidence import containment
+
+
+def manifest_read_findings(
+        errors: tuple[ArtifactReadFact, ...]) -> list[Finding]:
+    """Project manifest read facts into stable G6 diagnostics."""
+    findings: list[Finding] = []
+    rule_ids = {
+        "malformed_json": "G6.manifest_json",
+        "invalid_entry": "G6.manifest_entry",
+        "unreadable": "G6.manifest_unreadable",
+    }
+    expectations = {
+        "malformed_json": "one valid JSON object per non-empty line",
+        "invalid_entry": "one JSON object per non-empty line",
+        "unreadable": "UTF-8 readable manifest.jsonl",
+    }
+    for error in errors:
+        if error.artifact != "manifest":
+            continue
+        rule_id = rule_ids.get(error.code, "G6.manifest_read")
+        findings.append(finding(
+            rule_id,
+            f"G6 evidence: {error.message}",
+            owner="evidence/manifest.jsonl",
+            expected=expectations.get(error.code, "readable manifest entries"),
+            actual=error.message,
+            repair=(
+                "Rewrite the named manifest line as one valid JSON object"
+                if error.line_number is not None
+                else "Restore evidence/manifest.jsonl as UTF-8 JSON Lines"
+            ),
+        ))
+    return findings
 
 
 def _g6_capture_findings(criterion: str, snapshot: object) -> list[Finding]:
