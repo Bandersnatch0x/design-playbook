@@ -35,7 +35,8 @@ class DecisionAccess:
     valid_entries: Callable[[Path], list[dict[str, Any]]]
 
 
-def _load_version(path: Path) -> dict[str, Any] | None:
+def load_version(path: Path) -> dict[str, Any] | None:
+    """Read one frozen version record for compatibility projections."""
     if not path.is_file():
         return None
     try:
@@ -66,7 +67,7 @@ def list_versions(preview_dir: Path) -> list[dict[str, Any]]:
     """Read valid named versions in ascending sequence order."""
     records: list[dict[str, Any]] = []
     for path in sorted(preview_dir.glob("version-*.json")):
-        record = _load_version(path)
+        record = load_version(path)
         if record is not None:
             records.append(record)
     return sorted(records, key=lambda record: record["seq"])

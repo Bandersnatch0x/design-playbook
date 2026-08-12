@@ -24,6 +24,7 @@ class ArtifactReadFact:
     path: Path
     code: str
     message: str
+    line_number: int | None = None
 
 
 @dataclass(frozen=True)
@@ -61,27 +62,47 @@ class RunFacts:
 
 def _read_manifest(
     evidence_dir: Path | None,
-) -> tuple[tuple[str, ...], ArtifactReadFact | None]:
+) -> tuple[tuple[str, ...], tuple[ArtifactReadFact, ...]]:
     if evidence_dir is None:
-        return (), None
+        return (), ()
     path = evidence_dir / "manifest.jsonl"
     if not path.is_file():
-        return (), None
+        return (), ()
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
-        return (), ArtifactReadFact("manifest", path, "unreadable", str(exc))
+        return (), (ArtifactReadFact("manifest", path, "unreadable", str(exc)),)
     entries: list[str] = []
-    for line in text.splitlines():
+    errors: list[ArtifactReadFact] = []
+    for line_number, line in enumerate(text.splitlines(), start=1):
         if not line.strip():
             continue
         try:
             value = json.loads(line)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
+            errors.append(
+                ArtifactReadFact(
+                    "manifest",
+                    path,
+                    "malformed_json",
+                    f"manifest line {line_number} is not valid JSON: {exc.msg}",
+                    line_number,
+                )
+            )
             continue
-        if isinstance(value, dict):
-            entries.append(line)
-    return tuple(entries), None
+        if not isinstance(value, dict):
+            errors.append(
+                ArtifactReadFact(
+                    "manifest",
+                    path,
+                    "invalid_entry",
+                    f"manifest line {line_number} must be a JSON object",
+                    line_number,
+                )
+            )
+            continue
+        entries.append(line)
+    return tuple(entries), tuple(errors)
 
 
 def _read_baseline(run_root: Path | None) -> tuple[str | None, str | None]:
@@ -166,7 +187,7 @@ def capture_run_facts(
         fallback_encoding=pointback_fallback_encoding,
     )
     baseline_text, baseline_error = _read_baseline(run_root)
-    manifest_lines, manifest_error = _read_manifest(evidence_dir)
+    manifest_lines, manifest_errors = _read_manifest(evidence_dir)
     preview = inspect_preview(preview_dir) if preview_dir is not None else None
     return RunFacts(
         run_root=run_root,
@@ -185,7 +206,7 @@ def capture_run_facts(
         baseline_state_error=baseline_error,
         read_errors=tuple(
             error
-            for error in (spec_error, pointback_error, manifest_error)
+            for error in (spec_error, pointback_error)
             if error is not None
-        ),
+        ) + manifest_errors,
     )

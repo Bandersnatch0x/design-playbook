@@ -129,6 +129,26 @@ class RunFactsTests(unittest.TestCase):
                 [("manifest", "unreadable")],
             )
 
+    def test_malformed_manifest_lines_are_structured_facts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            evidence = root / "evidence"
+            evidence.mkdir()
+            (root / "point-back.md").write_text("", encoding="utf-8")
+            (evidence / "manifest.jsonl").write_text(
+                json.dumps({"artifact": "valid.png"}) + "\nnot-json\n[]\n",
+                encoding="utf-8",
+            )
+
+            facts = capture_run_facts(run_root=root)
+
+            self.assertEqual(len(facts.manifest_entries), 1)
+            self.assertEqual(
+                [(error.code, error.line_number) for error in facts.read_errors],
+                [("malformed_json", 2), ("invalid_entry", 3)],
+            )
+            self.assertIn("manifest line 2", facts.read_errors[0].message)
+
     def test_nested_json_values_cannot_mutate_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

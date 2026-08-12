@@ -116,14 +116,6 @@ def _version_lock(preview_dir: Path) -> Iterator[None]:
         raise VersionError(f"version writer lock failed: {exc}") from exc
 
 
-def _load_version(path: Path) -> dict[str, Any] | None:
-    """Compatibility alias for the historical private reader."""
-    try:
-        return compatibility._load_version(path)
-    except compatibility.VersionError as exc:
-        raise VersionError(str(exc)) from exc
-
-
 def _valid_versions(preview_dir: Path) -> list[dict[str, Any]]:
     try:
         return compatibility.list_versions(preview_dir)
