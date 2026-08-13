@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **v0.12.0 release prep ready (local, untagged)** — 2026-08-08. Versions bumped to **0.12.0** across plugin/npm/marketplace/README; `COMMAND_INVENTORY` has `(0, 12)`; release notes `docs/releases/v0.12.0.md`. Includes vNext (ADR-0016–0020, contract v1, G7, `run-status`/`doctor`) + preview Scheme A′ control interaction. Live dogfood `2026-08-08-vnext-live` **pass**. Local gates green. **Next:** commit(s) → `python scripts/release.py` dry-run → `--apply` tag only when user asks → push atomic + install smoke. **渠道决策（ADR-0015）：main = stable channel**；community catalog 仍为 **PAUSED BY USER**.
+**Current:** **v0.13.0 released** — 2026-08-13. Tag `v0.13.0` points to `d851577`; npm `latest` is `design-playbook@0.13.0`; GitHub Release: <https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.13.0>. Release workflow, npm OIDC/provenance verification, and isolated public install smoke all passed. Smoke evidence: `.scratch/design-playbook-v0/evidence/install-smoke-v0.13.0/` (8 skills, 6 commands, 2 MCP servers). Ticket 13 was reviewed and closed as obsolete without runtime implementation. **Next:** run a real-product v0.13 dogfood and turn observed friction into a scoped v0.14 issue; do not add another architecture abstraction without evidence. **渠道决策（ADR-0015）：main = stable channel**；community catalog 仍为 **PAUSED BY USER**.
 
 | Phase | Status |
 | --- | --- |
