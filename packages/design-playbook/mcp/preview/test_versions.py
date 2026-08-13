@@ -38,8 +38,8 @@ def _seed_round(
     *, confirmed: bool = True, feedback: str = "ok",
 ) -> dict:
     digest = prototype_html_digest(html.encode("utf-8"))
-    binding = transaction._binding(
-        round_n=round_n, prototype_hash=digest, report_ref="r.md",
+    binding = transaction.compute_binding_digest(
+        round_n=round_n, prototype_html_hash=digest, report_ref="r.md",
         summary="s", options=["确认通过", "需要修改"])
     entry = {
         "schema_version": 1,
@@ -501,8 +501,8 @@ class ForkTests(unittest.TestCase):
             src.mkdir()
             # path-mode style: decision entry but no round-N.html snapshot
             digest = prototype_html_digest(b"<html>x</html>")
-            binding = transaction._binding(
-                round_n=1, prototype_hash=digest, report_ref="r.md",
+            binding = transaction.compute_binding_digest(
+                round_n=1, prototype_html_hash=digest, report_ref="r.md",
                 summary="s", options=["确认通过", "需要修改"])
             entry = {
                 "schema_version": 1,

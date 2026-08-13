@@ -81,9 +81,9 @@ class PreviewMcpStdioTests(unittest.TestCase):
     def test_active_lock_returns_structured_error_over_stdio(self) -> None:
         html = "<html><body>locked</body></html>"
         options = ["确认通过", "需要修改"]
-        binding = transaction._binding(
+        binding = transaction.compute_binding_digest(
             round_n=1,
-            prototype_hash=prototype_html_digest(html.encode("utf-8")),
+            prototype_html_hash=prototype_html_digest(html.encode("utf-8")),
             report_ref="report.md", summary="review", options=options,
         )
         with tempfile.TemporaryDirectory() as tmp:

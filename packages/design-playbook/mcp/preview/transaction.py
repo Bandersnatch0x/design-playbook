@@ -7,7 +7,6 @@ and result construction for one Preview decision.
 from __future__ import annotations
 
 import errno
-import hashlib
 import json
 import os
 import tempfile
@@ -25,7 +24,11 @@ else:
 
 from design_playbook.mcp.preview.control import _format_feedback
 from design_playbook.mcp.preview.i18n import CONFIRM_LABELS
-from design_playbook.mcp.preview.integrity import evaluate_feedback_floor, prototype_html_digest
+from design_playbook.mcp.preview.integrity import (
+    compute_binding_digest,
+    evaluate_feedback_floor,
+    prototype_html_digest,
+)
 from design_playbook.mcp.preview.util import _now_iso
 
 BrowserCollector = Callable[[Path, str, list[str], int], dict[str, Any]]
@@ -40,19 +43,38 @@ def _preview_dir_for(path: Path | None) -> Path:
     return scratch
 
 
-def _ensure_prototype(path_arg: str | None, html: str | None, round_n: int,
-                      preview_dir: Path) -> Path:
+def _resolve_prototype(
+    path_arg: str | None, html: str | None, round_n: int,
+    preview_dir: Path,
+) -> tuple[Path, str]:
+    """Resolve prototype source to a path and compute its digest.
+
+    Single source for prototype resolution: path mode reads the file, html
+    mode computes from inline bytes. Returns (prototype_path, digest) so
+    callers can build the binding without re-reading. Does NOT write the
+    html file — that is _ensure_prototype's job.
+    """
     if path_arg:
-        p = Path(path_arg)
-        if not p.is_file():
+        prototype = Path(path_arg)
+        if not prototype.is_file():
             raise ValueError(f"prototype path does not exist: {path_arg}")
-        return p
+        return prototype, prototype_html_digest(prototype.read_bytes())
     if not html:
         raise ValueError("path or html is required")
-    preview_dir.mkdir(parents=True, exist_ok=True)
-    target = preview_dir / f"round-{round_n}.html"
-    target.write_text(html, encoding="utf-8")
-    return target
+    return (
+        preview_dir / f"round-{round_n}.html",
+        prototype_html_digest(html.encode("utf-8")),
+    )
+
+
+def _ensure_prototype(path_arg: str | None, html: str | None, round_n: int,
+                      preview_dir: Path) -> Path:
+    """Resolve and materialize the prototype file on disk."""
+    prototype, _ = _resolve_prototype(path_arg, html, round_n, preview_dir)
+    if not path_arg:
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        prototype.write_text(html, encoding="utf-8")
+    return prototype
 
 
 def self_check_floor() -> None:
@@ -444,23 +466,6 @@ def json_text(value: dict[str, Any]) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2) + "\n"
 
 
-def _binding(
-    *, round_n: int, prototype_hash: str, report_ref: str,
-    summary: str, options: list[str],
-) -> dict[str, Any]:
-    fields = {
-        "round": round_n,
-        "prototype_html_hash": prototype_hash,
-        "report_ref": report_ref,
-        "summary": summary,
-        "options": list(options),
-    }
-    canonical = json.dumps(
-        fields, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-    return {"digest": hashlib.sha256(canonical).hexdigest(), **fields}
-
-
 def load_entry(path: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
@@ -483,9 +488,9 @@ def load_entry(path: Path) -> dict[str, Any] | None:
     binding_valid = False
     if isinstance(binding, dict):
         try:
-            expected = _binding(
+            expected = compute_binding_digest(
                 round_n=round_n,
-                prototype_hash=binding["prototype_html_hash"],
+                prototype_html_hash=binding["prototype_html_hash"],
                 report_ref=binding["report_ref"], summary=binding["summary"],
                 options=binding["options"],
             )
@@ -702,17 +707,11 @@ def run_preview_transaction(
     summary = summary.strip()
     report_ref = report_ref.strip()
     preview_dir = _preview_dir_for(Path(path_arg) if path_arg else None)
-    if path_arg:
-        prototype = Path(path_arg)
-        if not prototype.is_file():
-            raise ValueError(f"prototype path does not exist: {path_arg}")
-        prototype_hash = prototype_html_digest(prototype.read_bytes())
-    else:
-        if not html:
-            raise ValueError("path or html is required")
-        prototype_hash = prototype_html_digest(html.encode("utf-8"))
-    binding = _binding(
-        round_n=round_n, prototype_hash=prototype_hash,
+    _prototype, prototype_hash = _resolve_prototype(
+        path_arg, html, round_n, preview_dir,
+    )
+    binding = compute_binding_digest(
+        round_n=round_n, prototype_html_hash=prototype_hash,
         report_ref=report_ref, summary=summary, options=options,
     )
     entry_path = preview_dir / f"decision-round-{round_n}.json"
@@ -756,16 +755,18 @@ def _run_locked(
     decision_id: str,
 ) -> dict[str, Any]:
     entry_path = preview_dir / f"decision-round-{round_n}.json"
-    if path_arg:
-        prototype = Path(path_arg)
-        if not prototype.is_file():
-            raise ValueError(f"prototype path does not exist: {path_arg}")
-        prototype_hash = prototype_html_digest(prototype.read_bytes())
-    else:
-        if not html:
-            raise ValueError("path or html is required")
-        prototype_hash = prototype_html_digest(html.encode("utf-8"))
-        prototype = preview_dir / f"round-{round_n}.html"
+    # Re-resolve inside the lock to detect TOCTOU: if the path-mode file
+    # changed between run_preview_transaction and lock acquisition, the
+    # recomputed hash will not match binding["digest"].
+    _prototype, locked_hash = _resolve_prototype(
+        path_arg, html, round_n, preview_dir,
+    )
+    if locked_hash != prototype_hash:
+        raise TransactionConflict(
+            "prototype changed between binding and lock acquisition",
+            retryable=False, round_n=round_n, decision_id=decision_id,
+            artifact=str(_prototype),
+        )
 
     existing = load_entry(entry_path)
     if existing is not None:

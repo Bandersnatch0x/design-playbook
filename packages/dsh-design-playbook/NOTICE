@@ -1,0 +1,10 @@
+# NOTICE
+
+dsh-design-playbook is a thin DSH (DeepSeek Harness) bundle package that bridges
+the design-playbook package's preview and evidence MCP servers into a DSH profile.
+
+It contains no original logic — only a Cordis patch file (cordis.patch.yml) that
+configures @deepseek-ai/dsh-mcp-client to launch the Python MCP servers shipped in
+the `design-playbook` package. All substantive code lives in `design-playbook`.
+
+Licensed under MIT (see `LICENSE` in the repository root).

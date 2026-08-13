@@ -1,0 +1,19 @@
+# design-playbook dsh bundle patch
+#
+# Mounts the design-playbook plugin (this package's lib/index.js), which
+# registers the bundled skills as a provider on ctx.skills. The plugin
+# locates its own skills/ directory via __dirname, so no path expression is
+# needed and no cwd-dependent resolution is involved.
+#
+# Note: the Cordis `!!js` evaluation scope provides no `require` (only Node
+# globals plus ctx-provided values like dshHomePath), so pointing a
+# skill-filesystem customSkillDirs row at package resources via
+# `require.resolve` does not work. The plugin route is the supported way for
+# a package to contribute its own skills.
+#
+# P2 (MCP + commands) will append rows here.
+
+- insert:
+    - id: design-playbook
+      name: 'design-playbook'
+      disabled: false

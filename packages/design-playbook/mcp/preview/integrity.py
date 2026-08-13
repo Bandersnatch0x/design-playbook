@@ -110,6 +110,30 @@ def prototype_html_digest(raw: bytes) -> str:
     return hashlib.sha256(normalized).hexdigest()
 
 
+def compute_binding_digest(
+    *, round_n: int, prototype_html_hash: str, report_ref: str,
+    summary: str, options: list[str],
+) -> dict[str, Any]:
+    """Build the binding record (canonical fields + SHA-256 digest).
+
+    Single source of truth for the binding shape — transaction.py uses it
+    to write, load_entry() uses it to validate on read, and
+    _valid_decision_entry() uses it for the G5 gate. Moving it here keeps
+    the write side and read side from drifting.
+    """
+    fields = {
+        "round": round_n,
+        "prototype_html_hash": prototype_html_hash,
+        "report_ref": report_ref,
+        "summary": summary,
+        "options": list(options),
+    }
+    canonical = json.dumps(
+        fields, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return {"digest": hashlib.sha256(canonical).hexdigest(), **fields}
+
+
 def _round_from_name(name: str) -> int | None:
     match = _ARTIFACT_ROUND.match(name)
     return int(match.group(1)) if match else None
@@ -166,17 +190,14 @@ def _valid_decision_entry(path: Path) -> bool:
         and isinstance(outcome, dict)
     ):
         return False
-    fields = {
-        "round": binding["round"],
-        "prototype_html_hash": binding["prototype_html_hash"],
-        "report_ref": binding["report_ref"],
-        "summary": binding["summary"],
-        "options": binding["options"],
-    }
-    canonical = json.dumps(
-        fields, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-    return binding.get("digest") == hashlib.sha256(canonical).hexdigest()
+    expected = compute_binding_digest(
+        round_n=binding["round"],
+        prototype_html_hash=binding["prototype_html_hash"],
+        report_ref=binding["report_ref"],
+        summary=binding["summary"],
+        options=binding["options"],
+    )
+    return binding.get("digest") == expected["digest"]
 
 
 def inspect_preview(preview_dir: Path) -> PreviewSnapshot:

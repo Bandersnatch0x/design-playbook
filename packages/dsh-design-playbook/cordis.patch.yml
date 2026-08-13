@@ -1,0 +1,43 @@
+# dsh-design-playbook MCP bridge patch
+#
+# Bridges design-playbook's preview + evidence MCP servers (Python stdio)
+# into a DeepSeek Harness profile via @deepseek-ai/dsh-mcp-client.
+#
+# The Cordis `!!js` evaluation scope has no global `require`, but DSH
+# (Node >=22.19) exposes `process.getBuiltinModule`, and the Loader exposes
+# the profile directory as `baseUrl`. createRequire(baseUrl) resolves the
+# installed `design-playbook` dependency from the profile's node_modules —
+# no hardcoded paths, no cwd dependence, no profile-name dependence.
+#
+# Requires the profile to have both `dsh-design-playbook` and its
+# dependency `design-playbook` installed (dsh plugin add handles the
+# latter automatically via the dependency edge).
+
+- insert:
+    - id: design-playbook-preview-mcp
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: stdio
+        serverName: design-playbook-preview
+        command: python
+        args:
+          - !!js >-
+              process.getBuiltinModule('node:module')
+                .createRequire(baseUrl)
+                .resolve('design-playbook/mcp/preview/server.py')
+        failOnStartupError: true
+      disabled: false
+
+    - id: design-playbook-evidence-mcp
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: stdio
+        serverName: design-playbook-evidence
+        command: python
+        args:
+          - !!js >-
+              process.getBuiltinModule('node:module')
+                .createRequire(baseUrl)
+                .resolve('design-playbook/mcp/evidence/server.py')
+        failOnStartupError: true
+      disabled: false

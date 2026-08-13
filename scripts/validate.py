@@ -276,6 +276,80 @@ else:
         f"(ADR-0015); add an entry to COMMAND_INVENTORY in scripts/_checks.py",
     )
 
+print("== design-playbook commands (P2 Cordis plugin registration) ==")
+# lib/index.js must register all six slash commands from commands/*.md.
+# A drift between COMMAND_NAMES and the shipped .md files would surface
+# only at DSH runtime — fail-fast here.
+lib_index = PKG / "lib" / "index.js"
+check(lib_index.is_file(), "lib/index.js present (Cordis plugin entry)")
+if lib_index.is_file():
+    lib_src = lib_index.read_text(encoding="utf-8")
+    # The plugin must declare both injected services.
+    check("'skills'" in lib_src and "'commands'" in lib_src,
+          "lib/index.js injects skills + commands")
+    # Each shipped command must be registered.
+    for cmd_file in sorted((PKG / "commands").glob("*.md")):
+        cmd_name = cmd_file.stem
+        check(f"'{cmd_name}'" in lib_src,
+              f"lib/index.js registers /{cmd_name}")
+    # The handler must use agent.followup (not inject/steer) — slash commands
+    # are explicit user actions that open a turn.
+    check("agent.followup" in lib_src or "invocation.agent.followup" in lib_src,
+          "lib/index.js command handler uses agent.followup")
+    # $ARGUMENTS substitution must be present.
+    check("$ARGUMENTS" in lib_src,
+          "lib/index.js substitutes $ARGUMENTS in command prompts")
+    # Test file must be excluded from the npm tarball.
+    files_field_v2 = npmj.get("files", []) if isinstance(npmj, dict) else []
+    files_field_v2 = files_field_v2 if isinstance(files_field_v2, list) else []
+    check("!lib/test_commands.js" in files_field_v2,
+          "package.json files[] excludes lib/test_commands.js from tarball")
+
+print("== dsh-design-playbook thin bundle (P2 MCP bridge) ==")
+BUNDLE = ROOT / "packages" / "dsh-design-playbook"
+bundle_pkg = _read_json(BUNDLE / "package.json")
+check(bool(bundle_pkg), f"dsh-design-playbook package.json present: {BUNDLE.relative_to(ROOT)}")
+if isinstance(bundle_pkg, dict) and bundle_pkg:
+    check(bundle_pkg.get("name") == "dsh-design-playbook",
+          f"dsh-design-playbook package name is correct (got {bundle_pkg.get('name')!r})")
+    check("design-playbook" in (bundle_pkg.get("dependencies", {}) or {}),
+          "dsh-design-playbook depends on design-playbook")
+    bundle_dsh = bundle_pkg.get("dsh", {})
+    bundle_dsh = bundle_dsh if isinstance(bundle_dsh, dict) else {}
+    bundle_patch = bundle_dsh.get("bundle", {})
+    bundle_patch = bundle_patch if isinstance(bundle_patch, dict) else {}
+    patch_rel = bundle_patch.get("patch")
+    check(patch_rel == "./cordis.patch.yml",
+          f"dsh-design-playbook declares dsh.bundle.patch (got {patch_rel!r})")
+    bundle_patch_file = BUNDLE / "cordis.patch.yml"
+    check(bundle_patch_file.is_file(), "dsh-design-playbook cordis.patch.yml present")
+    if bundle_patch_file.is_file():
+        patch_text = bundle_patch_file.read_text(encoding="utf-8")
+        # The patch must bridge both MCP servers, not the skills provider
+        # (P1 lives in the main design-playbook package).
+        check("design-playbook-preview-mcp" in patch_text,
+              "dsh-design-playbook patch bridges preview MCP")
+        check("design-playbook-evidence-mcp" in patch_text,
+              "dsh-design-playbook patch bridges evidence MCP")
+        check("@deepseek-ai/dsh-mcp-client" in patch_text,
+              "dsh-design-playbook patch uses dsh-mcp-client")
+        # Resolution must use createRequire(baseUrl), not the unavailable
+        # global require (the !!js scope has no require — see research.md §11).
+        check("process.getBuiltinModule('node:module')" in patch_text
+              and "createRequire(baseUrl)" in patch_text,
+              "dsh-design-playbook patch resolves via createRequire(baseUrl)")
+        check("require.resolve(" not in patch_text,
+              "dsh-design-playbook patch does not use unavailable global require")
+        # The resolved .py targets must exist inside the design-playbook dep.
+        check("design-playbook/mcp/preview/server.py" in patch_text,
+              "dsh-design-playbook patch resolves preview server.py")
+        check("design-playbook/mcp/evidence/server.py" in patch_text,
+              "dsh-design-playbook patch resolves evidence server.py")
+        check((PKG / "mcp" / "preview" / "server.py").is_file(),
+              "design-playbook preview server.py exists for bundle resolution")
+        check((PKG / "mcp" / "evidence" / "server.py").is_file(),
+              "design-playbook evidence server.py exists for bundle resolution")
+
 print("== Clean runtime surface (no upstream/vendor residue) ==")
 # Attribution files (README, NOTICE) legitimately credit sources; scan runtime only.
 banned = re.compile(r"cloudai|阿里云|alibaba-cloud-design|\bACD\b|\bECS\b|演示附件|manuscript|#636AF1", re.I)
