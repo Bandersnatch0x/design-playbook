@@ -99,7 +99,7 @@ The orchestrator still **probes** and skips steps when a host has no MCP tools.
 
 | Adapter | MCP tool | Enables | Notes |
 | :--- | :--- | :--- | :--- |
-| `design-playbook-preview` | `preview_prototype` | `preview*` human confirm gate (G5) | Bundled; sibling dir is a compatibility launcher |
+| `design-playbook-preview` | `preview_prototype` | `preview*` human confirm gate (G5) | Bundled; needs system Edge/Chrome for the popup (falls back to default browser); sibling dir is a compatibility launcher |
 | `design-playbook-evidence` | `execute_capture_plan` | `observe*` runtime evidence (G6) — needs Playwright + Chromium | Bundled; capture still optional at runtime |
 
 Docs: [preview](./packages/design-playbook-preview/#install--mcp-config) · [evidence](./packages/design-playbook-evidence/#install--mcp-config)

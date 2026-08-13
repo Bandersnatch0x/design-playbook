@@ -30,10 +30,21 @@ Claude Code / Codex 插件。每次跑同一条可预测链路 — **Design I/O*
 
 ## 📦 安装
 
+**Claude Code**
+
 ```text
 /plugin marketplace add https://github.com/Bandersnatch0x/design-playbook.git
 /plugin install design-playbook@design-playbook
 ```
+
+**Codex**
+
+```bash
+codex plugin marketplace add Bandersnatch0x/design-playbook
+codex plugin add design-playbook@design-playbook
+```
+
+> Codex 安装细节、marketplace 不可用时的 `[mcp_servers.*]` 直配 fallback、preview 前置条件（系统 Chromium + python）：见 [`packages/design-playbook/codex/AGENTS.md`](./packages/design-playbook/codex/AGENTS.md)。`preview*`/`observe*` 仅在对应 MCP 工具注册后运行，否则编排器**静默跳过**（不是报错）。
 
 <details>
 <summary>本地开发 / 自测</summary>
@@ -44,7 +55,12 @@ marketplace catalog 在**仓库根目录**（不在 package 内）：
 claude --plugin-dir <绝对路径>/packages/design-playbook      # 开发加载，免安装
 /plugin marketplace add <仓库根绝对路径>                     # 本地 marketplace
 /plugin install design-playbook@design-playbook
+
+codex plugin marketplace add <仓库根绝对路径>
+codex plugin add design-playbook@design-playbook
 ```
+
+Codex bridge 说明：[`packages/design-playbook/codex/AGENTS.md`](./packages/design-playbook/codex/AGENTS.md)。
 
 </details>
 
@@ -84,7 +100,7 @@ Preview / Evidence MCP 运行时已放进主插件（`packages/design-playbook/m
 
 | 适配器 | MCP 工具 | 启用 | 说明 |
 | :--- | :--- | :--- | :--- |
-| `design-playbook-preview` | `preview_prototype` | `preview*` 人工确认门（G5） | 已打包；兄弟目录为兼容 launcher |
+| `design-playbook-preview` | `preview_prototype` | `preview*` 人工确认门（G5） | 已打包；需系统 Edge/Chrome 弹窗（缺失回退默认浏览器）；兄弟目录为兼容 launcher |
 | `design-playbook-evidence` | `execute_capture_plan` | `observe*` 运行时取证（G6）——需 Playwright + Chromium | 已打包；取证在运行时仍可选 |
 
 文档：[preview](./packages/design-playbook-preview/#install--mcp-config) · [evidence](./packages/design-playbook-evidence/#install--mcp-config)
