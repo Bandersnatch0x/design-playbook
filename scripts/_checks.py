@@ -47,6 +47,16 @@ COMMAND_INVENTORY: dict[tuple[int, int], frozenset[str]] = {
         "run-status",
         "doctor",
     }),
+    # 0.14 keeps the 0.13 command surface; DSH integration adds a new install
+    # surface but no new commands (6-command inventory stays).
+    (0, 14): frozenset({
+        "design-io",
+        "ux-spec",
+        "ui-review",
+        "run-review",
+        "run-status",
+        "doctor",
+    }),
 }
 
 

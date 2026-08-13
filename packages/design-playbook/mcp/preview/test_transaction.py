@@ -561,9 +561,9 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             with self.subTest(binding_matches=binding_matches), tempfile.TemporaryDirectory() as tmp:
                 prototype = Path(tmp) / "round-1.html"
                 prototype.write_text("reviewed", encoding="utf-8")
-                digest = transaction._binding(
+                digest = transaction.compute_binding_digest(
                     round_n=1,
-                    prototype_hash=prototype_html_digest(
+                    prototype_html_hash=prototype_html_digest(
                         prototype.read_bytes()
                     ),
                     report_ref="report.md", summary="summary",

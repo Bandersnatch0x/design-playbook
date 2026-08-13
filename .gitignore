@@ -41,6 +41,7 @@ __pycache__/
 .graphify/
 .playwright-cli/
 .pi-subagents/
+.pi/
 
 # External-reference research notes (not version-controlled; avoid
 # third-party attribution/attribution drift. Keep local only.)

@@ -15,6 +15,7 @@ from typing import Any, Protocol
 
 from design_playbook.mcp.evidence import containment
 from design_playbook.mcp.evidence.capture_contract import parse_capture_contract
+from design_playbook.mcp.preview.util import _log
 
 CAPTURE_TYPES = frozenset({"screenshot", "a11y tree", "interaction trace"})
 ALLOWED_ARGUMENTS = frozenset(
@@ -31,10 +32,6 @@ ALLOWED_ARGUMENTS = frozenset(
     }
 )
 RUN_ROOT_ENV = "DESIGN_PLAYBOOK_RUN_ROOT"
-
-
-def _log(msg: str) -> None:
-    print(msg, file=sys.stderr, flush=True)
 
 
 class BrowserAdapter(Protocol):
@@ -167,7 +164,8 @@ def _resolve_artifact_path(artifact_path: str) -> Path:
     """
     result = containment.write_target(artifact_path, _run_root())
     if result.ok:
-        return result.path  # type: ignore[return-value]
+        assert result.path is not None  # ok implies path is set
+        return result.path
     raise ValueError(_reason_message(result.reason))
 
 
@@ -203,6 +201,106 @@ _REASON_MESSAGES = {
 }
 
 
+def _require_selector(action: dict, index: int, do: str) -> str:
+    """Extract and validate a required selector for an action."""
+    selector = action.get("selector")
+    if not isinstance(selector, str) or not selector:
+        raise ValueError(f"actions[{index}].selector required for {do}")
+    return selector
+
+
+def _action_click(page: Any, action: dict, index: int, do: str) -> None:
+    selector = _require_selector(action, index, do)
+    page.click(selector, timeout=10_000)
+
+
+def _action_fill(page: Any, action: dict, index: int, do: str) -> None:
+    selector = _require_selector(action, index, do)
+    value = action.get("value")
+    if value is None:
+        value = action.get("text", "")
+    if not isinstance(value, str):
+        raise ValueError(f"actions[{index}].value must be a string")
+    page.fill(selector, value, timeout=10_000)
+
+
+def _action_type(page: Any, action: dict, index: int, do: str) -> None:
+    selector = _require_selector(action, index, do)
+    value = action.get("value")
+    if value is None:
+        value = action.get("text", "")
+    if not isinstance(value, str):
+        raise ValueError(f"actions[{index}].value must be a string")
+    page.click(selector, timeout=10_000)
+    page.keyboard.type(value)
+
+
+def _action_press(page: Any, action: dict, index: int, do: str) -> None:
+    key = action.get("key") or action.get("value")
+    if not isinstance(key, str) or not key:
+        raise ValueError(f"actions[{index}].key required for press")
+    selector = action.get("selector")
+    if isinstance(selector, str) and selector:
+        page.press(selector, key, timeout=10_000)
+    else:
+        page.keyboard.press(key)
+
+
+def _action_wait_for_selector(page: Any, action: dict, index: int, do: str) -> None:
+    selector = _require_selector(action, index, do)
+    page.wait_for_selector(selector, timeout=10_000)
+
+
+def _action_wait_for_state(page: Any, action: dict, index: int, do: str) -> None:
+    state = action.get("state")
+    if not isinstance(state, str) or not state:
+        raise ValueError(f"actions[{index}].state required for wait_for_state")
+    selector = action.get("selector")
+    if isinstance(selector, str) and selector:
+        page.wait_for_selector(selector, timeout=10_000)
+    else:
+        page.wait_for_selector(
+            f'[data-state="{state}"]',
+            timeout=10_000,
+        )
+
+
+def _action_wait(page: Any, action: dict, index: int, do: str) -> None:
+    ms = action.get("ms")
+    if ms is None:
+        ms = action.get("timeout_ms", 200)
+    page.wait_for_timeout(int(ms))
+
+
+def _action_select_option(page: Any, action: dict, index: int, do: str) -> None:
+    selector = _require_selector(action, index, do)
+    value = action.get("value")
+    label = action.get("label")
+    if value is None and label is None:
+        raise ValueError(
+            f"actions[{index}].value or label required for select_option")
+    if value is not None:
+        page.select_option(selector, value=value, timeout=10_000)
+    else:
+        page.select_option(selector, label=label, timeout=10_000)
+
+
+# Action registry: do → handler. Each handler owns its validation + Playwright
+# call. Adding an action type means adding a function + one entry here, not an
+# elif branch in a 75-line function.
+_ACTION_HANDLERS: dict[str, Any] = {
+    "click": _action_click,
+    "fill": _action_fill,
+    "type": _action_type,
+    "press": _action_press,
+    "wait_for_selector": _action_wait_for_selector,
+    "wait_for_state": _action_wait_for_state,
+    "wait": _action_wait,
+    "sleep": _action_wait,
+    "select_option": _action_select_option,
+}
+
+
 def _run_actions(page: Any, actions: list[dict[str, Any]]) -> None:
     for i, action in enumerate(actions):
         if not isinstance(action, dict):
@@ -211,73 +309,10 @@ def _run_actions(page: Any, actions: list[dict[str, Any]]) -> None:
         if not isinstance(do, str) or not do.strip():
             raise ValueError(f"actions[{i}].do is required")
         do = do.strip().lower()
-        selector = action.get("selector")
-        if do == "click":
-            if not isinstance(selector, str) or not selector:
-                raise ValueError(f"actions[{i}].selector required for click")
-            page.click(selector, timeout=10_000)
-        elif do in ("fill", "type"):
-            if not isinstance(selector, str) or not selector:
-                raise ValueError(f"actions[{i}].selector required for {do}")
-            value = action.get("value")
-            if value is None:
-                value = action.get("text", "")
-            if not isinstance(value, str):
-                raise ValueError(f"actions[{i}].value must be a string")
-            if do == "fill":
-                page.fill(selector, value, timeout=10_000)
-            else:
-                page.click(selector, timeout=10_000)
-                page.keyboard.type(value)
-        elif do == "press":
-            key = action.get("key") or action.get("value")
-            if not isinstance(key, str) or not key:
-                raise ValueError(f"actions[{i}].key required for press")
-            if isinstance(selector, str) and selector:
-                page.press(selector, key, timeout=10_000)
-            else:
-                page.keyboard.press(key)
-        elif do == "wait_for_selector":
-            if not isinstance(selector, str) or not selector:
-                raise ValueError(
-                    f"actions[{i}].selector required for wait_for_selector"
-                )
-            page.wait_for_selector(selector, timeout=10_000)
-        elif do == "wait_for_state":
-            state = action.get("state")
-            if not isinstance(state, str) or not state:
-                raise ValueError(f"actions[{i}].state required for wait_for_state")
-            # Prefer explicit selector; else body[data-state].
-            if isinstance(selector, str) and selector:
-                page.wait_for_selector(selector, timeout=10_000)
-            else:
-                page.wait_for_selector(
-                    f'[data-state="{state}"]',
-                    timeout=10_000,
-                )
-        elif do in ("wait", "sleep"):
-            ms = action.get("ms")
-            if ms is None:
-                ms = action.get("timeout_ms", 200)
-            page.wait_for_timeout(int(ms))
-        elif do == "select_option":
-            # Native <select> — page.fill raises "Fill did not work on <select>";
-            # select_option drives <option> by value (or visible label) and
-            # fires change.
-            if not isinstance(selector, str) or not selector:
-                raise ValueError(
-                    f"actions[{i}].selector required for select_option")
-            value = action.get("value")
-            label = action.get("label")
-            if value is None and label is None:
-                raise ValueError(
-                    f"actions[{i}].value or label required for select_option")
-            if value is not None:
-                page.select_option(selector, value=value, timeout=10_000)
-            else:
-                page.select_option(selector, label=label, timeout=10_000)
-        else:
+        handler = _ACTION_HANDLERS.get(do)
+        if handler is None:
             raise ValueError(f"actions[{i}]: unsupported do={do!r}")
+        handler(page, action, i, do)
 
 
 def _read_observed_state(page: Any) -> str:
@@ -399,6 +434,36 @@ class PlaywrightBrowserAdapter:
                 browser.close()
 
 
+def _validate_runtime_object(args: dict[str, Any]) -> tuple[str, str, str, list[dict[str, Any]]]:
+    """Validate Runtime Object fields and return (url, cap_type, state, actions).
+
+    Owns the field-level validation that execute_capture_plan previously
+    interleaved with capture logic. Keeps url/type/state/actions validation
+    in one locality so the handler reads cleanly.
+    """
+    url = args.get("url")
+    cap_type = args.get("type")
+    state = args.get("state")
+    actions = args.get("actions")
+
+    if not isinstance(url, str) or not url.strip():
+        raise ValueError("url is required")
+    if not isinstance(cap_type, str) or cap_type not in CAPTURE_TYPES:
+        raise ValueError(
+            f'type must be one of {sorted(CAPTURE_TYPES)}; got {cap_type!r}'
+        )
+    if not isinstance(state, str) or not state.strip():
+        raise ValueError("state is required")
+    if actions is None:
+        actions = []
+    if not isinstance(actions, list):
+        raise ValueError("actions must be an array")
+    for i, a in enumerate(actions):
+        if not isinstance(a, dict):
+            raise ValueError(f"actions[{i}] must be an object")
+    return url, cap_type, state, actions
+
+
 def execute_capture_plan(
     args: dict[str, Any],
     browser_adapter: BrowserAdapter | None = None,
@@ -419,32 +484,14 @@ def execute_capture_plan(
         label = artifact if isinstance(artifact, str) else ""
         return _failed(label, str(exc))
 
-    url = args.get("url")
-    cap_type = args.get("type")
-    state = args.get("state")
-    actions = args.get("actions")
+    url, cap_type, state, actions = _validate_runtime_object(args)
     artifact_path = args.get("artifact_path")
     overwrite = args.get("overwrite", False)
 
-    if not isinstance(url, str) or not url.strip():
-        raise ValueError("url is required")
-    if not isinstance(cap_type, str) or cap_type not in CAPTURE_TYPES:
-        raise ValueError(
-            f'type must be one of {sorted(CAPTURE_TYPES)}; got {cap_type!r}'
-        )
-    if not isinstance(state, str) or not state.strip():
-        raise ValueError("state is required")
     if not isinstance(artifact_path, str) or not artifact_path.strip():
         raise ValueError("artifact_path is required")
     if not isinstance(overwrite, bool):
         raise ValueError("overwrite must be a boolean")
-    if actions is None:
-        actions = []
-    if not isinstance(actions, list):
-        raise ValueError("actions must be an array")
-    for i, a in enumerate(actions):
-        if not isinstance(a, dict):
-            raise ValueError(f"actions[{i}] must be an object")
 
     rel = artifact_path.strip()
     try:

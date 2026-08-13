@@ -1,0 +1,42 @@
+{
+  "name": "dsh-design-playbook",
+  "version": "0.14.0",
+  "description": "Thin DSH bundle that bridges design-playbook's preview + evidence MCP servers into a DeepSeek Harness profile. Depends on the design-playbook package for the server implementations.",
+  "keywords": [
+    "dsh-plugin",
+    "dsh-bundle",
+    "design-playbook",
+    "mcp",
+    "preview",
+    "evidence"
+  ],
+  "license": "MIT",
+  "author": "Bandersnatch0x (https://github.com/Bandersnatch0x)",
+  "homepage": "https://github.com/Bandersnatch0x/design-playbook",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Bandersnatch0x/design-playbook.git",
+    "directory": "packages/dsh-design-playbook"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "README.md",
+    "NOTICE"
+  ],
+  "dependencies": {
+    "design-playbook": "^0.13.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-mcp-client": ">=0.1.0-rc.6"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-mcp-client": {
+      "optional": true
+    }
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

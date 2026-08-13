@@ -86,7 +86,13 @@ def _tool_schema() -> dict[str, Any]:
 
 
 
-def handle_preview_prototype(args: dict[str, Any]) -> dict[str, Any]:
+def _validate_preview_args(args: dict[str, Any]) -> tuple[str | None, str | None, str, int, str, list[str]]:
+    """Validate preview prototype arguments.
+
+    Owns the field-level validation so the handler reads cleanly and the
+    validation shape is testable in isolation. Returns
+    (path_arg, html, summary, round_n, report_ref, options).
+    """
     path_arg = args.get("path")
     html = args.get("html")
     summary = args.get("summary")
@@ -106,6 +112,11 @@ def handle_preview_prototype(args: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("html must be a string")
     if not isinstance(options, list) or not all(isinstance(o, str) for o in options):
         raise ValueError("options must be string[]")
+    return path_arg, html, summary, round_n, report_ref, options
+
+
+def handle_preview_prototype(args: dict[str, Any]) -> dict[str, Any]:
+    path_arg, html, summary, round_n, report_ref, options = _validate_preview_args(args)
 
     try:
         return run_preview_transaction(

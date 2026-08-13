@@ -774,7 +774,8 @@ def collect_review(
             if validated:
                 done.set()
 
-    server = HTTPServer(("127.0.0.1", 0), Handler)
+    _preview_port = int(os.environ.get("DESIGN_PLAYBOOK_PREVIEW_PORT", "0"))
+    server = HTTPServer(("127.0.0.1", _preview_port), Handler)
     port = server.server_address[1]
     thread = threading.Thread(
         target=server.serve_forever, name="dpb-preview-http", daemon=True
