@@ -36,10 +36,14 @@ python packages/design-playbook/codex/install_skills.py --force
 #   @packages/design-playbook/skills/design-playbook/SKILL.md
 ```
 
-Manual MCP (only if not using `codex plugin add`):
+Register MCP directly (fallback when `codex plugin add` is unavailable):
+
+`codex plugin add` depends on a healthy codex marketplace subsystem. If `codex doctor`
+or `codex plugin marketplace list` fails (e.g. a stale marketplace source path), register
+the servers directly in `~/.codex/config.toml` (or your `CODEX_HOME`):
 
 ```toml
-# ~/.codex/config.toml
+# ~/.codex/config.toml  (or $CODEX_HOME/config.toml)
 [mcp_servers.design-playbook-preview]
 command = "python"
 args = ["<abs>/packages/design-playbook/mcp/preview/server.py"]
@@ -49,6 +53,16 @@ command = "python"
 args = ["<abs>/packages/design-playbook/mcp/evidence/server.py"]
 # evidence also needs: pip install playwright && playwright install chromium
 ```
+
+Verify: `codex mcp list` should list both. `preview*` needs a system Edge/Chrome (the
+adapter spawns it via `--app=`); `observe*` needs Playwright + Chromium.
+
+> **`preview*` silently skips when `preview_prototype` is absent.** If preview does not
+> appear, the orchestrator probed `tools/list`, found no `preview_prototype`, and skipped
+> G5 - this is designed skip behaviour, not a crash. Confirm the tool is registered
+> (`codex mcp list`) before treating it as a preview failure. Codex end-to-end preview
+> smoke is not yet validated (v0.4.4 deferred the codex E2E smoke; only evidence/G6 was
+> server-level smoked).
 
 ## Load order
 
