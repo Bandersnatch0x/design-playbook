@@ -41,6 +41,12 @@ class ValidateGateTests(unittest.TestCase):
             ROOT / "packages" / "design-playbook",
             self.root / "packages" / "design-playbook",
         )
+        # The dsh-design-playbook thin bundle is a separate package that
+        # validate.py checks for P2 MCP bridge consistency.
+        shutil.copytree(
+            ROOT / "packages" / "dsh-design-playbook",
+            self.root / "packages" / "dsh-design-playbook",
+        )
         # validate.py reads the repo-root Claude marketplace catalog at
         # ROOT/.claude-plugin/marketplace.json and the Codex/agents catalog
         # at ROOT/.agents/plugins/marketplace.json (ADR-0009 dual-publish).
