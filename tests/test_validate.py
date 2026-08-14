@@ -129,22 +129,71 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("ui-evaluator blocks unattended acceptance", result.stdout)
         self.assertIn("VALIDATION FAILED", result.stdout)
 
-    def test_craft_detector_required_field_drift_fails(self) -> None:
-        catalog = (
+    def test_registry_enum_drift_fails(self) -> None:
+        # G8 product-level: an invalid enum value on any registry entry must
+        # fail the static gate (rules-prototype §8.2 machine face).
+        registry = (
             self.root / "packages" / "design-playbook" / "skills"
-            / "craft-guard" / "references" / "detectors.md"
+            / "design-playbook" / "references" / "rules.md"
         )
-        text = catalog.read_text(encoding="utf-8")
-        self.assertIn("**Rendered signals:**", text)
-        catalog.write_text(
-            text.replace("**Rendered signals:**", "**Visual signals:**", 1),
+        text = registry.read_text(encoding="utf-8")
+        self.assertIn("id: CRAFT-01", text)
+        registry.write_text(
+            text.replace("status: advisory", "status: suggested", 1),
             encoding="utf-8",
         )
 
         result = self.validate()
 
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("CRAFT-01 detector contract", result.stdout)
+        self.assertIn("G8 CRAFT-01 entry valid", result.stdout)
+        self.assertIn("VALIDATION FAILED", result.stdout)
+
+    def test_registry_reference_drift_fails(self) -> None:
+        # G8 reference existence: related/overrides/supersedes must resolve
+        # to registry ids with pinned versions.
+        registry = (
+            self.root / "packages" / "design-playbook" / "skills"
+            / "design-playbook" / "references" / "rules.md"
+        )
+        text = registry.read_text(encoding="utf-8")
+        self.assertIn("related: CRAFT-06@1", text)
+        registry.write_text(
+            text.replace("related: CRAFT-06@1", "related: CRAFT-99@1", 1),
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("references unknown id CRAFT-99", result.stdout)
+        self.assertIn("VALIDATION FAILED", result.stdout)
+
+    def test_craft_not_applicable_reason_drift_fails(self) -> None:
+        # Seven-column migration: a blank not-applicable reason is invalid
+        # (the old blank-N/A discipline carried into the three-state split).
+        fixture = (
+            self.root / "packages" / "design-playbook" / "examples"
+            / "craft-detectors" / "saas-dashboard.md"
+        )
+        text = fixture.read_text(encoding="utf-8")
+        marker = "Surface declares one restrained standard control radius"
+        self.assertIn(marker, text)
+        fixture.write_text(
+            text.replace(
+                "Surface declares one restrained standard control radius in "
+                "design tokens; no pill or shape-geometry variation face is "
+                "in scope",
+                "-",
+                1,
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("observable reason", result.stdout)
         self.assertIn("VALIDATION FAILED", result.stdout)
 
     def test_composition_detector_coverage_drift_fails(self) -> None:
@@ -153,9 +202,9 @@ class ValidateGateTests(unittest.TestCase):
             / "craft-detectors" / "composition-contrast.md"
         )
         text = fixture.read_text(encoding="utf-8")
-        target = "| card-collection-clear | CRAFT-02 | clear |"
+        target = "| card-collection-clear | CRAFT-02@1 | applicable | - | clear |"
         self.assertIn(target, text)
-        fixture.write_text(text.replace(target, "| card-collection-clear | CRAFT-02 | hit |", 1), encoding="utf-8")
+        fixture.write_text(text.replace(target, "| card-collection-clear | CRAFT-02@1 | applicable | - | hit |", 1), encoding="utf-8")
 
         result = self.validate()
 
@@ -194,7 +243,7 @@ class ValidateGateTests(unittest.TestCase):
         result = self.validate()
 
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("ui-evaluator consumes craft detector ledger", result.stdout)
+        self.assertIn("ui-evaluator consumes craft registry audit rows", result.stdout)
         self.assertIn("VALIDATION FAILED", result.stdout)
 
     def test_codex_plugin_json_version_drift_fails(self) -> None:

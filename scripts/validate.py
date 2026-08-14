@@ -18,6 +18,7 @@ from pathlib import Path
 # than run as `python scripts/validate.py` (mirrors doctor.py's guard).
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _checks
+import rules_registry
 
 ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "packages" / "design-playbook"
@@ -454,56 +455,86 @@ web_skip = "Web and mobile Web skip `native-craft`"
 check(web_skip in orchestrator and web_skip in codex,
       "orchestrator and Codex skip native-craft for Web targets")
 
-print("== Craft detector protocol ==")
-detector_catalog = PKG / "skills" / "craft-guard" / "references" / "detectors.md"
-detector_fixture = PKG / "examples" / "craft-detectors" / "saas-dashboard.md"
-detector_text = detector_catalog.read_text(encoding="utf-8") if detector_catalog.exists() else ""
-fixture_text = detector_fixture.read_text(encoding="utf-8") if detector_fixture.exists() else ""
-detector_ids = tuple(f"CRAFT-{index:02d}" for index in range(1, 9))
-detector_fields = (
-    "**Purpose:**",
-    "**Rendered signals:**",
-    "**Source signals:**",
-    "**Legitimate exceptions:**",
-    "**Owner hint:**",
-    "**Positive fix:**",
+print("== Registry entries (G8) ==")
+# First-party UX rule registry (rules-prototype §8.2, decision Q6=A): the
+# product-level G8 self-check replaces the former "Craft detector protocol"
+# section. Machine face: id/version/enums/owner hops/references/history;
+# placeholder entries need the full three-state predicate + blocked exit.
+registry_path = PKG.joinpath(*rules_registry.RULES_PATH_PARTS)
+check(registry_path.is_file(), f"registry present: {registry_path.relative_to(ROOT)}")
+registry_text = registry_path.read_text(encoding="utf-8") if registry_path.exists() else ""
+registry_entries = rules_registry.parse_registry(registry_text)
+registry_errors = rules_registry.validate_registry(registry_entries)
+expected_registry_ids = tuple(
+    [f"CRAFT-{index:02d}" for index in range(1, 9)]
+    + ["A11Y-01", "RESP-01", "I18N-01", "PERF-01", "SEC-01"]
 )
-for index, detector_id in enumerate(detector_ids):
-    next_id = detector_ids[index + 1] if index + 1 < len(detector_ids) else None
-    headings = re.findall(rf"^## {re.escape(detector_id)}\b", detector_text, re.M)
-    start = re.search(rf"^## {re.escape(detector_id)}\b", detector_text, re.M)
-    end = re.search(rf"^## {re.escape(next_id)}\b", detector_text, re.M) if next_id else None
-    section = detector_text[start.start():end.start()] if start and end else (
-        detector_text[start.start():] if start else ""
-    )
+registry_ids = tuple(entry.id for entry in registry_entries)
+check(
+    registry_ids == expected_registry_ids and len(registry_entries) == 13,
+    f"G8 registry has the 13 expected entries in order (got {len(registry_entries)})",
+)
+for entry in registry_entries:
+    entry_errors = [
+        error for error in registry_errors if error.startswith(f"{entry.id}:")
+    ]
     check(
-        len(headings) == 1
-        and bool(section)
-        and all(section.count(field) == 1 for field in detector_fields),
-        f"{detector_id} detector contract",
+        not entry_errors,
+        f"G8 {entry.id} entry valid (v{entry.version}, "
+        f"{entry.status}/{entry.provenance}){'' if not entry_errors else ': ' + '; '.join(entry_errors)}",
     )
+check(
+    not registry_errors,
+    "G8 registry cross-entry checks (references, pinned versions, override cycles)",
+)
+check(
+    not banned.search(registry_text),
+    "G8 registry content lint (no external product names or third-party rule text)",
+)
 
-fixture_rows = re.findall(
-    r"^\| (CRAFT-\d{2}) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \|$",
-    fixture_text,
-    re.M,
+# Thin reference layer: the eight detector six-field blocks moved to the
+# registry; detectors.md now only carries the execution protocol.
+detector_catalog = PKG / "skills" / "craft-guard" / "references" / "detectors.md"
+detector_text = detector_catalog.read_text(encoding="utf-8") if detector_catalog.exists() else ""
+seven_column_header = (
+    "| ID@ver | Applicability | Predicate reason / missing proof | Result "
+    "| Rendered evidence | Source evidence | Exception check | Positive fix |"
 )
 check(
-    len(fixture_rows) == len(detector_ids)
-    and tuple(row[0] for row in fixture_rows) == detector_ids,
-    "SaaS detector ledger has all eight IDs exactly once",
+    "../design-playbook/references/rules.md" in detector_text
+    and seven_column_header in detector_text,
+    "craft-guard detector reference is a thin layer over the registry",
+)
+craft_skill_text = (
+    PKG / "skills" / "craft-guard" / "SKILL.md"
+).read_text(encoding="utf-8")
+check(
+    "../design-playbook/references/rules.md" in craft_skill_text
+    and "Applicability" in craft_skill_text
+    and seven_column_header in craft_skill_text,
+    "craft-guard skill consumes the registry and the seven-column row format",
+)
+
+detector_ids = tuple(f"CRAFT-{index:02d}" for index in range(1, 9))
+
+saas_fixture = PKG / "examples" / "craft-detectors" / "saas-dashboard.md"
+saas_text = saas_fixture.read_text(encoding="utf-8") if saas_fixture.exists() else ""
+saas_rows = rules_registry.parse_craft_rows(saas_text)
+check(
+    tuple(row.entry_id for row in saas_rows) == detector_ids,
+    "SaaS craft ledger has all eight registry IDs exactly once",
 )
 check(
-    all(row[1].strip() in {"clear", "hit", "blocked"} for row in fixture_rows),
-    "SaaS detector ledger uses allowed statuses",
+    not rules_registry.validate_craft_rows(saas_rows, registry_entries),
+    "SaaS craft ledger seven-column rows valid against the registry",
 )
 check(
-    all(all(cell.strip() for cell in row[2:]) for row in fixture_rows),
-    "SaaS detector ledger has complete evidence fields",
+    any(row.applicability == "not-applicable" and row.reason for row in saas_rows),
+    "SaaS craft ledger demonstrates not-applicable with an observable reason",
 )
 check(
-    {row[1].strip() for row in fixture_rows} >= {"clear", "hit", "blocked"},
-    "SaaS detector ledger demonstrates hit clear and blocked",
+    any(row.applicability == "blocked" for row in saas_rows),
+    "SaaS craft ledger demonstrates blocked",
 )
 
 composition_fixture = PKG / "examples" / "craft-detectors" / "composition-contrast.md"
@@ -511,46 +542,71 @@ composition_text = (
     composition_fixture.read_text(encoding="utf-8")
     if composition_fixture.exists() else ""
 )
-composition_rows = re.findall(
-    r"^\| ([^|]+) \| (CRAFT-\d{2}) \| (hit|clear) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \|$",
-    composition_text,
-    re.M,
+composition_rows = rules_registry.parse_craft_rows(
+    composition_text, with_case_column=True)
+check(
+    not rules_registry.validate_craft_rows(composition_rows, registry_entries),
+    "composition contrast seven-column rows valid against the registry",
 )
 for detector_id in detector_ids[:5]:
-    rows = [row for row in composition_rows if row[1] == detector_id]
+    results = [
+        row.result for row in composition_rows
+        if row.entry_id == detector_id and row.applicability == "applicable"
+    ]
     check(
-        len(rows) == 2 and {row[2] for row in rows} == {"hit", "clear"},
+        results == ["hit", "clear"],
         f"{detector_id} contrast has hit and clear",
     )
-    hit_rows = [row for row in rows if row[2] == "hit"]
-    check(
-        len(hit_rows) == 1
-        and all(cell.strip() and cell.strip() != "-" for cell in hit_rows[0][3:]),
-        f"{detector_id} hit has evidence exception owner and fix",
-    )
+check(
+    any(row.applicability == "not-applicable" and row.reason for row in composition_rows),
+    "composition contrast demonstrates not-applicable with an observable reason",
+)
+check(
+    any(row.applicability == "blocked" for row in composition_rows),
+    "composition contrast demonstrates blocked",
+)
 
 landing_fixture = PKG / "examples" / "craft-detectors" / "landing-product-contrast.md"
 landing_text = landing_fixture.read_text(encoding="utf-8") if landing_fixture.exists() else ""
-landing_rows = re.findall(
-    r"^\| ([^|]+) \| (CRAFT-\d{2}) \| (hit|clear) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \|$",
-    landing_text,
-    re.M,
+landing_rows = rules_registry.parse_craft_rows(
+    landing_text, with_case_column=True)
+check(
+    not rules_registry.validate_craft_rows(landing_rows, registry_entries),
+    "landing contrast seven-column rows valid against the registry",
 )
 for detector_id in detector_ids[5:]:
-    rows = [row for row in landing_rows if row[1] == detector_id]
+    results = [
+        row.result for row in landing_rows
+        if row.entry_id == detector_id and row.applicability == "applicable"
+    ]
     check(
-        len(rows) == 2 and {row[2] for row in rows} == {"hit", "clear"},
+        results == ["hit", "clear"],
         f"{detector_id} contrast has hit and clear",
     )
-    hit_rows = [row for row in rows if row[2] == "hit"]
-    check(
-        len(hit_rows) == 1
-        and all(cell.strip() and cell.strip() != "-" for cell in hit_rows[0][3:]),
-        f"{detector_id} hit has evidence exception owner and fix",
-    )
+check(
+    any(row.applicability == "not-applicable" and row.reason for row in landing_rows),
+    "landing contrast demonstrates not-applicable with an observable reason",
+)
+check(
+    any(row.applicability == "blocked" for row in landing_rows),
+    "landing contrast demonstrates blocked",
+)
 
 brand_fixture = PKG / "examples" / "craft-detectors" / "existing-brand-contrast.md"
 brand_text = brand_fixture.read_text(encoding="utf-8") if brand_fixture.exists() else ""
+brand_rows = rules_registry.parse_craft_rows(brand_text)
+check(
+    not rules_registry.validate_craft_rows(brand_rows, registry_entries),
+    "existing-brand contrast seven-column rows valid against the registry",
+)
+check(
+    any(row.applicability == "not-applicable" and row.reason for row in brand_rows),
+    "existing-brand contrast demonstrates not-applicable with an observable reason",
+)
+check(
+    any(row.applicability == "blocked" for row in brand_rows),
+    "existing-brand contrast demonstrates blocked",
+)
 check(
     all(phrase in brand_text for phrase in (
         "binding status is `ready`",
@@ -613,9 +669,10 @@ PROSE_PHRASES: dict[str, list[str]] = {
     "ui-evaluator pass requires all evidence rows": [
         "every required evidence row passes",
     ],
-    "ui-evaluator consumes craft detector ledger": [
+    "ui-evaluator consumes craft registry audit rows": [
         "`.scratch/<run>/craft-guard.md`",
-        "all eight `CRAFT-01` through `CRAFT-08` rows",
+        "exactly one seven-column audit row for every registry craft entry whose applicability predicate evaluates to `applicable`",
+        "warn when every evaluated entry is `not-applicable`, any `not-applicable` row lacks an observable reason, or the `blocked` rate is abnormal",
         "A detector never decides source, severity, or verdict",
         "Carry every `blocked` row into evaluation as a craft proof gap",
         "Keep craft detector rows out of the G6 manifest and L6 evidence ledger",
@@ -704,7 +761,7 @@ check_skill_prose(
     "ui-evaluator requires an evidence ledger and blocks missing proof",
     anchor="### 2. Run checks",
 )
-check_skill_prose(run_checks, "ui-evaluator consumes craft detector ledger", anchor="### 2. Run checks")
+check_skill_prose(run_checks, "ui-evaluator consumes craft registry audit rows", anchor="### 2. Run checks")
 check_skill_prose(verdict, "ui-evaluator pass requires all evidence rows", anchor="### 4. Verdict")
 
 print("== Run aggregate (v0.9) ==")

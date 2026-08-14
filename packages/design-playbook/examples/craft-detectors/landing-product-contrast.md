@@ -1,12 +1,14 @@
-# Landing and product detector contrast cases
+# Landing and product craft contrast cases
 
-Authored worked cases for CRAFT-06 through CRAFT-08. Each result is advisory and leaves declaration mapping, severity, and verdict to `ui-evaluator`.
+Authored worked cases for CRAFT-06 through CRAFT-08 against the registry. Each applicable result is advisory and leaves declaration mapping, severity, and verdict to `ui-evaluator`.
 
-| Case | ID | Expected | Rendered evidence | Source evidence | Exception check | Owner hint | Positive fix |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| dashboard-display-type-hit | CRAFT-06 | hit | Compact metrics panel uses 72px heading that crowds values below | Panel heading references display-hero token | Surface is an operational panel, not a literal hero | design | Use panel title role and preserve hierarchy through grouping and weight |
-| product-hero-clear | CRAFT-06 | clear | Product name leads first viewport while next section remains visible | H1 uses display token within bounded responsive hero | Literal product hero warrants display scale and text fits target viewports | design | - |
-| verbose-toolbar-hit | CRAFT-07 | hit | Toolbar repeats Undo, Redo, Save, Zoom in, and Zoom out as wide text pills | Generic Button renders familiar tool actions despite icon library availability | Actions are familiar and low-risk; accessible icon labels are possible | components | Use icon buttons with accessible names and tooltips; keep text for ambiguous commands |
-| destructive-text-clear | CRAFT-07 | clear | Delete workspace remains an explicit text action with consequence copy | Destructive Button opens confirmation Dialog | High-risk action benefits from explicit language | components | - |
-| looping-decoration-hit | CRAFT-08 | hit | CTA badge bounces continuously without state change | Infinite keyframes animate translateY and ignore reduced-motion | No game or immersive intent is declared | craft | Remove loop and use short transform/opacity feedback only for a named state change |
-| state-transition-clear | CRAFT-08 | clear | Saved indicator fades in after persistence and stays stable | 160ms opacity transition follows saved state and reduced-motion disables it | Motion explains persistence completion | craft | - |
+| Case | ID@ver | Applicability | Predicate reason / missing proof | Result | Rendered evidence | Source evidence | Exception check | Positive fix |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| dashboard-display-type-hit | CRAFT-06@1 | applicable | - | hit | Compact metrics panel uses 72px heading that crowds values below | Panel heading references display-hero token | Surface is an operational panel, not a literal hero | Use panel title role and preserve hierarchy through grouping and weight |
+| product-hero-clear | CRAFT-06@1 | applicable | - | clear | Product name leads first viewport while next section remains visible | H1 uses display token within bounded responsive hero | Literal product hero warrants display scale and text fits target viewports | - |
+| verbose-toolbar-hit | CRAFT-07@1 | applicable | - | hit | Toolbar repeats Undo, Redo, Save, Zoom in, and Zoom out as wide text pills | Generic Button renders familiar tool actions despite icon library availability | Actions are familiar and low-risk; accessible icon labels are possible | Use icon buttons with accessible names and tooltips; keep text for ambiguous commands |
+| destructive-text-clear | CRAFT-07@1 | applicable | - | clear | Delete workspace remains an explicit text action with consequence copy | Destructive Button opens confirmation Dialog | High-risk action benefits from explicit language | - |
+| looping-decoration-hit | CRAFT-08@1 | applicable | - | hit | CTA badge bounces continuously without state change | Infinite keyframes animate translateY and ignore reduced-motion | No game or immersive intent is declared | Remove loop and use short transform/opacity feedback only for a named state change |
+| state-transition-clear | CRAFT-08@1 | applicable | - | clear | Saved indicator fades in after persistence and stays stable | 160ms opacity transition follows saved state and reduced-motion disables it | Motion explains persistence completion | - |
+| plain-docs-not-applicable | CRAFT-07@1 | not-applicable | Static documentation page under review declares no repeated operation surface; no toolbar or high-frequency action face is in scope | - | - | - | No repeated-operation face to check | - |
+| motion-source-blocked | CRAFT-08@1 | blocked | Motion implementation source was not included in review input for this case; transition purpose and reduced-motion handling cannot be decided | - | Rendered shows an entrance transition on the pricing section | Motion source absent from review input | No exception can be checked without source | Provide the motion source before complete craft Pass |

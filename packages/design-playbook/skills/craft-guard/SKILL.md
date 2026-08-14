@@ -44,7 +44,12 @@ Treat as exhaustive for the surface under edit.
 
 ### AI slop → target look
 
-For implemented UI, enable detectors from the active spec/contract (or the full catalog when none is declared). Run enabled checks from [`references/detectors.md`](references/detectors.md) against rendered UI plus relevant source. Write exactly one `hit|clear|blocked|N/A` row per **enabled** detector to `.scratch/<run>/craft-guard.md`. **N/A requires an observable reason** (blank N/A is invalid). Unknown detector IDs fail at this stage. Detector output is advisory: record evidence, exception check, and positive fix; leave declaration source, severity, and verdict to `ui-evaluator`. Missing proof is `blocked`, not a silent clear.
+For implemented UI, evaluate the applicability predicates of the registry entries in [`../design-playbook/references/rules.md`](../design-playbook/references/rules.md) — the subset declared by the active spec/contract, or the full catalog when none is declared. Run every entry whose predicate evaluates to `applicable` against rendered UI plus relevant source. Execution protocol and the row format live in [`references/detectors.md`](references/detectors.md). Write exactly one seven-column audit row per **applicable** entry to `.scratch/<run>/craft-guard.md`:
+
+| ID@ver | Applicability | Predicate reason / missing proof | Result | Rendered evidence | Source evidence | Exception check | Positive fix |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+
+`Applicability` is the entry's three-state predicate outcome: `applicable`, `not-applicable`, or `blocked`. **not-applicable and blocked both require an observable reason** (blank is invalid — never a silent skip). `Result` is `clear|hit` only for applicable rows, `-` otherwise; `Positive fix` is required on hit rows. Missing rendered or source proof is `blocked`, not a silent clear. Unknown registry IDs fail at this stage. Audit rows are advisory: record evidence, exception check, and positive fix; leave declaration source, severity, and verdict to `ui-evaluator`.
 
 | Push toward | Instead of default sludge |
 | --- | --- |
@@ -58,4 +63,4 @@ For implemented UI, enable detectors from the active spec/contract (or the full 
 
 ## Completion
 
-**Done when:** hierarchy, every in-scope wait/fail path, every animation, and — when the surface has L4 interactive zones — every zone's affordance (per `references/craft.md`) pass their checks; implemented UI also has all eight detector rows with no unexplained missing proof. Residual hits and blocked proof are handed to `ui-evaluator`; detector rows do not assign source, severity, or verdict.
+**Done when:** hierarchy, every in-scope wait/fail path, every animation, and — when the surface has L4 interactive zones — every zone's affordance (per `references/craft.md`) pass their checks; implemented UI also records exactly one seven-column audit row for every registry craft entry whose applicability predicate evaluates to `applicable`, with no unexplained missing proof. Residual hits and blocked proof are handed to `ui-evaluator`; audit rows do not assign source, severity, or verdict.

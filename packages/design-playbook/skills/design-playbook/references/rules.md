@@ -1,6 +1,6 @@
 # First-party UX rule registry
 
-Product-level declaration shared by the whole pipeline (read-only at run time; runs only produce audit rows and findings that reference it). Entry blocks below are structured field blocks validated by the product-level G8 self-check in `scripts/validate.py`.
+Product-level declaration shared by the whole pipeline (read-only at run time; runs only produce audit rows and findings that reference it). Entry blocks below are structured field blocks validated by the product-level G8 self-check (`validate.py`, repo scripts).
 
 - `schemaVersion: 1`
 - Split rule: when the registry exceeds 30 entries or 3 families, split by family into per-family files plus an index and migrate the G8 cross-file checks at the same time.
@@ -359,7 +359,7 @@ evidence-method: runtime-observation
 severity-default: S2 / judgment
 exceptions: declared background tasks that report completion through notification instead of inline feedback
 false-positives: operations shorter than the perception threshold being required to show feedback (to be verified)
-owner: spec -> R2; template -> R5
+owner: spec -> R2|R5
 provenance: placeholder
 status: advisory
 fix: tier feedback by duration aligned with the craft Loading tiers declaration; timeouts get retry or cancel exits; in-flight triggers get busy state
