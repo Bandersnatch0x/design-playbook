@@ -25,6 +25,7 @@ if str(SCRIPTS) not in sys.path:
 
 import rules_registry  # noqa: E402
 from design_playbook.scripts import g11_coverage  # noqa: E402
+from design_playbook.scripts._diagnostics import finding, render_text  # noqa: E402
 from design_playbook.scripts.g1_spec import check_spec  # noqa: E402
 from design_playbook.scripts.g2_g4_pointback import (  # noqa: E402
     _findings,
@@ -344,6 +345,74 @@ disposition: info
             f.rule_id for f in g11_coverage.check_coverage(legacy, required=True)
         }
         self.assertIn("G11.missing_coverage_block", rules)
+
+
+class TextProjectionFixLineTests(unittest.TestCase):
+    """Review advisory R4: the default text projection appends a ``fix:``
+    continuation line whenever a finding carries repair guidance, so the
+    text face is as actionable as ``--format json``. Historical FAIL/WARN
+    line formats are untouched."""
+
+    def test_error_with_repair_appends_fix_line(self) -> None:
+        out = render_text([finding(
+            "G11.missing_coverage_block",
+            "G11 coverage: report must contain a '## Coverage statement' block",
+            owner="point-back.md",
+            expected="a Coverage statement block",
+            actual="missing",
+            repair="Record exhaustive-review completion, sampling, and the "
+                   "explicit unreviewed list",
+        )], [])
+        lines = out.splitlines()
+        self.assertEqual(lines[0], "RUN INVALID:")
+        self.assertEqual(
+            lines[1],
+            "  FAIL  G11 coverage: report must contain a "
+            "'## Coverage statement' block")
+        self.assertEqual(
+            lines[2],
+            "        fix:  Record exhaustive-review completion, sampling, "
+            "and the explicit unreviewed list")
+
+    def test_warning_with_repair_appends_fix_line(self) -> None:
+        out = render_text([], [finding(
+            "G6.method_unusable_quarantined",
+            "G6 method: human-subject evidence lacks population/ethics",
+            owner="evidence/manifest.jsonl",
+            expected="population + ethics on human-subject entries",
+            actual="unusable entry quarantined",
+            repair="Capture population and ethics, or drop the claim to the "
+                   "evidence basis",
+            severity="warning",
+        )])
+        self.assertIn("RUN OK", out)
+        self.assertIn("  WARN  G6 method:", out)
+        self.assertIn(
+            "        fix:  Capture population and ethics", out)
+
+    def test_finding_without_repair_has_no_fix_line(self) -> None:
+        out = render_text([finding(
+            "G1.missing_l6",
+            "G1 spec: no L6 criteria",
+            owner="spec.md",
+            expected="an L6 block",
+            actual="missing",
+            repair="",
+        )], [])
+        self.assertNotIn("fix:", out)
+        self.assertIn("  FAIL  G1 spec: no L6 criteria", out)
+
+    def test_g11_findings_render_their_repair_in_text(self) -> None:
+        # Sampled rule (review advisory): the G11 gate's findings must show
+        # their structured repair in the default text projection.
+        legacy = "# pb\n\n## Evidence ledger\n\n(ledger rows only)\n"
+        findings = g11_coverage.check_coverage(legacy, required=True)
+        self.assertTrue(findings)
+        out = render_text(findings, [])
+        for item in findings:
+            self.assertIn(f"  FAIL  {item.message}", out)
+            if item.repair:
+                self.assertIn(f"        fix:  {item.repair}", out)
 
 
 class SeverityAxisTests(unittest.TestCase):

@@ -53,21 +53,40 @@ def finding(
 
 
 def render_text(errors: Iterable[Finding], warnings: Iterable[Finding]) -> str:
-    """Project findings into the historical readable validator report."""
+    """Project findings into the historical readable validator report.
+
+    The historical ``FAIL``/``WARN`` message lines are byte-identical to the
+    pre-structure projection; when a finding carries a ``repair`` guidance a
+    continuation line is appended below it (review advisory, R4) so the
+    default text face stays as actionable as ``--format json`` without
+    changing any existing line's format.
+    """
     errs = list(errors)
     warns = list(warnings)
     lines: list[str] = []
     if errs:
         lines.append("RUN INVALID:")
-        for item in errs:
-            lines.append(f"  FAIL  {item.message}")
-        for item in warns:
-            lines.append(f"  WARN  {item.message}")
+        lines.extend(_text_lines(errs, "FAIL"))
+        lines.extend(_text_lines(warns, "WARN"))
     else:
         lines.append("RUN OK: artifacts satisfy the deterministic seam")
-        for item in warns:
-            lines.append(f"  WARN  {item.message}")
+        lines.extend(_text_lines(warns, "WARN"))
     return "\n".join(lines) + ("\n" if lines else "")
+
+
+def _text_lines(items: Iterable[Finding], label: str) -> list[str]:
+    """One ``FAIL``/``WARN`` line per finding, plus a fix line when set.
+
+    The fix line indents to the message column (the 8-character
+    ``"  FAIL  "`` prefix) so consumers filtering on line prefixes or the
+    historical message substrings are unaffected.
+    """
+    out: list[str] = []
+    for item in items:
+        out.append(f"  {label}  {item.message}")
+        if item.repair:
+            out.append(f"        fix:  {item.repair}")
+    return out
 
 
 def render_json(errors: Iterable[Finding], warnings: Iterable[Finding]) -> str:

@@ -403,6 +403,22 @@ class G8RunRegistryTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("G8 OK", result.stdout)
 
+    def test_missing_row_finding_renders_repair_in_text(self) -> None:
+        # Review advisory R4 (sampled G8 rule): the default text projection
+        # shows the structured repair under the FAIL line.
+        from design_playbook.scripts._diagnostics import render_text
+
+        broken = P2_CRAFT.replace(
+            "| I18N-01@1 | not-applicable | 单语控制台，无 i18n 声明（无 i18n.* 契约字段，L1 未声明多语言用户群） | - | - | - | 单语声明成立 | - |",
+            "")
+        findings = check_g8_run(broken, self.entries, "P2")
+        out = render_text(findings, [])
+        missing = next(
+            f for f in findings if f.rule_id == "G8.run_missing_row")
+        self.assertIn(f"  FAIL  {missing.message}", out)
+        self.assertIn(f"        fix:  {missing.repair}", out)
+        self.assertIn("Evaluate I18N-01", missing.repair)
+
 
 class FixtureWalkthroughTests(unittest.TestCase):
     """Issue #38: the extended fixture run demonstrates every S3 face."""
