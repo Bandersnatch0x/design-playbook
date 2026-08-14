@@ -53,6 +53,14 @@ Gates the run-level controls that the skills also declare in prose:
                            parser; P2/P3 demand one audit row per advisory
                            entry (full predicate evaluation), P1 allows the
                            touch-related subset
+  G12 tier boundary      - conditional (S4): when plan.md carries a
+                           run-profile block, the actual declaration touch
+                           (contract diff vs the bind snapshot, finding
+                           routes, E-tier DD entries, blocking count, spec
+                           L6 growth) must fit the declared tier's allowed
+                           face; violations emit E1-E5 escalation signals
+                           and require a recorded run-profile upgrade
+                           (escalate-and-rewalk, never exemption)
 
 Reads plain Markdown, so it is host-neutral: it accepts artifacts produced by
 any agent (Claude Code, Codex) that follow the declared shape.
@@ -148,6 +156,19 @@ from design_playbook.scripts.interaction_dimensions import (  # noqa: E402
     check_dimensions,
 )
 from design_playbook.scripts.method_semantics import check_method_semantics  # noqa: E402
+
+# vNext S4 gates: G12 tier boundary (contract diff vs the declared face,
+# E1-E6 escalation accounting) over the run-profile block and the G7 bind
+# snapshot; runs without a run-profile block are not re-checked.
+from design_playbook.scripts.dd_entries import parse_dd_entries  # noqa: E402
+from design_playbook.scripts.g12_tier_boundary import (  # noqa: E402
+    CRITERION_PATH,
+    bind_fields,
+    check_g12,
+    contract_touch,
+    load_bind_snapshot,
+    load_effective_contract,
+)
 
 
 def run(
@@ -303,23 +324,24 @@ def run(
     dr_g10 = dr if dr is not None else (
         rr / "decision-report.md" if rr is not None else None
     )
+    report_text = ""
     if dr_g10 is not None and dr_g10.is_file():
         try:
             report_text = dr_g10.read_text(encoding="utf-8")
         except (OSError, UnicodeError):
             report_text = ""
-        if report_text and DD_HEADING.search(report_text):
-            errs += check_g10(
-                report_text,
-                report_path=dr_g10,
-                preview_dir=pd,
-                shaping_events=shaping_events,
-                pointback_text=pointback_text,
-                baseline_state=_load_json_tolerant(
-                    rr / "design-baseline" / "state.json"
-                ) if rr is not None else None,
-                run_profile_tier=_plan_tier(rr),
-            )
+    if report_text and DD_HEADING.search(report_text):
+        errs += check_g10(
+            report_text,
+            report_path=dr_g10,
+            preview_dir=pd,
+            shaping_events=shaping_events,
+            pointback_text=pointback_text,
+            baseline_state=_load_json_tolerant(
+                rr / "design-baseline" / "state.json"
+            ) if rr is not None else None,
+            run_profile_tier=_plan_tier(rr),
+        )
 
     # G8 run level (vNext S3): a craft-guard.md in the run root is checked
     # against the registry (shared parser). P2/P3 demand one audit row per
@@ -340,6 +362,38 @@ def run(
             ))
         else:
             errs += check_g8_run(craft_text, registry_entries, _plan_tier(rr))
+
+    # G12 tier boundary + escalation signals (vNext S4): fires when plan.md
+    # carries a run-profile block; legacy runs without the block are not
+    # re-checked. The contract diff basis is the G7 bind snapshot; without
+    # contract paths the route / decision / blocking faces still fire.
+    profile = _plan_profile(rr)
+    if profile is not None:
+        touch = None
+        bound_criteria = None
+        if contract_project and contract_run:
+            snapshot = load_bind_snapshot(Path(contract_run))
+            effective = load_effective_contract(Path(contract_project))
+            if snapshot is not None and effective is not None:
+                bound = bind_fields(snapshot)
+                if bound is not None:
+                    touch = contract_touch(bound, effective)
+                    bound_criteria = sum(
+                        1 for path in bound if CRITERION_PATH.match(path))
+        dd_explore = bool(
+            report_text and DD_HEADING.search(report_text)
+            and any(entry.tier == "explore"
+                    for entry in parse_dd_entries(report_text)))
+        g12_errs, g12_warns, _signals = check_g12(
+            profile,
+            pointback_text=pointback_text,
+            touch=touch,
+            bound_criteria=bound_criteria,
+            spec_l6_count=len(_l6_items(spec_text)),
+            dd_explore=dd_explore,
+        )
+        errs += g12_errs
+        warns += g12_warns
     return errs, warns
 
 
@@ -353,14 +407,19 @@ def _load_json_tolerant(path: Path) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
-def _plan_tier(run_root: Path | None) -> str | None:
+def _plan_profile(run_root: Path | None):
+    """The parsed run-profile block of a run root; None when absent."""
     if run_root is None:
         return None
     plan = run_root / "plan.md"
     try:
-        profile = parse_run_profile(plan.read_text(encoding="utf-8"))
+        return parse_run_profile(plan.read_text(encoding="utf-8"))
     except (OSError, UnicodeError):
         return None
+
+
+def _plan_tier(run_root: Path | None) -> str | None:
+    profile = _plan_profile(run_root)
     return profile.tier if profile is not None else None
 
 
