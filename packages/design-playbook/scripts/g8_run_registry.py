@@ -36,6 +36,7 @@ if str(_PKG_ROOT) not in sys.path:
 
 from design_playbook.scripts import rules_registry  # noqa: E402
 from design_playbook.scripts._diagnostics import Finding, finding  # noqa: E402
+from design_playbook.scripts.rules_registry import RegistryError  # noqa: E402
 from design_playbook.scripts.run_profile import parse_run_profile  # noqa: E402
 
 REGISTRY_PATH = (
@@ -65,13 +66,20 @@ def check_g8_run(craft_text: str, entries: list, tier: str | None) -> list[Findi
     rows = rules_registry.parse_craft_rows(craft_text)
 
     for error in rules_registry.validate_craft_rows(rows, entries):
+        # Row-level errors arrive structured (RegistryError, review advisory
+        # R4): lift the rule/expected/actual/repair face into the finding so
+        # the run-level projection is as actionable as the Finding-model
+        # gates; the message line and the fallbacks stay byte-compatible.
+        detail = error if isinstance(error, RegistryError) else None
         errs.append(finding(
             "G8.run_row",
             f"G8 run: {error}",
             owner="craft-guard.md",
-            expected="seven-column row valid against the registry",
-            actual=error,
-            repair="Fix the audit row (or pin the current entry version)",
+            expected=(detail.expected if detail and detail.expected
+                      else "seven-column row valid against the registry"),
+            actual=str(detail.actual) if detail and detail.actual else str(error),
+            repair=(detail.repair if detail and detail.repair
+                    else "Fix the audit row (or pin the current entry version)"),
         ))
 
     if tier not in FULL_EVALUATION_TIERS:

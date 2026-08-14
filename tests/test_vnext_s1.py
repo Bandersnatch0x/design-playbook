@@ -103,6 +103,65 @@ class RegistryTests(unittest.TestCase):
             any("pins CRAFT-06@2" in error for error in errors))
 
 
+class RegistryErrorStructureTests(unittest.TestCase):
+    """Review advisory R4: registry errors carry the structured face
+    (rule/expected/actual/repair) while staying str-compatible so the
+    historical consumers (validate.py prefix filter, join, substring
+    tests) are unchanged."""
+
+    def test_enum_error_carries_structured_fields(self) -> None:
+        text = REGISTRY_TEXT.replace("status: advisory", "status: suggested", 1)
+        errors = rules_registry.validate_registry(
+            rules_registry.parse_registry(text))
+        match = next(
+            error for error in errors
+            if isinstance(error, rules_registry.RegistryError)
+            and error.rule == "CRAFT-01")
+        self.assertIsInstance(match, rules_registry.RegistryError)
+        self.assertIsInstance(match, str)  # str face preserved
+        self.assertTrue(str(match).startswith("CRAFT-01:"))
+        self.assertIn("advisory", match.expected)
+        self.assertEqual(match.actual, "suggested")
+        self.assertTrue(match.repair)
+
+    def test_reference_error_carries_structured_fields(self) -> None:
+        text = REGISTRY_TEXT.replace(
+            "related: CRAFT-06@1", "related: CRAFT-99@1", 1)
+        errors = rules_registry.validate_registry(
+            rules_registry.parse_registry(text))
+        match = next(
+            error for error in errors if "unknown id CRAFT-99" in error)
+        self.assertEqual(match.rule, "CRAFT-01")
+        self.assertIn("registry id", match.expected)
+        self.assertEqual(match.actual, "CRAFT-99")
+        self.assertTrue(match.repair)
+
+    def test_craft_row_errors_are_structured(self) -> None:
+        entries = rules_registry.parse_registry(REGISTRY_TEXT)
+        broken = (
+            "| CRAFT-01@9 | applicable | - | hit | rendered | source "
+            "| exception | fix |\n"
+        )
+        errors = rules_registry.validate_craft_rows(
+            rules_registry.parse_craft_rows(broken), entries)
+        pin = next(e for e in errors if "pinned version" in e)
+        self.assertIsInstance(pin, rules_registry.RegistryError)
+        self.assertEqual(pin.rule, "CRAFT-01@9")
+        self.assertEqual(pin.expected, "CRAFT-01@1")
+        self.assertTrue(pin.repair)
+
+    def test_structured_dict_projection(self) -> None:
+        text = REGISTRY_TEXT.replace(
+            "version: 1", "version: 0", 1)
+        errors = rules_registry.validate_registry(
+            rules_registry.parse_registry(text))
+        match = next(e for e in errors if "positive integer" in e)
+        payload = match.to_dict()
+        self.assertEqual(payload["rule"], "CRAFT-01")
+        self.assertEqual(payload["actual"], "0")
+        self.assertTrue(payload["repair"])
+
+
 class SevenColumnRowTests(unittest.TestCase):
     ROW = ("| CRAFT-01@1 | applicable | - | hit | three equal primaries "
            "| three primary variants | no exception | keep one primary |")

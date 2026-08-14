@@ -389,6 +389,18 @@ class G8RunRegistryTests(unittest.TestCase):
         self.assertIn(
             "G8.run_row", _rules(check_g8_run(broken, self.entries, "P2")))
 
+    def test_row_level_error_lifts_structured_fields(self) -> None:
+        # Review advisory R4: validate_craft_rows errors arrive structured
+        # (RegistryError) and the run-level finding carries their
+        # expected/actual/repair face, not just the message.
+        broken = P2_CRAFT.replace("| CRAFT-01@1 |", "| CRAFT-01@9 |")
+        row_finding = next(
+            f for f in check_g8_run(broken, self.entries, "P2")
+            if f.rule_id == "G8.run_row")
+        self.assertEqual(row_finding.expected, "CRAFT-01@1")
+        self.assertEqual(row_finding.actual, "CRAFT-01@9")
+        self.assertIn("Re-pin", row_finding.repair)
+
     def test_cli_on_fixture_run(self) -> None:
         import os
 
