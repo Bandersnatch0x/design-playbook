@@ -42,6 +42,7 @@ jobs:
           python3 tests/test_vnext_s1.py
           python3 tests/test_vnext_s2.py
           python3 tests/test_vnext_s3.py
+          python3 tests/test_vnext_s4.py
       - name: Syntax check (all Python)
         # py_compile is the always-on syntax gate. The MCP stdio suites now
         # also run as required gates below (ticket 06): preview mocks its
@@ -87,6 +88,7 @@ jobs:
             tests/test_vnext_s1.py \
             tests/test_vnext_s2.py \
             tests/test_vnext_s3.py \
+            tests/test_vnext_s4.py \
             packages/design-playbook/scripts/validate_run.py \
             packages/design-playbook/scripts/g1_spec.py \
             packages/design-playbook/scripts/g2_g4_pointback.py \
@@ -103,6 +105,9 @@ jobs:
             packages/design-playbook/scripts/dd_entries.py \
             packages/design-playbook/scripts/shaping_log.py \
             packages/design-playbook/scripts/run_profile.py \
+            packages/design-playbook/scripts/repair_rounds.py \
+            packages/design-playbook/scripts/escalation_signals.py \
+            packages/design-playbook/scripts/g12_tier_boundary.py \
             packages/design-playbook/scripts/stages.py \
             packages/design-playbook/scripts/run_status.py \
             packages/design-playbook/design_playbook.py \

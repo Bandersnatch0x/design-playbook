@@ -82,9 +82,16 @@ class EscalationSignal:
 
 
 def finding_routes(parsed: dict[str, list[str]]) -> frozenset[str]:
-    """Route set of one parsed finding (empty when unannotated)."""
-    return frozenset(
-        value.strip() for value in parsed.get("route", []) if value.strip())
+    """Route set of one parsed finding (empty when unannotated).
+
+    Multi-layer findings carry the minimum owning set on one line
+    (whitespace-separated); a second ``route:`` line is a shape error the
+    route check reports.
+    """
+    routes: set[str] = set()
+    for value in parsed.get("route", []):
+        routes.update(value.split())
+    return frozenset(routes)
 
 
 def parse_routes(text: str) -> tuple[tuple[int, str, frozenset[str]], ...]:
@@ -142,8 +149,8 @@ def check_routes(text: str) -> list[Finding]:
                        "the minimum owning set",
             ))
         unknown = sorted(
-            value.strip() for value in values
-            if value.strip() not in VALID_ROUTES
+            token for value in values for token in value.split()
+            if token not in VALID_ROUTES
         )
         if unknown:
             errs.append(finding(
