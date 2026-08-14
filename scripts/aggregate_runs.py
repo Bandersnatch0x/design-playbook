@@ -31,6 +31,10 @@ if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
 from design_playbook.mcp.evidence.ledger_syntax import LedgerFacts, parse_ledger  # noqa: E402
+from design_playbook.scripts.learning_candidates import (  # noqa: E402
+    candidate_view,
+    occurrences_from_pointbacks,
+)
 from design_playbook.scripts.run_facts import RunFacts, capture_run_facts  # noqa: E402
 from design_playbook.scripts.validate_run import run as validate_run  # noqa: E402
 
@@ -145,7 +149,8 @@ def normalize(text: str) -> str:
     return " ".join(text.casefold().split())
 
 
-def aggregate(runs: list[Path], root: Path, top: int) -> dict:
+def aggregate(runs: list[Path], root: Path, top: int,
+              task_contexts: dict[str, str] | None = None) -> dict:
     payload: dict = {
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "scratch_root": str((root / ".scratch").resolve()),
@@ -153,9 +158,14 @@ def aggregate(runs: list[Path], root: Path, top: int) -> dict:
         "runs": [],
         "rollup": {},
         "repeat_blockers": [],
+        # vNext S5 additive key (vnext-prototype 1.2): the derived D8
+        # learning-candidate view. Reported only, never written back; the
+        # legacy keys above are unchanged.
+        "learning_candidates": {},
     }
     by_result: dict[str, int] = {}
     blockers: dict[str, dict] = {}
+    pointbacks: dict[str, str] = {}
     for run_dir in runs:
         facts = capture_run_facts(
             run_root=run_dir, pointback_fallback_encoding="gb18030"
@@ -164,6 +174,8 @@ def aggregate(runs: list[Path], root: Path, top: int) -> dict:
         art = artifacts(run_dir, facts)
         gate = gate_status(run_dir, facts)
         pb_text = facts.pointback_text
+        if meta["id"] not in pointbacks:
+            pointbacks[meta["id"]] = pb_text
         rows = ledger_rows(pb_text, facts.ledger)
         run_rec = {
             "id": meta["id"],
@@ -204,6 +216,8 @@ def aggregate(runs: list[Path], root: Path, top: int) -> dict:
     payload["repeat_blockers"] = [
         b for b in sorted(blockers.values(), key=lambda b: (-b["count"], b["text"]))
         if b["count"] >= 2][:top]
+    payload["learning_candidates"] = candidate_view(
+        occurrences_from_pointbacks(pointbacks, task_contexts=task_contexts))
     return payload
 
 
@@ -238,6 +252,30 @@ def markdown_view(payload: dict) -> str:
         for blk in b:
             lines.append(
                 f"| {blk['count']} | {', '.join(blk['runs'][:5])} | {blk['text'][:80]} |")
+    lines += ["", "## Rule candidates (derived, vNext S5)", ""]
+    view = payload.get("learning_candidates") or {}
+    qualifying = view.get("qualifying", [])
+    below = view.get("below_threshold", [])
+    if not qualifying and not below:
+        lines.append("_none_")
+    else:
+        if qualifying:
+            lines += [
+                "| candidate | runs | contexts | signal |",
+                "| --- | --- | --- | --- |",
+            ]
+            for cand in qualifying:
+                lines.append(
+                    f"| {cand['candidate_id']} | {cand['distinct_runs']} | "
+                    f"{cand['distinct_task_contexts']} | "
+                    f"{cand['signal_key'][:80]} |")
+        else:
+            lines.append("_no qualifying candidates_")
+        lines.append("")
+        lines.append(
+            f"below threshold (gap to the queue): {len(below)}"
+            + (f" — {', '.join(c['candidate_id'] for c in below[:5])}"
+               if below else ""))
     return "\n".join(lines) + "\n"
 
 
@@ -251,10 +289,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--md", action="store_true", help="print markdown view")
     parser.add_argument("--md-out", type=Path, default=None)
     parser.add_argument("--top", type=int, default=10)
+    parser.add_argument(
+        "--candidate-contexts", type=Path, default=None,
+        help="JSON file mapping run id -> task context for the derived "
+             "learning-candidate view (rules-prototype 5.1: contexts come "
+             "from contract / spec / manifest, not from the scan)")
     args = parser.parse_args(argv)
     root = args.root.resolve()
     runs = find_runs(root, args.runs)
-    payload = aggregate(runs, root, args.top)
+    task_contexts = None
+    if args.candidate_contexts is not None:
+        try:
+            task_contexts = json.loads(
+                args.candidate_contexts.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            print(f"cannot read --candidate-contexts {args.candidate_contexts}: "
+                  f"{exc}", file=sys.stderr)
+            return 2
+        if not isinstance(task_contexts, dict):
+            print("--candidate-contexts must map run id -> task context",
+                  file=sys.stderr)
+            return 2
+    payload = aggregate(runs, root, args.top, task_contexts=task_contexts)
     text = json.dumps(payload, ensure_ascii=False, indent=2)
     if args.md or args.md_out:
         view = markdown_view(payload)
