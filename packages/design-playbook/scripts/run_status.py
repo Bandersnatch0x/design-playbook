@@ -39,6 +39,55 @@ else:
 # its status decision from the shared canonical value.
 from design_playbook.scripts.stages import STAGES, STAGES_BY_KEY  # noqa: E402
 from design_playbook.scripts.run_facts import RunFacts, capture_run_facts  # noqa: E402
+from design_playbook.scripts.run_profile import parse_run_profile  # noqa: E402
+from design_playbook.scripts.shaping_log import (  # noqa: E402
+    ShapingLogError,
+    load_shaping_facts,
+    queue_state,
+)
+
+
+@dataclass(frozen=True)
+class VnextNarration:
+    """Additive vNext narration facts (run-profile block + shaping session)."""
+
+    tier: str | None
+    confirmed_by: str | None
+    skipped: tuple[tuple[str, str], ...]
+    upgrades: tuple[str, ...]
+    shaping: str | None
+
+
+def inspect_vnext(run_root: Path) -> VnextNarration:
+    """Read run-profile (plan.md) and shaping session state (additive)."""
+    tier = None
+    confirmed_by = None
+    skipped: tuple[tuple[str, str], ...] = ()
+    upgrades: tuple[str, ...] = ()
+    plan_path = run_root / "plan.md"
+    if plan_path.is_file():
+        try:
+            profile = parse_run_profile(
+                plan_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError):
+            profile = None
+        if profile is not None:
+            tier = profile.tier or None
+            confirmed_by = profile.confirmed_by or None
+            skipped = profile.skipped
+            upgrades = profile.upgrades
+    shaping: str | None = None
+    try:
+        session = load_shaping_facts(run_root)
+    except (ShapingLogError, OSError, UnicodeError):
+        shaping = "unreadable"
+    else:
+        if session is not None:
+            shaping = queue_state(list(session.events))
+    return VnextNarration(
+        tier=tier, confirmed_by=confirmed_by, skipped=skipped,
+        upgrades=upgrades, shaping=shaping,
+    )
 
 
 @dataclass(frozen=True)
@@ -229,6 +278,7 @@ def render(run_root: Path, *, as_json: bool) -> int:
     snapshot = facts.preview or inspect_preview(run_root / "preview")
     states = inspect_run(run_root, snapshot, facts)
     action = next_action(states, run_root, snapshot, facts)
+    vnext = inspect_vnext(run_root)
     payload = {
         "run_root": str(run_root),
         "stages": [
@@ -242,6 +292,16 @@ def render(run_root: Path, *, as_json: bool) -> int:
         ],
         "next": action,
         "verdict": verdict_of(run_root, facts),
+        "run_profile": {
+            "tier": vnext.tier,
+            "confirmed_by": vnext.confirmed_by,
+            "skipped": [
+                {"step": name, "reason": reason}
+                for name, reason in vnext.skipped
+            ],
+            "upgrades": list(vnext.upgrades),
+        } if vnext.tier is not None else None,
+        "shaping": vnext.shaping,
     }
     if as_json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -253,6 +313,15 @@ def render(run_root: Path, *, as_json: bool) -> int:
         mark = "x" if s.present else " "
         detail = f" ({', '.join(s.evidence)})" if s.evidence else ""
         print(f"  [{mark}] {s.key:10} {s.skill}{detail}")
+    if vnext.tier is not None:
+        confirmed = "confirmed by user" if (
+            vnext.confirmed_by or "").casefold().startswith("user") else (
+            vnext.confirmed_by or "unconfirmed")
+        print(f"run-profile: tier {vnext.tier} ({confirmed})")
+        if vnext.upgrades:
+            print(f"  upgrades: {'; '.join(vnext.upgrades)}")
+    if vnext.shaping is not None:
+        print(f"shaping: session {vnext.shaping}")
     if payload["verdict"]:
         print(f"verdict: {payload['verdict']}")
     print(f"next: {action}")

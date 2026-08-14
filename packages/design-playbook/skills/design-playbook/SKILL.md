@@ -20,6 +20,17 @@ Keep each control in one authoritative place:
 | **Evidence** | `spec` L6 + evaluator ledger | Exactly one `L6.<n>` ledger row per criterion; planning-only uses declaration coverage, implementation uses rendered states, interaction/test results, and applicable code checks |
 | **Stop** | this orchestrator | Pass; smallest missing decision; unavailable required evidence or authority; repeated blocker |
 | **Confirm** | this orchestrator + user decision | Any consequential action not already authorized |
+| **Tier** | `plan.md` run-profile block | Tier (P1/P2/P3) + grading checklist + skip list + upgrade events |
+
+## Run profile (tier grading)
+
+Grade the run once, up front (LR1). Three tiers share one state machine and one artifact set — the tier only changes how deep each step goes:
+
+- **P1 point-fix** — single owning-layer point-back repair; no new/decided contract fields, no design decision step, no shaping session (bind fast path + assumed ack only; R2 row-level spec additions allowed).
+- **P2 standard** — new feature inside the confirmed intent and baseline: run-scoped L1 values, new `l6.cN` criteria, `<domain>.*` assumption fields, full `ux-spec` shaping session (S0-S6, G9), R/C-tier design decisions.
+- **P3 full** — revises existing decided fields (`supersedes`), structural IA/primary-path alternatives, or crosses ≥2 declaration domains.
+
+The agent grades initially against the declaration-touch checklist and asks the user to confirm **once** (may fold into the request reply). **Upgrade is automatic** the moment a correction signal appears (R1 finding, structural R2, cross-layer blocking, E-tier judgment) — record the upgrade event in the run-profile block and walk the added steps; **downgrade requires the user** (over-compliance already performed is kept). Write the block into `plan.md` as a structured field block (`tier: P1|P2|P3`, grading checklist, `confirmed_by: user + <ts>`, skip list with one-line reasons, upgrade events). The profile block is mandatory for every run — skipping the rest of the plan body is legal, skipping the profile block is not. Every skipped step keeps the one-line skip narration rule below.
 
 Answer, review, diagnose, and plan requests end with findings or a plan. Build and fix requests continue through in-scope local edits and the most relevant available validation. Ask the smallest question only when the answer changes the goal, scope, platform, success criteria, or authority; otherwise record a conservative assumption in L1.
 
@@ -67,7 +78,7 @@ Then continue to **3. `ux-spec`** (or **4. plan** when spec already exists).
 
 ### 3. `ux-spec` (when spec is missing)
 
-Invoke **ux-spec**. Produce six-layer `spec.md`. When `.scratch/<run>/reference/contract.md` exists, **ux-spec** must read it first (functional constraints, non-goals, always/ask/never) — do not wait for plan.
+Invoke **ux-spec**. Produce six-layer `spec.md` with the L2-L5 structured field blocks. For P2/P3 runs the skill runs as a shaping session (S0-S6 with CP batches; append-only artifacts under `.scratch/<run>/shaping/` — `shaping-log.jsonl` + derived `queue.json`; G9 gates the session exit). P1 runs skip the session and use the bind fast path. When `.scratch/<run>/reference/contract.md` exists, **ux-spec** must read it first (functional constraints, non-goals, always/ask/never) — do not wait for plan.
 
 **Done when:** **ux-spec**'s own completion criteria hold (that skill is SSOT). Smoke: L1–L6 present; L5 substantive, not "show loading"; every top-level L6 item uses ordered `Given -> When -> Then`, names its evidence, and names the capture seed where the proof is a runtime state; reference constraints folded when a contract exists.
 
@@ -75,9 +86,11 @@ Then continue to **4. plan**.
 
 ### 4. plan (pipeline step — pure orchestration)
 
-Not a run-contract control and **not** a machine gate. Does not become Goal / Success / Evidence / Stop / Confirm SSOT.
+Not a run-contract control beyond the **Tier** row and **not** a machine gate. Does not become Goal / Success / Evidence / Stop / Confirm SSOT.
 
-Write a light handoff at `.scratch/<run>/plan.md` (required on disk). When `.scratch/<run>/reference/contract.md` exists, the handoff must point to it (path only; do not paste the full contract) and fold its functional constraints into the description→spec map and its visual cues/exclusions into the ui-picker input pack. Minimum three blocks:
+Write a light handoff at `.scratch/<run>/plan.md` (required on disk). It **must open with the `run-profile` structured block** (see *Run profile* above): `tier: P1|P2|P3`, the grading checklist, `confirmed_by: user + <ts>`, the skip list (step + one-line reason; silent skips are illegal), and upgrade events. Skipping the rest of the plan body is legal; skipping the profile block is not.
+
+When `.scratch/<run>/reference/contract.md` exists, the handoff must point to it (path only; do not paste the full contract) and fold its functional constraints into the description→spec map and its visual cues/exclusions into the ui-picker input pack. Minimum three blocks:
 
 1. **本次 run 范围** — pointers to L2 / scenes / non-goals (do not copy L1–L6 wholesale)
 2. **用户描述 → spec 映射** — which L1/L2/L6 this ask touches; unmapped items → conservative assumptions
@@ -143,7 +156,7 @@ Load on demand (only if the fill needs them):
 
 ### 8. Craft → `craft-guard`
 
-Invoke **craft-guard**. Apply loading tiers, motion purpose, hierarchy, CJK type. For native desktop, `craft-guard` owns shared UI above the render-surface seam and defers to `native-craft` below it. If a finding crosses the seam, split it into separate point-backs to the owning declarations.
+Invoke **craft-guard**. Apply loading tiers, motion purpose, hierarchy, CJK type. Craft rules live in the first-party registry (`references/rules.md`): evaluate each entry's applicability predicate (P1: touch-surface subset; P2/P3: full catalog) and write seven-column audit rows to `.scratch/<run>/craft-guard.md`. For native desktop, `craft-guard` owns shared UI above the render-surface seam and defers to `native-craft` below it. If a finding crosses the seam, split it into separate point-backs to the owning declarations.
 
 **Done when:** **craft-guard**'s own completion criteria hold (that skill is SSOT). Smoke: every wait/fail path maps to a loading tier; every animation states its purpose; L4 interactive-zone affordance resolved; residual issues handed to `ui-evaluator` with source `craft`.
 
@@ -186,9 +199,9 @@ Evidence is captured, not judged — copy provider returns verbatim here; `pass`
 
 ### 10. Accept → `ui-evaluator`
 
-Invoke **ui-evaluator**. Issues must **point back** to a declaration.
+Invoke **ui-evaluator**. Issues must **point back** to a declaration. The report is the six-block `point-back.md` (ledger / findings / positive findings / coverage statement / limitations statement / verdict); recirculated blockers route through the two-hop map (declaration artifact -> R1-R5) and record the `invalidated:` evidence set.
 
-**Done when:** the report includes the criterion-shaped evidence ledger (`criterion / required / observed / result`) and findings as `issue / source / fix / severity`; the authoritative verdict completion criterion in `ui-evaluator` is met; **and** you show the user a short **run artifact index** (paths under `.scratch/<run>/`) so declaration products are discoverable — at minimum: `design-baseline/` (if triggered), `reference/` (if any), `spec.md`, `plan.md`, `decision-report.md`, `preview/` (if any), Fill surface path, `evidence/` (if any), `point-back.md`. One block is enough; do not only leave paths buried in tool logs.
+**Done when:** the report includes the criterion-shaped evidence ledger (`criterion / required / observed / result`) and findings as `issue / source / fix / severity`; the authoritative verdict completion criterion in `ui-evaluator` is met; **and** you show the user a short **run artifact index** (paths under `.scratch/<run>/`) so declaration products are discoverable — at minimum: `design-baseline/` (if triggered), `reference/` (if any), `spec.md`, `plan.md`, `decision-report.md`, `preview/` (if any), `shaping/` (if a session ran), Fill surface path, `evidence/` (if any), `point-back.md`. One block is enough; do not only leave paths buried in tool logs.
 
 Cross-run review of multiple `.scratch/<run>/` runs lives in command **run-review** (cross-run, not a step of this run).
 
