@@ -56,6 +56,8 @@ class VnextNarration:
     skipped: tuple[tuple[str, str], ...]
     upgrades: tuple[str, ...]
     shaping: str | None
+    six_block: bool = False
+    invalidated: bool = False
 
 
 def inspect_vnext(run_root: Path) -> VnextNarration:
@@ -84,9 +86,21 @@ def inspect_vnext(run_root: Path) -> VnextNarration:
     else:
         if session is not None:
             shaping = queue_state(list(session.events))
+    pointback = run_root / "point-back.md"
+    six_block = False
+    invalidated = False
+    if pointback.is_file():
+        try:
+            pb_text = pointback.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            pb_text = ""
+        six_block = "## Coverage statement" in pb_text
+        invalidated = "\ninvalidated:" in pb_text or pb_text.startswith(
+            "invalidated:")
     return VnextNarration(
         tier=tier, confirmed_by=confirmed_by, skipped=skipped,
         upgrades=upgrades, shaping=shaping,
+        six_block=six_block, invalidated=invalidated,
     )
 
 
@@ -302,6 +316,8 @@ def render(run_root: Path, *, as_json: bool) -> int:
             "upgrades": list(vnext.upgrades),
         } if vnext.tier is not None else None,
         "shaping": vnext.shaping,
+        "six_block_report": vnext.six_block,
+        "invalidated_evidence": vnext.invalidated,
     }
     if as_json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -322,6 +338,9 @@ def render(run_root: Path, *, as_json: bool) -> int:
             print(f"  upgrades: {'; '.join(vnext.upgrades)}")
     if vnext.shaping is not None:
         print(f"shaping: session {vnext.shaping}")
+    if vnext.six_block:
+        note = " with invalidated evidence set" if vnext.invalidated else ""
+        print(f"point-back: six-block vNext report{note}")
     if payload["verdict"]:
         print(f"verdict: {payload['verdict']}")
     print(f"next: {action}")

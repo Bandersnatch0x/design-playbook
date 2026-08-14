@@ -426,6 +426,9 @@ class RunStatusVnextTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("run-profile: tier P2 (confirmed by user)", result.stdout)
         self.assertIn("shaping: session archived", result.stdout)
+        self.assertIn(
+            "point-back: six-block vNext report with invalidated evidence set",
+            result.stdout)
 
     def test_run_without_vnext_artifacts_has_no_narration(self) -> None:
         # Backward compatibility: a plain run reports no run-profile/shaping.
