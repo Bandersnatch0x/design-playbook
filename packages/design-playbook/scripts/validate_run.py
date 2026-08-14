@@ -24,7 +24,11 @@ Gates the run-level controls that the skills also declare in prose:
   G11 coverage statement - conditional: vNext six-block reports must carry
                            a Coverage statement with the exhaustive-review
                            completion status and the explicit unreviewed
-                           list (existence only; legacy reports unaffected)
+                           list (existence only; legacy reports unaffected).
+                           S3: when the statement declares the five-state x
+                           page sampling matrix, every spec-declared cell
+                           needs sampling evidence or an explicit
+                           unreviewed entry with a reason (gap check)
   G10 design decisions   - conditional: when the decision report carries DD
                            entry blocks (appended after the verbatim top
                            block), entries must satisfy the design-decision
@@ -32,6 +36,21 @@ Gates the run-level controls that the skills also declare in prose:
                            obligations, supersedes existence + acyclicity,
                            preview decision_id linkage, R3 dd: challenge
                            resolution, and the stale three-exit review
+  G6 method semantics    - conditional (S3): manifest entries carrying the
+                           optional method-semantics keys must satisfy the
+                           nine-value method enum, observation/interpret-
+                           ation separation, and scope; human-subject
+                           evidence missing population+ethics is unusable
+                           and can never support a pass ledger row
+  G2 dimensions          - conditional (S3): interaction-track findings may
+                           annotate dimension/face/basis; subjective faces
+                           are judgment class — advisory only, judgment
+                           source declared, agent-judgment derives low
+  G8 run-level registry  - conditional (S3): a craft-guard.md in the run
+                           root is evaluated against the shared registry
+                           parser; P2/P3 demand one audit row per advisory
+                           entry (full predicate evaluation), P1 allows the
+                           touch-related subset
 
 Reads plain Markdown, so it is host-neutral: it accepts artifacts produced by
 any agent (Claude Code, Codex) that follow the declared shape.
@@ -114,6 +133,19 @@ from design_playbook.scripts.dd_entries import DD_HEADING  # noqa: E402
 from design_playbook.scripts.g10_design_decisions import check_g10  # noqa: E402
 from design_playbook.scripts.run_profile import parse_run_profile  # noqa: E402
 
+# vNext S3 gates: method-semantics keys (G6-adjacent), interaction-track
+# dimension annotations (G2-adjacent), sampling-matrix gaps (G11), and the
+# run-level registry coverage (G8, sharing the rules_registry parser).
+from design_playbook.scripts.g8_run_registry import (  # noqa: E402
+    check_g8_run,
+    load_registry,
+)
+from design_playbook.scripts.g11_coverage import check_sampling_matrix  # noqa: E402
+from design_playbook.scripts.interaction_dimensions import (  # noqa: E402
+    check_dimensions,
+)
+from design_playbook.scripts.method_semantics import check_method_semantics  # noqa: E402
+
 
 def run(
         spec_path: str,
@@ -162,6 +194,13 @@ def run(
     # G11 (vNext S1): six-block reports must carry a Coverage statement with
     # the exhaustive status + explicit unreviewed list (existence only).
     errs += check_coverage(pointback_text, required=require_coverage)
+    # G11 sampling matrix (vNext S3, Q3=A): when the statement declares the
+    # five-state x page matrix, every spec-declared cell needs sampling
+    # evidence or an explicit unreviewed entry with a reason.
+    errs += check_sampling_matrix(pointback_text, spec_text, evidence_dir=ed)
+    # G2 dimensions (vNext S3): dimension/face/basis annotations on findings
+    # — subjective faces are judgment class (advisory only, source declared).
+    errs += check_dimensions(pointback_text)
     preview_snapshot = facts.preview
     dr = Path(decision_report) if decision_report else None
     if require_preview and (
@@ -202,6 +241,19 @@ def run(
         pointback_text, len(_l6_items(spec_text)), ed, rr,
         observed_rows=observed_rows, entries=entries,
     )
+    # G6 method semantics (vNext S3): the optional five keys are validated
+    # where they live (the manifest); pass rows must not rest on unusable
+    # human-subject evidence. Old manifests without the keys stay silent.
+    method_rows = [
+        (values[0].split()[0], row.values("result")[0], row.artifact_token)
+        for row in facts.ledger.rows
+        if (values := row.values("criterion")) and values[0]
+        and row.values("result") and row.values("result")[0]
+        and row.raw_observed
+    ]
+    method_errs, method_warns = check_method_semantics(entries, method_rows)
+    errs += method_errs
+    warns += method_warns
     warns += check_manifest_ts_warnings(ed, entries=entries)
     warns += check_superseded_ledger_warnings(
         pointback_text, ed, observed_rows=observed_rows, entries=entries,
@@ -260,6 +312,26 @@ def run(
                 ) if rr is not None else None,
                 run_profile_tier=_plan_tier(rr),
             )
+
+    # G8 run level (vNext S3): a craft-guard.md in the run root is checked
+    # against the registry (shared parser). P2/P3 demand one audit row per
+    # advisory entry; P1 and tier-less legacy runs keep the subset freedom.
+    if rr is not None and (rr / "craft-guard.md").is_file():
+        try:
+            craft_text = (rr / "craft-guard.md").read_text(encoding="utf-8")
+            registry_entries, _ = load_registry()
+        except (OSError, UnicodeError):
+            errs.append(finding(
+                "G8.run_registry",
+                "G8 run: craft-guard.md present but the audit log or the "
+                "registry could not be read",
+                owner="craft-guard.md",
+                expected="readable craft-guard.md and rules.md",
+                actual="read error",
+                repair="Restore the files or drop the audit log",
+            ))
+        else:
+            errs += check_g8_run(craft_text, registry_entries, _plan_tier(rr))
     return errs, warns
 
 
