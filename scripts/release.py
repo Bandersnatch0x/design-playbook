@@ -19,8 +19,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+import _checks
+
 ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "packages" / "design-playbook"
+DSH_PKG = ROOT / "packages" / "dsh-design-playbook"
 VALIDATOR = ROOT / "scripts" / "validate.py"
 SEAM_TEST = PKG / "tests" / "test_validate_run.py"
 PREVIEW_SERVER = PKG / "mcp" / "preview" / "server.py"
@@ -139,6 +142,16 @@ def check_version() -> None:
             f"codex.plugin={codex_version!r} "
             f"package.json={npm_version!r}"
         )
+
+    release_group_errors = _checks.release_group_errors(
+        read_json(PKG / "package.json"),
+        read_json(DSH_PKG / "package.json"),
+    )
+    if release_group_errors:
+        for message in release_group_errors:
+            fail(message)
+    else:
+        ok(f"npm release group versions match: {npm_version}")
 
     badge_re = re.compile(r"badge/Version-(\d+\.\d+\.\d+)-")
     for relative in ("README.md", "README-zh.md"):
@@ -284,8 +297,11 @@ def main() -> int:
     print()
     print("== next (irreversible tag push) ==")
     print(f"  - git push --atomic origin main {tag}  (after --apply)")
-    print("  - Actions Release workflow: npm publish -> verify -> GitHub Release")
-    print(f"  - recovery only: gh workflow run release.yml --ref {tag} "
+    print("  - Actions: publish design-playbook -> publish dsh-design-playbook "
+          "-> verify both -> shared GitHub Release")
+    print(f"  - DSH artifact recovery: gh workflow run release-dsh-bundle.yml "
+          f"--ref {tag} -f tag={tag} -f recovery=true")
+    print(f"  - shared Release recovery: gh workflow run release.yml --ref {tag} "
           f"-f tag={tag} -f recovery=true")
     print("  - 2nd-session install smoke (release-checklist gate 5)")
 

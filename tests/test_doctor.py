@@ -47,6 +47,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("mcp/preview/server.py", result.stdout)
         self.assertIn("gate 1 structural smoke", result.stdout)
         self.assertIn("8 skills present", result.stdout)
+        self.assertIn("npm release group", result.stdout)
         # Lockstep with COMMAND_INVENTORY / plugin version (was hardcoded 4 pre-0.12).
         plugin = json.loads(
             (ROOT / "packages/design-playbook/.claude-plugin/plugin.json")
@@ -108,6 +109,49 @@ class DoctorTests(unittest.TestCase):
         self.assertTrue(
             drift_hits,
             f"expected codex version drift failure, got: {captured}",
+        )
+
+    def test_check_release_group_fails_on_dependency_drift(self) -> None:
+        doctor = _load_doctor_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp)
+            pkg = tmp_root / "packages" / "design-playbook"
+            dsh_pkg = tmp_root / "packages" / "dsh-design-playbook"
+            pkg.mkdir(parents=True)
+            dsh_pkg.mkdir(parents=True)
+            (pkg / "package.json").write_text(
+                json.dumps({"name": "design-playbook", "version": "1.2.3"}),
+                encoding="utf-8",
+            )
+            (dsh_pkg / "package.json").write_text(
+                json.dumps(
+                    {
+                        "name": "dsh-design-playbook",
+                        "version": "1.2.3",
+                        "dependencies": {"design-playbook": "^1.1.0"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            orig_root = doctor.ROOT
+            orig_pkg = doctor.PKG
+            orig_failures = doctor.failures[:]
+            doctor.ROOT = tmp_root
+            doctor.PKG = pkg
+            doctor.failures = []
+            try:
+                doctor.check_release_group()
+                captured = list(doctor.failures)
+            finally:
+                doctor.ROOT = orig_root
+                doctor.PKG = orig_pkg
+                doctor.failures = orig_failures
+
+        self.assertIn(
+            "dsh-design-playbook dependency on design-playbook '^1.1.0'; "
+            "expected '^1.2.3'",
+            captured,
         )
 
 

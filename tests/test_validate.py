@@ -214,6 +214,23 @@ class ValidateGateTests(unittest.TestCase):
         # FAIL line names both sides so the drift is visible at a glance.
         self.assertIn("matches Claude plugin.json", result.stdout)
 
+    def test_dsh_dependency_version_drift_fails(self) -> None:
+        dsh_package = (
+            self.root / "packages" / "dsh-design-playbook" / "package.json"
+        )
+        payload = json.loads(dsh_package.read_text(encoding="utf-8"))
+        payload["dependencies"]["design-playbook"] = "^0.13.0"
+        dsh_package.write_text(json.dumps(payload), encoding="utf-8")
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn(
+            "dsh-design-playbook dependency on design-playbook '^0.13.0'",
+            result.stdout,
+        )
+        self.assertIn("VALIDATION FAILED", result.stdout)
+
     def test_codex_mcp_target_missing_fails(self) -> None:
         # Issue 07 acceptance: .codex-plugin/mcp.json points preview at
         # ./mcp/preview/server.py (resolved relative to its install cwd).

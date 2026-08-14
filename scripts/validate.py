@@ -312,8 +312,15 @@ check(bool(bundle_pkg), f"dsh-design-playbook package.json present: {BUNDLE.rela
 if isinstance(bundle_pkg, dict) and bundle_pkg:
     check(bundle_pkg.get("name") == "dsh-design-playbook",
           f"dsh-design-playbook package name is correct (got {bundle_pkg.get('name')!r})")
-    check("design-playbook" in (bundle_pkg.get("dependencies", {}) or {}),
-          "dsh-design-playbook depends on design-playbook")
+    release_group_errors = _checks.release_group_errors(npmj, bundle_pkg)
+    if release_group_errors:
+        for message in release_group_errors:
+            check(False, message)
+    else:
+        check(
+            True,
+            "npm release group versions and dsh-design-playbook dependency match",
+        )
     bundle_dsh = bundle_pkg.get("dsh", {})
     bundle_dsh = bundle_dsh if isinstance(bundle_dsh, dict) else {}
     bundle_patch = bundle_dsh.get("bundle", {})
