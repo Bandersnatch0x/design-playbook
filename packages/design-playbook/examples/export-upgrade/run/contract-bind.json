@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "open_fields": [],
+  "stale_fields": [],
+  "blockers": [],
+  "assumed_fields": [
+    "export.column_scope",
+    "export.row_cap",
+    "export.sync_window",
+    "export.task_persist_ttl",
+    "l1.scenes"
+  ],
+  "bound_contract": {
+    "schemaVersion": 1,
+    "changelog": [
+      {
+        "at": "2026-08-14T10:00:00Z",
+        "summary": "prior run projection (export entry)"
+      }
+    ],
+    "fields": {
+      "l1.goal": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "支持运营完成周报所需的数据导出（行内批量导出上周数据为 CSV）"
+      },
+      "l1.target_user": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "运营角色，周频导出上周数据做周报"
+      },
+      "l1.non_goals": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "不做定时/周期导出；不做全量历史导出"
+      },
+      "l1.scenes": {
+        "provenance": "inferred",
+        "resolution": "assumed",
+        "value": "首场景=运营周报",
+        "notes": "理由：场景清单延续既有假设；回退：单场景。"
+      },
+      "l2.entry_choice": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "B：主列表行内批量导出（范围收敛）"
+      },
+      "l6.c1": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "Given 运营在主列表选定上周范围 When 触发行内批量导出 Then 30 秒内获得 CSV 且行数与选中范围一致（证据：交互记录）"
+      },
+      "l6.c2": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "Given 选定范围超过 20 万行 When 确认导出 Then 提示剩余量与收窄建议（证据：错误态截图 capture seed）"
+      },
+      "l6.c3": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "Given 导出进行中 When 用户离开并返回该页 Then 导出进度与结果仍可获知（证据：交互记录）"
+      },
+      "export.row_cap": {
+        "provenance": "inferred",
+        "resolution": "assumed",
+        "value": 200000,
+        "notes": "理由：规模上限延续 CP-C 改写；回退：50000。"
+      },
+      "export.sync_window": {
+        "provenance": "inferred",
+        "resolution": "assumed",
+        "value": "30s",
+        "notes": "理由：限时延续既有确认；回退：60s。"
+      },
+      "export.column_scope": {
+        "provenance": "inferred",
+        "resolution": "assumed",
+        "value": "当前视图列含隐藏列开关",
+        "notes": "理由：列范围延续；回退：当前视图列。"
+      },
+      "export.task_persist_ttl": {
+        "provenance": "inferred",
+        "resolution": "assumed",
+        "value": "run 内持久（≤10 条）",
+        "notes": "理由：条目保留时长未答；风险：堆积或过早消失；回退：run 内持久。"
+      }
+    }
+  },
+  "contract_sha": "f619312b92feb1222597c88f4d73e496e5ea6fc95622124af44648e3388f2f9a",
+  "decision_log_sha": "786c32ed2c15dbf6e3cafea4d15145a9151344f138727ba415b6d80d965d5c17"
+}

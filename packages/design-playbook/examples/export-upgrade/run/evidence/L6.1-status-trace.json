@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "trace": {
+    "criterion": "L6.1",
+    "state": "exporting-visible",
+    "note": "状态区持续进度 30s 内 5 次采样均更新"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "round": 1,
+  "report_ref": "decision-report.md",
+  "confirmed": true,
+  "floor_pass": true,
+  "selected_options": [
+    "A 行内进度"
+  ],
+  "feedback": "round 1: 状态必须跨页保持可查",
+  "anchors": [],
+  "timestamp": "2026-08-14T11:6:00Z",
+  "prototype_path": "preview/round-1.html",
+  "prototype_html_hash": "c6413c2c568eb14cadfc3f4edc6be5190be17cc11dd3716b5541732179248c53",
+  "decision_id": "5f0c9a21d4e34b7f8a2c6d1e9b04f7a3"
+}

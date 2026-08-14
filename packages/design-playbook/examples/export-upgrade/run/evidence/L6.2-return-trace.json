@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "trace": {
+    "criterion": "L6.2",
+    "state": "return-restored-r2",
+    "note": "r2：返回后条目恢复且完成态可获知"
+  }
+}
