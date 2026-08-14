@@ -58,6 +58,7 @@ from design_playbook.scripts.dd_entries import (  # noqa: E402
 from design_playbook.scripts.escalation_signals import (  # noqa: E402
     EscalationSignal,
     collect_signals,
+    effective_tier,
     recorded_regrades,
     route_hits,
 )
@@ -405,6 +406,9 @@ def render(run_root: Path, *, as_json: bool) -> int:
         "verdict": verdict_of(run_root, facts),
         "run_profile": {
             "tier": vnext.tier,
+            "effective_tier": (
+                effective_tier(vnext.tier, vnext.upgrades)
+                if vnext.tier is not None else None),
             "confirmed_by": vnext.confirmed_by,
             "skipped": [
                 {"step": name, "reason": reason}
@@ -446,7 +450,11 @@ def render(run_root: Path, *, as_json: bool) -> int:
         confirmed = "confirmed by user" if (
             vnext.confirmed_by or "").casefold().startswith("user") else (
             vnext.confirmed_by or "unconfirmed")
-        print(f"run-profile: tier {vnext.tier} ({confirmed})")
+        effective = effective_tier(vnext.tier, vnext.upgrades)
+        tier_note = (
+            vnext.tier if effective == vnext.tier
+            else f"{vnext.tier} -> {effective} (upgraded)")
+        print(f"run-profile: tier {tier_note} ({confirmed})")
         if vnext.upgrades:
             print(f"  upgrades: {'; '.join(vnext.upgrades)}")
     if vnext.shaping is not None:

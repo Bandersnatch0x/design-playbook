@@ -161,6 +161,7 @@ from design_playbook.scripts.method_semantics import check_method_semantics  # n
 # E1-E6 escalation accounting) over the run-profile block and the G7 bind
 # snapshot; runs without a run-profile block are not re-checked.
 from design_playbook.scripts.dd_entries import parse_dd_entries  # noqa: E402
+from design_playbook.scripts.escalation_signals import effective_tier  # noqa: E402
 from design_playbook.scripts.g12_tier_boundary import (  # noqa: E402
     CRITERION_PATH,
     bind_fields,
@@ -419,8 +420,16 @@ def _plan_profile(run_root: Path | None):
 
 
 def _plan_tier(run_root: Path | None) -> str | None:
+    """The run's effective tier: declared tier plus recorded S4 upgrades.
+
+    G8/G10 consume this; after an escalation (run-profile upgrades event)
+    the run walks the new tier's obligations, so the effective tier — not
+    the intake declaration — is the gate input.
+    """
     profile = _plan_profile(run_root)
-    return profile.tier if profile is not None else None
+    if profile is None:
+        return None
+    return effective_tier(profile.tier, profile.upgrades)
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:

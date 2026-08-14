@@ -53,10 +53,11 @@ ROUTE_LAYERS = {
     "R1": 1, "R2-line": 2, "R2-structural": 2, "R3": 3, "R4": 4, "R5": 5,
 }
 TIER_RANK = {"P1": 1, "P2": 2, "P3": 3}
-# Upgrade lines record "<ts> <signal?> <reason> -> <tier>"; the trailing
-# tier and any E1-E6 token are the machine face (lenient parse: prose
-# lines without a tier are narration-only and never block accounting).
-UPGRADE_TIER = re.compile(r"\b(P[123])\s*$")
+# Upgrade lines record "<ts> <signal?> <reason> -> <tier>" (trailing prose
+# after the tier is legal); the arrow-tier pair and any E1-E6 token are the
+# machine face (lenient parse: prose lines without an arrow tier are
+# narration-only and never block accounting).
+UPGRADE_TIER = re.compile(r"(?:->|→)\s*(P[123])(?!\d)")
 UPGRADE_SIGNAL = re.compile(r"\b(E[1-6])\b")
 
 
