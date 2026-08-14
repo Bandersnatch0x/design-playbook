@@ -2,15 +2,15 @@ name: Release dsh-design-playbook
 
 on:
   push:
-    tags: ["dsh-v*"]
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing dsh-vX.Y.Z tag to recover"
+        description: "Existing vX.Y.Z tag to recover"
         required: true
         type: string
       recovery:
-        description: "Recover npm-published / GitHub-Release-missing state"
+        description: "Verify an existing npm artifact without republishing"
         required: true
         default: false
         type: boolean
@@ -35,7 +35,6 @@ jobs:
       RECOVERY: ${{ github.event_name == 'workflow_dispatch' && inputs.recovery || false }}
     outputs:
       tag: ${{ steps.release.outputs.tag }}
-      title: ${{ steps.release.outputs.title }}
       package_name: ${{ steps.release.outputs.package_name }}
       version: ${{ steps.release.outputs.version }}
     steps:
@@ -64,12 +63,12 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${RELEASE_TAG}"
-          if [[ ! "${TAG}" =~ ^dsh-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "::error::release tag must be dsh-vX.Y.Z: ${TAG}"
+          if [[ ! "${TAG}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::release tag must be stable semver vX.Y.Z: ${TAG}"
             exit 1
           fi
 
-          VERSION="${TAG#dsh-v}"
+          VERSION="${TAG#v}"
           PACKAGE_NAME="$(node -p "require('./packages/dsh-design-playbook/package.json').name")"
           PACKAGE_VERSION="$(node -p "require('./packages/dsh-design-playbook/package.json').version")"
           if [[ "${VERSION}" != "${PACKAGE_VERSION}" ]]; then
@@ -99,7 +98,9 @@ jobs:
           echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
           echo "package_name=${PACKAGE_NAME}" >> "${GITHUB_OUTPUT}"
-          echo "title=dsh-design-playbook ${VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Run release group gate
+        run: python3 scripts/release.py --checks version
 
       - name: Validate dsh bundle structure
         shell: bash
@@ -111,7 +112,6 @@ jobs:
             const pkg = require('./${PKG_DIR}/package.json');
             if (!pkg.dsh?.bundle?.patch) throw new Error('no dsh.bundle.patch');
             if (pkg.dsh.bundle.patch !== './cordis.patch.yml') throw new Error('patch path mismatch');
-            if (!pkg.dependencies?.['design-playbook']) throw new Error('missing design-playbook dependency');
             console.log('bundle structure OK');
           "
           # Verify cordis.patch.yml exists and bridges both MCP servers
@@ -125,28 +125,24 @@ jobs:
         working-directory: packages/dsh-design-playbook
         run: npm pack --dry-run
 
-      - name: Check GitHub Release state
-        id: github-state
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.release.outputs.tag }}
+      - name: Wait for design-playbook registry
+        timeout-minutes: 16
         shell: bash
+        env:
+          PACKAGE_NAME: design-playbook
+          VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          set +e
-          OUTPUT="$(gh api --silent "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" 2>&1)"
-          STATUS=$?
-          set -e
-          if [[ ${STATUS} -eq 0 ]]; then
-            EXISTS=true
-          elif grep -Fq "HTTP 404" <<<"${OUTPUT}"; then
-            EXISTS=false
-          else
-            echo "::error::GitHub Release preflight failed"
-            printf '%s\n' "${OUTPUT}"
-            exit ${STATUS}
-          fi
-          echo "exists=${EXISTS}" >> "${GITHUB_OUTPUT}"
+          for ATTEMPT in $(seq 1 90); do
+            ACTUAL="$(npm view "${PACKAGE_NAME}@${VERSION}" version 2>/dev/null || true)"
+            if [[ "${ACTUAL}" == "${VERSION}" ]]; then
+              echo "Verified ${PACKAGE_NAME}@${VERSION} on attempt ${ATTEMPT}"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::npm registry did not expose required ${PACKAGE_NAME}@${VERSION}"
+          exit 1
 
       - name: Check npm registry state
         id: registry
@@ -175,13 +171,11 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           NPM_EXISTS: ${{ steps.registry.outputs.exists }}
-          GITHUB_RELEASE_EXISTS: ${{ steps.github-state.outputs.exists }}
         run: |
-          python3 scripts/release_state.py state \
+          python3 scripts/release_state.py package-state \
             --event-name "${EVENT_NAME}" \
             --recovery "${RECOVERY}" \
             --npm-exists "${NPM_EXISTS}" \
-            --github-release-exists "${GITHUB_RELEASE_EXISTS}" \
             >> "${GITHUB_OUTPUT}"
 
       - name: Publish npm package with OIDC
@@ -231,55 +225,4 @@ jobs:
             echo "- tag: ${{ steps.release.outputs.tag }}"
             echo "- preexisting: ${{ steps.registry.outputs.exists }}"
             echo "- action: ${{ steps.state.outputs.action }}"
-          } >> "${GITHUB_STEP_SUMMARY}"
-
-  github-release:
-    name: Create GitHub Release (dsh bundle)
-    needs: publish
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      RELEASE_TAG: ${{ needs.publish.outputs.tag }}
-      RELEASE_TITLE: ${{ needs.publish.outputs.title }}
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - name: Checkout immutable release tag
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ env.RELEASE_TAG }}
-          fetch-depth: 0
-
-      - name: Create GitHub Release
-        id: release
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Use the main release notes if they cover this version; otherwise
-          # create a minimal release body from the package description.
-          NOTES="docs/releases/${RELEASE_TAG}.md"
-          if [[ ! -f "${NOTES}" ]]; then
-            NOTES="$(mktemp)"
-            {
-              echo "# dsh-design-playbook $(echo "${RELEASE_TAG}" | sed 's/dsh-v//')"
-              echo ""
-              echo "Thin DSH bundle bridging design-playbook's preview + evidence MCP servers."
-              echo "Depends on design-playbook@$(node -p "require('./packages/dsh-design-playbook/package.json').dependencies['design-playbook']")."
-            } > "${NOTES}"
-          fi
-          gh release create "${RELEASE_TAG}" \
-            --verify-tag \
-            --title "${RELEASE_TITLE}" \
-            --notes-file "${NOTES}"
-          echo "status=created" >> "${GITHUB_OUTPUT}"
-
-      - name: GitHub Release summary
-        shell: bash
-        run: |
-          {
-            echo "## GitHub Release"
-            echo ""
-            echo "- tag: ${RELEASE_TAG}"
-            echo "- status: ${{ steps.release.outputs.status }}"
-            echo "- url: https://github.com/${{ github.repository }}/releases/tag/${RELEASE_TAG}"
           } >> "${GITHUB_STEP_SUMMARY}"

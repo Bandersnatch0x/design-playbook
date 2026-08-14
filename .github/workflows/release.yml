@@ -10,7 +10,7 @@ on:
         required: true
         type: string
       recovery:
-        description: "Recover npm-published / GitHub-Release-missing state"
+        description: "Recover both-npm-published / GitHub-Release-missing state"
         required: true
         default: false
         type: boolean
@@ -231,6 +231,40 @@ jobs:
           printf '%s' "${AUDIT_JSON}" | python3 scripts/release_state.py provenance \
             --package-name "${PACKAGE_NAME}" --version "${VERSION}"
 
+      - name: Verify dsh-design-playbook registry
+        timeout-minutes: 16
+        shell: bash
+        env:
+          PACKAGE_NAME: dsh-design-playbook
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          for ATTEMPT in $(seq 1 90); do
+            ACTUAL="$(npm view "${PACKAGE_NAME}@${VERSION}" version 2>/dev/null || true)"
+            if [[ "${ACTUAL}" == "${VERSION}" ]]; then
+              echo "Verified ${PACKAGE_NAME}@${VERSION} on attempt ${ATTEMPT}"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::npm registry did not expose required ${PACKAGE_NAME}@${VERSION}"
+          exit 1
+
+      - name: Verify dsh-design-playbook provenance
+        shell: bash
+        env:
+          PACKAGE_NAME: dsh-design-playbook
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          VERIFY_DIR="$(mktemp -d)"
+          trap 'rm -rf -- "${VERIFY_DIR}"' EXIT
+          npm install --prefix "${VERIFY_DIR}" --ignore-scripts --no-audit --no-fund \
+            "${PACKAGE_NAME}@${VERSION}"
+          AUDIT_JSON="$(npm audit signatures --prefix "${VERIFY_DIR}" --json --include-attestations)"
+          printf '%s' "${AUDIT_JSON}" | python3 scripts/release_state.py provenance \
+            --package-name "${PACKAGE_NAME}" --version "${VERSION}"
+
       - name: npm publish summary
         shell: bash
         run: |
@@ -244,7 +278,7 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
   github-release:
-    name: Create GitHub Release
+    name: Create shared GitHub Release
     needs: publish
     runs-on: ubuntu-latest
     permissions:

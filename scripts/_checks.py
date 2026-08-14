@@ -58,6 +58,7 @@ COMMAND_INVENTORY: dict[tuple[int, int], frozenset[str]] = {
         "doctor",
     }),
 }
+STABLE_SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 
 
 def version_key(version: str) -> tuple[int, int] | None:
@@ -75,6 +76,51 @@ def expected_commands(version: str) -> frozenset[str] | None:
     if key is None:
         return None
     return COMMAND_INVENTORY.get(key)
+
+
+def release_group_errors(
+    main_manifest: object,
+    dsh_manifest: object,
+) -> tuple[str, ...]:
+    """Return manifest errors that break the fixed npm release group."""
+    errors: list[str] = []
+    if not isinstance(main_manifest, dict):
+        errors.append("design-playbook package.json must contain a JSON object")
+    if not isinstance(dsh_manifest, dict):
+        errors.append("dsh-design-playbook package.json must contain a JSON object")
+    if errors:
+        return tuple(errors)
+
+    main_version = main_manifest.get("version")
+    dsh_version = dsh_manifest.get("version")
+    main_version_valid = bool(
+        isinstance(main_version, str) and STABLE_SEMVER.fullmatch(main_version)
+    )
+    dsh_version_valid = bool(
+        isinstance(dsh_version, str) and STABLE_SEMVER.fullmatch(dsh_version)
+    )
+    if not main_version_valid:
+        errors.append(f"design-playbook version {main_version!r} is not stable semver")
+    if not dsh_version_valid:
+        errors.append(f"dsh-design-playbook version {dsh_version!r} is not stable semver")
+    if main_version_valid and dsh_version_valid and dsh_version != main_version:
+        errors.append(
+            f"dsh-design-playbook version {dsh_version!r} does not match "
+            f"design-playbook version {main_version!r}"
+        )
+    dependencies = dsh_manifest.get("dependencies")
+    dependency = (
+        dependencies.get("design-playbook")
+        if isinstance(dependencies, dict)
+        else None
+    )
+    expected_dependency = f"^{main_version}" if main_version_valid else None
+    if expected_dependency is not None and dependency != expected_dependency:
+        errors.append(
+            f"dsh-design-playbook dependency on design-playbook {dependency!r}; "
+            f"expected {expected_dependency!r}"
+        )
+    return tuple(errors)
 
 
 @dataclass(frozen=True, order=True)

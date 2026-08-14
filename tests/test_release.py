@@ -17,6 +17,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE = ROOT / "scripts" / "release.py"
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from _checks import release_group_errors  # noqa: E402
 
 
 def _current_version() -> str:
@@ -36,6 +39,40 @@ def _run(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+class ReleaseGroupPolicyTests(unittest.TestCase):
+    def test_release_group_manifest_contract(self) -> None:
+        main = {"name": "design-playbook", "version": "1.2.3"}
+        dsh = {
+            "name": "dsh-design-playbook",
+            "version": "1.2.3",
+            "dependencies": {"design-playbook": "^1.2.3"},
+        }
+
+        invalid_cases = (
+            ([], dsh, "design-playbook package.json must contain a JSON object"),
+            ({}, dsh, "design-playbook version None is not stable semver"),
+            (main, {"version": "1.2"}, "dsh-design-playbook version '1.2' is not stable semver"),
+            (
+                main,
+                {"version": "1.2.3"},
+                "dsh-design-playbook dependency on design-playbook None; expected '^1.2.3'",
+            ),
+            (
+                main,
+                {"version": "1.2.4", "dependencies": {"design-playbook": "^1.2.3"}},
+                "dsh-design-playbook version '1.2.4' does not match design-playbook version '1.2.3'",
+            ),
+        )
+        for main_manifest, dsh_manifest, expected in invalid_cases:
+            with self.subTest(expected=expected):
+                self.assertIn(
+                    expected,
+                    release_group_errors(main_manifest, dsh_manifest),
+                )
+
+        self.assertEqual(release_group_errors(main, dsh), ())
+
+
 class ReleaseGateTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -44,6 +81,10 @@ class ReleaseGateTests(unittest.TestCase):
         shutil.copytree(
             ROOT / "packages" / "design-playbook",
             self.root / "packages" / "design-playbook",
+        )
+        shutil.copytree(
+            ROOT / "packages" / "dsh-design-playbook",
+            self.root / "packages" / "dsh-design-playbook",
         )
         shutil.copytree(ROOT / ".claude-plugin", self.root / ".claude-plugin")
         shutil.copy2(ROOT / "README.md", self.root / "README.md")
@@ -134,6 +175,34 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("9.9.9", result.stdout)
         self.assertIn("codex", result.stdout.lower())
+
+    def test_dsh_package_version_must_match_main_package(self) -> None:
+        dsh_package = (
+            self.root / "packages" / "dsh-design-playbook" / "package.json"
+        )
+        payload = json.loads(dsh_package.read_text(encoding="utf-8"))
+        payload["version"] = "9.9.9"
+        dsh_package.write_text(json.dumps(payload), encoding="utf-8")
+
+        result = self.release("--checks", "version")
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("dsh-design-playbook version '9.9.9'", result.stdout)
+        self.assertIn(f"design-playbook version '{CURRENT_VERSION}'", result.stdout)
+
+    def test_dsh_dependency_must_match_main_package_version(self) -> None:
+        dsh_package = (
+            self.root / "packages" / "dsh-design-playbook" / "package.json"
+        )
+        payload = json.loads(dsh_package.read_text(encoding="utf-8"))
+        payload["dependencies"]["design-playbook"] = "^0.13.0"
+        dsh_package.write_text(json.dumps(payload), encoding="utf-8")
+
+        result = self.release("--checks", "version")
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("dsh-design-playbook dependency on design-playbook '^0.13.0'", result.stdout)
+        self.assertIn(f"expected '^{CURRENT_VERSION}'", result.stdout)
 
 
 if __name__ == "__main__":

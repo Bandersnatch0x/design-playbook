@@ -36,6 +36,12 @@ dsh plugin --profile <name> add dsh-design-playbook
 
 This installs both `dsh-design-playbook` and its dependency `design-playbook` into the profile. Reconcile activates the bundle layer automatically.
 
+## Release identity
+
+Stable releases form one fixed group with `design-playbook`. A single repository tag, `vX.Y.Z`, triggers both package publishers from the same commit. The package versions must be identical and this bundle must depend on exactly `design-playbook@^X.Y.Z`; repository validation fails rather than editing either manifest when those values drift.
+
+The bundle publisher waits for `design-playbook@X.Y.Z` before publishing. The shared GitHub Release is created by the main release workflow only after both npm artifacts and both provenance attestations have been verified. `dsh-v0.14.0` remains the historical bootstrap tag; new stable releases do not create `dsh-v*` tags.
+
 ## Verify
 
 ```sh

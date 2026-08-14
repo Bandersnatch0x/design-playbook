@@ -161,6 +161,20 @@ def check_versions() -> str:
     return version
 
 
+def check_release_group() -> None:
+    print("== npm release group ==")
+    main_manifest = read_json(PKG / "package.json")
+    dsh_manifest = read_json(
+        ROOT / "packages" / "dsh-design-playbook" / "package.json"
+    )
+    errors = _checks.release_group_errors(main_manifest, dsh_manifest)
+    if errors:
+        for message in errors:
+            fail(message)
+        return
+    ok("design-playbook and dsh-design-playbook versions/dependency match")
+
+
 # Mirrors validate.py bundled-MCP gate (.mcp.json present + both servers
 # registered + ${CLAUDE_PLUGIN_ROOT}); validate.py additionally checks the
 # bundled server.py runtime files exist. Keep in sync when adapter layout
@@ -332,6 +346,7 @@ def main(argv: list[str] | None = None) -> int:
     check_layout()
     check_gate1_smoke()
     check_versions()
+    check_release_group()
     check_mcp()
     check_codex_manifest()
     check_launchers()
