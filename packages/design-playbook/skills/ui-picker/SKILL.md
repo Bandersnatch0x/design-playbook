@@ -53,9 +53,21 @@ risks: …
 
 **Done when:** the report exists, records the bound baseline or explicit waiver, and coding has not started without it.
 
+#### DD entry blocks (append after the top block)
+
+The top block above is the Fill consumption face and stays byte-identical. When a choice needs a record a reviewer could challenge, append versioned DD entry blocks after it (`## DD-0001 — <question>` + one yaml field block each; format and gate rules in [`references/decisions.md`](references/decisions.md)). Tier every recorded decision first:
+
+| Tier | Trigger | Who decides | Recording duty |
+| --- | --- | --- | --- |
+| record (R) | single reasonable choice, or local implementation inside confirmed declarations | agent | one-line rationale + constraint reference |
+| compare (C) | 2-3 substantive candidates inside the baseline, no E criterion hit | agent | candidates + comparison axes + trade-off + rejection reasons |
+| explore (E) | any E criterion: identity drift from the bound baseline, region/weight re-composition, a T3 route from shaping, an R3 challenge, or a baseline conflict | **user** | full entry + user confirmation |
+
+Baseline-internal small choices never trigger full exploration. E-tier confirmation rides the preview transaction when the adapter is present (`options` = candidate labels, `report_ref` = this report; link the entry to the transaction `decision_id`); when absent, record `kind: user` + `report-batch` in the entry's confirmation block. R3 challenges revise by a new entry that `supersedes` the retired one — history is never rewritten. `scripts/g10_design_decisions.py` (G10, via `validate_run.py`) checks the machine face.
+
 ### Branch — structure still open
 
-If template is underdetermined, offer 2–3 IA variants (same `spec`, different main-region weight), one-line tradeoff each, pick one, then complete step 4.
+If template is underdetermined, offer 2–3 IA variants (same `spec`, different main-region weight), one-line tradeoff each, pick one, then complete step 4. This branch is the C tier above: record it as a `tier: compare` DD entry instead of leaving the trade-off in conversation only.
 
 ## Defaults that hold
 
