@@ -6,7 +6,8 @@
 issue:    batch retry has no confirm step
 source:   domain
 fix:      confirm Dialog before executing batch retry
-severity: high (blocking)
+severity: S3
+disposition: blocking
 ```
 
 Note: the project started the sprint with 0 blocking issues on the backlog.

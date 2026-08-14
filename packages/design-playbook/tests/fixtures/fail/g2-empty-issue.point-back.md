@@ -6,7 +6,7 @@
 issue:
 source: spec L2
 fix: add a consequence-confirmation dialog
-severity: high
+severity: S2
 ```
 
 ## Verdict

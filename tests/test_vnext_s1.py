@@ -347,12 +347,12 @@ disposition: info
 
 
 class SeverityAxisTests(unittest.TestCase):
-    def test_alias_mapping(self) -> None:
-        self.assertEqual(severity_axis("S3"), "S3")
-        self.assertEqual(severity_axis("high (blocking)"), "S3")
-        self.assertEqual(severity_axis("high"), "S2")
-        self.assertEqual(severity_axis("med"), "S1")
-        self.assertEqual(severity_axis("low"), "S1")
+    """vNext S5 rewrote the alias-period expectations: the legacy values are
+    now structural errors (vnext-prototype Q5=B, two-stage migration)."""
+
+    def test_axis_mapping(self) -> None:
+        for value in ("S3", "S2", "S1", "S0"):
+            self.assertEqual(severity_axis(value), value)
         self.assertIsNone(severity_axis("critical"))
 
     def _probe(self, severity: str, disposition: str = "") -> list:
@@ -370,12 +370,19 @@ class SeverityAxisTests(unittest.TestCase):
         )
         return [f.rule_id for f in check_pointback(text, 0)]
 
-    def test_union_of_new_and_legacy_values_is_legal(self) -> None:
-        for severity in ("S3", "S2", "S1", "S0", "high (blocking)",
-                         "high", "med", "low"):
+    def test_new_axis_values_are_legal(self) -> None:
+        for severity in ("S3", "S2", "S1", "S0"):
             rules = self._probe(severity)
             self.assertNotIn("G2.finding_invalid_severity", rules,
-                             f"{severity} must be legal during the alias period")
+                             f"{severity} must be legal")
+
+    def test_legacy_alias_values_are_rejected(self) -> None:
+        # vNext S5 (issue #40): the alias period ended — the legacy
+        # spellings are structural errors, not silent aliases any more.
+        for severity in ("high (blocking)", "high", "med", "low"):
+            rules = self._probe(severity)
+            self.assertIn("G2.finding_invalid_severity", rules,
+                          f"{severity} must be rejected after alias removal")
 
     def test_invalid_severity_rejected(self) -> None:
         self.assertIn(
@@ -385,9 +392,11 @@ class SeverityAxisTests(unittest.TestCase):
         self.assertIn("G2.s3_needs_disposition", self._probe("S3"))
         self.assertNotIn(
             "G2.s3_needs_disposition", self._probe("S3", "blocking"))
-        # legacy spelling carries its own blocking meaning
-        self.assertNotIn(
-            "G2.s3_needs_disposition", self._probe("high (blocking)"))
+        # no legacy spelling carries blocking meaning any more — a removed
+        # alias must not resurrect the old G4 closure behaviour either
+        rules = self._probe("high (blocking)")
+        self.assertIn("G2.finding_invalid_severity", rules)
+        self.assertNotIn("G4.missing_closure_trail", rules)
 
     def test_disposition_enum_validated(self) -> None:
         self.assertIn(

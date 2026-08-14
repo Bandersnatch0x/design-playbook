@@ -8,17 +8,20 @@ Produced by **ui-evaluator**. Three blocking findings, but only one is closed.
 issue:    batch retry has no confirm step
 source:   domain
 fix:      confirm Dialog with consequence copy before executing batch retry
-severity: high (blocking)
+severity: S3
+disposition: blocking
 
 issue:    abort run without confirm
 source:   domain
 fix:      confirm Dialog; abort is irreversible -> state consequence
-severity: high (blocking)
+severity: S3
+disposition: blocking
 
 issue:    resource sparkline animates width on update
 source:   craft (DESIGN.md §6: no width/height/top/left animation)
 fix:      animate opacity/transform only; re-render data in place
-severity: high (blocking)
+severity: S3
+disposition: blocking
 ```
 
 ## Recirculate closure trail

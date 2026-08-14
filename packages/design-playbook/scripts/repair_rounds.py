@@ -94,14 +94,16 @@ def _invalidated_text(text: str) -> str:
 
 
 def is_blocking(parsed: dict[str, list[str]]) -> bool:
-    """Blocking disposition: legacy severity spelling or the new axis."""
-    severity = parsed["severity"][0] if parsed["severity"] else ""
-    legacy_blocking = bool(re.search(r"(?<!non-)\bblocking\b", severity, re.I))
+    """Blocking disposition: the explicit ``disposition: blocking`` field.
+
+    vNext S5 removed the legacy severity spellings, so the severity text can
+    no longer carry blocking meaning — only the disposition axis does.
+    """
     disposition = (
         parsed["disposition"][0].strip().casefold()
         if parsed["disposition"] else ""
     )
-    return legacy_blocking or disposition == "blocking"
+    return disposition == "blocking"
 
 
 def parse_round_facts(text: str) -> RoundFacts:

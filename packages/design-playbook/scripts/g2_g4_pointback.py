@@ -8,11 +8,14 @@ closure-trail coverage preventing blockers being dropped (G4).
 vNext S1 (review-prototype Q1/Q4): findings may carry additional field
 lines (track / confidence / disposition / evidence / assumes / rule / dd).
 The four required fields and the machine face are unchanged; additional
-fields are validated only when present. Severity accepts the new axis
-S3|S2|S1|S0 plus the legacy values as compatibility aliases during the
-alias period (union; legacy removal lands in a later slice). Blocking
-disposition comes from the legacy severity spelling or the new
-``disposition: blocking`` field — severity and disposition are two axes.
+fields are validated only when present.
+
+vNext S5 (vnext-prototype Q5=B, second stage — BREAKING): the legacy
+severity aliases ``high (blocking) | high | med | low`` are no longer
+legal. The value domain is the new axis ``S3 | S2 | S1 | S0`` only;
+legacy spellings are structural errors. Blocking disposition comes from
+the ``disposition: blocking`` field — severity and disposition are two
+axes.
 """
 from __future__ import annotations
 
@@ -48,29 +51,26 @@ CLOSURE_LINE = re.compile(
 )
 VALID_RESULTS = {"pass", "fail", "blocked", "n/a"}
 
-# Severity axis (review-prototype Q1): new values plus legacy aliases during
-# the alias period — union is legal; removal is a later slice (vnext Q5=B).
+# Severity axis (review-prototype Q1). vNext S5 removed the legacy aliases
+# (vnext-prototype Q5=B, two-stage migration complete): only S3|S2|S1|S0 are
+# legal; the old spellings are structural errors.
 SEVERITY_NEW = frozenset({"S3", "S2", "S1", "S0"})
 SEVERITY_LEGACY = frozenset({"high (blocking)", "high", "med", "low"})
-SEVERITY_ALIASES = {
-    "high (blocking)": "S3",
-    "high": "S2",
-    "med": "S1",
-    "low": "S1",
-}
 VALID_TRACKS = frozenset({"product", "interaction", "cross-cutting"})
 VALID_CONFIDENCE = frozenset({"high", "medium", "low"})
 VALID_DISPOSITIONS = frozenset({"blocking", "advisory", "info"})
 
 
 def severity_axis(value: str) -> str | None:
-    """Map a severity value onto the new axis; None when invalid."""
+    """Map a severity value onto the axis; None when invalid.
+
+    The exact axis spelling is required — the legacy aliases were removed
+    in vNext S5 (they used to fold onto S3/S2/S1/S1 during the alias
+    period).
+    """
     stripped = value.strip()
     if stripped in SEVERITY_NEW:
         return stripped
-    legacy = stripped.casefold()
-    if legacy in SEVERITY_LEGACY:
-        return SEVERITY_ALIASES[legacy]
     return None
 
 
@@ -312,19 +312,24 @@ def check_pointback(
                     repair=f"Keep one {field} on finding {i}",
                 ))
 
-        # Severity axis (alias period: new S3-S0 and legacy values both
-        # legal; anything else is a structural error).
+        # Severity axis (vNext S5: new-axis-only; the legacy aliases are
+        # structural errors — the two-stage alias period is over).
         severity = pb_finding["severity"][0] if pb_finding["severity"] else ""
         if severity and severity_axis(severity) is None:
+            legacy_note = (
+                " (legacy alias removed in v0.19.0)" 
+                if severity.strip().casefold() in SEVERITY_LEGACY else ""
+            )
             errs.append(finding(
                 "G2.finding_invalid_severity",
                 f"G2 point-back: finding {i} severity '{severity}' is not "
-                "S3|S2|S1|S0 (or a legacy alias)",
+                f"S3|S2|S1|S0{legacy_note}",
                 owner=f"point-back.md#finding.{i}",
-                expected="S3|S2|S1|S0 or legacy high (blocking)|high|med|low",
+                expected="S3|S2|S1|S0",
                 actual=severity,
-                repair="Use the severity axis; legacy values map to "
-                       "S3/S2/S1/S1 during the alias period",
+                repair="Use the severity axis S3|S2|S1|S0; the legacy "
+                       "high (blocking)|high|med|low spellings were "
+                       "removed (former aliases: S3/S2/S1/S1)",
             ))
 
         # Additional fields validate only when present (protocol additive).
@@ -375,8 +380,8 @@ def check_pointback(
                 repair="Derive disposition from severity x class x "
                        "confidence; judgment-class S3 is never blocking",
             ))
-        # New-axis S3 (exact spelling) requires the disposition field; the
-        # legacy "high (blocking)" spelling carries its own blocking meaning.
+        # New-axis S3 (exact spelling) requires the disposition field; there
+        # is no legacy spelling carrying blocking meaning any more.
         if severity.strip() in SEVERITY_NEW and severity_axis(severity) == "S3" \
                 and not disposition:
             errs.append(finding(
@@ -390,12 +395,10 @@ def check_pointback(
                        "escalate to the user instead of blocking",
             ))
 
-        # Blocking = legacy severity spelling or an explicit blocking
-        # disposition on the new axis (severity and disposition are
-        # independent axes; a bare S3 does not block without disposition).
-        legacy_blocking = bool(re.search(r"(?<!non-)\bblocking\b", severity, re.I))
-        axis_blocking = disposition.casefold() == "blocking"
-        if legacy_blocking or axis_blocking:
+        # Blocking is the explicit blocking disposition on the axis (severity
+        # and disposition are independent axes; a bare S3 does not block
+        # without disposition).
+        if disposition.casefold() == "blocking":
             issue = pb_finding["issue"][0] if pb_finding["issue"] else ""
             blocking.append((i, issue))
 

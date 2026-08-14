@@ -164,9 +164,11 @@ class RepairRoundsTests(unittest.TestCase):
             [])
 
     def test_legacy_reports_stay_silent(self) -> None:
+        # "legacy" here = a report without round annotations; the severity
+        # spelling itself is on the new axis since S5 removed the aliases.
         legacy = "# pb\n\n## Findings\n\n```text\nissue: a\nsource: s\n" \
-                 "fix: f\nseverity: high (blocking)\n```\n\n## Verdict\n\n" \
-                 "Recirculate\n"
+                 "fix: f\nseverity: S3\ndisposition: blocking\n```\n\n" \
+                 "## Verdict\n\nRecirculate\n"
         self.assertEqual(check_rounds(legacy), [])
         self.assertIsNone(parse_close_reason(legacy))
 

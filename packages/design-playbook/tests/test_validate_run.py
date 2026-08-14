@@ -221,7 +221,7 @@ def _verdict_probe_pointback(verdict_section: str) -> str:
 issue: polish spacing on card header
 source: craft
 fix: tighten padding
-severity: low
+severity: S1
 ```
 
 ## Evidence ledger
