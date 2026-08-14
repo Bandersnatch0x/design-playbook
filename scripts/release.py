@@ -29,7 +29,15 @@ SEAM_TEST = PKG / "tests" / "test_validate_run.py"
 PREVIEW_SERVER = PKG / "mcp" / "preview" / "server.py"
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
-CHECK_ORDER = ("tree", "version", "validate", "seam", "adapter", "tag")
+CHECK_ORDER = (
+    "tree",
+    "version",
+    "release-group",
+    "validate",
+    "seam",
+    "adapter",
+    "tag",
+)
 failures: list[str] = []
 
 
@@ -143,16 +151,6 @@ def check_version() -> None:
             f"package.json={npm_version!r}"
         )
 
-    release_group_errors = _checks.release_group_errors(
-        read_json(PKG / "package.json"),
-        read_json(DSH_PKG / "package.json"),
-    )
-    if release_group_errors:
-        for message in release_group_errors:
-            fail(message)
-    else:
-        ok(f"npm release group versions match: {npm_version}")
-
     badge_re = re.compile(r"badge/Version-(\d+\.\d+\.\d+)-")
     for relative in ("README.md", "README-zh.md"):
         path = ROOT / relative
@@ -186,8 +184,30 @@ def check_version() -> None:
         ok(f"{relative.as_posix()} matches version {version}")
 
 
+def check_release_group() -> None:
+    """Enforce the fixed npm release group (design-playbook + dsh bundle).
+
+    Both package versions must equal the stable version and the DSH
+    dependency must be exactly ``^X.Y.Z``. This is the standalone gate the
+    DSH workflow runs before publication; the full release gate runs it too,
+    so a version bump can never split the group (spec stories 7/8).
+    """
+    print("== 3. npm release group ==")
+    main_manifest = read_json(PKG / "package.json")
+    dsh_manifest = read_json(DSH_PKG / "package.json")
+    if not isinstance(main_manifest, dict) or not isinstance(dsh_manifest, dict):
+        return  # read_json already reported the unreadable manifest
+    errors = _checks.release_group_errors(main_manifest, dsh_manifest)
+    if errors:
+        for message in errors:
+            fail(message)
+        return
+    main_version = main_manifest.get("version", "")
+    ok(f"npm release group versions match: {main_version}")
+
+
 def check_validate() -> None:
-    print("== 3. scripts/validate.py ==")
+    print("== 4. scripts/validate.py ==")
     result = run([sys.executable, str(VALIDATOR)])
     if result.returncode == 0 and "VALIDATION PASSED" in result.stdout:
         ok("validate.py PASSED")
@@ -197,7 +217,7 @@ def check_validate() -> None:
 
 
 def check_seam() -> None:
-    print("== 4. seam test (test_validate_run.py) ==")
+    print("== 5. seam test (test_validate_run.py) ==")
     result = run([sys.executable, str(SEAM_TEST)])
     if result.returncode == 0 and "SEAM TEST PASSED" in result.stdout:
         ok("SEAM TEST PASSED")
@@ -207,7 +227,7 @@ def check_seam() -> None:
 
 
 def check_adapter() -> None:
-    print("== 5. adapter floor self-check ==")
+    print("== 6. adapter floor self-check ==")
     result = run([sys.executable, str(PREVIEW_SERVER), "--self-check"])
     if result.returncode == 0 and "FLOOR SELF-CHECK PASSED" in result.stdout:
         ok("FLOOR SELF-CHECK PASSED")
@@ -217,7 +237,7 @@ def check_adapter() -> None:
 
 
 def check_tag(*, apply: bool) -> str:
-    print("== 6. tag ==")
+    print("== 7. tag ==")
     version = plugin_version()
     if not SEMVER.fullmatch(version):
         fail(f"cannot check tag: invalid plugin version {version!r}")
@@ -283,6 +303,7 @@ def main() -> int:
     checks = {
         "tree": check_tree,
         "version": check_version,
+        "release-group": check_release_group,
         "validate": check_validate,
         "seam": check_seam,
         "adapter": check_adapter,

@@ -84,7 +84,7 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         )
         self.assertEqual(
             self.dsh_publish_steps["Run release group gate"]["run"],
-            "python3 scripts/release.py --checks version",
+            "python3 scripts/release.py --checks release-group",
         )
 
     def test_release_is_tag_driven_with_explicit_recovery(self) -> None:
@@ -247,10 +247,14 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         )
         for step in waits:
             with self.subTest(step=step["name"]):
-                self.assertGreater(step["timeout-minutes"], 0)
+                self.assertGreaterEqual(step["timeout-minutes"], 25)
                 self.assertIn("required ${PACKAGE_NAME}@${VERSION}", step["run"])
 
-    def test_both_publishers_inspect_their_npm_artifacts(self) -> None:
+    def test_both_publishers_pin_python_and_inspect_their_npm_artifacts(self) -> None:
+        self.assertEqual(
+            self.dsh_publish_steps["Setup Python"]["with"]["python-version"],
+            "3.13",
+        )
         for steps, package_dir in (
             (self.publish_steps, "packages/design-playbook"),
             (self.dsh_publish_steps, "packages/dsh-design-playbook"),

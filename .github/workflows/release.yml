@@ -232,14 +232,14 @@ jobs:
             --package-name "${PACKAGE_NAME}" --version "${VERSION}"
 
       - name: Verify dsh-design-playbook registry
-        timeout-minutes: 16
+        timeout-minutes: 36
         shell: bash
         env:
           PACKAGE_NAME: dsh-design-playbook
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          for ATTEMPT in $(seq 1 90); do
+          for ATTEMPT in $(seq 1 180); do
             ACTUAL="$(npm view "${PACKAGE_NAME}@${VERSION}" version 2>/dev/null || true)"
             if [[ "${ACTUAL}" == "${VERSION}" ]]; then
               echo "Verified ${PACKAGE_NAME}@${VERSION} on attempt ${ATTEMPT}"

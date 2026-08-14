@@ -49,6 +49,11 @@ jobs:
         with:
           node-version: "22.14.0"
 
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
       - name: Pin Trusted Publishing npm CLI
         shell: bash
         run: |
@@ -100,7 +105,11 @@ jobs:
           echo "package_name=${PACKAGE_NAME}" >> "${GITHUB_OUTPUT}"
 
       - name: Run release group gate
-        run: python3 scripts/release.py --checks version
+        # Lockstep policy only: both package versions equal the tag version
+        # and the DSH dependency is exactly ^X.Y.Z. Main-package surface
+        # checks (README badges, release notes, marketplace) belong to the
+        # main workflow's full gate, not to the DSH publisher (spec 7/8/17).
+        run: python3 scripts/release.py --checks release-group
 
       - name: Validate dsh bundle structure
         shell: bash
@@ -126,14 +135,14 @@ jobs:
         run: npm pack --dry-run
 
       - name: Wait for design-playbook registry
-        timeout-minutes: 16
+        timeout-minutes: 36
         shell: bash
         env:
           PACKAGE_NAME: design-playbook
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          for ATTEMPT in $(seq 1 90); do
+          for ATTEMPT in $(seq 1 180); do
             ACTUAL="$(npm view "${PACKAGE_NAME}@${VERSION}" version 2>/dev/null || true)"
             if [[ "${ACTUAL}" == "${VERSION}" ]]; then
               echo "Verified ${PACKAGE_NAME}@${VERSION} on attempt ${ATTEMPT}"
