@@ -18,10 +18,15 @@ from pathlib import Path
 # than run as `python scripts/validate.py` (mirrors doctor.py's guard).
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _checks
-import rules_registry
 
+# The registry parser lives with the shipped package scripts so the
+# product-level G8 and the run-level G8 (g8_run_registry.py) share one
+# canonical module (vNext S3).
 ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "packages" / "design-playbook"
+sys.path.insert(0, str(PKG / "scripts"))
+import rules_registry  # noqa: E402
+
 failures: list[str] = []
 
 

@@ -67,7 +67,7 @@ jobs:
             packages/design-playbook-preview/server.py \
             packages/design-playbook-evidence/server.py \
             scripts/validate.py \
-            scripts/rules_registry.py \
+            packages/design-playbook/scripts/rules_registry.py \
             scripts/release.py \
             scripts/release_state.py \
             scripts/doctor.py \

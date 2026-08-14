@@ -1,7 +1,9 @@
-"""First-party UX rule registry parsing and G8 product-level self-check.
+"""First-party UX rule registry parsing and G8 self-checks.
 
-Shared by ``scripts/validate.py`` (the product-level G8 gate) and the repo
-unit tests. Owns exactly the machine-checkable face declared in
+One canonical module shared by both G8 levels (vNext S3): the product-level
+self-check (repo ``scripts/validate.py``) and the run-level coverage gate
+(``g8_run_registry.py``) consume the same entry parsing and row validation.
+Owns exactly the machine-checkable face declared in
 ``skills/design-playbook/references/rules.md``:
 
 - entry parsing: ``## <ID> — <title>`` heading + one fenced field block
