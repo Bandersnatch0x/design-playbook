@@ -1,0 +1,9 @@
+{
+  "nodes": [
+    {
+      "role": "generic",
+      "name": ""
+    }
+  ],
+  "note": "round 1: toast node has no name and no role=alert"
+}

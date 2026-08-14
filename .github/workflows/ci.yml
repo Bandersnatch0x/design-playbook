@@ -39,6 +39,7 @@ jobs:
           python3 tests/test_normalize_lockstep.py
           python3 tests/test_install_smoke.py
           python3 tests/test_release_workflow.py
+          python3 tests/test_vnext_s1.py
       - name: Syntax check (all Python)
         # py_compile is the always-on syntax gate. The MCP stdio suites now
         # also run as required gates below (ticket 06): preview mocks its
@@ -65,6 +66,7 @@ jobs:
             packages/design-playbook-preview/server.py \
             packages/design-playbook-evidence/server.py \
             scripts/validate.py \
+            scripts/rules_registry.py \
             scripts/release.py \
             scripts/release_state.py \
             scripts/doctor.py \
@@ -80,6 +82,7 @@ jobs:
             tests/test_normalize_lockstep.py \
             tests/test_install_smoke.py \
             tests/test_release_workflow.py \
+            tests/test_vnext_s1.py \
             packages/design-playbook/scripts/validate_run.py \
             packages/design-playbook/scripts/g1_spec.py \
             packages/design-playbook/scripts/g2_g4_pointback.py \
@@ -87,6 +90,10 @@ jobs:
             packages/design-playbook/scripts/g6_evidence.py \
             packages/design-playbook/scripts/g6_records.py \
             packages/design-playbook/scripts/g6_warnings.py \
+            packages/design-playbook/scripts/g9_shaping.py \
+            packages/design-playbook/scripts/g11_coverage.py \
+            packages/design-playbook/scripts/shaping_log.py \
+            packages/design-playbook/scripts/run_profile.py \
             packages/design-playbook/scripts/stages.py \
             packages/design-playbook/scripts/run_status.py \
             packages/design-playbook/design_playbook.py \

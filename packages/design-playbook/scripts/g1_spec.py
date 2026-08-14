@@ -41,11 +41,16 @@ def _l6_items(text: str) -> list[str]:
 
 
 def _layer_body(text: str, layer: str) -> str:
-    """Slice the body of one L<k> section (up to the next heading)."""
+    """Slice one L<k> layer body, including its sub-headings (### blocks).
+
+    The structured-field tables live under sub-headings inside the layer
+    (e.g. ``### Page duties``), so the body extends to the next same-or-
+    higher level heading (``##``), not to the first sub-heading.
+    """
     parts = re.split(rf"^#+\s*{layer}\b", text, maxsplit=1, flags=re.M)
     if len(parts) == 1:
         return ""
-    return re.split(r"^#+\s+", parts[1], maxsplit=1, flags=re.M)[0]
+    return re.split(r"^##\s+", parts[1], maxsplit=1, flags=re.M)[0]
 
 
 def _tables(body: str) -> list[list[list[str]]]:
