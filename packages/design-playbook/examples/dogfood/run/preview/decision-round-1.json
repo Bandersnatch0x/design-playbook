@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "decision_id": "7c3a91e4d2b6f80a5c7e9d1b3f5a8c0e",
+  "timestamp": "2026-08-14T09:28:00Z",
+  "binding": {
+    "digest": "3f8c1d6a9b2e4f7c0a3d5e8f1b4c6a9d0e2f4a6b8c0d2e4f6a8b0c2d4e6f80a",
+    "round": 1,
+    "prototype_html_hash": "49168ec16c460766b07304c1dbeb19b632e97033257a21d4e0b2c06be4104f5c",
+    "report_ref": "decision-report.md",
+    "summary": "顶栏计数区升级的呈现构成",
+    "options": [
+      "A 顶栏轻量计数增强",
+      "B 全局运行控制台"
+    ]
+  },
+  "outcome": {
+    "confirmed": true,
+    "user_confirmed": true,
+    "floor_pass": true,
+    "selected_options": [
+      "B 全局运行控制台"
+    ],
+    "feedback": "选全局方案：运行中切页必须可续读；布局段突破接受，基线漂移复核照走",
+    "anchors": []
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "kind": "interaction-trace",
+  "state": "final",
+  "steps": [
+    {"action": "enqueue new run with feed at 12-entry cap", "at": "2026-08-14T10:34:30Z", "observed": "oldest completed entry evicted; failed entries retained (not silently dropped)"},
+    {"action": "open completed entry result", "at": "2026-08-14T10:34:58Z", "observed": "result entry point available from the feed entry"}
+  ],
+  "note": "cap governance trace: eviction order + failed-entry retention"
+}

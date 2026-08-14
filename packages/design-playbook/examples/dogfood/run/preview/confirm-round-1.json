@@ -1,0 +1,15 @@
+{
+  "round": 1,
+  "report_ref": "decision-report.md",
+  "confirmed": true,
+  "floor_pass": true,
+  "selected_options": [
+    "B 全局运行控制台"
+  ],
+  "feedback": "round 1: 运行中切页必须可续读；布局段突破接受，基线漂移复核照走",
+  "anchors": [],
+  "timestamp": "2026-08-14T09:32:00Z",
+  "prototype_path": "preview/round-1.html",
+  "prototype_html_hash": "49168ec16c460766b07304c1dbeb19b632e97033257a21d4e0b2c06be4104f5c",
+  "decision_id": "7c3a91e4d2b6f80a5c7e9d1b3f5a8c0e"
+}

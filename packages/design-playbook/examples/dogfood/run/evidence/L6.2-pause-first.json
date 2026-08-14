@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "kind": "a11y-tree",
+  "state": "first-round / invalidated",
+  "nodes": [
+    {"role": "generic", "name": "", "attr": "global pause button has no accessible name and no role (first round)"}
+  ],
+  "note": "R4 finding first-round evidence: global pause control unusable via assistive tech; superseded by the r2 trace after the role/name fix"
+}

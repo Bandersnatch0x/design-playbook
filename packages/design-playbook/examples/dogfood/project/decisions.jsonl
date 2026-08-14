@@ -1,0 +1,11 @@
+{"confirmed_at": "2026-08-14T08:30:00Z", "decision": "查看所有模拟运行的实时状态、失败重试与资源占用的队列监控页", "field": "l1.goal", "id": "D-0001", "rationale": "showcase 主 run 用户确认的监控页目标"}
+{"confirmed_at": "2026-08-14T08:30:00Z", "decision": "运维分析师、场景设计者", "field": "l1.target_user", "id": "D-0002", "rationale": "showcase 主 run L1 确认"}
+{"confirmed_at": "2026-08-14T08:30:00Z", "decision": "不在此编辑场景；不承载完整决策审计（在 Workbench）", "field": "l1.non_goals", "id": "D-0003", "rationale": "showcase 主 run 非目标确认"}
+{"confirmed_at": "2026-08-14T08:31:00Z", "decision": "Given 运维打开队列监控 When 查看运行列表 Then 每条模拟运行呈现状态、场景名、耗时与资源占用（证据：交互记录）", "field": "l6.c1", "id": "D-0004", "rationale": "showcase 主 run L6 确认"}
+{"confirmed_at": "2026-08-14T08:31:00Z", "decision": "Given 存在失败运行 When 选中失败条目触发批量重试 Then 重试入队且条目状态转为 queued（证据：交互记录）", "field": "l6.c2", "id": "D-0005", "rationale": "showcase 主 run L6 确认"}
+{"confirmed_at": "2026-08-14T08:31:00Z", "decision": "Given 运行超时 When 选择重试或中止 Then 对应动作执行且状态迁移可见（证据：交互记录）", "field": "l6.c3", "id": "D-0006", "rationale": "showcase 主 run L6 确认"}
+{"confirmed_at": "2026-08-14T08:32:00Z", "decision": "顶栏计数 + 主列表 + 侧区趋势（既有三段布局）", "field": "l2.entry_choice", "id": "D-0007", "rationale": "showcase 主 run 布局取舍"}
+{"confirmed_at": "2026-08-14T09:12:00Z", "decision": "把队列监控页升级为全局模拟运行中心的第一步——运行状态跨页可查、全局控制可用、失败可批量治理", "field": "l1.goal", "id": "D-0008", "supersedes": "D-0001", "rationale": "P3 升级：运行中心第一步（CP-A 确认，supersedes D-0001）"}
+{"confirmed_at": "2026-08-14T09:12:00Z", "decision": "Given 模拟运行进行中 When 离开并返回队列页 Then 全局控制台运行 feed 恢复显示且状态可续读（证据：交互记录）", "field": "l6.c4", "id": "D-0009", "rationale": "CP-A 确认（feed 跨页续读）"}
+{"confirmed_at": "2026-08-14T09:12:00Z", "decision": "Given 多运行并发 When 在全局控制台触发全局暂停 Then 进行中运行进入 paused 且控制台持续反馈（证据：交互记录）", "field": "l6.c5", "id": "D-0010", "rationale": "CP-A 确认（全局暂停反馈）"}
+{"confirmed_at": "2026-08-14T09:12:00Z", "decision": "Given 控制台 feed 达到上限 When 新运行入队 Then 最旧完成条目让位且失败项不静默丢失（证据：交互记录）", "field": "l6.c6", "id": "D-0011", "rationale": "CP-A 确认（feed 上限治理）"}

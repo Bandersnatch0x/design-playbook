@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "open_fields": [],
+  "stale_fields": [],
+  "blockers": [],
+  "assumed_fields": [
+    "l1.scenes",
+    "sim.control_scope",
+    "sim.max_parallel"
+  ],
+  "bound_contract": {
+    "schemaVersion": 1,
+    "changelog": [
+      {
+        "at": "2026-08-14T08:35:00Z",
+        "summary": "showcase main run projection (queue monitoring)"
+      }
+    ],
+    "fields": {
+      "l1.goal": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "查看所有模拟运行的实时状态、失败重试与资源占用的队列监控页"
+      },
+      "l1.target_user": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "运维分析师、场景设计者"
+      },
+      "l1.non_goals": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "不在此编辑场景；不承载完整决策审计（在 Workbench）"
+      },
+      "l1.scenes": {
+        "provenance": "inferred",
+        "resolution": "assumed",
+        "value": "日常监控在跑模拟 + 失败批量重试 + 资源异常定位",
+        "notes": "理由：场景清单延续 showcase 主 run；回退：仅日常监控。"
+      },
+      "l2.entry_choice": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "顶栏计数 + 主列表 + 侧区趋势（既有三段布局）"
+      },
+      "l6.c1": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "Given 运维打开队列监控 When 查看运行列表 Then 每条模拟运行呈现状态、场景名、耗时与资源占用（证据：交互记录）"
+      },
+      "l6.c2": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "Given 存在失败运行 When 选中失败条目触发批量重试 Then 重试入队且条目状态转为 queued（证据：交互记录）"
+      },
+      "l6.c3": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "Given 运行超时 When 选择重试或中止 Then 对应动作执行且状态迁移可见（证据：交互记录）"
+      },
+      "sim.max_parallel": {
+        "provenance": "inferred",
+        "resolution": "assumed",
+        "value": 8,
+        "notes": "理由：并发上限延续平台默认；回退：4。"
+      },
+      "sim.control_scope": {
+        "provenance": "inferred",
+        "resolution": "assumed",
+        "value": "全局暂停/恢复不作用于手动单次重试",
+        "notes": "理由：控制范围未答；风险：误伤手动重试；回退：全局暂停覆盖全部。"
+      }
+    }
+  },
+  "contract_sha": "4a11c0ffee51b7d2c93a1e0f6d8e7b5c9420ad1f3e5b7c9d1a2f4e6b8c0d2a4f",
+  "decision_log_sha": "6b22d1eef62c8e3da4fb2f1a7c9f8d6e5314be2c4d6f8a0b2c4e6d8f0a2b4c6e"
+}

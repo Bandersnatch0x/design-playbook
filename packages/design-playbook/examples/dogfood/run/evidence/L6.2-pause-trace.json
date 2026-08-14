@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "kind": "interaction-trace",
+  "state": "final (r2 resample after a11y fix)",
+  "steps": [
+    {"action": "trigger global pause with 3 runs in flight", "at": "2026-08-14T10:32:20Z", "observed": "button busy; 3 running entries transition to paused within one feed tick"},
+    {"action": "observe console feedback", "at": "2026-08-14T10:32:52Z", "observed": "counts update (running 0 / paused 3); manual retry entry stays queued (sim.control_scope honored)"},
+    {"action": "a11y re-walk of pause control", "at": "2026-08-14T10:33:10Z", "observed": "button exposes role=button, accessible name '全局暂停所有进行中模拟'"}
+  ],
+  "note": "r2 resample: pause feedback + a11y fix verified; pause-failure toast negative path recorded (role=alert)"
+}
