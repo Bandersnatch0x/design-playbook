@@ -72,8 +72,8 @@ from design_playbook.scripts.escalation_signals import (
     effective_tier,
     max_tier,
     parse_routes,
+    recorded_regrades,
     tier_rank,
-    upgrade_tiers,
 )
 from design_playbook.scripts.g2_g4_pointback import _findings
 from design_playbook.scripts.repair_rounds import is_blocking
@@ -306,14 +306,8 @@ def check_g12(
             required_tier=covering,
             source="plan.md#run-profile",
         ))
-    if upgrade_tiers(profile.upgrades):
-        signals.append(EscalationSignal(
-            signal="E6",
-            detail="; ".join(
-                line for _tier, line in upgrade_tiers(profile.upgrades)),
-            required_tier=reached,
-            source="plan.md#run-profile.upgrades",
-        ))
+    if regrades := recorded_regrades(profile.upgrades):
+        signals.extend(regrades)
 
     # Escalation accounting: every signal demanding a tier above the
     # effective tier must be covered by a recorded upgrade event; covered

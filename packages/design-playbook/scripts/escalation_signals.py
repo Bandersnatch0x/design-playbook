@@ -233,6 +233,24 @@ def upgrade_tiers(upgrades: tuple[str, ...]) -> list[tuple[str, str]]:
     return out
 
 
+def recorded_regrades(upgrades: tuple[str, ...]) -> list[EscalationSignal]:
+    """E6 signals: user re-grades read from run-profile upgrade events.
+
+    E6 is a recorded fact rather than a derived trigger, so the required
+    tier is simply the tier the re-grade reached (any direction; a
+    downgrade keeps over-compliance per loop-prototype 1.3).
+    """
+    return [
+        EscalationSignal(
+            signal="E6",
+            detail=line,
+            required_tier=reached,
+            source="plan.md#run-profile.upgrades",
+        )
+        for reached, line in upgrade_tiers(upgrades)
+    ]
+
+
 def effective_tier(tier: str, upgrades: tuple[str, ...]) -> str:
     """The tier after recorded upgrades (last tier wins; else the declared)."""
     recorded = upgrade_tiers(upgrades)

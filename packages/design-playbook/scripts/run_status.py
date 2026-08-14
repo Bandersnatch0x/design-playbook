@@ -46,6 +46,26 @@ from design_playbook.scripts.shaping_log import (  # noqa: E402
     queue_state,
 )
 
+# vNext S4 re-entry narration (loop-prototype 7.1): repair rounds, route
+# hit counts, dd supersedes / stale reviews, derived escalation signals,
+# and the close_reason terminal narration, all read from artifacts the
+# gates already consume (additive; plain runs report empty faces).
+from design_playbook.scripts.dd_entries import (  # noqa: E402
+    DD_HEADING,
+    dd_refs_in_pointback,
+    parse_dd_entries,
+)
+from design_playbook.scripts.escalation_signals import (  # noqa: E402
+    EscalationSignal,
+    collect_signals,
+    recorded_regrades,
+    route_hits,
+)
+from design_playbook.scripts.repair_rounds import (  # noqa: E402
+    parse_close_reason,
+    parse_round_facts,
+)
+
 
 @dataclass(frozen=True)
 class VnextNarration:
@@ -58,6 +78,70 @@ class VnextNarration:
     shaping: str | None
     six_block: bool = False
     invalidated: bool = False
+    repair: "RepairNarration | None" = None
+
+
+@dataclass(frozen=True)
+class RepairNarration:
+    """S4 re-entry facts derived from the point-back / plan / DD report.
+
+    W-event presentation (loop-prototype 7.1): route hit counts stand for
+    W1-W7 (R4 / R5 / R2-line / R2-structural / R1 x2 / R3), dd supersedes
+    and stale reviews for W7-W8, upgrade events for W10, and the
+    close_reason narration carries the terminal state (pass |
+    escalated-stop | aborted — a narration state, never a verdict value).
+    E5 (G12 contract diff) needs the project contract and stays gate-side.
+    """
+
+    rounds: int = 0
+    routes: tuple[tuple[str, int], ...] = ()
+    dd_supersedes: int = 0
+    stale_reviews: int = 0
+    close_reason: str | None = None
+    signals: tuple[EscalationSignal, ...] = ()
+
+    @property
+    def wait_user(self) -> bool:
+        """An escalated stop waits on the user disposition (three-way)."""
+        return self.close_reason == "escalated-stop"
+
+    @property
+    def empty(self) -> bool:
+        return not (self.rounds or self.routes or self.signals
+                    or self.close_reason or self.dd_supersedes
+                    or self.stale_reviews)
+
+
+def _repair_narration(
+        pointback_text: str, run_root: Path,
+        upgrades: tuple[str, ...]) -> RepairNarration:
+    """Derive the S4 re-entry faces from artifacts in the run root."""
+    rounds = parse_round_facts(pointback_text).max_rounds
+    routes = tuple(sorted(route_hits(pointback_text).items()))
+    dd_supersedes = len(dd_refs_in_pointback(pointback_text))
+    stale_reviews = 0
+    dd_explore = False
+    report = run_root / "decision-report.md"
+    if report.is_file():
+        try:
+            text = report.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            text = ""
+        if text and DD_HEADING.search(text):
+            entries = parse_dd_entries(text)
+            stale_reviews = sum(
+                1 for entry in entries if entry.stale_review)
+            dd_explore = any(entry.tier == "explore" for entry in entries)
+    signals = list(collect_signals(pointback_text, dd_explore=dd_explore))
+    signals.extend(recorded_regrades(upgrades))
+    return RepairNarration(
+        rounds=rounds,
+        routes=routes,
+        dd_supersedes=dd_supersedes,
+        stale_reviews=stale_reviews,
+        close_reason=parse_close_reason(pointback_text),
+        signals=tuple(signals),
+    )
 
 
 def inspect_vnext(run_root: Path) -> VnextNarration:
@@ -89,6 +173,7 @@ def inspect_vnext(run_root: Path) -> VnextNarration:
     pointback = run_root / "point-back.md"
     six_block = False
     invalidated = False
+    pb_text = ""
     if pointback.is_file():
         try:
             pb_text = pointback.read_text(encoding="utf-8")
@@ -97,10 +182,14 @@ def inspect_vnext(run_root: Path) -> VnextNarration:
         six_block = "## Coverage statement" in pb_text
         invalidated = "\ninvalidated:" in pb_text or pb_text.startswith(
             "invalidated:")
+    repair = None
+    if pb_text:
+        repair = _repair_narration(pb_text, run_root, upgrades)
     return VnextNarration(
         tier=tier, confirmed_by=confirmed_by, skipped=skipped,
         upgrades=upgrades, shaping=shaping,
         six_block=six_block, invalidated=invalidated,
+        repair=repair,
     )
 
 
@@ -246,6 +335,14 @@ def next_action(
             return blocked
     if "accept" in present:
         verdict = verdict_of(run_root, facts)
+        # vNext S4: an escalated stop is a waiting state — repairing again
+        # is exactly wrong; narrate the two-round budget and the three-way
+        # user disposition before any verdict-derived hint.
+        if parse_close_reason(facts.pointback_text) == "escalated-stop":
+            return ("Escalated stop — the same blocking finding survived two "
+                    "repair rounds without new evidence; user disposition "
+                    "required (revise the owning declaration / accept the "
+                    "risk and record / keep suspended).")
         # verdict_of returns "Pass" only from one uniquely valid Pass
         # (ADR-0025); exact equality avoids any string-prefix inference that
         # could complete a run from malformed or repeated Verdict text.
@@ -318,6 +415,22 @@ def render(run_root: Path, *, as_json: bool) -> int:
         "shaping": vnext.shaping,
         "six_block_report": vnext.six_block,
         "invalidated_evidence": vnext.invalidated,
+        "repair": {
+            "rounds": vnext.repair.rounds,
+            "routes": {route: count for route, count in vnext.repair.routes},
+            "dd_supersedes": vnext.repair.dd_supersedes,
+            "stale_reviews": vnext.repair.stale_reviews,
+            "close_reason": vnext.repair.close_reason,
+            "wait_user": vnext.repair.wait_user,
+            "signals": [
+                {
+                    "signal": signal.signal,
+                    "required_tier": signal.required_tier,
+                    "detail": signal.detail,
+                }
+                for signal in vnext.repair.signals
+            ],
+        } if vnext.repair is not None else None,
     }
     if as_json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -341,6 +454,25 @@ def render(run_root: Path, *, as_json: bool) -> int:
     if vnext.six_block:
         note = " with invalidated evidence set" if vnext.invalidated else ""
         print(f"point-back: six-block vNext report{note}")
+    repair = vnext.repair
+    if repair is not None and not repair.empty:
+        faces = [f"{repair.rounds} round(s)"] if repair.rounds else []
+        if repair.routes:
+            faces.append("routes " + ", ".join(
+                f"{route} x{count}" for route, count in repair.routes))
+        if repair.dd_supersedes:
+            faces.append(f"dd supersedes x{repair.dd_supersedes}")
+        if repair.stale_reviews:
+            faces.append(f"stale reviews x{repair.stale_reviews}")
+        print(f"repair: {'; '.join(faces)}")
+        if repair.signals:
+            listed = "; ".join(
+                f"{signal.signal} -> {signal.required_tier}"
+                for signal in repair.signals)
+            print(f"escalation signals: {listed}")
+        if repair.close_reason:
+            waiting = " (waiting user disposition)" if repair.wait_user else ""
+            print(f"close_reason: {repair.close_reason}{waiting}")
     if payload["verdict"]:
         print(f"verdict: {payload['verdict']}")
     print(f"next: {action}")
