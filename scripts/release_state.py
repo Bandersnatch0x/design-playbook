@@ -39,7 +39,15 @@ def release_action(
     npm_exists: bool,
     github_release_exists: bool,
 ) -> str:
-    """Validate the pre-publish state and return publish or recover."""
+    """Validate the pre-publish state and return publish or recover.
+
+    The recovery token is ``recover`` because the main transaction still
+    has a side effect left: the shared GitHub Release job runs after this
+    publish job succeeds, completing the transaction without republishing
+    the immutable npm version. Contrast ``package_release_action``, whose
+    recovery token is ``verify`` because the DSH workflow owns no GitHub
+    Release and stops after registry/provenance verification (story 17).
+    """
     mode = release_mode(event_name, recovery)
     if mode == "publish":
         if npm_exists:
@@ -65,7 +73,15 @@ def package_release_action(
     recovery: bool,
     npm_exists: bool,
 ) -> str:
-    """Validate a package-only publish and return publish or verify."""
+    """Validate a package-only publish and return publish or verify.
+
+    The recovery token is ``verify``: the DSH workflow owns no shared
+    GitHub Release, so a package-only recovery run stops after
+    registry/provenance verification and never republishes the immutable
+    npm version (story 17). Contrast ``release_action``, whose recovery
+    token is ``recover`` because the main transaction completes by creating
+    the shared GitHub Release.
+    """
     mode = release_mode(event_name, recovery)
     if mode == "publish":
         if npm_exists:

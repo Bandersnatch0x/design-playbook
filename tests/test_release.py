@@ -184,7 +184,7 @@ class ReleaseGateTests(unittest.TestCase):
         payload["version"] = "9.9.9"
         dsh_package.write_text(json.dumps(payload), encoding="utf-8")
 
-        result = self.release("--checks", "version")
+        result = self.release("--checks", "release-group")
 
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("dsh-design-playbook version '9.9.9'", result.stdout)
@@ -198,11 +198,31 @@ class ReleaseGateTests(unittest.TestCase):
         payload["dependencies"]["design-playbook"] = "^0.13.0"
         dsh_package.write_text(json.dumps(payload), encoding="utf-8")
 
-        result = self.release("--checks", "version")
+        result = self.release("--checks", "release-group")
 
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("dsh-design-playbook dependency on design-playbook '^0.13.0'", result.stdout)
         self.assertIn(f"expected '^{CURRENT_VERSION}'", result.stdout)
+
+    def test_release_group_check_passes_on_consistent_fixture(self) -> None:
+        result = self.release("--checks", "release-group")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("npm release group versions match", result.stdout)
+
+    def test_release_group_check_ignores_main_package_surface(self) -> None:
+        # Review finding (c): the DSH workflow gate must enforce lockstep
+        # only. Main-package cosmetics (release notes, README badges,
+        # marketplace.json) belong to the main workflow's full gate; an old
+        # v* tag missing them must not fail a DSH package-only recovery.
+        (self.root / CURRENT_NOTES_REL).unlink()
+        (self.root / "README.md").write_text("# no badge\n", encoding="utf-8")
+        (self.root / "README-zh.md").write_text("# no badge\n", encoding="utf-8")
+
+        result = self.release("--checks", "release-group")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("npm release group versions match", result.stdout)
 
 
 if __name__ == "__main__":
