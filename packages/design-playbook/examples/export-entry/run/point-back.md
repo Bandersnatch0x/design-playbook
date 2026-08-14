@@ -1,6 +1,6 @@
 # Point-back — 数据导出入口（P2 标准 run，含一轮 Recirculate）
 
-Six-block report (final state after one repair round). Round 1: 1 条 a11y blocking（S3 事实类）→ Recirculate → R4 修复 + invalidated 登记 → 重采重评 → closure → Pass。L6.3 首轮采集 blocked（R5 证据计划修复后重采）。
+Six-block report (final state after one repair round). Round 1: 1 条 a11y blocking（S3 事实类）→ Recirculate → R4 修复 + invalidated 登记 → 重采重评 → closure → Pass。L6.3 首轮采集 blocked（R5 证据计划修复后重采）。S3 扩展：交互轨七维标注（system-response 客观面 / task-organization 主观面各一条）、五态×页面采样矩阵（6 格采样 + 4 格显式未审）、manifest 方法语义五键（L6.1 附涉人 user-test 负例：ethics 缺失被隔离为 blocked 证据）。
 
 ## Evidence ledger
 
@@ -48,9 +48,26 @@ source:   spec L4
 fix:      导出进行中置 busy 并禁重复触发，完成后恢复；补 L4 状态行
 severity: S2
 track:    interaction
+dimension: system-response
+face:     objective
+basis:    machine-reproducible
 confidence: high
 disposition: advisory
 evidence:  evidence/L6.1-export-trace.json 首轮轨迹显示 2 次连续触发；src/Console/ExportButton.tsx:42
+```
+
+```text
+issue:    导出选项「定界符/编码」术语疑超出运营角色的任务语言，或增加无谓决策负担
+source:   spec L1（目标用户）+ L4
+fix:      将高级选项折叠为「高级」默认收起；术语适配待用户研究确认（呈报用户三选一：改声明/接受风险/提交晋升队列）
+severity: S2
+track:    interaction
+dimension: task-organization
+face:     subjective
+basis:    agent-judgment
+confidence: low
+disposition: advisory
+evidence:  rendered 走查（agent-judgment, method=expert-review）；非用户证据——涉人记录见 evidence/L6.1-usertest-notes.md（ethics 缺失，已隔离不可采信）
 ```
 
 ## Positive findings
@@ -70,13 +87,27 @@ evidence:  evidence/L6.1-export-trace.json（跨层：交互轨迹 + 度量计�
 
 必审: 主路径 4/4 节点完成（P1 全程、P2 超限、P3 返回、导出错误态）；L6.3 首轮采集 blocked（覆盖缺口→R5，重采后完成）
 采样: 边缘 2/2——空选择导出（发现：L5 未建模该边缘态，已按 R2 补五态行）；超时中断（通过，证据 evidence/edge-timeout.png，理由=高频中断风险）
+
+采样矩阵:
+
+- main-list/initial: evidence/L6.1-export-trace.json（上周数据默认视图入轨）
+- main-list/loading: 未审（骨架态未单独采集——高频低风险，R2 待补采样）
+- main-list/success: evidence/L6.1-export-trace.json（行选择 + 导出入口可用）
+- main-list/failure: evidence/edge-timeout.png（超时中断采样通过）
+- main-list/empty: 未审（空选择入口禁用由 L5 行声明覆盖——静态走查确认，未采运行时证据）
+- export-dialog/initial: 未审（默认当前视图列与 main-list/initial 同源——未单独采集）
+- export-dialog/loading: evidence/L6.1-export-trace.json（导出中 busy 禁重复，R4 修复后）
+- export-dialog/success: evidence/L6.1-export-trace.json（下载完成提示）
+- export-dialog/failure: evidence/L6.2-cap-error-r2.png（超限提示 role=alert，重评 r2 证据）
+- export-dialog/empty: 未审（无选择时入口禁用、面板不打开——无采集面）
+
 未审: 移动端视口（契约未声明目标视口——已立 finding 回流 D1/D2；未审项不产生 pass 贡献）
 横切: a11y=applicable（1 条 blocking 已闭合）；响应式=applicable（1280x800 已采）；i18n=not-applicable（单语控制台，无 i18n 声明）；性能感知=blocked（provider 缺度量面，登记为 craft proof gap）；安全体验=not-applicable（无敏感操作新增）
 
 ## Limitations statement
 
-- 判断类 advisory：无（本 run 两条发现均为事实类）
-- 用户代表性：本 run 无 user-test 证据，全部结论不构成任何「用户会」断言
+- 判断类 advisory：术语适配（task-organization 主观面，agent-judgment 非用户证据，confidence=low，advisory 不阻 verdict）
+- 用户代表性：本 run 无可用 user-test 证据（L6.1-usertest-notes.md 因 ethics 缺失被隔离为 blocked 证据），全部结论不构成任何「用户会」断言
 - pass 范围：L6.1/L6.2/L6.3 pass 限单 viewport 1280x800 / 单数据集 week-2026-32 / 单次运行
 - assumed 依赖：L6.2 pass 依赖 export.row_cap 假设成立
 - 机器面证明声明与事实一致，不证明体验良好
