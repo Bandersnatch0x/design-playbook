@@ -30,10 +30,18 @@ EXTRA_FINDING_FIELDS = (
     # source. Validated by interaction_dimensions.py; parsed here so every
     # consumer sees the same field set.
     "dimension", "face", "basis",
+    # vNext S4 recirculation annotations (loop-prototype 2.2 / 7.1): the
+    # second-hop repair route (R1 | R2-line | R2-structural | R3 | R4 | R5,
+    # multiple values legal for multi-layer findings) and the machine round
+    # counter for blocking findings (rounds survived through repair +
+    # re-evaluate). Validated by repair_rounds.py / escalation_signals.py /
+    # g12_tier_boundary.py; parsed here so every consumer sees one field set.
+    "route", "rounds",
 )
 FIELD_LINE = re.compile(
     r"^(issue|source|fix|severity|track|confidence|disposition|evidence|"
-    r"assumes|rule|dd|dimension|face|basis):[ \t]*(.*)$", re.I | re.M)
+    r"assumes|rule|dd|dimension|face|basis|route|rounds):[ \t]*(.*)$",
+    re.I | re.M)
 CLOSURE_LINE = re.compile(
     r"^\s*[-*]\s*closes:[ \t]*(.*?)[ \t]*->[^\n]*\b0 blocking\b",
     re.I | re.M,
