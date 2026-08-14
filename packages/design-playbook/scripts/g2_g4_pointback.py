@@ -25,10 +25,15 @@ from design_playbook.scripts.verdict_syntax import VerdictFacts, parse_verdict
 FINDING_FIELDS = ("issue", "source", "fix", "severity")
 EXTRA_FINDING_FIELDS = (
     "track", "confidence", "disposition", "evidence", "assumes", "rule", "dd",
+    # vNext S3 interaction-track annotations (review-prototype 1.2): the
+    # dimension refinement plus its objective/subjective face and judgment
+    # source. Validated by interaction_dimensions.py; parsed here so every
+    # consumer sees the same field set.
+    "dimension", "face", "basis",
 )
 FIELD_LINE = re.compile(
     r"^(issue|source|fix|severity|track|confidence|disposition|evidence|"
-    r"assumes|rule|dd):[ \t]*(.*)$", re.I | re.M)
+    r"assumes|rule|dd|dimension|face|basis):[ \t]*(.*)$", re.I | re.M)
 CLOSURE_LINE = re.compile(
     r"^\s*[-*]\s*closes:[ \t]*(.*?)[ \t]*->[^\n]*\b0 blocking\b",
     re.I | re.M,
