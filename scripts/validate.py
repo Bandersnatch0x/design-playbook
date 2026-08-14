@@ -747,7 +747,10 @@ check_skill_prose(run_contract, "orchestrator names all five run-contract contro
 check_skill_prose(run_contract, "orchestrator defines confirmation and stop boundaries", anchor="## Run contract")
 
 ux_spec = (PKG / "skills" / "ux-spec" / "SKILL.md").read_text(encoding="utf-8")
-l6 = section_between(spec_template, "## L6", "---")
+# End anchor is the worked-snippet heading, not the old lone `---` rule:
+# spec-schema 2 adds L2/L5 tables whose separator rows are also `---`,
+# and section_between requires the end anchor to be unique in the file.
+l6 = section_between(spec_template, "## L6", "## Worked snippet")
 check_skill_prose(
     f"{l6}\n{ux_spec}",
     "ux-spec binds each success criterion to required evidence",

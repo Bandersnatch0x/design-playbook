@@ -16,6 +16,11 @@ Gates the run-level controls that the skills also declare in prose:
                            `evidence/` artifact, require the artifact to exist
                            and a manifest entry to bind it to the matching
                            L6.<n> (multi-entry: latest wins)
+  G9 shaping exit        - conditional: when a shaping session exists
+                           (shaping-log.jsonl), events must use the closed
+                           enum, a projected mapping record must exist, the
+                           derived queue.json must match re-derivation, and
+                           (with contract paths) open=0 + assumed all acked
 
 Reads plain Markdown, so it is host-neutral: it accepts artifacts produced by
 any agent (Claude Code, Codex) that follow the declared shape.
@@ -80,6 +85,11 @@ try:
 except ImportError:  # pragma: no cover - optional until package scripts co-locate
     check_g7 = None  # type: ignore[assignment]
 
+# G9 shaping-exit gate (vNext S1, decision Q8=A): fires only when a shaping
+# session exists — either via --shaping-dir or discovered under --run-root.
+from design_playbook.scripts.g9_shaping import check_g9  # noqa: E402
+from design_playbook.scripts.shaping_log import SHAPING_LOG  # noqa: E402
+
 
 def run(
         spec_path: str,
@@ -92,6 +102,7 @@ def run(
         require_evidence: bool = False,
         contract_project: str | None = None,
         contract_run: str | None = None,
+        shaping_dir: str | None = None,
         run_facts: RunFacts | None = None) -> tuple[list[Finding], list[Finding]]:
     """Return ``(errors, warnings)``. Errors fail the run; warnings do not."""
     errs: list[Finding] = []
@@ -179,6 +190,16 @@ def run(
             ))
         else:
             errs += check_g7(Path(contract_project), Path(contract_run))
+    # G9 (conditional): a shaping session on disk engages the exit gate.
+    sd = Path(shaping_dir) if shaping_dir else (
+        rr / "shaping" if rr is not None else None
+    )
+    if sd is not None and (sd / Path(SHAPING_LOG).name).is_file():
+        errs += check_g9(
+            sd,
+            project_dir=Path(contract_project) if contract_project else None,
+            run_dir=Path(contract_run) if contract_run else rr,
+        )
     return errs, warns
 
 
@@ -241,6 +262,12 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         default=None,
         help="optional run dir containing contract-bind.json for G7",
     )
+    parser.add_argument(
+        "--shaping-dir",
+        default=None,
+        help="optional path to .scratch/<run>/shaping/ for G9 "
+             "(defaults to <run-root>/shaping when --run-root is set)",
+    )
     args = parser.parse_args(argv[1:])
     if args.strict:
         args.require_preview = True
@@ -276,6 +303,7 @@ def main(argv: list[str]) -> int:
             require_evidence=args.require_evidence,
             contract_project=args.contract_project,
             contract_run=args.contract_run,
+            shaping_dir=args.shaping_dir,
         )
     except (OSError, UnicodeError) as exc:
         if fmt == "json":
