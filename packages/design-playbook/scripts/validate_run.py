@@ -25,6 +25,13 @@ Gates the run-level controls that the skills also declare in prose:
                            a Coverage statement with the exhaustive-review
                            completion status and the explicit unreviewed
                            list (existence only; legacy reports unaffected)
+  G10 design decisions   - conditional: when the decision report carries DD
+                           entry blocks (appended after the verbatim top
+                           block), entries must satisfy the design-decision
+                           machine face — tier/status enums, tier recording
+                           obligations, supersedes existence + acyclicity,
+                           preview decision_id linkage, R3 dd: challenge
+                           resolution, and the stale three-exit review
 
 Reads plain Markdown, so it is host-neutral: it accepts artifacts produced by
 any agent (Claude Code, Codex) that follow the declared shape.
@@ -94,7 +101,18 @@ except ImportError:  # pragma: no cover - optional until package scripts co-loca
 # session exists — either via --shaping-dir or discovered under --run-root.
 from design_playbook.scripts.g9_shaping import check_g9  # noqa: E402
 from design_playbook.scripts.g11_coverage import check_coverage  # noqa: E402
-from design_playbook.scripts.shaping_log import SHAPING_LOG  # noqa: E402
+from design_playbook.scripts.shaping_log import (  # noqa: E402
+    SHAPING_LOG,
+    ShapingLogError,
+    parse_shaping_log,
+)
+
+# G10 design-decision gate (vNext S2): fires only when the decision report
+# carries DD entry blocks; discovery mirrors G9 (--decision-report explicit
+# or <run-root>/decision-report.md).
+from design_playbook.scripts.dd_entries import DD_HEADING  # noqa: E402
+from design_playbook.scripts.g10_design_decisions import check_g10  # noqa: E402
+from design_playbook.scripts.run_profile import parse_run_profile  # noqa: E402
 
 
 def run(
@@ -204,13 +222,66 @@ def run(
     sd = Path(shaping_dir) if shaping_dir else (
         rr / "shaping" if rr is not None else None
     )
+    shaping_events: list[dict] | None = None
     if sd is not None and (sd / Path(SHAPING_LOG).name).is_file():
         errs += check_g9(
             sd,
             project_dir=Path(contract_project) if contract_project else None,
             run_dir=Path(contract_run) if contract_run else rr,
         )
+        # G10 consumes the same session events for the T3 upstream-route
+        # signal; on a malformed log G9 owns the diagnostic and G10 skips.
+        try:
+            shaping_events = parse_shaping_log(
+                (sd / SHAPING_LOG).read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, ShapingLogError):
+            shaping_events = None
+
+    # G10 (conditional): a decision report carrying DD entry blocks engages
+    # the design-decision gate (top block stays verbatim; reports without
+    # entry blocks keep passing — the extension is additive).
+    dr_g10 = dr if dr is not None else (
+        rr / "decision-report.md" if rr is not None else None
+    )
+    if dr_g10 is not None and dr_g10.is_file():
+        try:
+            report_text = dr_g10.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            report_text = ""
+        if report_text and DD_HEADING.search(report_text):
+            errs += check_g10(
+                report_text,
+                report_path=dr_g10,
+                preview_dir=pd,
+                shaping_events=shaping_events,
+                pointback_text=pointback_text,
+                baseline_state=_load_json_tolerant(
+                    rr / "design-baseline" / "state.json"
+                ) if rr is not None else None,
+                run_profile_tier=_plan_tier(rr),
+            )
     return errs, warns
+
+
+def _load_json_tolerant(path: Path) -> dict | None:
+    try:
+        import json
+
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _plan_tier(run_root: Path | None) -> str | None:
+    if run_root is None:
+        return None
+    plan = run_root / "plan.md"
+    try:
+        profile = parse_run_profile(plan.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError):
+        return None
+    return profile.tier if profile is not None else None
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
