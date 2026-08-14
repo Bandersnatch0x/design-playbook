@@ -8,7 +8,9 @@ Gates the run-level controls that the skills also declare in prose:
   G3 verdict earned      - one explicit verdict; Pass requires all evidence to
                            pass and every blocking finding to have a closure
   G4 recirculation bound - closure coverage prevents blockers being dropped;
-                           the two-cycle stop policy remains agent-enforced
+                           the two-cycle stop is machine-counted (vNext S4:
+                           an unclosed blocking finding with rounds >= 2
+                           must narrate close_reason: escalated-stop)
   G5 preview confirm     - conditional: if preview occurred, require a
                            confirmed record whose report_ref matches the
                            current decision report (when provided)
@@ -131,6 +133,7 @@ from design_playbook.scripts.shaping_log import (  # noqa: E402
 # or <run-root>/decision-report.md).
 from design_playbook.scripts.dd_entries import DD_HEADING  # noqa: E402
 from design_playbook.scripts.g10_design_decisions import check_g10  # noqa: E402
+from design_playbook.scripts.repair_rounds import check_rounds  # noqa: E402
 from design_playbook.scripts.run_profile import parse_run_profile  # noqa: E402
 
 # vNext S3 gates: method-semantics keys (G6-adjacent), interaction-track
@@ -191,6 +194,11 @@ def run(
         pointback_text, len(_l6_items(spec_text)),
         ledger_facts=facts.ledger, verdict_facts=facts.verdict,
     )
+    # G4 rounds (vNext S4): the two-cycle stop is machine-counted — an
+    # unclosed blocking finding at rounds >= 2 must narrate escalated-stop.
+    # Fires only when the report carries round annotations or a close_reason
+    # (legacy reports without them stay silent).
+    errs += check_rounds(pointback_text, verdict_facts=facts.verdict)
     # G11 (vNext S1): six-block reports must carry a Coverage statement with
     # the exhaustive status + explicit unreviewed list (existence only).
     errs += check_coverage(pointback_text, required=require_coverage)
