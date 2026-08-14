@@ -1,5 +1,5 @@
 ---
-description: Cross-run review of Design I/O runs — gate table + repeat blockers
+description: Cross-run review of Design I/O runs — gate table + repeat blockers + rule candidate queue (derived, report-only)
 ---
 
 Cross-run **run review** over `.scratch/<run>/` dirs in the user project. Not a step of a single Design I/O run. Markdown only; report header **`run-review/v1`**.
