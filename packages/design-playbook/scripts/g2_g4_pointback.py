@@ -1,9 +1,18 @@
-"""G2-G4 point-back gates (ADR-0023).
+"""G2-G4 point-back gates (ADR-0023 + vNext S1 review axis).
 
 Owns the point-back / verdict / closure rule sets: every L6 item has one
 complete evidence row and every finding has issue/source/fix/severity (G2),
 one explicit verdict with Pass requiring all evidence to pass (G3), and
 closure-trail coverage preventing blockers being dropped (G4).
+
+vNext S1 (review-prototype Q1/Q4): findings may carry additional field
+lines (track / confidence / disposition / evidence / assumes / rule / dd).
+The four required fields and the machine face are unchanged; additional
+fields are validated only when present. Severity accepts the new axis
+S3|S2|S1|S0 plus the legacy values as compatibility aliases during the
+alias period (union; legacy removal lands in a later slice). Blocking
+disposition comes from the legacy severity spelling or the new
+``disposition: blocking`` field — severity and disposition are two axes.
 """
 from __future__ import annotations
 
@@ -14,25 +23,61 @@ from design_playbook.mcp.evidence.ledger_syntax import EVIDENCE_FIELDS, LedgerFa
 from design_playbook.scripts.verdict_syntax import VerdictFacts, parse_verdict
 
 FINDING_FIELDS = ("issue", "source", "fix", "severity")
+EXTRA_FINDING_FIELDS = (
+    "track", "confidence", "disposition", "evidence", "assumes", "rule", "dd",
+)
 FIELD_LINE = re.compile(
-    r"^(issue|source|fix|severity):[ \t]*(.*)$", re.I | re.M)
+    r"^(issue|source|fix|severity|track|confidence|disposition|evidence|"
+    r"assumes|rule|dd):[ \t]*(.*)$", re.I | re.M)
 CLOSURE_LINE = re.compile(
     r"^\s*[-*]\s*closes:[ \t]*(.*?)[ \t]*->[^\n]*\b0 blocking\b",
     re.I | re.M,
 )
 VALID_RESULTS = {"pass", "fail", "blocked", "n/a"}
 
+# Severity axis (review-prototype Q1): new values plus legacy aliases during
+# the alias period — union is legal; removal is a later slice (vnext Q5=B).
+SEVERITY_NEW = frozenset({"S3", "S2", "S1", "S0"})
+SEVERITY_LEGACY = frozenset({"high (blocking)", "high", "med", "low"})
+SEVERITY_ALIASES = {
+    "high (blocking)": "S3",
+    "high": "S2",
+    "med": "S1",
+    "low": "S1",
+}
+VALID_TRACKS = frozenset({"product", "interaction", "cross-cutting"})
+VALID_CONFIDENCE = frozenset({"high", "medium", "low"})
+VALID_DISPOSITIONS = frozenset({"blocking", "advisory", "info"})
+
+
+def severity_axis(value: str) -> str | None:
+    """Map a severity value onto the new axis; None when invalid."""
+    stripped = value.strip()
+    if stripped in SEVERITY_NEW:
+        return stripped
+    legacy = stripped.casefold()
+    if legacy in SEVERITY_LEGACY:
+        return SEVERITY_ALIASES[legacy]
+    return None
+
 
 def _findings(text: str) -> list[dict[str, list[str]]]:
-    """Parse finding paragraphs without using a required field as delimiter."""
+    """Parse finding paragraphs without using a required field as delimiter.
+
+    Additional-field-only blocks (e.g. a bare ``track:`` line outside a
+    finding) do not count as findings — at least one of the four required
+    fields must be present.
+    """
     findings = []
     for block in re.split(r"\n\s*\n", text):
         matches = FIELD_LINE.findall(block)
         if not matches:
             continue
-        fields = {field: [] for field in FINDING_FIELDS}
+        fields = {field: [] for field in FINDING_FIELDS + EXTRA_FINDING_FIELDS}
         for name, value in matches:
             fields[name.lower()].append(value.strip())
+        if not any(fields[field] for field in FINDING_FIELDS):
+            continue
         findings.append(fields)
     return findings
 
@@ -254,8 +299,90 @@ def check_pointback(
                     repair=f"Keep one {field} on finding {i}",
                 ))
 
+        # Severity axis (alias period: new S3-S0 and legacy values both
+        # legal; anything else is a structural error).
         severity = pb_finding["severity"][0] if pb_finding["severity"] else ""
-        if re.search(r"(?<!non-)\bblocking\b", severity, re.I):
+        if severity and severity_axis(severity) is None:
+            errs.append(finding(
+                "G2.finding_invalid_severity",
+                f"G2 point-back: finding {i} severity '{severity}' is not "
+                "S3|S2|S1|S0 (or a legacy alias)",
+                owner=f"point-back.md#finding.{i}",
+                expected="S3|S2|S1|S0 or legacy high (blocking)|high|med|low",
+                actual=severity,
+                repair="Use the severity axis; legacy values map to "
+                       "S3/S2/S1/S1 during the alias period",
+            ))
+
+        # Additional fields validate only when present (protocol additive).
+        track = pb_finding["track"][0] if pb_finding["track"] else ""
+        if track and track.casefold() not in VALID_TRACKS:
+            errs.append(finding(
+                "G2.finding_invalid_track",
+                f"G2 point-back: finding {i} track '{track}' not in "
+                "product|interaction|cross-cutting",
+                owner=f"point-back.md#finding.{i}",
+                expected="product|interaction|cross-cutting",
+                actual=track,
+                repair="Name the review track that owns this finding",
+            ))
+        confidence = (
+            pb_finding["confidence"][0] if pb_finding["confidence"] else ""
+        )
+        if confidence and confidence.casefold() not in VALID_CONFIDENCE:
+            errs.append(finding(
+                "G2.finding_invalid_confidence",
+                f"G2 point-back: finding {i} confidence '{confidence}' not "
+                "in high|medium|low",
+                owner=f"point-back.md#finding.{i}",
+                expected="high|medium|low",
+                actual=confidence,
+                repair="Derive confidence from evidence layers / "
+                       "reproducibility / judging subject",
+            ))
+        dispositions = pb_finding["disposition"]
+        if dispositions and len(dispositions) > 1:
+            errs.append(finding(
+                "G2.finding_repeated_field",
+                f"G2 point-back: finding {i} repeats disposition:",
+                owner=f"point-back.md#finding.{i}",
+                expected="single disposition",
+                actual=f"{len(dispositions)} values",
+                repair=f"Keep one disposition on finding {i}",
+            ))
+        disposition = dispositions[0] if dispositions else ""
+        if disposition and disposition.casefold() not in VALID_DISPOSITIONS:
+            errs.append(finding(
+                "G2.finding_invalid_disposition",
+                f"G2 point-back: finding {i} disposition '{disposition}' "
+                "not in blocking|advisory|info",
+                owner=f"point-back.md#finding.{i}",
+                expected="blocking|advisory|info",
+                actual=disposition,
+                repair="Derive disposition from severity x class x "
+                       "confidence; judgment-class S3 is never blocking",
+            ))
+        # New-axis S3 (exact spelling) requires the disposition field; the
+        # legacy "high (blocking)" spelling carries its own blocking meaning.
+        if severity.strip() in SEVERITY_NEW and severity_axis(severity) == "S3" \
+                and not disposition:
+            errs.append(finding(
+                "G2.s3_needs_disposition",
+                f"G2 point-back: finding {i} uses S3 severity without a "
+                "disposition field",
+                owner=f"point-back.md#finding.{i}",
+                expected="disposition: blocking|advisory",
+                actual="missing",
+                repair="State the disposition; judgment-class S3 findings "
+                       "escalate to the user instead of blocking",
+            ))
+
+        # Blocking = legacy severity spelling or an explicit blocking
+        # disposition on the new axis (severity and disposition are
+        # independent axes; a bare S3 does not block without disposition).
+        legacy_blocking = bool(re.search(r"(?<!non-)\bblocking\b", severity, re.I))
+        axis_blocking = disposition.casefold() == "blocking"
+        if legacy_blocking or axis_blocking:
             issue = pb_finding["issue"][0] if pb_finding["issue"] else ""
             blocking.append((i, issue))
 

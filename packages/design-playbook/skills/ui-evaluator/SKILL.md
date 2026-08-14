@@ -65,12 +65,28 @@ For implemented UI, visible-state proof is a rendered inspection at the declared
 issue:    <observable>
 source:   <declaration>
 fix:      <next edit>
-severity: high (blocking)|high|med|low
+severity: S3|S2|S1|S0
 ```
+
+Severity is the **consequence axis** (S3 blocking-severity / S2 major / S1 minor / S0 positive or info), graded by user-visible impact and referencing the affected L6 / primary-path node. Legacy values `high (blocking)|high|med|low` remain legal aliases during the alias period (`high (blocking)`→S3, `high`→S2, `med`/`low`→S1).
+
+Additional field lines (machine-tolerated; validated when present) complete the review axis:
+
+```text
+track:       product|interaction|cross-cutting
+confidence:  high|medium|low   (evidence layers x reproducibility x judging subject)
+disposition: blocking|advisory|info   (severity x fact/judgment class x confidence)
+evidence:    <artifact path or source ref — may repeat>
+assumes:     <assumed contract field paths the finding depends on, if any>
+rule:        <registry ID@version refs, when a registry rule is involved>
+dd:          <decision-report entry ref, when a design decision is involved>
+```
+
+Severity and disposition are **two axes**: a judgment-class S3 (subjective / semantic / representativeness) is never directly blocking — list it in the Limitations "pending user adjudication" sub-block with the three options (change declaration / accept risk / promote to the rule-registry queue). Only fact-class S3 (reproducible, evidence-bound) takes `disposition: blocking` and enters G4 closure.
 
 Order: **blocking** first (broken L5/L6, unsafe dangerous ops, removed focus rings), then polish.
 
-**Done when:** every finding has all four fields; no “generally improve the design” lines.
+**Done when:** every finding has all four fields; no “generally improve the design” lines; additional fields use only their declared value sets.
 
 ### 4. Verdict
 
@@ -86,28 +102,55 @@ For a repaired blocker, record exactly one closure line whose issue text is iden
 
 **Done when:** the explicit verdict is structurally unique; blocking sources are non-empty; every blocking finding has exactly one matching closure before `Pass`. A blocking finding cannot be waived inside a Pass artifact. Without a user in the loop, blocking findings remain in recirculate and the run requests a decision; only after an explicit user decision that updates the owning declaration or severity — recorded against the user's statement or decision record — may the evaluator re-evaluate; the final Pass artifact contains no blocking severity.
 
+### 5. Six-block report structure
+
+The report artifact remains `point-back.md` (no new file). The machine face is unchanged — four-field findings, four-field ledger rows, closure lines, verdict semantics — and existing parsers tolerate the new blocks. The full structure:
+
+```text
+## Evidence ledger          (one row per L6; required rows may note assumed deps)
+## Findings                 (four fields + additional field lines)
+## Positive findings        (S0/info rows + pattern-level positives; AC-level
+                             positives are the ledger pass rows themselves)
+## Coverage statement       (exhaustive-review completion / sampling + reasons /
+                             explicit unreviewed list; G11 checks existence)
+## Limitations statement    (judgment-class dimensions, no-user-evidence scope,
+                             pass scope, assumed dependencies, machine-face
+                             boundary, pending-user-adjudication sub-block)
+## Verdict                  (exactly one Pass|Recirculate + closure lines)
+```
+
+Coverage levels: **exhaustive** (primary path + required rare paths + per-page five-state matrix — no exceptions), **sampled** (edge cases by five-state x page matrix, reasons recorded), **explicit unreviewed** (everything else — never defaults to pass). Unreviewed is not pass: it produces no pass contribution.
+
+Positive findings are the acceptance-evidence face, not decoration: every L6 `pass` on implemented UI requires at least one bound rendered or interaction artifact (measurement/source corroborate but never carry a pass alone); planning-only passes rest on declaration coverage and must not claim a render or test occurred. Missing evidence is `blocked` (unverifiable), never `fail` — "not tested" and "tested and failed" are different facts.
+
+**Done when:** all six blocks are present; the Coverage statement names the exhaustive completion status and the explicit unreviewed list (G11); every pass row cites bound evidence; limitations name the judgment-class dimensions and assumed dependencies.
+
+After Recirculate, use [`references/repair.md`](references/repair.md) for the smallest owning declaration, the R1-R5 second-hop route, and which evidence to invalidate.
+
 The artifact shape behind this verdict is machine-checkable: `scripts/validate_run.py` gates L1-L6, ordered `Given -> When -> Then` in every top-level L6 item, one non-empty four-field evidence row per `L6.<n>`, allowed evidence results, all-pass evidence for `Pass`, four non-empty finding fields, one explicit verdict, and one exact issue-linked closure per blocking finding. These checks are the completion criteria above, not extra prose.
 
 After Recirculate, use [`references/repair.md`](references/repair.md) for the smallest owning declaration and which evidence to invalidate.
 
 ## Recirculate map (authoritative)
 
-Single source of truth for the observable -> declaration routing. The orchestrator and other skills point here; do not duplicate it.
+Single source of truth for the observable -> declaration routing. The orchestrator and other skills point here; do not duplicate it. Routing is two hops: first hop observable -> declaration artifact, second hop declaration artifact -> R1-R5 repair target (see [`references/repair.md`](references/repair.md) for the full second-hop table and the `invalidated:` evidence-set block).
 
-| Observable | Declaration |
-| --- | --- |
-| Happy path only; empty/fail/auth missing | `spec` |
-| Wrong business meaning / risk / secrets | `domain` |
-| AI slop, flat hierarchy, purposeless motion | `craft` |
-| New UI visually conflicts with confirmed existing-product baseline | bound `<binding.path>` |
-| Scattered hex/px/ms | `design` |
-| Badge↔Tag, Dialog↔Drawer mixups | `components` |
-| Wrong page shell (e.g. list as card wall) | `template` |
-| Desktop app feels like a web page / wrong seam | `native-craft` |
-| Copied third-party brand / Do not copy breach | `reference` (supporting) → fix in Fill / re-intake |
-| Critique with no owner | re-run `ui-evaluator` |
+| Observable | Declaration | Second hop (default) |
+| --- | --- | --- |
+| Happy path only; empty/fail/auth missing | `spec` | R2 (interaction model: five-state / path rows) |
+| Wrong business meaning / risk / secrets | `domain` | R1 (requirement subtree reopen when undeclared) |
+| AI slop, flat hierarchy, purposeless motion | `craft` | R4 (implementation) |
+| New UI visually conflicts with confirmed existing-product baseline | bound `<binding.path>` | R3 (design decision) |
+| Scattered hex/px/ms | `design` | R4 |
+| Badge↔Tag, Dialog↔Drawer mixups | `components` | R4 |
+| Wrong page shell (e.g. list as card wall) | `template` | R4 |
+| Desktop app feels like a web page / wrong seam | `native-craft` | R4 |
+| Copied third-party brand / Do not copy breach | `reference` (supporting) → fix in Fill / re-intake | R4 |
+| Undeclared product requirement / unjudgeable criterion / falsified assumption | re-open `ux-spec` shaping | R1 |
+| Capture plan cannot answer the criterion / provider absent | observe* seam | R5 (evidence plan) |
+| Critique with no owner | re-run `ui-evaluator` | — |
 
-Fix only the owning layer, then resume from the pipeline step that consumes it.
+Fix only the owning layer (minimum owning set; repair order R1→R2→R3→R4, R5 may append after any layer), then resume from the pipeline step that consumes it.
 
 ## Guard
 

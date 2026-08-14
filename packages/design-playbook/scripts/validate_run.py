@@ -21,6 +21,10 @@ Gates the run-level controls that the skills also declare in prose:
                            enum, a projected mapping record must exist, the
                            derived queue.json must match re-derivation, and
                            (with contract paths) open=0 + assumed all acked
+  G11 coverage statement - conditional: vNext six-block reports must carry
+                           a Coverage statement with the exhaustive-review
+                           completion status and the explicit unreviewed
+                           list (existence only; legacy reports unaffected)
 
 Reads plain Markdown, so it is host-neutral: it accepts artifacts produced by
 any agent (Claude Code, Codex) that follow the declared shape.
@@ -37,7 +41,8 @@ or artifact I/O errors. JSON mode projects the same findings as a list.
 Strict quality mode (opt-in):
   --require-preview   fail when preview did not occur (G5 must fire)
   --require-evidence  fail when no evidence/ binding is present (G6 must fire)
-  --strict            shorthand for both require flags
+  --require-coverage  fail when the report lacks a Coverage statement (G11)
+  --strict            shorthand for all require flags
 """
 import argparse
 import sys
@@ -88,6 +93,7 @@ except ImportError:  # pragma: no cover - optional until package scripts co-loca
 # G9 shaping-exit gate (vNext S1, decision Q8=A): fires only when a shaping
 # session exists — either via --shaping-dir or discovered under --run-root.
 from design_playbook.scripts.g9_shaping import check_g9  # noqa: E402
+from design_playbook.scripts.g11_coverage import check_coverage  # noqa: E402
 from design_playbook.scripts.shaping_log import SHAPING_LOG  # noqa: E402
 
 
@@ -103,6 +109,7 @@ def run(
         contract_project: str | None = None,
         contract_run: str | None = None,
         shaping_dir: str | None = None,
+        require_coverage: bool = False,
         run_facts: RunFacts | None = None) -> tuple[list[Finding], list[Finding]]:
     """Return ``(errors, warnings)``. Errors fail the run; warnings do not."""
     errs: list[Finding] = []
@@ -134,6 +141,9 @@ def run(
         pointback_text, len(_l6_items(spec_text)),
         ledger_facts=facts.ledger, verdict_facts=facts.verdict,
     )
+    # G11 (vNext S1): six-block reports must carry a Coverage statement with
+    # the exhaustive status + explicit unreviewed list (existence only).
+    errs += check_coverage(pointback_text, required=require_coverage)
     preview_snapshot = facts.preview
     dr = Path(decision_report) if decision_report else None
     if require_preview and (
@@ -244,7 +254,14 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="shorthand for --require-preview --require-evidence",
+        help="shorthand for --require-preview --require-evidence "
+             "--require-coverage",
+    )
+    parser.add_argument(
+        "--require-coverage",
+        action="store_true",
+        help="strict mode: fail when the point-back lacks a Coverage "
+             "statement block even in legacy shape",
     )
     parser.add_argument(
         "--format",
@@ -272,6 +289,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     if args.strict:
         args.require_preview = True
         args.require_evidence = True
+        args.require_coverage = True
     return args
 
 
@@ -304,6 +322,7 @@ def main(argv: list[str]) -> int:
             contract_project=args.contract_project,
             contract_run=args.contract_run,
             shaping_dir=args.shaping_dir,
+            require_coverage=args.require_coverage,
         )
     except (OSError, UnicodeError) as exc:
         if fmt == "json":
