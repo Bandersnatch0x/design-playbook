@@ -30,7 +30,9 @@ Gates the run-level controls that the skills also declare in prose:
                            S3: when the statement declares the five-state x
                            page sampling matrix, every spec-declared cell
                            needs sampling evidence or an explicit
-                           unreviewed entry with a reason (gap check)
+                           unreviewed entry with a reason (gap check).
+                           S6: the effective tier P3 makes the matrix block
+                           mandatory (full-profile sampling obligation)
   G10 design decisions   - conditional: when the decision report carries DD
                            entry blocks (appended after the verbatim top
                            block), entries must satisfy the design-decision
@@ -227,7 +229,10 @@ def run(
     # G11 sampling matrix (vNext S3, Q3=A): when the statement declares the
     # five-state x page matrix, every spec-declared cell needs sampling
     # evidence or an explicit unreviewed entry with a reason.
-    errs += check_sampling_matrix(pointback_text, spec_text, evidence_dir=ed)
+    # vNext S6: the effective tier P3 makes the matrix block itself
+    # mandatory (loop-prototype 1.2 "sampling matrix fully executed").
+    errs += check_sampling_matrix(
+        pointback_text, spec_text, evidence_dir=ed, tier=_plan_tier(rr))
     # G2 dimensions (vNext S3): dimension/face/basis annotations on findings
     # — subjective faces are judgment class (advisory only, source declared).
     errs += check_dimensions(pointback_text)

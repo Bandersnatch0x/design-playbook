@@ -15,6 +15,13 @@ reports every gap: a cell with no matrix line and no unreviewed entry is a
 machine-enumerable coverage gap (unreviewed items never default to pass).
 Legacy or matrix-less reports do not trigger the extension.
 
+vNext S6 extension (loop-prototype 1.2 tier matrix): the full profile
+declares "sampling matrix fully executed" as a P3 obligation — for a run
+whose effective tier is P3 the matrix block is mandatory, not opt-in. The
+check fires on the declared tier only (legacy runs without a run-profile
+block are never re-checked), resolving the S3 leftover coupling of matrix
+completeness to tier.
+
 Old-format reports (no new blocks, no additional finding fields, no
 invalidated block) do not trigger the gate: the six-block extension is
 additive and legacy reports keep passing (compatibility contract).
@@ -155,16 +162,37 @@ def parse_matrix_lines(section: str) -> list[tuple[str, str, str]]:
 def check_sampling_matrix(
         pointback_text: str,
         spec_text: str,
-        evidence_dir: Path | None = None) -> list[Finding]:
+        evidence_dir: Path | None = None,
+        tier: str | None = None) -> list[Finding]:
     """Five-state x page sampling-matrix gap check (S3, Q3=A).
 
     Fires only when the Coverage statement carries the matrix marker; the
     cells come from the spec L5 declaration. Every declared cell must have
     exactly one matrix line — naming sampling evidence or an explicit
     unreviewed entry with a reason. A cell with neither is a gap.
+
+    S6: ``tier='P3'`` (the effective tier after recorded upgrades) makes
+    the matrix block itself mandatory — the full profile's "sampling matrix
+    fully executed" obligation is machine-enforced as block existence plus
+    the S3 per-cell enumeration (loop-prototype 1.2 / 1.6).
     """
     section = _section_after_heading(pointback_text, COVERAGE_HEADING)
     if not section or not MATRIX_MARKER.search(section):
+        if tier == "P3":
+            actual = ("no Coverage statement"
+                      if not section else "no sampling-matrix block")
+            return [finding(
+                "G11.matrix_required",
+                "G11 coverage: P3 (full profile) demands the five-state x "
+                f"page sampling matrix — {actual}",
+                owner="point-back.md#coverage",
+                expected="Coverage statement with a sampling-matrix block "
+                         "naming every spec-declared cell",
+                actual=actual,
+                repair="Execute the sampling matrix (one line per "
+                       "spec-declared cell: sampling evidence or an "
+                       "explicit unreviewed entry with a reason)",
+            )]
         return []  # matrix block absent: not opted in, nothing to enumerate
     errs: list[Finding] = []
     declared = spec_matrix_cells(spec_text)
