@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Commands | `packages/design-playbook/commands/` |
 | MCP adapters | `packages/design-playbook/mcp/{preview,evidence}/` + 包根 `.mcp.json`（ADR-0009；sibling 包为兼容启动器） |
 | Cordis 插件 | `packages/design-playbook/lib/index.js`（DSH skill provider + commands 注册；ADR-0003） |
-| DSH MCP 桥接包 | `packages/dsh-design-playbook/`（薄 bundle，桥接 preview/evidence MCP；ADR-0009） |
+| DSH MCP 桥接包 | `packages/dsh-design-playbook/`（薄 bundle，桥接 preview/evidence MCP；ADR-0009；CI workflow `.github/workflows/release-dsh-bundle.yml`，tag 模式 `dsh-v*`） |
 | Codex | `packages/design-playbook/codex/AGENTS.md` |
 | npm / pi | `packages/design-playbook/package.json`（`pi` manifest + `pi-package` keyword → pi.dev gallery） |
 | 自有示例 | `packages/design-playbook/examples/` |
