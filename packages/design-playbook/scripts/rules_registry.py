@@ -18,6 +18,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+try:  # package import seam (design_playbook.* context)
+    from design_playbook.scripts import rules_governance
+except ImportError:  # standalone product-level import (scripts/validate.py
+    import rules_governance  # puts only this scripts/ dir on sys.path)
+
 RULES_PATH_PARTS = (
     "skills", "design-playbook", "references", "rules.md"
 )
@@ -165,10 +170,28 @@ def _parse_refs(value: str) -> list[tuple[str, str]]:
     return refs
 
 
-def validate_registry(entries: list[RuleEntry]) -> list[str]:
-    """G8 product-level checks. Returns a list of failure descriptions."""
+def validate_registry(
+        entries: list[RuleEntry],
+        governance_events: list[dict] | None = None,
+) -> list[str]:
+    """G8 product-level checks. Returns a list of failure descriptions.
+
+    ``governance_events`` (vNext S5 wiring) supplies the parsed
+    rules-governance.jsonl events. When present, every machine-enforced
+    entry's ``governance-ref`` must resolve to an adjudicated *promote*
+    event targeting that rule at ``machine-enforced`` (rules-prototype
+    8.2 / Q6=A: "every machine-enforced entry has a governance
+    adjudication reference"). Without events the reference's existence is
+    still required but cannot be resolved — the shipped registry holds no
+    machine-enforced entries, so the wired check stays dormant until the
+    first promotion lands.
+    """
     errors: list[str] = []
     seen: dict[str, RuleEntry] = {}
+    promotions = (
+        rules_governance.promote_adjudications(governance_events)
+        if governance_events is not None else {}
+    )
 
     for entry in entries:
         label = entry.id
@@ -235,6 +258,24 @@ def validate_registry(entries: list[RuleEntry]) -> list[str]:
                     f"{label}: machine-enforced entry requires a governance "
                     "adjudication reference (governance-ref)"
                 )
+            elif governance_events is not None:
+                event = promotions.get(label)
+                if event is None or event.get("id") != ref.strip():
+                    errors.append(
+                        f"{label}: governance-ref {ref!r} does not resolve "
+                        "to a promote -> machine-enforced adjudication for "
+                        f"{label} in the governance log"
+                    )
+                else:
+                    target_version = event.get("target_version")
+                    if (isinstance(target_version, int)
+                            and not isinstance(target_version, bool)
+                            and target_version != entry.version):
+                        errors.append(
+                            f"{label}: governance-ref pins {label}@"
+                            f"{target_version} but the registry version is "
+                            f"v{entry.version}"
+                        )
 
         owner = entry.fields.get("owner", "")
         if owner:
