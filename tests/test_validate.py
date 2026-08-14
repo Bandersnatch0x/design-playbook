@@ -149,6 +149,74 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("G8 CRAFT-01 entry valid", result.stdout)
         self.assertIn("VALIDATION FAILED", result.stdout)
 
+    def test_registry_third_party_source_name_fails_content_lint(self) -> None:
+        # G8 content ban (review advisory, R4): naming a third-party source
+        # this product does not credit as rule provenance must fail the
+        # machine lint, not just the prose declaration in rules.md's header.
+        registry = (
+            self.root / "packages" / "design-playbook" / "skills"
+            / "design-playbook" / "references" / "rules.md"
+        )
+        for name in ("ui-ux-pro-max", "impeccable", "stitch-loop", "taste-skill"):
+            with self.subTest(name=name):
+                registry.write_text(
+                    registry.read_text(encoding="utf-8")
+                    + f"\nProvenance note: derived from {name} materials.\n",
+                    encoding="utf-8",
+                )
+
+                result = self.validate()
+
+                self.assertEqual(
+                    result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn("G8 registry content lint", result.stdout)
+                self.assertIn("VALIDATION FAILED", result.stdout)
+
+                registry.write_text(
+                    registry.read_text(encoding="utf-8").replace(
+                        f"\nProvenance note: derived from {name} materials.\n",
+                        "",
+                    ),
+                    encoding="utf-8",
+                )
+
+    def test_registry_content_lint_is_case_insensitive(self) -> None:
+        registry = (
+            self.root / "packages" / "design-playbook" / "skills"
+            / "design-playbook" / "references" / "rules.md"
+        )
+        registry.write_text(
+            registry.read_text(encoding="utf-8")
+            + "\nProvenance note: derived from UI-UX-PRO-MAX materials.\n",
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("G8 registry content lint", result.stdout)
+
+    def test_registry_abstract_external_reference_wording_passes(self) -> None:
+        # False-positive guard: the ban targets the third-party source
+        # names, not the abstract category wording the spec uses ("external
+        # reference samples are research input only") or common words that
+        # merely contain a banned term's fragment (taste, stitch).
+        registry = (
+            self.root / "packages" / "design-playbook" / "skills"
+            / "design-playbook" / "references" / "rules.md"
+        )
+        registry.write_text(
+            registry.read_text(encoding="utf-8")
+            + "\n外部参考样本仅作研究输入，不构成规则来源；风格判断 without taste"
+            " debate；`.stitch/DESIGN.md` 仅作基线候选路径。\n",
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("VALIDATION PASSED", result.stdout)
+
     def test_registry_reference_drift_fails(self) -> None:
         # G8 reference existence: related/overrides/supersedes must resolve
         # to registry ids with pinned versions.

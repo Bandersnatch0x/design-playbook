@@ -365,6 +365,10 @@ if isinstance(bundle_pkg, dict) and bundle_pkg:
 
 print("== Clean runtime surface (no upstream/vendor residue) ==")
 # Attribution files (README, NOTICE) legitimately credit sources; scan runtime only.
+# This residue scan keeps its vendor-only face: the runtime surface (e.g.
+# codex/AGENTS.md routing, README attribution) legitimately names external
+# dependencies. The third-party source-name ban is a registry-content rule
+# and lives below (banned_external_sources, G8 content lint).
 banned = re.compile(r"cloudai|阿里云|alibaba-cloud-design|\bACD\b|\bECS\b|演示附件|manuscript|#636AF1", re.I)
 attribution = {"readme.md", "notice", "license"}
 hits = []
@@ -460,6 +464,19 @@ web_skip = "Web and mobile Web skip `native-craft`"
 check(web_skip in orchestrator and web_skip in codex,
       "orchestrator and Codex skip native-craft for Web targets")
 
+# G8 content-ban face (advisory finding, R4): the registry lint used to
+# carry only the upstream vendor residue terms, so any third-party source
+# name outside that list slipped past the machine check. The terms below
+# are the third-party sources this product explicitly does not credit as
+# rule provenance — the detector needs the literals; they must appear
+# nowhere in the shipped registry. Full-name, word-boundary matches keep
+# abstract wording honest: "external reference samples" as a category, or
+# common words like "taste"/"stitch" on their own, do not hit.
+banned_external_sources = re.compile(
+    r"\bui-ux-pro-max\b|\bimpeccable\b|\bstitch-loop\b|\btaste-skill\b",
+    re.I,
+)
+
 print("== Registry entries (G8) ==")
 # First-party UX rule registry (rules-prototype §8.2, decision Q6=A): the
 # product-level G8 self-check replaces the former "Craft detector protocol"
@@ -493,7 +510,8 @@ check(
     "G8 registry cross-entry checks (references, pinned versions, override cycles)",
 )
 check(
-    not banned.search(registry_text),
+    not banned.search(registry_text)
+    and not banned_external_sources.search(registry_text),
     "G8 registry content lint (no external product names or third-party rule text)",
 )
 
