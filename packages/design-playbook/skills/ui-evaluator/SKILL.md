@@ -57,6 +57,8 @@ Evidence is captured, not judged. A manifest entry records that an artifact was 
 
 For implemented UI, visible-state proof is a rendered inspection at the declared target viewport; behavior proof is an interaction trace or automated check; code-health proof is the relevant available test, type/lint, or affected build result. Planning-only proof is declaration coverage and must not claim a render or test occurred. Non-L6 declaration checks may be supporting observations or findings; they do not enter the machine ledger.
 
+The host model may have no vision (text-only input). Reading a screenshot would break such a session — never make viewing an artifact a review action. Render artifacts stay bound as path references (manifest + ledger `observed`), and machine assertions judge the **text face**: HTML/CSS source, `a11y tree` text, and interaction-trace JSON. A no-vision run reviews this way end to end without degrading the protocol; note it once in the Limitations statement ("this run was reviewed on text-face evidence").
+
 **Done when:** every bound row was considered; every L6 criterion has exactly one non-empty `criterion / required / observed / result` row keyed as `L6.<n>`; results use only `pass|fail|blocked|N/A`; unavailable required proof is `blocked`, not skipped.
 
 ### 3. Emit point-back findings
@@ -115,7 +117,9 @@ The report artifact remains `point-back.md` (no new file). The machine face is u
                              explicit unreviewed list; G11 checks existence)
 ## Limitations statement    (judgment-class dimensions, no-user-evidence scope,
                              pass scope, assumed dependencies, machine-face
-                             boundary, pending-user-adjudication sub-block)
+                             boundary, text-face review note when no visual
+                             evidence was read, pending-user-adjudication
+                             sub-block)
 ## Verdict                  (exactly one Pass|Recirculate + closure lines)
 ```
 
