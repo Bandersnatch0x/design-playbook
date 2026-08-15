@@ -210,17 +210,34 @@ class StageState:
 # of the run root. When plan.md registers those paths as ``fill:`` field
 # lines, the fill stage is also judged on their existence — one path per
 # line, run-root-relative or host-project-relative (the orchestrating cwd).
-PLAN_FILL_LINE = re.compile(r"^fill:[ \t]*(\S+)", re.M)
+# Only unfenced column-0 field lines are declarations; fenced blocks are
+# prose/examples and are never read as declarations.
+PLAN_FILL_LINE = re.compile(r"^fill:[ \t]*(\S+)")
 
 
 def _plan_fill_artifacts(run_root: Path) -> list[str]:
-    """Declared fill artifact paths from plan.md that exist on disk."""
+    """Declared fill artifact paths from plan.md that exist on disk.
+
+    Fenced code blocks (```` ``` ````) are skipped while scanning: an
+    example or prose block citing ``fill: spec.md`` is not a declaration
+    (fail-closed — the fill stage stays unchecked rather than counting a
+    narrated example).
+    """
     try:
         text = (run_root / "plan.md").read_text(encoding="utf-8")
     except (OSError, UnicodeError):
         return []
     found: list[str] = []
-    for match in PLAN_FILL_LINE.finditer(text):
+    fenced = False
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        match = PLAN_FILL_LINE.match(line)
+        if match is None:
+            continue
         declared = match.group(1).strip().rstrip(",")
         candidate = Path(declared)
         bases = (
