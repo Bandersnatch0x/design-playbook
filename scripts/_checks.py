@@ -57,6 +57,18 @@ COMMAND_INVENTORY: dict[tuple[int, int], frozenset[str]] = {
         "run-status",
         "doctor",
     }),
+    # 0.15-0.19 are the planned per-slice minors that ultimately shipped
+    # together as 0.20; they never released individually, so only the unified
+    # release line needs an inventory entry. 0.20 keeps the 0.14 command
+    # surface: vNext deepens skills and artifacts but adds no commands.
+    (0, 20): frozenset({
+        "design-io",
+        "ux-spec",
+        "ui-review",
+        "run-review",
+        "run-status",
+        "doctor",
+    }),
 }
 STABLE_SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 
