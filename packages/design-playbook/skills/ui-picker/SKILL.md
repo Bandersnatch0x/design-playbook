@@ -51,6 +51,8 @@ baseline-changes: none | <explicitly approved change>
 risks: …
 ```
 
+`baseline-changes: none` tolerates a trailing same-line note (the machine face reads the `none` value token); substantive commentary goes on its own line instead.
+
 **Done when:** the report exists, records the bound baseline or explicit waiver, and coding has not started without it.
 
 #### DD entry blocks (append after the top block)

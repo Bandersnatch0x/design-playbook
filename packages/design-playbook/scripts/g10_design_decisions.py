@@ -6,8 +6,9 @@ declared by the protocol — entry completeness, tier/status enums, tier
 recording obligations (R one-line rationale / C trade-off record / E user
 confirmation), supersedes existence + acyclicity, registry rule-reference
 cross-check, preview transaction linkage (decision_id), R3 re-entry
-resolution (dd: challenges must end invalidated with an E-tier revision),
-and the baseline-drift stale review (three exits: keep / revise / escalate).
+resolution (dd: challenges must end invalidated with an E-tier revision;
+``dd:`` on a positive finding is a shape error, issue #44), and the
+baseline-drift stale review (three exits: keep / revise / escalate).
 
 Comparison-matrix quality, trade-off sufficiency, and tier-grading
 judgement calls (composition change, identity drift beyond declared
@@ -35,6 +36,7 @@ from design_playbook.scripts.dd_entries import (
     is_cross_run_ref,
     local_dd_id,
     parse_dd_entries,
+    positive_dd_refs,
 )
 
 # rules.md ships inside the package (read-only protocol consumption, the
@@ -669,6 +671,31 @@ def _reentry_checks(
     return errs
 
 
+def _positive_dd_checks(pointback_text: str | None) -> list[Finding]:
+    """``dd:`` on a positive (S0) finding is a shape error (issue #44).
+
+    ``dd:`` is the R3 challenge channel; riding it on a positive
+    observation reads as a challenge downstream. Fail closed with a
+    precise error instead of silently ignoring the line.
+    """
+    if not pointback_text:
+        return []
+    errs: list[Finding] = []
+    for index, refs in positive_dd_refs(pointback_text):
+        errs.append(finding(
+            "G10.dd_on_positive_finding",
+            f"G10 decisions: positive finding {index} carries "
+            f"dd: {', '.join(refs)} — dd: is the R3 challenge channel and "
+            "never rides a positive observation",
+            owner=f"point-back.md#finding.{index}",
+            expected="dd: only on non-positive (S1-S3) findings",
+            actual="dd: on severity S0",
+            repair="Drop the dd: line and record the observation link as "
+                   "prose (e.g. an evidence note line)",
+        ))
+    return errs
+
+
 def _preview_link_checks(
         entries: list[DDEntry],
         preview_dir: Path | None) -> list[Finding]:
@@ -929,6 +956,7 @@ def check_g10(
         report_text=report_text,
     )
     errs += _reentry_checks(entries, signals.dd_targets)
+    errs += _positive_dd_checks(pointback_text)
     errs += _preview_link_checks(entries, preview_dir)
     errs += _stale_checks(entries, baseline_state)
     errs += _signal_checks(entries, signals, run_profile_tier)

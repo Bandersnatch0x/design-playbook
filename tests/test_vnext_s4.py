@@ -215,6 +215,10 @@ class EscalationSignalTests(unittest.TestCase):
             [s.signal for s in collect_signals(r3)], ["E3"])
         self.assertEqual(
             [s.required_tier for s in collect_signals(r3)], ["P3"])
+        dd_only = _pointback(_finding_block("dd challenge", severity="S2",
+                                            disposition="advisory",
+                                            extra="dd:       DD-0001"))
+        self.assertEqual([s.signal for s in collect_signals(dd_only)], ["E3"])
         explore_only = collect_signals(
             _pointback(_finding_block(route="R4")), dd_explore=True)
         self.assertEqual([s.signal for s in explore_only], ["E3"])
@@ -222,6 +226,23 @@ class EscalationSignalTests(unittest.TestCase):
         cross = _pointback(_finding_block(route="R2-line R4"))
         self.assertEqual(
             [s.signal for s in collect_signals(cross)], ["E4"])
+
+    def test_positive_finding_dd_never_fires_e3(self) -> None:
+        # Issue #44: dd: on a positive (S0) finding records an observation
+        # link, not a challenge — no E3, and no tier push from it.
+        positive = _pointback(_finding_block(
+            "follows baseline", severity="S0", disposition="info",
+            extra="dd:       DD-0001"))
+        self.assertEqual(collect_signals(positive), [])
+        mixed = _pointback(
+            _finding_block("dd challenge", severity="S2",
+                           disposition="advisory",
+                           extra="dd:       DD-0001"),
+            _finding_block("follows baseline", severity="S0",
+                           disposition="info",
+                           extra="dd:       DD-0001"),
+        )
+        self.assertEqual([s.signal for s in collect_signals(mixed)], ["E3"])
 
     def test_upgrade_parsing_and_effective_tier(self) -> None:
         upgrades = (

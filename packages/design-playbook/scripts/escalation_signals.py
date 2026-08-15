@@ -41,6 +41,7 @@ import re
 from dataclasses import dataclass
 
 from design_playbook.scripts._diagnostics import Finding, finding
+from design_playbook.scripts.dd_entries import is_positive_finding
 from design_playbook.scripts.g2_g4_pointback import _findings
 from design_playbook.scripts.repair_rounds import is_blocking
 
@@ -167,9 +168,16 @@ def check_routes(text: str) -> list[Finding]:
 
 
 def dd_targets(text: str) -> tuple[str, ...]:
-    """dd: references carried by findings (R3 challenge face)."""
+    """dd: references carried by findings (R3 challenge face).
+
+    Issue #44: positive (S0) findings carry observation links, not
+    challenges — their ``dd:`` values never fire E3 (G10 reports the
+    misuse as a structural error instead).
+    """
     targets: list[str] = []
     for parsed in _findings(text):
+        if is_positive_finding(parsed):
+            continue
         targets.extend(value.strip() for value in parsed.get("dd", [])
                        if value.strip())
     return tuple(targets)
