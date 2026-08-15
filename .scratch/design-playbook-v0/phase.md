@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **v0.14.1 released** — 2026-08-14. Tag `v0.14.1` points to `dec53ee`; npm `latest` is `design-playbook@0.14.1` and `dsh-design-playbook@0.14.1`; GitHub Release: <https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.14.1>. Both OIDC publish workflows, both registry/provenance checks, and the single shared Release passed. v0.14.1 makes the main package and DSH bundle a fixed release group driven by one stable tag, with explicit partial-release recovery. Isolated public install smoke passed: `.scratch/design-playbook-v0/evidence/install-smoke-v0.14.1/` (8 skills, 6 commands, 2 MCP servers). **渠道决策（ADR-0015）：main = stable channel**；community catalog 仍为 **PAUSED BY USER**.
+**Current:** **v0.20.0 released** — 2026-08-15. Tag `v0.20.0` points to `f1c0780`; npm `latest` is `design-playbook@0.20.0` and `dsh-design-playbook@0.20.0`; GitHub Release: https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.20.0. Both OIDC publishes and the DSH lockstep succeeded; the main run's provenance verify hit an npm attestation-index delay (404→200) and the shared Release was completed via the documented recovery path (`release.yml recovery=true`). v0.20.0 ships the complete vNext first-party UI/UX closed loop (Wayfinder map #23 → slices S1-S6 via PR #42): tiered run profiles P1-P3, rule registry + G8, shaping sessions + G9, dual-track review + G11, G12 tier boundary, governance log + learning candidates; severity legacy aliases removed (ADR-0028, breaking). Isolated public install smoke passed: `.scratch/install-smoke/20260815T005124Z-v0.20.0/` (8 skills, 6 commands, 2 MCP servers). **渠道决策（ADR-0015）：main = stable channel**；community catalog 仍为 **PAUSED BY USER**.
 
 | Phase | Status |
 | --- | --- |
@@ -43,6 +43,7 @@
 | vNext live dogfood | done (2026-08-08; run `dogfood/2026-08-08-vnext-live`; real HITL confirm-round-2 + HTTP fill-host observe v1; G5/G6/G7 verify green; log `2026-08-08-vnext-live.md` verdict **pass**) |
 | preview control A′ | done (2026-08-08; abort popover + clamp/trap/cancel, pill revise submit, quick feedback, Ctrl+Enter floor, Esc/outside disarm pill arm; floor S1–S25 + control markup tests green) |
 | v0.12.0 release prep | in-progress (version surfaces + notes + inventory; tag/publish/smoke only on explicit ask) |
+| vNext ui/ux closed loop | done (map #23 十票全关 → S1-S6 六切片 PR #42 → 双轨评审 Pass 0 blocking → v0.20.0 released, 2026-08-15; spec: docs/specs/ui-ux-vnext/) |
 
 ## v0 ship checklist (5/5 pass)
 
