@@ -257,8 +257,39 @@
 
   var selected = {};            // id -> true（取消不得改动）
   var summaryUnreachable = false;
+  // 对话会话 token：open/close 各自递增；两个延迟回调（骨架填充 180ms /
+  // 确认执行 200ms）先校验 token 未变且 overlay 仍 open 才执行效果，
+  // 否则丢弃——取消后不再有残留渲染（S1/R4 骨架窗竞态）。
+  var dialogSession = 0;
+  // 执行锁：confirm 后进入执行锁定直至结果呈现，取消通道（Esc/遮罩/
+  // 取消按钮）在此窗口全部失效（S1/R4 执行窗竞态：已确认的重试展示
+  // 不被取消打断）。
+  var executing = false;
+  var dialogTimer = null;
+  var executeTimer = null;
 
   function $(id) { return document.getElementById(id); }
+  function overlayOpen() { return $("retry-overlay").classList.contains("is-open"); }
+  function clearDialogTimers() {
+    if (dialogTimer !== null) {
+      window.clearTimeout(dialogTimer);
+      dialogTimer = null;
+    }
+    if (executeTimer !== null) {
+      window.clearTimeout(executeTimer);
+      executeTimer = null;
+    }
+  }
+  function resetDialogControls() {
+    executing = false;
+    $("dlg-cancel").disabled = false;
+    $("dlg-confirm").classList.remove("is-loading");
+  }
+  function endDialogSession() {
+    dialogSession += 1;
+    clearDialogTimers();
+    resetDialogControls();
+  }
   function selectedFailed() { return RUNS.filter(function (r) { return selected[r.id] && r.state === "failed"; }); }
   function inScope(list, scope) {
     return scope === "fail-once"
@@ -403,6 +434,7 @@
   }
 
   function openDialog() {
+    endDialogSession();                  // 新会话：清理并作废一切旧的延迟回调
     summaryUnreachable = SCENARIO === "summary-error";
     var overlay = $("retry-overlay");
     overlay.classList.add("is-open");
@@ -427,13 +459,17 @@
     $("dlg-confirm").textContent = "重试 … 条运行";
     var first = $("scope-fail-once");
     first.focus();
-    window.setTimeout(function () {
+    var session = dialogSession;
+    dialogTimer = window.setTimeout(function () {
+      dialogTimer = null;
+      if (session !== dialogSession || !overlayOpen()) return; // 骨架窗内已取消：丢弃
       $("dlg-affected").classList.remove("skeleton");
       renderDialog();
     }, 180);
   }
 
   function closeDialog() {
+    endDialogSession();                  // 关闭清理并作废本会话延迟回调
     $("retry-overlay").classList.remove("is-open");
     setState("queue-ready");
   }
@@ -474,16 +510,20 @@
     if (window.confirm("批量中止选中的运行中任务？")) { notify("批量中止演示面"); }
   });
 
-  $("dlg-cancel").addEventListener("click", closeDialog);
+  $("dlg-cancel").addEventListener("click", function () {
+    if (!executing) closeDialog();      // 执行窗内取消已禁用（按钮 disabled，双保险）
+  });
   $("retry-overlay").addEventListener("click", function (e) {
-    if (e.target === $("retry-overlay")) closeDialog();   // 遮罩点击 = 取消，绝不执行
+    if (e.target === $("retry-overlay") && !executing) closeDialog();   // 遮罩点击 = 取消，绝不执行；执行窗内忽略
   });
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && $("retry-overlay").classList.contains("is-open")) closeDialog();
+    if (e.key === "Escape" && overlayOpen() && !executing) closeDialog(); // 执行窗内 Esc 不打断已确认的重试
   });
 
   document.querySelectorAll('input[name="retry-scope"]').forEach(function (radio) {
-    radio.addEventListener("change", renderDialog);
+    radio.addEventListener("change", function () {
+      if (!executing) renderDialog();   // 执行窗内不接受范围切换（避免执行中途状态机抖动）
+    });
   });
 
   $("btn-reload-summary").addEventListener("click", function () {
@@ -494,14 +534,23 @@
   $("dlg-confirm").addEventListener("click", function () {
     var btn = $("dlg-confirm");
     if (btn.disabled) return;
+    var session = dialogSession;
+    executing = true;                   // 确认即锁定：取消通道关闭直至结果呈现
+    $("dlg-cancel").disabled = true;   // 视觉锁定（.btn:disabled）
     btn.classList.add("is-loading");
     btn.textContent = "执行中…";
     var scopeList = inScope(selectedFailed(), currentScope());
     // 模拟提交延迟后置 queued（transform/opacity 之外无动画）
-    window.setTimeout(function () {
+    executeTimer = window.setTimeout(function () {
+      executeTimer = null;
+      // 会话校验：执行窗内对话不可能被关闭（取消通道已锁）；此检查为
+      // 纵深防御——token 变更或 overlay 非 open 一律不落地任何效果。
+      if (session !== dialogSession || !overlayOpen()) {
+        resetDialogControls();
+        return;
+      }
       scopeList.forEach(function (r) { r.state = "queued"; });
       selected = {};                       // 执行后清空选中（假设 retry.execute_semantics）
-      btn.classList.remove("is-loading");
       closeDialog();
       renderCounts(); renderRows(); renderSide(); renderBatchBar();
       setState("queue-post-confirm");

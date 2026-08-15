@@ -121,8 +121,36 @@ def _structured(call_response: dict) -> dict:
     return json.loads(text)
 
 
+class _RecordingPage:
+    def __init__(self) -> None:
+        self.waits: list[tuple[str, int]] = []
+
+    def wait_for_selector(self, selector: str, *, timeout: int) -> None:
+        self.waits.append((selector, timeout))
+
+
 class EvidencePurePathTests(unittest.TestCase):
     """No-chromium transport and direct runtime-interface tests."""
+
+    def test_wait_for_state_combines_selector_and_state(self) -> None:
+        page = _RecordingPage()
+        capture_runtime._action_wait_for_state(
+            page,
+            {"do": "wait_for_state", "selector": "body", "state": "ready"},
+            0,
+            "wait_for_state",
+        )
+        self.assertEqual(page.waits, [('body[data-state="ready"]', 10_000)])
+
+    def test_wait_for_state_without_selector_targets_any_matching_state(self) -> None:
+        page = _RecordingPage()
+        capture_runtime._action_wait_for_state(
+            page,
+            {"do": "wait_for_state", "state": "ready"},
+            0,
+            "wait_for_state",
+        )
+        self.assertEqual(page.waits, [('[data-state="ready"]', 10_000)])
 
     def test_parse_capture_contract_requires_schema_and_viewport(self) -> None:
         from design_playbook.mcp.evidence import capture_contract

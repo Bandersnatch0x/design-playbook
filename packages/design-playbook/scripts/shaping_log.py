@@ -93,23 +93,6 @@ def load_shaping_facts(run_root: Path) -> ShapingFacts | None:
     return ShapingFacts(events=tuple(events), queue=queue)
 
 
-def _pending_ids(events: list[dict[str, Any]]) -> set[str]:
-    """Item ids referenced by ask/stage events without a terminal answer."""
-    opened: set[str] = set()
-    closed: set[str] = set()
-    for event in events:
-        kind = event.get("event")
-        item = event.get("question_id") or event.get("item_id")
-        if not isinstance(item, str) or not item:
-            continue
-        if kind in ("asked", "assumption_staged", "confirm_presented"):
-            opened.add(item)
-        elif kind in ("answered", "item_confirmed", "item_rejected",
-                      "item_revised"):
-            closed.add(item)
-    return opened - closed
-
-
 def _item_id(item: Any) -> Any:
     """Identity of a confirmation-batch item (``field`` for dict items)."""
     if isinstance(item, dict):

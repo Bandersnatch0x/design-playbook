@@ -36,9 +36,9 @@ from design_playbook.scripts.g2_g4_pointback import FIELD_LINE
 MIN_DISTINCT_RUNS = 3
 MIN_DISTINCT_CONTEXTS = 2
 MAX_UNEXPLAINED_FALSE_POSITIVES = 0
-# Positive observations (S0) are not defect signals — the derivation
-# never lets them enter the candidate queue.
-EXCLUDED_SEVERITIES = frozenset({"S0"})
+# Candidate derivation fails closed: only defect severities enter history.
+# S0 is a positive observation; blank, legacy, and unknown values are invalid.
+CANDIDATE_SEVERITIES = frozenset({"S3", "S2", "S1"})
 
 UNSPECIFIED_CONTEXT = "(unspecified)"
 
@@ -134,8 +134,8 @@ def derive_candidates(
     """
     groups: dict[str, list[Occurrence]] = {}
     for occurrence in occurrences:
-        if occurrence.severity.strip() in EXCLUDED_SEVERITIES:
-            continue  # positive observations are not defect signals
+        if occurrence.severity.strip() not in CANDIDATE_SEVERITIES:
+            continue
         key = normalize(occurrence.issue)
         if key:
             groups.setdefault(key, []).append(occurrence)

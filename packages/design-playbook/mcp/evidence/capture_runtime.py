@@ -256,13 +256,12 @@ def _action_wait_for_state(page: Any, action: dict, index: int, do: str) -> None
     if not isinstance(state, str) or not state:
         raise ValueError(f"actions[{index}].state required for wait_for_state")
     selector = action.get("selector")
-    if isinstance(selector, str) and selector:
-        page.wait_for_selector(selector, timeout=10_000)
-    else:
-        page.wait_for_selector(
-            f'[data-state="{state}"]',
-            timeout=10_000,
-        )
+    target = (
+        f'{selector}[data-state="{state}"]'
+        if isinstance(selector, str) and selector
+        else f'[data-state="{state}"]'
+    )
+    page.wait_for_selector(target, timeout=10_000)
 
 
 def _action_wait(page: Any, action: dict, index: int, do: str) -> None:

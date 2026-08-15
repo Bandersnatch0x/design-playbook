@@ -132,6 +132,27 @@ class CandidateDerivationTests(unittest.TestCase):
         self.assertNotIn(lc.normalize("export loop completes within the limit"),
                          keys)
 
+    def test_invalid_severities_cannot_help_a_signal_qualify(self) -> None:
+        history = [
+            _occurrence("run-valid-1", "a", severity="S2"),
+            _occurrence("run-valid-2", "b", severity="S1"),
+        ] + [
+            _occurrence(f"run-invalid-{index}", "c", severity=severity)
+            for index, severity in enumerate(
+                ("S0", "", " ", "high", "med", "low", "unknown"), 1
+            )
+        ]
+        candidates = lc.derive_candidates(history)
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+        self.assertFalse(candidate.qualifies)
+        self.assertEqual(candidate.distinct_runs, 2)
+        self.assertIn("distinct_runs 2 < 3", candidate.gaps)
+        self.assertEqual(
+            {occurrence.severity for occurrence in candidate.occurrences},
+            {"S2", "S1"},
+        )
+
     def test_view_shape_matches_the_protocol(self) -> None:
         view = lc.candidate_view(self.HISTORY())
         self.assertEqual(view["threshold"], {
@@ -194,6 +215,13 @@ class OccurrenceLoaderTests(unittest.TestCase):
         occurrences = lc.occurrences_from_pointbacks(
             {"run-a": "## Notes\n\ntrack: product\n"})
         self.assertEqual(occurrences, [])
+
+    def test_loader_preserves_raw_invalid_severity_for_fail_closed_derivation(self) -> None:
+        occurrences = lc.occurrences_from_pointbacks({
+            "run-a": self._pointback(SIGNAL, severity="high"),
+        })
+        self.assertEqual(occurrences[0].severity, "high")
+        self.assertEqual(lc.derive_candidates(occurrences), [])
 
 
 class GovernanceLogTests(unittest.TestCase):

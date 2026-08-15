@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 RUN_PROFILE_MARKER = re.compile(r"<!--\s*run-profile(?::\s*v(\d+))?\s*-->")
 FENCED_BLOCK = re.compile(r"```[a-zA-Z]*\n(.*?)```", re.S)
 TIERS = frozenset({"P1", "P2", "P3"})
+SUPPORTED_RUN_PROFILE_VERSIONS = frozenset({1})
 
 
 @dataclass(frozen=True)
@@ -105,6 +106,10 @@ def validate_run_profile(profile: RunProfile | None) -> list[str]:
                 "skipping the rest of the plan body is legal, skipping the "
                 "profile block is not)"]
     errors: list[str] = []
+    if profile.version not in SUPPORTED_RUN_PROFILE_VERSIONS:
+        errors.append(
+            f"run-profile version v{profile.version} is unsupported; only v1 is accepted"
+        )
     if profile.tier not in TIERS:
         errors.append(
             f"run-profile tier {profile.tier!r} not in P1|P2|P3 "

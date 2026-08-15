@@ -226,6 +226,7 @@ upgrades: []
     def test_parses_tier_and_skips(self) -> None:
         profile = parse_run_profile(self.PROFILE)
         self.assertIsNotNone(profile)
+        self.assertEqual(profile.version, 1)
         self.assertEqual(profile.tier, "P2")
         self.assertEqual(
             profile.skipped, (("preview", "adapter absent (G5 not triggered)"),))
@@ -234,6 +235,23 @@ upgrades: []
     def test_missing_block_is_reported(self) -> None:
         self.assertIsNone(parse_run_profile("# plan\nbody only\n"))
         self.assertTrue(validate_run_profile(None))
+
+    def test_unversioned_marker_defaults_to_v1(self) -> None:
+        profile = parse_run_profile(
+            self.PROFILE.replace("run-profile: v1", "run-profile"))
+        self.assertEqual(profile.version, 1)
+        self.assertEqual(validate_run_profile(profile), [])
+
+    def test_unsupported_marker_versions_are_rejected(self) -> None:
+        for version in (2, 99):
+            with self.subTest(version=version):
+                profile = parse_run_profile(
+                    self.PROFILE.replace("v1", f"v{version}", 1))
+                errors = validate_run_profile(profile)
+                self.assertTrue(any(
+                    f"v{version}" in error and "unsupported" in error
+                    for error in errors
+                ))
 
     def test_invalid_tier_rejected(self) -> None:
         profile = parse_run_profile(
