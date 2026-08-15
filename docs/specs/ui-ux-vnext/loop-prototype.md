@@ -235,6 +235,8 @@ LR10 VERDICT 终局
 
 结论：**新增文件仅 4 类**（shaping 两件、rules 两件、candidates 目录；其中 rules/candidates 已由 #30/#31 定稿），本工单新增的只有 run-profile 块且落在既有 plan.md 内；其余全部为沿用或向后兼容扩展（附加字段行/可选键/追加块）。
 
+> 补注（2026-08-15，#44）：Fill 面亦可落在宿主树而非 run 根——`plan.md` 可用 `fill: <path>` 字段行登记这些路径（run 根相对或宿主项目相对），`run_status.py` 据此在 `filled-ui.*` 之外判定 fill 段（第 19 行 stage registry 零改动）。
+
 ---
 
 ## 4. 统一门禁序列
