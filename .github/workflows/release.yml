@@ -223,13 +223,23 @@ jobs:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          VERIFY_DIR="$(mktemp -d)"
-          trap 'rm -rf -- "${VERIFY_DIR}"' EXIT
-          npm install --prefix "${VERIFY_DIR}" --ignore-scripts --no-audit --no-fund \
-            "${PACKAGE_NAME}@${VERSION}"
-          AUDIT_JSON="$(npm audit signatures --prefix "${VERIFY_DIR}" --json --include-attestations)"
-          printf '%s' "${AUDIT_JSON}" | python3 scripts/release_state.py provenance \
-            --package-name "${PACKAGE_NAME}" --version "${VERSION}"
+          for ATTEMPT in $(seq 1 3); do
+            VERIFY_DIR="$(mktemp -d)"
+            if npm install --prefix "${VERIFY_DIR}" --ignore-scripts --no-audit --no-fund \
+                 "${PACKAGE_NAME}@${VERSION}" \
+               && AUDIT_JSON="$(npm audit signatures --prefix "${VERIFY_DIR}" --json --include-attestations)" \
+               && printf '%s' "${AUDIT_JSON}" | python3 scripts/release_state.py provenance \
+                    --package-name "${PACKAGE_NAME}" --version "${VERSION}"; then
+              echo "Verified provenance for ${PACKAGE_NAME}@${VERSION} on attempt ${ATTEMPT}"
+              rm -rf -- "${VERIFY_DIR}"
+              exit 0
+            fi
+            rm -rf -- "${VERIFY_DIR}"
+            echo "provenance verification attempt ${ATTEMPT}/3 failed (npm attestation indexing may lag)"
+            sleep 20
+          done
+          echo "::error::provenance verification for ${PACKAGE_NAME}@${VERSION} failed after 3 attempts"
+          exit 1
 
       - name: Verify dsh-design-playbook registry
         timeout-minutes: 36
@@ -257,13 +267,23 @@ jobs:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          VERIFY_DIR="$(mktemp -d)"
-          trap 'rm -rf -- "${VERIFY_DIR}"' EXIT
-          npm install --prefix "${VERIFY_DIR}" --ignore-scripts --no-audit --no-fund \
-            "${PACKAGE_NAME}@${VERSION}"
-          AUDIT_JSON="$(npm audit signatures --prefix "${VERIFY_DIR}" --json --include-attestations)"
-          printf '%s' "${AUDIT_JSON}" | python3 scripts/release_state.py provenance \
-            --package-name "${PACKAGE_NAME}" --version "${VERSION}"
+          for ATTEMPT in $(seq 1 3); do
+            VERIFY_DIR="$(mktemp -d)"
+            if npm install --prefix "${VERIFY_DIR}" --ignore-scripts --no-audit --no-fund \
+                 "${PACKAGE_NAME}@${VERSION}" \
+               && AUDIT_JSON="$(npm audit signatures --prefix "${VERIFY_DIR}" --json --include-attestations)" \
+               && printf '%s' "${AUDIT_JSON}" | python3 scripts/release_state.py provenance \
+                    --package-name "${PACKAGE_NAME}" --version "${VERSION}"; then
+              echo "Verified provenance for ${PACKAGE_NAME}@${VERSION} on attempt ${ATTEMPT}"
+              rm -rf -- "${VERIFY_DIR}"
+              exit 0
+            fi
+            rm -rf -- "${VERIFY_DIR}"
+            echo "provenance verification attempt ${ATTEMPT}/3 failed (npm attestation indexing may lag)"
+            sleep 20
+          done
+          echo "::error::provenance verification for ${PACKAGE_NAME}@${VERSION} failed after 3 attempts"
+          exit 1
 
       - name: npm publish summary
         shell: bash
