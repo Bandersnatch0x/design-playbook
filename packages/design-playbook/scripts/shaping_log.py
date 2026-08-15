@@ -110,12 +110,26 @@ def _pending_ids(events: list[dict[str, Any]]) -> set[str]:
     return opened - closed
 
 
+def _item_id(item: Any) -> Any:
+    """Identity of a confirmation-batch item (``field`` for dict items)."""
+    if isinstance(item, dict):
+        return item.get("field")
+    return item
+
+
 def derive_queue(events: list[dict[str, Any]]) -> dict[str, Any]:
     """Derive queue.json state from the append-only event log.
 
     Derived view (shaping-prototype 4.1): pending questions (asked, not
     answered), staged assumptions (staged, not confirmed/rejected/revised),
     and confirmation batches (presented, not fully decided).
+
+    Batches close at item granularity: ``item_confirmed`` /
+    ``item_rejected`` / ``item_revised`` events settle only the presented
+    item whose id (dict ``field`` or the bare string) they carry, so a
+    partially decided batch stays listed with its undecided items and a
+    batch leaves ``open_confirmations`` only once every presented item has
+    a terminal decision.
     """
     pending: list[dict[str, Any]] = []
     staged: list[dict[str, Any]] = []
@@ -154,11 +168,23 @@ def derive_queue(events: list[dict[str, Any]]) -> dict[str, Any]:
                 item for item in staged
                 if item.get("field") != field_path
             ]
-            if isinstance(event.get("batch"), str):
-                confirmations = [
-                    batch for batch in confirmations
-                    if batch.get("batch") != event.get("batch")
-                ]
+            if (
+                isinstance(event.get("batch"), str)
+                and isinstance(field_path, str) and field_path
+            ):
+                batch_name = event.get("batch")
+                settled: list[dict[str, Any]] = []
+                for batch in confirmations:
+                    if batch.get("batch") != batch_name:
+                        settled.append(batch)
+                        continue
+                    remaining = [
+                        item for item in batch.get("items", [])
+                        if _item_id(item) != field_path
+                    ]
+                    if remaining:
+                        settled.append({**batch, "items": remaining})
+                confirmations = settled
     return {
         "derived_from": "shaping-log.jsonl",
         "pending_questions": pending,

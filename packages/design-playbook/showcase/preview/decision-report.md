@@ -40,8 +40,8 @@ Ready for preview*（结构语义 floor：可读场景 + 命名 template 区域 
 ## Preview 轮次记录
 
 - **round-1（revise）**：人审选「需要修改」，feedback = `安师大安师大是`（无 anchor），`floor_pass=true / confirmed=false`。该 feedback 属 ADR-0008 语义垃圾串——结构 floor 放行（非空 feedback 触发），但零可执行改动信号；语义判定属 ui-evaluator（G6），非 floor。log.md 已记。无可派生改动 → round-2 仅按 decision report 自洽收紧结构（step3 联动不再折进 step1 卡，独立为步骤区域），不臆造迎合性改动。
-- **round-2（revise，新证据）**：见 `preview/round-2.html`。人审选「需要修改」+ 真实 anchor `[select #s] 需要修改字体`，`floor_pass=true / confirmed=false`。这是具体可执行反馈（区别 round-1 的语义垃圾），不触发"两轮无新证据 stop"。font 属 craft 范畴（CJK type / 层级），但 prototype 层先修可执行项：`<select>/<option>` 不继承 CJK 栈是真实浏览器行为 → round-3 显式继承。
-- **round-3（revise，新证据）**：见 `preview/round-3.html`，修复 #s 字体。人审再给 anchor `[#c] 改为一行两个`，`floor_pass=true / confirmed=false`。布局密度属 ui-picker/craft 表现层，但 prototype 层先执行：#c（公司名称）从独占行改为两列行。
+- **round-2（revise，新证据）**：原型 `round-2.html` 为迭代过程工件，未随 showcase 分发（preview/ 目录仅精选收编 round-1 与 round-4，完整轮次轨迹见 `log.md`）。人审选「需要修改」+ 真实 anchor `[select #s] 需要修改字体`，`floor_pass=true / confirmed=false`。这是具体可执行反馈（区别 round-1 的语义垃圾），不触发"两轮无新证据 stop"。font 属 craft 范畴（CJK type / 层级），但 prototype 层先修可执行项：`<select>/<option>` 不继承 CJK 栈是真实浏览器行为 → round-3 显式继承。
+- **round-3（revise，新证据）**：原型 `round-3.html` 同为未随 showcase 分发的迭代过程工件（轨迹见 `log.md`），该轮修复 #s 字体。人审再给 anchor `[#c] 改为一行两个`，`floor_pass=true / confirmed=false`。布局密度属 ui-picker/craft 表现层，但 prototype 层先执行：#c（公司名称）从独占行改为两列行。
 - **round-4（再呈现，收敛提示）**：见 `preview/round-4.html`，step1 改两列行（公司名称 | 所属行业；公司规模次行）。结构已三次收敛，summary 提示可确认进 fill；字族/间距最终归 craft-guard。
 - **round-4 CONFIRM ✅**：`confirmed=true / floor_pass=true`，confirm-round-4.json 落盘，report_ref 指向本 report → G5 满足。确认时人审另附 2 条 carry-forward 打磨 anchor（已确认但记录待 fill/craft 落实）：
   1. `[div 下一步] 修改按钮位置`（step1 actions 按钮布局）→ fill：actions 区右对齐、按钮间距统一。
