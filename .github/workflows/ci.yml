@@ -98,6 +98,7 @@ jobs:
             tests/test_vnext_s4.py \
             tests/test_vnext_s5.py \
             tests/test_vnext_s6.py \
+            packages/design-playbook/tests/test_queue_monitor.py \
             packages/design-playbook/scripts/validate_run.py \
             packages/design-playbook/scripts/g1_spec.py \
             packages/design-playbook/scripts/g2_g4_pointback.py \
@@ -211,6 +212,13 @@ jobs:
           python3 packages/design-playbook/tests/test_floor_frontend.py \
             | tee /tmp/frontend-floor.log
           grep -Fx "FRONTEND FLOOR TEST PASSED" /tmp/frontend-floor.log
+
+      - name: Queue monitor dialog timer races (require chromium)
+        if: steps.pw_install.outcome == 'success'
+        run: |
+          python3 -m pytest \
+            packages/design-playbook/tests/test_queue_monitor.py \
+            -v
 
       - name: Preview canvas version-control e2e (require chromium)
         if: steps.pw_install.outcome == 'success'
