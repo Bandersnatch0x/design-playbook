@@ -6,8 +6,14 @@
 issue: destructive action has no confirmation
 source: spec L2
 fix: add a consequence-confirmation dialog
-severity: high (blocking)
+severity: S3
+disposition: blocking
 ```
+
+## Coverage statement
+
+必审: primary path findings 6/6 complete
+未审: none (single-viewport walkthrough)
 
 ## Verdict
 

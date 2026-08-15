@@ -129,22 +129,139 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("ui-evaluator blocks unattended acceptance", result.stdout)
         self.assertIn("VALIDATION FAILED", result.stdout)
 
-    def test_craft_detector_required_field_drift_fails(self) -> None:
-        catalog = (
+    def test_registry_enum_drift_fails(self) -> None:
+        # G8 product-level: an invalid enum value on any registry entry must
+        # fail the static gate (rules-prototype §8.2 machine face).
+        registry = (
             self.root / "packages" / "design-playbook" / "skills"
-            / "craft-guard" / "references" / "detectors.md"
+            / "design-playbook" / "references" / "rules.md"
         )
-        text = catalog.read_text(encoding="utf-8")
-        self.assertIn("**Rendered signals:**", text)
-        catalog.write_text(
-            text.replace("**Rendered signals:**", "**Visual signals:**", 1),
+        text = registry.read_text(encoding="utf-8")
+        self.assertIn("id: CRAFT-01", text)
+        registry.write_text(
+            text.replace("status: advisory", "status: suggested", 1),
             encoding="utf-8",
         )
 
         result = self.validate()
 
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("CRAFT-01 detector contract", result.stdout)
+        self.assertIn("G8 CRAFT-01 entry valid", result.stdout)
+        self.assertIn("VALIDATION FAILED", result.stdout)
+
+    def test_registry_third_party_source_name_fails_content_lint(self) -> None:
+        # G8 content ban (review advisory, R4): naming a third-party source
+        # this product does not credit as rule provenance must fail the
+        # machine lint, not just the prose declaration in rules.md's header.
+        registry = (
+            self.root / "packages" / "design-playbook" / "skills"
+            / "design-playbook" / "references" / "rules.md"
+        )
+        for name in ("ui-ux-pro-max", "impeccable", "stitch-loop", "taste-skill"):
+            with self.subTest(name=name):
+                registry.write_text(
+                    registry.read_text(encoding="utf-8")
+                    + f"\nProvenance note: derived from {name} materials.\n",
+                    encoding="utf-8",
+                )
+
+                result = self.validate()
+
+                self.assertEqual(
+                    result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn("G8 registry content lint", result.stdout)
+                self.assertIn("VALIDATION FAILED", result.stdout)
+
+                registry.write_text(
+                    registry.read_text(encoding="utf-8").replace(
+                        f"\nProvenance note: derived from {name} materials.\n",
+                        "",
+                    ),
+                    encoding="utf-8",
+                )
+
+    def test_registry_content_lint_is_case_insensitive(self) -> None:
+        registry = (
+            self.root / "packages" / "design-playbook" / "skills"
+            / "design-playbook" / "references" / "rules.md"
+        )
+        registry.write_text(
+            registry.read_text(encoding="utf-8")
+            + "\nProvenance note: derived from UI-UX-PRO-MAX materials.\n",
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("G8 registry content lint", result.stdout)
+
+    def test_registry_abstract_external_reference_wording_passes(self) -> None:
+        # False-positive guard: the ban targets the third-party source
+        # names, not the abstract category wording the spec uses ("external
+        # reference samples are research input only") or common words that
+        # merely contain a banned term's fragment (taste, stitch).
+        registry = (
+            self.root / "packages" / "design-playbook" / "skills"
+            / "design-playbook" / "references" / "rules.md"
+        )
+        registry.write_text(
+            registry.read_text(encoding="utf-8")
+            + "\n外部参考样本仅作研究输入，不构成规则来源；风格判断 without taste"
+            " debate；`.stitch/DESIGN.md` 仅作基线候选路径。\n",
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("VALIDATION PASSED", result.stdout)
+
+    def test_registry_reference_drift_fails(self) -> None:
+        # G8 reference existence: related/overrides/supersedes must resolve
+        # to registry ids with pinned versions.
+        registry = (
+            self.root / "packages" / "design-playbook" / "skills"
+            / "design-playbook" / "references" / "rules.md"
+        )
+        text = registry.read_text(encoding="utf-8")
+        self.assertIn("related: CRAFT-06@1", text)
+        registry.write_text(
+            text.replace("related: CRAFT-06@1", "related: CRAFT-99@1", 1),
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("references unknown id CRAFT-99", result.stdout)
+        self.assertIn("VALIDATION FAILED", result.stdout)
+
+    def test_craft_not_applicable_reason_drift_fails(self) -> None:
+        # Seven-column migration: a blank not-applicable reason is invalid
+        # (the old blank-N/A discipline carried into the three-state split).
+        fixture = (
+            self.root / "packages" / "design-playbook" / "examples"
+            / "craft-detectors" / "saas-dashboard.md"
+        )
+        text = fixture.read_text(encoding="utf-8")
+        marker = "Surface declares one restrained standard control radius"
+        self.assertIn(marker, text)
+        fixture.write_text(
+            text.replace(
+                "Surface declares one restrained standard control radius in "
+                "design tokens; no pill or shape-geometry variation face is "
+                "in scope",
+                "-",
+                1,
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("observable reason", result.stdout)
         self.assertIn("VALIDATION FAILED", result.stdout)
 
     def test_composition_detector_coverage_drift_fails(self) -> None:
@@ -153,9 +270,9 @@ class ValidateGateTests(unittest.TestCase):
             / "craft-detectors" / "composition-contrast.md"
         )
         text = fixture.read_text(encoding="utf-8")
-        target = "| card-collection-clear | CRAFT-02 | clear |"
+        target = "| card-collection-clear | CRAFT-02@1 | applicable | - | clear |"
         self.assertIn(target, text)
-        fixture.write_text(text.replace(target, "| card-collection-clear | CRAFT-02 | hit |", 1), encoding="utf-8")
+        fixture.write_text(text.replace(target, "| card-collection-clear | CRAFT-02@1 | applicable | - | hit |", 1), encoding="utf-8")
 
         result = self.validate()
 
@@ -194,7 +311,7 @@ class ValidateGateTests(unittest.TestCase):
         result = self.validate()
 
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("ui-evaluator consumes craft detector ledger", result.stdout)
+        self.assertIn("ui-evaluator consumes craft registry audit rows", result.stdout)
         self.assertIn("VALIDATION FAILED", result.stdout)
 
     def test_codex_plugin_json_version_drift_fails(self) -> None:

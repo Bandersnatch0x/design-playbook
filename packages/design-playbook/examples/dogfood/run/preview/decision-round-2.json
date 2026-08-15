@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "decision_id": "9d5b2f70c4e6a8d0b2f4a6c8e0d2b4f6",
+  "timestamp": "2026-08-14T09:48:00Z",
+  "binding": {
+    "digest": "5a0e2c4b6d8f1a3c5e7b9d0f2a4c6e8b0d2f4a6c8e0b2d4f6a8c0e2b4d6f8a0c",
+    "round": 2,
+    "prototype_html_hash": "a03ee4678cbbf824192ae8967d261625f1b3181b1cfe9acaf559af6745bd940a",
+    "report_ref": "decision-report.md",
+    "summary": "运行 feed 跨页保持修订（R3 重入）",
+    "options": [
+      "A2 回退顶栏计数",
+      "B2 控制台+feed 持久化"
+    ]
+  },
+  "outcome": {
+    "confirmed": true,
+    "user_confirmed": true,
+    "floor_pass": true,
+    "selected_options": [
+      "B2 控制台+feed 持久化"
+    ],
+    "feedback": "round 2: feed 必须跨页持久且失败项不静默丢失；上限让位规则接受",
+    "anchors": []
+  }
+}

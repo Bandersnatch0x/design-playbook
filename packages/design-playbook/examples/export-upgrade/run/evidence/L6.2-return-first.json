@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "trace": {
+    "criterion": "L6.2",
+    "state": "return-empty-r1",
+    "note": "R3 首轮：返回后状态区为空（失败证据）"
+  }
+}

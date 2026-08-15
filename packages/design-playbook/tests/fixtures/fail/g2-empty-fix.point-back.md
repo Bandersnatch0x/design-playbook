@@ -6,7 +6,7 @@
 issue: destructive action has no confirmation
 source: spec L2
 fix:
-severity: high
+severity: S2
 ```
 
 ## Verdict

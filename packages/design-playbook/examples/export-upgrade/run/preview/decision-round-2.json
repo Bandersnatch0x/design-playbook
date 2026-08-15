@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "decision_id": "c81b2e6047fa4d92b3e5c8a1f6d09b42",
+  "timestamp": "2026-08-14T11:02:00Z",
+  "binding": {
+    "digest": "3666dd7132737fb88f0abd8d40c72f80ebde0445eda445066088f88ea5a29642",
+    "round": 2,
+    "prototype_html_hash": "96689b6a4ec2a197c9b47e4c9404cda507ca5f127f77d73bf2a4a02cd3699975",
+    "report_ref": "decision-report.md",
+    "summary": "导出任务状态跨页保持修订（R3 重入）",
+    "options": [
+      "B2 全局状态区+持久化",
+      "A2 回退行内进度"
+    ]
+  },
+  "outcome": {
+    "confirmed": true,
+    "user_confirmed": true,
+    "floor_pass": true,
+    "selected_options": [
+      "B2 全局状态区+持久化"
+    ],
+    "feedback": "选全局方案：切页场景必须可查",
+    "anchors": []
+  }
+}

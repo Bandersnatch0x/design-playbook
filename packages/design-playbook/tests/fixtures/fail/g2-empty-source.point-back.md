@@ -8,32 +8,35 @@ Produced by **ui-evaluator** against the decision report + spec. Every finding p
 issue:    batch retry has no confirm step
 source:
 fix:      confirm Dialog with consequence copy before executing batch retry
-severity: high (blocking)
+severity: S3
+disposition: blocking
 
 issue:    abort run without confirm
 source:   domain
 fix:      confirm Dialog; abort is irreversible -> state consequence
-severity: high (blocking)
+severity: S3
+disposition: blocking
 
 issue:    resource sparkline animates width on update
 source:   craft (DESIGN.md §6: no width/height/top/left animation)
 fix:      animate opacity/transform only; re-render data in place
-severity: high (blocking)
+severity: S3
+disposition: blocking
 
 issue:    failed state uses red neon
 source:   craft (DESIGN.md §7: no neon/glow; warning role = Amber Evidence)
 fix:      use var(--amber-evidence), no outer glow
-severity: med
+severity: S1
 
 issue:    viewer can click retry (no permission gate)
 source:   spec L5
 fix:      disable retry/abort for viewer role + tooltip reason
-severity: med
+severity: S1
 
 issue:    emoji status icons in list
 source:   craft (DESIGN.md §7: no emojis)
 fix:      Badge text only
-severity: low
+severity: S1
 ```
 
 ## Recirculate closure trail

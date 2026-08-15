@@ -1,0 +1,22 @@
+{
+  "schema": "design-baseline/v1",
+  "status": "ready",
+  "project_root": "examples/export-upgrade/project",
+  "baseline": {
+    "path": "DESIGN.md",
+    "sha256": "2d0728566b52e19c5fb5fd81cb7c8ef44dd51f63e83212154b4d954dc22425a3",
+    "origin": "existing"
+  },
+  "draft": null,
+  "sources": [
+    {
+      "source": "baseline-v2-refactor.md",
+      "observed": "layout conventions restated after source restructure",
+      "confidence": "high"
+    }
+  ],
+  "decision": {
+    "kind": "existing",
+    "confirmed_at": "2026-08-14T12:01:00Z"
+  }
+}

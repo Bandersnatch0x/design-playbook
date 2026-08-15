@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "decision_id": "5f0c9a21d4e34b7f8a2c6d1e9b04f7a3",
+  "timestamp": "2026-08-14T11:01:00Z",
+  "binding": {
+    "digest": "b6933cc3b8db2fa3604c9667d4a7385ceed3ba9a0a5d8e6c10c1247ca323436c",
+    "round": 1,
+    "prototype_html_hash": "c6413c2c568eb14cadfc3f4edc6be5190be17cc11dd3716b5541732179248c53",
+    "report_ref": "decision-report.md",
+    "summary": "导出进行中的状态呈现构成",
+    "options": [
+      "A 行内进度",
+      "B 全局状态区"
+    ]
+  },
+  "outcome": {
+    "confirmed": true,
+    "user_confirmed": true,
+    "floor_pass": true,
+    "selected_options": [
+      "A 行内进度"
+    ],
+    "feedback": "选全局方案：切页场景必须可查",
+    "anchors": []
+  }
+}

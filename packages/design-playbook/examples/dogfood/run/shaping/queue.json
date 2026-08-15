@@ -1,0 +1,13 @@
+{
+  "derived_from": "shaping-log.jsonl",
+  "pending_questions": [
+    {
+      "question_id": "Q9",
+      "tier": "T3",
+      "text": "顶栏计数区升级为全局运行控制台——视觉方向（构成级）？",
+      "impact": "D3 decision-report（成形只登记路由，D3 裁决）"
+    }
+  ],
+  "staged_assumptions": [],
+  "open_confirmations": []
+}

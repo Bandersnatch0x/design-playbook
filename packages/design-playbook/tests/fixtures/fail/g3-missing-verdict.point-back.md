@@ -6,7 +6,8 @@
 issue: destructive action has no confirmation
 source: spec L2
 fix: add a consequence-confirmation dialog
-severity: high (blocking)
+severity: S3
+disposition: blocking
 ```
 
 ## Evidence ledger

@@ -1,0 +1,15 @@
+{
+  "round": 2,
+  "report_ref": "decision-report.md",
+  "confirmed": true,
+  "floor_pass": true,
+  "selected_options": [
+    "B2 控制台+feed 持久化"
+  ],
+  "feedback": "round 2: feed 必须跨页持久且失败项不静默丢失；上限让位规则接受",
+  "anchors": [],
+  "timestamp": "2026-08-14T09:52:00Z",
+  "prototype_path": "preview/round-2.html",
+  "prototype_html_hash": "a03ee4678cbbf824192ae8967d261625f1b3181b1cfe9acaf559af6745bd940a",
+  "decision_id": "9d5b2f70c4e6a8d0b2f4a6c8e0d2b4f6"
+}

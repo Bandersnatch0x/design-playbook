@@ -1,0 +1,85 @@
+{
+  "assumed_fields": [
+    "export.column_scope",
+    "export.row_cap",
+    "export.sync_window",
+    "l1.scenes"
+  ],
+  "blockers": [],
+  "bound_contract": {
+    "changelog": [
+      {
+        "at": "2026-08-14T10:00:00Z",
+        "summary": "shaping session projection: 11 fields staged (7 to be decided via CP-A/CP-B, 4 assumed via CP-C)"
+      }
+    ],
+    "fields": {
+      "export.column_scope": {
+        "notes": "理由：列范围为局部实现选择；风险：隐藏列误出；回退：当前视图列（不含隐藏列）。",
+        "provenance": "inferred",
+        "resolution": "assumed",
+        "value": "当前视图列含隐藏列开关"
+      },
+      "export.row_cap": {
+        "notes": "理由：规模上限未答，CP-C 改写 50000→200000（用户 2026-08-14 接受风险）；风险：过高拖垮同步窗口；回退：50000。",
+        "provenance": "inferred",
+        "resolution": "assumed",
+        "value": 200000
+      },
+      "export.sync_window": {
+        "notes": "理由：同步导出限时未逐字确认；风险：超时体验未定义；回退：60s。",
+        "provenance": "inferred",
+        "resolution": "assumed",
+        "value": "30s"
+      },
+      "l1.goal": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "支持运营完成周报所需的数据导出（行内批量导出上周数据为 CSV）"
+      },
+      "l1.non_goals": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "不做定时/周期导出；不做全量历史导出"
+      },
+      "l1.scenes": {
+        "notes": "理由：回答未逐字确认场景清单；风险：场景过窄；回退：单场景起步。CP-C 2026-08-14 用户确认。",
+        "provenance": "inferred",
+        "resolution": "assumed",
+        "value": "首场景=运营周报"
+      },
+      "l1.target_user": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "运营角色，周频导出上周数据做周报"
+      },
+      "l2.entry_choice": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "B：主列表行内批量导出（范围收敛）"
+      },
+      "l6.c1": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "Given 运营在主列表选定上周范围 When 触发行内批量导出 Then 30 秒内获得 CSV 且行数与选中范围一致（证据：交互记录）"
+      },
+      "l6.c2": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "Given 选定范围超过 20 万行 When 确认导出 Then 提示剩余量与收窄建议（证据：错误态截图 capture seed）"
+      },
+      "l6.c3": {
+        "provenance": "observed",
+        "resolution": "decided",
+        "value": "Given 导出进行中 When 用户离开并返回该页 Then 导出进度与结果仍可获知（证据：交互记录）"
+      }
+    },
+    "schemaVersion": 1
+  },
+  "contract_sha": "761b87005398b40387b1d1655029dc79056d282d780557a3083aaa15f927901a",
+  "decision_log_sha": "a788329526d8b8ea4d82d286dd0f4f0292bc503b044681aa3f83079425ea81ae",
+  "ok": true,
+  "open_fields": [],
+  "schemaVersion": 1,
+  "stale_fields": []
+}

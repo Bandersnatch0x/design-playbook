@@ -398,5 +398,50 @@ class RunStatusPreviewRoundTests(unittest.TestCase):
             self.assertNotIn("resume at fill", payload["next"].lower())
 
 
+class RunStatusVnextTests(unittest.TestCase):
+    """vNext S1 (issue #34, exit criterion 5): the recovery narration
+    recognizes the run-profile block (plan.md) and the shaping session
+    artifacts on the packaged P2 fixture run."""
+
+    FIXTURE = ROOT / "packages" / "design-playbook" / "examples" / "export-entry" / "run"
+
+    def test_run_profile_and_shaping_in_json(self) -> None:
+        result = _run(str(self.FIXTURE), "--json")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        payload = json.loads(result.stdout)
+        profile = payload["run_profile"]
+        self.assertIsNotNone(profile)
+        self.assertEqual(profile["tier"], "P2")
+        self.assertTrue(profile["confirmed_by"].casefold().startswith("user"))
+        self.assertEqual(
+            [(skip["step"], bool(skip["reason"])) for skip in profile["skipped"]],
+            [("preview", True)],
+        )
+        self.assertEqual(profile["upgrades"], [])
+        self.assertEqual(payload["shaping"], "archived")
+        self.assertEqual(payload["verdict"], "Pass")
+
+    def test_run_profile_and_shaping_in_text(self) -> None:
+        result = _run(str(self.FIXTURE))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("run-profile: tier P2 (confirmed by user)", result.stdout)
+        self.assertIn("shaping: session archived", result.stdout)
+        self.assertIn(
+            "point-back: six-block vNext report with invalidated evidence set",
+            result.stdout)
+
+    def test_run_without_vnext_artifacts_has_no_narration(self) -> None:
+        # Backward compatibility: a plain run reports no run-profile/shaping.
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-plain"
+            run_root.mkdir()
+            (run_root / "spec.md").write_text("# L1\n", encoding="utf-8")
+            result = _run(str(run_root), "--json")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertIsNone(payload["run_profile"])
+            self.assertIsNone(payload["shaping"])
+
+
 if __name__ == "__main__":
     unittest.main()

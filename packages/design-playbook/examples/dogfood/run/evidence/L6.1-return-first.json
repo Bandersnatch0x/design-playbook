@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "kind": "interaction-trace",
+  "state": "first-round / invalidated",
+  "steps": [
+    {"action": "switch away from run-queue while sim-0042 running", "at": "2026-08-14T10:00:40Z"},
+    {"action": "return to run-queue", "at": "2026-08-14T10:01:05Z", "observed": "console feed empty — in-flight entry not restored"}
+  ],
+  "note": "R3 finding first-round evidence: feed cross-view persistence assumption failed; superseded by the r2 trace after DD-0002 (see invalidated block)"
+}

@@ -1,0 +1,13 @@
+{"event": "asked", "question_id": "Q1", "batch": 1, "tier": "T1", "text": "导出升级后「完成」意味着什么？", "impact": "l1.goal / l6.c4-c6", "ts": "2026-08-14T10:42:00Z"}
+{"event": "answered", "question_id": "Q1", "answer": "任务全程可见、跨页保持、结果可获知", "ts": "2026-08-14T10:44:00Z"}
+{"event": "asked", "question_id": "Q9", "batch": 2, "tier": "T3", "text": "导出进行中的状态呈现——视觉方向（构成级）？", "impact": "D3 decision-report（成形只登记路由，D3 裁决）", "ts": "2026-08-14T10:46:00Z"}
+{"event": "assumption_staged", "field": "export.task_persist_ttl", "tier": "T2", "reason": "状态条目保留时长未答", "risk": "条目堆积或过早消失", "fallback": "run 内持久（≤10 条）", "ts": "2026-08-14T10:47:00Z"}
+{"event": "confirm_presented", "batch": "CP-A", "kind": "intent", "items": ["l1.goal 修订（supersedes D-0001）", "l6.c4-c6 表述"], "ts": "2026-08-14T10:50:00Z"}
+{"event": "confirm_presented", "batch": "CP-C", "kind": "assumption", "items": ["export.task_persist_ttl"], "ts": "2026-08-14T10:50:00Z"}
+{"event": "item_confirmed", "batch": "CP-A", "field": "l1.goal", "ts": "2026-08-14T10:55:00Z"}
+{"event": "item_confirmed", "batch": "CP-A", "field": "l6.c4", "ts": "2026-08-14T10:55:00Z"}
+{"event": "item_confirmed", "batch": "CP-A", "field": "l6.c5", "ts": "2026-08-14T10:55:00Z"}
+{"event": "item_confirmed", "batch": "CP-A", "field": "l6.c6", "ts": "2026-08-14T10:55:00Z"}
+{"event": "item_confirmed", "batch": "CP-C", "field": "export.task_persist_ttl", "ts": "2026-08-14T10:56:00Z"}
+{"event": "projected", "ts": "2026-08-14T10:58:00Z", "order": ["promote_fields", "append_decision", "apply_decisions", "spec", "bind_first"], "decisions": ["D-0008", "D-0009", "D-0010", "D-0011"], "assumed": ["export.task_persist_ttl"], "mappings": [{"decision": "D-0008", "field": "l1.goal", "spec_section": "L1"}, {"decision": "D-0009", "field": "l6.c4", "spec_section": "L6"}, {"decision": "D-0010", "field": "l6.c5", "spec_section": "L6"}, {"decision": "D-0011", "field": "l6.c6", "spec_section": "L6"}]}
+{"event": "archived", "ts": "2026-08-14T10:59:00Z"}

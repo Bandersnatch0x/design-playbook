@@ -1,0 +1,9 @@
+{
+  "nodes": [
+    {
+      "role": "alert",
+      "name": "超出 200,000 行上限，建议按周导出"
+    }
+  ],
+  "note": "r2: toast exposes role=alert with readable name including cap value"
+}

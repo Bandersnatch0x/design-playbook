@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "changelog": [
+    {
+      "at": "2026-08-14T08:35:00Z",
+      "summary": "showcase main run projection (queue monitoring)"
+    },
+    {
+      "at": "2026-08-14T09:14:00Z",
+      "summary": "P3 dogfood projection: l1.goal supersedes D-0001 via D-0008; adds l6.c4-c6; stages sim.control_scope"
+    }
+  ],
+  "fields": {
+    "l1.goal": {
+      "provenance": "observed",
+      "resolution": "decided",
+      "value": "把队列监控页升级为全局模拟运行中心的第一步——运行状态跨页可查、全局控制可用、失败可批量治理"
+    },
+    "l1.target_user": {
+      "provenance": "observed",
+      "resolution": "decided",
+      "value": "运维分析师、场景设计者"
+    },
+    "l1.non_goals": {
+      "provenance": "observed",
+      "resolution": "decided",
+      "value": "不在此编辑场景；不承载完整决策审计（在 Workbench）"
+    },
+    "l1.scenes": {
+      "provenance": "inferred",
+      "resolution": "assumed",
+      "value": "日常监控在跑模拟 + 失败批量重试 + 资源异常定位",
+      "notes": "理由：场景清单延续 showcase 主 run；回退：仅日常监控。"
+    },
+    "l2.entry_choice": {
+      "provenance": "observed",
+      "resolution": "decided",
+      "value": "顶栏计数 + 主列表 + 侧区趋势（既有三段布局）"
+    },
+    "l6.c1": {
+      "provenance": "observed",
+      "resolution": "decided",
+      "value": "Given 运维打开队列监控 When 查看运行列表 Then 每条模拟运行呈现状态、场景名、耗时与资源占用（证据：交互记录）"
+    },
+    "l6.c2": {
+      "provenance": "observed",
+      "resolution": "decided",
+      "value": "Given 存在失败运行 When 选中失败条目触发批量重试 Then 重试入队且条目状态转为 queued（证据：交互记录）"
+    },
+    "l6.c3": {
+      "provenance": "observed",
+      "resolution": "decided",
+      "value": "Given 运行超时 When 选择重试或中止 Then 对应动作执行且状态迁移可见（证据：交互记录）"
+    },
+    "l6.c4": {
+      "provenance": "observed",
+      "resolution": "decided",
+      "value": "Given 模拟运行进行中 When 离开并返回队列页 Then 全局控制台运行 feed 恢复显示且状态可续读（证据：交互记录）"
+    },
+    "l6.c5": {
+      "provenance": "observed",
+      "resolution": "decided",
+      "value": "Given 多运行并发 When 在全局控制台触发全局暂停 Then 进行中运行进入 paused 且控制台持续反馈（证据：交互记录）"
+    },
+    "l6.c6": {
+      "provenance": "observed",
+      "resolution": "decided",
+      "value": "Given 控制台 feed 达到上限 When 新运行入队 Then 最旧完成条目让位且失败项不静默丢失（证据：交互记录）"
+    },
+    "sim.max_parallel": {
+      "provenance": "inferred",
+      "resolution": "assumed",
+      "value": 8,
+      "notes": "理由：并发上限延续平台默认；回退：4。"
+    },
+    "sim.control_scope": {
+      "provenance": "inferred",
+      "resolution": "assumed",
+      "value": "全局暂停/恢复不作用于手动单次重试",
+      "notes": "理由：控制范围未答；风险：误伤手动重试；回退：全局暂停覆盖全部。"
+    }
+  }
+}

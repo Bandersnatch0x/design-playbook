@@ -1,0 +1,22 @@
+{
+  "schema": "design-baseline/v1",
+  "status": "ready",
+  "project_root": "examples/dogfood/project",
+  "baseline": {
+    "path": "DESIGN.md",
+    "sha256": "2c7e9f3ab5d1e04c6a8f0b2d4e6c9a1f3b5d7e9c1a3f5b7d9e1c3a5f7b9d1e3f",
+    "origin": "existing"
+  },
+  "draft": null,
+  "sources": [
+    {
+      "source": "showcase/01-spec.md + DESIGN.md 反馈段",
+      "observed": "console region conventions restated after the showcase source restructure",
+      "confidence": "high"
+    }
+  ],
+  "decision": {
+    "kind": "existing",
+    "confirmed_at": "2026-08-14T09:20:00Z"
+  }
+}

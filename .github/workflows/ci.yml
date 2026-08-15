@@ -23,6 +23,8 @@ jobs:
         run: python3 -m pip install --disable-pip-version-check pyyaml==6.0.2
       - name: Validate
         run: python3 scripts/validate.py
+      - name: Cross-document link self-check (vNext S6)
+        run: python3 scripts/check_doc_links.py
       - name: Doctor (skip floor self-check for speed)
         run: python3 scripts/doctor.py --skip-self-check
       - name: Validate run seam
@@ -39,6 +41,12 @@ jobs:
           python3 tests/test_normalize_lockstep.py
           python3 tests/test_install_smoke.py
           python3 tests/test_release_workflow.py
+          python3 tests/test_vnext_s1.py
+          python3 tests/test_vnext_s2.py
+          python3 tests/test_vnext_s3.py
+          python3 tests/test_vnext_s4.py
+          python3 tests/test_vnext_s5.py
+          python3 tests/test_vnext_s6.py
       - name: Syntax check (all Python)
         # py_compile is the always-on syntax gate. The MCP stdio suites now
         # also run as required gates below (ticket 06): preview mocks its
@@ -65,6 +73,10 @@ jobs:
             packages/design-playbook-preview/server.py \
             packages/design-playbook-evidence/server.py \
             scripts/validate.py \
+            scripts/check_doc_links.py \
+            packages/design-playbook/scripts/rules_registry.py \
+            packages/design-playbook/scripts/rules_governance.py \
+            packages/design-playbook/scripts/learning_candidates.py \
             scripts/release.py \
             scripts/release_state.py \
             scripts/doctor.py \
@@ -80,6 +92,12 @@ jobs:
             tests/test_normalize_lockstep.py \
             tests/test_install_smoke.py \
             tests/test_release_workflow.py \
+            tests/test_vnext_s1.py \
+            tests/test_vnext_s2.py \
+            tests/test_vnext_s3.py \
+            tests/test_vnext_s4.py \
+            tests/test_vnext_s5.py \
+            tests/test_vnext_s6.py \
             packages/design-playbook/scripts/validate_run.py \
             packages/design-playbook/scripts/g1_spec.py \
             packages/design-playbook/scripts/g2_g4_pointback.py \
@@ -87,6 +105,18 @@ jobs:
             packages/design-playbook/scripts/g6_evidence.py \
             packages/design-playbook/scripts/g6_records.py \
             packages/design-playbook/scripts/g6_warnings.py \
+            packages/design-playbook/scripts/g9_shaping.py \
+            packages/design-playbook/scripts/g10_design_decisions.py \
+            packages/design-playbook/scripts/g11_coverage.py \
+            packages/design-playbook/scripts/g8_run_registry.py \
+            packages/design-playbook/scripts/method_semantics.py \
+            packages/design-playbook/scripts/interaction_dimensions.py \
+            packages/design-playbook/scripts/dd_entries.py \
+            packages/design-playbook/scripts/shaping_log.py \
+            packages/design-playbook/scripts/run_profile.py \
+            packages/design-playbook/scripts/repair_rounds.py \
+            packages/design-playbook/scripts/escalation_signals.py \
+            packages/design-playbook/scripts/g12_tier_boundary.py \
             packages/design-playbook/scripts/stages.py \
             packages/design-playbook/scripts/run_status.py \
             packages/design-playbook/design_playbook.py \

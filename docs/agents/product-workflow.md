@@ -38,10 +38,29 @@
 
 ## 命令
 
-| 命令 | 位置 |
-| --- | --- |
-| product-next / product-grill / product-dogfood | monorepo `.claude/commands/` (not in installable package) |
-| design-io / ux-spec / ui-review | `packages/design-playbook/commands/` |
+安装包内六命令（`packages/design-playbook/commands/`，签名 v0 起零改动；描述随 vNext 深化）：
+
+| 命令 | 职责 | vNext 面 |
+| --- | --- | --- |
+| `design-io` | 全链路编排入口 | run-profile 档位定档（P1/P2/P3）与回流循环 |
+| `ux-spec` | 只出 spec | 成形会话（问题/假设/确认批次）与会话工件；止于 spec.md |
+| `ui-review` | 只验收 | 双轨评审 + 六块 point-back 报告 |
+| `run-review` | 跨 run 复盘 | 规则候选队列（派生视图，只呈报不写回） |
+| `run-status` | run 状态读模型 | 识别 run-profile/成形会话/invalidated 重入叙述 |
+| `doctor` | 安装面健康诊断 | 零改动（rules.md 属包内工件由 validate.py 校验） |
+
+维护者命令 `product-next / product-grill / product-dogfood` 在 monorepo `.claude/commands/`（不进安装包）。
+
+## vNext 工件面（S1-S6 落地）
+
+规格权威：[`docs/specs/ui-ux-vnext/`](../specs/ui-ux-vnext/)（八份定稿原型 + 切片图）。落码要点：
+
+- **档位**：每个 run 的 `plan.md` 头部必写 `run-profile` 结构化块（tier P1|P2|P3 + 判据核对 + 跳过清单 + 升档事件）；升档自动、降档需用户；G12 机器复盘。
+- **成形**：`ux-spec` S0-S6 会话工件 `.scratch/<run>/shaping/`（shaping-log.jsonl + 派生 queue.json），G9 校验出口。
+- **规则**：注册表 `skills/design-playbook/references/rules.md`（G8 产品级 + run 级共享解析器）；项目级治理日志 `rules-governance.jsonl`（仅用户决定性事件）。
+- **设计决策**：decision-report 顶块后追加 DD 条目块（R/C/E 三档，G10）；E 档确认搭乘 preview 事务。
+- **评审**：point-back 六块报告（+Positive/Coverage/Limitations）+ `invalidated:` 失效集 + finding 附加字段；G11 消费 Coverage statement（P3 档强制五态×页面采样矩阵块）。
+- **示例**：`packages/design-playbook/examples/`（export-entry P2 / export-upgrade P3 / dogfood S6 自举全链 / rules-governance 治理走查）。
 
 ## 票夹
 
@@ -66,3 +85,5 @@ Sibling package `packages/design-playbook-preview/` (stdio MCP, tool `preview_pr
 ## Optional evidence provider
 
 `observe*` probes for an external MCP tool `execute_capture_plan` (e.g. Playwright MCP). When present, the orchestrator derives a capture plan from spec L6, a provider executes it producing an artifact, and the orchestrator binds it to the criterion in `.scratch/<run>/evidence/manifest.jsonl`. When absent, `ui-evaluator` ledger `observed` stays free-text (current behavior) and G6 does not trigger. design-playbook owns the binding (manifest) and the verdict (ledger), never the runtime.
+
+适配器缺席不降级协议：缺席 = 显式 `blocked` / `not-applicable` 记录或既有通道回落，永不静默跳过、永不臆断 pass（vnext-prototype 第 4 节；预览缺席记 run-profile 跳过清单一行，取证缺席记 ledger `result: blocked` 回流 R5）。

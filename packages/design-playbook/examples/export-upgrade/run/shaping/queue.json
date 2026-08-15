@@ -1,0 +1,13 @@
+{
+  "derived_from": "shaping-log.jsonl",
+  "pending_questions": [
+    {
+      "question_id": "Q9",
+      "tier": "T3",
+      "text": "导出进行中的状态呈现——视觉方向（构成级）？",
+      "impact": "D3 decision-report（成形只登记路由，D3 裁决）"
+    }
+  ],
+  "staged_assumptions": [],
+  "open_confirmations": []
+}

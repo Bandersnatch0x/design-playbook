@@ -39,7 +39,7 @@
 issue:    observe used semantic mirror, not live Fill host
 source:   observe* seam
 fix:      re-capture on live host URL when available; keep surface: mirror until then
-severity: low
+severity: S1
 ```
 
 Do not treat G6 artifact presence alone as proof the Fill tree was runtime-verified.

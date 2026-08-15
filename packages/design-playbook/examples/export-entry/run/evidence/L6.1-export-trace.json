@@ -1,0 +1,23 @@
+{
+  "type": "interaction-trace",
+  "steps": [
+    {
+      "action": "select last-week range",
+      "rows": 214
+    },
+    {
+      "action": "open export dialog",
+      "state": "export-open"
+    },
+    {
+      "action": "confirm export",
+      "state": "exporting"
+    },
+    {
+      "action": "download complete",
+      "elapsed_s": 14.2,
+      "csv_rows": 214
+    }
+  ],
+  "note": "14.2s < 30s; 214/214 rows; one trigger only after R4 busy guard"
+}
