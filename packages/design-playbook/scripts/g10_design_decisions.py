@@ -104,6 +104,11 @@ def _entry_checks(entries: list[DDEntry]) -> list[Finding]:
             ))
         seen[label] = index
 
+        # fold defects first (issue #44 follow-up): a named unterminated /
+        # comma-less fold error outranks the indirect missing_* findings it
+        # causes downstream, so the error face points at the real defect.
+        errs += _fold_checks(entry)
+
         for key in ("id", "tier", "question", "status"):
             if not entry.fields.get(key, "").strip():
                 errs.append(finding(
@@ -142,6 +147,45 @@ def _entry_checks(entries: list[DDEntry]) -> list[Finding]:
         errs += _selection_checks(entry)
         errs += _confirmation_checks(entry)
         errs += _baseline_rule_checks(entry)
+    return errs
+
+
+def _fold_checks(entry: DDEntry) -> list[Finding]:
+    """Fold defects on ``- {…}`` items (issue #44 follow-up, fail-closed).
+
+    A fold break without a comma merges the next key into the previous
+    value (the parse alone would accept it silently); a fold that never
+    balances swallows the rest of the block and only indirect missing_*
+    errors would fire. Both get a named error up front, with the block line
+    of the fold-opening marker; the remaining shape errors still fire.
+    """
+    errs: list[Finding] = []
+    for issue in entry.fold_issues:
+        if issue.kind == "unterminated":
+            errs.append(finding(
+                "G10.fold_unterminated",
+                f"G10 decisions: {entry.id} opens a folded flow-map item at "
+                f"block line {issue.line} that never closes its brace — the "
+                "fold swallowed the rest of the entry block",
+                owner=_fmt(entry.id),
+                expected="braces balance inside the entry block",
+                actual=f"unterminated fold from block line {issue.line}",
+                repair="Close the brace, or unfold to the canonical "
+                       "single-line item",
+            ))
+        else:
+            errs.append(finding(
+                "G10.fold_break_not_comma",
+                f"G10 decisions: {entry.id} folds a flow-map item at block "
+                f"line {issue.line} without a comma at the break — the next "
+                "key merges into the previous value",
+                owner=_fmt(entry.id),
+                expected="fold breaks end with a comma (or the opening "
+                         "brace)",
+                actual=f"break after {issue.tail!r}",
+                repair="End the folded line with a comma before continuing "
+                       "the item on the next line",
+            ))
     return errs
 
 

@@ -217,6 +217,40 @@ class DDEntryParseTests(unittest.TestCase):
         self.assertEqual(folded.rejected, single.rejected)
         self.assertEqual(_rules(_report(folded_text)), set())
 
+    def test_fold_break_without_comma_is_a_structural_error(self) -> None:
+        # Issue #44 follow-up: a fold break that drops the comma merges the
+        # next key into the previous value (`summary: alpha` + continuation
+        # `deviations: X}` swallowed the deviations key). Fail closed with a
+        # named G10 error instead of silently mis-parsing.
+        kept = C_BLOCK.replace(
+            "  - {id: B, source: agent, created_at: 2026-08-14T10:20:00Z,"
+            " fidelity: description, summary: fixed name plus stamp,"
+            " deviations: none, assets: []}\n",
+            "  - {id: B, source: agent, created_at: 2026-08-14T10:20:00Z,"
+            " fidelity: description,\n"
+            "     summary: fixed name plus stamp, deviations: none,"
+            " assets: []}\n",
+        )
+        dropped = C_BLOCK.replace(
+            "  - {id: B, source: agent, created_at: 2026-08-14T10:20:00Z,"
+            " fidelity: description, summary: fixed name plus stamp,"
+            " deviations: none, assets: []}\n",
+            "  - {id: B, source: agent, created_at: 2026-08-14T10:20:00Z,"
+            " fidelity: description\n"
+            "     summary: fixed name plus stamp, deviations: none,"
+            " assets: []}\n",
+        )
+        # positive: the comma-kept fold at the same break parses clean
+        self.assertEqual(_rules(_report(kept)), set())
+        # negative: dropping the comma at the break is a named error
+        rules = _rules(_report(dropped))
+        self.assertIn("G10.fold_break_not_comma", rules)
+        # and the mis-merge is visible, not silent: the continuation's key
+        # was swallowed into the previous value
+        candidate_b = parse_dd_entries(_report(dropped))[0].candidates[1]
+        self.assertNotIn("summary", candidate_b)
+        self.assertIn("summary:", candidate_b["fidelity"])
+
     def test_unterminated_flow_map_fold_fails_closed(self) -> None:
         # Dropping the closing brace leaves the fold unterminated: the item
         # swallows the rest of the block and the shape checks reject it
@@ -228,6 +262,34 @@ class DDEntryParseTests(unittest.TestCase):
         rules = _rules(_report(broken))
         self.assertIn("G10.bad_candidate", rules)
         self.assertIn("G10.missing_comparison", rules)
+
+    def test_unterminated_fold_is_named_before_indirect_errors(self) -> None:
+        # Issue #44 follow-up: an unterminated fold reports its own error
+        # (with the fold-opening block line) ahead of the indirect
+        # missing_*/bad_candidate findings the swallowed block causes.
+        broken = C_BLOCK.replace(
+            "summary: fixed name plus stamp, deviations: none, assets: []}\n",
+            "summary: fixed name plus stamp, deviations: none, assets: []\n",
+        )
+        findings = check_g10(_report(broken))
+        rule_ids = [f.rule_id for f in findings]
+        self.assertIn("G10.fold_unterminated", rule_ids)
+        # both named fold errors lead the report, ahead of the indirect
+        # missing_*/bad_candidate findings the swallowed block causes
+        self.assertTrue(
+            all(rule.startswith("G10.fold_") for rule in rule_ids[:2]),
+            rule_ids)
+        unterminated = next(
+            f for f in findings if f.rule_id == "G10.fold_unterminated")
+        self.assertIn("block line 10", unterminated.message)
+        indirect = next(
+            i for i, rule in enumerate(rule_ids)
+            if rule in ("G10.bad_candidate", "G10.missing_comparison"))
+        self.assertLess(rule_ids.index("G10.fold_unterminated"), indirect)
+        self.assertIn(
+            "G10.bad_candidate", {f.rule_id for f in findings})
+        self.assertIn(
+            "G10.missing_comparison", {f.rule_id for f in findings})
 
 
 class TierSignalTests(unittest.TestCase):
@@ -264,7 +326,8 @@ class TierSignalTests(unittest.TestCase):
                 parse_dd_entries(text), report_text=text)
             self.assertFalse(signals.baseline_changed, note)
             self.assertNotIn("baseline-conflict", signals.fired)
-        for value in ("enable status region", "nonempty", "none-such"):
+        for value in ("enable status region", "nonempty", "none-such",
+                      "none_x"):
             text = _report(_e_block()).replace(
                 "baseline-changes: none", f"baseline-changes: {value}")
             self.assertTrue(collect_e_signals(

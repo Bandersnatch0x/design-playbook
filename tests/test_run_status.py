@@ -498,6 +498,40 @@ class RunStatusFillStageTests(unittest.TestCase):
             self.assertTrue(by_key["fill"]["present"])
             self.assertIn("src/panel.html", by_key["fill"]["evidence"])
 
+    def test_fenced_fill_example_is_not_a_declaration(self) -> None:
+        # Fenced blocks are prose/examples: a `fill:` line inside ``` is
+        # never a declaration, even when the cited path exists (the fill
+        # stage stays unchecked — fail-closed, no narrated example counts).
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-fill-fenced"
+            run_root.mkdir()
+            (run_root / "spec.md").write_text("# L1\n", encoding="utf-8")
+            (run_root / "plan.md").write_text(
+                "# plan\n\n"
+                "```yaml\n"
+                "fill: spec.md\n"
+                "```\n",
+                encoding="utf-8")
+
+            result = _run(str(run_root), "--json")
+
+            self.assertEqual(result.returncode, 0,
+                             result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            by_key = {s["key"]: s for s in payload["stages"]}
+            self.assertFalse(by_key["fill"]["present"])
+
+            # control: the same line, unfenced, is the declaration
+            (run_root / "plan.md").write_text(
+                "# plan\n\nfill: spec.md\n", encoding="utf-8")
+            result = _run(str(run_root), "--json")
+            self.assertEqual(result.returncode, 0,
+                             result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            by_key = {s["key"]: s for s in payload["stages"]}
+            self.assertTrue(by_key["fill"]["present"])
+            self.assertIn("spec.md", by_key["fill"]["evidence"])
+
 
 if __name__ == "__main__":
     unittest.main()
