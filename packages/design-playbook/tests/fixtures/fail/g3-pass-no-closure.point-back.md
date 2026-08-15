@@ -44,9 +44,9 @@ severity: S1
 - blocking: batch retry no confirm -> reopen `domain` -> fix: confirm Dialog + consequence -> re-eval: confirm present before execute -> **done**
 - blocking: abort without confirm -> reopen `domain` -> fix: confirm Dialog + irreversibility copy -> re-eval: confirm gates abort -> **done**
 - blocking: sparkline animates width -> reopen `craft`/`design` -> fix: opacity/transform only, data re-rendered in place -> re-eval: no width animation -> **done**
-- med: failed red neon -> reopen `craft` -> fix: var(--amber-evidence) no glow -> re-eval: amber warning role -> resolved
-- med: viewer retry ungated -> reopen `spec` L5 -> fix: disable + tooltip -> re-eval: viewer cannot retry -> resolved
-- low: emoji icons -> reopen `craft` -> fix: Badge text -> re-eval: no emojis -> resolved
+- S1: failed red neon -> reopen `craft` -> fix: var(--amber-evidence) no glow -> re-eval: amber warning role -> resolved
+- S1: viewer retry ungated -> reopen `spec` L5 -> fix: disable + tooltip -> re-eval: viewer cannot retry -> resolved
+- S1: emoji icons -> reopen `craft` -> fix: Badge text -> re-eval: no emojis -> resolved
 
 ## Verdict
 
