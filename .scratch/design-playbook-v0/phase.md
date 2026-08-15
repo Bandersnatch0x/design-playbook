@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **v0.13.0 released** — 2026-08-13. Tag `v0.13.0` points to `d851577`; npm `latest` is `design-playbook@0.13.0`; GitHub Release: <https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.13.0>. Release workflow, npm OIDC/provenance verification, and isolated public install smoke all passed. Smoke evidence: `.scratch/design-playbook-v0/evidence/install-smoke-v0.13.0/` (8 skills, 6 commands, 2 MCP servers). Ticket 13 was reviewed and closed as obsolete without runtime implementation. **Next:** run a real-product v0.13 dogfood and turn observed friction into a scoped v0.14 issue; do not add another architecture abstraction without evidence. **渠道决策（ADR-0015）：main = stable channel**；community catalog 仍为 **PAUSED BY USER**.
+**Current:** **v0.14.1 released** — 2026-08-14. Tag `v0.14.1` points to `dec53ee`; npm `latest` is `design-playbook@0.14.1` and `dsh-design-playbook@0.14.1`; GitHub Release: <https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.14.1>. Both OIDC publish workflows, both registry/provenance checks, and the single shared Release passed. v0.14.1 makes the main package and DSH bundle a fixed release group driven by one stable tag, with explicit partial-release recovery. Isolated public install smoke passed: `.scratch/design-playbook-v0/evidence/install-smoke-v0.14.1/` (8 skills, 6 commands, 2 MCP servers). **渠道决策（ADR-0015）：main = stable channel**；community catalog 仍为 **PAUSED BY USER**.
 
 | Phase | Status |
 | --- | --- |

@@ -117,7 +117,7 @@
 
 - 新值域：`S3 | S2 | S1 | S0`（+ 事实/判断类别标注）；旧值 `high (blocking) | high | med | low` 保留为**兼容别名**。
 - 换算表：`high (blocking)`→S3；`high`→S2；`med`/`low`→S1；S0 无旧值（新增）。
-- 机器面现状：G2 只校验 finding 四字段存在性、不校验 severity 值域——别名期天然兼容；vNext 落码时 G2 扩展值域校验为「新旧并集」，移除期后仅收新值（**决议 Q5=B：两段式迁移——S1（v0.15.0）引入新值与并集校验，S5（v0.19.0，ADR-0028）移除旧值**）。
+- 机器面现状：G2 只校验 finding 四字段存在性、不校验 severity 值域——别名期天然兼容；vNext 落码时 G2 扩展值域校验为「新旧并集」，移除期后仅收新值（**决议 Q5=B：两段式迁移——S1（v0.15.0）引入新值与并集校验，S5 移除旧值，实际随统一发布 v0.20.0 生效，ADR-0028**）。
 - 处置轴 `disposition: blocking|advisory|info` 为 finding 附加字段行（解析器忽略旧版无此行的块，向后兼容）。
 
 **craft-guard 七列改造对 validate.py 与 fixture 的影响**（#30 6.3 清单的落码面）：
@@ -142,7 +142,7 @@
 | 7 | run-review JSON 契约面 / aggregate_runs.py | 候选队列派生视图（新可选键/节） | **非破坏（additive）** | 报告头 `run-review/v1` 保留；既有键零改动 | — |
 | 8 | run_status.py 输出 | 新工件识别叙述行 | **非破坏（additive）** | 既有叙述原样 | — |
 | 9 | **craft-guard 检测器表**（detectors.md 六字段块 + craft-guard.md 审计行 + validate.py fixture 段 + ui-evaluator 消费段措辞） | 列结构变化（Status 拆 Applicability/Result）、N/A 语义迁移（并入三态）、注册表迁址 | **破坏性（BREAKING）** | 单一切片内原子切换：rules.md + 薄引用层 + SKILL 七列 + 四 fixture + validate.py 重写 + ui-evaluator 措辞同批落码（G8 产品级同批上线，防中间态）；历史 run 的 craft-guard.md 不重写（append-only 哲学，新格式自迁移后 run 生效）；CRAFT-01…08 ID 零破坏（fixture 与历史引用可解析） | **决议 Q4=A：无双格式期**——S1 内原子切换，release note 标 breaking；旧写法在新格式下不再合法（#30 6.2 既定） |
-| 10 | severity 旧值（`high (blocking)\|high\|med\|low`） | 分轴 S3-S0 + 兼容别名 | **非破坏 → 破坏（两段式）** | 别名期：G2 值域校验收新旧并集，消费方按换算表解释；移除期：旧值报结构错误 | **决议 Q5=B：两段式迁移**——S1（v0.15.0）引入、S5（v0.19.0，ADR-0028）移除 |
+| 10 | severity 旧值（`high (blocking)\|high\|med\|low`） | 分轴 S3-S0 + 兼容别名 | **非破坏 → 破坏（两段式）** | 别名期：G2 值域校验收新旧并集，消费方按换算表解释；移除期：旧值报结构错误 | **决议 Q5=B：两段式迁移**——S1（v0.15.0）引入、S5 移除（统一发布 v0.20.0 生效，ADR-0028） |
 | 11 | 命令签名（6 命令） | 无变化（仅描述更新） | **零破坏** | 无 | — |
 | 12 | stage registry / stages.py | 零改动 | **零破坏** | 无 | — |
 | 13 | npm 发布组与 release transaction | 延续锁步组（design-playbook + dsh-design-playbook 同版本） | **零破坏** | vNext 切片逐个过既有 release transaction；stable main 政策不变 | **决议 Q3=A：逐切片 minor**——v0.15.0=S1（含 breaking 标注）→ v0.20.0=S6；v1.0 留给外部用户信号后的语义化里程碑 |
@@ -199,7 +199,7 @@
 
 ## 6. 交付切片与实现工单图（地图最后一条 Not yet specified 的答案）
 
-vNext 全量落为 **6 个版本化切片**；切片 1 = 首验证切片。版本映射（决议 Q3=A）：**S1=v0.15.0（含 breaking 标注）→ S2=v0.16.0 → S3=v0.17.0 → S4=v0.18.0 → S5=v0.19.0 → S6=v0.20.0**（补丁号随需；v1.0 留给外部用户信号后的语义化里程碑）；每切片独立过既有 release transaction（stable main：main 始终等于最新正式发布）。实现工单按**决议 Q2=B** 执行：仅 S1 一张实现 issue 随本定稿创建，S2-S6 待 S1 落地验证后再建（边界可能随 S1 落码微调，#28-Q6 保留条件同款风险）。
+vNext 全量落为 **6 个版本化切片**；切片 1 = 首验证切片。版本映射（决议 Q3=A）：**S1=v0.15.0（含 breaking 标注）→ S2=v0.16.0 → S3=v0.17.0 → S4=v0.18.0 → S5=v0.19.0 → S6=v0.20.0**（补丁号随需；v1.0 留给外部用户信号后的语义化里程碑。实际交付：六切片经 PR #42 统一合入，随 v0.20.0 一次性发布）；每切片独立过既有 release transaction（stable main：main 始终等于最新正式发布）。实现工单按**决议 Q2=B** 执行：仅 S1 一张实现 issue 随本定稿创建，S2-S6 待 S1 落地验证后再建（边界可能随 S1 落码微调，#28-Q6 保留条件同款风险）。
 
 | 切片 | 一句话范围 | 依赖 | 主要破坏面 |
 | --- | --- | --- | --- |
@@ -242,7 +242,7 @@ Destination 原文五要件：交互式需求成形、工具无关设计决策�
 | Q2 | 实现工单是否现在创建 | **B**：只建 S1 一张实现 issue；S2-S6 待 S1 落地验证后再建（避免工单图过早固化） |
 | Q3 | 版本号策略 | **A**：逐切片 minor 发布——v0.15.0=S1（含 breaking 标注）→ v0.20.0=S6；延续 stable main + release transaction；v1.0 留给外部用户信号后的语义化里程碑 |
 | Q4 | craft-guard 破坏性变更的废弃期 | **A**：无双格式期——S1 内原子切换（注册表 + 七列 + fixture + validate.py 同批），release note 标 breaking；历史 run 工件不重写 |
-| Q5 | severity 旧值兼容别名期长度 | **B**：两段式迁移——S1（v0.15.0）引入新值 + 别名并集校验，S5（v0.19.0，ADR-0028）移除旧值 |
+| Q5 | severity 旧值兼容别名期长度 | **B**：两段式迁移——S1（v0.15.0）引入新值 + 别名并集校验，S5 移除旧值（统一发布 v0.20.0 生效，ADR-0028） |
 | Q6 | 命令面是否新增入口 | **A**：不新增——成形会话经 `/design-io` 与 `/ux-spec` 深化进入；日后高频「单开会话」需求出现再增（additive 无破坏） |
 | Q7 | 首切片 fixture 场景 | **A**：全新会话 P2——「数据导出入口」完整走查（S0-S6 + 一轮 Recirculate），含 S2 澄清与 CP 批次 |
 | Q8 | G9 落点 | **A**：独立 gate 模块 `g9_shaping.py`（与 g1/g5/g6 模块化先例一致），编排进 `validate_run.py` |

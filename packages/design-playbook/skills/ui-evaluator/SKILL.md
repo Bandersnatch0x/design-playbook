@@ -68,7 +68,7 @@ fix:      <next edit>
 severity: S3|S2|S1|S0
 ```
 
-Severity is the **consequence axis** (S3 blocking-severity / S2 major / S1 minor / S0 positive or info), graded by user-visible impact and referencing the affected L6 / primary-path node. The legacy values `high (blocking)|high|med|low` are **no longer legal** (alias period ended, v0.19.0 breaking change): they are structural errors at G2 — write the axis values directly (`high (blocking)`→S3 + `disposition: blocking`, `high`→S2, `med`/`low`→S1).
+Severity is the **consequence axis** (S3 blocking-severity / S2 major / S1 minor / S0 positive or info), graded by user-visible impact and referencing the affected L6 / primary-path node. The legacy values `high (blocking)|high|med|low` are **no longer legal** (alias period ended, v0.20.0 breaking change): they are structural errors at G2 — write the axis values directly (`high (blocking)`→S3 + `disposition: blocking`, `high`→S2, `med`/`low`→S1).
 
 Additional field lines (machine-tolerated; validated when present) complete the review axis:
 
