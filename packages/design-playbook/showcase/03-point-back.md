@@ -68,6 +68,11 @@ observed: closure trails record confirmation copy before retry and abort executi
 result: pass
 ```
 
+## Positive findings
+
+- All five L6 criteria pass in the Evidence ledger above (failed-row detail, retry state trace, empty-state CTA, viewer gating, confirm-before-batch-retry).
+- Every finding is declaration-grounded (`domain` / `spec` L5 / `craft` DESIGN.md tokens) — none required free-floating judgment.
+
 ## Recirculate closure trail
 
 - closes: batch retry has no confirm step -> reopen `domain` -> fix: confirm Dialog + consequence -> re-eval: confirm present before execute -> **0 blocking**
@@ -81,6 +86,10 @@ result: pass
 
 必审: primary path findings 6/6 complete
 未审: none (single-viewport walkthrough)
+
+## Limitations statement
+
+- Single-viewport walkthrough of the queue page; findings derive from declaration-grounded inspection of rendered states, with no involved-user evidence.
 
 ## Verdict
 
