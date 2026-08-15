@@ -97,6 +97,8 @@
 
 **净结论**：新增文件仅 4 类 6 项（rules.md、rules-governance.jsonl、shaping 两件、candidates 目录）；其余 13 项为沿用或向后兼容扩展；唯一行格式重定义是 craft-guard.md 审计行（第 3 节列破坏性）。
 
+> 补注（2026-08-15，#44）：Fill 面亦可落在宿主树——`plan.md` 可用 `fill: <path>` 字段行登记路径，`run-status` 据此判定 fill 段；工件本身与 stage registry（第 19 行）零改动。
+
 ### 2.2 校验器逐项清单（G8 新增 + G9-G12 首版机器面 vs 协议面 + 两项迁移）
 
 | 门禁 | 落点（文件） | 首版机器面 | 首版协议面 | 变更类型 |

@@ -46,7 +46,13 @@ or braces (use full-width punctuation in prose values); this is the declared
 shape, same contract style as the seven-column audit rows. Items may fold
 across lines (issue #44): a ``- {`` item that does not close its brace on
 the marker line continues on the following lines until the braces balance —
-single-line items parse exactly as before.
+single-line items parse exactly as before. Folds break at commas (the
+schema example's shape): a break that does not end the accumulated text
+with a comma (or the opening brace) would merge the next key into the
+previous value, so the join records a :class:`FoldIssue` and G10 reports it
+(:code:`G10.fold_break_not_comma`); a fold that never balances by the end
+of the block records :code:`G10.fold_unterminated` (fail-closed, with the
+remaining shape errors still firing).
 
 ``dd:`` is the R3 challenge channel, never an observation link: values
 carried by positive (S0) findings are excluded from the challenge face and
@@ -129,6 +135,7 @@ class DDEntry:
     supersedes: str = ""
     stale: str = ""
     stale_review: dict[str, str] = field(default_factory=dict)
+    fold_issues: tuple["FoldIssue", ...] = ()
     block: str = ""
 
     # -- convenience accessors ------------------------------------------
@@ -178,6 +185,23 @@ class DDEntry:
 
 
 @dataclass(frozen=True)
+class FoldIssue:
+    """A fold defect found while joining folded flow-map items.
+
+    ``kind`` is ``"break_not_comma"`` (the accumulated fold text did not end
+    with a comma — or the opening brace — when a continuation was appended,
+    so the next key merges into the previous value) or ``"unterminated"``
+    (the braces never balanced before the block ended). ``line`` is the
+    1-based line of the fold-opening marker inside the entry block;
+    ``tail`` carries the offending text tail for the error face.
+    """
+
+    kind: str
+    line: int
+    tail: str = ""
+
+
+@dataclass(frozen=True)
 class ESignals:
     """Machine-judgeable E-criterion signals gathered from run artifacts."""
 
@@ -217,7 +241,8 @@ def _flow_map(item: str) -> dict[str, str]:
     return {"value": _scalar(item)}
 
 
-def _join_folded_flow_maps(lines: list[str]) -> list[str]:
+def _join_folded_flow_maps(
+        lines: list[str]) -> tuple[list[str], tuple[FoldIssue, ...]]:
     """Join folded ``- {...}`` flow-map items onto their marker line.
 
     Issue #44: an item that opens a ``{`` without closing it on the marker
@@ -225,14 +250,27 @@ def _join_folded_flow_maps(lines: list[str]) -> list[str]:
     example already shows) until its braces balance; continuation text is
     appended to the marker line so the rest of the parser sees one logical
     line. Values never contain ASCII commas or braces (declared shape), so
-    brace balance is an unambiguous fold terminator. An unterminated fold
-    stays joined and fails the downstream shape checks (fail-closed).
+    brace balance is an unambiguous fold terminator. Folds break at commas:
+    a continuation appended to accumulated text that does not end with a
+    comma (or the opening brace) would silently merge the next key into the
+    previous value, so the break is recorded as a :class:`FoldIssue`
+    (fail-closed; G10 reports it). An unterminated fold stays joined and
+    records its own issue plus the downstream shape checks (fail-closed).
+    Returns ``(joined lines, fold issues)``.
     """
     out: list[str] = []
+    issues: list[FoldIssue] = []
     fold: str | None = None
-    for raw_line in lines:
+    fold_line = 0
+    for lineno, raw_line in enumerate(lines, 1):
         stripped = raw_line.strip()
         if fold is not None:
+            if not fold.rstrip().endswith((",", "{")):
+                issues.append(FoldIssue(
+                    kind="break_not_comma",
+                    line=fold_line,
+                    tail=fold.strip()[-60:],
+                ))
             fold = fold.rstrip() + " " + stripped
             if fold.count("{") <= fold.count("}"):
                 out.append(fold)
@@ -243,11 +281,13 @@ def _join_folded_flow_maps(lines: list[str]) -> list[str]:
             and stripped.count("{") > stripped.count("}")
         ):
             fold = raw_line.rstrip()
+            fold_line = lineno
             continue
         out.append(raw_line)
     if fold is not None:
+        issues.append(FoldIssue(kind="unterminated", line=fold_line))
         out.append(fold)
-    return out
+    return out, tuple(issues)
 
 
 def _entry_blocks(text: str) -> list[tuple[str, str]]:
@@ -273,7 +313,8 @@ def _parse_entry(entry_id: str, body: str) -> DDEntry:
     current_section: str | None = None
     current_list_key: str | None = None
 
-    for raw_line in _join_folded_flow_maps(block.splitlines()):
+    joined, fold_issues = _join_folded_flow_maps(block.splitlines())
+    for raw_line in joined:
         stripped = raw_line.strip()
         if not stripped or stripped.startswith("```"):
             continue
@@ -349,6 +390,7 @@ def _parse_entry(entry_id: str, body: str) -> DDEntry:
         supersedes=fields.get("supersedes", ""),
         stale=fields.get("stale", ""),
         stale_review=_scalars("stale_review"),
+        fold_issues=fold_issues,
         block=block,
     )
 
@@ -364,8 +406,9 @@ def parse_dd_entries(text: str) -> list[DDEntry]:
 # ``none`` value token for the verbatim top block: a trailing same-line
 # note after the token is tolerated commentary, never a declared change
 # (issue #44). The token must end at whitespace or punctuation so values
-# like ``nonempty`` stay fail-closed non-none.
-NONE_VALUE = re.compile(r"none(?=$|[^0-9A-Za-z-])", re.I)
+# like ``nonempty`` and ``none_x`` stay fail-closed non-none (underscore
+# joins the lookalike continuation class with ``-``, e.g. ``none-such``).
+NONE_VALUE = re.compile(r"none(?=$|[^0-9A-Za-z_-])", re.I)
 
 
 def top_block_baseline_change(text: str) -> bool:

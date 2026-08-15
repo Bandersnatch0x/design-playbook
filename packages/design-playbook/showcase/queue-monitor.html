@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SwarSight · 模拟运行队列</title>
+<style>
+  /* Token layer — 值来源: showcase/02-decision-report.md token 块（design-baseline waived，见 run gaps.log） */
+  :root {
+    --abyss-canvas: #080A0D;        /* bg */
+    --graphite-surface: #0D1117;    /* panel */
+    --ash-border: #262C36;          /* 推导: 同族低对比描边（gaps.log） */
+    --signal-cyan: #2DD4BF;         /* 唯一 accent: 确认按钮 / 焦点 / 选中 */
+    --amber-evidence: #F2C94C;      /* 警示: 失败 / 多次失败标记 */
+    --cold-ink: #E6EDF3;            /* 主文本 */
+    --muted-telemetry: #8B949E;     /* 次文本 / 遥测 */
+    --danger-ink: #F2C94C;          /* 危险意图沿用 amber，不用红 neon */
+    --font-cjk: "PingFang SC","Microsoft YaHei","Hiragino Sans GB",system-ui,sans-serif;
+    --row-h: 40px;
+    --radius: 6px;
+    --dur-fast: 120ms;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--abyss-canvas); color: var(--cold-ink);
+    font-family: var(--font-cjk); font-size: 13px; line-height: 1.5;
+  }
+  header {
+    display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+    padding: 12px 20px; border-bottom: 1px solid var(--ash-border);
+    background: var(--graphite-surface);
+  }
+  header h1 { font-size: 15px; font-weight: 600; letter-spacing: .02em; }
+  .counts { display: flex; gap: 16px; }
+  .count { display: flex; align-items: baseline; gap: 6px; }
+  .count b { font-size: 18px; font-weight: 600; color: var(--cold-ink); }
+  .count span { color: var(--muted-telemetry); }
+  .count.is-failed b { color: var(--amber-evidence); }
+  .window-select {
+    margin-left: auto; background: var(--abyss-canvas); color: var(--cold-ink);
+    border: 1px solid var(--ash-border); border-radius: var(--radius);
+    font-family: inherit; font-size: 12px; padding: 4px 8px;
+  }
+  .layout { display: grid; grid-template-columns: 1fr 280px; gap: 16px; padding: 16px 20px 72px; }
+  .panel { background: var(--graphite-surface); border: 1px solid var(--ash-border); border-radius: var(--radius); }
+  .panel h2 { font-size: 12px; font-weight: 600; color: var(--muted-telemetry); padding: 10px 14px 6px; letter-spacing: .06em; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left; font-size: 11px; font-weight: 500; color: var(--muted-telemetry);
+    padding: 8px 10px; border-bottom: 1px solid var(--ash-border); letter-spacing: .04em;
+  }
+  tbody td { padding: 0 10px; height: var(--row-h); border-bottom: 1px solid var(--ash-border); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr.is-selected { background: rgba(45, 212, 191, 0.06); }
+  .row-select { accent-color: var(--signal-cyan); width: 14px; height: 14px; }
+  .badge {
+    display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px;
+    border: 1px solid var(--ash-border); color: var(--muted-telemetry);
+  }
+  .badge.is-running { color: var(--signal-cyan); border-color: rgba(45,212,191,.35); }
+  .badge.is-failed  { color: var(--amber-evidence); border-color: rgba(242,201,76,.4); }
+  .badge.is-timeout { color: var(--amber-evidence); border-color: rgba(242,201,76,.4); }
+  .muted { color: var(--muted-telemetry); }
+  .spark { display: inline-block; vertical-align: middle; }
+  .spark polyline { fill: none; stroke: var(--muted-telemetry); stroke-width: 1.25; }
+  .row-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .btn {
+    font-family: inherit; font-size: 12px; border-radius: var(--radius); cursor: pointer;
+    border: 1px solid var(--ash-border); background: transparent; color: var(--cold-ink);
+    padding: 3px 12px; transition: opacity var(--dur-fast) ease, transform var(--dur-fast) ease;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--muted-telemetry); }
+  .btn:disabled { color: var(--muted-telemetry); opacity: .45; cursor: not-allowed; }
+  .btn-primary {
+    background: var(--signal-cyan); border-color: var(--signal-cyan); color: var(--abyss-canvas); font-weight: 600;
+  }
+  .btn-primary:disabled { background: transparent; color: var(--muted-telemetry); border-color: var(--ash-border); opacity: .45; }
+  .btn.is-loading { pointer-events: none; opacity: .7; }
+  aside .panel { margin-bottom: 16px; }
+  .trend-bars { display: flex; align-items: flex-end; gap: 4px; height: 56px; padding: 4px 14px 10px; }
+  .trend-bars i { flex: 1; background: rgba(242,201,76,.35); border-top: 2px solid var(--amber-evidence); }
+  .side-list { list-style: none; padding: 4px 14px 10px; }
+  .side-list li { display: flex; justify-content: space-between; padding: 3px 0; }
+  .chip {
+    display: inline-block; min-width: 20px; text-align: center; padding: 0 6px;
+    border-radius: 999px; border: 1px solid var(--ash-border); font-size: 11px; color: var(--muted-telemetry);
+  }
+  .queue-pressure { padding: 4px 14px 12px; color: var(--muted-telemetry); }
+  .queue-pressure b { color: var(--cold-ink); font-size: 16px; }
+  /* 批量条 */
+  .batch-bar {
+    position: fixed; left: 0; right: 0; bottom: 0; display: none;
+    align-items: center; gap: 16px; padding: 10px 20px;
+    background: var(--graphite-surface); border-top: 1px solid var(--ash-border);
+  }
+  .batch-bar.is-visible { display: flex; }
+  .batch-bar .sel-count b { color: var(--signal-cyan); }
+  .empty-state { padding: 48px 20px; text-align: center; color: var(--muted-telemetry); }
+  .empty-state .btn { margin-top: 12px; }
+  /* 确认对话 */
+  .overlay {
+    position: fixed; inset: 0; display: none; place-items: center;
+    background: rgba(8,10,13,.72); z-index: 40;
+  }
+  .overlay.is-open { display: grid; }
+  .dialog {
+    width: min(480px, calc(100vw - 32px)); background: var(--graphite-surface);
+    border: 1px solid var(--ash-border); border-radius: 8px; padding: 20px;
+    opacity: 0; transform: translateY(8px) scale(.98);
+    transition: opacity var(--dur-fast) ease, transform var(--dur-fast) ease;
+  }
+  .overlay.is-open .dialog { opacity: 1; transform: none; }
+  .dialog h3 { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .dialog .sub { color: var(--muted-telemetry); margin-bottom: 14px; }
+  .dlg-section-label { font-size: 11px; color: var(--muted-telemetry); letter-spacing: .06em; margin: 12px 0 6px; }
+  .affected { font-size: 22px; font-weight: 600; }
+  .affected small { font-size: 12px; font-weight: 400; color: var(--muted-telemetry); margin-left: 4px; }
+  .cause-list { list-style: none; }
+  .cause-list li { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--ash-border); }
+  .cause-list li:last-child { border-bottom: none; }
+  .cause-name { color: var(--amber-evidence); }
+  .skeleton { border-radius: 4px; background: linear-gradient(90deg, var(--abyss-canvas), var(--ash-border), var(--abyss-canvas)); color: transparent; user-select: none; }
+  .radiogroup { display: flex; flex-direction: column; gap: 6px; }
+  .radiogroup label { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--ash-border); border-radius: var(--radius); cursor: pointer; }
+  .radiogroup label:has(input:checked) { border-color: var(--signal-cyan); }
+  .radiogroup input { accent-color: var(--signal-cyan); }
+  .radiogroup .hint { color: var(--muted-telemetry); margin-left: auto; font-size: 11px; }
+  .dlg-error { border: 1px solid rgba(242,201,76,.4); border-radius: var(--radius); padding: 10px 12px; margin: 8px 0; }
+  .dlg-error .reason { color: var(--amber-evidence); }
+  .dlg-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+  .empty-scope-note { color: var(--amber-evidence); font-size: 12px; margin-top: 4px; display: none; }
+  .empty-scope-note.is-visible { display: block; }
+  .status-live { position: fixed; left: 20px; bottom: 56px; color: var(--muted-telemetry); font-size: 12px; z-index: 30; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  :focus-visible { outline: 2px solid var(--signal-cyan); outline-offset: 1px; }
+</style>
+</head>
+<body data-state="queue-ready" data-role="operator">
+
+<header>
+  <h1>模拟运行队列</h1>
+  <div class="counts" aria-label="队列计数">
+    <div class="count"><b id="cnt-running">0</b><span>运行中</span></div>
+    <div class="count is-failed"><b id="cnt-failed">0</b><span>失败</span></div>
+    <div class="count"><b id="cnt-queued">0</b><span>排队</span></div>
+    <div class="count"><b id="cnt-completed">0</b><span>已完成</span></div>
+  </div>
+  <label class="muted" for="time-window">时间窗</label>
+  <select id="time-window" class="window-select" aria-label="时间窗筛选">
+    <option value="all">全部</option>
+    <option value="1h">近 1 小时</option>
+    <option value="24h">近 24 小时</option>
+  </select>
+</header>
+
+<div class="layout">
+  <main class="panel" id="queue-panel">
+    <h2>运行列表</h2>
+    <table aria-label="模拟运行列表">
+      <thead>
+        <tr>
+          <th style="width:36px"><span class="visually-hidden">选择</span></th>
+          <th>状态</th><th>场景</th><th>触发人</th><th>耗时</th><th>资源占用</th><th style="text-align:right">操作</th>
+        </tr>
+      </thead>
+      <tbody id="run-rows"></tbody>
+    </table>
+    <div class="empty-state" id="empty-state" hidden>
+      还没有模拟运行
+      <div><button class="btn" id="empty-cta" type="button">创建场景</button></div>
+    </div>
+  </main>
+
+  <aside>
+    <section class="panel">
+      <h2>失败趋势（近 6 小时）</h2>
+      <div class="trend-bars" id="trend-bars" aria-hidden="true"></div>
+    </section>
+    <section class="panel">
+      <h2>队列压力</h2>
+      <div class="queue-pressure">排队 <b id="pressure-queued">0</b> / 容量 12 槽位</div>
+    </section>
+    <section class="panel">
+      <h2>最近失败原因</h2>
+      <ul class="side-list" id="side-causes"></ul>
+    </section>
+  </aside>
+</div>
+
+<div class="batch-bar" id="batch-bar" role="toolbar" aria-label="批量操作">
+  <span class="sel-count">已选中 <b id="sel-count">0</b> 条 · 失败 <b id="sel-failed-count">0</b> 条</span>
+  <button class="btn" id="btn-batch-abort" type="button">批量中止</button>
+  <button class="btn btn-primary" id="btn-batch-retry" type="button">批量重试</button>
+  <span class="muted" id="viewer-note" hidden>重试/中止需要操作员权限</span>
+</div>
+
+<div class="status-live" id="status-live" role="status" aria-live="polite"></div>
+
+<div class="overlay" id="retry-overlay">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-title" aria-describedby="dlg-sub" id="retry-dialog">
+    <h3 id="dlg-title">批量重试失败运行</h3>
+    <p class="sub" id="dlg-sub">请确认重试范围；取消不会改动任何运行。</p>
+
+    <div id="dlg-body">
+      <div class="dlg-section-label">受影响运行</div>
+      <div class="affected"><span id="dlg-affected">0</span><small>条失败运行将被重试</small></div>
+
+      <div class="dlg-section-label">失败原因摘要</div>
+      <ul class="cause-list" id="dlg-causes"></ul>
+
+      <div class="dlg-section-label">重试范围</div>
+      <div class="radiogroup" role="radiogroup" aria-label="重试范围">
+        <label><input type="radio" name="retry-scope" id="scope-fail-once" value="fail-once" checked>
+          仅失败一次的<span class="hint" id="hint-fail-once"></span></label>
+        <label><input type="radio" name="retry-scope" id="scope-multi-fail" value="multi-fail">
+          含多次失败的<span class="hint" id="hint-multi-fail"></span></label>
+      </div>
+      <p class="empty-scope-note" id="empty-scope-note">当前范围没有可重试的运行</p>
+    </div>
+
+    <div class="dlg-error" id="dlg-error" hidden>
+      <span class="reason">失败摘要暂不可用：模拟服务不可达</span>
+      <div style="margin-top:6px"><button class="btn" id="btn-reload-summary" type="button">重新加载</button></div>
+    </div>
+
+    <div class="dlg-actions">
+      <button class="btn" id="dlg-cancel" type="button">取消</button>
+      <button class="btn btn-primary" id="dlg-confirm" type="button">重试 0 条运行</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var qs = new URLSearchParams(location.search);
+  var ROLE = qs.get("role") === "viewer" ? "viewer" : "operator";
+  var SCENARIO = qs.get("scenario") || "default";
+  document.body.setAttribute("data-role", ROLE);
+
+  // mock 数据（demo 面，无后端契约）
+  var RUNS = [
+    { id: "r-2201", scenario: "海风撤离推演", owner: "chi",  state: "running",   dur: "142m", agoMin: 30,  cpu: [30,42,55,48,60,58,64], mem: [40,44,47,50,52,55,57], attempts: 0 },
+    { id: "r-2202", scenario: "供应链中断",   owner: "chi",  state: "failed",    dur: "66m",  agoMin: 75,  cpu: [22,30,28,35,20,18,12], mem: [30,33,36,38,30,26,22], attempts: 3, cause: "GPU 配额不足" },
+    { id: "r-2203", scenario: "舆情扩散 v1",  owner: "lin",  state: "failed",    dur: "12m",  agoMin: 20,  cpu: [10,14,12,16,9,8,6],    mem: [20,22,21,24,18,16,14], attempts: 1, cause: "场景配置校验失败" },
+    { id: "r-2204", scenario: "电网峰谷调度", owner: "chi",  state: "failed",    dur: "88m",  agoMin: 100, cpu: [25,28,33,31,26,22,15], mem: [35,37,40,42,36,30,25], attempts: 1, cause: "实体状态快照损坏" },
+    { id: "r-2205", scenario: "海风撤离推演 v2", owner: "lin", state: "failed",  dur: "41m",  agoMin: 55,  cpu: [18,22,26,24,19,15,10], mem: [28,30,33,31,27,23,19], attempts: 2, cause: "网络分区超时" },
+    { id: "r-2206", scenario: "港口吞吐模拟", owner: "chi",  state: "queued",    dur: "—",    agoMin: 5,   cpu: [], mem: [], attempts: 0 },
+    { id: "r-2207", scenario: "能源价格冲击", owner: "lin",  state: "failed",    dur: "19m",  agoMin: 15,  cpu: [12,16,14,18,11,9,7],   mem: [22,25,24,27,20,18,16], attempts: 1, cause: "GPU 配额不足" },
+    { id: "r-2208", scenario: "舆情扩散 v2",  owner: "chi",  state: "completed", dur: "210m", agoMin: 300, cpu: [40,45,50,52,48,44,40], mem: [50,52,55,58,54,50,48], attempts: 0 },
+    { id: "r-2209", scenario: "电网峰谷调度 v2", owner: "lin", state: "failed",  dur: "240m", agoMin: 280, cpu: [35,38,42,45,40,36,30], mem: [48,50,53,56,52,48,44], attempts: 4, cause: "GPU 配额不足" },
+    { id: "r-2210", scenario: "供应链中断 v2", owner: "chi",  state: "aborted",  dur: "37m",  agoMin: 400, cpu: [], mem: [], attempts: 0 }
+  ];
+  if (SCENARIO === "multionly") {
+    RUNS.forEach(function (r) { if (r.state === "failed") r.attempts = Math.max(2, r.attempts); });
+  }
+
+  var selected = {};            // id -> true（取消不得改动）
+  var summaryUnreachable = false;
+
+  function $(id) { return document.getElementById(id); }
+  function selectedFailed() { return RUNS.filter(function (r) { return selected[r.id] && r.state === "failed"; }); }
+  function inScope(list, scope) {
+    return scope === "fail-once"
+      ? list.filter(function (r) { return r.attempts === 1; })
+      : list;
+  }
+  function setState(s) { document.body.setAttribute("data-state", s); }
+
+  function sparkline(pts, w, h) {
+    if (!pts.length) return '<span class="muted">—</span>';
+    var max = Math.max.apply(null, pts) || 1;
+    var step = (w - 2) / (pts.length - 1);
+    var poly = pts.map(function (p, i) { return (1 + i * step).toFixed(1) + "," + (h - 1 - (p / max) * (h - 2)).toFixed(1); }).join(" ");
+    return '<svg class="spark" width="' + w + '" height="' + h + '" aria-hidden="true" focusable="false"><polyline points="' + poly + '"/></svg>';
+  }
+
+  function renderCounts() {
+    ["running", "failed", "queued", "completed"].forEach(function (s) {
+      $("cnt-" + s).textContent = RUNS.filter(function (r) { return r.state === s; }).length;
+    });
+    $("pressure-queued").textContent = RUNS.filter(function (r) { return r.state === "queued"; }).length;
+  }
+
+  function renderSide() {
+    var bars = $("trend-bars");
+    bars.innerHTML = "";
+    [2, 1, 3, 2, 4, 3].forEach(function (v) {
+      var i = document.createElement("i");
+      i.style.height = (v * 12) + "px";
+      bars.appendChild(i);
+    });
+    var byCause = {};
+    RUNS.forEach(function (r) { if (r.state === "failed") byCause[r.cause] = (byCause[r.cause] || 0) + 1; });
+    var ul = $("side-causes");
+    ul.innerHTML = "";
+    Object.keys(byCause).sort(function (a, b) { return byCause[b] - byCause[a]; }).forEach(function (c) {
+      var li = document.createElement("li");
+      li.innerHTML = '<span class="cause-name">' + c + '</span><span class="chip">' + byCause[c] + "</span>";
+      ul.appendChild(li);
+    });
+  }
+
+  function visibleRuns() {
+    var w = $("time-window").value;
+    var limit = w === "1h" ? 60 : w === "24h" ? 1440 : Infinity;
+    return RUNS.filter(function (r) { return r.agoMin <= limit; });
+  }
+
+  function renderRows() {
+    var tb = $("run-rows");
+    tb.innerHTML = "";
+    var list = visibleRuns();
+    $("empty-state").hidden = list.length > 0;
+    list.forEach(function (r) {
+      var tr = document.createElement("tr");
+      if (selected[r.id]) tr.className = "is-selected";
+      var stateTxt = { queued: "排队", running: "运行中", paused: "已暂停", failed: "失败", completed: "已完成", aborted: "已中止", timeout: "超时" }[r.state] || r.state;
+      var multiTag = r.state === "failed" && r.attempts > 1
+        ? ' <span class="chip" title="已失败 ' + r.attempts + ' 次">×' + r.attempts + "</span>" : "";
+      var canOp = ROLE === "operator" && r.state === "failed";
+      var permTitle = ROLE === "viewer" ? "重试/中止需要操作员权限" : "";
+      tr.innerHTML =
+        '<td><input type="checkbox" class="row-select" id="select-' + r.id + '" data-run="' + r.id + '" aria-label="选择运行 ' + r.id + '"' + (selected[r.id] ? " checked" : "") + "></td>" +
+        '<td><span class="badge is-' + r.state + '">' + stateTxt + "</span>" + multiTag + "</td>" +
+        '<td>' + r.scenario + '</td><td class="muted">' + r.owner + '</td><td class="muted">' + r.dur + "</td>" +
+        "<td>" + sparkline(r.cpu, 56, 14) + " " + sparkline(r.mem, 56, 14) + "</td>" +
+        '<td><div class="row-actions">' +
+        '<button class="btn" data-action="detail" data-run="' + r.id + '" type="button">详情</button>' +
+        '<button class="btn" data-action="retry" data-run="' + r.id + '" type="button"' + (canOp ? "" : " disabled") + (permTitle ? ' title="' + permTitle + '"' : "") + ">重试</button>" +
+        '<button class="btn" data-action="abort" data-run="' + r.id + '" type="button"' + (canOp ? "" : " disabled") + (permTitle ? ' title="' + permTitle + '"' : "") + ">中止</button>" +
+        "</div></td>";
+      tb.appendChild(tr);
+    });
+  }
+
+  function renderBatchBar() {
+    var selAll = Object.keys(selected).filter(function (id) { return selected[id]; });
+    var selFailed = selectedFailed();
+    $("batch-bar").classList.toggle("is-visible", selAll.length > 0);
+    $("sel-count").textContent = selAll.length;
+    $("sel-failed-count").textContent = selFailed.length;
+    var canBatch = ROLE === "operator" && selFailed.length > 0;
+    $("btn-batch-retry").disabled = !canBatch;
+    $("btn-batch-abort").disabled = !canBatch;
+    $("viewer-note").hidden = ROLE !== "viewer";
+    if (ROLE === "viewer") { $("viewer-note").hidden = false; }
+  }
+
+  function clusterCauses(list) {
+    var byCause = {};
+    list.forEach(function (r) { byCause[r.cause] = (byCause[r.cause] || 0) + 1; });
+    var entries = Object.keys(byCause).map(function (c) { return { cause: c, n: byCause[c] }; })
+      .sort(function (a, b) { return b.n - a.n; });
+    var top = entries.slice(0, 3);
+    var rest = entries.slice(3).reduce(function (s, e) { return s + e.n; }, 0);
+    if (rest > 0) top.push({ cause: "其他", n: rest });
+    return top;
+  }
+
+  function currentScope() {
+    var el = document.querySelector('input[name="retry-scope"]:checked');
+    return el ? el.value : "fail-once";
+  }
+
+  function renderDialog() {
+    var scope = currentScope();
+    var failed = selectedFailed();
+    var scopeList = inScope(failed, scope);
+    var failOnceN = inScope(failed, "fail-once").length;
+    var allFailedN = failed.length;
+
+    if (summaryUnreachable) {
+      $("dlg-body").hidden = true;
+      $("dlg-error").hidden = false;
+      $("dlg-confirm").disabled = true;
+      $("dlg-confirm").textContent = "重试 " + 0 + " 条运行";
+      setState("retry-dialog-error");
+      return;
+    }
+    $("dlg-body").hidden = false;
+    $("dlg-error").hidden = true;
+
+    $("dlg-affected").textContent = scopeList.length;
+    $("hint-fail-once").textContent = failOnceN + " 条";
+    $("hint-multi-fail").textContent = allFailedN + " 条";
+
+    var ul = $("dlg-causes");
+    ul.innerHTML = "";
+    clusterCauses(scopeList).forEach(function (e) {
+      var li = document.createElement("li");
+      li.innerHTML = '<span class="cause-name">' + e.cause + '</span><span class="chip">' + e.n + "</span>";
+      ul.appendChild(li);
+    });
+
+    var empty = scopeList.length === 0;
+    $("empty-scope-note").classList.toggle("is-visible", empty);
+    $("dlg-confirm").disabled = empty;
+    $("dlg-confirm").textContent = "重试 " + scopeList.length + " 条运行";
+
+    if (empty) setState("retry-dialog-empty-scope");
+    else setState(scope === "multi-fail" ? "retry-dialog-scope-multifail" : "retry-dialog-open");
+  }
+
+  function openDialog() {
+    summaryUnreachable = SCENARIO === "summary-error";
+    var overlay = $("retry-overlay");
+    overlay.classList.add("is-open");
+    // 打开即回保守默认（spec L3/L4：默认勾选「仅失败一次的」），不残留上次会话的选择
+    var radios = document.querySelectorAll('input[name="retry-scope"]');
+    for (var ri = 0; ri < radios.length; ri++) radios[ri].checked = radios[ri].id === "scope-fail-once";
+    if (summaryUnreachable) {
+      renderDialog();
+      return;
+    }
+    // 加载态：骨架占位（不塌结构），数据到位后填充；确认按钮数据未到位时禁用
+    setState("retry-dialog-loading");
+    $("dlg-affected").textContent = "…";
+    $("dlg-affected").classList.add("skeleton");
+    var sk = document.createElement("li");
+    sk.className = "skeleton";
+    sk.textContent = "原因加载中";
+    $("dlg-causes").innerHTML = "";
+    $("dlg-causes").appendChild(sk.cloneNode(true));
+    $("dlg-causes").appendChild(sk.cloneNode(true));
+    $("dlg-confirm").disabled = true;
+    $("dlg-confirm").textContent = "重试 … 条运行";
+    var first = $("scope-fail-once");
+    first.focus();
+    window.setTimeout(function () {
+      $("dlg-affected").classList.remove("skeleton");
+      renderDialog();
+    }, 180);
+  }
+
+  function closeDialog() {
+    $("retry-overlay").classList.remove("is-open");
+    setState("queue-ready");
+  }
+
+  function notify(msg) { $("status-live").textContent = msg; }
+
+  // ---- 事件绑定 ----
+  $("run-rows").addEventListener("change", function (e) {
+    var cb = e.target.closest(".row-select");
+    if (!cb) return;
+    selected[cb.dataset.run] = cb.checked;
+    renderRows(); renderBatchBar();
+  });
+
+  $("run-rows").addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-action]");
+    if (!btn || btn.disabled) return;
+    var run = RUNS.find(function (r) { return r.id === btn.dataset.run; });
+    if (btn.dataset.action === "retry") {
+      run.state = "queued";
+      renderCounts(); renderRows(); renderSide();
+      notify("已重试运行 " + run.id);
+    } else if (btn.dataset.action === "abort") {
+      if (window.confirm("中止运行 " + run.id + "？")) {
+        run.state = "aborted";
+        renderCounts(); renderRows(); renderSide();
+        notify("已中止运行 " + run.id);
+      }
+    } else {
+      notify("详情（Drawer）演示面：运行 " + run.id);
+    }
+  });
+
+  $("time-window").addEventListener("change", function () { renderRows(); });
+
+  $("btn-batch-retry").addEventListener("click", openDialog);
+  $("btn-batch-abort").addEventListener("click", function () {
+    if (window.confirm("批量中止选中的运行中任务？")) { notify("批量中止演示面"); }
+  });
+
+  $("dlg-cancel").addEventListener("click", closeDialog);
+  $("retry-overlay").addEventListener("click", function (e) {
+    if (e.target === $("retry-overlay")) closeDialog();   // 遮罩点击 = 取消，绝不执行
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && $("retry-overlay").classList.contains("is-open")) closeDialog();
+  });
+
+  document.querySelectorAll('input[name="retry-scope"]').forEach(function (radio) {
+    radio.addEventListener("change", renderDialog);
+  });
+
+  $("btn-reload-summary").addEventListener("click", function () {
+    summaryUnreachable = false;
+    renderDialog();
+  });
+
+  $("dlg-confirm").addEventListener("click", function () {
+    var btn = $("dlg-confirm");
+    if (btn.disabled) return;
+    btn.classList.add("is-loading");
+    btn.textContent = "执行中…";
+    var scopeList = inScope(selectedFailed(), currentScope());
+    // 模拟提交延迟后置 queued（transform/opacity 之外无动画）
+    window.setTimeout(function () {
+      scopeList.forEach(function (r) { r.state = "queued"; });
+      selected = {};                       // 执行后清空选中（假设 retry.execute_semantics）
+      btn.classList.remove("is-loading");
+      closeDialog();
+      renderCounts(); renderRows(); renderSide(); renderBatchBar();
+      setState("queue-post-confirm");
+      notify("已重试 " + scopeList.length + " 条失败运行");
+    }, 200);
+  });
+
+  $("empty-cta").addEventListener("click", function () { notify("跳转创建场景（演示面）"); });
+
+  // ---- 初始渲染 ----
+  renderCounts(); renderRows(); renderSide(); renderBatchBar();
+})();
+</script>
+</body>
+</html>

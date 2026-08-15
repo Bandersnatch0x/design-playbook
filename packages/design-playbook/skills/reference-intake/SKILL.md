@@ -47,6 +47,8 @@ Write `manifest.json` under `.scratch/<run>/reference/` using the shape in [`ref
 
 Read the sources. Fill **every required heading** from [`references/contract-template.md`](references/contract-template.md) (SSOT for section names and bullet prompts). Do not invent alternate headings.
 
+The host model may have no vision (text-only input): image sources are registered by **path and metadata only** (locator, `sha256`, `captured_at` in `manifest.json`) — reading the image is never a required intake action. The observed/inferred split then rides the text the session can actually cite (user-provided notes, URL page text, file facts); visual points nobody can verify stay `inferred` or move to Unresolved questions. A no-vision host runs this skill end to end without degrading the protocol.
+
 Mark every claim as **observed** or **inferred**. Unlabeled claims are invalid; rewrite them before emit.
 
 **Done when:**

@@ -59,7 +59,7 @@ stale: <reason + ts>             # optional: baseline drift marked this entry
 stale_review: {exit: keep, note: <review line + new sha256>}  # keep | revise | escalate
 ```
 
-Rules: ids are zero-padded `DD-####` and never repeat inside a run; flow-map values must not contain ASCII commas or braces (use full-width punctuation in prose); a `- {…}` item may fold onto following lines while its braces stay unbalanced (the schema above shows the fold — single-line items are canonical); comparison cells carry facts and statements with source references — **numeric scores, weighted sums, and ranking points are forbidden**; incommensurable axes get an explicit trade-off line instead.
+Rules: ids are zero-padded `DD-####` and never repeat inside a run; flow-map values must not contain ASCII commas or braces (use full-width punctuation in prose); a `- {…}` item may fold onto following lines while its braces stay unbalanced, breaking at a comma — the folded line must end with a comma before the continuation (the schema above shows the fold — single-line items are canonical; a comma-less break or an unterminated fold is a G10 structural error, never a silent merge); comparison cells carry facts and statements with source references — **numeric scores, weighted sums, and ranking points are forbidden**; incommensurable axes get an explicit trade-off line instead.
 
 ## Candidates and providers
 
