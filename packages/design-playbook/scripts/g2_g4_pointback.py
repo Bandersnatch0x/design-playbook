@@ -317,7 +317,7 @@ def check_pointback(
         severity = pb_finding["severity"][0] if pb_finding["severity"] else ""
         if severity and severity_axis(severity) is None:
             legacy_note = (
-                " (legacy alias removed in v0.19.0)" 
+                " (legacy alias removed in v0.20.0)" 
                 if severity.strip().casefold() in SEVERITY_LEGACY else ""
             )
             errs.append(finding(

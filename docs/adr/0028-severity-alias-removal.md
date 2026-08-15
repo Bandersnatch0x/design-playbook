@@ -4,7 +4,7 @@
 
 Accepted (vNext S5, issue #40, 2026-08-14). **Breaking change** — release
 note must carry the breaking annotation when the vNext slice line ships
-(S5 maps to v0.19.0 per vnext-prototype Q3=A).
+(S5 was planned as v0.19.0 per vnext-prototype Q3=A; the six slices ultimately shipped together, so the removal is effective from the unified v0.20.0 release).
 
 ## Context
 
