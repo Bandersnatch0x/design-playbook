@@ -24,6 +24,7 @@ if str(PKG) not in sys.path:
 
 from design_playbook.scripts.dd_entries import (  # noqa: E402
     collect_e_signals,
+    dd_refs_in_pointback,
     parse_dd_entries,
 )
 from design_playbook.scripts.g10_design_decisions import check_g10  # noqa: E402
@@ -189,6 +190,45 @@ class DDEntryParseTests(unittest.TestCase):
         self.assertEqual(parse_dd_entries(text), [])
         self.assertEqual(check_g10(text), [])
 
+    def test_folded_flow_map_items_parse_like_single_line(self) -> None:
+        # Issue #44: a `- {…}` item may fold onto following lines while its
+        # braces stay unbalanced (the shape the decisions.md schema example
+        # shows). The folded parse must equal the single-line parse.
+        single = parse_dd_entries(_report(C_BLOCK))[0]
+        folded_text = C_BLOCK.replace(
+            "  - {id: B, source: agent, created_at: 2026-08-14T10:20:00Z,"
+            " fidelity: description, summary: fixed name plus stamp,"
+            " deviations: none, assets: []}\n",
+            "  - {id: B, source: agent, created_at: 2026-08-14T10:20:00Z,\n"
+            "     fidelity: description, summary: fixed name plus stamp,\n"
+            "     deviations: none, assets: []}\n",
+        ).replace(
+            "    - {axis: archive lookup (l1.target_user), A: supports,"
+            " B: hurts}\n",
+            "    - {axis: archive lookup (l1.target_user), A: supports,\n"
+            "       B: hurts}\n",
+        ).replace(
+            "    - {candidate: B, reason: needs rename first}\n",
+            "    - {candidate: B,\n       reason: needs rename first}\n",
+        )
+        folded = parse_dd_entries(_report(folded_text))[0]
+        self.assertEqual(folded.candidates, single.candidates)
+        self.assertEqual(folded.comparison_axes, single.comparison_axes)
+        self.assertEqual(folded.rejected, single.rejected)
+        self.assertEqual(_rules(_report(folded_text)), set())
+
+    def test_unterminated_flow_map_fold_fails_closed(self) -> None:
+        # Dropping the closing brace leaves the fold unterminated: the item
+        # swallows the rest of the block and the shape checks reject it
+        # (never a silent partial parse).
+        broken = C_BLOCK.replace(
+            "summary: fixed name plus stamp, deviations: none, assets: []}\n",
+            "summary: fixed name plus stamp, deviations: none, assets: []\n",
+        )
+        rules = _rules(_report(broken))
+        self.assertIn("G10.bad_candidate", rules)
+        self.assertIn("G10.missing_comparison", rules)
+
 
 class TierSignalTests(unittest.TestCase):
     def test_t3_and_reentry_signals_are_machine_judgeable(self) -> None:
@@ -212,6 +252,24 @@ class TierSignalTests(unittest.TestCase):
             parse_dd_entries(text), report_text=text)
         self.assertTrue(signals.baseline_changed)
         self.assertIn("baseline-conflict", signals.fired)
+
+    def test_baseline_change_none_tolerates_trailing_note(self) -> None:
+        # Issue #44: commentary after the none value token never turns
+        # none into a declared change; lookalike values stay fail-closed.
+        for note in ("none", "none — no change this run",
+                     "none（本 run 无变更）"):
+            text = _report(_e_block()).replace(
+                "baseline-changes: none", f"baseline-changes: {note}")
+            signals = collect_e_signals(
+                parse_dd_entries(text), report_text=text)
+            self.assertFalse(signals.baseline_changed, note)
+            self.assertNotIn("baseline-conflict", signals.fired)
+        for value in ("enable status region", "nonempty", "none-such"):
+            text = _report(_e_block()).replace(
+                "baseline-changes: none", f"baseline-changes: {value}")
+            self.assertTrue(collect_e_signals(
+                parse_dd_entries(text), report_text=text).baseline_changed,
+                value)
 
     def test_declared_deviations_raise_identity_signal(self) -> None:
         block = _e_block().replace("deviations: none, assets: []}",
@@ -302,6 +360,44 @@ class TierObligationTests(unittest.TestCase):
     def test_bad_heading_id_surface(self) -> None:
         text = _report(R_BLOCK) + "\n## DD-1 — broken\n\n```yaml\nid: DD-1\n```\n"
         self.assertIn("G10.bad_id", _rules(text))
+
+
+class PositiveDDFieldTests(unittest.TestCase):
+    """Issue #44: ``dd:`` is the R3 challenge channel, never an
+    observation link — positive (S0) findings must not carry it."""
+
+    def _pointback(self, severity: str) -> str:
+        return (
+            "## Positive findings\n\n```text\n"
+            "issue:    follows the bound baseline\n"
+            "source:   design\n"
+            "fix:      none — observation link only\n"
+            f"severity: {severity}\n"
+            "dd:       DD-0001\n"
+            "```\n"
+        )
+
+    def test_dd_on_s0_is_a_structural_error(self) -> None:
+        rules = _rules(_report(R_BLOCK), pointback_text=self._pointback("S0"))
+        self.assertIn("G10.dd_on_positive_finding", rules)
+        # the misread challenge face no longer fires alongside the error
+        self.assertNotIn("G10.dd_challenge_unresolved", rules)
+
+    def test_dd_on_non_positive_still_reads_as_challenge(self) -> None:
+        rules = _rules(_report(R_BLOCK), pointback_text=self._pointback("S2"))
+        self.assertNotIn("G10.dd_on_positive_finding", rules)
+        self.assertIn("G10.dd_challenge_unresolved", rules)
+
+    def test_positive_dd_never_fires_reentry_signal(self) -> None:
+        signals = collect_e_signals(
+            parse_dd_entries(_report(R_BLOCK)),
+            pointback_text=self._pointback("S0"),
+            report_text=_report(R_BLOCK),
+        )
+        self.assertEqual(signals.dd_targets, ())
+        self.assertNotIn("re-entry", signals.fired)
+        self.assertEqual(
+            dd_refs_in_pointback(self._pointback("S2")), ("DD-0001",))
 
 
 class SupersedesTests(unittest.TestCase):

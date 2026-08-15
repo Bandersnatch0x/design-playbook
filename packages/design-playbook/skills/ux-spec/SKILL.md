@@ -61,6 +61,8 @@ Use the headings in [`references/spec-template.md`](references/spec-template.md)
 
 Evidence is criterion-shaped: visible states require rendered inspection at named target viewports; behavior requires an interaction trace or automated check; implementation health uses the relevant tests, type/lint checks, or affected build when available. Planning-only work names the future proof instead of claiming it exists. Where the proof is a runtime state, name the **capture seed** — the state to capture (e.g. "error-state screenshot") and the capture type. This is the seed the `observe*` step derives a capture plan from (`Given`/`When` → state+actions, `Then` → required); do not write selectors, URLs, or actions here — those are derived later. Capture contract v1 requires `schemaVersion: 1` and an explicit viewport at observe time (ADR-0018).
 
+The host model may have no vision (text-only input): render artifacts are bound by **path reference** (manifest + ledger), never by viewing them. Machine assertions for review use the **text face** — HTML/CSS source, `a11y tree` text, interaction-trace JSON. A no-vision run follows this mode end to end; it is not a protocol downgrade, so do not write L6 proof that requires the composing model to look at a screenshot.
+
 **Done when:** L5 is not a single word (“loading”); every L6 item is a top-level list item that uses `Given -> When -> Then` in that order, can be ticked pass/fail without taste debate, and says what evidence will prove it (naming the capture seed where the proof is a runtime state); every L6 item references a reachable path row; L6 items stay user-risk units rather than one row per evidence type.
 
 ### 4. Emit

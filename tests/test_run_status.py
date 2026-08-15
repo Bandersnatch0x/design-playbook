@@ -443,5 +443,61 @@ class RunStatusVnextTests(unittest.TestCase):
             self.assertIsNone(payload["shaping"])
 
 
+class RunStatusFillStageTests(unittest.TestCase):
+    """Issue #44: fill surfaces outside the run root are judged on the
+    ``fill:`` paths plan.md registers (stage-registry markers unchanged)."""
+
+    def test_plan_declared_run_root_path_marks_fill(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-fill"
+            run_root.mkdir()
+            (run_root / "spec.md").write_text("# L1\n", encoding="utf-8")
+            (run_root / "plan.md").write_text(
+                "# plan\n\nfill: surface.html\n", encoding="utf-8")
+
+            # declared but absent: the fill stage stays unchecked
+            result = _run(str(run_root), "--json")
+            self.assertEqual(result.returncode, 0,
+                             result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            by_key = {s["key"]: s for s in payload["stages"]}
+            self.assertFalse(by_key["fill"]["present"])
+
+            (run_root / "surface.html").write_text(
+                "<html></html>", encoding="utf-8")
+            result = _run(str(run_root), "--json")
+            self.assertEqual(result.returncode, 0,
+                             result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            by_key = {s["key"]: s for s in payload["stages"]}
+            self.assertTrue(by_key["fill"]["present"])
+            self.assertIn("surface.html", by_key["fill"]["evidence"])
+            self.assertIn("craft-guard", payload["next"])
+
+    def test_plan_declared_host_path_marks_fill(self) -> None:
+        # Product-side fill: the surface lives in the host tree, not under
+        # the run root; the declared path resolves against the run root
+        # first, then the orchestrating cwd (the host project root).
+        with tempfile.TemporaryDirectory() as tmp:
+            host = Path(tmp) / "host"
+            (host / "src").mkdir(parents=True)
+            (host / "src" / "panel.html").write_text(
+                "<html></html>", encoding="utf-8")
+            run_root = host / ".scratch" / "run-fill"
+            run_root.mkdir(parents=True)
+            (run_root / "spec.md").write_text("# L1\n", encoding="utf-8")
+            (run_root / "plan.md").write_text(
+                "# plan\n\nfill: src/panel.html\n", encoding="utf-8")
+
+            result = _run(str(run_root), "--json", cwd=host)
+
+            self.assertEqual(result.returncode, 0,
+                             result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            by_key = {s["key"]: s for s in payload["stages"]}
+            self.assertTrue(by_key["fill"]["present"])
+            self.assertIn("src/panel.html", by_key["fill"]["evidence"])
+
+
 if __name__ == "__main__":
     unittest.main()

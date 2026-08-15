@@ -51,6 +51,8 @@ For implemented UI, evaluate the applicability predicates of the registry entrie
 
 `Applicability` is the entry's three-state predicate outcome: `applicable`, `not-applicable`, or `blocked`. **not-applicable and blocked both require an observable reason** (blank is invalid — never a silent skip). `Result` is `clear|hit` only for applicable rows, `-` otherwise; `Positive fix` is required on hit rows. Missing rendered or source proof is `blocked`, not a silent clear. Unknown registry IDs fail at this stage. Audit rows are advisory: record evidence, exception check, and positive fix; leave declaration source, severity, and verdict to `ui-evaluator`.
 
+The host model may have no vision (text-only input): renders stay **path-bound** (the `Rendered evidence` column cites the artifact path; never read the image), and assertions run on the **text face** — HTML/CSS source, `a11y tree` text, interaction-trace JSON. A no-vision run evaluates the same registry protocol this way without degrading it; genuinely missing rendered proof still records `blocked` honestly.
+
 | Push toward | Instead of default sludge |
 | --- | --- |
 | Accent on key noun + primary CTA | Purple–blue gradient wallpaper |

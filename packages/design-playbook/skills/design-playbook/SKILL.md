@@ -146,6 +146,8 @@ Implement structure from the decision report + `spec` + confirmed project `DESIG
 
 If a reused host component conflicts with spec L5, record the conflict and recirculate to `spec` via the authoritative map in `ui-evaluator` before choosing a minimal patch or explicit acceptance.
 
+**Fill artifact location:** the Fill surface may live in the host tree (product side) instead of the run root. When it does, register the path(s) in `plan.md` as `fill: <path>` field lines (one per line; run-root-relative or host-project-relative) — `run-status` judges the fill stage on those declared paths in addition to `filled-ui.*` in the run root. An out-of-run Fill surface with no registered path leaves the fill stage unchecked.
+
 Load on demand (only if the fill needs them):
 
 - domain / risk / sensitive fields → `ui-picker/references/domain.md`

@@ -43,13 +43,22 @@ stay protocol-side. Gate policy lives in ``g10_design_decisions.py``.
 
 Flow-map values inside ``- {k: v, ...}`` items may not contain ASCII commas
 or braces (use full-width punctuation in prose values); this is the declared
-shape, same contract style as the seven-column audit rows.
+shape, same contract style as the seven-column audit rows. Items may fold
+across lines (issue #44): a ``- {`` item that does not close its brace on
+the marker line continues on the following lines until the braces balance —
+single-line items parse exactly as before.
+
+``dd:`` is the R3 challenge channel, never an observation link: values
+carried by positive (S0) findings are excluded from the challenge face and
+reported as structural errors by G10 (issue #44).
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 from typing import Any
+
+from design_playbook.scripts.g2_g4_pointback import _findings
 
 # --- closed enums (design-prototype 4.1 machine face) -----------------------
 
@@ -208,6 +217,39 @@ def _flow_map(item: str) -> dict[str, str]:
     return {"value": _scalar(item)}
 
 
+def _join_folded_flow_maps(lines: list[str]) -> list[str]:
+    """Join folded ``- {...}`` flow-map items onto their marker line.
+
+    Issue #44: an item that opens a ``{`` without closing it on the marker
+    line continues on the following lines (the fold the entry schema
+    example already shows) until its braces balance; continuation text is
+    appended to the marker line so the rest of the parser sees one logical
+    line. Values never contain ASCII commas or braces (declared shape), so
+    brace balance is an unambiguous fold terminator. An unterminated fold
+    stays joined and fails the downstream shape checks (fail-closed).
+    """
+    out: list[str] = []
+    fold: str | None = None
+    for raw_line in lines:
+        stripped = raw_line.strip()
+        if fold is not None:
+            fold = fold.rstrip() + " " + stripped
+            if fold.count("{") <= fold.count("}"):
+                out.append(fold)
+                fold = None
+            continue
+        if (
+            stripped.startswith("- ")
+            and stripped.count("{") > stripped.count("}")
+        ):
+            fold = raw_line.rstrip()
+            continue
+        out.append(raw_line)
+    if fold is not None:
+        out.append(fold)
+    return out
+
+
 def _entry_blocks(text: str) -> list[tuple[str, str]]:
     """Split the report into (id, body) blocks by DD entry heading."""
     matches = list(DD_HEADING.finditer(text))
@@ -231,7 +273,7 @@ def _parse_entry(entry_id: str, body: str) -> DDEntry:
     current_section: str | None = None
     current_list_key: str | None = None
 
-    for raw_line in block.splitlines():
+    for raw_line in _join_folded_flow_maps(block.splitlines()):
         stripped = raw_line.strip()
         if not stripped or stripped.startswith("```"):
             continue
@@ -319,20 +361,73 @@ def parse_dd_entries(text: str) -> list[DDEntry]:
     ]
 
 
+# ``none`` value token for the verbatim top block: a trailing same-line
+# note after the token is tolerated commentary, never a declared change
+# (issue #44). The token must end at whitespace or punctuation so values
+# like ``nonempty`` stay fail-closed non-none.
+NONE_VALUE = re.compile(r"none(?=$|[^0-9A-Za-z-])", re.I)
+
+
 def top_block_baseline_change(text: str) -> bool:
-    """True when the verbatim top block declares ``baseline-changes != none``."""
+    """True when the verbatim top block declares ``baseline-changes != none``.
+
+    ``none`` may carry a trailing same-line note (anything after the value
+    token); notes never turn ``none`` into a declared change. Substantive
+    commentary belongs on its own line.
+    """
     match = re.search(r"^baseline-changes:[ \t]*(\S.*)$", text, re.M)
     if match is None:
         return False
-    return match.group(1).strip().casefold() != "none"
+    return NONE_VALUE.match(match.group(1).strip()) is None
+
+
+def is_positive_finding(parsed: dict[str, list[str]]) -> bool:
+    """True when a parsed point-back finding sits on the S0 (info) axis."""
+    values = parsed.get("severity") or [""]
+    return values[0].strip().casefold() == "s0"
+
+
+def positive_dd_refs(
+        text: str) -> tuple[tuple[int, tuple[str, ...]], ...]:
+    """``(finding index, dd refs)`` for every positive finding carrying ``dd:``.
+
+    Issue #44: ``dd:`` is the R3 challenge channel and never rides a
+    positive observation. These are structural errors G10 reports
+    (fail-closed) instead of silently reading them as challenges.
+    """
+    out: list[tuple[int, tuple[str, ...]]] = []
+    for index, parsed in enumerate(_findings(text), 1):
+        refs = tuple(
+            value.strip().rstrip(",") for value in parsed.get("dd", [])
+            if value.strip())
+        if refs and is_positive_finding(parsed):
+            out.append((index, refs))
+    return tuple(out)
+
+
+def _positive_dd_block(block: str) -> bool:
+    return any(
+        parsed.get("dd") and is_positive_finding(parsed)
+        for parsed in _findings(block)
+    )
 
 
 def dd_refs_in_pointback(text: str) -> tuple[str, ...]:
-    """Collect ``dd:`` targets from finding field lines / invalidated rows."""
+    """Collect ``dd:`` challenge targets from finding field lines.
+
+    Issue #44: ``dd:`` values carried by positive (S0) findings record
+    observation links, not challenges — their paragraphs are skipped so a
+    positive observation can never fire a false re-entry / E3 signal.
+    Paragraphs that are not findings (e.g. a bare ``dd:`` line) keep the
+    legacy raw face.
+    """
     targets: list[str] = []
-    for match in re.finditer(r"^dd:[ \t]*(\S+)", text, re.I | re.M):
-        ref = match.group(1).strip().rstrip(",")
-        targets.append(ref)
+    for block in re.split(r"\n\s*\n", text):
+        if _positive_dd_block(block):
+            continue
+        for match in re.finditer(r"^dd:[ \t]*(\S+)", block, re.I | re.M):
+            ref = match.group(1).strip().rstrip(",")
+            targets.append(ref)
     return tuple(targets)
 
 
