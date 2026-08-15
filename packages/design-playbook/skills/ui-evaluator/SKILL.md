@@ -81,7 +81,7 @@ disposition: blocking|advisory|info   (severity x fact/judgment class x confiden
 evidence:    <artifact path or source ref — may repeat>
 assumes:     <assumed contract field paths the finding depends on, if any>
 rule:        <registry ID@version refs, when a registry rule is involved>
-dd:          <decision-report entry ref, when a design decision is involved>
+dd:          <decision-report entry ref, when a design decision is challenged — never on positive (S0) findings>
 ```
 
 Severity and disposition are **two axes**: a judgment-class S3 (subjective / semantic / representativeness) is never directly blocking — list it in the Limitations "pending user adjudication" sub-block with the three options (change declaration / accept risk / promote to the rule-registry queue). Only fact-class S3 (reproducible, evidence-bound) takes `disposition: blocking` and enters G4 closure.
