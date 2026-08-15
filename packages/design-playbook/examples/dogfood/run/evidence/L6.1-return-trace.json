@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "kind": "interaction-trace",
+  "state": "final (r2 resample after Re-Fill)",
+  "steps": [
+    {"action": "switch away from run-queue while sim-0042 running", "at": "2026-08-14T10:29:10Z"},
+    {"action": "return to run-queue", "at": "2026-08-14T10:29:41Z", "observed": "console feed restored: sim-0042 running 74%; completed entries carry result entry points"},
+    {"action": "read feed state aloud drill", "at": "2026-08-14T10:30:02Z", "observed": "state readable without re-navigating (status continuation)"}
+  ],
+  "note": "r2 resample of the invalidated set (L6.1) after DD-0002 supersedes revision"
+}

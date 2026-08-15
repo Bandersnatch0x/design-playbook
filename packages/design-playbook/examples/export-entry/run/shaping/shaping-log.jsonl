@@ -1,0 +1,26 @@
+{"event": "asked", "question_id": "Q1", "batch": 1, "tier": "T1", "text": "这次导出要帮谁完成什么任务？", "impact": "l1.goal / l1.target_user / 全部 L6", "ts": "2026-08-14T09:31:00Z"}
+{"event": "asked", "question_id": "Q2", "batch": 1, "tier": "T1", "text": "导出「完成」对用户意味着什么——拿到文件即算，还是含列选择/时间范围？", "impact": "l6.c1 / l6.c2 / l6.c3", "ts": "2026-08-14T09:31:00Z"}
+{"event": "asked", "question_id": "Q3", "batch": 1, "tier": "T1", "text": "定时/周期导出、全量历史导出，是否明确不做？", "impact": "l1.non_goals / l1.boundaries", "ts": "2026-08-14T09:31:00Z"}
+{"event": "answered", "question_id": "Q1", "answer": "运营同学每周导上周数据做周报", "ts": "2026-08-14T09:33:00Z"}
+{"event": "answered", "question_id": "Q2", "answer": "CSV 就行，拿到文件且行数与选中一致即完成；超上限要有提示", "ts": "2026-08-14T09:33:00Z"}
+{"event": "answered", "question_id": "Q3", "answer": "别做定时任务；全量历史不做", "ts": "2026-08-14T09:33:00Z"}
+{"event": "assumption_staged", "field": "l1.scenes", "tier": "T2", "reason": "首场景=运营周报（回答中未逐字确认场景清单）", "risk": "场景清单过窄", "fallback": "单场景起步，后续 run 增补", "ts": "2026-08-14T09:34:00Z"}
+{"event": "assumption_staged", "field": "export.row_cap", "tier": "T1", "reason": "规模上限未答（队列满，转显式风险确认）", "risk": "上限过低阻断真实导出或过高拖垮同步窗口", "fallback": "50000 行", "ts": "2026-08-14T09:34:00Z"}
+{"event": "assumption_staged", "field": "export.sync_window", "tier": "T2", "reason": "同步导出限时未逐字确认", "risk": "超时体验未定义", "fallback": "60 秒", "ts": "2026-08-14T09:34:00Z"}
+{"event": "assumption_staged", "field": "export.column_scope", "tier": "T4", "reason": "文件命名与列范围为局部实现选择", "risk": "隐藏列误出", "fallback": "当前视图列（不含隐藏列）", "ts": "2026-08-14T09:34:00Z"}
+{"event": "confirm_presented", "batch": "CP-A", "kind": "intent", "items": ["l1.goal", "l1.target_user", "l6.c1-c3 表述", "l1.non_goals"], "ts": "2026-08-14T09:40:00Z"}
+{"event": "confirm_presented", "batch": "CP-B", "kind": "structural", "items": ["入口 IA 两案：A 全局工具栏 / B 主列表行内批量"], "ts": "2026-08-14T09:40:00Z"}
+{"event": "confirm_presented", "batch": "CP-C", "kind": "assumption", "items": ["export.row_cap", "export.sync_window", "export.column_scope", "l1.scenes"], "ts": "2026-08-14T09:40:00Z"}
+{"event": "item_confirmed", "batch": "CP-A", "field": "l1.goal", "ts": "2026-08-14T09:52:00Z"}
+{"event": "item_confirmed", "batch": "CP-A", "field": "l1.target_user", "ts": "2026-08-14T09:52:00Z"}
+{"event": "item_confirmed", "batch": "CP-A", "field": "l1.non_goals", "ts": "2026-08-14T09:52:00Z"}
+{"event": "item_confirmed", "batch": "CP-A", "field": "l6.c1", "ts": "2026-08-14T09:53:00Z"}
+{"event": "item_confirmed", "batch": "CP-A", "field": "l6.c2", "ts": "2026-08-14T09:53:00Z"}
+{"event": "item_confirmed", "batch": "CP-A", "field": "l6.c3", "ts": "2026-08-14T09:53:00Z"}
+{"event": "item_confirmed", "batch": "CP-B", "field": "l2.entry_choice", "selection": "B（主列表行内批量导出，范围收敛）", "ts": "2026-08-14T09:55:00Z"}
+{"event": "item_revised", "batch": "CP-C", "field": "export.row_cap", "revision": "50000 改写为 200000", "ts": "2026-08-14T09:57:00Z"}
+{"event": "item_confirmed", "batch": "CP-C", "field": "export.sync_window", "revision_confirmed": "30 秒（含于 l6.c1 表述）", "ts": "2026-08-14T09:58:00Z"}
+{"event": "item_confirmed", "batch": "CP-C", "field": "export.column_scope", "revision_confirmed": "当前视图列含隐藏列开关", "ts": "2026-08-14T09:58:00Z"}
+{"event": "item_confirmed", "batch": "CP-C", "field": "l1.scenes", "ts": "2026-08-14T09:58:00Z"}
+{"event": "projected", "ts": "2026-08-14T10:05:00Z", "order": ["promote_fields", "append_decision", "apply_decisions", "spec", "bind_first"], "decisions": ["D-0001", "D-0002", "D-0003", "D-0004", "D-0005", "D-0006", "D-0007"], "assumed": ["l1.scenes", "export.row_cap", "export.sync_window", "export.column_scope"], "mappings": [{"decision": "D-0001", "field": "l1.goal", "spec_section": "L1"}, {"decision": "D-0002", "field": "l1.target_user", "spec_section": "L1"}, {"decision": "D-0003", "field": "l1.non_goals", "spec_section": "L1"}, {"decision": "D-0004", "field": "l6.c1", "spec_section": "L6"}, {"decision": "D-0005", "field": "l6.c2", "spec_section": "L6"}, {"decision": "D-0006", "field": "l6.c3", "spec_section": "L6"}, {"decision": "D-0007", "field": "l2.entry_choice", "spec_section": "L2"}]}
+{"event": "archived", "ts": "2026-08-14T10:12:00Z"}

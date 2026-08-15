@@ -8,7 +8,9 @@ Gates the run-level controls that the skills also declare in prose:
   G3 verdict earned      - one explicit verdict; Pass requires all evidence to
                            pass and every blocking finding to have a closure
   G4 recirculation bound - closure coverage prevents blockers being dropped;
-                           the two-cycle stop policy remains agent-enforced
+                           the two-cycle stop is machine-counted (vNext S4:
+                           an unclosed blocking finding with rounds >= 2
+                           must narrate close_reason: escalated-stop)
   G5 preview confirm     - conditional: if preview occurred, require a
                            confirmed record whose report_ref matches the
                            current decision report (when provided)
@@ -16,6 +18,51 @@ Gates the run-level controls that the skills also declare in prose:
                            `evidence/` artifact, require the artifact to exist
                            and a manifest entry to bind it to the matching
                            L6.<n> (multi-entry: latest wins)
+  G9 shaping exit        - conditional: when a shaping session exists
+                           (shaping-log.jsonl), events must use the closed
+                           enum, a projected mapping record must exist, the
+                           derived queue.json must match re-derivation, and
+                           (with contract paths) open=0 + assumed all acked
+  G11 coverage statement - conditional: vNext six-block reports must carry
+                           a Coverage statement with the exhaustive-review
+                           completion status and the explicit unreviewed
+                           list (existence only; legacy reports unaffected).
+                           S3: when the statement declares the five-state x
+                           page sampling matrix, every spec-declared cell
+                           needs sampling evidence or an explicit
+                           unreviewed entry with a reason (gap check).
+                           S6: the effective tier P3 makes the matrix block
+                           mandatory (full-profile sampling obligation)
+  G10 design decisions   - conditional: when the decision report carries DD
+                           entry blocks (appended after the verbatim top
+                           block), entries must satisfy the design-decision
+                           machine face — tier/status enums, tier recording
+                           obligations, supersedes existence + acyclicity,
+                           preview decision_id linkage, R3 dd: challenge
+                           resolution, and the stale three-exit review
+  G6 method semantics    - conditional (S3): manifest entries carrying the
+                           optional method-semantics keys must satisfy the
+                           nine-value method enum, observation/interpret-
+                           ation separation, and scope; human-subject
+                           evidence missing population+ethics is unusable
+                           and can never support a pass ledger row
+  G2 dimensions          - conditional (S3): interaction-track findings may
+                           annotate dimension/face/basis; subjective faces
+                           are judgment class — advisory only, judgment
+                           source declared, agent-judgment derives low
+  G8 run-level registry  - conditional (S3): a craft-guard.md in the run
+                           root is evaluated against the shared registry
+                           parser; P2/P3 demand one audit row per advisory
+                           entry (full predicate evaluation), P1 allows the
+                           touch-related subset
+  G12 tier boundary      - conditional (S4): when plan.md carries a
+                           run-profile block, the actual declaration touch
+                           (contract diff vs the bind snapshot, finding
+                           routes, E-tier DD entries, blocking count, spec
+                           L6 growth) must fit the declared tier's allowed
+                           face; violations emit E1-E5 escalation signals
+                           and require a recorded run-profile upgrade
+                           (escalate-and-rewalk, never exemption)
 
 Reads plain Markdown, so it is host-neutral: it accepts artifacts produced by
 any agent (Claude Code, Codex) that follow the declared shape.
@@ -32,7 +79,8 @@ or artifact I/O errors. JSON mode projects the same findings as a list.
 Strict quality mode (opt-in):
   --require-preview   fail when preview did not occur (G5 must fire)
   --require-evidence  fail when no evidence/ binding is present (G6 must fire)
-  --strict            shorthand for both require flags
+  --require-coverage  fail when the report lacks a Coverage statement (G11)
+  --strict            shorthand for all require flags
 """
 import argparse
 import sys
@@ -80,6 +128,51 @@ try:
 except ImportError:  # pragma: no cover - optional until package scripts co-locate
     check_g7 = None  # type: ignore[assignment]
 
+# G9 shaping-exit gate (vNext S1, decision Q8=A): fires only when a shaping
+# session exists — either via --shaping-dir or discovered under --run-root.
+from design_playbook.scripts.g9_shaping import check_g9  # noqa: E402
+from design_playbook.scripts.g11_coverage import check_coverage  # noqa: E402
+from design_playbook.scripts.shaping_log import (  # noqa: E402
+    SHAPING_LOG,
+    ShapingLogError,
+    parse_shaping_log,
+)
+
+# G10 design-decision gate (vNext S2): fires only when the decision report
+# carries DD entry blocks; discovery mirrors G9 (--decision-report explicit
+# or <run-root>/decision-report.md).
+from design_playbook.scripts.dd_entries import DD_HEADING  # noqa: E402
+from design_playbook.scripts.g10_design_decisions import check_g10  # noqa: E402
+from design_playbook.scripts.repair_rounds import check_rounds  # noqa: E402
+from design_playbook.scripts.run_profile import parse_run_profile  # noqa: E402
+
+# vNext S3 gates: method-semantics keys (G6-adjacent), interaction-track
+# dimension annotations (G2-adjacent), sampling-matrix gaps (G11), and the
+# run-level registry coverage (G8, sharing the rules_registry parser).
+from design_playbook.scripts.g8_run_registry import (  # noqa: E402
+    check_g8_run,
+    load_registry,
+)
+from design_playbook.scripts.g11_coverage import check_sampling_matrix  # noqa: E402
+from design_playbook.scripts.interaction_dimensions import (  # noqa: E402
+    check_dimensions,
+)
+from design_playbook.scripts.method_semantics import check_method_semantics  # noqa: E402
+
+# vNext S4 gates: G12 tier boundary (contract diff vs the declared face,
+# E1-E6 escalation accounting) over the run-profile block and the G7 bind
+# snapshot; runs without a run-profile block are not re-checked.
+from design_playbook.scripts.dd_entries import parse_dd_entries  # noqa: E402
+from design_playbook.scripts.escalation_signals import effective_tier  # noqa: E402
+from design_playbook.scripts.g12_tier_boundary import (  # noqa: E402
+    CRITERION_PATH,
+    bind_fields,
+    check_g12,
+    contract_touch,
+    load_bind_snapshot,
+    load_effective_contract,
+)
+
 
 def run(
         spec_path: str,
@@ -92,6 +185,8 @@ def run(
         require_evidence: bool = False,
         contract_project: str | None = None,
         contract_run: str | None = None,
+        shaping_dir: str | None = None,
+        require_coverage: bool = False,
         run_facts: RunFacts | None = None) -> tuple[list[Finding], list[Finding]]:
     """Return ``(errors, warnings)``. Errors fail the run; warnings do not."""
     errs: list[Finding] = []
@@ -123,6 +218,24 @@ def run(
         pointback_text, len(_l6_items(spec_text)),
         ledger_facts=facts.ledger, verdict_facts=facts.verdict,
     )
+    # G4 rounds (vNext S4): the two-cycle stop is machine-counted — an
+    # unclosed blocking finding at rounds >= 2 must narrate escalated-stop.
+    # Fires only when the report carries round annotations or a close_reason
+    # (legacy reports without them stay silent).
+    errs += check_rounds(pointback_text, verdict_facts=facts.verdict)
+    # G11 (vNext S1): six-block reports must carry a Coverage statement with
+    # the exhaustive status + explicit unreviewed list (existence only).
+    errs += check_coverage(pointback_text, required=require_coverage)
+    # G11 sampling matrix (vNext S3, Q3=A): when the statement declares the
+    # five-state x page matrix, every spec-declared cell needs sampling
+    # evidence or an explicit unreviewed entry with a reason.
+    # vNext S6: the effective tier P3 makes the matrix block itself
+    # mandatory (loop-prototype 1.2 "sampling matrix fully executed").
+    errs += check_sampling_matrix(
+        pointback_text, spec_text, evidence_dir=ed, tier=_plan_tier(rr))
+    # G2 dimensions (vNext S3): dimension/face/basis annotations on findings
+    # — subjective faces are judgment class (advisory only, source declared).
+    errs += check_dimensions(pointback_text)
     preview_snapshot = facts.preview
     dr = Path(decision_report) if decision_report else None
     if require_preview and (
@@ -163,6 +276,19 @@ def run(
         pointback_text, len(_l6_items(spec_text)), ed, rr,
         observed_rows=observed_rows, entries=entries,
     )
+    # G6 method semantics (vNext S3): the optional five keys are validated
+    # where they live (the manifest); pass rows must not rest on unusable
+    # human-subject evidence. Old manifests without the keys stay silent.
+    method_rows = [
+        (values[0].split()[0], row.values("result")[0], row.artifact_token)
+        for row in facts.ledger.rows
+        if (values := row.values("criterion")) and values[0]
+        and row.values("result") and row.values("result")[0]
+        and row.raw_observed
+    ]
+    method_errs, method_warns = check_method_semantics(entries, method_rows)
+    errs += method_errs
+    warns += method_warns
     warns += check_manifest_ts_warnings(ed, entries=entries)
     warns += check_superseded_ledger_warnings(
         pointback_text, ed, observed_rows=observed_rows, entries=entries,
@@ -179,7 +305,136 @@ def run(
             ))
         else:
             errs += check_g7(Path(contract_project), Path(contract_run))
+    # G9 (conditional): a shaping session on disk engages the exit gate.
+    sd = Path(shaping_dir) if shaping_dir else (
+        rr / "shaping" if rr is not None else None
+    )
+    shaping_events: list[dict] | None = None
+    if sd is not None and (sd / Path(SHAPING_LOG).name).is_file():
+        errs += check_g9(
+            sd,
+            project_dir=Path(contract_project) if contract_project else None,
+            run_dir=Path(contract_run) if contract_run else rr,
+        )
+        # G10 consumes the same session events for the T3 upstream-route
+        # signal; on a malformed log G9 owns the diagnostic and G10 skips.
+        try:
+            shaping_events = parse_shaping_log(
+                (sd / SHAPING_LOG).read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, ShapingLogError):
+            shaping_events = None
+
+    # G10 (conditional): a decision report carrying DD entry blocks engages
+    # the design-decision gate (top block stays verbatim; reports without
+    # entry blocks keep passing — the extension is additive).
+    dr_g10 = dr if dr is not None else (
+        rr / "decision-report.md" if rr is not None else None
+    )
+    report_text = ""
+    if dr_g10 is not None and dr_g10.is_file():
+        try:
+            report_text = dr_g10.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            report_text = ""
+    if report_text and DD_HEADING.search(report_text):
+        errs += check_g10(
+            report_text,
+            report_path=dr_g10,
+            preview_dir=pd,
+            shaping_events=shaping_events,
+            pointback_text=pointback_text,
+            baseline_state=_load_json_tolerant(
+                rr / "design-baseline" / "state.json"
+            ) if rr is not None else None,
+            run_profile_tier=_plan_tier(rr),
+        )
+
+    # G8 run level (vNext S3): a craft-guard.md in the run root is checked
+    # against the registry (shared parser). P2/P3 demand one audit row per
+    # advisory entry; P1 and tier-less legacy runs keep the subset freedom.
+    if rr is not None and (rr / "craft-guard.md").is_file():
+        try:
+            craft_text = (rr / "craft-guard.md").read_text(encoding="utf-8")
+            registry_entries, _ = load_registry()
+        except (OSError, UnicodeError):
+            errs.append(finding(
+                "G8.run_registry",
+                "G8 run: craft-guard.md present but the audit log or the "
+                "registry could not be read",
+                owner="craft-guard.md",
+                expected="readable craft-guard.md and rules.md",
+                actual="read error",
+                repair="Restore the files or drop the audit log",
+            ))
+        else:
+            errs += check_g8_run(craft_text, registry_entries, _plan_tier(rr))
+
+    # G12 tier boundary + escalation signals (vNext S4): fires when plan.md
+    # carries a run-profile block; legacy runs without the block are not
+    # re-checked. The contract diff basis is the G7 bind snapshot; without
+    # contract paths the route / decision / blocking faces still fire.
+    profile = _plan_profile(rr)
+    if profile is not None:
+        touch = None
+        bound_criteria = None
+        if contract_project and contract_run:
+            snapshot = load_bind_snapshot(Path(contract_run))
+            effective = load_effective_contract(Path(contract_project))
+            if snapshot is not None and effective is not None:
+                bound = bind_fields(snapshot)
+                if bound is not None:
+                    touch = contract_touch(bound, effective)
+                    bound_criteria = sum(
+                        1 for path in bound if CRITERION_PATH.match(path))
+        dd_explore = bool(
+            report_text and DD_HEADING.search(report_text)
+            and any(entry.tier == "explore"
+                    for entry in parse_dd_entries(report_text)))
+        g12_errs, g12_warns, _signals = check_g12(
+            profile,
+            pointback_text=pointback_text,
+            touch=touch,
+            bound_criteria=bound_criteria,
+            spec_l6_count=len(_l6_items(spec_text)),
+            dd_explore=dd_explore,
+        )
+        errs += g12_errs
+        warns += g12_warns
     return errs, warns
+
+
+def _load_json_tolerant(path: Path) -> dict | None:
+    try:
+        import json
+
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _plan_profile(run_root: Path | None):
+    """The parsed run-profile block of a run root; None when absent."""
+    if run_root is None:
+        return None
+    plan = run_root / "plan.md"
+    try:
+        return parse_run_profile(plan.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError):
+        return None
+
+
+def _plan_tier(run_root: Path | None) -> str | None:
+    """The run's effective tier: declared tier plus recorded S4 upgrades.
+
+    G8/G10 consume this; after an escalation (run-profile upgrades event)
+    the run walks the new tier's obligations, so the effective tier — not
+    the intake declaration — is the gate input.
+    """
+    profile = _plan_profile(run_root)
+    if profile is None:
+        return None
+    return effective_tier(profile.tier, profile.upgrades)
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
@@ -223,7 +478,14 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="shorthand for --require-preview --require-evidence",
+        help="shorthand for --require-preview --require-evidence "
+             "--require-coverage",
+    )
+    parser.add_argument(
+        "--require-coverage",
+        action="store_true",
+        help="strict mode: fail when the point-back lacks a Coverage "
+             "statement block even in legacy shape",
     )
     parser.add_argument(
         "--format",
@@ -241,10 +503,17 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         default=None,
         help="optional run dir containing contract-bind.json for G7",
     )
+    parser.add_argument(
+        "--shaping-dir",
+        default=None,
+        help="optional path to .scratch/<run>/shaping/ for G9 "
+             "(defaults to <run-root>/shaping when --run-root is set)",
+    )
     args = parser.parse_args(argv[1:])
     if args.strict:
         args.require_preview = True
         args.require_evidence = True
+        args.require_coverage = True
     return args
 
 
@@ -276,6 +545,8 @@ def main(argv: list[str]) -> int:
             require_evidence=args.require_evidence,
             contract_project=args.contract_project,
             contract_run=args.contract_run,
+            shaping_dir=args.shaping_dir,
+            require_coverage=args.require_coverage,
         )
     except (OSError, UnicodeError) as exc:
         if fmt == "json":

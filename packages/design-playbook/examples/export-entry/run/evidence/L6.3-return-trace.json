@@ -1,0 +1,22 @@
+{
+  "steps": [
+    {
+      "action": "start export",
+      "state": "exporting"
+    },
+    {
+      "action": "navigate away",
+      "state": "away"
+    },
+    {
+      "action": "navigate back",
+      "state": "exporting"
+    },
+    {
+      "action": "wait",
+      "state": "done",
+      "result_visible": true
+    }
+  ],
+  "note": "recaptured after R5 capture-plan revision (cross-navigation session keep)"
+}

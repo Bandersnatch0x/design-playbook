@@ -221,7 +221,7 @@ def _verdict_probe_pointback(verdict_section: str) -> str:
 issue: polish spacing on card header
 source: craft
 fix: tighten padding
-severity: low
+severity: S1
 ```
 
 ## Evidence ledger
@@ -1233,6 +1233,55 @@ def main() -> int:
                         f"findings, got {warn_payload!r}")
                 else:
                     print("  ok    structured/warning stays exit 0")
+
+    # --- vNext S1: P2 fixture run full chain (issue #34, criterion 2) ---
+    # Static P2 walkthrough ("data export entry"): shaping session + registry
+    # audit + six-block report with one Recirculate round. Runs the whole
+    # seam — G1 deepened / G2-G4 / G6 / G7 / G9 / G11 — to a Pass verdict.
+    p2_run = PACKAGE / "examples" / "export-entry" / "run"
+    p2_project = PACKAGE / "examples" / "export-entry" / "project"
+    expect_valid(
+        failures,
+        "vnext/p2-export-entry-full-chain",
+        p2_run / "spec.md",
+        p2_run / "point-back.md",
+        "--evidence-dir", str(p2_run / "evidence"),
+        "--run-root", str(p2_run),
+        "--contract-project", str(p2_project),
+        "--contract-run", str(p2_run),
+        "--shaping-dir", str(p2_run / "shaping"),
+    )
+    expect_valid(
+        failures,
+        "vnext/p2-export-entry-strict-coverage",
+        p2_run / "spec.md",
+        p2_run / "point-back.md",
+        "--evidence-dir", str(p2_run / "evidence"),
+        "--run-root", str(p2_run),
+        "--contract-project", str(p2_project),
+        "--contract-run", str(p2_run),
+        "--shaping-dir", str(p2_run / "shaping"),
+        "--require-evidence", "--require-coverage",
+    )
+
+    # G9 negative: a shaping log with an event outside the closed enum.
+    with tempfile.TemporaryDirectory() as tmp:
+        bad_shaping = Path(tmp) / "shaping"
+        _write_text(bad_shaping / "shaping-log.jsonl", '{"event": "exploded"}\n')
+        expect_invalid(
+            failures, "vnext/g9-invalid-event",
+            p2_run / "spec.md", p2_run / "point-back.md",
+            "G9 shaping", "--shaping-dir", str(bad_shaping))
+
+    # G11 negative: vNext-shaped report without a Coverage statement block.
+    broken_pb = (p2_run / "point-back.md").read_text(encoding="utf-8").replace(
+        "## Coverage statement", "## Coverage draft", 1)
+    with tempfile.TemporaryDirectory() as tmp:
+        pb = Path(tmp) / "point-back.md"
+        _write_text(pb, broken_pb)
+        expect_invalid(
+            failures, "vnext/g11-missing-coverage",
+            p2_run / "spec.md", pb, "G11 coverage")
 
     # --- ADR-0008 frontend floor JS intercept (playwright) ---
     # CI has no playwright (see ci.yml: browser suites stay local/release).

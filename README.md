@@ -70,16 +70,28 @@ Eight model-invoked skills (`/design-playbook:<name>`):
 
 | Skill | Role |
 | :--- | :--- |
-| `design-playbook` | 🎯 Orchestrator (full pipeline) |
+| `design-playbook` | 🎯 Orchestrator (full pipeline, run-profile tiering P1/P2/P3) |
 | `design-baseline` | 🧭 Discover, validate, or draft project `DESIGN.md` before existing-product UI work |
 | `reference-intake` | 📎 Reference contract (screenshot/URL/analogy → Keep/Change/Do not copy) |
-| `ux-spec` | 📋 Six-layer spec declaration |
-| `ui-picker` | 🧱 Shell + component semantics |
-| `craft-guard` | 🛡️ Craft / anti-AI-slop |
+| `ux-spec` | 📋 Six-layer spec declaration via the S0-S6 shaping session (question/assumption/confirmation batches + session artifacts) |
+| `ui-picker` | 🧱 Shell + component semantics + R/C/E design-decision entries |
+| `craft-guard` | 🛡️ Craft / anti-AI-slop against the first-party rule registry (seven-column audit rows) |
 | `native-craft` | 🖥️ Native-feel desktop declaration |
-| `ui-evaluator` | ✅ Point-back acceptance + recirculate |
+| `ui-evaluator` | ✅ Dual-track acceptance (six-block point-back) + recirculate |
 
-**Commands:** `design-io` (full pipeline) · `ux-spec` (spec only) · `ui-review` (accept only) · `run-review` (cross-run)
+**Commands:** `design-io` (full pipeline) · `ux-spec` (spec only) · `ui-review` (accept only) · `run-review` (cross-run) · `run-status` (phase + resume narration) · `doctor` (install health)
+
+## 🎚️ Run profiles (P1/P2/P3)
+
+Every run declares a tier in the `plan.md` **run-profile** block — process weight stays proportional to change consequence. The agent grades against the declaration-touch checklist, the user confirms once; **upgrades are automatic** the moment a correction signal appears, downgrades need the user.
+
+| Tier | Scope | Gate face |
+| :--- | :--- | :--- |
+| **P1** point-fix | Single-owning-layer point-back repair, no decided-field touch | Registry subset evaluation; R4/R5 (+R2 line) routes |
+| **P2** standard | In-baseline feature change (new criteria, R/C decisions) | Full predicate evaluation; shaping session + G9/G10 |
+| **P3** full | Decided-field revision (supersedes), structural re-composition, E-tier decisions | G1-G12 full spectrum + sampling matrix fully executed |
+
+Full matrix and re-entry semantics: [`docs/specs/ui-ux-vnext/loop-prototype.md`](./docs/specs/ui-ux-vnext/loop-prototype.md).
 
 ## 🔗 Stack with ecosystem
 

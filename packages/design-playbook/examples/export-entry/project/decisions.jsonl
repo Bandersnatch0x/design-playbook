@@ -1,0 +1,7 @@
+{"confirmed_at":"2026-08-14T09:52:00Z","decision":"支持运营完成周报所需的数据导出（行内批量导出上周数据为 CSV）","field":"l1.goal","id":"D-0001","rationale":"2026-08-14 用户确认的周报场景产品目标"}
+{"confirmed_at":"2026-08-14T09:52:00Z","decision":"运营角色，周频导出上周数据做周报","field":"l1.target_user","id":"D-0002","rationale":"Q1 回答 + CP-A 确认"}
+{"confirmed_at":"2026-08-14T09:52:00Z","decision":"不做定时/周期导出；不做全量历史导出","field":"l1.non_goals","id":"D-0003","rationale":"Q3 回答 + CP-A 确认"}
+{"confirmed_at":"2026-08-14T09:53:00Z","decision":"Given 运营在主列表选定上周范围 When 触发行内批量导出 Then 30 秒内获得 CSV 且行数与选中范围一致（证据：交互记录）","field":"l6.c1","id":"D-0004","rationale":"Q2 回答 + CP-A 确认的限时导出判据"}
+{"confirmed_at":"2026-08-14T09:53:00Z","decision":"Given 选定范围超过 20 万行 When 确认导出 Then 提示剩余量与收窄建议（证据：错误态截图 capture seed）","field":"l6.c2","id":"D-0005","rationale":"CP-A 确认的超限判据；上限值依赖 export.row_cap 假设"}
+{"confirmed_at":"2026-08-14T09:53:00Z","decision":"Given 导出进行中 When 用户离开并返回该页 Then 导出进度与结果仍可获知（证据：交互记录）","field":"l6.c3","id":"D-0006","rationale":"CP-A 确认的返回可见判据"}
+{"confirmed_at":"2026-08-14T09:55:00Z","decision":"B：主列表行内批量导出（范围收敛）","field":"l2.entry_choice","id":"D-0007","rationale":"CP-B 两案取舍：A 全局工具栏影响全部列表页，B 范围收敛符合周报场景"}

@@ -34,7 +34,7 @@ def _facts(text: str) -> VerdictFacts:
 
 class HeadingCardinalityTests(unittest.TestCase):
     def test_no_verdict_heading_yields_zero(self):
-        facts = _facts("## Findings\n\nissue: x\nsource: y\nfix: z\nseverity: low\n")
+        facts = _facts("## Findings\n\nissue: x\nsource: y\nfix: z\nseverity: S1\n")
         self.assertEqual(facts.heading_count, 0)
         self.assertIsNone(facts.canonical)
 

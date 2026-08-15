@@ -1,0 +1,37 @@
+{
+  "changelog": [
+    {
+      "at": "2026-08-14T13:00:00Z",
+      "summary": "prior run projection: retry-and-return criteria decided, retry backoff assumed"
+    }
+  ],
+  "fields": {
+    "export.retry_backoff": {
+      "notes": "理由：重试退避上限未逐字确认；风险：连续重试压垮服务；回退：固定 5s。",
+      "provenance": "inferred",
+      "resolution": "assumed",
+      "value": "exponential, 30s cap"
+    },
+    "l1.goal": {
+      "provenance": "observed",
+      "resolution": "decided",
+      "value": "支持运营导出失败后可靠重试并保持进度可见"
+    },
+    "l1.target_user": {
+      "provenance": "observed",
+      "resolution": "decided",
+      "value": "运营角色，导出任务失败后重试完成周报"
+    },
+    "l6.c1": {
+      "provenance": "observed",
+      "resolution": "decided",
+      "value": "Given 导出失败 When 点击重试 Then 30 秒内重新发起导出并显示进度（证据：交互记录）"
+    },
+    "l6.c2": {
+      "provenance": "observed",
+      "resolution": "decided",
+      "value": "Given 导出进行中 When 离开并返回该页 Then 导出进度与结果仍可获知（证据：交互记录）"
+    }
+  },
+  "schemaVersion": 1
+}

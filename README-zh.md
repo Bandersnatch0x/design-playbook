@@ -72,16 +72,28 @@ Codex bridge 说明：[`packages/design-playbook/codex/AGENTS.md`](./packages/de
 
 | Skill | 职责 |
 | :--- | :--- |
-| `design-playbook` | 🎯 编排（全链路） |
+| `design-playbook` | 🎯 编排（全链路；run-profile 档位定档 P1/P2/P3） |
 | `design-baseline` | 🧭 初始化发现、校验或从已有 UI 生成项目 `DESIGN.md` 草稿 |
 | `reference-intake` | 📎 参考契约（截图/URL/类比 → Keep/Change/Do not copy） |
-| `ux-spec` | 📋 六层 spec 声明 |
-| `ui-picker` | 🧱 骨架 + 组件语义 |
-| `craft-guard` | 🛡️ 工艺 / 反 AI 味 |
+| `ux-spec` | 📋 六层 spec 声明（S0-S6 成形会话：问题/假设/确认批次 + 会话工件） |
+| `ui-picker` | 🧱 骨架 + 组件语义 + R/C/E 设计决策条目 |
+| `craft-guard` | 🛡️ 工艺 / 反 AI 味（第一方规则注册表 + 七列审计行） |
 | `native-craft` | 🖥️ 桌面原生手感声明 |
-| `ui-evaluator` | ✅ point-back 验收 + 回流 |
+| `ui-evaluator` | ✅ 双轨验收（六块 point-back 报告）+ 回流 |
 
-**命令**：`design-io`（全链路）· `ux-spec`（只出 spec）· `ui-review`（只验收）· `run-review`（跨 run 复盘）
+**命令**：`design-io`（全链路）· `ux-spec`（只出 spec）· `ui-review`（只验收）· `run-review`（跨 run 复盘）· `run-status`（阶段与恢复叙述）· `doctor`（安装面健康）
+
+## 🎚️ Run 档位（P1/P2/P3）
+
+每个 run 在 `plan.md` **run-profile** 块声明档位——流程重量与变更后果成正比。代理按声明触碰面判据初判、用户一次确认；**升档自动**（纠偏信号一出现即升档并补走新增环节），降档需用户。
+
+| 档 | 范围 | 门禁面 |
+| :--- | :--- | :--- |
+| **P1** 点修 | 单一 owning 层 point-back 修复，不触碰 decided 字段 | 注册表子集求值；R4/R5（+R2 行级）路由 |
+| **P2** 标准 | 基线内功能变更（新判据、R/C 决策） | 适用谓词全求值；成形会话 + G9/G10 |
+| **P3** 全量 | decided 字段修订（supersedes）、结构性重构、E 档决策 | G1-G12 全谱 + 采样矩阵完整执行 |
+
+完整矩阵与重入语义见 [`docs/specs/ui-ux-vnext/loop-prototype.md`](./docs/specs/ui-ux-vnext/loop-prototype.md)。
 
 ## 🔗 与生态组合
 
