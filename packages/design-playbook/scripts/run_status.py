@@ -2,12 +2,16 @@
 """Derive Design I/O run status / resume hints from existing artifacts.
 
 Does **not** create a second run-state SSOT. Reads only files agents already
-write under a run root (default: discover newest ``.scratch/*/``).
+write under a run root (default: discover newest ``.scratch/*/``). Fill
+surfaces may live outside the run root: when ``plan.md`` registers them with
+``fill:`` field lines, the fill stage is also judged on those declared paths
+(issue #44; the stage registry itself is unchanged).
 """
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -202,16 +206,46 @@ class StageState:
     evidence: list[str]
 
 
+# Issue #44: fill surfaces may land in the host tree (product side) instead
+# of the run root. When plan.md registers those paths as ``fill:`` field
+# lines, the fill stage is also judged on their existence — one path per
+# line, run-root-relative or host-project-relative (the orchestrating cwd).
+PLAN_FILL_LINE = re.compile(r"^fill:[ \t]*(\S+)", re.M)
+
+
+def _plan_fill_artifacts(run_root: Path) -> list[str]:
+    """Declared fill artifact paths from plan.md that exist on disk."""
+    try:
+        text = (run_root / "plan.md").read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return []
+    found: list[str] = []
+    for match in PLAN_FILL_LINE.finditer(text):
+        declared = match.group(1).strip().rstrip(",")
+        candidate = Path(declared)
+        bases = (
+            [candidate] if candidate.is_absolute()
+            else [run_root / candidate, Path.cwd() / candidate]
+        )
+        if any(base.is_file() for base in bases) and declared not in found:
+            found.append(declared)
+    return found
+
+
 def inspect_run(
     run_root: Path, preview_snapshot: PreviewSnapshot | None = None,
     run_facts: RunFacts | None = None,
 ) -> list[StageState]:
     facts = run_facts or capture_run_facts(run_root=run_root)
     snapshot = preview_snapshot or facts.preview or inspect_preview(run_root / "preview")
+    plan_fills = _plan_fill_artifacts(run_root)
     states: list[StageState] = []
     for stage in STAGES:
         if stage.key == "preview":
             found = [f"preview/{source}" for source in snapshot.occurrence_sources]
+        elif stage.key == "fill":
+            found = [marker for marker in stage.markers if marker in facts.existing_paths]
+            found += [declared for declared in plan_fills]
         else:
             found = [marker for marker in stage.markers if marker in facts.existing_paths]
         states.append(StageState(
