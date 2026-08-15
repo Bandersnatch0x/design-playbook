@@ -290,6 +290,39 @@ class ShapingLogTests(unittest.TestCase):
         self.assertEqual(resolved["staged_assumptions"], [])
         self.assertEqual(resolved["open_confirmations"], [])
 
+    def test_partial_batch_confirmation_keeps_undecided_items(self) -> None:
+        events = self.EVENTS + [
+            {"event": "confirm_presented", "batch": "CP-D", "kind": "intent",
+             "items": ["l1.goal", "l1.target_user", "l1.non_goals"]},
+            {"event": "item_confirmed", "batch": "CP-D", "field": "l1.goal"},
+        ]
+        queue = derive_queue(events)
+        self.assertEqual(len(queue["open_confirmations"]), 2)
+        partial = queue["open_confirmations"][1]
+        self.assertEqual(partial["batch"], "CP-D")
+        self.assertEqual(partial["items"], ["l1.target_user", "l1.non_goals"])
+
+    def test_batch_closes_only_after_every_item_decided(self) -> None:
+        events = self.EVENTS + [
+            {"event": "confirm_presented", "batch": "CP-D", "kind": "intent",
+             "items": [{"field": "l1.goal", "value": "goal text"},
+                       {"field": "l1.target_user", "value": "user text"},
+                       {"field": "l1.non_goals", "value": "non-goal text"}]},
+            {"event": "item_confirmed", "batch": "CP-D", "field": "l1.goal"},
+            {"event": "item_rejected", "batch": "CP-D",
+             "field": "l1.target_user"},
+        ]
+        queue = derive_queue(events)
+        self.assertEqual(
+            [b["items"] for b in queue["open_confirmations"] if
+             b["batch"] == "CP-D"],
+            [[{"field": "l1.non_goals", "value": "non-goal text"}]])
+        closed = derive_queue(events + [
+            {"event": "item_revised", "batch": "CP-D", "field": "l1.non_goals"},
+        ])
+        self.assertNotIn(
+            "CP-D", [b["batch"] for b in closed["open_confirmations"]])
+
     def test_g9_rejects_unknown_event(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             sd = Path(tmp) / "shaping"

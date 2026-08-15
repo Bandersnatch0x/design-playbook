@@ -8,8 +8,8 @@
 {"event": "assumption_staged", "field": "export.row_cap", "tier": "T1", "reason": "规模上限未答（队列满，转显式风险确认）", "risk": "上限过低阻断真实导出或过高拖垮同步窗口", "fallback": "50000 行", "ts": "2026-08-14T09:34:00Z"}
 {"event": "assumption_staged", "field": "export.sync_window", "tier": "T2", "reason": "同步导出限时未逐字确认", "risk": "超时体验未定义", "fallback": "60 秒", "ts": "2026-08-14T09:34:00Z"}
 {"event": "assumption_staged", "field": "export.column_scope", "tier": "T4", "reason": "文件命名与列范围为局部实现选择", "risk": "隐藏列误出", "fallback": "当前视图列（不含隐藏列）", "ts": "2026-08-14T09:34:00Z"}
-{"event": "confirm_presented", "batch": "CP-A", "kind": "intent", "items": ["l1.goal", "l1.target_user", "l6.c1-c3 表述", "l1.non_goals"], "ts": "2026-08-14T09:40:00Z"}
-{"event": "confirm_presented", "batch": "CP-B", "kind": "structural", "items": ["入口 IA 两案：A 全局工具栏 / B 主列表行内批量"], "ts": "2026-08-14T09:40:00Z"}
+{"event": "confirm_presented", "batch": "CP-A", "kind": "intent", "items": ["l1.goal", "l1.target_user", "l6.c1", "l6.c2", "l6.c3", "l1.non_goals"], "ts": "2026-08-14T09:40:00Z"}
+{"event": "confirm_presented", "batch": "CP-B", "kind": "structural", "items": [{"field": "l2.entry_choice", "value": "入口 IA 两案：A 全局工具栏 / B 主列表行内批量"}], "ts": "2026-08-14T09:40:00Z"}
 {"event": "confirm_presented", "batch": "CP-C", "kind": "assumption", "items": ["export.row_cap", "export.sync_window", "export.column_scope", "l1.scenes"], "ts": "2026-08-14T09:40:00Z"}
 {"event": "item_confirmed", "batch": "CP-A", "field": "l1.goal", "ts": "2026-08-14T09:52:00Z"}
 {"event": "item_confirmed", "batch": "CP-A", "field": "l1.target_user", "ts": "2026-08-14T09:52:00Z"}

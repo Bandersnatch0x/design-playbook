@@ -250,6 +250,20 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
                 self.assertGreaterEqual(step["timeout-minutes"], 25)
                 self.assertIn("required ${PACKAGE_NAME}@${VERSION}", step["run"])
 
+    def test_provenance_verification_retries_are_bounded_and_fail_closed(self) -> None:
+        verifies = (
+            self.publish_steps["Verify npm provenance"],
+            self.publish_steps["Verify dsh-design-playbook provenance"],
+        )
+        for step in verifies:
+            with self.subTest(step=step["name"]):
+                self.assertIn("seq 1 3", step["run"])
+                self.assertIn("sleep 20", step["run"])
+                self.assertIn("npm audit signatures", step["run"])
+                self.assertIn("release_state.py provenance", step["run"])
+                self.assertIn("failed after 3 attempts", step["run"])
+                self.assertIn("exit 1", step["run"])
+
     def test_both_publishers_pin_python_and_inspect_their_npm_artifacts(self) -> None:
         self.assertEqual(
             self.dsh_publish_steps["Setup Python"]["with"]["python-version"],

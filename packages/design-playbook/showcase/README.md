@@ -28,7 +28,7 @@ One **demonstrated** Design I/O run against SwarSight (swarm-intelligence foresi
 
 1. [`01-spec.md`](01-spec.md) - six-layer spec (ux-spec)
 2. [`02-decision-report.md`](02-decision-report.md) - shell + component decision (ui-picker)
-3. [`03-point-back.md`](03-point-back.md) - point-back findings + closure (ui-evaluator)
+3. [`03-point-back.md`](03-point-back.md) - point-back findings + closure (ui-evaluator); backfilled to the full six-block report shape (Positive findings + Limitations statement added)
 4. [`04-preview-hitl.md`](04-preview-hitl.md) - **preview\* HITL 演示**（G5；sourced from dogfood 007，不同 ask）+ [`preview/`](preview/) artifacts
 5. [`queue-monitor.html`](queue-monitor.html) - **live dogfood Fill surface**（v0.20.0 `retry-confirm` run，另一 ask）：失败批量重试确认对话，五态渲染 + 轨迹断言 45/45 + 重开重置验证 8/8；含 ui-review 复评发现并修复的重开范围残留缺陷（openDialog 打开即重置为保守默认）
 
