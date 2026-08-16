@@ -2,8 +2,9 @@
 
 ## Status
 
-Accepted (architecture review, 2026-08-16). Unreleased on
-`fix/architecture-deepening`; does not alter stable `main` or v0.20.1.
+Accepted (architecture review, 2026-08-16). Prepared for v0.20.2 on
+`release/v0.20.2`; stable `main` and v0.20.1 remain unchanged until atomic
+promotion.
 
 ## Context
 
@@ -48,5 +49,6 @@ The v0.20.1 review found three real seams and one correctness gap:
   counts, while distribution-specific discovery remains local to each adapter.
 - Release registry classification and provenance retry policy are deterministic
   under injected command, clock, temp-directory, and cleanup adapters.
-- New release transaction behavior stays on a feature branch until the normal
-  release gate promotes it; no public package or tag changes in this ADR.
+- New release transaction behavior stays on the release branch until the normal
+  release gate promotes the identical commit to `main` and `v0.20.2`; this ADR
+  does not authorize a partial public update.
