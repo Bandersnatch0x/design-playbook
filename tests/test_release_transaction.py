@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from release_transaction import (  # noqa: E402
     ReleaseTransactionError,
+    classify_registry_result,
     resolve_identity,
     verify_provenance,
     wait_registry,
@@ -57,7 +58,23 @@ class ReleaseIdentityTests(unittest.TestCase):
 
 
 class ReleaseVerificationTests(unittest.TestCase):
-    def test_retry_budget_is_fail_closed(self) -> None:
+    def test_registry_classifier_is_pure_and_fail_closed(self) -> None:
+        self.assertEqual(
+            classify_registry_result(
+                returncode=0, stdout="1.2.3\n", stderr="", version="1.2.3"
+            ).exists,
+            True,
+        )
+        self.assertFalse(
+            classify_registry_result(
+                returncode=1, stdout="", stderr='{"code":"E404"}', version="1.2.3"
+            ).exists
+        )
+        with self.assertRaises(ReleaseTransactionError):
+            classify_registry_result(
+                returncode=1, stdout="", stderr="network unavailable", version="1.2.3"
+            )
+
         for function in (wait_registry, verify_provenance):
             with self.subTest(function=function.__name__), self.assertRaises(
                 ReleaseTransactionError

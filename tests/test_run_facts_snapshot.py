@@ -2,10 +2,10 @@
 """RunFacts immutable optional artifact loading tests."""
 from __future__ import annotations
 
+import sys
 import tempfile
 import unittest
 from pathlib import Path
-import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PKG = ROOT / "packages" / "design-playbook"
@@ -36,9 +36,36 @@ class RunFactsOptionalArtifactTests(unittest.TestCase):
             facts = capture_run_facts(run_root=root)
             self.assertEqual(facts.run_profile.version, 1)
             self.assertEqual(facts.run_profile.tier, "P2")
+            self.assertEqual(facts.plan_text.splitlines()[0], "# plan")
+            self.assertEqual(facts.plan_fill_artifacts, ())
+            self.assertEqual(facts.craft_guard_text, "")
             self.assertEqual([entry.id for entry in facts.decision_entries], ["DD-0001"])
             self.assertEqual(facts.shaping_events[0]["event"], "asked")
             self.assertIsNone(facts.shaping_error)
+
+    def test_snapshot_does_not_change_when_run_files_mutate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "plan.md").write_text(
+                "<!-- run-profile: v1 -->\n```yaml\ntier: P1\nconfirmed_by: user\n```\nfill: artifact.txt\n",
+                encoding="utf-8",
+            )
+            (root / "artifact.txt").write_text("captured", encoding="utf-8")
+            facts = capture_run_facts(run_root=root)
+            (root / "plan.md").write_text("changed", encoding="utf-8")
+            (root / "artifact.txt").unlink()
+            self.assertIn("run-profile: v1", facts.plan_text)
+            self.assertEqual(facts.run_profile.tier, "P1")
+            self.assertEqual(facts.plan_fill_artifacts, ("artifact.txt",))
+
+    def test_empty_craft_guard_presence_is_captured(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "craft-guard.md").write_text("", encoding="utf-8")
+            facts = capture_run_facts(run_root=root)
+            (root / "craft-guard.md").unlink()
+            self.assertTrue(facts.craft_guard_exists)
+            self.assertEqual(facts.craft_guard_text, "")
 
     def test_malformed_shaping_is_recorded_without_policy(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

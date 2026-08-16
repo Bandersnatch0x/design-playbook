@@ -94,16 +94,22 @@ class MethodSemanticsParseTests(unittest.TestCase):
             self.assertTrue(semantics.scope)
             self.assertTrue(semantics.usable)
 
-    def test_fixture_human_subject_negative_is_unusable(self) -> None:
-        usertest = [
-            entry for entry in MANIFEST_LINES
-            if entry.get("method") == "user-test"
-        ]
-        self.assertEqual(len(usertest), 1)
-        semantics = parse_method_semantics(usertest[0])
-        # usability is not a structural break: the entry parses clean and
-        # is quarantined as blocked evidence instead
-        self.assertEqual(entry_errors(usertest[0]), [])
+    def test_fixture_has_no_synthetic_human_subject_evidence(self) -> None:
+        self.assertFalse(any(
+            entry.get("method") in HUMAN_SUBJECT_METHODS
+            for entry in MANIFEST_LINES
+        ))
+
+    def test_missing_human_subject_ethics_is_unusable(self) -> None:
+        entry = {
+            "criterion": "L6.1",
+            "artifact": "temporary-user-test.md",
+            "method": "user-test",
+            "observation": "temporary test observation",
+            "scope": "one temporary test session",
+            "population": "test fixture population",
+        }
+        semantics = parse_method_semantics(entry)
         self.assertFalse(semantics.usable)
         self.assertIn("ethics", semantics.unusable_reason)
 
@@ -478,13 +484,30 @@ class FixtureWalkthroughTests(unittest.TestCase):
         result = self._validate(P2_RUN)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("RUN OK", result.stdout)
-        # the human-subject negative is quarantined, not failing the run
-        self.assertIn("quarantined", result.stdout)
+        self.assertNotIn("quarantined", result.stdout)
 
     def test_unusable_pass_basis_breaks_the_chain(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run = Path(tmp) / "run"
             shutil.copytree(P2_RUN, run)
+            manifest = run / "evidence" / "manifest.jsonl"
+            entries = [
+                json.loads(line)
+                for line in manifest.read_text(encoding="utf-8").splitlines()
+            ]
+            entries.append({
+                "criterion": "L6.1",
+                "artifact": "L6.1-usertest-notes.md",
+                "method": "user-test",
+                "observation": "temporary test observation",
+                "scope": "one temporary test session",
+                "population": "test fixture population",
+            })
+            _write(
+                manifest,
+                "\n".join(json.dumps(entry, ensure_ascii=False) for entry in entries)
+                + "\n",
+            )
             pb = (run / "point-back.md").read_text(encoding="utf-8")
             pb = pb.replace(
                 "observed:  evidence/L6.1-export-trace.json 14.2s 完成，214/214 行；单次触发（R4 修复后 busy 态防重复）",

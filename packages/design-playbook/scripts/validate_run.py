@@ -360,9 +360,7 @@ def run(
             preview_dir=pd,
             shaping_events=shaping_events,
             pointback_text=pointback_text,
-            baseline_state=_load_json_tolerant(
-                rr / "design-baseline" / "state.json"
-            ) if rr is not None else None,
+            baseline_state=facts.baseline_state,
             run_profile_tier=(
                 effective_tier(profile.tier, profile.upgrades)
                 if profile is not None else None
@@ -372,9 +370,9 @@ def run(
     # G8 run level (vNext S3): a craft-guard.md in the run root is checked
     # against the registry (shared parser). P2/P3 demand one audit row per
     # advisory entry; P1 and tier-less legacy runs keep the subset freedom.
-    if rr is not None and (rr / "craft-guard.md").is_file():
+    if facts.craft_guard_exists:
         try:
-            craft_text = (rr / "craft-guard.md").read_text(encoding="utf-8")
+            craft_text = facts.craft_guard_text
             registry_entries, _ = load_registry()
         except (OSError, UnicodeError):
             errs.append(finding(
@@ -426,16 +424,6 @@ def run(
         errs += g12_errs
         warns += g12_warns
     return errs, warns
-
-
-def _load_json_tolerant(path: Path) -> dict | None:
-    try:
-        import json
-
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, ValueError):
-        return None
-    return data if isinstance(data, dict) else None
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:

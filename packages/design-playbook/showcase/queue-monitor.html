@@ -290,12 +290,6 @@
     clearDialogTimers();
     resetDialogControls();
   }
-  function selectedFailed() { return RUNS.filter(function (r) { return selected[r.id] && r.state === "failed"; }); }
-  function inScope(list, scope) {
-    return scope === "fail-once"
-      ? list.filter(function (r) { return r.attempts === 1; })
-      : list;
-  }
   function setState(s) { document.body.setAttribute("data-state", s); }
 
   function sparkline(pts, w, h) {
@@ -367,7 +361,7 @@
 
   function renderBatchBar() {
     var selAll = Object.keys(selected).filter(function (id) { return selected[id]; });
-    var selFailed = selectedFailed();
+    var selFailed = QueueMonitorState.selectedFailed(RUNS, selected);
     $("batch-bar").classList.toggle("is-visible", selAll.length > 0);
     $("sel-count").textContent = selAll.length;
     $("sel-failed-count").textContent = selFailed.length;
@@ -396,9 +390,9 @@
 
   function renderDialog() {
     var scope = currentScope();
-    var failed = selectedFailed();
-    var scopeList = inScope(failed, scope);
-    var failOnceN = inScope(failed, "fail-once").length;
+    var failed = QueueMonitorState.selectedFailed(RUNS, selected);
+    var scopeList = QueueMonitorState.inScope(failed, scope);
+    var failOnceN = QueueMonitorState.inScope(failed, "fail-once").length;
     var allFailedN = failed.length;
 
     if (summaryUnreachable) {

@@ -67,7 +67,7 @@ face:     subjective
 basis:    agent-judgment
 confidence: low
 disposition: advisory
-evidence:  rendered 走查（agent-judgment, method=expert-review）；非用户证据——涉人记录见 evidence/L6.1-usertest-notes.md（ethics 缺失，已隔离不可采信）
+evidence:  rendered 走查（agent-judgment, method=expert-review）；非用户证据——evidence/L6.1-usertest-notes.md 仅为合成 schema 示例，未登记到 Manifest，不能支持判断
 ```
 
 ## Positive findings
@@ -107,7 +107,7 @@ evidence:  evidence/L6.1-export-trace.json（跨层：交互轨迹 + 度量计�
 ## Limitations statement
 
 - 判断类 advisory：术语适配（task-organization 主观面，agent-judgment 非用户证据，confidence=low，advisory 不阻 verdict）
-- 用户代表性：本 run 无可用 user-test 证据（L6.1-usertest-notes.md 因 ethics 缺失被隔离为 blocked 证据），全部结论不构成任何「用户会」断言
+- 用户代表性：本 run 无真实 user-test evidence；合成 notes 未登记到 Manifest，全部结论不构成任何「用户会」断言
 - pass 范围：L6.1/L6.2/L6.3 pass 限单 viewport 1280x800 / 单数据集 week-2026-32 / 单次运行
 - assumed 依赖：L6.2 pass 依赖 export.row_cap 假设成立
 - 机器面证明声明与事实一致，不证明体验良好
