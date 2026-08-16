@@ -49,6 +49,31 @@ JSONRPC_REQUESTS = (
 )
 T = TypeVar("T")
 
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+from package_inventory import InventoryError
+from package_inventory import compare as _compare_inventory
+from package_inventory import from_npm, from_plugin, from_source
+
+RUNTIME_NAMES = {
+    "design-playbook-preview": "preview",
+    "design-playbook-evidence": "evidence",
+}
+
+
+def _source_expectations() -> dict[str, Any]:
+    return from_source(PKG, expected_mcp_tools=EXPECTED_MCP_TOOLS)
+
+
+def _inspect_plugin_inventory(plugin_root: Path) -> dict[str, Any]:
+    return from_plugin(plugin_root)
+
+
+def _inspect_npm_inventory(package_root: Path) -> dict[str, Any]:
+    return from_npm(package_root, RUNTIME_NAMES)
+
+
+
 
 class SmokeFailure(RuntimeError):
     """Expected smoke failure with a concise evidence-safe message."""
@@ -167,89 +192,13 @@ def _tool_version(command: str, timeout: int) -> str:
     return _bounded(completed.stdout or completed.stderr, 300)
 
 
-def _source_expectations() -> dict[str, Any]:
-    plugin = _read_json(PKG / ".claude-plugin" / "plugin.json")
-    package = _read_json(PKG / "package.json")
-    mcp = _read_json(PKG / ".mcp.json")
-    version = plugin.get("version")
-    _require(isinstance(version, str) and bool(version), "local plugin version missing")
-    _require(package.get("version") == version, "local plugin/npm version drift")
-
-    skills = sorted(
-        path.name
-        for path in (PKG / "skills").iterdir()
-        if path.is_dir() and (path / "SKILL.md").is_file()
-    )
-    commands = sorted(path.stem for path in (PKG / "commands").glob("*.md"))
-    servers = mcp.get("mcpServers")
-    _require(isinstance(servers, dict), "local .mcp.json mcpServers missing")
-    mcp_names = sorted(servers)
-    _require(
-        set(mcp_names) == set(EXPECTED_MCP_TOOLS),
-        f"local MCP inventory drift: {mcp_names}",
-    )
-    return {
-        "version": version,
-        "skills": skills,
-        "commands": commands,
-        "mcp_servers": mcp_names,
-    }
-
-
-def _inspect_plugin_inventory(plugin_root: Path) -> dict[str, Any]:
-    package = _read_json(plugin_root / "package.json")
-    mcp = _read_json(plugin_root / ".mcp.json")
-    servers = mcp.get("mcpServers")
-    _require(isinstance(servers, dict), f"installed mcpServers missing: {plugin_root}")
-    return {
-        "version": package.get("version"),
-        "skills": sorted(
-            path.name
-            for path in (plugin_root / "skills").iterdir()
-            if path.is_dir() and (path / "SKILL.md").is_file()
-        ),
-        "commands": sorted(
-            path.stem for path in (plugin_root / "commands").glob("*.md")
-        ),
-        "mcp_servers": sorted(servers),
-    }
-
-
-def _inspect_npm_inventory(package_root: Path) -> dict[str, Any]:
-    package = _read_json(package_root / "package.json")
-    runtime_paths = {
-        name: package_root / "mcp" / short / "server.py"
-        for name, short in (
-            ("design-playbook-preview", "preview"),
-            ("design-playbook-evidence", "evidence"),
-        )
-    }
-    return {
-        "version": package.get("version"),
-        "skills": sorted(
-            path.name
-            for path in (package_root / "skills").iterdir()
-            if path.is_dir() and (path / "SKILL.md").is_file()
-        ),
-        "commands": sorted(
-            path.stem for path in (package_root / "commands").glob("*.md")
-        ),
-        "mcp_servers": sorted(
-            name for name, path in runtime_paths.items() if path.is_file()
-        ),
-    }
-
-
 def _assert_inventory(
     actual: dict[str, Any], expected: dict[str, Any], label: str
 ) -> dict[str, Any]:
-    for key in ("version", "skills", "commands", "mcp_servers"):
-        _require(
-            actual.get(key) == expected.get(key),
-            f"{label} {key} mismatch: expected {expected.get(key)!r}, "
-            f"got {actual.get(key)!r}",
-        )
-    return actual
+    try:
+        return _compare_inventory(actual, expected, label)
+    except InventoryError as exc:
+        raise SmokeFailure(str(exc)) from exc
 
 
 def _installed_metadata(config_dir: Path, expected_version: str) -> dict[str, Any]:

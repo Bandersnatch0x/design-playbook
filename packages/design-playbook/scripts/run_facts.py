@@ -44,6 +44,10 @@ class RunFacts:
     evidence_dir: Path | None
     spec_text: str
     pointback_text: str
+    plan_text: str
+    plan_fill_artifacts: tuple[str, ...]
+    craft_guard_exists: bool
+    craft_guard_text: str
     ledger: LedgerFacts
     verdict: VerdictFacts
     preview: PreviewSnapshot | None
@@ -69,6 +73,19 @@ class RunFacts:
         if self._baseline_text is None:
             return None
         return json.loads(self._baseline_text)
+
+
+@dataclass(frozen=True)
+class _OptionalRunFacts:
+    plan_text: str = ""
+    run_profile: RunProfile | None = None
+    decision_report_text: str = ""
+    decision_entries: tuple[DDEntry, ...] = ()
+    shaping_events: tuple[dict[str, Any], ...] | None = None
+    shaping_error: str | None = None
+    craft_guard_exists: bool = False
+    craft_guard_text: str = ""
+    read_errors: tuple[ArtifactReadFact, ...] = ()
 
 
 def _read_manifest(
@@ -166,31 +183,48 @@ def _existing_paths(run_root: Path | None) -> frozenset[str]:
     return frozenset(paths)
 
 
-def _read_optional_run_facts(
-        run_root: Path | None,
-) -> tuple[RunProfile | None, str, tuple[DDEntry, ...], tuple[dict[str, Any], ...] | None, str | None]:
-    """Load optional vNext artifact facts without becoming a policy gate."""
+def _plan_fill_artifacts(
+    run_root: Path | None,
+    plan_text: str,
+) -> tuple[str, ...]:
+    """Capture existing fill declarations while the run snapshot is loaded."""
     if run_root is None:
-        return None, "", (), None, None
+        return ()
+    found: list[str] = []
+    fenced = False
+    for line in plan_text.splitlines():
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            continue
+        if fenced or not line.startswith("fill:"):
+            continue
+        declared = line[5:].strip().split()[0].rstrip(",") if line[5:].strip() else ""
+        if not declared:
+            continue
+        candidate = Path(declared)
+        bases = (
+            [candidate] if candidate.is_absolute()
+            else [run_root / candidate, Path.cwd() / candidate]
+        )
+        if any(base.is_file() for base in bases) and declared not in found:
+            found.append(declared)
+    return tuple(found)
 
-    profile: RunProfile | None = None
-    plan = run_root / "plan.md"
-    try:
-        if plan.is_file():
-            profile = parse_run_profile(plan.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError):
-        profile = None
+
+def _read_optional_run_facts(run_root: Path | None) -> _OptionalRunFacts:
+    """Load optional vNext artifacts into one immutable snapshot."""
+    if run_root is None:
+        return _OptionalRunFacts()
+
+    plan_text, plan_error = _read_text("plan", run_root / "plan.md")
+    profile = parse_run_profile(plan_text) if plan_text else None
 
     entries: tuple[DDEntry, ...] = ()
     report_text = ""
     report = run_root / "decision-report.md"
-    try:
-        if report.is_file():
-            report_text = report.read_text(encoding="utf-8")
-            entries = tuple(parse_dd_entries(report_text))
-    except (OSError, UnicodeError):
-        report_text = ""
-        entries = ()
+    report_text, report_error = _read_text("decision_report", report)
+    if report_text:
+        entries = tuple(parse_dd_entries(report_text))
 
     shaping_events: tuple[dict[str, Any], ...] | None = None
     shaping_error: str | None = None
@@ -203,7 +237,22 @@ def _read_optional_run_facts(
     except (OSError, UnicodeError, ShapingLogError) as exc:
         shaping_events = None
         shaping_error = str(exc)
-    return profile, report_text, entries, shaping_events, shaping_error
+    craft_guard_text, craft_error = _read_text(
+        "craft_guard", run_root / "craft-guard.md"
+    )
+    craft_guard_exists = craft_error is None or craft_error.code != "missing"
+    errors = tuple(error for error in (plan_error, report_error, craft_error) if error)
+    return _OptionalRunFacts(
+        plan_text=plan_text,
+        run_profile=profile,
+        decision_report_text=report_text,
+        decision_entries=entries,
+        shaping_events=shaping_events,
+        shaping_error=shaping_error,
+        craft_guard_exists=craft_guard_exists,
+        craft_guard_text=craft_guard_text,
+        read_errors=errors,
+    )
 
 
 def capture_run_facts(
@@ -240,7 +289,7 @@ def capture_run_facts(
     baseline_text, baseline_error = _read_baseline(run_root)
     manifest_lines, manifest_errors = _read_manifest(evidence_dir)
     preview = inspect_preview(preview_dir) if preview_dir is not None else None
-    run_profile, decision_report_text, decision_entries, shaping_events, shaping_error = _read_optional_run_facts(run_root)
+    optional = _read_optional_run_facts(run_root)
     return RunFacts(
         run_root=run_root,
         spec_path=spec_path,
@@ -249,6 +298,10 @@ def capture_run_facts(
         evidence_dir=evidence_dir,
         spec_text=spec_text,
         pointback_text=pointback_text,
+        plan_text=optional.plan_text,
+        plan_fill_artifacts=_plan_fill_artifacts(run_root, optional.plan_text),
+        craft_guard_exists=optional.craft_guard_exists,
+        craft_guard_text=optional.craft_guard_text,
         ledger=parse_ledger(pointback_text),
         verdict=parse_verdict(pointback_text),
         preview=preview,
@@ -260,10 +313,12 @@ def capture_run_facts(
             error
             for error in (spec_error, pointback_error)
             if error is not None
-        ) + manifest_errors,
-        run_profile=run_profile,
-        decision_report_text=decision_report_text,
-        decision_entries=decision_entries,
-        shaping_events=shaping_events,
-        shaping_error=shaping_error,
+        ) + manifest_errors + tuple(
+            error for error in optional.read_errors if error.code != "missing"
+        ),
+        run_profile=optional.run_profile,
+        decision_report_text=optional.decision_report_text,
+        decision_entries=optional.decision_entries,
+        shaping_events=optional.shaping_events,
+        shaping_error=optional.shaping_error,
     )

@@ -51,6 +51,16 @@ class RunStatusTests(unittest.TestCase):
                         result.stderr,
                     )
 
+    def test_unreadable_plan_is_an_operational_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-unreadable-plan"
+            run_root.mkdir()
+            (run_root / "plan.md").write_bytes(b"\xff")
+            result = _run(str(run_root), "--json")
+            self.assertEqual(result.returncode, 2)
+            self.assertEqual(result.stdout, "")
+            self.assertIn("RUN STATUS ERROR: cannot read plan.md:", result.stderr)
+
     def test_status_from_spec_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run_root = Path(tmp) / "run-a"

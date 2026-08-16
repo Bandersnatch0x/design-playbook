@@ -91,8 +91,33 @@ class InventoryTests(unittest.TestCase):
                 "design-playbook-preview",
             ],
         }
-        self.assertEqual(plugin, expected)
-        self.assertEqual(npm, expected)
+        for inventory in (plugin, npm):
+            self.assertEqual(
+                {key: inventory[key] for key in ("version", "skills", "commands", "mcp_servers")},
+                expected,
+            )
+        self.assertEqual(set(plugin["mcp_entrypoints"]), set(expected["mcp_servers"]))
+        self.assertEqual(set(npm["mcp_entrypoints"]), set(expected["mcp_servers"]))
+        self.assertEqual(plugin["mcp_entrypoints"], npm["mcp_entrypoints"])
+
+    def test_mcp_entrypoint_drift_fails_closed(self) -> None:
+        expected = {
+            "version": "0.10.0",
+            "skills": [],
+            "commands": [],
+            "mcp_servers": ["design-playbook-preview"],
+            "mcp_entrypoints": {
+                "design-playbook-preview": "mcp/preview/server.py"
+            },
+        }
+        actual = {
+            **expected,
+            "mcp_entrypoints": {
+                "design-playbook-preview": "mcp/other/server.py"
+            },
+        }
+        with self.assertRaisesRegex(smoke.SmokeFailure, "mcp_entrypoints mismatch"):
+            smoke._assert_inventory(actual, expected, "installed plugin")
 
     def test_inventory_mismatch_fails_with_named_surface(self) -> None:
         expected = {

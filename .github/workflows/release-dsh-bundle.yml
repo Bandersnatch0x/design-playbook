@@ -127,25 +127,17 @@ jobs:
 
       - name: Check npm registry state
         id: registry
-        shell: bash
         run: |
-          set -euo pipefail
-          PACKAGE_NAME="${{ steps.release.outputs.package_name }}"
-          SPEC="${PACKAGE_NAME}@${{ steps.release.outputs.version }}"
           set +e
-          OUTPUT="$(npm view "${SPEC}" version --json 2>&1)"
+          python3 scripts/release_transaction.py registry-state \
+            --package "${{ steps.release.outputs.package_name }}" \
+            --version "${{ steps.release.outputs.version }}" \
+            > registry-state.txt
           STATUS=$?
           set -e
-          if [[ ${STATUS} -eq 0 ]]; then
-            EXISTS=true
-          elif grep -Eq '"code"[[:space:]]*:[[:space:]]*"E404"|npm error code E404' <<<"${OUTPUT}"; then
-            EXISTS=false
-          else
-            echo "::error::npm registry preflight failed"
-            printf '%s\n' "${OUTPUT}"
-            exit ${STATUS}
-          fi
-          echo "exists=${EXISTS}" >> "${GITHUB_OUTPUT}"
+          cat registry-state.txt
+          if [[ ${STATUS} -ne 0 ]]; then exit ${STATUS}; fi
+          cat registry-state.txt >> "${GITHUB_OUTPUT}"
 
       - name: Validate public release state transition
         id: state

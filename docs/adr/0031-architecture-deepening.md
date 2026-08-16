@@ -31,6 +31,10 @@ The v0.20.1 review found three real seams and one correctness gap:
    the DOM/timer adapter. The showcase is not migrated into a frontend package.
 4. Unsupported run-profile versions fail at both the main run validation seam
    and the standalone G8 CLI entry point.
+5. `scripts/package_inventory.py` owns normalized package inventory facts
+   (`version`, skills, commands, MCP servers, and MCP entrypoints). Source,
+   marketplace/plugin, and npm-unpacked surfaces remain adapters; install smoke
+   owns orchestration and live process probes.
 
 ## Consequences
 
@@ -40,5 +44,9 @@ The v0.20.1 review found three real seams and one correctness gap:
   tests assert adapter wiring rather than re-testing shell implementations.
 - Queue-monitor transition tests run without a browser, while existing Chromium
   tests retain DOM/timer coverage.
+- Package inventory comparison catches MCP entrypoint drift, not only server
+  counts, while distribution-specific discovery remains local to each adapter.
+- Release registry classification and provenance retry policy are deterministic
+  under injected command, clock, temp-directory, and cleanup adapters.
 - New release transaction behavior stays on a feature branch until the normal
   release gate promotes it; no public package or tag changes in this ADR.

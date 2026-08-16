@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -152,18 +151,10 @@ def inspect_vnext(
         shaping = "unreadable"
     elif facts.shaping_events is not None:
         shaping = queue_state(list(facts.shaping_events))
-    pointback = run_root / "point-back.md"
-    six_block = False
-    invalidated = False
-    pb_text = ""
-    if pointback.is_file():
-        try:
-            pb_text = pointback.read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
-            pb_text = ""
-        six_block = "## Coverage statement" in pb_text
-        invalidated = "\ninvalidated:" in pb_text or pb_text.startswith(
-            "invalidated:")
+    pb_text = facts.pointback_text
+    six_block = "## Coverage statement" in pb_text
+    invalidated = "\ninvalidated:" in pb_text or pb_text.startswith(
+        "invalidated:")
     repair = None
     if pb_text:
         repair = _repair_narration(
@@ -185,47 +176,7 @@ class StageState:
     evidence: list[str]
 
 
-# Issue #44: fill surfaces may land in the host tree (product side) instead
-# of the run root. When plan.md registers those paths as ``fill:`` field
-# lines, the fill stage is also judged on their existence — one path per
-# line, run-root-relative or host-project-relative (the orchestrating cwd).
-# Only unfenced column-0 field lines are declarations; fenced blocks are
-# prose/examples and are never read as declarations.
-PLAN_FILL_LINE = re.compile(r"^fill:[ \t]*(\S+)")
-
-
-def _plan_fill_artifacts(run_root: Path) -> list[str]:
-    """Declared fill artifact paths from plan.md that exist on disk.
-
-    Fenced code blocks (```` ``` ````) are skipped while scanning: an
-    example or prose block citing ``fill: spec.md`` is not a declaration
-    (fail-closed — the fill stage stays unchecked rather than counting a
-    narrated example).
-    """
-    try:
-        text = (run_root / "plan.md").read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
-        return []
-    found: list[str] = []
-    fenced = False
-    for line in text.splitlines():
-        if line.lstrip().startswith("```"):
-            fenced = not fenced
-            continue
-        if fenced:
-            continue
-        match = PLAN_FILL_LINE.match(line)
-        if match is None:
-            continue
-        declared = match.group(1).strip().rstrip(",")
-        candidate = Path(declared)
-        bases = (
-            [candidate] if candidate.is_absolute()
-            else [run_root / candidate, Path.cwd() / candidate]
-        )
-        if any(base.is_file() for base in bases) and declared not in found:
-            found.append(declared)
-    return found
+# Plan fill declarations are captured by RunFacts; status only projects them.
 
 
 def inspect_run(
@@ -234,7 +185,7 @@ def inspect_run(
 ) -> list[StageState]:
     facts = run_facts or capture_run_facts(run_root=run_root)
     snapshot = preview_snapshot or facts.preview or inspect_preview(run_root / "preview")
-    plan_fills = _plan_fill_artifacts(run_root)
+    plan_fills = list(facts.plan_fill_artifacts)
     states: list[StageState] = []
     for stage in STAGES:
         if stage.key == "preview":
@@ -403,17 +354,14 @@ def render(run_root: Path, *, as_json: bool) -> int:
         print(f"RUN STATUS ERROR: not a directory: {run_root}", file=sys.stderr)
         return 2
     facts = capture_run_facts(run_root=run_root)
-    pointback_error = next(
-        (
-            error
-            for error in facts.read_errors
-            if error.artifact == "point_back" and error.code != "missing"
-        ),
+    read_error = next(
+        (error for error in facts.read_errors if error.code != "missing"),
         None,
     )
-    if pointback_error is not None:
+    if read_error is not None:
         print(
-            f"RUN STATUS ERROR: cannot read point-back.md: {pointback_error.message}",
+            f"RUN STATUS ERROR: cannot read {read_error.path.name}: "
+            f"{read_error.message}",
             file=sys.stderr,
         )
         return 2
