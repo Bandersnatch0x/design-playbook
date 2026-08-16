@@ -37,7 +37,10 @@ if str(_PKG_ROOT) not in sys.path:
 from design_playbook.scripts import rules_registry  # noqa: E402
 from design_playbook.scripts._diagnostics import Finding, finding  # noqa: E402
 from design_playbook.scripts.rules_registry import RegistryError  # noqa: E402
-from design_playbook.scripts.run_profile import parse_run_profile  # noqa: E402
+from design_playbook.scripts.run_profile import (  # noqa: E402
+    parse_run_profile,
+    validate_run_profile,
+)
 
 REGISTRY_PATH = (
     Path(__file__).resolve().parents[1] / "skills" / "design-playbook"
@@ -144,9 +147,16 @@ def main(argv: list[str]) -> int:
         try:
             profile = parse_run_profile(
                 plan_path.read_text(encoding="utf-8"))
-            tier = profile.tier if profile is not None else None
-        except (OSError, UnicodeError):
-            tier = None
+        except (OSError, UnicodeError) as exc:
+            print(f"G8 INVALID: cannot read {plan_path}: {exc}", file=sys.stderr)
+            return 2
+        profile_errors = validate_run_profile(profile) if profile is not None else []
+        if profile_errors:
+            print("G8 INVALID:")
+            for error in profile_errors:
+                print(f"  FAIL  run-profile invalid: {error}")
+            return 1
+        tier = profile.tier if profile is not None else None
     findings = check_g8_run(craft_text, entries, tier)
     if not findings:
         print("G8 OK: craft audit rows satisfy the run-level registry gate")

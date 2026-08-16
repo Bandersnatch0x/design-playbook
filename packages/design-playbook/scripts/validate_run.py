@@ -144,7 +144,7 @@ from design_playbook.scripts.shaping_log import (  # noqa: E402
 from design_playbook.scripts.dd_entries import DD_HEADING  # noqa: E402
 from design_playbook.scripts.g10_design_decisions import check_g10  # noqa: E402
 from design_playbook.scripts.repair_rounds import check_rounds  # noqa: E402
-from design_playbook.scripts.run_profile import parse_run_profile  # noqa: E402
+from design_playbook.scripts.run_profile import validate_run_profile  # noqa: E402
 
 # vNext S3 gates: method-semantics keys (G6-adjacent), interaction-track
 # dimension annotations (G2-adjacent), sampling-matrix gaps (G11), and the
@@ -198,6 +198,17 @@ def run(
         spec_path=Path(spec_path), pointback_path=Path(pb_path),
         preview_dir=pd, evidence_dir=ed, run_root=rr,
     )
+    profile = facts.run_profile
+    if profile is not None:
+        for error in validate_run_profile(profile):
+            errs.append(finding(
+                "G12.run_profile",
+                f"run-profile invalid: {error}",
+                owner="plan.md#run-profile",
+                expected="supported v1 run-profile with valid tier and confirmation",
+                actual=error,
+                repair="Fix the run-profile block before running vNext gates",
+            ))
     operational_errors = tuple(
         error for error in facts.read_errors if error.artifact != "manifest"
     )
@@ -232,7 +243,10 @@ def run(
     # vNext S6: the effective tier P3 makes the matrix block itself
     # mandatory (loop-prototype 1.2 "sampling matrix fully executed").
     errs += check_sampling_matrix(
-        pointback_text, spec_text, evidence_dir=ed, tier=_plan_tier(rr))
+        pointback_text, spec_text, evidence_dir=ed, tier=(
+            effective_tier(profile.tier, profile.upgrades)
+            if profile is not None else None
+        ))
     # G2 dimensions (vNext S3): dimension/face/basis annotations on findings
     # — subjective faces are judgment class (advisory only, source declared).
     errs += check_dimensions(pointback_text)
@@ -309,20 +323,23 @@ def run(
     sd = Path(shaping_dir) if shaping_dir else (
         rr / "shaping" if rr is not None else None
     )
-    shaping_events: list[dict] | None = None
+    shaping_events: list[dict] | None = (
+        list(facts.shaping_events) if facts.shaping_events is not None else None
+    )
     if sd is not None and (sd / Path(SHAPING_LOG).name).is_file():
         errs += check_g9(
             sd,
             project_dir=Path(contract_project) if contract_project else None,
             run_dir=Path(contract_run) if contract_run else rr,
         )
-        # G10 consumes the same session events for the T3 upstream-route
-        # signal; on a malformed log G9 owns the diagnostic and G10 skips.
-        try:
-            shaping_events = parse_shaping_log(
-                (sd / SHAPING_LOG).read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, ShapingLogError):
-            shaping_events = None
+        # Explicit --shaping-dir may point outside the captured run root.
+        # Default discovery already parsed the same log into RunFacts.
+        if shaping_dir is not None:
+            try:
+                shaping_events = parse_shaping_log(
+                    (sd / SHAPING_LOG).read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, ShapingLogError):
+                shaping_events = None
 
     # G10 (conditional): a decision report carrying DD entry blocks engages
     # the design-decision gate (top block stays verbatim; reports without
@@ -330,10 +347,10 @@ def run(
     dr_g10 = dr if dr is not None else (
         rr / "decision-report.md" if rr is not None else None
     )
-    report_text = ""
-    if dr_g10 is not None and dr_g10.is_file():
+    report_text = facts.decision_report_text if dr is None else ""
+    if dr is not None and dr.is_file():
         try:
-            report_text = dr_g10.read_text(encoding="utf-8")
+            report_text = dr.read_text(encoding="utf-8")
         except (OSError, UnicodeError):
             report_text = ""
     if report_text and DD_HEADING.search(report_text):
@@ -346,7 +363,10 @@ def run(
             baseline_state=_load_json_tolerant(
                 rr / "design-baseline" / "state.json"
             ) if rr is not None else None,
-            run_profile_tier=_plan_tier(rr),
+            run_profile_tier=(
+                effective_tier(profile.tier, profile.upgrades)
+                if profile is not None else None
+            ),
         )
 
     # G8 run level (vNext S3): a craft-guard.md in the run root is checked
@@ -367,13 +387,15 @@ def run(
                 repair="Restore the files or drop the audit log",
             ))
         else:
-            errs += check_g8_run(craft_text, registry_entries, _plan_tier(rr))
+            errs += check_g8_run(craft_text, registry_entries, (
+                effective_tier(profile.tier, profile.upgrades)
+                if profile is not None else None
+            ))
 
     # G12 tier boundary + escalation signals (vNext S4): fires when plan.md
     # carries a run-profile block; legacy runs without the block are not
     # re-checked. The contract diff basis is the G7 bind snapshot; without
     # contract paths the route / decision / blocking faces still fire.
-    profile = _plan_profile(rr)
     if profile is not None:
         touch = None
         bound_criteria = None
@@ -386,10 +408,13 @@ def run(
                     touch = contract_touch(bound, effective)
                     bound_criteria = sum(
                         1 for path in bound if CRITERION_PATH.match(path))
-        dd_explore = bool(
+        dd_explore = any(
+            entry.tier == "explore" for entry in facts.decision_entries
+        ) if dr is None else bool(
             report_text and DD_HEADING.search(report_text)
             and any(entry.tier == "explore"
-                    for entry in parse_dd_entries(report_text)))
+                    for entry in parse_dd_entries(report_text))
+        )
         g12_errs, g12_warns, _signals = check_g12(
             profile,
             pointback_text=pointback_text,
@@ -411,30 +436,6 @@ def _load_json_tolerant(path: Path) -> dict | None:
     except (OSError, UnicodeError, ValueError):
         return None
     return data if isinstance(data, dict) else None
-
-
-def _plan_profile(run_root: Path | None):
-    """The parsed run-profile block of a run root; None when absent."""
-    if run_root is None:
-        return None
-    plan = run_root / "plan.md"
-    try:
-        return parse_run_profile(plan.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError):
-        return None
-
-
-def _plan_tier(run_root: Path | None) -> str | None:
-    """The run's effective tier: declared tier plus recorded S4 upgrades.
-
-    G8/G10 consume this; after an escalation (run-profile upgrades event)
-    the run walks the new tier's obligations, so the effective tier — not
-    the intake declaration — is the gate input.
-    """
-    profile = _plan_profile(run_root)
-    if profile is None:
-        return None
-    return effective_tier(profile.tier, profile.upgrades)
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:

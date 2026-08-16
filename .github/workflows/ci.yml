@@ -34,6 +34,7 @@ jobs:
           python3 tests/test_release.py
           python3 tests/test_doctor.py
           python3 tests/test_run_status.py
+          python3 tests/test_run_facts_snapshot.py
           python3 tests/test_stages_registry.py
           python3 tests/test_design_baseline.py
           python3 tests/test_validate.py
@@ -41,12 +42,16 @@ jobs:
           python3 tests/test_normalize_lockstep.py
           python3 tests/test_install_smoke.py
           python3 tests/test_release_workflow.py
+          python3 tests/test_release_transaction.py
           python3 tests/test_vnext_s1.py
           python3 tests/test_vnext_s2.py
           python3 tests/test_vnext_s3.py
           python3 tests/test_vnext_s4.py
           python3 tests/test_vnext_s5.py
           python3 tests/test_vnext_s6.py
+      - name: Queue monitor dialog state tests
+        run: node packages/design-playbook/showcase/test_queue_monitor_state.js
+
       - name: Syntax check (all Python)
         # py_compile is the always-on syntax gate. The MCP stdio suites now
         # also run as required gates below (ticket 06): preview mocks its
@@ -79,6 +84,7 @@ jobs:
             packages/design-playbook/scripts/learning_candidates.py \
             scripts/release.py \
             scripts/release_state.py \
+            scripts/release_transaction.py \
             scripts/doctor.py \
             scripts/install_smoke.py \
             packages/design-playbook/skills/design-baseline/scripts/design_baseline.py \
@@ -92,6 +98,8 @@ jobs:
             tests/test_normalize_lockstep.py \
             tests/test_install_smoke.py \
             tests/test_release_workflow.py \
+            tests/test_release_transaction.py \
+            tests/test_run_facts_snapshot.py \
             tests/test_vnext_s1.py \
             tests/test_vnext_s2.py \
             tests/test_vnext_s3.py \

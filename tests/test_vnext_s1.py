@@ -8,6 +8,7 @@ Black-box where a CLI exists (validate_run.py); in-process for the parsers.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -657,10 +658,36 @@ class FixtureRunGateTests(unittest.TestCase):
             capture_output=True, text=True, check=False,
         )
 
-    def test_full_chain_reaches_pass(self) -> None:
-        result = self._validate()
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("RUN OK", result.stdout)
+    def test_unsupported_profile_version_fails_production_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp) / "run"
+            shutil.copytree(FIXTURE_RUN, run)
+            shutil.copytree(FIXTURE_RUN.parent / "project", Path(tmp) / "project")
+            plan = run / "plan.md"
+            plan.write_text(
+                plan.read_text(encoding="utf-8").replace(
+                    "run-profile: v1", "run-profile: v99", 1
+                ),
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(PKG / "scripts" / "validate_run.py"),
+                    str(run / "spec.md"),
+                    str(run / "point-back.md"),
+                    "--evidence-dir", str(run / "evidence"),
+                    "--run-root", str(run),
+                    "--contract-project", str(Path(tmp) / "project"),
+                    "--contract-run", str(run),
+                    "--shaping-dir", str(run / "shaping"),
+                ],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("run-profile invalid", result.stdout)
+            self.assertIn("v99", result.stdout)
+
 
     def test_strict_mode_also_passes(self) -> None:
         # --strict adds --require-coverage; the six-block report satisfies it

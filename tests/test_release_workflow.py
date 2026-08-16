@@ -242,27 +242,27 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
 
     def test_registry_waits_are_bounded_and_name_the_missing_artifact(self) -> None:
         waits = (
-            self.dsh_publish_steps["Wait for design-playbook registry"],
-            self.publish_steps["Verify dsh-design-playbook registry"],
+            (self.dsh_publish_steps["Wait for design-playbook registry"], 180, 10),
+            (self.publish_steps["Verify dsh-design-playbook registry"], 180, 10),
         )
-        for step in waits:
+        for step, attempts, interval in waits:
             with self.subTest(step=step["name"]):
                 self.assertGreaterEqual(step["timeout-minutes"], 25)
-                self.assertIn("required ${PACKAGE_NAME}@${VERSION}", step["run"])
+                self.assertIn("release_transaction.py wait-registry", step["run"])
+                self.assertIn(f"--attempts {attempts}", step["run"])
+                self.assertIn(f"--interval {interval}", step["run"])
 
     def test_provenance_verification_retries_are_bounded_and_fail_closed(self) -> None:
         verifies = (
             self.publish_steps["Verify npm provenance"],
             self.publish_steps["Verify dsh-design-playbook provenance"],
+            self.dsh_publish_steps["Verify npm provenance"],
         )
         for step in verifies:
             with self.subTest(step=step["name"]):
-                self.assertIn("seq 1 3", step["run"])
-                self.assertIn("sleep 20", step["run"])
-                self.assertIn("npm audit signatures", step["run"])
-                self.assertIn("release_state.py provenance", step["run"])
-                self.assertIn("failed after 3 attempts", step["run"])
-                self.assertIn("exit 1", step["run"])
+                self.assertIn("release_transaction.py verify-provenance", step["run"])
+                self.assertIn("--attempts 3", step["run"])
+                self.assertIn("--interval 20", step["run"])
 
     def test_both_publishers_pin_python_and_inspect_their_npm_artifacts(self) -> None:
         self.assertEqual(
@@ -297,7 +297,7 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         )
         self.assertIn("Verify npm provenance", self.publish_steps)
         self.assertIn(
-            "npm audit signatures",
+            "release_transaction.py verify-provenance",
             self.publish_steps["Verify npm provenance"]["run"],
         )
         self.assertNotIn(
@@ -306,15 +306,11 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         )
 
     def test_package_name_comes_from_manifest(self) -> None:
-        self.assertNotIn("PACKAGE_NAME: design-playbook", self.workflow)
-        self.assertIn(
-            "package_name=${PACKAGE_NAME}",
-            self.publish_steps["Resolve and bind release identity"]["run"],
-        )
-        self.assertIn(
-            'PACKAGE_NAME="${{ steps.release.outputs.package_name }}"',
-            self.workflow,
-        )
+        identity = self.publish_steps["Resolve and bind release identity"]["run"]
+        self.assertIn("release_transaction.py identity", identity)
+        self.assertIn("--manifest packages/design-playbook/package.json", identity)
+        self.assertNotIn("node -p", identity)
+        self.assertIn("steps.release.outputs.package_name", self.workflow)
 
     def test_provenance_contract_requires_exact_package(self) -> None:
         require_verified_provenance(

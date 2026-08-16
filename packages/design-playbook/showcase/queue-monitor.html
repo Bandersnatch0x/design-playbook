@@ -230,6 +230,7 @@
   </div>
 </div>
 
+<script src="queue-monitor-state.js"></script>
 <script>
 (function () {
   "use strict";
@@ -257,14 +258,8 @@
 
   var selected = {};            // id -> true（取消不得改动）
   var summaryUnreachable = false;
-  // 对话会话 token：open/close 各自递增；两个延迟回调（骨架填充 180ms /
-  // 确认执行 200ms）先校验 token 未变且 overlay 仍 open 才执行效果，
-  // 否则丢弃——取消后不再有残留渲染（S1/R4 骨架窗竞态）。
-  var dialogSession = 0;
-  // 执行锁：confirm 后进入执行锁定直至结果呈现，取消通道（Esc/遮罩/
-  // 取消按钮）在此窗口全部失效（S1/R4 执行窗竞态：已确认的重试展示
-  // 不被取消打断）。
-  var executing = false;
+  // QueueMonitorState owns session/execute transitions; this page owns DOM and timers.
+  var dialogState = QueueMonitorState.createDialogState();
   var dialogTimer = null;
   var executeTimer = null;
 
@@ -281,12 +276,17 @@
     }
   }
   function resetDialogControls() {
-    executing = false;
+    dialogState = QueueMonitorState.resetExecution(dialogState);
     $("dlg-cancel").disabled = false;
     $("dlg-confirm").classList.remove("is-loading");
   }
+  function startDialogSession() {
+    dialogState = QueueMonitorState.openDialog(dialogState);
+    clearDialogTimers();
+    resetDialogControls();
+  }
   function endDialogSession() {
-    dialogSession += 1;
+    dialogState = QueueMonitorState.closeDialog(dialogState);
     clearDialogTimers();
     resetDialogControls();
   }
@@ -434,7 +434,7 @@
   }
 
   function openDialog() {
-    endDialogSession();                  // 新会话：清理并作废一切旧的延迟回调
+    startDialogSession();                // 新会话：清理并作废一切旧的延迟回调
     summaryUnreachable = SCENARIO === "summary-error";
     var overlay = $("retry-overlay");
     overlay.classList.add("is-open");
@@ -459,10 +459,10 @@
     $("dlg-confirm").textContent = "重试 … 条运行";
     var first = $("scope-fail-once");
     first.focus();
-    var session = dialogSession;
+    var session = dialogState.session;
     dialogTimer = window.setTimeout(function () {
       dialogTimer = null;
-      if (session !== dialogSession || !overlayOpen()) return; // 骨架窗内已取消：丢弃
+      if (!QueueMonitorState.isCurrentSession(dialogState, session) || !overlayOpen()) return; // 骨架窗内已取消：丢弃
       $("dlg-affected").classList.remove("skeleton");
       renderDialog();
     }, 180);
@@ -511,18 +511,18 @@
   });
 
   $("dlg-cancel").addEventListener("click", function () {
-    if (!executing) closeDialog();      // 执行窗内取消已禁用（按钮 disabled，双保险）
+    if (QueueMonitorState.canCancel(dialogState)) closeDialog();      // 执行窗内取消已禁用（按钮 disabled，双保险）
   });
   $("retry-overlay").addEventListener("click", function (e) {
-    if (e.target === $("retry-overlay") && !executing) closeDialog();   // 遮罩点击 = 取消，绝不执行；执行窗内忽略
+    if (e.target === $("retry-overlay") && QueueMonitorState.canCancel(dialogState)) closeDialog();   // 遮罩点击 = 取消，绝不执行；执行窗内忽略
   });
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && overlayOpen() && !executing) closeDialog(); // 执行窗内 Esc 不打断已确认的重试
+    if (e.key === "Escape" && overlayOpen() && QueueMonitorState.canCancel(dialogState)) closeDialog(); // 执行窗内 Esc 不打断已确认的重试
   });
 
   document.querySelectorAll('input[name="retry-scope"]').forEach(function (radio) {
     radio.addEventListener("change", function () {
-      if (!executing) renderDialog();   // 执行窗内不接受范围切换（避免执行中途状态机抖动）
+      if (QueueMonitorState.canCancel(dialogState)) renderDialog();   // 执行窗内不接受范围切换（避免执行中途状态机抖动）
     });
   });
 
@@ -534,27 +534,27 @@
   $("dlg-confirm").addEventListener("click", function () {
     var btn = $("dlg-confirm");
     if (btn.disabled) return;
-    var session = dialogSession;
-    executing = true;                   // 确认即锁定：取消通道关闭直至结果呈现
+    var session = dialogState.session;
+    dialogState = QueueMonitorState.beginExecution(dialogState); // 确认即锁定
     $("dlg-cancel").disabled = true;   // 视觉锁定（.btn:disabled）
     btn.classList.add("is-loading");
     btn.textContent = "执行中…";
-    var scopeList = inScope(selectedFailed(), currentScope());
     // 模拟提交延迟后置 queued（transform/opacity 之外无动画）
     executeTimer = window.setTimeout(function () {
       executeTimer = null;
       // 会话校验：执行窗内对话不可能被关闭（取消通道已锁）；此检查为
       // 纵深防御——token 变更或 overlay 非 open 一律不落地任何效果。
-      if (session !== dialogSession || !overlayOpen()) {
+      if (!QueueMonitorState.isCurrentSession(dialogState, session) || !overlayOpen()) {
         resetDialogControls();
         return;
       }
-      scopeList.forEach(function (r) { r.state = "queued"; });
-      selected = {};                       // 执行后清空选中（假设 retry.execute_semantics）
+      var retryResult = QueueMonitorState.completeRetry(RUNS, selected, currentScope());
+      RUNS = retryResult.runs;
+      selected = retryResult.selected;
       closeDialog();
       renderCounts(); renderRows(); renderSide(); renderBatchBar();
       setState("queue-post-confirm");
-      notify("已重试 " + scopeList.length + " 条失败运行");
+      notify("已重试 " + retryResult.count + " 条失败运行");
     }, 200);
   });
 
