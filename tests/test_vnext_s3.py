@@ -12,6 +12,7 @@ parsers and gate functions.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -401,9 +402,30 @@ class G8RunRegistryTests(unittest.TestCase):
         self.assertEqual(row_finding.actual, "CRAFT-01@9")
         self.assertIn("Re-pin", row_finding.repair)
 
-    def test_cli_on_fixture_run(self) -> None:
-        import os
+    def test_cli_rejects_unsupported_profile_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            craft = root / "craft-guard.md"
+            craft.write_text(P2_CRAFT, encoding="utf-8")
+            plan = root / "plan.md"
+            plan.write_text(
+                "# plan\n<!-- run-profile: v99 -->\n\n```yaml\n"
+                "tier: P2\nconfirmed_by: user + now\n```\n",
+                encoding="utf-8",
+            )
+            env = dict(os.environ)
+            env["PYTHONPATH"] = str(PKG) + os.pathsep + env.get("PYTHONPATH", "")
+            result = subprocess.run(
+                [sys.executable,
+                 str(PKG / "scripts" / "g8_run_registry.py"),
+                 str(craft), "--plan", str(plan)],
+                capture_output=True, text=True, check=False, env=env,
+            )
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("run-profile invalid", result.stdout)
+            self.assertIn("v99", result.stdout)
 
+    def test_cli_on_fixture_run(self) -> None:
         env = dict(os.environ)
         env["PYTHONPATH"] = str(PKG) + os.pathsep + env.get("PYTHONPATH", "")
         result = subprocess.run(

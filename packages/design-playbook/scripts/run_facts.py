@@ -13,6 +13,12 @@ from typing import Any
 
 from design_playbook.mcp.evidence.ledger_syntax import LedgerFacts, parse_ledger
 from design_playbook.mcp.preview.integrity import PreviewSnapshot, inspect_preview
+from design_playbook.scripts.dd_entries import DDEntry, parse_dd_entries
+from design_playbook.scripts.run_profile import RunProfile, parse_run_profile
+from design_playbook.scripts.shaping_log import (
+    ShapingLogError,
+    parse_shaping_log,
+)
 from design_playbook.scripts.verdict_syntax import VerdictFacts, parse_verdict
 
 
@@ -46,6 +52,11 @@ class RunFacts:
     _baseline_text: str | None
     baseline_state_error: str | None
     read_errors: tuple[ArtifactReadFact, ...]
+    run_profile: RunProfile | None = None
+    decision_report_text: str = ""
+    decision_entries: tuple[DDEntry, ...] = ()
+    shaping_events: tuple[dict[str, Any], ...] | None = None
+    shaping_error: str | None = None
 
     @property
     def manifest_entries(self) -> tuple[dict[str, Any], ...]:
@@ -155,6 +166,46 @@ def _existing_paths(run_root: Path | None) -> frozenset[str]:
     return frozenset(paths)
 
 
+def _read_optional_run_facts(
+        run_root: Path | None,
+) -> tuple[RunProfile | None, str, tuple[DDEntry, ...], tuple[dict[str, Any], ...] | None, str | None]:
+    """Load optional vNext artifact facts without becoming a policy gate."""
+    if run_root is None:
+        return None, "", (), None, None
+
+    profile: RunProfile | None = None
+    plan = run_root / "plan.md"
+    try:
+        if plan.is_file():
+            profile = parse_run_profile(plan.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError):
+        profile = None
+
+    entries: tuple[DDEntry, ...] = ()
+    report_text = ""
+    report = run_root / "decision-report.md"
+    try:
+        if report.is_file():
+            report_text = report.read_text(encoding="utf-8")
+            entries = tuple(parse_dd_entries(report_text))
+    except (OSError, UnicodeError):
+        report_text = ""
+        entries = ()
+
+    shaping_events: tuple[dict[str, Any], ...] | None = None
+    shaping_error: str | None = None
+    shaping_log = run_root / "shaping" / "shaping-log.jsonl"
+    try:
+        if shaping_log.is_file():
+            shaping_events = tuple(
+                parse_shaping_log(shaping_log.read_text(encoding="utf-8"))
+            )
+    except (OSError, UnicodeError, ShapingLogError) as exc:
+        shaping_events = None
+        shaping_error = str(exc)
+    return profile, report_text, entries, shaping_events, shaping_error
+
+
 def capture_run_facts(
     *,
     spec_path: Path | None = None,
@@ -189,6 +240,7 @@ def capture_run_facts(
     baseline_text, baseline_error = _read_baseline(run_root)
     manifest_lines, manifest_errors = _read_manifest(evidence_dir)
     preview = inspect_preview(preview_dir) if preview_dir is not None else None
+    run_profile, decision_report_text, decision_entries, shaping_events, shaping_error = _read_optional_run_facts(run_root)
     return RunFacts(
         run_root=run_root,
         spec_path=spec_path,
@@ -209,4 +261,9 @@ def capture_run_facts(
             for error in (spec_error, pointback_error)
             if error is not None
         ) + manifest_errors,
+        run_profile=run_profile,
+        decision_report_text=decision_report_text,
+        decision_entries=decision_entries,
+        shaping_events=shaping_events,
+        shaping_error=shaping_error,
     )

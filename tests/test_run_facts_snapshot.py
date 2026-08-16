@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""RunFacts immutable optional artifact loading tests."""
+from __future__ import annotations
+
+import tempfile
+import unittest
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+PKG = ROOT / "packages" / "design-playbook"
+if str(PKG) not in sys.path:
+    sys.path.insert(0, str(PKG))
+
+from design_playbook.scripts.run_facts import capture_run_facts  # noqa: E402
+
+
+class RunFactsOptionalArtifactTests(unittest.TestCase):
+    def test_vnext_artifacts_load_into_one_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "plan.md").write_text(
+                """# plan\n<!-- run-profile: v1 -->\n\n```yaml\ntier: P2\nconfirmed_by: user + now\n```\n""",
+                encoding="utf-8",
+            )
+            (root / "decision-report.md").write_text(
+                "## DD-0001 — choice\n\n```yaml\nid: DD-0001\ntier: record\nstatus: confirmed-agent\nquestion: choice\n```\n",
+                encoding="utf-8",
+            )
+            shaping = root / "shaping"
+            shaping.mkdir()
+            (shaping / "shaping-log.jsonl").write_text(
+                '{"event":"asked","question_id":"Q1"}\n',
+                encoding="utf-8",
+            )
+            facts = capture_run_facts(run_root=root)
+            self.assertEqual(facts.run_profile.version, 1)
+            self.assertEqual(facts.run_profile.tier, "P2")
+            self.assertEqual([entry.id for entry in facts.decision_entries], ["DD-0001"])
+            self.assertEqual(facts.shaping_events[0]["event"], "asked")
+            self.assertIsNone(facts.shaping_error)
+
+    def test_malformed_shaping_is_recorded_without_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            (root / "shaping").mkdir(parents=True)
+            (root / "shaping" / "shaping-log.jsonl").write_text(
+                '{"event":"not-valid"}\n', encoding="utf-8"
+            )
+            facts = capture_run_facts(run_root=root)
+            self.assertIsNone(facts.shaping_events)
+            self.assertTrue(facts.shaping_error)
+
+
+if __name__ == "__main__":
+    unittest.main()

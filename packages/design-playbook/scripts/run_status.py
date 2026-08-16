@@ -43,22 +43,13 @@ else:
 # its status decision from the shared canonical value.
 from design_playbook.scripts.stages import STAGES, STAGES_BY_KEY  # noqa: E402
 from design_playbook.scripts.run_facts import RunFacts, capture_run_facts  # noqa: E402
-from design_playbook.scripts.run_profile import parse_run_profile  # noqa: E402
-from design_playbook.scripts.shaping_log import (  # noqa: E402
-    ShapingLogError,
-    load_shaping_facts,
-    queue_state,
-)
+from design_playbook.scripts.shaping_log import queue_state  # noqa: E402
 
 # vNext S4 re-entry narration (loop-prototype 7.1): repair rounds, route
 # hit counts, dd supersedes / stale reviews, derived escalation signals,
 # and the close_reason terminal narration, all read from artifacts the
 # gates already consume (additive; plain runs report empty faces).
-from design_playbook.scripts.dd_entries import (  # noqa: E402
-    DD_HEADING,
-    dd_refs_in_pointback,
-    parse_dd_entries,
-)
+from design_playbook.scripts.dd_entries import dd_refs_in_pointback  # noqa: E402
 from design_playbook.scripts.escalation_signals import (  # noqa: E402
     EscalationSignal,
     collect_signals,
@@ -118,25 +109,16 @@ class RepairNarration:
 
 
 def _repair_narration(
-        pointback_text: str, run_root: Path,
-        upgrades: tuple[str, ...]) -> RepairNarration:
+        pointback_text: str,
+        upgrades: tuple[str, ...],
+        decision_entries: tuple,
+) -> RepairNarration:
     """Derive the S4 re-entry faces from artifacts in the run root."""
     rounds = parse_round_facts(pointback_text).max_rounds
     routes = tuple(sorted(route_hits(pointback_text).items()))
     dd_supersedes = len(dd_refs_in_pointback(pointback_text))
-    stale_reviews = 0
-    dd_explore = False
-    report = run_root / "decision-report.md"
-    if report.is_file():
-        try:
-            text = report.read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
-            text = ""
-        if text and DD_HEADING.search(text):
-            entries = parse_dd_entries(text)
-            stale_reviews = sum(
-                1 for entry in entries if entry.stale_review)
-            dd_explore = any(entry.tier == "explore" for entry in entries)
+    stale_reviews = sum(1 for entry in decision_entries if entry.stale_review)
+    dd_explore = any(entry.tier == "explore" for entry in decision_entries)
     signals = list(collect_signals(pointback_text, dd_explore=dd_explore))
     signals.extend(recorded_regrades(upgrades))
     return RepairNarration(
@@ -149,32 +131,27 @@ def _repair_narration(
     )
 
 
-def inspect_vnext(run_root: Path) -> VnextNarration:
-    """Read run-profile (plan.md) and shaping session state (additive)."""
+def inspect_vnext(
+        run_root: Path,
+        run_facts: RunFacts | None = None,
+) -> VnextNarration:
+    """Project vNext facts from one immutable run snapshot."""
+    facts = run_facts or capture_run_facts(run_root=run_root)
     tier = None
     confirmed_by = None
     skipped: tuple[tuple[str, str], ...] = ()
     upgrades: tuple[str, ...] = ()
-    plan_path = run_root / "plan.md"
-    if plan_path.is_file():
-        try:
-            profile = parse_run_profile(
-                plan_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError):
-            profile = None
-        if profile is not None:
-            tier = profile.tier or None
-            confirmed_by = profile.confirmed_by or None
-            skipped = profile.skipped
-            upgrades = profile.upgrades
+    profile = facts.run_profile
+    if profile is not None:
+        tier = profile.tier or None
+        confirmed_by = profile.confirmed_by or None
+        skipped = profile.skipped
+        upgrades = profile.upgrades
     shaping: str | None = None
-    try:
-        session = load_shaping_facts(run_root)
-    except (ShapingLogError, OSError, UnicodeError):
+    if facts.shaping_error is not None:
         shaping = "unreadable"
-    else:
-        if session is not None:
-            shaping = queue_state(list(session.events))
+    elif facts.shaping_events is not None:
+        shaping = queue_state(list(facts.shaping_events))
     pointback = run_root / "point-back.md"
     six_block = False
     invalidated = False
@@ -189,7 +166,9 @@ def inspect_vnext(run_root: Path) -> VnextNarration:
             "invalidated:")
     repair = None
     if pb_text:
-        repair = _repair_narration(pb_text, run_root, upgrades)
+        repair = _repair_narration(
+            pb_text, upgrades, facts.decision_entries
+        )
     return VnextNarration(
         tier=tier, confirmed_by=confirmed_by, skipped=skipped,
         upgrades=upgrades, shaping=shaping,
@@ -441,7 +420,7 @@ def render(run_root: Path, *, as_json: bool) -> int:
     snapshot = facts.preview or inspect_preview(run_root / "preview")
     states = inspect_run(run_root, snapshot, facts)
     action = next_action(states, run_root, snapshot, facts)
-    vnext = inspect_vnext(run_root)
+    vnext = inspect_vnext(run_root, facts)
     payload = {
         "run_root": str(run_root),
         "stages": [

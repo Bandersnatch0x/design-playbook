@@ -20,6 +20,10 @@ import sys
 from pathlib import Path
 
 import _checks
+from release_transaction import (  # noqa: E402
+    ReleaseTransactionError,
+    resolve_package_identity,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "packages" / "design-playbook"
@@ -93,21 +97,6 @@ def codex_plugin_version() -> str:
     return version if isinstance(version, str) else ""
 
 
-def npm_package_version() -> str:
-    """Version declared in the npm/pi publish manifest.
-
-    ``packages/design-playbook/package.json`` is what feeds the pi package
-    gallery, which indexes npm rather than this repo. A bump that skips it
-    leaves the gallery listing a stale version forever, since the gallery
-    only ever sees published tarballs.
-    """
-    payload = read_json(PKG / "package.json")
-    if payload is None:
-        return ""
-    version = payload.get("version", "")
-    return version if isinstance(version, str) else ""
-
-
 def check_tree() -> None:
     print("== 1. working tree clean ==")
     status = git("status", "--porcelain", "--untracked-files=all")
@@ -125,7 +114,11 @@ def check_version() -> None:
     print("== 2. version consistency ==")
     version = plugin_version()
     codex_version = codex_plugin_version()
-    npm_version = npm_package_version()
+    npm_manifest = read_json(PKG / "package.json")
+    npm_version = (
+        npm_manifest.get("version", "")
+        if isinstance(npm_manifest, dict) else ""
+    )
     marketplace = read_json(ROOT / ".claude-plugin" / "marketplace.json")
     if marketplace is None:
         return
@@ -141,7 +134,17 @@ def check_version() -> None:
     if not SEMVER.fullmatch(version):
         fail(f"plugin.json version not semver: {version!r}")
     elif version == metadata_version == marketplace_version == codex_version == npm_version:
-        ok(f"versions match across 5 manifest sites: {version}")
+        tag = f"v{version}"
+        try:
+            identity = resolve_package_identity(
+                tag=tag,
+                manifest=npm_manifest,
+                notes_path=ROOT / "docs" / "releases" / f"{tag}.md",
+            )
+        except ReleaseTransactionError as exc:
+            fail(str(exc))
+        else:
+            ok(f"versions match across 5 manifest sites: {identity.version}")
     else:
         fail(
             f"version mismatch: plugin.json={version!r} "
