@@ -27,13 +27,13 @@ Keep each control in one authoritative place:
 Apply this section only after entry routing returns `design-run`; `no-run`
 creates no profile or run artifacts.
 
-Grade the run once, up front (LR1). Three tiers share one state machine and one artifact set — the tier only changes how deep each step goes:
+Project the router's initial tier and criteria once, up front (LR1). Three tiers share one state machine and one artifact set — the tier only changes how deep each step goes:
 
-- **P1 point-fix** — single owning-layer point-back repair; no new/decided contract fields, no design decision step, no shaping session (bind fast path + assumed ack only; R2 row-level spec additions allowed).
-- **P2 standard** — new feature inside the confirmed intent and baseline: run-scoped L1 values, new `l6.cN` criteria, `<domain>.*` assumption fields, full `ux-spec` shaping session (S0-S6, G9), R/C-tier design decisions.
-- **P3 full** — revises existing decided fields (`supersedes`), structural IA/primary-path alternatives, or crosses ≥2 declaration domains.
+- **P1 point-fix** — bind fast path + assumed acknowledgement; no design-decision entry or shaping session; R2 row-level spec additions remain allowed.
+- **P2 standard** — full `ux-spec` shaping session (S0-S6, G9), R/C-tier design decisions, and standard evidence/review obligations.
+- **P3 full** — full declaration, alternative, interaction, and applicability coverage.
 
-The agent grades initially against the declaration-touch checklist and asks the user to confirm **once** (may fold into the request reply). **Upgrade is automatic** the moment a correction signal appears (R1 finding, structural R2, cross-layer blocking, E-tier judgment) — record the upgrade event in the run-profile block and walk the added steps; **downgrade requires the user** (over-compliance already performed is kept). Write the block into `plan.md` as a structured field block (`tier: P1|P2|P3`, grading checklist, `confirmed_by: user + <ts>`, skip list with one-line reasons, upgrade events). The profile block is mandatory for every run — skipping the rest of the plan body is legal, skipping the profile block is not. Every skipped step keeps the one-line skip narration rule below.
+The executable router proposes the initial grade and the user confirms it **once** (may fold into the request reply). **Upgrade is automatic** the moment a correction signal appears (R1 finding, structural R2, cross-layer blocking, E-tier judgment) — record the upgrade event in the run-profile block and walk the added steps; **downgrade requires the user** (over-compliance already performed is kept). Write the block into `plan.md` as a structured field block (`tier: P1|P2|P3`, grading checklist, `confirmed_by: user + <ts>`, skip list with one-line reasons, upgrade events). The profile block is mandatory for every run — skipping the rest of the plan body is legal, skipping the profile block is not. Every skipped step keeps the one-line skip narration rule below.
 
 Answer, review, diagnose, and plan requests end with findings or a plan. Build and fix requests continue through in-scope local edits and the most relevant available validation. Ask the smallest question only when the answer changes the goal, scope, platform, success criteria, or authority; otherwise record a conservative assumption in L1.
 
@@ -54,37 +54,30 @@ Do in order. Data flow:
 
 ### 1. Entry routing
 
-**SSOT for this decision is this skill only** (not `commands/design-io.md`).
+**Executable routing authority:**
+`packages/design-playbook/scripts/run_profile.py route`. This skill owns fact
+normalization and orchestration; `commands/design-io.md` only invokes it.
 
-Normalize the request and repository facts, then call the existing
-`packages/design-playbook/scripts/run_profile.py route` interface. Keep the
-returned `mode`, tier, criteria, and prerequisite flags as the only initial
-route decision; do not classify chat again in a second workflow layer.
+Normalize the request and repository facts, call `run_profile.py route`, and
+keep its returned `mode`, tier, criteria, and prerequisite flags as the only
+initial route decision.
 
-- `no-run`: `answer`, `review`, `diagnose`, or non-persistent `plan` without
-  durable Design I/O artifacts. Do not create `.scratch/<run>/`, `plan.md`, or
-  a run-profile. A vision-capable host may inspect an attached image directly;
+- `no-run`: respond directly. Do not create `.scratch/<run>/`, `plan.md`, or a
+  run-profile. A vision-capable host may inspect an attached image directly;
   a text-only host records the metadata and states that visual inspection is
   unavailable once. Neither path copies the temporary image.
-- `design-run`: `prototype`, `build`, `fix`, or any request for durable Design
-  I/O artifacts. Project the returned tier and criteria into the existing v1
-  run-profile, then satisfy the independently returned baseline, reference,
-  and spec prerequisites.
+- `design-run`: project the returned tier and criteria into the existing v1
+  run-profile, then satisfy the independently returned prerequisites.
 
-The router rejects unknown or contradictory facts visibly. P3 wins for
-structural consequence, decided-field revision, or two or more declaration
-domains; P1 is only a local fix with no decided-field addition; all other
-design runs start at P2. The router does not decide later preview/observe
-adapter availability or evaluator verdicts.
+Treat a router error as a stop and correct the normalized facts; do not
+reconstruct its decision table in prose. The router does not decide later
+preview/observe adapter availability or evaluator verdicts.
 
-- **Existing-product UI build/fix** (meaningful first-party pages/components/theme/styles already exist) and no usable verified baseline binding under `.scratch/<run>/design-baseline/state.json` → step **1A. `design-baseline`**
-- **Reference materials present** (screenshot, design file path, URL, or product/brand analogy) and no usable `.scratch/<run>/reference/contract.md` → step **2. `reference-intake`**
-- **Missing `spec`** (no usable six-layer `spec.md` for this run) → step **3. `ux-spec`**
-- **Spec present** → step **4. plan** (do not re-run `ux-spec` unless structural conflict forces it)
-- No meaningful existing UI, or no UI mutation in scope → skip `design-baseline` with one-line narration
-- No reference materials → skip `reference-intake` with one-line narration
+- `requires_baseline` → step **1A. `design-baseline`**; otherwise skip it.
+- `requires_reference_contract` → step **2. `reference-intake`**; otherwise skip it.
+- `requires_spec` → step **3. `ux-spec`**; otherwise continue to step **4. plan**.
 
-### 1A. `design-baseline` (existing-product UI only)
+### 1A. `design-baseline` (when required)
 
 Invoke **design-baseline** before reference intake or specification work. Call the deep module `prepare` → (user confirm/waive) → `confirm` as needed; immediately before Fill call `verify`. Discover and validate project `DESIGN.md`; if missing or incomplete, generate only run-local `DESIGN.draft.md` + `evidence.json` from first-party UI evidence and wait for confirmation before a durable write.
 

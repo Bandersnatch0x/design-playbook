@@ -85,5 +85,5 @@ Rules:
 - copied ephemeral raster locators are run-root-relative under `reference/assets/`; existing authored fixtures may retain `assets/...` relative to the reference directory
 - URL locators are absolute strings; `sha256` is null for pure URLs and product analogies
 - `storage` is `copied`, `linked`, `remote`, or `symbolic`; `acquired_via` is `attachment`, `local-file`, `host-tool`, `export`, `url`, or `analogy`
-- `media_type`, `provider`, and source-level `captured_at` are optional additive fields; provider names never change core routing
+- `media_type`, `provider`, and source-level `captured_at` are optional additive fields; `provider` is a non-path label and never changes core routing
 - do not put host Fill paths into `sources`

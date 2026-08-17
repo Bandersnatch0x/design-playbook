@@ -49,7 +49,7 @@ detects the type from bytes, copies it byte-for-byte into
 appends the complete manifest. The returned locator is relative to the run
 root (`reference/assets/...`); record `storage: copied`, the detected
 `media_type`, and optional `acquired_via`, `provider`, and source-level
-`captured_at`. Never write the host's temporary path into a manifest or
+`captured_at`. Keep `provider` as a provider label, never a path. Never write the host's temporary path into a manifest or
 contract. The helper is for raster files only; author URLs, design files, and
 product analogies directly in the manifest.
 

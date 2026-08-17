@@ -38,7 +38,7 @@ def _validate_identifier(value: object, label: str) -> str:
     return value
 
 
-def _validate_optional_text(value: object, label: str) -> str:
+def _validate_nonempty_text(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip() or any(
         ord(character) < 32 or ord(character) == 127 for character in value
     ):
@@ -48,8 +48,19 @@ def _validate_optional_text(value: object, label: str) -> str:
     return value
 
 
+def _validate_provider(value: object, source_path: Path | None = None) -> str:
+    provider = _validate_nonempty_text(value, "provider")
+    path_like = "/" in provider or "\\" in provider
+    if source_path is not None:
+        source_names = {str(source_path).casefold(), source_path.name.casefold()}
+        path_like = path_like or provider.casefold() in source_names
+    if path_like:
+        raise ReferenceSourceError("provider must be a provider label, not a path")
+    return provider
+
+
 def _validate_timestamp(value: object, label: str) -> None:
-    timestamp = _validate_optional_text(value, label)
+    timestamp = _validate_nonempty_text(value, label)
     normalized = timestamp[:-1] + "+00:00" if timestamp.endswith("Z") else timestamp
     try:
         datetime.fromisoformat(normalized)
@@ -93,7 +104,7 @@ def _load_manifest(
     if loaded.get("run_id") != run_id:
         raise ReferenceSourceError("manifest run_id does not match the requested run_id")
     _validate_timestamp(loaded.get("captured_at"), "manifest captured_at")
-    _validate_optional_text(loaded.get("tool"), "manifest tool")
+    _validate_nonempty_text(loaded.get("tool"), "manifest tool")
     sources = loaded.get("sources")
     if not isinstance(sources, list):
         raise ReferenceSourceError("manifest sources must be a list")
@@ -110,7 +121,7 @@ def _load_manifest(
         seen_ids.add(source_id)
         if source.get("kind") not in SOURCE_KINDS:
             raise ReferenceSourceError(f"manifest sources[{index}].kind is invalid")
-        _validate_optional_text(
+        _validate_nonempty_text(
             source.get("locator"), f"manifest sources[{index}].locator"
         )
         if "sha256" not in source:
@@ -133,11 +144,12 @@ def _load_manifest(
             raise ReferenceSourceError(
                 f"manifest sources[{index}].acquired_via is invalid"
             )
-        for field in ("provider", "media_type"):
-            if field in source:
-                _validate_optional_text(
-                    source[field], f"manifest sources[{index}].{field}"
-                )
+        if "provider" in source:
+            _validate_provider(source["provider"])
+        if "media_type" in source:
+            _validate_nonempty_text(
+                source["media_type"], f"manifest sources[{index}].media_type"
+            )
         if "captured_at" in source:
             _validate_timestamp(
                 source["captured_at"], f"manifest sources[{index}].captured_at"
@@ -199,8 +211,12 @@ def ingest_ephemeral_image(
             f"acquired_via must be one of {sorted(ACQUISITION_METHODS)}"
         )
     if provider is not None:
-        _validate_optional_text(provider, "provider")
-    timestamp = captured_at or datetime.now(timezone.utc).isoformat()
+        _validate_provider(provider, source_path)
+    timestamp = (
+        datetime.now(timezone.utc).isoformat()
+        if captured_at is None
+        else captured_at
+    )
     _validate_timestamp(timestamp, "captured_at")
     manifest_path = run_root / "reference" / "manifest.json"
     _ensure_within_run(manifest_path, run_root)

@@ -7,11 +7,14 @@ import json
 import subprocess
 import sys
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PKG = ROOT / "packages" / "design-playbook"
+MAIN_SKILL = PKG / "skills" / "design-playbook" / "SKILL.md"
+UI_PICKER_SKILL = PKG / "skills" / "ui-picker" / "SKILL.md"
 
 if str(PKG) not in sys.path:
     sys.path.insert(0, str(PKG))
@@ -22,20 +25,34 @@ from design_playbook.scripts.run_profile import (  # noqa: E402
 )
 
 
+DEFAULT_REQUEST_FACTS = RequestFacts(
+    intent="build",
+    durable_design_artifacts=False,
+    consequence="feature",
+    existing_product=False,
+    has_references=False,
+    spec_present=True,
+    baseline_ready=False,
+    reference_contract_ready=False,
+    adds_decided_fields=False,
+    revises_decided_fields=False,
+    declaration_domains=1,
+)
+
+
+def request_facts(**overrides: object) -> RequestFacts:
+    return replace(DEFAULT_REQUEST_FACTS, **overrides)
+
+
 class RequestRoutingTests(unittest.TestCase):
     def test_read_only_review_has_no_run_requirements(self) -> None:
         decision = route_request(
-            RequestFacts(
+            request_facts(
                 intent="review",
-                durable_design_artifacts=False,
                 consequence="none",
                 existing_product=True,
                 has_references=True,
                 spec_present=False,
-                baseline_ready=False,
-                reference_contract_ready=False,
-                adds_decided_fields=False,
-                revises_decided_fields=False,
                 declaration_domains=0,
             )
         )
@@ -50,17 +67,10 @@ class RequestRoutingTests(unittest.TestCase):
         for intent in ("answer", "diagnose", "plan"):
             with self.subTest(intent=intent):
                 decision = route_request(
-                    RequestFacts(
+                    request_facts(
                         intent=intent,
-                        durable_design_artifacts=False,
                         consequence="none",
-                        existing_product=False,
-                        has_references=False,
                         spec_present=False,
-                        baseline_ready=False,
-                        reference_contract_ready=False,
-                        adds_decided_fields=False,
-                        revises_decided_fields=False,
                         declaration_domains=0,
                     )
                 )
@@ -69,18 +79,9 @@ class RequestRoutingTests(unittest.TestCase):
 
     def test_local_fix_starts_a_p1_design_run(self) -> None:
         decision = route_request(
-            RequestFacts(
+            request_facts(
                 intent="fix",
-                durable_design_artifacts=False,
                 consequence="local",
-                existing_product=False,
-                has_references=False,
-                spec_present=True,
-                baseline_ready=False,
-                reference_contract_ready=False,
-                adds_decided_fields=False,
-                revises_decided_fields=False,
-                declaration_domains=1,
             )
         )
 
@@ -89,18 +90,8 @@ class RequestRoutingTests(unittest.TestCase):
 
     def test_additive_build_starts_a_p2_design_run(self) -> None:
         decision = route_request(
-            RequestFacts(
-                intent="build",
-                durable_design_artifacts=False,
-                consequence="feature",
-                existing_product=False,
-                has_references=False,
-                spec_present=True,
-                baseline_ready=False,
-                reference_contract_ready=False,
+            request_facts(
                 adds_decided_fields=True,
-                revises_decided_fields=False,
-                declaration_domains=1,
             )
         )
 
@@ -109,18 +100,10 @@ class RequestRoutingTests(unittest.TestCase):
 
     def test_new_decided_field_promotes_a_local_fix_to_p2(self) -> None:
         decision = route_request(
-            RequestFacts(
+            request_facts(
                 intent="fix",
-                durable_design_artifacts=False,
                 consequence="local",
-                existing_product=False,
-                has_references=False,
-                spec_present=True,
-                baseline_ready=False,
-                reference_contract_ready=False,
                 adds_decided_fields=True,
-                revises_decided_fields=False,
-                declaration_domains=1,
             )
         )
 
@@ -131,18 +114,9 @@ class RequestRoutingTests(unittest.TestCase):
         for intent, consequence in (("build", "local"), ("fix", "feature")):
             with self.subTest(intent=intent, consequence=consequence):
                 decision = route_request(
-                    RequestFacts(
+                    request_facts(
                         intent=intent,
-                        durable_design_artifacts=False,
                         consequence=consequence,
-                        existing_product=False,
-                        has_references=False,
-                        spec_present=True,
-                        baseline_ready=False,
-                        reference_contract_ready=False,
-                        adds_decided_fields=False,
-                        revises_decided_fields=False,
-                        declaration_domains=1,
                     )
                 )
 
@@ -151,43 +125,15 @@ class RequestRoutingTests(unittest.TestCase):
 
     def test_each_p3_trigger_overrides_lower_tiers(self) -> None:
         cases = (
-            RequestFacts(
-                intent="build",
-                durable_design_artifacts=False,
+            request_facts(
                 consequence="structural",
-                existing_product=False,
-                has_references=False,
-                spec_present=True,
-                baseline_ready=False,
-                reference_contract_ready=False,
-                adds_decided_fields=False,
-                revises_decided_fields=False,
-                declaration_domains=1,
             ),
-            RequestFacts(
+            request_facts(
                 intent="fix",
-                durable_design_artifacts=False,
                 consequence="local",
-                existing_product=False,
-                has_references=False,
-                spec_present=True,
-                baseline_ready=False,
-                reference_contract_ready=False,
-                adds_decided_fields=False,
                 revises_decided_fields=True,
-                declaration_domains=1,
             ),
-            RequestFacts(
-                intent="build",
-                durable_design_artifacts=False,
-                consequence="feature",
-                existing_product=False,
-                has_references=False,
-                spec_present=True,
-                baseline_ready=False,
-                reference_contract_ready=False,
-                adds_decided_fields=False,
-                revises_decided_fields=False,
+            request_facts(
                 declaration_domains=2,
             ),
         )
@@ -200,31 +146,14 @@ class RequestRoutingTests(unittest.TestCase):
 
     def test_p3_conditions_apply_to_every_design_run_entry(self) -> None:
         cases = (
-            RequestFacts(
+            request_facts(
                 intent="prototype",
-                durable_design_artifacts=False,
                 consequence="structural",
-                existing_product=False,
-                has_references=False,
-                spec_present=True,
-                baseline_ready=False,
-                reference_contract_ready=False,
-                adds_decided_fields=False,
-                revises_decided_fields=False,
-                declaration_domains=1,
             ),
-            RequestFacts(
+            request_facts(
                 intent="plan",
                 durable_design_artifacts=True,
-                consequence="feature",
-                existing_product=False,
-                has_references=False,
-                spec_present=True,
-                baseline_ready=False,
-                reference_contract_ready=False,
-                adds_decided_fields=False,
                 revises_decided_fields=True,
-                declaration_domains=1,
             ),
         )
 
@@ -234,17 +163,10 @@ class RequestRoutingTests(unittest.TestCase):
 
     def test_prototype_starts_a_design_run(self) -> None:
         decision = route_request(
-            RequestFacts(
+            request_facts(
                 intent="prototype",
-                durable_design_artifacts=False,
                 consequence="none",
-                existing_product=False,
-                has_references=False,
                 spec_present=False,
-                baseline_ready=False,
-                reference_contract_ready=False,
-                adds_decided_fields=False,
-                revises_decided_fields=False,
                 declaration_domains=0,
             )
         )
@@ -254,17 +176,10 @@ class RequestRoutingTests(unittest.TestCase):
 
     def test_durable_design_artifact_starts_a_run_for_read_only_intent(self) -> None:
         decision = route_request(
-            RequestFacts(
+            request_facts(
                 intent="review",
                 durable_design_artifacts=True,
                 consequence="none",
-                existing_product=False,
-                has_references=False,
-                spec_present=True,
-                baseline_ready=False,
-                reference_contract_ready=False,
-                adds_decided_fields=False,
-                revises_decided_fields=False,
                 declaration_domains=0,
             )
         )
@@ -275,52 +190,36 @@ class RequestRoutingTests(unittest.TestCase):
     def test_run_requirements_are_derived_independently_of_tier(self) -> None:
         cases = (
             (
-                RequestFacts(
+                request_facts(
                     intent="fix",
-                    durable_design_artifacts=False,
                     consequence="local",
                     existing_product=True,
-                    has_references=False,
-                    spec_present=True,
-                    baseline_ready=False,
-                    reference_contract_ready=False,
-                    adds_decided_fields=False,
-                    revises_decided_fields=False,
-                    declaration_domains=1,
                 ),
                 (True, False, False),
             ),
             (
-                RequestFacts(
-                    intent="build",
-                    durable_design_artifacts=False,
-                    consequence="feature",
-                    existing_product=False,
+                request_facts(
                     has_references=True,
-                    spec_present=True,
-                    baseline_ready=False,
-                    reference_contract_ready=False,
                     adds_decided_fields=True,
-                    revises_decided_fields=False,
-                    declaration_domains=1,
                 ),
                 (False, True, False),
             ),
             (
-                RequestFacts(
-                    intent="build",
-                    durable_design_artifacts=False,
+                request_facts(
                     consequence="structural",
-                    existing_product=False,
-                    has_references=False,
                     spec_present=False,
-                    baseline_ready=False,
-                    reference_contract_ready=False,
-                    adds_decided_fields=False,
-                    revises_decided_fields=False,
-                    declaration_domains=1,
                 ),
                 (False, False, True),
+            ),
+            (
+                request_facts(
+                    intent="review",
+                    durable_design_artifacts=True,
+                    consequence="none",
+                    existing_product=True,
+                    declaration_domains=0,
+                ),
+                (True, False, False),
             ),
         )
 
@@ -338,31 +237,15 @@ class RequestRoutingTests(unittest.TestCase):
 
     def test_contradictory_request_facts_fail_explicitly(self) -> None:
         cases = (
-            RequestFacts(
-                intent="build",
-                durable_design_artifacts=False,
+            request_facts(
                 consequence="none",
-                existing_product=False,
-                has_references=False,
-                spec_present=True,
-                baseline_ready=False,
-                reference_contract_ready=False,
-                adds_decided_fields=False,
-                revises_decided_fields=False,
                 declaration_domains=0,
             ),
-            RequestFacts(
+            request_facts(
                 intent="review",
-                durable_design_artifacts=False,
                 consequence="structural",
                 existing_product=True,
-                has_references=False,
-                spec_present=True,
                 baseline_ready=True,
-                reference_contract_ready=False,
-                adds_decided_fields=False,
-                revises_decided_fields=False,
-                declaration_domains=1,
             ),
         )
 
@@ -372,20 +255,9 @@ class RequestRoutingTests(unittest.TestCase):
                     route_request(facts)
 
     def test_unknown_route_values_fail_explicitly(self) -> None:
-        base = dict(
-            durable_design_artifacts=False,
-            existing_product=False,
-            has_references=False,
-            spec_present=True,
-            baseline_ready=False,
-            reference_contract_ready=False,
-            adds_decided_fields=False,
-            revises_decided_fields=False,
-            declaration_domains=0,
-        )
         cases = (
-            RequestFacts(intent="rewrite", consequence="feature", **base),
-            RequestFacts(intent="build", consequence="global", **base),
+            request_facts(intent="rewrite"),
+            request_facts(consequence="global"),
         )
 
         for facts in cases:
@@ -394,17 +266,9 @@ class RequestRoutingTests(unittest.TestCase):
                     route_request(facts)
 
     def test_negative_declaration_domain_count_fails_explicitly(self) -> None:
-        facts = RequestFacts(
+        facts = request_facts(
             intent="review",
-            durable_design_artifacts=False,
             consequence="none",
-            existing_product=False,
-            has_references=False,
-            spec_present=True,
-            baseline_ready=False,
-            reference_contract_ready=False,
-            adds_decided_fields=False,
-            revises_decided_fields=False,
             declaration_domains=-1,
         )
 
@@ -459,6 +323,63 @@ class RequestRoutingTests(unittest.TestCase):
         self.assertIn("contradictory request facts", completed.stderr)
         self.assertNotIn("Traceback", completed.stderr)
         self.assertEqual(completed.stdout, "")
+
+
+class AdaptiveRoutingSkillContractTests(unittest.TestCase):
+    def test_main_skill_delegates_the_initial_decision_to_run_profile(self) -> None:
+        text = MAIN_SKILL.read_text(encoding="utf-8")
+
+        self.assertIn("Executable routing authority", text)
+        self.assertIn("run_profile.py route", text)
+        self.assertNotIn("SSOT for this decision is this skill only", text)
+        self.assertNotIn("P3 wins for", text)
+        for flag in (
+            "requires_baseline",
+            "requires_reference_contract",
+            "requires_spec",
+        ):
+            with self.subTest(flag=flag):
+                self.assertIn(f"`{flag}`", text)
+
+    def test_no_run_image_handling_covers_both_host_capabilities(self) -> None:
+        text = MAIN_SKILL.read_text(encoding="utf-8")
+
+        self.assertIn("vision-capable host", text)
+        self.assertIn("text-only host", text)
+        self.assertIn("Neither path copies the temporary image", text)
+        self.assertIn("Do not create `.scratch/<run>/`", text)
+
+    def test_ui_picker_component_handoff_is_read_only_and_keeps_report_keys(self) -> None:
+        text = UI_PICKER_SKILL.read_text(encoding="utf-8")
+        normalized = " ".join(text.split())
+        declared = normalized.index("`## Component Stylings`")
+        discovered = normalized.index("`design-baseline/evidence.json`")
+
+        self.assertLess(declared, discovered)
+        for outcome in ("reuse <path>", "extend <path>", "new ("):
+            with self.subTest(outcome=outcome):
+                self.assertIn(outcome, text)
+        self.assertIn("Do not edit, move, publish, extract, or commit", normalized)
+
+        report = text.split("```text", maxsplit=1)[1].split("```", maxsplit=1)[0]
+        keys = tuple(
+            line.split(":", maxsplit=1)[0]
+            for line in report.splitlines()
+            if ":" in line
+        )
+        self.assertEqual(
+            keys,
+            (
+                "design-baseline",
+                "scene",
+                "density",
+                "template",
+                "regions",
+                "components",
+                "baseline-changes",
+                "risks",
+            ),
+        )
 
 
 if __name__ == "__main__":

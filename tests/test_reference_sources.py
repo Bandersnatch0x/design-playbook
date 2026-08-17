@@ -233,6 +233,7 @@ class ReferenceSourceTests(unittest.TestCase):
             ({"kind": "other", "acquired_via": "clipboard"}, "acquired_via"),
             ({"kind": "other", "provider": "  "}, "provider"),
             ({"kind": "other", "provider": "host\nname"}, "provider"),
+            ({"kind": "other", "captured_at": ""}, "captured_at"),
         )
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -251,6 +252,28 @@ class ReferenceSourceTests(unittest.TestCase):
                             **overrides,
                         )
                     self.assertFalse((run_root / "reference").exists())
+
+    def test_provider_cannot_persist_the_ephemeral_source_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "host-temp" / "clipboard.png"
+            source.parent.mkdir()
+            source.write_bytes(PNG_BYTES)
+            run_root = root / "run"
+
+            with self.assertRaisesRegex(
+                reference_sources.ReferenceSourceError, "provider"
+            ):
+                reference_sources.ingest_ephemeral_image(
+                    source,
+                    run_root,
+                    run_id="run",
+                    source_id="src-1",
+                    kind="screenshot",
+                    provider=str(source),
+                )
+
+            self.assertFalse((run_root / "reference").exists())
 
     def test_invalid_source_files_fail_with_reference_source_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
