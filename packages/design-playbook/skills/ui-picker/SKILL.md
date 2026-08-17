@@ -15,6 +15,12 @@ Choose density (console-tight vs marketing-loose) and scene class (list / detail
 
 When a verified `.scratch/<run>/design-baseline/state.json` binds a baseline (`status: ready` from `design_baseline.verify`), read that binding path first (`baseline.path`, usually `DESIGN.md` or `.stitch/DESIGN.md`). It is the project-specific authority for atmosphere, visual roles, density, layout, motion, and component conventions. Preserve it unless the requested change explicitly revises the baseline.
 
+Build a read-only component candidate list while reading the baseline. First
+use observed component paths in the verified baseline's `## Component
+Stylings` declaration. Then append non-duplicate paths from the run-local
+`design-baseline/evidence.json` `components` list when present. Keep this
+priority order and treat every path as evidence, never as authority.
+
 When `.scratch/<run>/reference/contract.md` exists (ADR-0011), read its **Visual cues for ui-picker**, Keep/Change, and Do not copy / exclusions. Use them as input for density, scene, region weight, and risks — never as hex tokens or as a license to copy brand chrome.
 
 **Done when:** one scene label and one density choice are explicit; a bound baseline is cited by path + SHA-256; if a reference contract exists, the decision report's risks or exclusions surface its Do not copy / brand risks (path citation is enough).
@@ -28,6 +34,20 @@ Read [`references/template.md`](references/template.md). Assign main / side / ac
 ### 3. Components
 
 Read [`references/components.md`](references/components.md). For each field/action, pick by **role** (status vs category vs confirm vs detail).
+
+For each material role, match the candidate list against source evidence and
+repository conventions, then record one of these outcomes inside the existing
+`components:` value in the decision report:
+
+- `reuse <path> (<one-line matching reason>)` when the declared component fits;
+- `extend <path> (<one-line missing-variant reason>)` when it is close but needs
+  a documented variant; or
+- `new (<one-line gap reason>)` when no trustworthy candidate exists.
+
+Include the candidate path in the value when one exists. A weak or missing
+candidate takes the explicit `new` path; do not invent a reuse claim. Do not
+edit, move, publish, extract, or commit a component during this step, and do
+not add a new top-level decision-report key or component repository.
 
 Load only if needed:
 

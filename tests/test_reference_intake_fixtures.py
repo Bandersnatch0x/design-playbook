@@ -25,6 +25,8 @@ REQUIRED_CONSTRAINT_MARKERS = (
     "Captured at",
 )
 KINDS = {"screenshot", "url", "design_file", "product_analogy", "other"}
+STORAGE = {"copied", "linked", "remote", "symbolic"}
+ACQUIRED_VIA = {"attachment", "local-file", "host-tool", "export", "url", "analogy"}
 
 
 class ReferenceIntakeFixtureTests(unittest.TestCase):
@@ -57,6 +59,9 @@ class ReferenceIntakeFixtureTests(unittest.TestCase):
                 self.assertIn(src.get("kind"), KINDS)
                 self.assertTrue(src.get("id"))
                 self.assertTrue(src.get("locator"))
+                self.assertIn(src.get("storage"), STORAGE)
+                self.assertIn(src.get("acquired_via"), ACQUIRED_VIA)
+                self.assertTrue(src.get("captured_at"))
 
 
 if __name__ == "__main__":

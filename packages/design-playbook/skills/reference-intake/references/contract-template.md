@@ -66,8 +66,13 @@ Write beside this contract as `.scratch/<run>/reference/manifest.json`:
     {
       "id": "src-1",
       "kind": "screenshot",
-      "locator": "assets/hero.png",
+      "locator": "reference/assets/hero-<digest-prefix>.png",
       "sha256": "<hex or null>",
+      "media_type": "image/png",
+      "storage": "copied",
+      "acquired_via": "attachment",
+      "provider": "optional-host-tool-name",
+      "captured_at": "2026-07-22T00:00:00+08:00",
       "note": "optional"
     }
   ]
@@ -77,6 +82,8 @@ Write beside this contract as `.scratch/<run>/reference/manifest.json`:
 Rules:
 
 - `kind` is one of: `screenshot`, `url`, `design_file`, `product_analogy`, `other`
-- file locators are run-root-relative under `reference/` when copied into `assets/`
+- copied ephemeral raster locators are run-root-relative under `reference/assets/`; existing authored fixtures may retain `assets/...` relative to the reference directory
 - URL locators are absolute strings; `sha256` is null for pure URLs and product analogies
+- `storage` is `copied`, `linked`, `remote`, or `symbolic`; `acquired_via` is `attachment`, `local-file`, `host-tool`, `export`, `url`, or `analogy`
+- `media_type`, `provider`, and source-level `captured_at` are optional additive fields; provider names never change core routing
 - do not put host Fill paths into `sources`

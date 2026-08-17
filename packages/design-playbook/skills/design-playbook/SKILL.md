@@ -1,6 +1,6 @@
 ---
 name: design-playbook
-description: Orchestrate outcome-first Design I/O for product UI. Use when building or revising a page, dashboard, list, or settings surface from a short ask, or recirculating a failed design review through declarations and evidence.
+description: Route and orchestrate outcome-first product UI work. Use for answer, review, diagnosis, plan, prototype, build, or fix asks involving a page, dashboard, list, or settings surface, and for recirculating failed design review through declarations and evidence.
 ---
 
 # design-playbook
@@ -23,6 +23,9 @@ Keep each control in one authoritative place:
 | **Tier** | `plan.md` run-profile block | Tier (P1/P2/P3) + grading checklist + skip list + upgrade events |
 
 ## Run profile (tier grading)
+
+Apply this section only after entry routing returns `design-run`; `no-run`
+creates no profile or run artifacts.
 
 Grade the run once, up front (LR1). Three tiers share one state machine and one artifact set — the tier only changes how deep each step goes:
 
@@ -52,6 +55,27 @@ Do in order. Data flow:
 ### 1. Entry routing
 
 **SSOT for this decision is this skill only** (not `commands/design-io.md`).
+
+Normalize the request and repository facts, then call the existing
+`packages/design-playbook/scripts/run_profile.py route` interface. Keep the
+returned `mode`, tier, criteria, and prerequisite flags as the only initial
+route decision; do not classify chat again in a second workflow layer.
+
+- `no-run`: `answer`, `review`, `diagnose`, or non-persistent `plan` without
+  durable Design I/O artifacts. Do not create `.scratch/<run>/`, `plan.md`, or
+  a run-profile. A vision-capable host may inspect an attached image directly;
+  a text-only host records the metadata and states that visual inspection is
+  unavailable once. Neither path copies the temporary image.
+- `design-run`: `prototype`, `build`, `fix`, or any request for durable Design
+  I/O artifacts. Project the returned tier and criteria into the existing v1
+  run-profile, then satisfy the independently returned baseline, reference,
+  and spec prerequisites.
+
+The router rejects unknown or contradictory facts visibly. P3 wins for
+structural consequence, decided-field revision, or two or more declaration
+domains; P1 is only a local fix with no decided-field addition; all other
+design runs start at P2. The router does not decide later preview/observe
+adapter availability or evaluator verdicts.
 
 - **Existing-product UI build/fix** (meaningful first-party pages/components/theme/styles already exist) and no usable verified baseline binding under `.scratch/<run>/design-baseline/state.json` → step **1A. `design-baseline`**
 - **Reference materials present** (screenshot, design file path, URL, or product/brand analogy) and no usable `.scratch/<run>/reference/contract.md` → step **2. `reference-intake`**
@@ -117,7 +141,7 @@ Native desktop order: `ux-spec` → `native-craft` → `ui-picker` → `fill` �
 
 Invoke **ui-picker**. Map scene → template + component semantics. Read its `references/` only as that skill directs. When `.scratch/<run>/reference/contract.md` exists, pass its visual cues / exclusions (via plan input pack and/or direct path) into **ui-picker**.
 
-**Done when:** **ui-picker**'s own completion criteria hold (that skill is SSOT). Smoke: the decision report names scene, density, template, regions, components, and risks; coding has not started before that report exists. For native desktop, it also consumes the declared render-surface seam.
+**Done when:** **ui-picker**'s own completion criteria hold (that skill is SSOT). Smoke: the decision report names scene, density, template, regions, components, and risks; each material component role records `reuse`, `extend`, or `new` with a candidate path or explicit gap reason; coding has not started before that report exists. For native desktop, it also consumes the declared render-surface seam.
 
 `ui-picker` **stops at the decision report** — it has no preview step.
 

@@ -39,6 +39,9 @@ jobs:
           python3 tests/test_run_facts_snapshot.py
           python3 tests/test_stages_registry.py
           python3 tests/test_design_baseline.py
+          python3 tests/test_reference_intake_fixtures.py
+          python3 tests/test_reference_sources.py
+          python3 tests/test_request_routing.py
           python3 tests/test_validate.py
           python3 tests/test_aggregate_runs.py
           python3 tests/test_normalize_lockstep.py
@@ -59,6 +62,7 @@ jobs:
         # files introduced only by a later stack layer. validate.py owns Ruff
         # via scripts/_checks.py; this gate only guarantees compile.
         run: python3 -m py_compile $(git ls-files '*.py')
+
 
       # ----------------------------------------------------------------
       # ticket 06: MCP stdio gates (required, merge-blocking).
