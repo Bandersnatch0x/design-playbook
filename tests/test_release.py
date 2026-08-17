@@ -87,6 +87,9 @@ class ReleaseGateTests(unittest.TestCase):
             self.root / "packages" / "dsh-design-playbook",
         )
         shutil.copytree(ROOT / ".claude-plugin", self.root / ".claude-plugin")
+        # The release gate checks tracked/untracked state. Copy root ignore rules
+        # into the fixture so Python imports cannot self-pollute it with bytecode.
+        shutil.copy2(ROOT / ".gitignore", self.root / ".gitignore")
         shutil.copy2(ROOT / "README.md", self.root / "README.md")
         shutil.copy2(ROOT / "README-zh.md", self.root / "README-zh.md")
         (self.root / "docs" / "releases").mkdir(parents=True)
