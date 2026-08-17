@@ -114,7 +114,7 @@ def _p3_criteria(facts: RequestFacts) -> tuple[str, ...]:
     return tuple(criteria)
 
 
-def _criteria_for(facts: RequestFacts, tier: str) -> tuple[str, ...]:
+def _p1_p2_criteria_for(facts: RequestFacts, tier: str) -> tuple[str, ...]:
     if tier == "P1":
         return ("intent: fix", "consequence: local", "decided-fields: unchanged")
     criteria = [f"intent: {facts.intent}", f"consequence: {facts.consequence}"]
@@ -167,7 +167,9 @@ def route_request(facts: RequestFacts) -> RouteDecision:
         requires_baseline=requires_baseline,
         requires_reference_contract=requires_reference_contract,
         requires_spec=requires_spec,
-        criteria=p3_criteria if tier == "P3" else _criteria_for(facts, tier),
+        criteria=(
+            p3_criteria if tier == "P3" else _p1_p2_criteria_for(facts, tier)
+        ),
         reasons=reasons[tier],
     )
 
