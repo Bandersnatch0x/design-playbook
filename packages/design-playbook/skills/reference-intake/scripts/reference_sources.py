@@ -26,18 +26,6 @@ class ReferenceSourceError(ValueError):
     """Raised when a reference source cannot be safely materialized."""
 
 
-def _validate_identifier(value: object, label: str) -> str:
-    if (
-        not isinstance(value, str)
-        or not value.strip()
-        or any(ord(character) < 32 or ord(character) == 127 for character in value)
-        or "/" in value
-        or "\\" in value
-    ):
-        raise ReferenceSourceError(f"{label} must be safe non-empty text")
-    return value
-
-
 def _validate_nonempty_text(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip() or any(
         ord(character) < 32 or ord(character) == 127 for character in value
@@ -46,6 +34,13 @@ def _validate_nonempty_text(value: object, label: str) -> str:
             f"{label} must be non-empty text without control characters"
         )
     return value
+
+
+def _validate_identifier(value: object, label: str) -> str:
+    identifier = _validate_nonempty_text(value, label)
+    if "/" in identifier or "\\" in identifier:
+        raise ReferenceSourceError(f"{label} must be safe non-empty text")
+    return identifier
 
 
 def _validate_provider(value: object, source_path: Path | None = None) -> str:

@@ -125,24 +125,30 @@ class RequestRoutingTests(unittest.TestCase):
 
     def test_each_p3_trigger_overrides_lower_tiers(self) -> None:
         cases = (
-            request_facts(
-                consequence="structural",
+            (
+                request_facts(consequence="structural"),
+                ("consequence: structural",),
             ),
-            request_facts(
-                intent="fix",
-                consequence="local",
-                revises_decided_fields=True,
+            (
+                request_facts(
+                    intent="fix",
+                    consequence="local",
+                    revises_decided_fields=True,
+                ),
+                ("decided-fields: revise",),
             ),
-            request_facts(
-                declaration_domains=2,
+            (
+                request_facts(declaration_domains=2),
+                ("declaration-domains: 2",),
             ),
         )
 
-        for facts in cases:
+        for facts, expected_criteria in cases:
             with self.subTest(facts=facts):
                 decision = route_request(facts)
                 self.assertEqual(decision.mode, "design-run")
                 self.assertEqual(decision.tier, "P3")
+                self.assertEqual(decision.criteria, expected_criteria)
 
     def test_p3_conditions_apply_to_every_design_run_entry(self) -> None:
         cases = (

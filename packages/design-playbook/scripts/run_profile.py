@@ -103,18 +103,20 @@ def _validate_request_facts(facts: RequestFacts) -> None:
         )
 
 
+def _p3_criteria(facts: RequestFacts) -> tuple[str, ...]:
+    criteria: list[str] = []
+    if facts.consequence == "structural":
+        criteria.append("consequence: structural")
+    if facts.revises_decided_fields:
+        criteria.append("decided-fields: revise")
+    if facts.declaration_domains >= 2:
+        criteria.append(f"declaration-domains: {facts.declaration_domains}")
+    return tuple(criteria)
+
+
 def _criteria_for(facts: RequestFacts, tier: str) -> tuple[str, ...]:
     if tier == "P1":
         return ("intent: fix", "consequence: local", "decided-fields: unchanged")
-    if tier == "P3":
-        criteria: list[str] = []
-        if facts.consequence == "structural":
-            criteria.append("consequence: structural")
-        if facts.revises_decided_fields:
-            criteria.append("decided-fields: revise")
-        if facts.declaration_domains >= 2:
-            criteria.append(f"declaration-domains: {facts.declaration_domains}")
-        return tuple(criteria)
     criteria = [f"intent: {facts.intent}", f"consequence: {facts.consequence}"]
     if facts.adds_decided_fields:
         criteria.append("decided-fields: add")
@@ -140,11 +142,8 @@ def route_request(facts: RequestFacts) -> RouteDecision:
     requires_baseline = facts.existing_product and not facts.baseline_ready
     requires_reference_contract = facts.has_references and not facts.reference_contract_ready
     requires_spec = not facts.spec_present
-    p3 = (
-        facts.consequence == "structural"
-        or facts.revises_decided_fields
-        or facts.declaration_domains >= 2
-    )
+    p3_criteria = _p3_criteria(facts)
+    p3 = bool(p3_criteria)
     p1 = (
         facts.intent == "fix"
         and facts.consequence == "local"
@@ -168,7 +167,7 @@ def route_request(facts: RequestFacts) -> RouteDecision:
         requires_baseline=requires_baseline,
         requires_reference_contract=requires_reference_contract,
         requires_spec=requires_spec,
-        criteria=_criteria_for(facts, tier),
+        criteria=p3_criteria if tier == "P3" else _criteria_for(facts, tier),
         reasons=reasons[tier],
     )
 
