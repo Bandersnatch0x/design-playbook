@@ -1,6 +1,6 @@
 # Phase pointer
 
-**Current:** **v0.20.1 released** — 2026-08-16. Tag `v0.20.1`; npm `latest` is `design-playbook@0.20.1` and `dsh-design-playbook@0.20.1`; GitHub Release: https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.20.1. Patch ships #45/#46/#47 live-test, dual-track review, shaping granularity, provenance retry, and showcase backfills plus final review hardening: queue-monitor skeleton/execute timer races, run-profile v1 fail-closed validation, selector+state evidence waits, learning-candidate severity allowlisting, and dead shaping code removal. Full local matrix passed (`validate`, doctor, doc links, `629 passed` + `164 subtests`), including real-Chromium queue-monitor regressions. **渠道决策（ADR-0015）：main = stable channel**；community catalog 仍为 **PAUSED BY USER**.
+**Current:** **v0.20.2 released** — 2026-08-16. Tag `v0.20.2`; npm `latest` is `design-playbook@0.20.2` and `dsh-design-playbook@0.20.2`; GitHub Release: https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.20.2. Patch deepens immutable RunFacts snapshots, release transaction verification, queue-monitor state ownership, normalized install inventory, and synthetic evidence fixture semantics. Full local matrix passed (`643 passed` + `174 subtests`), public install smoke passed against marketplace HEAD and npm 0.20.2. **渠道决策（ADR-0015）：main = stable channel**；community catalog 仍为 **PAUSED BY USER**.
 
 | Phase | Status |
 | --- | --- |
