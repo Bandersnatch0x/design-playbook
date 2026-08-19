@@ -31,6 +31,7 @@ if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
 from design_playbook.mcp.evidence.ledger_syntax import LedgerFacts, parse_ledger  # noqa: E402
+from design_playbook.scripts.audit_preferences import parse_audit_marker  # noqa: E402
 from design_playbook.scripts.learning_candidates import (  # noqa: E402
     candidate_view,
     occurrences_from_pointbacks,
@@ -166,6 +167,7 @@ def aggregate(runs: list[Path], root: Path, top: int,
     by_result: dict[str, int] = {}
     blockers: dict[str, dict] = {}
     pointbacks: dict[str, str] = {}
+    unaudited_runs = 0
     for run_dir in runs:
         facts = capture_run_facts(
             run_root=run_dir, pointback_fallback_encoding="gb18030"
@@ -174,13 +176,24 @@ def aggregate(runs: list[Path], root: Path, top: int,
         art = artifacts(run_dir, facts)
         gate = gate_status(run_dir, facts)
         pb_text = facts.pointback_text
-        if meta["id"] not in pointbacks:
+        # ADR-0033 D5/D12: skeleton runs stay in discovery (the chain never
+        # breaks) but their placeholder statistics must not mix with real
+        # audits. Parse via the single deep module; policy lives here.
+        marker = parse_audit_marker(pb_text)
+        # Legacy marker-less reports remain audited for compatibility. Any
+        # present marker must be uniquely valid and true; false or ambiguous
+        # input is excluded from audit-derived statistics.
+        audited = not marker.present or marker.audited is True
+        if not audited:
+            unaudited_runs += 1
+        if audited and meta["id"] not in pointbacks:
             pointbacks[meta["id"]] = pb_text
         rows = ledger_rows(pb_text, facts.ledger)
         run_rec = {
             "id": meta["id"],
             "date": meta["date"],
             "effort": meta["effort"],
+            "audited": audited,
             "artifacts": art,
             "gate": gate,
             "ledger": [],
@@ -189,13 +202,14 @@ def aggregate(runs: list[Path], root: Path, top: int,
             criterion = row.get("criterion", "")
             result = (row.get("result") or "unknown").strip().lower()
             observed = row.get("observed", "")
-            by_result[result] = by_result.get(result, 0) + 1
+            if audited:
+                by_result[result] = by_result.get(result, 0) + 1
             run_rec["ledger"].append({
                 "criterion": criterion,
                 "result": result,
                 "observed": observed,
             })
-            if result != "pass":
+            if audited and result != "pass":
                 norm = normalize(observed)
                 if norm:
                     blk = blockers.setdefault(norm, {
@@ -211,7 +225,9 @@ def aggregate(runs: list[Path], root: Path, top: int,
         payload["runs"].append(run_rec)
     payload["rollup"] = {
         "by_result": dict(sorted(by_result.items())),
-        "ledger_rows": sum(len(r["ledger"]) for r in payload["runs"]),
+        "ledger_rows": sum(
+            len(r["ledger"]) for r in payload["runs"] if r["audited"]),
+        "unaudited_runs": unaudited_runs,
     }
     payload["repeat_blockers"] = [
         b for b in sorted(blockers.values(), key=lambda b: (-b["count"], b["text"]))
@@ -230,18 +246,19 @@ def markdown_view(payload: dict) -> str:
         "",
         "## Runs",
         "",
-        "| run | date | effort | plan | pb | evidence | preview | spec | gate |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| run | date | effort | plan | pb | evidence | preview | spec | gate | audited |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for r in payload["runs"]:
         a = r["artifacts"]
         gate = r["gate"]["status"]
+        audited = "✓" if r.get("audited", True) else "not audited"
         lines.append(
             f"| {r['id']} | {r['date'] or '-'} | {r['effort'] or '-'} | "
             f"{'✓' if a['plan'] else '·'} | {'✓' if a['point_back'] else '·'} | "
             f"{'✓' if a['evidence_manifest'] else '·'} | "
             f"{'✓' if a['preview'] else '·'} | {'✓' if a['spec'] else '·'} | "
-            f"{gate} |"
+            f"{gate} | {audited} |"
         )
     lines += ["", "## Repeat blockers", ""]
     b = payload["repeat_blockers"]

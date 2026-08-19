@@ -76,6 +76,10 @@ def check_layout() -> None:
         PKG / "mcp" / "preview" / "server.py",
         PKG / "mcp" / "evidence" / "server.py",
         PKG / "scripts" / "validate_run.py",
+        # Issue #71: audit-preferences module is part of the shipped
+        # scripts surface (package.json files[] ships scripts/); doctor
+        # must fail closed if it disappears from the layout.
+        PKG / "scripts" / "audit_preferences.py",
         PKG / "codex" / "AGENTS.md",
     ]
     for path in check_paths:

@@ -40,6 +40,7 @@ def _make_inventory_tree(
     version: str = "0.10.0",
     skills: tuple[str, ...] = ("design-playbook", "ui-picker"),
     commands: tuple[str, ...] = ("design-io", "run-review"),
+    scripts: tuple[str, ...] = ("audit_preferences.py", "validate_run.py"),
     with_manifest: bool = True,
 ) -> None:
     _write_json(root / "package.json", {"name": "design-playbook", "version": version})
@@ -51,6 +52,10 @@ def _make_inventory_tree(
         command = root / "commands" / f"{name}.md"
         command.parent.mkdir(parents=True, exist_ok=True)
         command.write_text(f"# {name}\n", encoding="utf-8")
+    for name in scripts:
+        script = root / "scripts" / name
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.write_text("# fixture\n", encoding="utf-8")
     for short in ("preview", "evidence"):
         server = root / "mcp" / short / "server.py"
         server.parent.mkdir(parents=True, exist_ok=True)
@@ -86,6 +91,7 @@ class InventoryTests(unittest.TestCase):
             "version": "0.10.0",
             "skills": ["design-playbook", "ui-picker"],
             "commands": ["design-io", "run-review"],
+            "scripts": ["audit_preferences", "validate_run"],
             "mcp_servers": [
                 "design-playbook-evidence",
                 "design-playbook-preview",
@@ -93,7 +99,7 @@ class InventoryTests(unittest.TestCase):
         }
         for inventory in (plugin, npm):
             self.assertEqual(
-                {key: inventory[key] for key in ("version", "skills", "commands", "mcp_servers")},
+                {key: inventory[key] for key in ("version", "skills", "commands", "scripts", "mcp_servers")},
                 expected,
             )
         self.assertEqual(set(plugin["mcp_entrypoints"]), set(expected["mcp_servers"]))
@@ -130,6 +136,27 @@ class InventoryTests(unittest.TestCase):
 
         with self.assertRaisesRegex(smoke.SmokeFailure, "commands mismatch"):
             smoke._assert_inventory(actual, expected, "installed plugin")
+
+    def test_scripts_drift_fails_closed(self) -> None:
+        """Issue #71: the shipped scripts surface (incl. audit_preferences)
+        is part of the precise inventory; a dropped module must fail the
+        install smoke, not pass silently."""
+        expected = {
+            "version": "0.10.0",
+            "skills": [],
+            "commands": [],
+            "scripts": ["audit_preferences", "validate_run"],
+            "mcp_servers": [],
+        }
+        actual = {**expected, "scripts": ["validate_run"]}
+
+        with self.assertRaisesRegex(smoke.SmokeFailure, "scripts mismatch"):
+            smoke._assert_inventory(actual, expected, "installed plugin")
+
+    def test_source_expectations_include_audit_preferences(self) -> None:
+        expected = smoke._source_expectations()
+        self.assertIn("audit_preferences", expected["scripts"])
+        self.assertIn("validate_run", expected["scripts"])
 
 
 class InstalledMetadataTests(unittest.TestCase):

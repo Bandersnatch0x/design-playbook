@@ -1048,6 +1048,42 @@ def main() -> int:
     else:
         print("  ok    strict --require-preview passes with confirmed preview")
 
+    # --- Skeleton anti-forgery (ADR-0033 D12, issue #67) ---
+    # The unaudited skeleton (audited: false) passes non-strict validation
+    # (the pass-family glob above also covers pass/skeleton) but is
+    # rejected by --strict and the --require-* flags with the AUDIT.*
+    # finding — no new gate number. The fail fixture is byte-identical to
+    # the single module's generator output; the lockstep check pins that.
+    if str(PACKAGE) not in sys.path:
+        sys.path.insert(0, str(PACKAGE))
+    from design_playbook.scripts.audit_preferences import (  # noqa: E402
+        skeleton_pointback,
+    )
+
+    skeleton_spec = FAIL / "skeleton-strict.spec.md"
+    skeleton_pb = FAIL / "skeleton-strict.point-back.md"
+    generated = skeleton_pointback(
+        skeleton_spec.read_text(encoding="utf-8"))
+    if generated != skeleton_pb.read_text(encoding="utf-8"):
+        failures.append(
+            "skeleton-strict fixture drifted from skeleton_pointback output")
+    else:
+        print("  ok    skeleton fixture is byte-identical to the generator")
+
+    audit_diagnostic = "AUDIT: point-back carries 'audited: false'"
+    expect_invalid(
+        failures, "skeleton/strict", skeleton_spec, skeleton_pb,
+        audit_diagnostic, "--strict")
+    expect_invalid(
+        failures, "skeleton/require-coverage", skeleton_spec, skeleton_pb,
+        audit_diagnostic, "--require-coverage")
+    expect_invalid(
+        failures, "skeleton/require-evidence", skeleton_spec, skeleton_pb,
+        audit_diagnostic, "--require-evidence")
+    expect_valid(
+        failures, "pass/skeleton-explicit",
+        PASS / "skeleton.spec.md", PASS / "skeleton.point-back.md")
+
     # --- Structured diagnostics (vNext ticket 02) ---
     # JSON/text projections share one finding model: rule_id, severity, owner,
     # expected, actual, repair. Text keeps historical message substrings.

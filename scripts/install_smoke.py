@@ -310,7 +310,8 @@ def _probe_mcp(
 def _inventory_detail(value: dict[str, Any]) -> str:
     return (
         f"version={value['version']} skills={len(value['skills'])} "
-        f"commands={len(value['commands'])} mcp={len(value['mcp_servers'])}"
+        f"commands={len(value['commands'])} scripts={len(value.get('scripts', []))} "
+        f"mcp={len(value['mcp_servers'])}"
     )
 
 
@@ -598,6 +599,7 @@ def render_markdown(result: dict[str, Any]) -> str:
                 f"- Enabled: `{installed.get('enabled', False)}`",
                 f"- Skills: **{len(inventory.get('skills', []))}**",
                 f"- Commands: **{len(inventory.get('commands', []))}**",
+                f"- Scripts: **{len(inventory.get('scripts', []))}**",
                 f"- MCP servers: **{len(inventory.get('mcp_servers', []))}**",
                 f"- Marketplace HEAD: `{result.get('marketplace_head', '')}`",
             ]
@@ -611,9 +613,10 @@ def render_markdown(result: dict[str, Any]) -> str:
                 "",
                 f"- Version: `{npm.get('version', '')}`",
                 f"- Shasum: `{npm.get('shasum', '')}`",
-                f"- Skills / commands / MCP: "
+                f"- Skills / commands / scripts / MCP: "
                 f"{len(npm_inventory.get('skills', []))} / "
                 f"{len(npm_inventory.get('commands', []))} / "
+                f"{len(npm_inventory.get('scripts', []))} / "
                 f"{len(npm_inventory.get('mcp_servers', []))}",
             ]
         )

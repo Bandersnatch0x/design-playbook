@@ -21,7 +21,7 @@
 
 ## ✨ 它是什么
 
-Claude Code / Codex 插件。每次跑同一条可预测链路 — **Design I/O**：`design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → (observe*) → ui-evaluator`，验收把每个问题**指回**所属声明，blocking 必须**回流**直到闭环。`?` 为条件入场：已有产品的 UI 修改先跑 `design-baseline?`，有截图/URL/设计稿/产品类比时再跑 `reference-intake?`；`preview*`/`observe*` 仅在对应可选 MCP 工具（`preview_prototype` / `execute_capture_plan`）存在时运行，否则跳过直进下一阶段。
+Claude Code / Codex 插件。每次跑同一条可预测链路 — **Design I/O**：`design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard† → (observe*†) → ui-evaluator†`，验收把每个问题**指回**所属声明，blocking 必须**回流**直到闭环。`?` 为条件入场：已有产品的 UI 修改先跑 `design-baseline?`，有截图/URL/设计稿/产品类比时再跑 `reference-intake?`；`preview*`/`observe*` 仅在对应可选 MCP 工具（`preview_prototype` / `execute_capture_plan`）存在时运行，否则跳过直进下一阶段。`†` = 用户可选的审计阶段（ADR-0033）：`craft-guard†` / `observe†` / `ui-evaluator†` 可由用户关闭 — 首次运行问一次，选择作为默认记入 `.design-playbook/preferences.yaml`（版本化；本机覆盖写在 `preferences.local.yaml`，已 gitignore）。跳过 `ui-evaluator†` 仍会生成标记 `audited: false` 的 point-back 骨架，strict 校验不会把它当作已审计结果放行。
 
 - **声明** *（什么是好）*：`spec` · `domain` · `craft` · `design` · `components` · `template`
 - **契约** *（怎么进链路）*：`skill`（时机）· `evaluator`（验收 + 回流）
