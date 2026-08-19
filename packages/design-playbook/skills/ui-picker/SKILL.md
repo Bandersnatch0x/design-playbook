@@ -15,11 +15,12 @@ Choose density (console-tight vs marketing-loose) and scene class (list / detail
 
 When a verified `.scratch/<run>/design-baseline/state.json` binds a baseline (`status: ready` from `design_baseline.verify`), read that binding path first (`baseline.path`, usually `DESIGN.md` or `.stitch/DESIGN.md`). It is the project-specific authority for atmosphere, visual roles, density, layout, motion, and component conventions. Preserve it unless the requested change explicitly revises the baseline.
 
-Build a read-only component candidate list while reading the baseline. First
-use observed component paths in the verified baseline's `## Component
-Stylings` declaration. Then append non-duplicate paths from the run-local
-`design-baseline/evidence.json` `components` list when present. Keep this
-priority order and treat every path as evidence, never as authority.
+Collect read-only component candidates from two sources, in this order:
+
+1. observed component paths in a verified baseline's `## Component Stylings` declaration, when that declaration exists;
+2. non-duplicate paths from run-local `design-baseline/evidence.json` `components`, when that file exists.
+
+Use the second source when it is present, including waived or draft runs that never produced a `status: ready` binding. Treat every path as evidence, never as authority.
 
 When `.scratch/<run>/reference/contract.md` exists (ADR-0011), read its **Visual cues for ui-picker**, Keep/Change, and Do not copy / exclusions. Use them as input for density, scene, region weight, and risks — never as hex tokens or as a license to copy brand chrome.
 
@@ -54,7 +55,7 @@ Load only if needed:
 - business risk / desensitize → [`references/domain.md`](references/domain.md)
 - token roles while deciding surfaces → verified `<binding.path>` first, then generic fallback [`references/design.md`](references/design.md)
 
-**Done when:** every primary datum/action has a named component role; easy-mix pairs (Badge/Tag, Dialog/Drawer, Dropdown/Menu/Command) are resolved in writing.
+**Done when:** every primary datum/action has a named component role; each material role records `reuse`, `extend`, or `new` inside `components:` with a candidate path or an explicit gap reason; easy-mix pairs (Badge/Tag, Dialog/Drawer, Dropdown/Menu/Command) are resolved in writing.
 
 ### 4. Decision report
 

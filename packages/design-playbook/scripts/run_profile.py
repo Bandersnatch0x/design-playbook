@@ -114,10 +114,11 @@ def _p3_criteria(facts: RequestFacts) -> tuple[str, ...]:
     return tuple(criteria)
 
 
-def _p1_p2_criteria_for(facts: RequestFacts, tier: str) -> tuple[str, ...]:
-    if tier == "P1":
-        return ("intent: fix", "consequence: local", "decided-fields: unchanged")
+def _lower_tier_criteria(facts: RequestFacts, tier: str) -> tuple[str, ...]:
     criteria = [f"intent: {facts.intent}", f"consequence: {facts.consequence}"]
+    if tier == "P1":
+        criteria.append("decided-fields: unchanged")
+        return tuple(criteria)
     if facts.adds_decided_fields:
         criteria.append("decided-fields: add")
     if facts.durable_design_artifacts:
@@ -168,7 +169,7 @@ def route_request(facts: RequestFacts) -> RouteDecision:
         requires_reference_contract=requires_reference_contract,
         requires_spec=requires_spec,
         criteria=(
-            p3_criteria if tier == "P3" else _p1_p2_criteria_for(facts, tier)
+            p3_criteria if tier == "P3" else _lower_tier_criteria(facts, tier)
         ),
         reasons=reasons[tier],
     )

@@ -2,12 +2,27 @@
 """Shape checks for reference-intake example fixtures (ADR-0011)."""
 from __future__ import annotations
 
+import importlib.util
 import json
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "packages" / "design-playbook" / "examples" / "reference-intake"
+MODULE_PATH = (
+    ROOT
+    / "packages"
+    / "design-playbook"
+    / "skills"
+    / "reference-intake"
+    / "scripts"
+    / "reference_sources.py"
+)
+SPEC = importlib.util.spec_from_file_location("reference_sources", MODULE_PATH)
+if SPEC is None or SPEC.loader is None:
+    raise RuntimeError(f"cannot load reference source module: {MODULE_PATH}")
+reference_sources = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(reference_sources)
 REQUIRED_HEADINGS = [
     "## Source summary",
     "## Evidence (observed)",
@@ -24,9 +39,9 @@ REQUIRED_CONSTRAINT_MARKERS = (
     "always / ask / never hints:",
     "Captured at",
 )
-KINDS = {"screenshot", "url", "design_file", "product_analogy", "other"}
-STORAGE = {"copied", "linked", "remote", "symbolic"}
-ACQUIRED_VIA = {"attachment", "local-file", "host-tool", "export", "url", "analogy"}
+KINDS = reference_sources.SOURCE_KINDS
+STORAGE = reference_sources.STORAGE_KINDS
+ACQUIRED_VIA = reference_sources.ACQUISITION_METHODS
 
 
 class ReferenceIntakeFixtureTests(unittest.TestCase):

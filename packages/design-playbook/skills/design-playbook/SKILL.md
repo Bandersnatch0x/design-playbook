@@ -77,6 +77,8 @@ preview/observe adapter availability or evaluator verdicts.
 - `requires_reference_contract` → step **2. `reference-intake`**; otherwise skip it.
 - `requires_spec` → step **3. `ux-spec`**; otherwise continue to step **4. plan**.
 
+**Done when:** `run_profile.py route` returned a decision that this skill consumed without reconstructing its table; `no-run` created no `.scratch/<run>/` artifacts; `design-run` projected the returned tier, criteria, and prerequisite flags.
+
 ### 1A. `design-baseline` (when required)
 
 Invoke **design-baseline** before reference intake or specification work. Call the deep module `prepare` → (user confirm/waive) → `confirm` as needed; immediately before Fill call `verify`. Discover and validate project `DESIGN.md`; if missing or incomplete, generate only run-local `DESIGN.draft.md` + `evidence.json` from first-party UI evidence and wait for confirmation before a durable write.
@@ -134,7 +136,7 @@ Native desktop order: `ux-spec` → `native-craft` → `ui-picker` → `fill` �
 
 Invoke **ui-picker**. Map scene → template + component semantics. Read its `references/` only as that skill directs. When `.scratch/<run>/reference/contract.md` exists, pass its visual cues / exclusions (via plan input pack and/or direct path) into **ui-picker**.
 
-**Done when:** **ui-picker**'s own completion criteria hold (that skill is SSOT). Smoke: the decision report names scene, density, template, regions, components, and risks; each material component role records `reuse`, `extend`, or `new` with a candidate path or explicit gap reason; coding has not started before that report exists. For native desktop, it also consumes the declared render-surface seam.
+**Done when:** **ui-picker**'s own completion criteria hold (that skill is SSOT). Smoke: the decision report names scene, density, template, regions, components, and risks; coding has not started before that report exists. For native desktop, it also consumes the declared render-surface seam.
 
 `ui-picker` **stops at the decision report** — it has no preview step.
 

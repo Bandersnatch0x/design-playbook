@@ -53,9 +53,7 @@ State is a cache, not authority. Every public call resolves paths against the su
 
 ### 1. Classify the project
 
-Apply the existing-product gate when the requested build or fix adds/revises UI and the repository already contains meaningful first-party UI: pages/routes, shared components, theme or token files, global styles, or shipped screenshots/stories.
-
-Skip for answer-only, review-only, diagnosis-only, or planning-only work that will not change UI. Skip the entry gate for a true greenfield repository with no existing visual surface. Narrate either skip in one line.
+Apply the existing-product gate when the orchestrator returned `requires_baseline`, including durable review, diagnosis, or plan work on an existing product. Existing-product means the repository already contains meaningful first-party UI: pages/routes, shared components, theme or token files, global styles, or shipped screenshots/stories. Skip when entry routing returned `no-run`. Skip the entry gate for a true greenfield repository with no existing visual surface. Narrate either skip in one line.
 
 **Done when:** the run records `existing-product` or `greenfield`, with the file signals used for that classification.
 

@@ -41,17 +41,15 @@ List every reference source. For each source record:
 
 Write `manifest.json` under `.scratch/<run>/reference/` using the shape in [`references/contract-template.md`](references/contract-template.md). Copy durable local media into `reference/assets/` only when needed for later human review; never into the host Fill tree.
 
-For a temporary PNG, JPEG, WebP, or GIF attachment that enters a design run,
-call [`scripts/reference_sources.py`](scripts/reference_sources.py)
-`ingest_ephemeral_image(...)`. The helper
-detects the type from bytes, copies it byte-for-byte into
-`reference/assets/` using a safe basename plus digest prefix, and atomically
-appends the complete manifest. The returned locator is relative to the run
-root (`reference/assets/...`); record `storage: copied`, the detected
-`media_type`, and optional `acquired_via`, `provider`, and source-level
-`captured_at`. Keep `provider` as a provider label, never a path. Never write the host's temporary path into a manifest or
-contract. The helper is for raster files only; author URLs, design files, and
-product analogies directly in the manifest.
+For a temporary PNG, JPEG, WebP, or GIF that enters a design run, call
+[`scripts/reference_sources.py`](scripts/reference_sources.py)
+`ingest_ephemeral_image(...)`. Pass `kind: screenshot` for a captured
+interface and `kind: other` for any other raster; keep the helper's
+detected `media_type`. Cite the returned source id and run-relative
+locator. Keep `provider` as a provider label, never a path. Record host
+temporary paths nowhere in the manifest or contract. Author URLs, design
+files, and product analogies directly; field names and locator rules live
+in [`references/contract-template.md`](references/contract-template.md).
 
 Treat Figma's official MCP, a Lanhu export, an HTML export, a URL, and a local
 design file as upstream collection methods. Normalize their outputs into this

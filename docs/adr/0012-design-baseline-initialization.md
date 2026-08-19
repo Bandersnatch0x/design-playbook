@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-07-24). Amended same day: deep module `prepare` / `confirm` / `verify` with `state.json` as the sole gate artifact.
+Accepted (2026-07-24). Amended same day: deep module `prepare` / `confirm` / `verify` with `state.json` as the sole gate artifact. Narrowed by ADR-0032 (2026-08-17): the read-only exemption is `no-run`, not intent labels.
 
 ## Context
 
@@ -19,7 +19,7 @@ A split of inspect script + hand-written `confirm.json` was rejected as the long
 
 ## Decision
 
-1. **Add conditional initialization `design-baseline?`.** For build/fix work that changes UI in a repository with meaningful existing first-party UI, run `design-baseline` before `reference-intake?`. Answer, review, diagnosis, and plan-only work do not trigger the gate. A true greenfield repository skips it.
+1. **Add conditional initialization `design-baseline?`.** For a `design-run` whose router returns `requires_baseline`, run `design-baseline` before `reference-intake?`. That includes durable review, diagnosis, or plan work on an existing product (ADR-0032). `no-run` requests and true greenfield repositories skip the gate.
 
 2. **Canonical authority.** `<project-root>/DESIGN.md` is canonical. `.stitch/DESIGN.md` is a compatibility candidate. Different content at both paths is ambiguous and requires an explicit user choice; agents do not merge or create a third authority.
 

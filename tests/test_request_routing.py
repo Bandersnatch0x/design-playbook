@@ -15,6 +15,20 @@ ROOT = Path(__file__).resolve().parents[1]
 PKG = ROOT / "packages" / "design-playbook"
 MAIN_SKILL = PKG / "skills" / "design-playbook" / "SKILL.md"
 UI_PICKER_SKILL = PKG / "skills" / "ui-picker" / "SKILL.md"
+BASELINE_SKILL = PKG / "skills" / "design-baseline" / "SKILL.md"
+INTAKE_SKILL = PKG / "skills" / "reference-intake" / "SKILL.md"
+
+
+def _heading_section(text: str, heading: str) -> str:
+    start = text.index(heading)
+    rest = text[start:]
+    next_heading = rest.find("\n### ", 1)
+    return rest if next_heading < 0 else rest[:next_heading]
+
+
+def _done_when(section: str) -> str:
+    marker = "**Done when:**"
+    return section[section.rindex(marker) :]
 
 if str(PKG) not in sys.path:
     sys.path.insert(0, str(PKG))
@@ -87,6 +101,10 @@ class RequestRoutingTests(unittest.TestCase):
 
         self.assertEqual(decision.mode, "design-run")
         self.assertEqual(decision.tier, "P1")
+        self.assertEqual(
+            decision.criteria,
+            ("intent: fix", "consequence: local", "decided-fields: unchanged"),
+        )
 
     def test_additive_build_starts_a_p2_design_run(self) -> None:
         decision = route_request(
@@ -386,6 +404,62 @@ class AdaptiveRoutingSkillContractTests(unittest.TestCase):
                 "risks",
             ),
         )
+
+    def test_ui_picker_done_when_owns_reuse_extend_new(self) -> None:
+        picker_done = _done_when(
+            _heading_section(
+                UI_PICKER_SKILL.read_text(encoding="utf-8"),
+                "### 3. Components",
+            )
+        )
+        orchestrator_done = _done_when(
+            _heading_section(
+                MAIN_SKILL.read_text(encoding="utf-8"),
+                "### 5. Shell",
+            )
+        )
+
+        for outcome in ("`reuse`", "`extend`", "`new`"):
+            with self.subTest(outcome=outcome):
+                self.assertIn(outcome, picker_done)
+        self.assertIn("that skill is SSOT", orchestrator_done)
+        self.assertNotIn("each material component role records", orchestrator_done)
+
+    def test_entry_routing_has_done_when(self) -> None:
+        section = _heading_section(
+            MAIN_SKILL.read_text(encoding="utf-8"),
+            "### 1. Entry routing",
+        )
+
+        self.assertIn("**Done when:**", section)
+        self.assertIn("run_profile.py route", section)
+
+    def test_ui_picker_harvests_evidence_without_verified_baseline(self) -> None:
+        text = UI_PICKER_SKILL.read_text(encoding="utf-8")
+        section = _heading_section(text, "### 1. Density + scene")
+
+        self.assertNotIn("while reading the baseline", section)
+        self.assertIn("`design-baseline/evidence.json`", section)
+        self.assertIn("waived", section)
+        self.assertIn("draft", section)
+
+    def test_design_baseline_skip_follows_router_no_run(self) -> None:
+        text = BASELINE_SKILL.read_text(encoding="utf-8")
+        section = _heading_section(text, "### 1. Classify the project")
+
+        self.assertNotIn("Skip for answer-only", section)
+        self.assertIn("`requires_baseline`", section)
+        self.assertIn("`no-run`", section)
+
+    def test_reference_intake_assigns_screenshot_vs_other_without_restating_helper(self) -> None:
+        text = INTAKE_SKILL.read_text(encoding="utf-8")
+        section = _heading_section(text, "### 1. Inventory sources")
+
+        self.assertIn("`kind: screenshot`", section)
+        self.assertIn("`kind: other`", section)
+        self.assertIn("media_type", section)
+        self.assertNotIn("byte-for-byte", section)
+        self.assertNotIn("digest prefix", section)
 
 
 if __name__ == "__main__":
