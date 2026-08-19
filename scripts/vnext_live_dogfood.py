@@ -93,7 +93,7 @@ def preflight() -> int:
             payload = json.loads(doctor.stdout)
             level = payload.get("level")
             if level == "broken":
-                _fail(f"doctor level=broken — fix install before live dogfood")
+                _fail("doctor level=broken — fix install before live dogfood")
                 failures += 1
             else:
                 _ok(f"doctor level={level}")

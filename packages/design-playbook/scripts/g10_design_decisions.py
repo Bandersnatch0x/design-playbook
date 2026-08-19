@@ -809,7 +809,6 @@ def _stale_checks(
             sha = binding.get("sha256")
             if isinstance(sha, str):
                 current_sha = sha.lower()
-    by_id = {entry.id: entry for entry in entries}
     for entry in entries:
         review = entry.stale_review
         if entry.stale and not review:

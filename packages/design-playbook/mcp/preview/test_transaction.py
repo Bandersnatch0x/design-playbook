@@ -243,10 +243,12 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             prototype = Path(tmp) / "round-1.html"
             prototype.write_text("reviewed", encoding="utf-8")
-            collect = lambda *args: {
-                "choice": "需要修改", "feedback": "adjust spacing",
-                "anchors": [], "aborted": False,
-            }
+            def collect(*args):
+                return {
+                    "choice": "需要修改", "feedback": "adjust spacing",
+                    "anchors": [], "aborted": False,
+                }
+
             self._run(prototype, collect=collect)
             confirm_path = Path(tmp) / "confirm-round-1.json"
             invalid_text = "{"
@@ -633,10 +635,11 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
         collect=None,
     ) -> dict:
         if collect is None:
-            collect = lambda *args: {
-                "choice": "确认通过", "feedback": "清晰",
-                "anchors": [], "aborted": False,
-            }
+            def collect(*args):
+                return {
+                    "choice": "确认通过", "feedback": "清晰",
+                    "anchors": [], "aborted": False,
+                }
         return run_preview_transaction(
             path_arg=str(prototype), html=None, summary=summary, round_n=1,
             report_ref=report_ref,

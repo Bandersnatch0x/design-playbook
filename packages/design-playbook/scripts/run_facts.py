@@ -160,13 +160,15 @@ def _read_text(
         return "", ArtifactReadFact(artifact, path, "missing", str(error))
     try:
         return path.read_text(encoding="utf-8"), None
-    except UnicodeDecodeError as exc:
+    except UnicodeDecodeError:
         if fallback_encoding is not None:
             try:
                 return path.read_text(encoding=fallback_encoding), None
             except (OSError, UnicodeError) as fallback_exc:
-                exc = fallback_exc
-        return "", ArtifactReadFact(artifact, path, "unreadable", str(exc))
+                return "", ArtifactReadFact(
+                    artifact, path, "unreadable", str(fallback_exc))
+        return "", ArtifactReadFact(
+            artifact, path, "unreadable", "invalid UTF-8")
     except OSError as exc:
         return "", ArtifactReadFact(artifact, path, "unreadable", str(exc))
 
