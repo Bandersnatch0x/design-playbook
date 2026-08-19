@@ -25,6 +25,8 @@
     var theme = hostTheme || (colorScheme && colorScheme.matches ? "light" : "dark");
     bar.setAttribute("data-theme", theme);
     if (floatRoot) floatRoot.setAttribute("data-theme", theme);
+    var onboardCard = document.getElementById("dpb-onboard");
+    if (onboardCard) onboardCard.setAttribute("data-theme", theme);
   }
 
   syncTheme();
@@ -59,6 +61,7 @@
 
   // wayfinder canvas-upgrade 07: draft persistence (per-run localStorage) + anchor undo.
   var historyStack = [];
+  var redoStack = [];  // #60: Ctrl/Cmd+Shift+Z redoes the most recent undo
   var DRAFT_KEY = window.DPB_DRAFT_KEY || "";
 
   function anchorSnapshot() {
@@ -70,6 +73,7 @@
   function pushHistorySnapshot(snapshot) {
     historyStack.push(snapshot);
     if (historyStack.length > 50) historyStack.shift();
+    redoStack.length = 0;  // a fresh change invalidates the redo branch
   }
 
   function pushHistory() {
@@ -92,7 +96,23 @@
     if (!historyStack.length) return;
     var prev = null;
     try { prev = JSON.parse(historyStack.pop()); } catch (e) { return; }
+    redoStack.push(anchorSnapshot());  // #60: keep the undone state redoable
     restoreAnchorsFromData(prev);
+    render();
+    setReadiness();
+    saveDraft();
+  }
+
+  function redo() {
+    // #60: Ctrl/Cmd+Shift+Z restores the most recent undo. Push the current
+    // state straight onto historyStack (NOT pushHistorySnapshot, which would
+    // wipe the remaining redo branch).
+    if (!redoStack.length) return;
+    var next = null;
+    try { next = JSON.parse(redoStack.pop()); } catch (e) { return; }
+    historyStack.push(anchorSnapshot());
+    if (historyStack.length > 50) historyStack.shift();
+    restoreAnchorsFromData(next);
     render();
     setReadiness();
     saveDraft();
@@ -149,6 +169,36 @@
     try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
   }
 
+  // ---- sandbox iframe channel (#56 pin-state sync, #57 locate/badges) ----
+  function protoFrame() {
+    return document.querySelector("iframe.dpb-proto-frame");
+  }
+  function postToFrame(msg) {
+    var f = protoFrame();
+    if (f && f.contentWindow) {
+      try { f.contentWindow.postMessage(msg, "*"); } catch (e) {}
+    }
+  }
+  function syncPinToFrame() {
+    // The parent owns pinOn; the bridge inside the opaque-origin iframe only
+    // ever learns it through this message (on toggle, on iframe load, and as
+    // an answer to the bridge's dpbPinHello resend request).
+    postToFrame({ dpbPinState: { on: pinOn } });
+  }
+  function syncAnchorsToFrame() {
+    // #57 scheme A: mirror the anchor list into the iframe as numbered
+    // badges so cross-origin annotations stay visible on their elements.
+    postToFrame({ dpbPinAnchors: anchors.map(function (a, i) {
+      return { selector: a.selector, n: i + 1, comment: a.comment || "" };
+    }) });
+  }
+  var announceEl = document.getElementById("dpb-announce");
+  function announce(msg) {
+    if (!announceEl) return;
+    announceEl.textContent = "";
+    window.setTimeout(function () { announceEl.textContent = msg || ""; }, 30);
+  }
+
   function ensureFloatRoot() {
 if (floatRoot) return floatRoot;
 floatRoot = document.createElement("div");
@@ -171,7 +221,7 @@ var parts = [];
 var cur = el;
 var depth = 0;
 while (cur && cur.nodeType === 1 && cur !== document.documentElement && depth < 8) {
-  if (cur.id === "dpb-preview-bar" || cur.id === "dpb-preview-spacer" || cur.id === "dpb-float-root") break;
+  if (cur.id === "dpb-preview-bar" || cur.id === "dpb-float-root") break;
   var part = cur.tagName.toLowerCase();
   if (cur.classList && cur.classList.length) {
     var cls = Array.prototype.slice.call(cur.classList, 0, 2)
@@ -284,6 +334,13 @@ if (bubble) {
 
   function render() {
 listEl.innerHTML = "";
+// C1: reconcile float bubbles with the anchor list — undo/redo and removals
+// can leave stale selectors in floatMap; drop any bubble without an anchor.
+var liveSelectors = {};
+anchors.forEach(function (a) { liveSelectors[a.selector] = true; });
+Object.keys(floatMap).forEach(function (sel) {
+  if (!liveSelectors[sel]) removeBubble(sel);
+});
 if (!anchors.length) {
   listEl.classList.remove("has-items");
   syncHidden();
@@ -307,11 +364,7 @@ anchors.forEach(function (a, idx) {
 });
 syncHidden();
 updateCounts();
-  }
-
-  function focusNewestAnchorInput() {
-var inputs = listEl.querySelectorAll("input[data-i]");
-if (inputs.length) inputs[inputs.length - 1].focus();
+syncAnchorsToFrame();  // #57: keep the in-iframe badges aligned with the list
   }
 
   function updateCounts() {
@@ -359,28 +412,10 @@ focusFeedback();
   var lastReady = null;
   var pillOpenLabel = null;  // I13: original pill-primary label, restored on ready->not-ready flip
   var openPrimary = document.getElementById("dpb-open-primary");
-  // Pill confirm mis-tap protection: first click arms, second submits (A′ arm path).
-  // Abort uses popover; pill confirm keeps arm so the resting pill stays one control.
-  var CONFIRM_ARM_MS = 4000;
-  var pillConfirmArmed = false;
-  var pillConfirmTimer = null;
-  var pillConfirmReadyLabel = null;  // label while ready (pre-arm)
-  var pillArmStatus = document.getElementById("dpb-pill-arm-status");
-  function resetPillConfirmArmed(announceCancel) {
-if (pillConfirmTimer) { clearTimeout(pillConfirmTimer); pillConfirmTimer = null; }
-var wasArmed = pillConfirmArmed;
-if (openPrimary && pillConfirmArmed) {
-  pillConfirmArmed = false;
-  openPrimary.classList.remove("is-armed");
-  openPrimary.removeAttribute("aria-pressed");
-  if (pillConfirmReadyLabel !== null) openPrimary.textContent = pillConfirmReadyLabel;
-}
-if (pillArmStatus) {
-  pillArmStatus.textContent = (announceCancel && wasArmed)
-    ? (I18N.confirm_cancelled || "")
-    : "";
-}
-  }
+  // #60: pill confirm converged on ONE path — when substantive the pill
+  // primary submits directly, exactly like the drawer primary. The old
+  // three-state arm mechanism (arm -> 4s window -> submit) was removed so the
+  // button behaves identically before and after the readiness flip.
   function setReadiness() {
 if (!pillReadyEl) return;
 var ready = isSubstantive();
@@ -398,10 +433,8 @@ if (ready) {
     if (drawerPrimary && drawerPrimary.textContent && openPrimary.textContent !== drawerPrimary.textContent) {
       openPrimary.textContent = drawerPrimary.textContent;
     }
-    pillConfirmReadyLabel = openPrimary.textContent;  // snapshot for arm restore
   }
 } else {
-  resetPillConfirmArmed();  // readiness flip undoes any pending arm
   pillReadyEl.textContent = I18N.not_ready || "";
   if (openPrimary) {
     openPrimary.classList.remove('is-direct-confirm');
@@ -411,7 +444,6 @@ if (ready) {
       openPrimary.textContent = pillOpenLabel;
     }
   }
-  pillConfirmReadyLabel = null;
 }
   }
 
@@ -430,13 +462,19 @@ if (pinBtn) {
   pinBtn.setAttribute("aria-pressed", pinOn ? "true" : "false");
 }
 if (pinLabel) pinLabel.textContent = pinOn ? (I18N.pin_on || "") : (I18N.pin_off || "");
+// #58: when the drawer is collapsed while pin stays on, the pill annotate
+// button carries the pin indicator and is the one-click path back to the list.
+if (openBtn) {
+  openBtn.classList.toggle("is-pinning", pinOn);
+  openBtn.setAttribute("title", pinOn ? (I18N.pin_on || "") : (I18N.pin_toggle_desc || ""));
+}
 if (!pinOn) clearHover();
+syncPinToFrame();  // #56: bridge switches interception mode instantly
   }
 
   var lastFocus = null;
   function openDrawer() {
 lastFocus = document.activeElement;
-resetPillConfirmArmed();  // drawer open: pill is hidden; drop any pending confirm arm
 // Use non-modal <dialog>.show() (NOT showModal): the drawer must NOT make the
 // page inert, because pin-to-annotate requires clicking prototype elements
 // behind the drawer. ::backdrop (modal only) is replaced by the .is-open::before
@@ -450,10 +488,11 @@ bar.classList.add("is-open");
 setTimeout(function () { if (closeBtn) closeBtn.focus(); }, 0);
   }
   function closeDrawer() {
+// #58: collapsing the drawer never turns pin off. Pin has its own explicit
+// exits (the drawer's pick toggle, Esc), so anchors survive a collapse and the
+// user can keep picking in prototype areas the 380px panel used to cover.
 bar.classList.remove("is-open");
 hideAbortPopover();  // Scheme A′: dismiss abort popover when drawer closes
-resetPillConfirmArmed();  // pill reappears disarmed
-if (pinOn) setPin(false);
 if (drawerEl && drawerEl.open && typeof drawerEl.close === "function") drawerEl.close();
 if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
   }
@@ -473,23 +512,13 @@ openDrawer();
 setPin(true);
   });
   function handlePillPrimary(e) {
+    // #60: single confirm path — identical semantics to the drawer primary.
+    // Substantive -> submit confirm in one click; otherwise open the drawer
+    // so the user can add the missing feedback. No arm state, no timeout.
     if (isSubstantive()) {
-      // Mis-tap protection: arm→confirm on pill (A′). Drawer confirm stays direct.
       e.preventDefault();
-      if (!pillConfirmArmed) {
-        pillConfirmArmed = true;
-        if (pillConfirmReadyLabel === null) pillConfirmReadyLabel = openPrimary.textContent;
-        openPrimary.classList.add("is-armed");
-        openPrimary.setAttribute("aria-pressed", "true");
-        openPrimary.textContent = I18N.confirm_confirm || "";
-        if (pillArmStatus) pillArmStatus.textContent = I18N.confirm_confirm || "";
-        pillConfirmTimer = setTimeout(function () { resetPillConfirmArmed(true); }, CONFIRM_ARM_MS);
-        return;
-      }
-      resetPillConfirmArmed();
       submitPrimary();
     } else {
-      resetPillConfirmArmed();
       openDrawer();
     }
   }
@@ -501,12 +530,6 @@ setPin(true);
   if (pillReadyEl) {
 pillReadyEl.addEventListener("click", function () { focusFeedback(); });
   }
-  // Outside click cancels a pending pill confirm arm (not a second accidental submit).
-  document.addEventListener("click", function (e) {
-if (!pillConfirmArmed) return;
-if (e.target && e.target.closest && e.target.closest("#dpb-open-primary")) return;
-resetPillConfirmArmed(true);
-  }, true);
   // P1.5: click on scrim (outside drawer) closes the drawer. Fires only when pin
   // is OFF (CSS sets scrim pointer-events:none while body.dpb-pin-mode is on, so
   // pin-on clicks reach the page for element selection, not the scrim).
@@ -560,20 +583,22 @@ field.addEventListener("keydown", function (e) {
 return !!(abortPopover && !abortPopover.hidden);
   }
   function positionAbortPopover() {
-// Prefer fixed coords from the abort button so the popover is not clipped by
-// drawer bounds and stays on-screen on narrow footers.
+// #60: real-measurement placement. The popover is already unhidden when this
+// runs, so offsetWidth/offsetHeight give its true size — no hardcoded
+// estimates that can push it off-screen when the drawer hugs the corner.
 if (!abortPopover || !abortBtn || abortPopover.hidden) return;
 var rect = abortBtn.getBoundingClientRect();
 var pad = 8;
-var estW = Math.min(260, Math.max(200, window.innerWidth * 0.45));
-var estH = 110;
+var popW = abortPopover.offsetWidth || 240;
+var popH = abortPopover.offsetHeight || 110;
 var left = rect.right + pad;
 var top = rect.top;
-if (left + estW > window.innerWidth - pad) {
-  left = Math.max(pad, rect.left - estW - pad);
+if (left + popW > window.innerWidth - pad) {
+  left = Math.max(pad, rect.left - popW - pad);
 }
-if (top + estH > window.innerHeight - pad) {
-  top = Math.max(pad, window.innerHeight - estH - pad);
+if (left < pad) left = pad;
+if (top + popH > window.innerHeight - pad) {
+  top = Math.max(pad, window.innerHeight - popH - pad);
 }
 if (top < pad) top = pad;
 abortPopover.classList.add("is-fixed");
@@ -648,7 +673,8 @@ if (abortPopoverOpen()) positionAbortPopover();
   if (drawerEl) drawerEl.addEventListener("close", function () {
 bar.classList.remove("is-open");
 hideAbortPopover();  // defense-in-depth if dialog closes outside closeDrawer
-if (pinOn) setPin(false);
+// #58: like closeDrawer, a native close collapses the drawer without ending
+// pin mode — picking state survives until explicitly toggled off.
   });
   function drawerFocusables() {
 if (!drawerEl) return [];
@@ -674,17 +700,16 @@ return Array.prototype.filter.call(nodes, function (el) {
   }
   document.addEventListener("keydown", function (e) {
 if (e.key === "Escape") {
+  // #59: Esc dismisses the one-time onboarding card first.
+  if (onboardEl && !onboardEl.hidden) {
+    e.preventDefault();
+    dismissOnboarding();
+    return;
+  }
   if (abortPopoverOpen()) {
     e.preventDefault();
     hideAbortPopover(true);
     if (abortBtn && typeof abortBtn.focus === "function") abortBtn.focus();
-    return;
-  }
-  // Esc undoes a pending pill confirm arm without opening/closing the drawer.
-  if (pillConfirmArmed) {
-    e.preventDefault();
-    resetPillConfirmArmed(true);
-    if (openPrimary && typeof openPrimary.focus === "function") openPrimary.focus();
     return;
   }
   if (pinOn) { setPin(false); return; }
@@ -692,10 +717,11 @@ if (e.key === "Escape") {
   return;
 }
 // wayfinder canvas-upgrade 07: Ctrl/Cmd+Z undoes the last anchor change
-// (add / remove / committed comment edit).
+// (add / remove / committed comment edit). #60: Ctrl/Cmd+Shift+Z redoes it.
 if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) {
   if (isTextEditingTarget(e.target)) return;
-  if (!e.shiftKey) { e.preventDefault(); undo(); }
+  e.preventDefault();
+  if (e.shiftKey) { redo(); } else { undo(); }
   return;
 }
 if (e.key !== "Tab") return;
@@ -731,7 +757,8 @@ if (e.shiftKey) {
   document.addEventListener("mousemove", function (e) {
 if (!pinOn) return;
 var el = e.target;
-if (!el || el.closest("#dpb-preview-bar") || el.closest("#dpb-preview-spacer") || el.closest("#dpb-float-root")) {
+// W1: the onboarding card is control chrome, never a pick target.
+if (!el || el.closest("#dpb-preview-bar") || el.closest("#dpb-float-root") || el.closest("#dpb-onboard")) {
   clearHover();
   return;
 }
@@ -749,7 +776,9 @@ if (hoverEl !== el) {
   document.addEventListener("click", function (e) {
 if (!pinOn) return;
 var raw = e.target;
-if (!raw || raw.closest("#dpb-preview-bar") || raw.closest("#dpb-preview-spacer") || raw.closest("#dpb-float-root")) return;
+// W1: clicks on the onboarding card (e.g. its dismiss button) must pass
+// through even while picking — it is chrome, not prototype content.
+if (!raw || raw.closest("#dpb-preview-bar") || raw.closest("#dpb-float-root") || raw.closest("#dpb-onboard")) return;
 if (raw === document.body || raw === document.documentElement) return;
 e.preventDefault();
 e.stopPropagation();
@@ -760,9 +789,15 @@ if (!selector) return;
 // de-dupe by selector; clear stale highlight on any previous element ref
 for (var i = 0; i < anchors.length; i++) {
   if (anchors[i].selector === selector) {
+    // #60: duplicate pick gets visible feedback (flash + live announcement)
+    // instead of silently doing nothing.
     if (anchors[i].el && anchors[i].el !== el) anchors[i].el.classList.remove("dpb-pin-target");
     anchors[i].el = el;
     el.classList.add("dpb-pin-target");
+    el.classList.remove("dpb-pin-flash");
+    void el.offsetWidth;
+    el.classList.add("dpb-pin-flash");
+    announce(String(I18N.duplicate_anchor || "").replace("{n}", String(i + 1)));
     render();
     return;
   }
@@ -778,28 +813,49 @@ anchors.push({
 });
 render();
 saveDraft();
-// focus newest comment input
-focusNewestAnchorInput();
+// #60: no forced focus grab — picking several elements in a row must not yank
+// the keyboard focus back into the drawer input each time.
   }, true);
 
   // G5 sandbox bridge: accept pin anchors postMessaged from the cross-origin
   // prototype iframe (opaque origin). The iframe cannot read the parent DOM or
   // the hidden decision token; it only sends {selector, tag}. Filter by
-  // pinOn so the always-on bridge only records while the user is annotating
-  // (no pin-state sync needed). el is null cross-origin — the iframe highlights
-  // the element itself (dpb-pin-target), and existing el-guarded code
-  // (positionFloat/ensureBubble/locate) already tolerates el === null.
+  // pinOn so anchors are only recorded while the user is annotating (the
+  // bridge gates its own capture on the synced dpbPinState too — defense in
+  // depth, #56). el is null cross-origin — the iframe highlights the element
+  // itself (dpb-pin-target), and existing el-guarded code already tolerates
+  // el === null.
   window.addEventListener("message", function (e) {
-if (!pinOn) return;
+// W3: only accept messages from OUR sandboxed prototype iframe. Any other
+// window (the prototype's own scripts run in it, but a foreign frame or the
+// host page could also postMessage) must not be able to inject anchors.
+var srcFrame = protoFrame();
+if (!srcFrame || e.source !== srcFrame.contentWindow) return;
 var data = e.data;
-if (!data || !data.dpbPinAnchor) return;
+if (!data) return;
+if (data.dpbPinHello) {
+  // #56: bridge (re)loaded and asks for the current pin state. W2: resend
+  // the badges too — a reload (or a draft restored before the iframe
+  // parsed) must not strand the iframe without its numbered annotations.
+  syncPinToFrame();
+  syncAnchorsToFrame();
+  return;
+}
+if (!pinOn) return;
+if (!data.dpbPinAnchor) return;
 var a = data.dpbPinAnchor;
 var selector = String(a.selector || "");
 var tag = String(a.tag || "").toLowerCase();
 if (!selector) return;
 // de-dupe by selector; no el/classList work (cross-origin)
 for (var i = 0; i < anchors.length; i++) {
-  if (anchors[i].selector === selector) return;
+  if (anchors[i].selector === selector) {
+    // #60: duplicate pick — flash the element inside the iframe and announce
+    // the existing anchor number instead of failing silently.
+    postToFrame({ dpbPinFlash: { selector: selector } });
+    announce(String(I18N.duplicate_anchor || "").replace("{n}", String(i + 1)));
+    return;
+  }
 }
 pushHistory();
 anchors.push({
@@ -811,7 +867,7 @@ anchors.push({
 });
 render();
 saveDraft();
-focusNewestAnchorInput();
+// #60: no forced focus grab after a cross-origin pick either.
   });
 
   listEl.addEventListener("input", function (e) {
@@ -822,15 +878,20 @@ var i = Number(t.getAttribute("data-i"));
 anchors[i].comment = t.value;
 syncHidden();
 ensureBubble(anchors[i], i);
+syncAnchorsToFrame();  // #57: badge notes in the iframe follow comment edits
 setReadiness();
 saveDraft();
   });
 
+  // C4: comment-edit before-snapshots keyed by anchor index (NOT hung on the
+  // input DOM node — render() rebuilds rows and would drop node-bound state,
+  // making that edit un-undoable).
+  var beforeEdits = {};
   listEl.addEventListener("focusin", function (e) {
     var t = e.target;
     if (!t || !t.getAttribute) return;
     if (t.getAttribute("data-i") == null) return;
-    t._dpbHistoryBefore = anchorSnapshot();
+    beforeEdits[t.getAttribute("data-i")] = anchorSnapshot();
   });
 
   // wayfinder canvas-upgrade 07: comment edits enter the undo stack at their
@@ -838,11 +899,13 @@ saveDraft();
   listEl.addEventListener("change", function (e) {
     var t = e.target;
     if (!t || !t.getAttribute) return;
-    if (t.getAttribute("data-i") == null) return;
-    if (t._dpbHistoryBefore != null && t._dpbHistoryBefore !== anchorSnapshot()) {
-      pushHistorySnapshot(t._dpbHistoryBefore);
+    var key = t.getAttribute("data-i");
+    if (key == null) return;
+    var before = beforeEdits[key];
+    if (before != null && before !== anchorSnapshot()) {
+      pushHistorySnapshot(before);
     }
-    delete t._dpbHistoryBefore;
+    delete beforeEdits[key];
   });
 
   listEl.addEventListener("click", function (e) {
@@ -852,12 +915,17 @@ var loc = t.getAttribute("data-locate");
 if (loc != null) {
   e.preventDefault();
   var a = anchors[Number(loc)];
-  if (a && a.el && a.el.isConnected) {
+  if (!a) return;
+  if (a.el && a.el.isConnected) {
     a.el.scrollIntoView({ behavior: "smooth", block: "center" });
     a.el.classList.remove("dpb-pin-flash");
     // force reflow so the animation can restart
     void a.el.offsetWidth;
     a.el.classList.add("dpb-pin-flash");
+  } else {
+    // #57 scheme A: cross-origin anchor (el is null) — ask the bridge to
+    // scroll + flash the element inside the sandboxed iframe.
+    postToFrame({ dpbPinLocate: { selector: a.selector } });
   }
   return;
 }
@@ -925,4 +993,41 @@ field.addEventListener("input", function () {
   saveDraft();
 });
   }
+
+  // ---- #59: one-time onboarding card (pin flow + shortcuts) ----
+  var ONBOARD_KEY = "dpb.preview.onboard.v1";
+  var onboardEl = document.getElementById("dpb-onboard");
+  var onboardCloseBtn = document.getElementById("dpb-onboard-close");
+  function showOnboarding() {
+if (!onboardEl) return;
+var seen = false;
+try { seen = !!localStorage.getItem(ONBOARD_KEY); } catch (e) {}
+if (seen) return;
+onboardEl.hidden = false;
+// C3: strictly one-time — mark as read the moment it is shown, not only on
+// dismiss. A user who never clicks away still never sees it twice.
+try { localStorage.setItem(ONBOARD_KEY, "1"); } catch (e) {}
+if (onboardCloseBtn) setTimeout(function () { onboardCloseBtn.focus(); }, 0);
+  }
+  function dismissOnboarding() {
+if (!onboardEl) return;
+onboardEl.hidden = true;
+try { localStorage.setItem(ONBOARD_KEY, "1"); } catch (e) {}
+  }
+  if (onboardCloseBtn) onboardCloseBtn.addEventListener("click", dismissOnboarding);
+  showOnboarding();
+
+  // ---- #56: keep the sandbox bridge in sync with the parent pin state ----
+  // The iframe element is parsed after this inline script, so attach the load
+  // resend once the DOM is complete; the bridge's dpbPinHello covers reloads.
+  document.addEventListener("DOMContentLoaded", function () {
+var f = protoFrame();
+if (f) f.addEventListener("load", function () {
+  // W2: a (re)loaded iframe lost its bridge state — resend pin mode AND the
+  // numbered badges so annotations survive iframe reloads.
+  syncPinToFrame();
+  syncAnchorsToFrame();
+});
+syncPinToFrame();
+  });
 })();

@@ -20,7 +20,6 @@
     </button>
     <button type="button" class="dpb-btn-primary" id="dpb-open-primary" aria-haspopup="dialog">{t_pill_open}</button>
   </span>
-  <span class="dpb-sr-only" id="dpb-pill-arm-status" role="alert"></span>
 </div>
 
 <!-- drawer (expanded) -->
@@ -34,7 +33,7 @@
   </div>
   <div class="dpb-drawer-body">
     <div class="dpb-pin-row">
-      <button type="button" class="dpb-pin-toggle" id="dpb-pin-toggle" aria-pressed="false">
+      <button type="button" class="dpb-pin-toggle" id="dpb-pin-toggle" aria-pressed="false" title="{t_pin_toggle_desc}">
         <span aria-hidden="true">🎯</span><span class="dpb-pin-label">{t_pin_toggle}</span>
       </button>
       <span class="dpb-pin-count" id="dpb-pin-count">{t_pin_count}</span>
@@ -76,5 +75,21 @@
   </div>
 </dialog>
   </form>
+  <!-- W4: live region must stay in the accessibility tree while the drawer
+       is open (the pill is display:none then), so it lives on the bar
+       itself, outside the pill. -->
+  <span class="dpb-sr-only" id="dpb-announce" role="status"></span>
 </div>
-<div id="dpb-preview-spacer" aria-hidden="true"></div>
+<!-- #59: one-time onboarding card (pin flow + shortcuts). Fixed top-right so
+     it never overlaps the bottom-right pill/drawer; dismissed via button or
+     Esc, remembered in localStorage. -->
+<div class="dpb-onboard" id="dpb-onboard" role="dialog" aria-label="{t_onboard_title}" hidden>
+  <p class="dpb-onboard-title" id="dpb-onboard-title">{t_onboard_title}</p>
+  <ul class="dpb-onboard-list" aria-labelledby="dpb-onboard-title">
+    <li>{t_onboard_pick}</li>
+    <li>{t_onboard_write}</li>
+    <li><kbd>Ctrl</kbd>+<kbd>Enter</kbd> {t_onboard_submit}</li>
+    <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> {t_onboard_undo}</li>
+  </ul>
+  <button type="button" class="dpb-onboard-close" id="dpb-onboard-close">{t_onboard_close}</button>
+</div>

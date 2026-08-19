@@ -1,5 +1,6 @@
 #dpb-preview-bar,
-#dpb-float-root {
+#dpb-float-root,
+.dpb-onboard {
 --dpb-bg: #1e2330;
 --dpb-surface: #252b38;
 --dpb-elev: #2a3140;
@@ -36,7 +37,8 @@ font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
 color: var(--dpb-ink);
   }
   #dpb-preview-bar[data-theme="light"],
-  #dpb-float-root[data-theme="light"] {
+  #dpb-float-root[data-theme="light"],
+  .dpb-onboard[data-theme="light"] {
 --dpb-bg: #ffffff;
 --dpb-surface: #f9fafb;
 --dpb-elev: #f3f4f6;
@@ -119,6 +121,12 @@ background: var(--dpb-elev); border-color: var(--dpb-border-hover); color: var(-
   #dpb-preview-bar .dpb-pill .dpb-btn-ghost:focus-visible {
 outline: 2px solid var(--dpb-accent); outline-offset: 2px;
   }
+  #dpb-preview-bar .dpb-pill .dpb-btn-ghost.is-pinning {
+/* #58: collapsed drawer + pin on — the annotate button doubles as the pin
+   indicator and the one-click path back to the anchor list. */
+color: var(--dpb-accent-soft); border-color: var(--dpb-accent-deep);
+background: rgba(20,184,166,.12);
+  }
   #dpb-preview-bar .dpb-pill .dpb-badge-dot {
 display: none; min-width: 18px; height: 18px; padding: 0 5px;
 align-items: center; justify-content: center; border-radius: 999px;
@@ -143,15 +151,6 @@ outline: 2px solid var(--dpb-accent); outline-offset: 2px;
   #dpb-preview-bar .dpb-pill .dpb-btn-primary.is-direct-confirm {
     box-shadow: 0 0 0 3px rgba(20,184,166,0.25);
     font-weight: 700;
-  }
-  /* Pill direct-confirm arm (二级保护): first click arms, second submits */
-  #dpb-preview-bar .dpb-pill .dpb-btn-primary.is-armed {
-    font-weight: 700;
-    animation: dpb-confirm-pulse 1s ease-in-out infinite;
-  }
-  @keyframes dpb-confirm-pulse {
-    0%,100% { box-shadow: 0 0 0 3px rgba(20,184,166,0.35); }
-    50% { box-shadow: 0 0 0 7px rgba(20,184,166,0.12); }
   }
   /* secondary action surfaced on the pill (e.g. the revise label) */
   #dpb-preview-bar .dpb-pill .dpb-btn-pill-secondary {
@@ -226,6 +225,9 @@ pointer-events: auto;  /* P1.5: intercept clicks outside drawer (close on scrim)
   }
   body.dpb-pin-mode #dpb-preview-bar.is-open::before {
 pointer-events: none;  /* P1.5: let pin-mode clicks reach prototype elements */
+/* #58: while picking, the scrim drops to near-transparent so the prototype
+   stays fully readable under the crosshair. */
+background: rgba(15,23,42,.04);
   }
   #dpb-preview-bar.is-open .dpb-pill { display: none; }
 
@@ -244,7 +246,7 @@ margin: 0; font-size: 13px; font-weight: 650; color: var(--dpb-ink);
 overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   #dpb-preview-bar .dpb-drawer-head .dpb-icon-btn {
-appearance: none; cursor: pointer; width: 28px; height: 28px;
+appearance: none; cursor: pointer; width: 32px; height: 32px;
 border-radius: 8px; border: 1px solid transparent;
 background: transparent; color: var(--dpb-muted);
 font: 650 16px/1 system-ui, sans-serif;
@@ -332,7 +334,7 @@ font-size: 11px; color: var(--dpb-muted);
 overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   #dpb-preview-bar .dpb-anchor input {
-width: 100%; box-sizing: border-box; height: 28px; margin: 0; padding: 0 8px;
+width: 100%; box-sizing: border-box; height: 32px; margin: 0; padding: 0 8px;
 border-radius: 6px; border: 1px solid var(--dpb-line-strong);
 background: var(--dpb-surface); color: var(--dpb-ink); font: inherit; outline: none;
   }
@@ -340,7 +342,7 @@ background: var(--dpb-surface); color: var(--dpb-ink); font: inherit; outline: n
 border-color: var(--dpb-accent); box-shadow: 0 0 0 2px rgba(20,184,166,.2);
   }
   #dpb-preview-bar .dpb-anchor .rm {
-appearance: none; cursor: pointer; height: 28px; padding: 0 8px;
+appearance: none; cursor: pointer; height: 32px; min-width: 32px; padding: 0 8px;
 border: 0; border-radius: 6px; background: transparent; color: var(--dpb-muted);
 font: 650 12px/1 system-ui, sans-serif;
   }
@@ -358,10 +360,11 @@ display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
   /* I4 / A′: readiness chip — click focuses feedback (pill or drawer). */
   #dpb-preview-bar .dpb-pill .dpb-pill-ready {
 appearance: none; cursor: pointer; border: 0; background: transparent;
-padding: 0 4px; margin: 0;
+padding: 0 6px; margin: 0; min-height: 32px;
 font-size: 11px; color: var(--dpb-muted); white-space: nowrap;
 font-family: inherit; line-height: 1.2;
 border-radius: 6px;
+display: inline-flex; align-items: center;
 }
   #dpb-preview-bar .dpb-pill .dpb-pill-ready:hover { color: var(--dpb-ink); }
   #dpb-preview-bar .dpb-pill .dpb-pill-ready:focus-visible {
@@ -522,9 +525,53 @@ animation: dpb-flash 900ms ease-out 1;
 cursor: default !important;
   }
 
+  /* #59: one-time onboarding card — fixed top-right, above pill/drawer chrome
+     (z-index 1002 > drawer 1001) but never over the bottom-right controls. */
+  .dpb-onboard {
+position: fixed; top: 16px; right: 16px; z-index: 1002;
+width: min(320px, calc(100vw - 32px)); box-sizing: border-box;
+padding: 12px 14px;
+border-radius: 12px;
+background: var(--dpb-bg); color: var(--dpb-ink);
+border: 1px solid var(--dpb-line-strong);
+box-shadow: 0 12px 32px rgba(0,0,0,.28), 0 2px 8px rgba(0,0,0,.14);
+font: 12.5px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .dpb-onboard[hidden] { display: none; }
+  .dpb-onboard .dpb-onboard-title {
+margin: 0 0 8px; font-size: 12.5px; font-weight: 700; color: var(--dpb-ink);
+  }
+  .dpb-onboard .dpb-onboard-list {
+margin: 0 0 10px; padding-left: 18px;
+display: grid; gap: 4px; color: var(--dpb-soft);
+  }
+  .dpb-onboard kbd {
+display: inline-block; padding: 1px 5px; border-radius: 4px;
+border: 1px solid var(--dpb-line-strong); border-bottom-width: 2px;
+background: var(--dpb-elev); color: var(--dpb-ink);
+font: 600 11px/1.2 system-ui, sans-serif;
+  }
+  .dpb-onboard .dpb-onboard-close {
+appearance: none; cursor: pointer; min-width: 72px; height: 32px; padding: 0 14px;
+border-radius: 8px; border: 1px solid var(--dpb-line-strong);
+background: var(--dpb-surface); color: var(--dpb-ink);
+font: 650 12.5px/1 system-ui, sans-serif;
+  }
+  .dpb-onboard .dpb-onboard-close:hover {
+background: var(--dpb-elev); border-color: var(--dpb-border-hover);
+  }
+  .dpb-onboard .dpb-onboard-close:focus-visible {
+outline: 2px solid var(--dpb-accent); outline-offset: 2px;
+  }
+
   @media (max-width: 720px) {
 #dpb-preview-bar { right: 12px; bottom: 12px; }
 #dpb-preview-bar .dpb-drawer { width: calc(100vw - 24px); }
+/* #60: narrow screens wrap the pill instead of clipping controls off-screen */
+#dpb-preview-bar .dpb-pill {
+flex-wrap: wrap; justify-content: flex-end;
+border-radius: 18px; max-width: calc(100vw - 24px);
+}
 #dpb-preview-bar .dpb-pill .dpb-pill-info { display: none; }
 /* A′: hide pill quick input on narrow; drawer textarea remains the editor */
 #dpb-preview-bar .dpb-pill .dpb-pill-feedback { display: none; }
@@ -541,5 +588,4 @@ cursor: default !important;
 .dpb-float-note { transition: none; }
 #dpb-preview-bar .dpb-btn:active { transform: none; }
 .dpb-pin-flash { animation: none; }
-#dpb-preview-bar .dpb-pill .dpb-btn-primary.is-armed { animation: none; }
   }

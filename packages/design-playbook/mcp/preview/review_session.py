@@ -514,12 +514,24 @@ def _inject_token_fields(control_html: str, token: str, round_n: int) -> str:
 # iframe DOM (cross-origin). This bridge runs INSIDE the iframe document and
 # restores anchor collection by postMessaging {selector, tag} to the parent.
 #
+# Pin-state sync (#56): the parent owns pinOn and pushes it down via
+# postMessage {dpbPinState:{on}} (on every toggle + iframe load). The bridge
+# gates its capture-phase click/mousemove listeners on that state: while pin
+# is OFF the prototype receives clicks and hover exactly as if the bridge were
+# not injected (no preventDefault/stopPropagation, no dashed outline); while
+# ON it keeps the capture behaviour (anchor + highlight + dashed hover).
+#
+# Cross-origin locate + numbered badges (#57, scheme A): the parent drives
+# {dpbPinLocate:{selector}} (scrollIntoView + flash), {dpbPinFlash:{selector}}
+# (duplicate-pick feedback) and {dpbPinAnchors:[{selector,n,comment}]} (in-
+# frame numbered badges mirroring the same-origin float-notes) into the iframe.
+#
 # G5 safety contract (verified by test_browser_control.PinAnnotationBridgeTests):
 #   - the bridge only postMessages anchor DATA ({selector, tag}) — it never
 #     reads parent.document, parent.location, the token, or storage, and it
 #     never fetches/XHRs. postMessage is its only outbound channel.
-#   - the parent records the anchor only while pin mode is on (control.py
-#     message listener filters on pinOn), so no pin-state sync is needed.
+#   - the parent additionally records anchors only while pin mode is on
+#     (control.js message listener filters on pinOn) — defense in depth.
 #   - the iframe highlights the clicked element itself (dpb-pin-target) since
 #     the parent cannot reach into the iframe DOM to do it.
 #
@@ -528,18 +540,39 @@ def _inject_token_fields(control_html: str, token: str, round_n: int) -> str:
 # control.py's cssPath so selectors match the same-origin path.
 BRIDGE_SCRIPT = r"""<script>
 (function () {
-  // Inject the pin highlight CSS into the iframe document. The parent's
-  // control-bar stylesheet does not cross the iframe boundary, so the bridge
-  // brings its own copy of .dpb-pin-target / .dpb-pin-hover (the same rules
-  // control.py renders in the parent) to actually show the highlight in-frame.
+  // Inject the pin highlight + badge CSS into the iframe document. The
+  // parent's control-bar stylesheet does not cross the iframe boundary, so the
+  // bridge brings its own copy of .dpb-pin-target / .dpb-pin-hover (the same
+  // rules control.py renders in the parent) plus the numbered annotation
+  // badges (.dpb-pin-badge*, #57 scheme A) to render them in-frame.
   var style = document.createElement("style");
   style.textContent =
     ".dpb-pin-target{outline:1.5px solid rgba(20,184,166,.9)!important;" +
     "outline-offset:1px!important;background-color:rgba(20,184,166,.06)!important;" +
     "cursor:crosshair!important}" +
     ".dpb-pin-hover{outline:1px dashed rgba(20,184,166,.45)!important;" +
-    "outline-offset:1px!important}";
+    "outline-offset:1px!important}" +
+    ".dpb-pin-badge{position:absolute;z-index:2147483000;min-width:18px;height:18px;" +
+    "padding:0 5px;border-radius:999px;background:#14b8a6;color:#042f2e;" +
+    "font:700 11px/18px system-ui,sans-serif;text-align:center;pointer-events:none;" +
+    "box-shadow:0 1px 3px rgba(0,0,0,.3)}" +
+    ".dpb-pin-badge-note{position:absolute;z-index:2147483000;max-width:220px;" +
+    "padding:4px 8px;border-radius:8px;background:#1f2430;color:#f3f4f6;" +
+    "border:1px solid #2c3444;font:11px/1.4 system-ui,sans-serif;" +
+    "word-break:break-word;pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.25)}" +
+    ".dpb-pin-flash{animation:dpb-pin-flash .9s ease-out 1}" +
+    "@keyframes dpb-pin-flash{0%{box-shadow:0 0 0 0 rgba(20,184,166,.55)}" +
+    "50%{box-shadow:0 0 0 8px rgba(20,184,166,.25)}" +
+    "100%{box-shadow:0 0 0 0 rgba(20,184,166,0)}}" +
+    // W5: honor reduced-motion inside the iframe too (host control.css only
+    // covers the parent document).
+    "@media (prefers-reduced-motion:reduce){.dpb-pin-flash{animation:none!important}}";
   (document.head || document.documentElement).appendChild(style);
+
+  // #56: pin state is owned by the parent control bar and synced down via
+  // postMessage. OFF (the initial state) means the bridge is fully passive:
+  // clicks and hover pass through to the prototype untouched.
+  var pinOn = false;
 
   function cssPath(el) {
     if (!el || el.nodeType !== 1) return "";
@@ -548,7 +581,7 @@ BRIDGE_SCRIPT = r"""<script>
     var cur = el;
     var depth = 0;
     while (cur && cur.nodeType === 1 && cur !== document.documentElement && depth < 8) {
-      if (cur.id === "dpb-preview-bar" || cur.id === "dpb-preview-spacer" || cur.id === "dpb-float-root") break;
+      if (cur.id === "dpb-preview-bar" || cur.id === "dpb-float-root") break;
       var part = cur.tagName.toLowerCase();
       if (cur.classList && cur.classList.length) {
         var cls = Array.prototype.slice.call(cur.classList, 0, 2)
@@ -584,6 +617,7 @@ BRIDGE_SCRIPT = r"""<script>
     }
   }
   document.addEventListener("mousemove", function (e) {
+    if (!pinOn) return;  // #56: no dashed hover outline outside pin mode
     var el = e.target;
     if (!el || el === document.body || el === document.documentElement) {
       clearHover();
@@ -596,6 +630,9 @@ BRIDGE_SCRIPT = r"""<script>
     }
   }, true);
   document.addEventListener("click", function (e) {
+    // #56: outside pin mode the bridge must not swallow clicks — links,
+    // buttons, tabs and forms inside the prototype stay fully interactive.
+    if (!pinOn) return;
     var el = e.target;
     if (!el || el === document.body || el === document.documentElement) return;
     e.preventDefault();
@@ -607,6 +644,105 @@ BRIDGE_SCRIPT = r"""<script>
     if (!selector) return;
     parent.postMessage({ dpbPinAnchor: { selector: selector, tag: el.tagName.toLowerCase() } }, "*");
   }, true);
+
+  // ---- #57 scheme A: cross-origin locate, flash and numbered badges ----
+  function findEl(selector) {
+    try { return document.querySelector(selector); } catch (err) { return null; }
+  }
+  function flashEl(el) {
+    el.classList.remove("dpb-pin-flash");
+    void el.offsetWidth;  // force reflow so the animation can restart
+    el.classList.add("dpb-pin-flash");
+  }
+  function locateEl(el) {
+    try { el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (err) {}
+    flashEl(el);
+  }
+  var badgeMap = {};  // selector -> { n: span, note: div }
+  function clearBadges() {
+    for (var sel in badgeMap) {
+      if (badgeMap[sel].n.parentNode) badgeMap[sel].n.parentNode.removeChild(badgeMap[sel].n);
+      if (badgeMap[sel].note.parentNode) badgeMap[sel].note.parentNode.removeChild(badgeMap[sel].note);
+    }
+    badgeMap = {};
+  }
+  function placeBadge(entry) {
+    var pair = badgeMap[entry.selector];
+    var el = findEl(entry.selector);
+    if (!el || !pair) return;
+    var rect = el.getBoundingClientRect();
+    var left = window.scrollX + rect.right + 6;
+    var top = window.scrollY + rect.top - 9;
+    // flip to the left side when the badge would run past the right edge
+    if (rect.right + 40 > document.documentElement.clientWidth) {
+      left = Math.max(window.scrollX + 4, window.scrollX + rect.left - 30);
+    }
+    pair.n.style.left = left + "px";
+    pair.n.style.top = top + "px";
+    pair.note.style.left = left + "px";
+    pair.note.style.top = (top + 22) + "px";
+  }
+  function syncAnchors(list) {
+    clearBadges();
+    var body = document.body || document.documentElement;
+    list.forEach(function (item) {
+      var el = findEl(item.selector);
+      if (!el) return;
+      var n = document.createElement("span");
+      n.className = "dpb-pin-badge";
+      n.setAttribute("aria-hidden", "true");
+      n.textContent = String(item.n);
+      body.appendChild(n);
+      var note = document.createElement("div");
+      note.className = "dpb-pin-badge-note";
+      note.textContent = String(item.comment || "");
+      note.style.display = item.comment ? "block" : "none";
+      body.appendChild(note);
+      badgeMap[item.selector] = { n: n, note: note };
+      placeBadge({ selector: item.selector });
+    });
+  }
+  var badgeTick = false;
+  function repositionBadges() {
+    if (badgeTick) return;
+    badgeTick = true;
+    window.requestAnimationFrame(function () {
+      badgeTick = false;
+      for (var sel in badgeMap) placeBadge({ selector: sel });
+    });
+  }
+  window.addEventListener("scroll", repositionBadges, true);
+  window.addEventListener("resize", repositionBadges);
+
+  window.addEventListener("message", function (e) {
+    // W3: only the parent window may drive the bridge. The prototype scripts
+    // share this window and must not be able to spoof pin state or badges.
+    if (e.source !== window.parent) return;
+    var data = e.data;
+    if (!data) return;
+    if (data.dpbPinState) {
+      // #56: parent is the single owner of the pin state.
+      pinOn = !!data.dpbPinState.on;
+      if (!pinOn) clearHover();
+      return;
+    }
+    if (data.dpbPinLocate) {
+      var locEl = findEl(String(data.dpbPinLocate.selector || ""));
+      if (locEl) locateEl(locEl);
+      return;
+    }
+    if (data.dpbPinFlash) {
+      var flashTarget = findEl(String(data.dpbPinFlash.selector || ""));
+      if (flashTarget) flashEl(flashTarget);
+      return;
+    }
+    if (Array.isArray(data.dpbPinAnchors)) {
+      syncAnchors(data.dpbPinAnchors);
+    }
+  });
+  // Ask the parent for a pin-state resend after (re)load so a refresh never
+  // strands the bridge in the wrong mode.
+  parent.postMessage({ dpbPinHello: true }, "*");
 })();
 </script>"""
 
@@ -622,12 +758,16 @@ def _build_parent_page(prototype_html: str, control_html: str) -> str:
 
     The pin-to-annotate bridge (``BRIDGE_SCRIPT``) is appended to the prototype
     BEFORE escaping so it executes inside the iframe document, where it can see
-    the prototype DOM. It captures clicks/hover, computes a cssPath selector
-    on its own side of the trust boundary, and postMessages ``{selector, tag}``
-    to the parent — restoring anchor collection that G5's cross-origin boundary
-    took away (the parent can no longer see iframe clicks or traverse iframe
-    DOM). The bridge never touches ``parent.document`` or the token; postMessage
-    is its only outbound channel (verified by test_browser_control).
+    the prototype DOM. While pin mode is on it captures clicks/hover, computes
+    a cssPath selector on its own side of the trust boundary, and postMessages
+    ``{selector, tag}`` to the parent — restoring anchor collection that G5's
+    cross-origin boundary took away (the parent can no longer see iframe clicks
+    or traverse iframe DOM). The parent pushes the pin state back down
+    (``dpbPinState``) so the bridge only intercepts while the user is actually
+    picking (#56), and drives cross-origin locate/badges (``dpbPinLocate`` /
+    ``dpbPinAnchors``, #57 scheme A). The bridge never touches
+    ``parent.document`` or the token; postMessage is its only outbound channel
+    (verified by test_browser_control).
     """
     # html.escape neutralizes every </script> (and quote) in both the prototype
     # and the bridge trailer to entity form inside the srcdoc ATTRIBUTE, so the
