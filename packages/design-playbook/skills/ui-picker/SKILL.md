@@ -20,7 +20,7 @@ Collect read-only component candidates from two sources, in this order:
 1. observed component paths in a verified baseline's `## Component Stylings` declaration, when that declaration exists;
 2. non-duplicate paths from run-local `design-baseline/evidence.json` `components`, when that file exists.
 
-Use the second source when it is present, including waived or draft runs that never produced a `status: ready` binding. Treat every path as evidence, never as authority.
+Use the second source when it is present, including waived or draft runs that never produced a `status: ready` binding. Those paths remain candidates only — they never substitute for a ready baseline or become design authority.
 
 When `.scratch/<run>/reference/contract.md` exists (ADR-0011), read its **Visual cues for ui-picker**, Keep/Change, and Do not copy / exclusions. Use them as input for density, scene, region weight, and risks — never as hex tokens or as a license to copy brand chrome.
 
@@ -67,7 +67,7 @@ scene:
 density:
 template:
 regions: …
-components: …
+components: primary-action -> reuse src/ui/Button.tsx (matching primary variant); status -> extend src/ui/Badge.tsx (needs warning state); empty-state -> new (no declared candidate)
 baseline-changes: none | <explicitly approved change>
 risks: …
 ```

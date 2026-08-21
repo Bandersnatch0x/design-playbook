@@ -10,6 +10,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -231,6 +232,8 @@ class ReferenceSourceTests(unittest.TestCase):
         cases = (
             ({"kind": "image"}, "kind"),
             ({"kind": "other", "acquired_via": "clipboard"}, "acquired_via"),
+            ({"kind": "other", "acquired_via": "url"}, "acquired_via"),
+            ({"kind": "other", "acquired_via": "analogy"}, "acquired_via"),
             ({"kind": "other", "provider": "  "}, "provider"),
             ({"kind": "other", "provider": "host\nname"}, "provider"),
             ({"kind": "other", "captured_at": ""}, "captured_at"),
@@ -415,6 +418,35 @@ class ReferenceSourceTests(unittest.TestCase):
                     kind="screenshot",
                     captured_at="not-a-timestamp",
                 )
+
+    def test_write_failure_fails_closed_without_partial_asset(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source.png"
+            source.write_bytes(PNG_BYTES)
+            run_root = root / "run"
+
+            with mock.patch.object(os, "replace", side_effect=OSError("disk full")):
+                with self.assertRaisesRegex(
+                    reference_sources.ReferenceSourceError, "could not write"
+                ):
+                    reference_sources.ingest_ephemeral_image(
+                        source,
+                        run_root,
+                        run_id="run",
+                        source_id="src-1",
+                        kind="screenshot",
+                    )
+
+            assets = run_root / "reference" / "assets"
+            if assets.exists():
+                leftover = [
+                    path.name
+                    for path in assets.iterdir()
+                    if not path.name.endswith(".tmp")
+                ]
+                self.assertEqual(leftover, [])
+            self.assertFalse((run_root / "reference" / "manifest.json").exists())
 
     @unittest.skipUnless(hasattr(os, "symlink"), "symlink unsupported")
     def test_destination_symlink_escape_is_rejected(self) -> None:

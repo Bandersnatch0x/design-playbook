@@ -35,7 +35,7 @@ Project the router's initial tier and criteria once, up front (LR1). Three tiers
 
 The executable router proposes the initial grade and the user confirms it **once** (may fold into the request reply). **Upgrade is automatic** the moment a correction signal appears (R1 finding, structural R2, cross-layer blocking, E-tier judgment) — record the upgrade event in the run-profile block and walk the added steps; **downgrade requires the user** (over-compliance already performed is kept). Write the block into `plan.md` as a structured field block (`tier: P1|P2|P3`, grading checklist, `confirmed_by: user + <ts>`, skip list with one-line reasons, upgrade events). The profile block is mandatory for every run — skipping the rest of the plan body is legal, skipping the profile block is not. Every skipped step keeps the one-line skip narration rule below.
 
-Answer, review, diagnose, and plan requests end with findings or a plan. Build and fix requests continue through in-scope local edits and the most relevant available validation. Ask the smallest question only when the answer changes the goal, scope, platform, success criteria, or authority; otherwise record a conservative assumption in L1.
+On a `design-run`, ask the smallest question only when the answer changes the goal, scope, platform, success criteria, or authority; otherwise record a conservative assumption in L1. Whether a request is `no-run` or `design-run` is only the router decision from step 1 — including durable review, diagnosis, or plan work.
 
 Pause for explicit confirmation before an external, destructive, costly, or scope-expanding action that the request did not already authorize. This includes adding a dependency, changing an API/backend/data contract, deploying or publishing, and accepting a blocking finding. When required evidence or authority is unavailable, stop with the exact blocker and the smallest next decision. If the same blocking finding survives two repair -> re-evaluate cycles without new evidence, stop recirculating and report it.
 
@@ -87,7 +87,7 @@ Gate artifact is only `.scratch/<run>/design-baseline/state.json` (`schema: desi
 
 **Done when:** **design-baseline**'s own completion criteria hold (that skill is SSOT). Smoke: `state.json` exists; candidate conflicts and stale source hashes are exposed by prepare/verify; status is `ready` or `waived`; no valid baseline was silently replaced.
 
-### 2. `reference-intake` (when reference materials present)
+### 2. `reference-intake` (when `requires_reference_contract`)
 
 Invoke **reference-intake**. Produce `.scratch/<run>/reference/contract.md` + `manifest.json` (ADR-0011).
 

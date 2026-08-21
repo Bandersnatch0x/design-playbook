@@ -36,7 +36,7 @@ REQUEST_INTENTS = frozenset(
     {"answer", "review", "diagnose", "plan", "prototype", "build", "fix"}
 )
 REQUEST_CONSEQUENCES = frozenset({"none", "local", "feature", "structural"})
-READ_ONLY_INTENTS = frozenset({"answer", "review", "diagnose", "plan"})
+NO_RUN_INTENTS = frozenset({"answer", "review", "diagnose", "plan"})
 
 
 @dataclass(frozen=True)
@@ -93,12 +93,12 @@ def _validate_request_facts(facts: RequestFacts) -> None:
     if facts.intent == "build" and facts.consequence == "none":
         raise ValueError("contradictory request facts: build consequence cannot be none")
     if (
-        facts.intent in READ_ONLY_INTENTS
+        facts.intent in NO_RUN_INTENTS
         and facts.consequence == "structural"
         and not facts.durable_design_artifacts
     ):
         raise ValueError(
-            "contradictory request facts: read-only structural work requires "
+            "contradictory request facts: non-durable structural work requires "
             "durable Design I/O artifacts"
         )
 
@@ -129,7 +129,7 @@ def _lower_tier_criteria(facts: RequestFacts, tier: str) -> tuple[str, ...]:
 def route_request(facts: RequestFacts) -> RouteDecision:
     """Route normalized facts through the single Design I/O entry seam."""
     _validate_request_facts(facts)
-    if facts.intent in READ_ONLY_INTENTS and not facts.durable_design_artifacts:
+    if facts.intent in NO_RUN_INTENTS and not facts.durable_design_artifacts:
         return RouteDecision(
             mode="no-run",
             tier=None,
@@ -137,7 +137,7 @@ def route_request(facts: RequestFacts) -> RouteDecision:
             requires_reference_contract=False,
             requires_spec=False,
             criteria=(),
-            reasons=("read-only request does not require durable Design I/O artifacts",),
+            reasons=("non-durable request does not require Design I/O artifacts",),
         )
 
     requires_baseline = facts.existing_product and not facts.baseline_ready

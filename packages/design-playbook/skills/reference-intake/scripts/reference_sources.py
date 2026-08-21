@@ -20,6 +20,9 @@ STORAGE_KINDS = frozenset({"copied", "linked", "remote", "symbolic"})
 ACQUISITION_METHODS = frozenset(
     {"attachment", "local-file", "host-tool", "export", "url", "analogy"}
 )
+EPHEMERAL_ACQUISITION = frozenset(
+    {"attachment", "local-file", "host-tool", "export"}
+)
 
 
 class ReferenceSourceError(ValueError):
@@ -164,6 +167,8 @@ def _atomic_write(path: Path, data: bytes) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
+    except OSError as exc:
+        raise ReferenceSourceError(f"could not write {path.name}: {exc}") from exc
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -201,9 +206,10 @@ def ingest_ephemeral_image(
     _validate_identifier(source_id, "source_id")
     if kind not in EPHEMERAL_KINDS:
         raise ReferenceSourceError(f"kind must be one of {sorted(EPHEMERAL_KINDS)}")
-    if acquired_via not in ACQUISITION_METHODS:
+    if acquired_via not in EPHEMERAL_ACQUISITION:
         raise ReferenceSourceError(
-            f"acquired_via must be one of {sorted(ACQUISITION_METHODS)}"
+            "acquired_via for ephemeral ingest must be one of "
+            f"{sorted(EPHEMERAL_ACQUISITION)}"
         )
     if provider is not None:
         _validate_provider(provider, source_path)

@@ -357,6 +357,8 @@ class AdaptiveRoutingSkillContractTests(unittest.TestCase):
         self.assertIn("run_profile.py route", text)
         self.assertNotIn("SSOT for this decision is this skill only", text)
         self.assertNotIn("P3 wins for", text)
+        self.assertNotIn("end with findings or a plan", text)
+        self.assertNotIn("when reference materials present", text)
         for flag in (
             "requires_baseline",
             "requires_reference_contract",
@@ -434,6 +436,23 @@ class AdaptiveRoutingSkillContractTests(unittest.TestCase):
         self.assertIn("**Done when:**", section)
         self.assertIn("run_profile.py route", section)
 
+    def test_reference_intake_heading_follows_router_flag(self) -> None:
+        heading = _heading_section(
+            MAIN_SKILL.read_text(encoding="utf-8"),
+            "### 2. `reference-intake`",
+        ).splitlines()[0]
+
+        self.assertIn("`requires_reference_contract`", heading)
+
+    def test_ui_picker_example_records_harvested_paths_in_components_value(self) -> None:
+        report = UI_PICKER_SKILL.read_text(encoding="utf-8").split(
+            "```text", maxsplit=1
+        )[1].split("```", maxsplit=1)[0]
+
+        self.assertIn("reuse src/ui/Button.tsx", report)
+        self.assertIn("extend src/ui/Badge.tsx", report)
+        self.assertIn("empty-state -> new", report)
+
     def test_ui_picker_harvests_evidence_without_verified_baseline(self) -> None:
         text = UI_PICKER_SKILL.read_text(encoding="utf-8")
         section = _heading_section(text, "### 1. Density + scene")
@@ -448,8 +467,10 @@ class AdaptiveRoutingSkillContractTests(unittest.TestCase):
         section = _heading_section(text, "### 1. Classify the project")
 
         self.assertNotIn("Skip for answer-only", section)
+        self.assertNotIn("true greenfield", section)
         self.assertIn("`requires_baseline`", section)
         self.assertIn("`no-run`", section)
+        self.assertIn("did not set `requires_baseline`", section)
 
     def test_reference_intake_assigns_screenshot_vs_other_without_restating_helper(self) -> None:
         text = INTAKE_SKILL.read_text(encoding="utf-8")
