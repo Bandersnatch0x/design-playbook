@@ -54,6 +54,12 @@ def warn(msg: str) -> None:
     warnings.append(msg)
 
 
+def info(msg: str) -> None:
+    """Advisory line: never recorded as a failure or warning, so it cannot
+    influence the doctor verdict or exit code (issue 64)."""
+    print(f"  info  {msg}")
+
+
 def read_json(path: Path) -> dict | None:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -325,6 +331,28 @@ def check_floor_self_check(*, skip: bool) -> None:
         print(result.stderr[-400:])
 
 
+# Issue 64: declarative reminder only. Host vision capability is
+# self-declared by the host model; doctor must not probe or infer it
+# (maintainer decision: automatic detection is technically unreliable).
+# Wording mirrors CONTEXT.md "No-run disposition" and ADR-0032
+# consequences: vision-capable hosts may inspect images directly;
+# text-only hosts retain an explicit limitation. Keep in sync if the
+# multimodal posture changes.
+def check_host_vision() -> None:
+    print("== host vision capability (self-declared) ==")
+    info(
+        "screenshot understanding depends on the host model's vision "
+        "support; this capability is self-declared by the host model -- "
+        "doctor does not auto-detect it"
+    )
+    info(
+        "confirm the host supports vision input before using screenshots "
+        "as a requirement source; text-only hosts should ask the user for "
+        "a written description instead (reference-intake falls back to "
+        "text explanations)"
+    )
+
+
 def check_launchers() -> None:
     print("== compatibility launchers ==")
     for rel in (
@@ -353,6 +381,7 @@ def main(argv: list[str] | None = None) -> int:
     check_release_group()
     check_mcp()
     check_codex_manifest()
+    check_host_vision()
     check_launchers()
     check_floor_self_check(skip=args.skip_self_check)
 

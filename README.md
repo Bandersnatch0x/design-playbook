@@ -28,6 +28,8 @@ A Claude Code / Codex plugin. One predictable pass per run — **Design I/O**: `
 
 > 🎬 **Try it:** `/design-playbook:design-io <your ask>` — one pass lands `spec.md`, a decision report, and a point-back ledger under `.scratch/<run>/` (artifact shape: [`showcase/01-spec.md`](./packages/design-playbook/showcase/01-spec.md)). **See it run on a real project:** the [`showcase/`](./packages/design-playbook/showcase) folder is a full Design I/O pass against SwarSight — spec, decision report, and point-back critique with a closed recirculate trail.
 
+> 🖼️ **Screenshots & multimodality:** understanding screenshot content depends on the **host model's multimodal/vision capability**. The plugin itself only *registers* images (locator + SHA-256 + metadata) — it provides no image understanding of its own. A host without vision rides the user's text description instead.
+
 ## 📦 Install
 
 **Claude Code**

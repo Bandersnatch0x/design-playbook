@@ -28,6 +28,8 @@ Claude Code / Codex 插件。每次跑同一条可预测链路 — **Design I/O*
 
 > 🎬 **试一把**：`/design-playbook:design-io <需求>` — 一次通过产出 `spec.md`、决策报告与 point-back 台账，落在 `.scratch/<run>/`（产物形态见 [`showcase/01-spec.md`](./packages/design-playbook/showcase/01-spec.md)）。**真实项目实跑**：[`showcase/`](./packages/design-playbook/showcase) 是对 SwarSight 的一次完整 Design I/O 实测 — spec、决策报告、point-back 评审 + 闭环回流轨迹。
 
+> 🖼️ **截图与多模态**：截图内容理解依赖**宿主模型的多模态/视觉能力**；插件本身只做图片登记（locator + SHA-256 + metadata），不提供图片内容理解。无视觉宿主改骑用户提供的文字说明。
+
 ## 📦 安装
 
 **Claude Code**
