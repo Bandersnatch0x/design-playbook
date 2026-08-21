@@ -113,6 +113,25 @@ def git_tracked_python_files(root: Path) -> tuple[str, ...] | None:
     )
 
 
+def parse_ruff_version(output: str) -> str | None:
+    """Parse ``ruff version`` / ``ruff --version`` banners to a semver."""
+    match = re.search(r"\bruff\s+(\d+\.\d+\.\d+)\b", output, flags=re.IGNORECASE)
+    return match.group(1) if match else None
+
+
+def ruff_pin_errors(installed: str | None) -> tuple[str, ...]:
+    """Require the installed Ruff version to equal ``RUFF_VERSION``."""
+    if installed is None:
+        return (
+            f"ruff {RUFF_VERSION} is required; pip install ruff=={RUFF_VERSION}",
+        )
+    if installed != RUFF_VERSION:
+        return (
+            f"ruff {installed} is installed; required ruff=={RUFF_VERSION}",
+        )
+    return ()
+
+
 def ruff_check_errors(root: Path) -> tuple[str, ...]:
     """Run pinned Ruff on git-tracked Python. Empty tuple means clean.
 
@@ -124,6 +143,16 @@ def ruff_check_errors(root: Path) -> tuple[str, ...]:
         return ()
     if not files:
         return ("ruff: git ls-files '*.py' returned no files",)
+    version_probe = subprocess.run(
+        [sys.executable, "-m", "ruff", "version"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    version_text = (version_probe.stdout or "") + (version_probe.stderr or "")
+    pin_errors = ruff_pin_errors(parse_ruff_version(version_text))
+    if pin_errors:
+        return pin_errors
     result = subprocess.run(
         [sys.executable, "-m", "ruff", "check", *files],
         cwd=str(root),
@@ -133,14 +162,9 @@ def ruff_check_errors(root: Path) -> tuple[str, ...]:
     )
     if result.returncode == 0:
         return ()
-    stderr = (result.stderr or "").strip()
-    stdout = (result.stdout or "").strip()
-    missing = "No module named ruff" in stderr or "No module named ruff" in stdout
-    if missing:
-        return (
-            f"ruff {RUFF_VERSION} is required; pip install ruff=={RUFF_VERSION}",
-        )
-    detail = stdout or stderr or f"exit {result.returncode}"
+    detail = ((result.stdout or "") + (result.stderr or "")).strip() or (
+        f"exit {result.returncode}"
+    )
     return (f"ruff=={RUFF_VERSION} failed: {detail[:500]}",)
 
 
