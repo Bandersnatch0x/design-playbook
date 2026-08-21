@@ -296,10 +296,12 @@ def needs_first_ask(effective: EffectivePreferences) -> bool:
     """Project whether the orchestrator owes the one-time question.
 
     The first ask is (re)triggered whenever no valid asked record
-    survives — including the corrupt-file case, because fail-closed
-    parsing treats damage as absent (spec #65 user story 14). This is a
-    projection only; the orchestrating prose decides when and how to ask
-    (ADR-0033 D7/D10).
+    survives. A corrupt layer is treated as absent (fail-closed, spec
+    #65 user story 14): a corrupt repo file leaves no record, so the
+    ask retriggers; a corrupt local override only masks its own layer,
+    and the surviving repo asked record still counts — the damage
+    alone does not force a re-ask. This is a projection only; the
+    orchestrating prose decides when and how to ask (ADR-0033 D7/D10).
     """
     return not effective.asked
 
