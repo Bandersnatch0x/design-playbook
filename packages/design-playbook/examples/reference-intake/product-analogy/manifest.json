@@ -9,6 +9,9 @@
       "kind": "product_analogy",
       "locator": "Linear (product analogy; no asset)",
       "sha256": null,
+      "storage": "symbolic",
+      "acquired_via": "analogy",
+      "captured_at": "2026-07-22T10:10:00+08:00",
       "note": "taste anchor only"
     }
   ]

@@ -22,13 +22,157 @@ reason, one line each — silent skips are illegal), and upgrade events.
 """
 from __future__ import annotations
 
+import argparse
+import json
 import re
-from dataclasses import dataclass, field
+import sys
+from dataclasses import asdict, dataclass, field
 
 RUN_PROFILE_MARKER = re.compile(r"<!--\s*run-profile(?::\s*v(\d+))?\s*-->")
 FENCED_BLOCK = re.compile(r"```[a-zA-Z]*\n(.*?)```", re.S)
 TIERS = frozenset({"P1", "P2", "P3"})
 SUPPORTED_RUN_PROFILE_VERSIONS = frozenset({1})
+REQUEST_INTENTS = frozenset(
+    {"answer", "review", "diagnose", "plan", "prototype", "build", "fix"}
+)
+REQUEST_CONSEQUENCES = frozenset({"none", "local", "feature", "structural"})
+NO_RUN_INTENTS = frozenset({"answer", "review", "diagnose", "plan"})
+
+
+@dataclass(frozen=True)
+class RequestFacts:
+    """Normalized facts used to choose whether a Design I/O run starts."""
+
+    intent: str
+    durable_design_artifacts: bool
+    consequence: str
+    existing_product: bool
+    has_references: bool
+    spec_present: bool
+    baseline_ready: bool
+    reference_contract_ready: bool
+    adds_decided_fields: bool
+    revises_decided_fields: bool
+    declaration_domains: int
+
+
+@dataclass(frozen=True)
+class RouteDecision:
+    """Initial Design I/O disposition and its run requirements."""
+
+    mode: str
+    tier: str | None
+    requires_baseline: bool
+    requires_reference_contract: bool
+    requires_spec: bool
+    criteria: tuple[str, ...]
+    reasons: tuple[str, ...]
+
+
+def _validate_request_facts(facts: RequestFacts) -> None:
+    if not isinstance(facts.intent, str) or facts.intent not in REQUEST_INTENTS:
+        raise ValueError(f"unknown request intent: {facts.intent!r}")
+    if not isinstance(facts.consequence, str) or facts.consequence not in REQUEST_CONSEQUENCES:
+        raise ValueError(f"unknown request consequence: {facts.consequence!r}")
+    if isinstance(facts.declaration_domains, bool) or not isinstance(
+        facts.declaration_domains, int
+    ) or facts.declaration_domains < 0:
+        raise ValueError("declaration_domains must be a non-negative integer")
+    for name in (
+        "durable_design_artifacts",
+        "existing_product",
+        "has_references",
+        "spec_present",
+        "baseline_ready",
+        "reference_contract_ready",
+        "adds_decided_fields",
+        "revises_decided_fields",
+    ):
+        if not isinstance(getattr(facts, name), bool):
+            raise ValueError(f"{name} must be boolean")
+    if facts.intent == "build" and facts.consequence == "none":
+        raise ValueError("contradictory request facts: build consequence cannot be none")
+    if (
+        facts.intent in NO_RUN_INTENTS
+        and facts.consequence == "structural"
+        and not facts.durable_design_artifacts
+    ):
+        raise ValueError(
+            "contradictory request facts: non-durable structural work requires "
+            "durable Design I/O artifacts"
+        )
+
+
+def _p3_criteria(facts: RequestFacts) -> tuple[str, ...]:
+    criteria: list[str] = []
+    if facts.consequence == "structural":
+        criteria.append("consequence: structural")
+    if facts.revises_decided_fields:
+        criteria.append("decided-fields: revise")
+    if facts.declaration_domains >= 2:
+        criteria.append(f"declaration-domains: {facts.declaration_domains}")
+    return tuple(criteria)
+
+
+def _lower_tier_criteria(facts: RequestFacts, tier: str) -> tuple[str, ...]:
+    criteria = [f"intent: {facts.intent}", f"consequence: {facts.consequence}"]
+    if tier == "P1":
+        criteria.append("decided-fields: unchanged")
+        return tuple(criteria)
+    if facts.adds_decided_fields:
+        criteria.append("decided-fields: add")
+    if facts.durable_design_artifacts:
+        criteria.append("durable-artifacts: requested")
+    return tuple(criteria)
+
+
+def route_request(facts: RequestFacts) -> RouteDecision:
+    """Route normalized facts through the single Design I/O entry seam."""
+    _validate_request_facts(facts)
+    if facts.intent in NO_RUN_INTENTS and not facts.durable_design_artifacts:
+        return RouteDecision(
+            mode="no-run",
+            tier=None,
+            requires_baseline=False,
+            requires_reference_contract=False,
+            requires_spec=False,
+            criteria=(),
+            reasons=("non-durable request does not require Design I/O artifacts",),
+        )
+
+    requires_baseline = facts.existing_product and not facts.baseline_ready
+    requires_reference_contract = facts.has_references and not facts.reference_contract_ready
+    requires_spec = not facts.spec_present
+    p3_criteria = _p3_criteria(facts)
+    p3 = bool(p3_criteria)
+    p1 = (
+        facts.intent == "fix"
+        and facts.consequence == "local"
+        and not facts.adds_decided_fields
+        and not p3
+    )
+    if p3:
+        tier = "P3"
+    elif p1:
+        tier = "P1"
+    else:
+        tier = "P2"
+    reasons = {
+        "P1": ("local fix has no full-tier trigger or decided-field addition",),
+        "P2": ("request does not meet a P1 or P3 condition",),
+        "P3": ("structural consequence, decided-field revision, or multi-domain work",),
+    }
+    return RouteDecision(
+        mode="design-run",
+        tier=tier,
+        requires_baseline=requires_baseline,
+        requires_reference_contract=requires_reference_contract,
+        requires_spec=requires_spec,
+        criteria=(
+            p3_criteria if tier == "P3" else _lower_tier_criteria(facts, tier)
+        ),
+        reasons=reasons[tier],
+    )
 
 
 @dataclass(frozen=True)
@@ -131,3 +275,54 @@ def validate_run_profile(profile: RunProfile | None) -> list[str]:
                 "(silent skips are illegal)"
             )
     return errors
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Design I/O run-profile utilities")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    route = subparsers.add_parser("route", help="route normalized request facts")
+    route.add_argument("--intent", required=True, choices=sorted(REQUEST_INTENTS))
+    route.add_argument(
+        "--consequence", required=True, choices=sorted(REQUEST_CONSEQUENCES)
+    )
+    route.add_argument("--durable-design-artifacts", action="store_true")
+    route.add_argument("--existing-product", action="store_true")
+    route.add_argument("--has-references", action="store_true")
+    route.add_argument("--spec-present", action="store_true")
+    route.add_argument("--baseline-ready", action="store_true")
+    route.add_argument("--reference-contract-ready", action="store_true")
+    route.add_argument("--adds-decided-fields", action="store_true")
+    route.add_argument("--revises-decided-fields", action="store_true")
+    route.add_argument("--declaration-domains", type=int, default=0)
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+    if args.command == "route":
+        try:
+            decision = route_request(
+                RequestFacts(
+                    intent=args.intent,
+                    durable_design_artifacts=args.durable_design_artifacts,
+                    consequence=args.consequence,
+                    existing_product=args.existing_product,
+                    has_references=args.has_references,
+                    spec_present=args.spec_present,
+                    baseline_ready=args.baseline_ready,
+                    reference_contract_ready=args.reference_contract_ready,
+                    adds_decided_fields=args.adds_decided_fields,
+                    revises_decided_fields=args.revises_decided_fields,
+                    declaration_domains=args.declaration_domains,
+                )
+            )
+        except ValueError as exc:
+            print(f"run_profile.py: error: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(asdict(decision), indent=2, sort_keys=True))
+        return 0
+    raise ValueError(f"unknown command: {args.command!r}")
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
