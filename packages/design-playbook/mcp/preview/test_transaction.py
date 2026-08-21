@@ -137,14 +137,14 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
         self.assertIn("- floor_pass: true", log)
 
     def test_skip_is_explicit_non_confirm_and_never_satisfies_floor(self) -> None:
-        # ADR-0008 amendment: skip is an explicit non-confirm disposition —
-        # not a confirm, the floor evaluates honestly, no confirm record.
+        # ADR-0008 amendment: skip is an explicit exempt pass - never a
+        # confirm, floor not evaluated, no confirm record, never satisfies G5.
         result, confirm, log = self._run_submission(
             {"choice": "跳过", "feedback": "", "anchors": [], "aborted": False}
         )
 
         self.assertFalse(result["confirmed"])
-        self.assertFalse(result["floor_pass"])
+        self.assertTrue(result["floor_pass"])
         self.assertTrue(result["skipped"])
         self.assertEqual(result["selected_options"], ["跳过"])
         self.assertIsNone(confirm)

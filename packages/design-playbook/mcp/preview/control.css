@@ -31,6 +31,33 @@
 /* Scheme A′: unify interactive targets — pill 36 / drawer footer 40 */
 --dpb-control-h: 36px;
 --dpb-drawer-control-h: 40px;
+/* Third state: 48px topbar + 380px drawer rail (fixes-matrix #04) */
+--dpb-topbar-h: 48px;
+--dpb-rail-w: 380px;
+/* Hallmark tokens: chip / wash / glass / ring surfaces */
+--dpb-accent-chip-bg: rgba(20,184,166,.14);
+--dpb-accent-chip-border: rgba(20,184,166,.35);
+--dpb-accent-wash: rgba(20,184,166,.12);
+--dpb-glass-border: rgba(255,255,255,.08);
+--dpb-glass-drawer-bg: rgba(15,23,42,.5);
+--dpb-glass-track: rgba(15,23,42,.04);
+--dpb-ring-accent: rgba(20,184,166,.25);
+--dpb-ring-accent-strong: rgba(20,184,166,.55);
+--dpb-ring-danger: rgba(248,113,113,.25);
+--dpb-shadow-pill: 0 8px 28px rgba(0,0,0,.15), 0 2px 6px rgba(0,0,0,.1);
+--dpb-shadow-drawer: 0 16px 48px rgba(0,0,0,.22), 0 4px 12px rgba(0,0,0,.12);
+--dpb-shadow-pop: 0 12px 32px rgba(0,0,0,.28), 0 2px 8px rgba(0,0,0,.14);
+--dpb-shadow-float: 0 8px 24px rgba(0,0,0,.32), 0 2px 6px rgba(0,0,0,.18);
+--dpb-shadow-edge: 0 -4px 16px rgba(0,0,0,.14);
+--dpb-shadow-topbar: 0 4px 16px rgba(0,0,0,.14);
+--dpb-shadow-chip: 0 1px 3px rgba(0,0,0,.3);
+--dpb-highlight: rgba(255,255,255,.18);
+--dpb-ring-focus: rgba(20,184,166,.22);
+--dpb-ring-ready: rgba(20,184,166,0.25);
+--dpb-pin-outline: rgba(20,184,166,.9);
+--dpb-pin-dashed: rgba(20,184,166,.45);
+--dpb-pin-flash-mid: rgba(20,184,166,.25);
+--dpb-pin-flash-end: rgba(20,184,166,0);
   }
   #dpb-preview-bar {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
@@ -69,6 +96,28 @@
 --dpb-quiet-hover: rgba(17,24,39,.05);
 --dpb-note-bg: #ffffff;
 --dpb-note-ink: #111827;
+--dpb-topbar-h: 48px;
+--dpb-rail-w: 380px;
+--dpb-accent-chip-bg: rgba(15,118,110,.14);
+--dpb-accent-chip-border: rgba(15,118,110,.35);
+--dpb-accent-wash: rgba(15,118,110,.12);
+--dpb-glass-border: rgba(17,24,39,.10);
+--dpb-glass-drawer-bg: rgba(17,24,39,.35);
+--dpb-glass-track: rgba(17,24,39,.04);
+--dpb-shadow-pill: 0 8px 28px rgba(0,0,0,.15), 0 2px 6px rgba(0,0,0,.1);
+--dpb-shadow-drawer: 0 16px 48px rgba(0,0,0,.22), 0 4px 12px rgba(0,0,0,.12);
+--dpb-shadow-pop: 0 12px 32px rgba(0,0,0,.28), 0 2px 8px rgba(0,0,0,.14);
+--dpb-shadow-float: 0 8px 24px rgba(0,0,0,.32), 0 2px 6px rgba(0,0,0,.18);
+--dpb-shadow-edge: 0 -4px 16px rgba(0,0,0,.14);
+--dpb-shadow-topbar: 0 4px 16px rgba(0,0,0,.14);
+--dpb-shadow-chip: 0 1px 3px rgba(0,0,0,.3);
+--dpb-highlight: rgba(255,255,255,.18);
+--dpb-ring-focus: rgba(15,118,110,.22);
+--dpb-ring-ready: rgba(15,118,110,.25);
+--dpb-pin-outline: rgba(15,118,110,.9);
+--dpb-pin-dashed: rgba(15,118,110,.45);
+--dpb-pin-flash-mid: rgba(15,118,110,.25);
+--dpb-pin-flash-end: rgba(15,118,110,0);
   }
   /* ---- floating pill (default state) ---- */
   #dpb-preview-bar {
@@ -92,7 +141,7 @@ padding: 8px 8px 8px 16px;
 background: var(--dpb-bg);
 border: 1px solid var(--dpb-line);
 border-radius: 999px;
-box-shadow: 0 8px 28px rgba(0,0,0,.15), 0 2px 6px rgba(0,0,0,.1);
+box-shadow: var(--dpb-shadow-pill);
   }
   #dpb-preview-bar .dpb-pill .dpb-pill-info {
 display: inline-flex; align-items: center; gap: 8px; max-width: 260px;
@@ -101,7 +150,7 @@ display: inline-flex; align-items: center; gap: 8px; max-width: 260px;
 flex: 0 0 auto; display: inline-flex; align-items: center; height: 22px;
 padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
 font-variant-numeric: tabular-nums; color: var(--dpb-accent-soft);
-background: rgba(20,184,166,.14); border: 1px solid rgba(20,184,166,.35);
+background: var(--dpb-accent-chip-bg); border: 1px solid var(--dpb-accent-chip-border);
   }
   #dpb-preview-bar .dpb-pill .dpb-summary {
 margin: 0; min-width: 0; color: var(--dpb-soft);
@@ -129,7 +178,7 @@ outline: 2px solid var(--dpb-accent); outline-offset: 2px;
 /* #58: collapsed drawer + pin on — the annotate button doubles as the pin
    indicator and the one-click path back to the anchor list. */
 color: var(--dpb-accent-soft); border-color: var(--dpb-accent-deep);
-background: rgba(20,184,166,.12);
+background: var(--dpb-accent-wash);
   }
   #dpb-preview-bar .dpb-pill .dpb-badge-dot {
 display: none; min-width: 18px; height: 18px; padding: 0 5px;
@@ -143,7 +192,7 @@ appearance: none; cursor: pointer; height: var(--dpb-control-h); padding: 0 16px
 border-radius: 999px; border: 1px solid var(--dpb-accent-deep);
 background: var(--dpb-accent); color: var(--dpb-accent-ink);
 font: 650 12.5px/1 system-ui, sans-serif;
-box-shadow: inset 0 1px 0 rgba(255,255,255,.18);
+box-shadow: inset 0 1px 0 var(--dpb-highlight);
 transition: background 140ms ease, transform 100ms ease;
   }
   #dpb-preview-bar .dpb-pill .dpb-btn-primary:hover { background: var(--dpb-accent-hover); color: var(--dpb-accent-contrast); }
@@ -153,7 +202,7 @@ outline: 2px solid var(--dpb-accent); outline-offset: 2px;
   }
   /* Direct confirm state on pill primary when readiness allows immediate action */
   #dpb-preview-bar .dpb-pill .dpb-btn-primary.is-direct-confirm {
-    box-shadow: 0 0 0 3px rgba(20,184,166,0.25);
+    box-shadow: 0 0 0 3px var(--dpb-ring-ready);
     font-weight: 700;
   }
   /* secondary action surfaced on the pill (e.g. the revise label) */
@@ -191,7 +240,7 @@ transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms eas
 border-color: var(--dpb-border-hover); background: var(--dpb-elev);
   }
   #dpb-preview-bar .dpb-pill .dpb-pill-feedback:focus {
-border-color: var(--dpb-accent); box-shadow: 0 0 0 3px rgba(20,184,166,.22);
+border-color: var(--dpb-accent); box-shadow: 0 0 0 3px var(--dpb-ring-focus);
 background: var(--dpb-input-focus);
   }
 
@@ -210,7 +259,7 @@ flex-direction: column;
 background: var(--dpb-bg);
 border: 1px solid var(--dpb-line);
 border-radius: 16px;
-box-shadow: 0 16px 48px rgba(0,0,0,.22), 0 4px 12px rgba(0,0,0,.12);
+box-shadow: var(--dpb-shadow-drawer);
 /* visible so abort popover can extend past the foot without being clipped */
 overflow: visible;
 color: var(--dpb-ink);
@@ -224,14 +273,14 @@ padding: 0;
   #dpb-preview-bar.is-open::before {
 content: "";
 position: fixed; inset: 0; z-index: -1;
-background: rgba(15,23,42,.5);
+background: var(--dpb-glass-drawer-bg);
 pointer-events: auto;  /* P1.5: intercept clicks outside drawer (close on scrim) */
   }
   body.dpb-pin-mode #dpb-preview-bar.is-open::before {
 pointer-events: none;  /* P1.5: let pin-mode clicks reach prototype elements */
 /* #58: while picking, the scrim drops to near-transparent so the prototype
    stays fully readable under the crosshair. */
-background: rgba(15,23,42,.04);
+background: var(--dpb-glass-track);
   }
   #dpb-preview-bar.is-open .dpb-pill { display: none; }
 
@@ -338,7 +387,7 @@ background: rgba(15,23,42,.04);
     padding: 16px 18px;
     border-top: 1px solid var(--dpb-glass-border);
     background: var(--dpb-chrome);
-    box-shadow: 0 -4px 16px rgba(0,0,0,.14);
+    box-shadow: var(--dpb-shadow-edge);
   }
   #dpb-preview-bar .dpb-drawer-foot .dpb-field,
   #dpb-preview-bar .dpb-overall-feedback {
@@ -433,7 +482,7 @@ transition: background 140ms ease, border-color 140ms ease, color 140ms ease, tr
   #dpb-preview-bar .dpb-btn:focus-visible { outline: 2px solid var(--dpb-accent); outline-offset: 2px; }
   #dpb-preview-bar .dpb-btn-primary {
 background: var(--dpb-accent); color: var(--dpb-accent-ink); border-color: var(--dpb-accent-deep);
-box-shadow: inset 0 1px 0 rgba(255,255,255,.18);
+box-shadow: inset 0 1px 0 var(--dpb-highlight);
   }
   #dpb-preview-bar .dpb-btn-primary:hover { background: var(--dpb-accent-hover); color: var(--dpb-accent-contrast); }
   #dpb-preview-bar .dpb-btn-secondary {
@@ -447,8 +496,8 @@ min-width: 72px; background: transparent; color: var(--dpb-muted); border-color:
   #dpb-preview-bar .dpb-btn-danger {
 min-width: 72px; background: transparent; color: var(--dpb-danger); border-color: transparent;
   }
-  #dpb-preview-bar .dpb-btn-danger:hover { color: #fff; background: var(--dpb-danger); border-color: var(--dpb-danger); }
-  #dpb-preview-bar .dpb-btn-danger.is-armed { color: #fff; background: var(--dpb-danger); border-color: var(--dpb-danger); font-weight: 700; }
+  #dpb-preview-bar .dpb-btn-danger:hover { color: var(--dpb-accent-contrast); background: var(--dpb-danger); border-color: var(--dpb-danger); }
+  #dpb-preview-bar .dpb-btn-danger.is-armed { color: var(--dpb-accent-contrast); background: var(--dpb-danger); border-color: var(--dpb-danger); font-weight: 700; }
   /* Scheme A′ abort second-confirm popover (replaces 4s arm) */
   #dpb-preview-bar .dpb-abort-wrap {
 position: relative; display: inline-flex; align-items: center;
@@ -461,7 +510,7 @@ min-width: 200px; max-width: min(260px, 55vw);
 padding: 10px 12px; border-radius: 12px;
 background: var(--dpb-bg); color: var(--dpb-ink);
 border: 1px solid var(--dpb-line-strong);
-box-shadow: 0 12px 32px rgba(0,0,0,.28), 0 2px 8px rgba(0,0,0,.14);
+box-shadow: var(--dpb-shadow-pop);
   }
   #dpb-preview-bar .dpb-popover.is-fixed {
 position: fixed; margin-left: 0; left: var(--dpb-pop-left, 0);
@@ -497,7 +546,7 @@ border-radius: 10px;
 background: var(--dpb-note-bg);
 color: var(--dpb-note-ink);
 border: 1px solid var(--dpb-line);
-box-shadow: 0 8px 24px rgba(0,0,0,.32), 0 2px 6px rgba(0,0,0,.18);
+box-shadow: var(--dpb-shadow-float);
 font: 12px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
 pointer-events: none;
 transform: translateY(4px);
@@ -511,7 +560,7 @@ width: 18px; height: 18px; border-radius: 999px;
 background: var(--dpb-accent); color: var(--dpb-accent-contrast);
 font-size: 11px; font-weight: 700;
 display: inline-grid; place-items: center;
-box-shadow: 0 1px 3px rgba(0,0,0,.3);
+box-shadow: var(--dpb-shadow-chip);
   }
   .dpb-float-note .dpb-float-label {
 display: block; font-weight: 650; color: var(--dpb-accent-soft);
@@ -522,13 +571,13 @@ color: var(--dpb-soft); word-break: break-word; white-space: pre-wrap;
   }
 
   .dpb-pin-target {
-outline: 1.5px solid rgba(20,184,166,.9) !important;
+outline: 1.5px solid var(--dpb-pin-outline) !important;
 outline-offset: 1px !important;
-background-color: rgba(20,184,166,.06) !important;
+background-color: var(--dpb-accent-wash) !important;
 cursor: crosshair !important;
   }
   .dpb-pin-hover {
-outline: 1px dashed rgba(20,184,166,.45) !important;
+outline: 1px dashed var(--dpb-pin-dashed) !important;
 outline-offset: 1px !important;
   }
   /* brief flash when an anchor is located from the list */
@@ -536,9 +585,9 @@ outline-offset: 1px !important;
 animation: dpb-flash 900ms ease-out 1;
   }
   @keyframes dpb-flash {
-0% { box-shadow: 0 0 0 0 rgba(20,184,166,.55); outline-color: rgba(20,184,166,.9) !important; }
-50% { box-shadow: 0 0 0 6px rgba(20,184,166,.25); }
-100% { box-shadow: 0 0 0 0 rgba(20,184,166,0); }
+0% { box-shadow: 0 0 0 0 var(--dpb-ring-accent-strong); outline-color: var(--dpb-accent) !important; }
+50% { box-shadow: 0 0 0 6px var(--dpb-pin-flash-mid); }
+100% { box-shadow: 0 0 0 0 var(--dpb-pin-flash-end); }
   }
   body.dpb-pin-mode, body.dpb-pin-mode * { cursor: crosshair !important; }
   body.dpb-pin-mode #dpb-preview-bar, body.dpb-pin-mode #dpb-preview-bar * {
@@ -554,7 +603,7 @@ padding: 12px 14px;
 border-radius: 12px;
 background: var(--dpb-bg); color: var(--dpb-ink);
 border: 1px solid var(--dpb-line-strong);
-box-shadow: 0 12px 32px rgba(0,0,0,.28), 0 2px 8px rgba(0,0,0,.14);
+box-shadow: var(--dpb-shadow-pop);
 font: 12.5px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
   }
   .dpb-onboard[hidden] { display: none; }
@@ -658,7 +707,7 @@ border-radius: 18px; max-width: calc(100vw - 24px);
     padding: 16px 18px;
     border-top: 1px solid var(--dpb-glass-border);
     background: var(--dpb-chrome);
-    box-shadow: 0 -4px 16px rgba(0,0,0,.14);
+    box-shadow: var(--dpb-shadow-edge);
   }
   #dpb-preview-bar .dpb-drawer-foot .dpb-field,
   #dpb-preview-bar .dpb-overall-feedback {
@@ -798,4 +847,119 @@ border-radius: 18px; max-width: calc(100vw - 24px);
     animation: dpb-shake 300ms ease;
     border-color: var(--dpb-danger) !important;
     box-shadow: 0 0 0 3px var(--dpb-ring-danger) !important;
+  }
+
+  /* utility: JS-toggled visibility (drawer skip button stays hidden —
+     skip lives in the pill; topbar starts hidden) */
+  .dpb-hidden { display: none !important; }
+
+  /* fixes-matrix #01: pill hosts the skip channel next to annotate */
+  #dpb-preview-bar .dpb-pill-divider {
+    width: 1px; height: 18px; flex: 0 0 auto;
+    background: var(--dpb-line-strong);
+  }
+  #dpb-preview-bar .dpb-btn-pill-skip {
+    appearance: none; cursor: pointer;
+    display: inline-flex; align-items: center;
+    height: var(--dpb-control-h); padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid var(--dpb-line-strong);
+    background: var(--dpb-surface); color: var(--dpb-soft);
+    font: 600 12px/1 inherit;
+    transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+  }
+  #dpb-preview-bar .dpb-btn-pill-skip:hover {
+    background: var(--dpb-elev); border-color: var(--dpb-border-hover); color: var(--dpb-ink);
+  }
+  #dpb-preview-bar .dpb-btn-pill-skip:focus-visible {
+    outline: 2px solid var(--dpb-accent); outline-offset: 2px;
+  }
+
+  /* fixes-matrix #04: 48px topbar (pin mode + zoom) shown while drawer open */
+  #dpb-preview-bar .dpb-topbar[hidden] { display: none !important; }
+  #dpb-preview-bar .dpb-topbar {
+    position: fixed; top: 0; left: 0; right: 0;
+    height: var(--dpb-topbar-h); box-sizing: border-box;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 0 16px;
+    background: var(--dpb-chrome);
+    border-bottom: 1px solid var(--dpb-glass-border);
+    box-shadow: var(--dpb-shadow-topbar);
+    z-index: 2147483000;
+  }
+  #dpb-preview-bar .dpb-topbar-left {
+    display: inline-flex; align-items: center; gap: 10px; min-width: 0;
+  }
+  #dpb-preview-bar .dpb-topbar-info {
+    display: inline-flex; align-items: center; gap: 8px; min-width: 0;
+  }
+  #dpb-preview-bar .dpb-topbar-title {
+    color: var(--dpb-soft); font-size: 12px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px;
+  }
+  #dpb-preview-bar .dpb-topbar-divider {
+    width: 1px; height: 18px; flex: 0 0 auto;
+    background: var(--dpb-line-strong);
+  }
+  #dpb-preview-bar .dpb-mode-seg,
+  #dpb-preview-bar .dpb-zoom-seg {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px; border-radius: 8px;
+    background: var(--dpb-note-bg);
+    border: 1px solid var(--dpb-line);
+  }
+  #dpb-preview-bar .dpb-zoom-btn,
+  #dpb-preview-bar .dpb-zoom-label {
+    appearance: none; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 4px; height: 26px; min-width: 28px; padding: 0 8px;
+    border-radius: 6px; border: 1px solid transparent;
+    background: transparent; color: var(--dpb-soft);
+    font: 600 12px/1 inherit; font-variant-numeric: tabular-nums;
+    transition: background 140ms ease, color 140ms ease;
+  }
+  #dpb-preview-bar .dpb-zoom-btn:hover,
+  #dpb-preview-bar .dpb-zoom-label:hover {
+    background: var(--dpb-hover); color: var(--dpb-ink);
+  }
+  #dpb-preview-bar .dpb-zoom-btn:focus-visible,
+  #dpb-preview-bar .dpb-zoom-label:focus-visible {
+    outline: 2px solid var(--dpb-accent); outline-offset: 1px;
+  }
+  #dpb-preview-bar .dpb-zoom-label { cursor: default; }
+
+  /* workspace shifts under the topbar; iframe/wrap dodge the 380px rail.
+     48px literal: body is outside the #dpb-preview-bar token scope, and the
+     topbar height is a fixed layout dimension, not a theme token. */
+  body.dpb-workspace { padding-top: 48px; }
+
+  #dpb-preview-bar .dpb-pin-toggle {
+    appearance: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 6px;
+    border: 1px solid var(--dpb-line-strong);
+    background: var(--dpb-surface);
+    color: var(--dpb-ink);
+    font: 600 12px/1 inherit;
+    transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+  }
+  #dpb-preview-bar .dpb-pin-toggle:hover {
+    background: var(--dpb-elev);
+    border-color: var(--dpb-border-hover);
+  }
+  #dpb-preview-bar .dpb-pin-toggle[aria-pressed="true"],
+  #dpb-preview-bar .dpb-pin-toggle.is-on {
+    background: var(--dpb-accent);
+    color: var(--dpb-accent-contrast);
+    border-color: var(--dpb-accent-deep);
+  }
+  #dpb-preview-bar .dpb-pin-count {
+    font-size: 11.5px;
+    color: var(--dpb-muted);
+    font-variant-numeric: tabular-nums;
   }

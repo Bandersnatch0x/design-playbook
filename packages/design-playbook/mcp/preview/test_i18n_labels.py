@@ -49,6 +49,19 @@ class LabelSetTests(unittest.TestCase):
         self.assertIn('id="dpb-skip"', html)
         self.assertIn(i18n._STRINGS[i18n.ZH]["skip"], html)
 
+    def test_control_page_renders_pill_skip_and_topbar(self) -> None:
+        # fixes-matrix #01/#04: skip lives in the pill; the 48px topbar hosts
+        # pin mode + zoom controls and starts hidden.
+        html = preview_control._build_control(
+            round_n=1, summary="评审", options=["确认通过", "需要修改"]
+        )
+        self.assertIn('id="dpb-pill-skip"', html)
+        self.assertIn('id="dpb-topbar" hidden', html)
+        self.assertIn('id="dpb-zoom-fit"', html)
+        self.assertIn('id="dpb-pin-toggle"', html)
+        # drawer skip stays hidden - the pill owns the skip channel
+        self.assertIn('class="dpb-btn dpb-hidden" id="dpb-skip"', html)
+
 
 if __name__ == "__main__":
     unittest.main()

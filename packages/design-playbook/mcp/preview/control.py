@@ -150,6 +150,8 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         t_drawer_empty_title=html_lib.escape(t("drawer_empty_title")),
         t_drawer_empty_desc=html_lib.escape(t("drawer_empty_desc")),
         t_skip=html_lib.escape(t("skip")),
+        t_skip_desc=html_lib.escape(t("skip_desc"), quote=True),
+        t_zoom_fit=html_lib.escape(t("zoom_fit")),
         skip_val=html_lib.escape(t("skip"), quote=True),
         t_collapse=html_lib.escape(t("collapse"), quote=True),
         t_pin_toggle=html_lib.escape(t("pin_toggle")),
