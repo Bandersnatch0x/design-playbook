@@ -33,11 +33,39 @@ Project the router's initial tier and criteria once, up front (LR1). Three tiers
 - **P2 standard** — full `ux-spec` shaping session (S0-S6, G9), R/C-tier design decisions, and standard evidence/review obligations.
 - **P3 full** — full declaration, alternative, interaction, and applicability coverage.
 
-The executable router proposes the initial grade and the user confirms it **once** (may fold into the request reply). **Upgrade is automatic** the moment a correction signal appears (R1 finding, structural R2, cross-layer blocking, E-tier judgment) — record the upgrade event in the run-profile block and walk the added steps; **downgrade requires the user** (over-compliance already performed is kept). Write the block into `plan.md` as a structured field block (`tier: P1|P2|P3`, grading checklist, `confirmed_by: user + <ts>`, skip list with one-line reasons, upgrade events). The profile block is mandatory for every run — skipping the rest of the plan body is legal, skipping the profile block is not. Every skipped step keeps the one-line skip narration rule below.
+The executable router proposes the initial grade and the user confirms it **once** (may fold into the request reply). **Upgrade is automatic** the moment a correction signal appears (R1 finding, structural R2, cross-layer blocking, E-tier judgment) — record the upgrade event in the run-profile block and walk the added steps; **downgrade requires the user** (over-compliance already performed is kept). Write the block into `plan.md` as a structured field block (`tier: P1|P2|P3`, grading checklist, `confirmed_by: user + <ts>`, skip list with one-line reasons, upgrade events). The profile block is mandatory for every run — skipping the rest of the plan body is legal, skipping the profile block is not. Every skipped step keeps the one-line skip narration rule below. Audit-preference tier waivers follow the SSOT section below.
 
 On a `design-run`, ask the smallest question only when the answer changes the goal, scope, platform, success criteria, or authority; otherwise record a conservative assumption in L1. Whether a request is `no-run` or `design-run` is only the router decision from step 1 — including durable review, diagnosis, or plan work.
 
 Pause for explicit confirmation before an external, destructive, costly, or scope-expanding action that the request did not already authorize. This includes adding a dependency, changing an API/backend/data contract, deploying or publishing, and accepting a blocking finding. When required evidence or authority is unavailable, stop with the exact blocker and the smallest next decision. If the same blocking finding survives two repair -> re-evaluate cycles without new evidence, stop recirculating and report it.
+
+## Audit preferences (ADR-0033)
+
+The audit/acceptance stages — `craft-guard`, `observe*`, `ui-evaluator` — are user-selectable. Fill and the preview confirmation (ADR-0008 floor) never are. Preferences are execution trimming **after** routing: `run_profile.py route` receives no preference input and this section never feeds it.
+
+**Read (one deep module — consume its output, never reconstruct its precedence):**
+
+```
+python packages/design-playbook/scripts/audit_preferences.py plan --repo-root <target-repo> [--declaration '{"craft_guard": false}']
+```
+
+The printed payload is the only trimming authority: `stages.<stage>.runs` decides whether the stage executes, `source` (`default` / `local` / `repo` / `run`) narrates where the choice came from, and `asked` projects the merged asked bit. Each `invalid_files` entry names one corrupt layer that was treated as absent; decide whether to ask from `asked`, since another valid layer may still preserve `asked: true`. A run declaration (this run's user statement, natural language mapped to the three booleans) is passed via `--declaration` and outranks both preference files.
+
+**First ask (folded into tier confirmation):** when the payload reports `asked: false`, owe the user the one-time audit-scope question — merge it into the tier-confirmation exchange above so the run suffers one interruption, not two. Collect the `craft_guard` / `observe` / `ui_evaluator` choices together with the tier confirmation; they become the run declaration for this run. Repository values are team-authored input, not proof of this user's choice: when any effective stage has `source: repo` and audit scope has not yet been confirmed in this session, include one confirmation of those stored choices in the same exchange and pass the answer as the run declaration. Never silently treat repository `asked: true` as current-user consent.
+
+**Write-back (remember the answer):** persist the answered declaration through the module — `write_back(repo_root, declaration, scope=..., this_run_only=...)` from `design_playbook.scripts.audit_preferences` (bootstrap: `sys.path.insert(0, 'packages/design-playbook')`). Scope `repo` writes `.design-playbook/preferences.yaml` (team-shared default, version-controlled); scope `local` writes `.design-playbook/preferences.local.yaml` and automatically ensures `.design-playbook/preferences.local.yaml` is listed in the target repository's `.gitignore`. When the user says "this run only", pass `this_run_only=True`: the choice applies to this run but is not persisted, and the asked bit is still consumed. The write-back also sets the asked bit, so the first-use question is not repeated; repository-sourced choices still receive the per-session confirmation above.
+
+**Trim + skip-list recording:** for every stage whose `runs` is false, skip the step and record it in the run-profile skip list with a one-line reason naming the source (e.g. `craft-guard: skipped by user audit preference (source: run)`) — silent skips are illegal, and the one-line skip narration rule still applies. The run artifacts carry a limitation statement naming what was not audited: absence of evidence is never presented as evidence.
+
+**Skeleton point-back (`ui-evaluator` skipped):** `point-back.md` is a machine hard dependency, so a skipped audit still emits one — generated by the module's `skeleton_pointback(spec_text)`, marked `audited: false` with a fixed limitation sentence, e.g.:
+
+```
+python -c "import sys; sys.path.insert(0, 'packages/design-playbook'); from pathlib import Path; from design_playbook.scripts.audit_preferences import skeleton_pointback; run = Path('.scratch/<run>'); (run / 'point-back.md').write_text(skeleton_pointback((run / 'spec.md').read_text(encoding='utf-8')), encoding='utf-8')"
+```
+
+Never edit out the `audited: false` marker or upgrade the skeleton's verdict: `validate_run --strict` / `--require-evidence` / `--require-coverage` reject skeleton runs, `run_status` projects *not audited*, and `aggregate_runs` surfaces them as unaudited (ADR-0033 D12). Optionality is a convenience for honest users, not a forgery channel.
+
+**Tier-obligation waiver:** an explicit user skip of `craft-guard` authorizes the corresponding P2/P3 obligation downgrade (full-catalog evaluation, G11 sampling matrix) automatically; the waiver is recorded in the skip list (ADR-0033 D8). The "downgrade needs the user" rule guards against agent self-demotion — the user's own declaration is the authorization.
 
 ## Steps
 
@@ -49,6 +77,7 @@ Do in order. Data flow:
 
 - `?` = conditional entry/route
 - `*` = run only when the matching MCP tool is available (`preview_prototype` for preview, `execute_capture_plan` for observe); otherwise skip
+- `craft-guard`, `observe*`, and `ui-evaluator` are additionally user-selectable via **Audit preferences** (ADR-0033); trimming there never changes this order
 - When you skip a step, say so in one line — step name + reason + how to enable, with the gate label when one applies. Matters most for `preview*`/`observe*` adapter absence, e.g. `-> preview*: adapter absent, skipped (G5 not triggered; enable via packages/design-playbook/mcp/preview/ or host MCP)`. Other conditional skips may use the same shape; entry lines are optional (keep output lean). Narration only — not a run-contract control.
 - Do not code a pretty shell until the active step’s completion criterion is met
 
@@ -65,7 +94,11 @@ initial route decision.
 - `no-run`: respond directly. Do not create `.scratch/<run>/`, `plan.md`, or a
   run-profile. A vision-capable host may inspect an attached image directly;
   a text-only host records the metadata and states that visual inspection is
-  unavailable once. Neither path copies the temporary image.
+  unavailable once, then — if the user supplied **only an image without
+  accompanying text** — must **ask the user for a short written description**
+  before finishing the response and continue with that description. Stating
+  the limitation once is not a stop condition when text material is missing.
+  Neither path copies the temporary image.
 - `design-run`: project the returned tier and criteria into the existing v1
   run-profile, then satisfy the independently returned prerequisites.
 
@@ -177,6 +210,8 @@ Load on demand (only if the fill needs them):
 
 ### 8. Craft → `craft-guard`
 
+When the audit-preferences plan reports `craft_guard.runs: false`, skip this step: record the skip-list reason (source from the plan payload), keep the one-line skip narration, and carry the waiver into the limitation statement (see *Audit preferences*). Otherwise:
+
 Invoke **craft-guard**. Apply loading tiers, motion purpose, hierarchy, CJK type. Craft rules live in the first-party registry (`references/rules.md`): evaluate each entry's applicability predicate (P1: touch-surface subset; P2/P3: full catalog) and write seven-column audit rows to `.scratch/<run>/craft-guard.md`. For native desktop, `craft-guard` owns shared UI above the render-surface seam and defers to `native-craft` below it. If a finding crosses the seam, split it into separate point-backs to the owning declarations.
 
 **Done when:** **craft-guard**'s own completion criteria hold (that skill is SSOT). Smoke: every wait/fail path maps to a loading tier; every animation states its purpose; L4 interactive-zone affordance resolved; residual issues handed to `ui-evaluator` with source `craft`.
@@ -185,6 +220,7 @@ Invoke **craft-guard**. Apply loading tiers, motion purpose, hierarchy, CJK type
 
 After craft, probe MCP `tools/list` for **`execute_capture_plan`**.
 
+- **Skipped by audit preference** (`observe.runs: false` in the audit-preferences plan) → skip exactly like adapter absence; narrate step + reason (`user audit preference, source: <source>`) and record it in the skip list.
 - **Absent** → skip; `ui-evaluator` ledger `observed` stays free-text (current behavior). G6 not triggered.
 - **Present** → for each L6 criterion whose proof is a runtime state, run the evidence loop in this orchestrator (not inside any skill):
   1. **Derive** a capture plan from L6 `Given -> When -> Then` (in memory, not on disk): `Given`/`When` → `state` + `actions`; `Then` → required proof (already in the ledger `required` field). Do not add or remove verification intent; L6 wins on conflict.
@@ -220,9 +256,11 @@ Evidence is captured, not judged — copy provider returns verbatim here; `pass`
 
 ### 10. Accept → `ui-evaluator`
 
-Invoke **ui-evaluator**. Issues must **point back** to a declaration. The report is the six-block `point-back.md` (ledger / findings / positive findings / coverage statement / limitations statement / verdict); recirculated blockers route through the two-hop map (declaration artifact -> R1-R5) and record the `invalidated:` evidence set.
+When the audit-preferences plan reports `ui_evaluator.runs: false`, do not invoke **ui-evaluator**: emit the module-generated skeleton `point-back.md` (`audited: false`, see *Audit preferences*) so the machine chain never breaks, record the skip in the skip list, and show the run artifact index below as usual. `run_status` projects *not audited* for such a run; never present the skeleton as an audit result.
 
-**Done when:** the report includes the criterion-shaped evidence ledger (`criterion / required / observed / result`) and findings as `issue / source / fix / severity`; the authoritative verdict completion criterion in `ui-evaluator` is met; **and** you show the user a short **run artifact index** (paths under `.scratch/<run>/`) so declaration products are discoverable — at minimum: `design-baseline/` (if triggered), `reference/` (if any), `spec.md`, `plan.md`, `decision-report.md`, `preview/` (if any), `shaping/` (if a session ran), Fill surface path, `evidence/` (if any), `point-back.md`. One block is enough; do not only leave paths buried in tool logs.
+Otherwise invoke **ui-evaluator**. Issues must **point back** to a declaration. The report is the six-block `point-back.md` (ledger / findings / positive findings / coverage statement / limitations statement / verdict); recirculated blockers route through the two-hop map (declaration artifact -> R1-R5) and record the `invalidated:` evidence set.
+
+**Done when:** either the audit ran — the report includes the criterion-shaped evidence ledger (`criterion / required / observed / result`) and findings as `issue / source / fix / severity`, and the authoritative verdict completion criterion in `ui-evaluator` is met — or the audit was skipped by preference and the skeleton point-back (`audited: false`) replaced the report; **and** you show the user a short **run artifact index** (paths under `.scratch/<run>/`) so declaration products are discoverable — at minimum: `design-baseline/` (if triggered), `reference/` (if any), `spec.md`, `plan.md`, `decision-report.md`, `preview/` (if any), `shaping/` (if a session ran), Fill surface path, `evidence/` (if any), `point-back.md`. One block is enough; do not only leave paths buried in tool logs.
 
 Cross-run review of multiple `.scratch/<run>/` runs lives in command **run-review** (cross-run, not a step of this run).
 

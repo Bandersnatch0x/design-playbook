@@ -44,6 +44,14 @@ from design_playbook.scripts.stages import STAGES, STAGES_BY_KEY  # noqa: E402
 from design_playbook.scripts.run_facts import RunFacts, capture_run_facts  # noqa: E402
 from design_playbook.scripts.shaping_log import queue_state  # noqa: E402
 
+# Audit-preferences forgery boundary (ADR-0033 D12, issue #67): a skeleton
+# point-back (audited: false) projects "not audited" — the marker facts
+# come from the single audit_preferences module; status narration never
+# invites the user to confirm a verdict the audit never earned.
+from design_playbook.scripts.audit_preferences import (  # noqa: E402
+    parse_audit_marker,
+)
+
 # vNext S4 re-entry narration (loop-prototype 7.1): repair rounds, route
 # hit counts, dd supersedes / stale reviews, derived escalation signals,
 # and the close_reason terminal narration, all read from artifacts the
@@ -212,9 +220,24 @@ def discover_runs(scratch: Path) -> list[Path]:
     return runs
 
 
+def _audit_disposition(pointback_text: str) -> str:
+    """Classify marker facts without treating ambiguity as legacy absence."""
+    marker = parse_audit_marker(pointback_text)
+    if not marker.present:
+        return "legacy"
+    if marker.audited is True:
+        return "audited"
+    if marker.audited is False:
+        return "unaudited"
+    return "ambiguous"
+
+
 def verdict_of(run_root: Path, run_facts: RunFacts | None = None) -> str | None:
     facts = run_facts or capture_run_facts(run_root=run_root)
     if not facts.pointback_text:
+        return None
+    # Skeleton and malformed marker reports cannot project an earned verdict.
+    if _audit_disposition(facts.pointback_text) in {"unaudited", "ambiguous"}:
         return None
     # ADR-0025 sanctioned correction: a canonical Verdict is exposed only
     # when exactly one valid Verdict exists. Missing, malformed, ambiguous,
@@ -316,6 +339,15 @@ def next_action(
         if blocked is not None:
             return blocked
     if "accept" in present:
+        audit_disposition = _audit_disposition(facts.pointback_text)
+        if audit_disposition == "unaudited":
+            return ("point-back.md is the unaudited skeleton "
+                    "(audited: false) — not audited; run the ui-evaluator "
+                    "audit to earn a real verdict.")
+        if audit_disposition == "ambiguous":
+            return ("point-back.md has duplicate or malformed audited markers "
+                    "— fix the marker and run ui-evaluator before trusting "
+                    "its verdict.")
         verdict = verdict_of(run_root, facts)
         # vNext S4: an escalated stop is a waiting state — repairing again
         # is exactly wrong; narrate the two-round budget and the three-way
@@ -369,6 +401,12 @@ def render(run_root: Path, *, as_json: bool) -> int:
     states = inspect_run(run_root, snapshot, facts)
     action = next_action(states, run_root, snapshot, facts)
     vnext = inspect_vnext(run_root, facts)
+    audit_marker = parse_audit_marker(facts.pointback_text)
+    audit_disposition = _audit_disposition(facts.pointback_text)
+    audited_projection = (
+        False if audit_disposition in {"unaudited", "ambiguous"}
+        else audit_marker.audited
+    )
     payload = {
         "run_root": str(run_root),
         "stages": [
@@ -382,6 +420,10 @@ def render(run_root: Path, *, as_json: bool) -> int:
         ],
         "next": action,
         "verdict": verdict_of(run_root, facts),
+        # Fail closed: malformed/ambiguous markers project False, while
+        # marker-less legacy reports alone retain None.
+        "audited": audited_projection,
+        "audit_marker_state": audit_disposition,
         "run_profile": {
             "tier": vnext.tier,
             "effective_tier": (
@@ -440,6 +482,10 @@ def render(run_root: Path, *, as_json: bool) -> int:
     if vnext.six_block:
         note = " with invalidated evidence set" if vnext.invalidated else ""
         print(f"point-back: six-block vNext report{note}")
+    if payload["audited"] is False:
+        print("audit: not audited (skeleton point-back)")
+    elif _audit_disposition(facts.pointback_text) == "ambiguous":
+        print("audit: invalid marker (duplicate or malformed audited line)")
     repair = vnext.repair
     if repair is not None and not repair.empty:
         faces = [f"{repair.rounds} round(s)"] if repair.rounds else []

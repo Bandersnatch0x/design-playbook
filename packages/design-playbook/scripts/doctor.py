@@ -14,6 +14,14 @@ import sys
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
+if str(PACKAGE_ROOT) not in sys.path:
+    sys.path.insert(0, str(PACKAGE_ROOT))
+
+from design_playbook.scripts.audit_preferences import (  # noqa: E402
+    effective_plan,
+    resolve_preferences,
+)
+
 LEVELS = ("ok", "degraded", "broken")
 
 
@@ -27,7 +35,11 @@ def _check(name: str, ok: bool, repair: str, *, required: bool = True) -> dict:
     }
 
 
-def run_checks(*, run_root: str | None = None) -> list[dict]:
+def run_checks(
+    *,
+    run_root: str | None = None,
+    repo_root: str | None = None,
+) -> list[dict]:
     checks: list[dict] = []
 
     checks.append(_check(
@@ -40,6 +52,7 @@ def run_checks(*, run_root: str | None = None) -> list[dict]:
     mcp_json = PACKAGE_ROOT / ".mcp.json"
     validate_run = PACKAGE_ROOT / "scripts" / "validate_run.py"
     run_status = PACKAGE_ROOT / "scripts" / "run_status.py"
+    audit_preferences = PACKAGE_ROOT / "scripts" / "audit_preferences.py"
     preview = PACKAGE_ROOT / "mcp" / "preview" / "server.py"
     evidence = PACKAGE_ROOT / "mcp" / "evidence" / "server.py"
 
@@ -48,6 +61,7 @@ def run_checks(*, run_root: str | None = None) -> list[dict]:
         (mcp_json, ".mcp.json"),
         (validate_run, "scripts/validate_run.py"),
         (run_status, "scripts/run_status.py"),
+        (audit_preferences, "scripts/audit_preferences.py"),
         (preview, "mcp/preview/server.py"),
         (evidence, "mcp/evidence/server.py"),
     ):
@@ -68,6 +82,37 @@ def run_checks(*, run_root: str | None = None) -> list[dict]:
         isinstance(version, str) and bool(version),
         "plugin.json must declare a semver version",
     ))
+
+    # Audit preferences are repository-scoped. Absence is healthy and means
+    # run-all defaults; corrupt layers degrade with a concrete repair.
+    preference_root = Path(repo_root).resolve() if repo_root else Path.cwd().resolve()
+    if preference_root.is_dir():
+        effective = resolve_preferences(preference_root)
+        plan = effective_plan(effective)
+        invalid = plan["invalid_files"]
+        checks.append({
+            "name": "audit_preferences.state",
+            "ok": not invalid,
+            "required": False,
+            "repair": (
+                "Repair or remove corrupt preference layer(s): "
+                + ", ".join(invalid)
+            ) if invalid else "",
+            "level": "degraded" if invalid else "ok",
+            "detail": {
+                "repo_root": str(preference_root),
+                "asked": plan["asked"],
+                "stages": plan["stages"],
+                "invalid_files": invalid,
+            },
+        })
+    else:
+        checks.append(_check(
+            "audit_preferences.state",
+            False,
+            f"Pass an existing repository root (got {preference_root})",
+            required=False,
+        ))
 
     # Optional: Playwright for evidence capture.
     playwright_ok = importlib.util.find_spec("playwright") is not None
@@ -116,8 +161,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Packaged design-playbook doctor")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     parser.add_argument("--run-root", default=None, help="optional run root to verify")
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help="target repository holding .design-playbook preferences (default: cwd)",
+    )
     args = parser.parse_args(argv)
-    checks = run_checks(run_root=args.run_root)
+    checks = run_checks(run_root=args.run_root, repo_root=args.repo_root)
     level = overall_level(checks)
     payload = {
         "package_root": str(PACKAGE_ROOT),
@@ -134,6 +184,9 @@ def main(argv: list[str] | None = None) -> int:
             line = f"  {mark:4} {item['name']}"
             if item["repair"]:
                 line += f" — {item['repair']}"
+            elif item.get("detail") is not None:
+                line += " — " + json.dumps(
+                    item["detail"], ensure_ascii=False, sort_keys=True)
             print(line)
     return 0 if level != "broken" else 1
 

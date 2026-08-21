@@ -12,6 +12,7 @@ dist
 dist-ssr
 .worktrees/
 *.local
+.design-playbook/preferences.local.yaml
 
 # Local agent planning, research, dogfood, and temporary artifacts.
 .scratch/
