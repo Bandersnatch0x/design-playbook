@@ -242,6 +242,9 @@ def ingest_ephemeral_image(
     locator = f"reference/assets/{asset_name}"
     asset_path = run_root / locator
     _ensure_within_run(asset_path, run_root)
+    # Same digest may already be claimed by a prior manifest entry; only an
+    # asset this call created may be rolled back on manifest failure.
+    asset_existed = asset_path.exists()
     _atomic_write(asset_path, source_bytes)
 
     record: dict[str, object] = {
@@ -258,5 +261,16 @@ def ingest_ephemeral_image(
         record["provider"] = provider
     sources.append(record)
     payload = (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
-    _atomic_write(manifest_path, payload)
+    try:
+        _atomic_write(manifest_path, payload)
+    except ReferenceSourceError:
+        # Fail closed (issue #74): an asset no manifest entry points at is
+        # an orphan. Remove this call's fresh asset before propagating; a
+        # pre-existing asset stays — a prior manifest entry still claims it.
+        if not asset_existed:
+            try:
+                asset_path.unlink(missing_ok=True)
+            except OSError:
+                pass  # cleanup best-effort; write failure still propagates
+        raise
     return manifest

@@ -448,6 +448,91 @@ class ReferenceSourceTests(unittest.TestCase):
                 self.assertEqual(leftover, [])
             self.assertFalse((run_root / "reference" / "manifest.json").exists())
 
+    def test_manifest_write_failure_rolls_back_fresh_asset(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source.png"
+            source.write_bytes(PNG_BYTES)
+            run_root = root / "run"
+
+            real_replace = os.replace
+            calls = {"count": 0}
+
+            def replace_failing_on_manifest(src, dst):
+                calls["count"] += 1
+                if calls["count"] == 2:  # asset written, manifest fails
+                    raise OSError("disk full")
+                return real_replace(src, dst)
+
+            with mock.patch.object(os, "replace", side_effect=replace_failing_on_manifest):
+                with self.assertRaisesRegex(
+                    reference_sources.ReferenceSourceError, "manifest"
+                ):
+                    reference_sources.ingest_ephemeral_image(
+                        source,
+                        run_root,
+                        run_id="run",
+                        source_id="src-1",
+                        kind="screenshot",
+                    )
+
+            assets = run_root / "reference" / "assets"
+            if assets.exists():
+                leftover = [
+                    path.name
+                    for path in assets.iterdir()
+                    if not path.name.endswith(".tmp")
+                ]
+                self.assertEqual(leftover, [])
+            self.assertFalse((run_root / "reference" / "manifest.json").exists())
+
+    def test_manifest_write_failure_keeps_preexisting_asset(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source.png"
+            source.write_bytes(PNG_BYTES)
+            run_root = root / "run"
+
+            reference_sources.ingest_ephemeral_image(
+                source,
+                run_root,
+                run_id="run",
+                source_id="src-1",
+                kind="screenshot",
+            )
+            manifest_path = run_root / "reference" / "manifest.json"
+            preserved_manifest = manifest_path.read_bytes()
+            assets = run_root / "reference" / "assets"
+            preserved_asset = next(path for path in assets.iterdir())
+
+            real_replace = os.replace
+            calls = {"count": 0}
+
+            def replace_failing_on_manifest(src, dst):
+                calls["count"] += 1
+                if calls["count"] == 2:  # asset rewritten, manifest fails
+                    raise OSError("disk full")
+                return real_replace(src, dst)
+
+            # Same path + same pixels → same digest → the same asset locator,
+            # already claimed by the first manifest entry.
+            with mock.patch.object(os, "replace", side_effect=replace_failing_on_manifest):
+                with self.assertRaisesRegex(
+                    reference_sources.ReferenceSourceError, "manifest"
+                ):
+                    reference_sources.ingest_ephemeral_image(
+                        source,
+                        run_root,
+                        run_id="run",
+                        source_id="src-2",
+                        kind="screenshot",
+                    )
+
+            # The first manifest entry still claims the shared asset, so the
+            # rollback must leave both the asset and the prior manifest alone.
+            self.assertEqual(manifest_path.read_bytes(), preserved_manifest)
+            self.assertEqual(list(assets.iterdir()), [preserved_asset])
+
     @unittest.skipUnless(hasattr(os, "symlink"), "symlink unsupported")
     def test_destination_symlink_escape_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
