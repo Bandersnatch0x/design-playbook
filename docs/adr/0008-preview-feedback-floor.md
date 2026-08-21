@@ -56,3 +56,25 @@ No schema-version field is added (manifest/confirm schema structural fields rema
 4. ✅ G5 pass fixtures (`g5-preview-confirmed`, `g5-aborted-then-confirmed`, `g5-multi-round-last-confirmed`) carry substantive feedback + `floor_pass`; new fail fixture `g5-confirm-floor-fail` (empty feedback, no floor_pass) rejects with "failed feedback floor".
 5. ✅ `ui-evaluator` rubric — preview-seam-health supporting finding, `source = preview* seam`.
 6. ✅ Regression: dogfood 0015's pre-ADR confirm (no `floor_pass`) now fails G5 by design; new confirms with substantive feedback + `floor_pass=true` pass.
+
+## Amendment: skip disposition (2026-08-22)
+
+The control UI gains an explicit **skip** choice (drawer quiet button, locale
+label `t("skip")`; `SKIP_LABELS` in `i18n.py` is the single label source). A
+skip is an **explicit non-confirm disposition**, deliberately outside
+`CONFIRM_LABELS`:
+
+- `user_confirmed` stays `false`; no `confirm-round-*.json` is written (the
+  entry is audited in `log.md` like a revise, with `- selected: <skip label>`).
+- The floor **still evaluates** the submission honestly; an empty skip yields
+  `floor_pass=false` with the ordinary floor reason. No bypass, no fabricated
+  `floor_pass=true` — a skip therefore never satisfies G5, matching
+  "preview confirmation stays unskippable" (CONTEXT.md).
+- The decision entry and transaction result carry `skipped: true` so
+  orchestrators can narrate the round as user-declined rather than revise.
+- Frontend advisory (`control.js isSkipChoice`) mirrors `SKIP_LABELS`
+  (defense-in-depth, never authoritative); `"pass"` remains a confirm label
+  and is excluded from the skip set on both sides.
+
+A skipped round ends unconfirmed; the orchestrator may start a new round or
+move on per its own stop policy.

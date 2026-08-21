@@ -23,7 +23,7 @@ else:
     import fcntl
 
 from design_playbook.mcp.preview.control import _format_feedback
-from design_playbook.mcp.preview.i18n import CONFIRM_LABELS
+from design_playbook.mcp.preview.i18n import CONFIRM_LABELS, SKIP_LABELS
 from design_playbook.mcp.preview.integrity import (
     compute_binding_digest,
     evaluate_feedback_floor,
@@ -689,6 +689,7 @@ def _result(entry: dict[str, Any], confirm_path: str) -> dict[str, Any]:
         "round": binding["round"],
         "confirm_record_path": confirm_path,
         "aborted": outcome["aborted"],
+        "skipped": bool(outcome.get("skipped")),
         "decision_id": entry["decision_id"],
     }
 
@@ -798,6 +799,11 @@ def _run_locked(
     selected = [] if aborted or rejected or not choice else [choice]
 
     confirm_labels = {label.casefold() for label in CONFIRM_LABELS}
+    skip_labels = {label.casefold() for label in SKIP_LABELS}
+    # A skip is an explicit non-confirm disposition (ADR-0008 amendment):
+    # it is never a confirm, the floor evaluates it like any other
+    # submission, and it never satisfies G5 on its own.
+    is_skip = choice.casefold() in skip_labels
     user_confirmed = (
         not aborted and not rejected and choice.casefold() in confirm_labels
     )
@@ -834,6 +840,7 @@ def _run_locked(
             "aborted": aborted,
             "rejected": rejected,
             "rejection": str(submission.get("rejection") or ""),
+            "skipped": is_skip,
         },
     }
     atomic_write(entry_path, json_text(entry))

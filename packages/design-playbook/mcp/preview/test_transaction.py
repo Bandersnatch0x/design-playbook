@@ -124,6 +124,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
                 "round": 1,
                 "confirm_record_path": str(confirm_path),
                 "aborted": False,
+                "skipped": False,
                 "decision_id": result["decision_id"],
             },
         )
@@ -134,6 +135,39 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
         self.assertEqual(confirm["selected_options"], ["确认通过"])
         self.assertIn("- selected: 确认通过", log)
         self.assertIn("- floor_pass: true", log)
+
+    def test_skip_is_explicit_non_confirm_and_never_satisfies_floor(self) -> None:
+        # ADR-0008 amendment: skip is an explicit non-confirm disposition —
+        # not a confirm, the floor evaluates honestly, no confirm record.
+        result, confirm, log = self._run_submission(
+            {"choice": "跳过", "feedback": "", "anchors": [], "aborted": False}
+        )
+
+        self.assertFalse(result["confirmed"])
+        self.assertFalse(result["floor_pass"])
+        self.assertTrue(result["skipped"])
+        self.assertEqual(result["selected_options"], ["跳过"])
+        self.assertIsNone(confirm)
+        self.assertIn("- selected: 跳过", log)
+
+    def test_bare_english_skip_label_is_also_recognised(self) -> None:
+        result, confirm, _ = self._run_submission(
+            {"choice": "skip", "feedback": "", "anchors": [], "aborted": False}
+        )
+
+        self.assertFalse(result["confirmed"])
+        self.assertTrue(result["skipped"])
+        self.assertIsNone(confirm)
+
+    def test_pass_stays_a_confirm_label_not_a_skip(self) -> None:
+        # "pass" historically confirms; it must not be reclassified as skip.
+        result, confirm, _ = self._run_submission(
+            {"choice": "pass", "feedback": "间距合理", "anchors": [], "aborted": False}
+        )
+
+        self.assertTrue(result["confirmed"])
+        self.assertFalse(result["skipped"])
+        self.assertTrue(confirm is not None and confirm["confirmed"])
 
     def test_confirm_floor_failure_records_non_authoritative_attempt(self) -> None:
         result, confirm, log = self._run_submission(
