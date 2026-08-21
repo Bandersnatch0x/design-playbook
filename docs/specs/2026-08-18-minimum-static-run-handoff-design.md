@@ -1,7 +1,12 @@
 # Minimum static run handoff reference delivery
 
 **Date:** 2026-08-18
-**Status:** Approved for implementation
+**Status:** Implemented. The reference delivery, fixture
+preflight, and `acceptance/verify_static_handoff.py` live in
+`.scratch/minimum-static-run-handoff-reference/` — deliberately outside
+version control per "Artifact layout" below — so a clean checkout carries the
+design, not the runnable acceptance. Re-run the acceptance from the reference
+set's own working copy; treat this document as the durable record.
 **Scope:** One fixed synthetic reference delivery, not a product interface
 
 ## Summary
