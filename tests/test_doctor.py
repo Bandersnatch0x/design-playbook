@@ -66,6 +66,12 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("Codex manifest", result.stdout)
         self.assertIn(".codex-plugin/plugin.json version matches", result.stdout)
         self.assertIn(".agents marketplace plugins[0].source.path exists", result.stdout)
+        # Issue 64: doctor must emit the declarative host-vision reminder
+        # (self-declared capability + text-only fallback path) without any
+        # auto-detection.
+        self.assertIn("host vision capability (self-declared)", result.stdout)
+        self.assertIn("doctor does not auto-detect it", result.stdout)
+        self.assertIn("reference-intake falls back to", result.stdout)
 
     def test_check_codex_manifest_fails_on_version_drift(self) -> None:
         """Issue 07 / H5: ``check_codex_manifest`` must surface Claude vs
@@ -114,6 +120,29 @@ class DoctorTests(unittest.TestCase):
             drift_hits,
             f"expected codex version drift failure, got: {captured}",
         )
+
+    def test_check_host_vision_is_advisory_only(self) -> None:
+        """Issue 64: ``check_host_vision`` is a fixed info-level reminder.
+        It must emit the self-declaration + fallback wording and must not
+        record any failure or warning, so it cannot influence the doctor
+        verdict or exit code. It also performs no detection: the function
+        reads no files, calls no model, and takes no arguments.
+        """
+        doctor = _load_doctor_module()
+        orig_failures = doctor.failures[:]
+        orig_warnings = doctor.warnings[:]
+        doctor.failures = []
+        doctor.warnings = []
+        try:
+            doctor.check_host_vision()
+            captured_failures = list(doctor.failures)
+            captured_warnings = list(doctor.warnings)
+        finally:
+            doctor.failures = orig_failures
+            doctor.warnings = orig_warnings
+
+        self.assertEqual(captured_failures, [])
+        self.assertEqual(captured_warnings, [])
 
     def test_check_release_group_fails_on_dependency_drift(self) -> None:
         doctor = _load_doctor_module()

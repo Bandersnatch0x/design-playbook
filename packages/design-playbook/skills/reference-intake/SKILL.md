@@ -60,9 +60,11 @@ provider output write `spec.md`, the decision report, Fill source, or a verdict.
 
 ### 2. Separate observed from inferred
 
-Read the sources. Fill **every required heading** from [`references/contract-template.md`](references/contract-template.md) (SSOT for section names and bullet prompts). Do not invent alternate headings.
+Read the text accompanying each source — user-provided notes, URL page text, file facts; **never the image bytes** (image sources were registered in step 1, not read). Fill **every required heading** from [`references/contract-template.md`](references/contract-template.md) (SSOT for section names and bullet prompts). Do not invent alternate headings.
 
 The host model may have no vision (text-only input): image sources are registered by **preserved locator and metadata only** (`locator`, `sha256`, `captured_at` in `manifest.json`) — reading the image is never a required intake action. Materialize an ephemeral image with the helper first and never record its host temporary path. The observed/inferred split then rides the text the session can actually cite (user-provided notes, URL page text, file facts); visual points nobody can verify stay `inferred` or move to Unresolved questions. A no-vision host runs this skill end to end without degrading the protocol.
+
+**Mandatory no-vision fallback:** when the host has no vision and the user supplied **only screenshots without accompanying text**, do not stop after stating the limitation — **first ask the user for a short written description** (what each screenshot shows, and which points to keep or change), then continue intake with that description as citable observed text. Ask once; it is a required step, not an optional courtesy. When the user already supplied text alongside the screenshots, do not ask. A vision-capable host may inspect the image directly and never triggers this ask.
 
 Mark every claim as **observed** or **inferred**. Unlabeled claims are invalid; rewrite them before emit.
 

@@ -12,6 +12,8 @@ Emit as `.scratch/<run>/reference/contract.md`. Headings are required.
 
 - ...
 
+No-vision filling rule: observed rows ride **only text the session can cite** — user-provided notes (including a requested written description of a screenshot), URL page text, file facts. A host without vision never derives observed claims from image bytes; visual points nobody can verify move to **Inferred (labeled)** or **Unresolved questions**.
+
 ## Inferred (labeled)
 
 - ... | confidence: high|medium|low | why:
@@ -41,6 +43,8 @@ Emit as `.scratch/<run>/reference/contract.md`. Headings are required.
 - Scene class hints:
 - Region weight / hierarchy:
 - Explicit exclusions:
+
+No-vision filling rule: fill each cue only from cited text (user notes describing the reference, URL page text); leave an item blank-and-noted or move it to **Inferred (labeled)** / **Unresolved questions** when nobody can verify it. Never invent cues from image bytes.
 
 ## License / brand risks
 
