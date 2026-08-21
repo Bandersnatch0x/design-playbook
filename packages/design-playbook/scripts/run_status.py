@@ -482,10 +482,13 @@ def render(run_root: Path, *, as_json: bool) -> int:
     if vnext.six_block:
         note = " with invalidated evidence set" if vnext.invalidated else ""
         print(f"point-back: six-block vNext report{note}")
-    if payload["audited"] is False:
-        print("audit: not audited (skeleton point-back)")
-    elif _audit_disposition(facts.pointback_text) == "ambiguous":
+    # Ambiguous markers also project audited=False; check the disposition
+    # first or the skeleton line masks the marker damage (the elif used to be
+    # unreachable for exactly this reason).
+    if audit_disposition == "ambiguous":
         print("audit: invalid marker (duplicate or malformed audited line)")
+    elif payload["audited"] is False:
+        print("audit: not audited (skeleton point-back)")
     repair = vnext.repair
     if repair is not None and not repair.empty:
         faces = [f"{repair.rounds} round(s)"] if repair.rounds else []

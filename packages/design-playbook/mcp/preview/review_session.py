@@ -637,8 +637,9 @@ BRIDGE_SCRIPT = r"""<script>
     if (!el || el === document.body || el === document.documentElement) return;
     e.preventDefault();
     e.stopPropagation();
-    var prev = document.querySelector(".dpb-pin-target");
-    if (prev && prev !== el) prev.classList.remove("dpb-pin-target");
+    // highlight reconciliation is syncAnchors' job — the parent echoes the
+    // full list back after recording the anchor, so every pinned element
+    // stays highlighted (not just the latest click).
     el.classList.add("dpb-pin-target");
     var selector = cssPath(el);
     if (!selector) return;
@@ -684,6 +685,25 @@ BRIDGE_SCRIPT = r"""<script>
   }
   function syncAnchors(list) {
     clearBadges();
+    // #57: the parent's list is the single owner of the cross-origin
+    // highlight too — removals and undo/redo must drop the teal outline
+    // from elements whose anchor is gone (el is null cross-origin, so the
+    // parent cannot clear them itself) and restore it for kept anchors,
+    // mirroring the same-origin behavior.
+    var keepEls = [];
+    list.forEach(function (item) {
+      var keepEl = findEl(item.selector);
+      if (keepEl) keepEls.push(keepEl);
+    });
+    var stale = document.querySelectorAll(".dpb-pin-target");
+    for (var si = 0; si < stale.length; si++) {
+      if (keepEls.indexOf(stale[si]) < 0) {
+        stale[si].classList.remove("dpb-pin-target");
+      }
+    }
+    keepEls.forEach(function (keepEl) {
+      keepEl.classList.add("dpb-pin-target");
+    });
     var body = document.body || document.documentElement;
     list.forEach(function (item) {
       var el = findEl(item.selector);
@@ -734,6 +754,19 @@ BRIDGE_SCRIPT = r"""<script>
     if (data.dpbPinFlash) {
       var flashTarget = findEl(String(data.dpbPinFlash.selector || ""));
       if (flashTarget) flashEl(flashTarget);
+      return;
+    }
+    if (data.dpbPinNote) {
+      // #57: one badge note updated in place — per-keystroke comment edits
+      // must not clear and rebuild the whole badge set.
+      var noteSel = String(data.dpbPinNote.selector || "");
+      var pair = badgeMap[noteSel];
+      if (pair) {
+        var noteText = String(data.dpbPinNote.comment || "");
+        pair.note.textContent = noteText;
+        pair.note.style.display = noteText ? "block" : "none";
+        placeBadge({ selector: noteSel });
+      }
       return;
     }
     if (Array.isArray(data.dpbPinAnchors)) {

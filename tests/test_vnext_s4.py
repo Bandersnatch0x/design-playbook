@@ -457,6 +457,7 @@ class FixtureWalkthroughTests(unittest.TestCase):
                   if (run_dir / "shaping").is_dir() else []),
             ],
             capture_output=True, text=True, check=False,
+            encoding="utf-8", errors="replace",
         )
 
     def _copy(self, example: str, tmp: str) -> Path:

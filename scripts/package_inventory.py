@@ -38,10 +38,16 @@ def _common(root: Path, version: Any) -> dict[str, Any]:
         if commands_dir.is_dir() else [],
         # Issue #71: the shipped scripts are a public surface (package.json
         # files[] ships scripts/); the precise inventory fails closed on a
-        # dropped module (e.g. audit_preferences, ADR-0033).
+        # dropped module (e.g. audit_preferences, ADR-0033). Underscore-
+        # prefixed helpers and test_ modules ship as files but are not
+        # public surface — a dev-only script dropped under scripts/ must
+        # not silently become mandatory release inventory (this list gates
+        # "dropped", never "added").
         "scripts": sorted(
             path.stem for path in scripts_dir.glob("*.py")
             if path.stem != "__init__"
+            and not path.stem.startswith("_")
+            and not path.stem.startswith("test_")
         ) if scripts_dir.is_dir() else [],
     }
 

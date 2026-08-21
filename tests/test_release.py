@@ -36,6 +36,7 @@ CURRENT_NOTES_REL = f"docs/releases/{CURRENT_TAG}.md"
 def _run(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [*args], cwd=cwd, capture_output=True, text=True, check=False,
+        encoding="utf-8", errors="replace",
     )
 
 

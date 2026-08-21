@@ -40,6 +40,8 @@ class DoctorTests(unittest.TestCase):
             cwd=ROOT,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -251,6 +253,8 @@ class PackagedDoctorAuditPreferencesTests(unittest.TestCase):
             cwd=ROOT,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         self.assertIn(result.returncode, (0, 1), result.stdout + result.stderr)

@@ -543,5 +543,77 @@ class RunStatusFillStageTests(unittest.TestCase):
             self.assertIn("spec.md", by_key["fill"]["evidence"])
 
 
+class RunStatusAuditProjectionTests(unittest.TestCase):
+    """ADR-0033: audit marker facts project into status — a verdict the audit
+    never earned is never narrated (unaudited / ambiguous / legacy)."""
+
+    def _write_run(self, tmp: str, name: str, pointback: str) -> Path:
+        run_root = Path(tmp) / name
+        run_root.mkdir()
+        (run_root / "spec.md").write_text("# L1\n", encoding="utf-8")
+        (run_root / "point-back.md").write_text(pointback, encoding="utf-8")
+        return run_root
+
+    def test_skeleton_marker_projects_not_audited(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = self._write_run(
+                tmp, "run-skeleton", "# Report\n\naudited: false\n\nBody.\n")
+            result = _run(str(run_root), "--json")
+            self.assertEqual(result.returncode, 0,
+                             result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertIs(payload["audited"], False)
+            self.assertEqual(payload["audit_marker_state"], "unaudited")
+            self.assertIsNone(payload["verdict"])
+            self.assertIn("unaudited skeleton", payload["next"])
+
+            text = _run(str(run_root))
+            self.assertEqual(text.returncode, 0, text.stdout + text.stderr)
+            self.assertIn("audit: not audited (skeleton point-back)",
+                          text.stdout)
+            self.assertIn("unaudited skeleton", text.stdout)
+
+    def test_ambiguous_marker_is_never_narrated_as_skeleton(self) -> None:
+        # Regression: the ambiguous text branch used to sit behind
+        # `audited is False` (unreachable — ambiguous projects False), so a
+        # duplicate-marker run printed the clean-skeleton line while its
+        # `next:` hint named the marker damage.
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = self._write_run(
+                tmp, "run-ambiguous", "audited: false\n\naudited: false\n")
+            result = _run(str(run_root), "--json")
+            self.assertEqual(result.returncode, 0,
+                             result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertIs(payload["audited"], False)
+            self.assertEqual(payload["audit_marker_state"], "ambiguous")
+            self.assertIsNone(payload["verdict"])
+            self.assertIn("duplicate or malformed audited markers",
+                          payload["next"])
+
+            text = _run(str(run_root))
+            self.assertEqual(text.returncode, 0, text.stdout + text.stderr)
+            self.assertIn(
+                "audit: invalid marker (duplicate or malformed audited line)",
+                text.stdout)
+            self.assertNotIn("skeleton point-back", text.stdout)
+
+    def test_legacy_report_without_marker_retains_none(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = self._write_run(
+                tmp, "run-legacy", "## Verdict\n\nPass\n")
+            result = _run(str(run_root), "--json")
+            self.assertEqual(result.returncode, 0,
+                             result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertIsNone(payload["audited"])
+            self.assertEqual(payload["audit_marker_state"], "legacy")
+            self.assertEqual(payload["verdict"], "Pass")
+
+            text = _run(str(run_root))
+            self.assertEqual(text.returncode, 0, text.stdout + text.stderr)
+            self.assertNotIn("audit:", text.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
