@@ -15,6 +15,13 @@ Choose density (console-tight vs marketing-loose) and scene class (list / detail
 
 When a verified `.scratch/<run>/design-baseline/state.json` binds a baseline (`status: ready` from `design_baseline.verify`), read that binding path first (`baseline.path`, usually `DESIGN.md` or `.stitch/DESIGN.md`). It is the project-specific authority for atmosphere, visual roles, density, layout, motion, and component conventions. Preserve it unless the requested change explicitly revises the baseline.
 
+Collect read-only component candidates from two sources, in this order:
+
+1. observed component paths in a verified baseline's `## Component Stylings` declaration, when that declaration exists;
+2. non-duplicate paths from run-local `design-baseline/evidence.json` `components`, when that file exists.
+
+Use the second source when it is present, including waived or draft runs that never produced a `status: ready` binding. Those paths remain candidates only — they never substitute for a ready baseline or become design authority.
+
 When `.scratch/<run>/reference/contract.md` exists (ADR-0011), read its **Visual cues for ui-picker**, Keep/Change, and Do not copy / exclusions. Use them as input for density, scene, region weight, and risks — never as hex tokens or as a license to copy brand chrome.
 
 **Done when:** one scene label and one density choice are explicit; a bound baseline is cited by path + SHA-256; if a reference contract exists, the decision report's risks or exclusions surface its Do not copy / brand risks (path citation is enough).
@@ -29,12 +36,26 @@ Read [`references/template.md`](references/template.md). Assign main / side / ac
 
 Read [`references/components.md`](references/components.md). For each field/action, pick by **role** (status vs category vs confirm vs detail).
 
+For each material role, match the candidate list against source evidence and
+repository conventions, then record one of these outcomes inside the existing
+`components:` value in the decision report:
+
+- `reuse <path> (<one-line matching reason>)` when the declared component fits;
+- `extend <path> (<one-line missing-variant reason>)` when it is close but needs
+  a documented variant; or
+- `new (<one-line gap reason>)` when no trustworthy candidate exists.
+
+Include the candidate path in the value when one exists. A weak or missing
+candidate takes the explicit `new` path; do not invent a reuse claim. Do not
+edit, move, publish, extract, or commit a component during this step, and do
+not add a new top-level decision-report key or component repository.
+
 Load only if needed:
 
 - business risk / desensitize → [`references/domain.md`](references/domain.md)
 - token roles while deciding surfaces → verified `<binding.path>` first, then generic fallback [`references/design.md`](references/design.md)
 
-**Done when:** every primary datum/action has a named component role; easy-mix pairs (Badge/Tag, Dialog/Drawer, Dropdown/Menu/Command) are resolved in writing.
+**Done when:** every primary datum/action has a named component role; each material role records `reuse`, `extend`, or `new` inside `components:` with a candidate path or an explicit gap reason; easy-mix pairs (Badge/Tag, Dialog/Drawer, Dropdown/Menu/Command) are resolved in writing.
 
 ### 4. Decision report
 
@@ -46,7 +67,7 @@ scene:
 density:
 template:
 regions: …
-components: …
+components: primary-action -> reuse src/ui/Button.tsx (matching primary variant); status -> extend src/ui/Badge.tsx (needs warning state); empty-state -> new (no declared candidate)
 baseline-changes: none | <explicitly approved change>
 risks: …
 ```

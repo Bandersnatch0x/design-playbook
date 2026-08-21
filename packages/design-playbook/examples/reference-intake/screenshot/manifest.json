@@ -9,6 +9,10 @@
       "kind": "screenshot",
       "locator": "assets/ops-alert-list.png",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "image/png",
+      "storage": "copied",
+      "acquired_via": "local-file",
+      "captured_at": "2026-07-22T10:00:00+08:00",
       "note": "fixture placeholder hash; real runs must hash the file"
     }
   ]

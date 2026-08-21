@@ -41,13 +41,28 @@ List every reference source. For each source record:
 
 Write `manifest.json` under `.scratch/<run>/reference/` using the shape in [`references/contract-template.md`](references/contract-template.md). Copy durable local media into `reference/assets/` only when needed for later human review; never into the host Fill tree.
 
+For a temporary PNG, JPEG, WebP, or GIF that enters a design run, call
+[`scripts/reference_sources.py`](scripts/reference_sources.py)
+`ingest_ephemeral_image(...)`. Pass `kind: screenshot` for a captured
+interface and `kind: other` for any other raster; keep the helper's
+detected `media_type`. Cite the returned source id and run-relative
+locator. Keep `provider` as a provider label, never a path. Record host
+temporary paths nowhere in the manifest or contract. Author URLs, design
+files, and product analogies directly; field names and locator rules live
+in [`references/contract-template.md`](references/contract-template.md).
+
+Treat Figma's official MCP, a Lanhu export, an HTML export, a URL, and a local
+design file as upstream collection methods. Normalize their outputs into this
+provider-neutral source contract; do not add a vendor conversion layer or let
+provider output write `spec.md`, the decision report, Fill source, or a verdict.
+
 **Done when:** every cited source appears in `manifest.json` with kind + locator; file sources that exist on disk carry `sha256`.
 
 ### 2. Separate observed from inferred
 
 Read the sources. Fill **every required heading** from [`references/contract-template.md`](references/contract-template.md) (SSOT for section names and bullet prompts). Do not invent alternate headings.
 
-The host model may have no vision (text-only input): image sources are registered by **path and metadata only** (locator, `sha256`, `captured_at` in `manifest.json`) — reading the image is never a required intake action. The observed/inferred split then rides the text the session can actually cite (user-provided notes, URL page text, file facts); visual points nobody can verify stay `inferred` or move to Unresolved questions. A no-vision host runs this skill end to end without degrading the protocol.
+The host model may have no vision (text-only input): image sources are registered by **preserved locator and metadata only** (`locator`, `sha256`, `captured_at` in `manifest.json`) — reading the image is never a required intake action. Materialize an ephemeral image with the helper first and never record its host temporary path. The observed/inferred split then rides the text the session can actually cite (user-provided notes, URL page text, file facts); visual points nobody can verify stay `inferred` or move to Unresolved questions. A no-vision host runs this skill end to end without degrading the protocol.
 
 Mark every claim as **observed** or **inferred**. Unlabeled claims are invalid; rewrite them before emit.
 

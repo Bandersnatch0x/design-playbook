@@ -5,8 +5,8 @@ Operational route for a first-time greenfield product UI ask. Existing-product b
 ## Route
 
 1. `/design-playbook:design-io <ask>` (or host equivalent)
-2. Skip `design-baseline` (no existing product UI)
-3. Skip `reference-intake` unless materials were provided
+2. Skip `design-baseline` unless the router returned `requires_baseline` (greenfield: no existing product UI)
+3. Skip `reference-intake` unless the router returned `requires_reference_contract`
 4. `ux-spec` → six-layer `spec.md` (**pause** if L1 boundaries need a user decision)
 5. `plan.md` handoff
 6. `ui-picker` decision report (**pause** if platform/native route unclear)
