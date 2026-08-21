@@ -111,9 +111,15 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         "terminate_confirm_go",
         "abort_cancelled",  # popover dismiss a11y broadcast
         "abort_popover_aria",
-        "confirm_confirm",  # pill direct-confirm arm label (mis-tap protection)
-        "confirm_cancelled",  # 4s-timeout a11y broadcast for pill arm undo
         "quick_feedback_placeholder",
+        "pin_toggle_desc",  # #58 pill annotate-button title while pinning
+        "duplicate_anchor",  # #60 duplicate pick live announcement ({n})
+        "onboard_title",  # #59 one-time onboarding card
+        "onboard_pick",
+        "onboard_write",
+        "onboard_submit",
+        "onboard_undo",
+        "onboard_close",
     )
     # json.dumps is JS-safe for quotes/backslashes; also neutralize </script>
     # and U+2028/2029 (pre-ES2019 JS string breaks) in case translations ever
@@ -141,6 +147,7 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         t_drawer_aria=html_lib.escape(t("drawer_aria"), quote=True),
         t_collapse=html_lib.escape(t("collapse"), quote=True),
         t_pin_toggle=html_lib.escape(t("pin_toggle")),
+        t_pin_toggle_desc=html_lib.escape(t("pin_toggle_desc"), quote=True),
         t_pin_count=html_lib.escape(t("pin_count", n=0)),
         t_anchors_head=html_lib.escape(t("anchors_head")),
         t_anchors_empty=html_lib.escape(t("anchors_empty")),
@@ -160,6 +167,12 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         t_draft=html_lib.escape(t("draft")),
         t_draft_desc=html_lib.escape(t("draft_desc"), quote=True),
         t_confirm_desc=html_lib.escape(t("confirm_desc"), quote=True),
+        t_onboard_title=html_lib.escape(t("onboard_title"), quote=True),
+        t_onboard_pick=html_lib.escape(t("onboard_pick")),
+        t_onboard_write=html_lib.escape(t("onboard_write")),
+        t_onboard_submit=html_lib.escape(t("onboard_submit")),
+        t_onboard_undo=html_lib.escape(t("onboard_undo")),
+        t_onboard_close=html_lib.escape(t("onboard_close")),
     )
 
     return (
