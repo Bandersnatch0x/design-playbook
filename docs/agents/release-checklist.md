@@ -33,7 +33,7 @@ python scripts/install_smoke.py
 python scripts/install_smoke.py --output-dir .scratch/design-playbook-v0/evidence/install-smoke-vX.Y.Z
 ```
 
-Defaults come from the local package manifest and exact source inventory. The script creates a fresh `CLAUDE_CONFIG_DIR`, adds the documented HTTPS marketplace, installs at user scope, checks version/enabled state plus exact skills/commands/MCP sets, runs strict plugin validation, performs real `initialize` + `tools/list` handshakes against both installed MCP servers, installs the matching npm artifact in a clean consumer, then writes `result.json` and `result.md`. Successful runs remove the temporary install directory; failures retain it and record the path. This live network flow stays human-triggered; CI runs `tests/test_install_smoke.py` without public installs.
+Defaults come from the local package manifest and exact source inventory. The script creates a fresh `CLAUDE_CONFIG_DIR`, adds the documented HTTPS marketplace, installs at user scope, checks version/enabled state plus exact skills/commands/scripts/MCP sets, runs strict plugin validation, performs real `initialize` + `tools/list` handshakes against both installed MCP servers, installs the matching npm artifact in a clean consumer, then writes `result.json` and `result.md`. Successful runs remove the temporary install directory; failures retain it and record the path. This live network flow stays human-triggered; CI runs `tests/test_install_smoke.py` without public installs.
 
 ## Prerequisites
 

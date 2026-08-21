@@ -27,6 +27,7 @@ def _read_json(path: Path) -> dict[str, Any]:
 def _common(root: Path, version: Any) -> dict[str, Any]:
     skills_dir = root / "skills"
     commands_dir = root / "commands"
+    scripts_dir = root / "scripts"
     return {
         "version": version,
         "skills": sorted(
@@ -35,6 +36,13 @@ def _common(root: Path, version: Any) -> dict[str, Any]:
         ) if skills_dir.is_dir() else [],
         "commands": sorted(path.stem for path in commands_dir.glob("*.md"))
         if commands_dir.is_dir() else [],
+        # Issue #71: the shipped scripts are a public surface (package.json
+        # files[] ships scripts/); the precise inventory fails closed on a
+        # dropped module (e.g. audit_preferences, ADR-0033).
+        "scripts": sorted(
+            path.stem for path in scripts_dir.glob("*.py")
+            if path.stem != "__init__"
+        ) if scripts_dir.is_dir() else [],
     }
 
 
@@ -113,7 +121,7 @@ def _plugin_entrypoint(spec: dict[str, Any]) -> str:
 
 def compare(actual: dict[str, Any], expected: dict[str, Any], label: str) -> dict[str, Any]:
     """Fail closed on every normalized public inventory field."""
-    for key in ("version", "skills", "commands", "mcp_servers", "mcp_entrypoints"):
+    for key in ("version", "skills", "commands", "scripts", "mcp_servers", "mcp_entrypoints"):
         if actual.get(key) != expected.get(key):
             raise InventoryError(
                 f"{label} {key} mismatch: expected {expected.get(key)!r}, "

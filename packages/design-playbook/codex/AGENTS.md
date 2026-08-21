@@ -77,6 +77,8 @@ Conditional entry `reference-intake?` (screenshot/URL/design/product analogy, AD
 
 Mirror the orchestrator's skip narration (SKILL.md Steps preamble): when a step is skipped, output one line — step name + reason + how to enable, with the gate label when one applies, e.g. `-> preview*: adapter absent, skipped (G5 not triggered; enable via packages/design-playbook/mcp/preview/ or host MCP)`.
 
+Audit preferences (ADR-0033) apply identically on Codex. Follow `skills/design-playbook/SKILL.md` § *Audit preferences* as sole authority; this bridge adds no host-specific preference rules.
+
 ## Compose
 
 - Style DB → ui-ux-pro-max

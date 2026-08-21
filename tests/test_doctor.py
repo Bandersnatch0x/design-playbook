@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCTOR = ROOT / "scripts" / "doctor.py"
+PACKAGE_DOCTOR = ROOT / "packages" / "design-playbook" / "scripts" / "doctor.py"
 sys.path.insert(0, str(ROOT / "scripts"))
 from _checks import expected_commands  # noqa: E402
 
@@ -47,6 +48,9 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("mcp/preview/server.py", result.stdout)
         self.assertIn("gate 1 structural smoke", result.stdout)
         self.assertIn("8 skills present", result.stdout)
+        # Issue #71: the audit-preferences module is part of the shipped
+        # scripts surface; doctor's layout check must fail closed on it.
+        self.assertIn("scripts/audit_preferences.py", result.stdout)
         self.assertIn("npm release group", result.stdout)
         # Lockstep with COMMAND_INVENTORY / plugin version (was hardcoded 4 pre-0.12).
         plugin = json.loads(
@@ -209,6 +213,51 @@ class DoctorTests(unittest.TestCase):
             source_fails,
             f"expected missing source-path failure, got: {captured}",
         )
+
+
+class PackagedDoctorAuditPreferencesTests(unittest.TestCase):
+    def _run(self, repo: Path) -> dict:
+        result = subprocess.run(
+            [sys.executable, str(PACKAGE_DOCTOR), "--json", "--repo-root", str(repo)],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertIn(result.returncode, (0, 1), result.stdout + result.stderr)
+        return json.loads(result.stdout)
+
+    def test_projects_effective_preference_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            prefs = repo / ".design-playbook" / "preferences.yaml"
+            prefs.parent.mkdir()
+            prefs.write_text(
+                "craft_guard: false\nobserve: true\nasked: true\n",
+                encoding="utf-8",
+            )
+            payload = self._run(repo)
+        check = next(
+            item for item in payload["checks"]
+            if item["name"] == "audit_preferences.state")
+        self.assertTrue(check["ok"])
+        self.assertTrue(check["detail"]["asked"])
+        self.assertFalse(check["detail"]["stages"]["craft_guard"]["runs"])
+        self.assertEqual(check["detail"]["stages"]["craft_guard"]["source"], "repo")
+
+    def test_corrupt_preference_layer_degrades(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            prefs = repo / ".design-playbook" / "preferences.yaml"
+            prefs.parent.mkdir()
+            prefs.write_text("observe: [broken\n", encoding="utf-8")
+            payload = self._run(repo)
+        check = next(
+            item for item in payload["checks"]
+            if item["name"] == "audit_preferences.state")
+        self.assertFalse(check["ok"])
+        self.assertEqual(check["level"], "degraded")
+        self.assertEqual(check["detail"]["invalid_files"], ["repo"])
 
 
 if __name__ == "__main__":

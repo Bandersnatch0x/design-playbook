@@ -81,6 +81,15 @@ Strict quality mode (opt-in):
   --require-evidence  fail when no evidence/ binding is present (G6 must fire)
   --require-coverage  fail when the report lacks a Coverage statement (G11)
   --strict            shorthand for all require flags
+
+Forgery boundary (ADR-0033 D12): a skeleton point-back carrying
+``audited: false`` passes non-strict validation but is rejected by
+--strict / --require-evidence / --require-coverage with the AUDIT.unaudited
+finding; a present-but-ambiguous marker (duplicate, indented, commented,
+or malformed) is likewise rejected with AUDIT.ambiguous_marker — no new
+gate number; the marker facts come from the single audit_preferences
+module. --require-preview alone does not reject: the preview confirmation
+is a pre-audit floor and may legitimately precede the audit.
 """
 import argparse
 import sys
@@ -107,6 +116,13 @@ from design_playbook.scripts._diagnostics import (  # noqa: E402
 # below only wires artifact paths, strict-mode flags, and finding order.
 from design_playbook.scripts.g1_spec import _l6_items, check_spec  # noqa: E402
 from design_playbook.scripts.g2_g4_pointback import check_pointback  # noqa: E402
+
+# Audit-preferences forgery boundary (ADR-0033 D12, issue #67): the marker
+# facts are parsed by the single deep module; the strict-mode rejection
+# policy is wired here beside the other require-flag findings.
+from design_playbook.scripts.audit_preferences import (  # noqa: E402
+    parse_audit_marker,
+)
 from design_playbook.scripts.g5_preview import check_preview  # noqa: E402
 from design_playbook.scripts.g6_evidence import (  # noqa: E402
     check_evidence,
@@ -174,6 +190,47 @@ from design_playbook.scripts.g12_tier_boundary import (  # noqa: E402
 )
 
 
+def _audit_marker_findings(
+    pointback_text: str,
+    *,
+    require_evidence: bool,
+    require_coverage: bool,
+) -> list[Finding]:
+    """Reject unaudited or ambiguous markers when audit gates are engaged."""
+    engaged_flags = [
+        flag for flag, on in (
+            ("--require-evidence", require_evidence),
+            ("--require-coverage", require_coverage),
+        ) if on
+    ]
+    marker = parse_audit_marker(pointback_text)
+    if not engaged_flags or not marker.present or marker.audited is True:
+        return []
+    engaged = " / ".join(engaged_flags)
+    if marker.audited is False:
+        return [finding(
+            "AUDIT.unaudited",
+            f"AUDIT: point-back carries 'audited: false' (skeleton, not "
+            f"audited) while {engaged} is engaged — an unaudited skeleton "
+            "cannot satisfy audit obligations",
+            owner="point-back.md#audited",
+            expected="an audited point-back, or no require flags",
+            actual="audited: false with require flags engaged",
+            repair="Run the ui-evaluator audit and replace the skeleton, "
+                   "or drop the require flags for this unaudited run",
+        )]
+    return [finding(
+        "AUDIT.ambiguous_marker",
+        f"AUDIT: point-back has an ambiguous or malformed 'audited:' marker "
+        f"({marker.marker_count} candidate(s)) while {engaged} is engaged",
+        owner="point-back.md#audited",
+        expected="exactly one unindented 'audited: true|false' marker",
+        actual="present but ambiguous audit marker",
+        repair="Remove duplicate or malformed audited markers, then run the "
+               "ui-evaluator audit before claiming audited: true",
+    )]
+
+
 def run(
         spec_path: str,
         pb_path: str,
@@ -228,6 +285,11 @@ def run(
     errs += check_pointback(
         pointback_text, len(_l6_items(spec_text)),
         ledger_facts=facts.ledger, verdict_facts=facts.verdict,
+    )
+    errs += _audit_marker_findings(
+        pointback_text,
+        require_evidence=require_evidence,
+        require_coverage=require_coverage,
     )
     # G4 rounds (vNext S4): the two-cycle stop is machine-counted — an
     # unclosed blocking finding at rounds >= 2 must narrate escalated-stop.

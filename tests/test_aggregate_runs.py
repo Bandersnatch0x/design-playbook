@@ -49,6 +49,14 @@ def make_run(run_dir: Path, *, blocked: list[str] | None = None,
         (run_dir / "plan.md").write_text("# plan\n", encoding="utf-8")
 
 
+def make_skeleton_run(run_dir: Path) -> None:
+    """A run whose point-back is the unaudited skeleton (ADR-0033 D5)."""
+    run_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(FIXTURE_PASS / "skeleton.spec.md", run_dir / "spec.md")
+    shutil.copyfile(
+        FIXTURE_PASS / "skeleton.point-back.md", run_dir / "point-back.md")
+
+
 def build_scratch(root: Path) -> Path:
     scratch = root / ".scratch" / "aggregate-test-effort" / "dogfood"
     make_run(scratch / "2026-01-01-001-pass")                       # A: gate ok
@@ -151,6 +159,85 @@ class AggregateRunsTest(unittest.TestCase):
         payload = json.loads(proc.stdout)
         self.assertGreaterEqual(payload["runs_total"], 0)
         self.assertIn("runs", payload)
+
+
+class AggregateUnauditedTest(unittest.TestCase):
+    """Issue #68: skeleton runs surface as unaudited without polluting stats."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cwd = Path(self.tmp.name)
+        scratch = self.cwd / ".scratch" / "aggregate-test-effort" / "dogfood"
+        make_run(scratch / "2026-01-01-001-pass")
+        make_skeleton_run(scratch / "2026-01-04-004-skeleton")
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def _payload(self, *args: str) -> dict:
+        proc = run_aggregate(*args, cwd=self.cwd)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_skeleton_run_is_discovered_and_marked_unaudited(self) -> None:
+        payload = self._payload()
+        self.assertEqual(payload["runs_total"], 2)
+        by_id = {r["id"]: r for r in payload["runs"]}
+        self.assertIn("2026-01-04-004-skeleton", by_id)
+        self.assertFalse(by_id["2026-01-04-004-skeleton"]["audited"])
+        self.assertTrue(by_id["2026-01-01-001-pass"]["audited"])
+        # Per-run detail keeps the ledger rows for presentation.
+        self.assertTrue(by_id["2026-01-04-004-skeleton"]["ledger"])
+
+    def test_verdict_statistics_exclude_skeleton_runs(self) -> None:
+        payload = self._payload()
+        by_result = payload["rollup"]["by_result"]
+        self.assertNotIn("n/a", by_result)
+        self.assertEqual(payload["rollup"].get("unaudited_runs"), 1)
+
+    def test_skeleton_observed_never_becomes_repeat_blocker(self) -> None:
+        """Two skeletons share identical placeholder observed text; it must
+        not satisfy the cross-run count>=2 repeat-blocker statistic."""
+        scratch = self.cwd / ".scratch" / "aggregate-test-effort" / "dogfood"
+        make_skeleton_run(scratch / "2026-01-05-005-skeleton")
+        payload = self._payload()
+        self.assertEqual(payload["repeat_blockers"], [])
+
+    def test_skeleton_pointbacks_excluded_from_learning_candidates(self) -> None:
+        scratch = self.cwd / ".scratch" / "aggregate-test-effort" / "dogfood"
+        # Second audited run shares findings with the first, so candidates
+        # exist; the skeletons must stay out of that derivation.
+        make_run(scratch / "2026-01-02-002-pass")
+        make_skeleton_run(scratch / "2026-01-05-005-skeleton")
+        payload = self._payload()
+        view = payload["learning_candidates"]
+        all_cands = view.get("qualifying", []) + view.get("below_threshold", [])
+        self.assertTrue(all_cands, "mixed corpus should derive candidates")
+        for cand in all_cands:
+            runs = {occ["run"] for occ in cand.get("occurrences", [])}
+            self.assertNotIn("2026-01-04-004-skeleton", runs)
+            self.assertNotIn("2026-01-05-005-skeleton", runs)
+
+    def test_ambiguous_marker_is_fail_closed_out_of_statistics(self) -> None:
+        scratch = self.cwd / ".scratch" / "aggregate-test-effort" / "dogfood"
+        run_dir = scratch / "2026-01-06-006-ambiguous"
+        make_skeleton_run(run_dir)
+        pointback = run_dir / "point-back.md"
+        pointback.write_text(
+            pointback.read_text(encoding="utf-8") + "\naudited: true\n",
+            encoding="utf-8",
+        )
+        payload = self._payload()
+        by_id = {r["id"]: r for r in payload["runs"]}
+        self.assertFalse(by_id[run_dir.name]["audited"])
+        self.assertEqual(payload["rollup"]["unaudited_runs"], 2)
+        self.assertNotIn("n/a", payload["rollup"]["by_result"])
+
+    def test_markdown_view_marks_unaudited_runs(self) -> None:
+        proc = run_aggregate("--md", cwd=self.cwd)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("| run | date | effort |", proc.stdout)
+        self.assertIn("not audited", proc.stdout)
 
 
 if __name__ == "__main__":
