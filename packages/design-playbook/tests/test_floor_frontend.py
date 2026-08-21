@@ -288,9 +288,10 @@ def main():
         if not s9_ok:
             failures.append("S9: revise must be blocked until feedback or complete anchors exist")
 
-        # --- S10: pill primary direct-confirm is two-step arm→submit when ready ---
-        # 二级保护: first click arms (no submit), second click submits confirm.
-        # Guards the "null"-choice regression + accidental one-click confirm.
+        # --- S10: pill primary single-click direct confirm when ready (#60) ---
+        # The old two-step arm mechanism is gone: when substantive the pill
+        # primary submits confirm in ONE click, identical to the drawer
+        # primary. Guards the "null"-choice regression + one-click semantics.
         page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
@@ -304,33 +305,25 @@ def main():
         # Check readiness on now-visible pill
         ready = page.evaluate("() => document.getElementById('dpb-pill-ready').classList.contains('is-ready')")
         page.evaluate(CAPTURE_SUBMITTER_JS)
-        # First click: arm only
-        page.click('#dpb-open-primary')
-        page.wait_for_timeout(100)
-        armed = page.evaluate(
-            "() => document.getElementById('dpb-open-primary').classList.contains('is-armed')")
-        captured_after_arm = page.evaluate("() => window.__capturedSubmitter")
-        drawer_open_after_arm = page.evaluate(
-            "() => { const d = document.getElementById('dpb-drawer'); return !!(d && d.open); }")
-        # Second click: submit confirm
+        # Single click: submits confirm directly (no arm state anywhere)
         page.click('#dpb-open-primary')
         page.wait_for_timeout(300)
         captured = page.evaluate("() => window.__capturedSubmitter")
         drawer_open = page.evaluate(
             "() => { const d = document.getElementById('dpb-drawer'); return !!(d && d.open); }")
+        armed = page.evaluate(
+            "() => document.getElementById('dpb-open-primary').classList.contains('is-armed')")
         s10_ok = (
-            ready and armed and captured_after_arm is None
-            and not drawer_open_after_arm
-            and captured == PRIMARY_OPT and not drawer_open
+            ready and captured == PRIMARY_OPT and not drawer_open and not armed
         )
         print(
-            f"  S10 pill arm→confirm: ready={ready} armed_1st={armed} "
-            f"captured_after_arm={captured_after_arm} captured_2nd='{captured}' "
-            f"(want '{PRIMARY_OPT}') drawer_open={drawer_open} -> {'OK' if s10_ok else 'FAIL'}"
+            f"  S10 pill single-click confirm: ready={ready} "
+            f"captured='{captured}' (want '{PRIMARY_OPT}') "
+            f"drawer_open={drawer_open} armed={armed} -> {'OK' if s10_ok else 'FAIL'}"
         )
         if not s10_ok:
             failures.append(
-                "S10: pill primary must arm on 1st click and submit confirm on 2nd when ready"
+                "S10: pill primary must submit confirm on a single click when ready (no arm)"
             )
 
         # --- S11: draft button keeps notes and closes without deciding (no submit) ---
@@ -498,53 +491,43 @@ def main():
         if not s16_ok:
             failures.append("S16: clicking elsewhere in drawer must dismiss abort popover")
 
-        # --- S17: pill confirm arm undoes without submit (timeout / annotate click) ---
+        # --- S17: not-ready pill primary opens the drawer, never submits (#60) ---
+        # With no substantive feedback the pill primary stays a dialog trigger:
+        # one click opens the drawer so the user can add the missing input; no
+        # arm state and no submit in either order of events.
         page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
+        page.evaluate(CAPTURE_SUBMITTER_JS)
+        page.click('#dpb-open-primary')  # not ready -> opens drawer
+        page.wait_for_timeout(200)
+        drawer_open_first = page.evaluate(
+            "() => { const d = document.getElementById('dpb-drawer'); return !!(d && d.open); }")
+        captured_first = page.evaluate("() => window.__capturedSubmitter")
+        # close and click again: still opens drawer, still no submit
+        page.click('#dpb-close-drawer')
+        page.wait_for_timeout(200)
         page.click('#dpb-open-primary')
         page.wait_for_timeout(200)
-        page.fill('textarea[name="feedback"]', 'ready then undo arm')
-        page.wait_for_timeout(100)
-        page.click('#dpb-close-drawer')
-        page.wait_for_timeout(200)
-        page.evaluate(CAPTURE_SUBMITTER_JS)
-        page.click('#dpb-open-primary')  # arm
-        page.wait_for_timeout(100)
+        drawer_open_second = page.evaluate(
+            "() => { const d = document.getElementById('dpb-drawer'); return !!(d && d.open); }")
+        captured_second = page.evaluate("() => window.__capturedSubmitter")
         armed = page.evaluate(
             "() => document.getElementById('dpb-open-primary').classList.contains('is-armed')")
-        # Click annotate -> must undo arm, no submit
-        page.click('#dpb-open-drawer')
-        page.wait_for_timeout(150)
-        armed_after_undo = page.evaluate(
-            "() => document.getElementById('dpb-open-primary').classList.contains('is-armed')")
-        captured_undo = page.evaluate("() => window.__capturedSubmitter")
-        # Re-close, re-arm, wait past CONFIRM_ARM_MS (4000) for timeout undo
-        page.click('#dpb-close-drawer')
-        page.wait_for_timeout(200)
-        page.click('#dpb-open-primary')  # arm again
-        page.wait_for_timeout(100)
-        armed_again = page.evaluate(
-            "() => document.getElementById('dpb-open-primary').classList.contains('is-armed')")
-        page.wait_for_timeout(4100)
-        armed_after_timeout = page.evaluate(
-            "() => document.getElementById('dpb-open-primary').classList.contains('is-armed')")
-        captured_timeout = page.evaluate("() => window.__capturedSubmitter")
         stayed = page.url.startswith('file:')
         s17_ok = (
-            armed and not armed_after_undo and captured_undo is None
-            and armed_again and not armed_after_timeout
-            and captured_timeout is None and stayed
+            drawer_open_first and captured_first is None
+            and drawer_open_second and captured_second is None
+            and not armed and stayed
         )
         print(
-            f"  S17 pill arm undo: arm={armed} after_annotate={armed_after_undo} "
-            f"rearm={armed_again} after_timeout={armed_after_timeout} "
-            f"no_submit={captured_undo is None and captured_timeout is None} "
-            f"-> {'OK' if s17_ok else 'FAIL'}"
+            f"  S17 not-ready opens drawer: open1={drawer_open_first} "
+            f"open2={drawer_open_second} no_submit={captured_first is None and captured_second is None} "
+            f"armed={armed} -> {'OK' if s17_ok else 'FAIL'}"
         )
         if not s17_ok:
             failures.append(
-                "S17: pill confirm arm must undo via annotate click and 4s timeout without submit"
+                "S17: not-ready pill primary must open the drawer without submitting (no arm)"
             )
 
         # --- S18: footer decision controls expose non-empty consequence descriptions ---
@@ -681,45 +664,39 @@ def main():
                 "S23: Ctrl+Enter without substantive feedback must not submit; mark invalid"
             )
 
-        # --- S24: Esc + outside click undo pill confirm arm without submit ---
+        # --- S24: ready state — Esc / outside click never submit; click confirms (#60) ---
+        # No arm state exists anymore: with substantive feedback, Esc and
+        # outside clicks must not trigger a submit, and a subsequent single
+        # pill click still submits confirm directly (single-path sanity).
         page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
         page.goto(file_url, wait_until='domcontentloaded')
         page.wait_for_selector('#dpb-preview-bar')
         page.set_viewport_size({"width": 1100, "height": 800})
-        page.fill('#dpb-pill-feedback', 'ready for esc undo')
+        page.fill('#dpb-pill-feedback', 'ready for esc sanity')
         page.wait_for_timeout(80)
         page.evaluate(CAPTURE_SUBMITTER_JS)
-        page.click('#dpb-open-primary')  # arm
-        page.wait_for_timeout(80)
-        armed_before_esc = page.evaluate(
-            "() => document.getElementById('dpb-open-primary').classList.contains('is-armed')")
         page.keyboard.press('Escape')
         page.wait_for_timeout(80)
-        armed_after_esc = page.evaluate(
-            "() => document.getElementById('dpb-open-primary').classList.contains('is-armed')")
         captured_esc = page.evaluate("() => window.__capturedSubmitter")
-        page.click('#dpb-open-primary')  # arm again
+        page.click('#dpb-pill-feedback')  # outside the primary button
         page.wait_for_timeout(80)
-        armed_before_outside = page.evaluate(
-            "() => document.getElementById('dpb-open-primary').classList.contains('is-armed')")
-        page.click('#dpb-pill-feedback')  # outside primary → cancel arm
-        page.wait_for_timeout(80)
-        armed_after_outside = page.evaluate(
-            "() => document.getElementById('dpb-open-primary').classList.contains('is-armed')")
         captured_out = page.evaluate("() => window.__capturedSubmitter")
+        # then a single click still confirms directly
+        page.click('#dpb-open-primary')
+        page.wait_for_timeout(200)
+        captured_click = page.evaluate("() => window.__capturedSubmitter")
         s24_ok = (
-            armed_before_esc and not armed_after_esc and captured_esc is None
-            and armed_before_outside and not armed_after_outside and captured_out is None
+            captured_esc is None and captured_out is None
+            and captured_click == PRIMARY_OPT
         )
         print(
-            f"  S24 pill arm Esc/outside: esc={armed_before_esc}->{armed_after_esc} "
-            f"out={armed_before_outside}->{armed_after_outside} "
-            f"no_submit={captured_esc is None and captured_out is None} "
-            f"-> {'OK' if s24_ok else 'FAIL'}"
+            f"  S24 ready Esc/outside no-submit: esc={captured_esc!r} "
+            f"outside={captured_out!r} click='{captured_click}' "
+            f"(want '{PRIMARY_OPT}') -> {'OK' if s24_ok else 'FAIL'}"
         )
         if not s24_ok:
             failures.append(
-                "S24: Esc and outside click must undo pill confirm arm without submit"
+                "S24: Esc/outside click must never submit; single pill click confirms when ready"
             )
 
         # --- S25: abort cancel button dismisses popover without submit ---
@@ -800,6 +777,52 @@ def main():
         if not s20_ok:
             failures.append(
                 "S20: control surfaces and annotations must follow live host/system themes"
+            )
+
+        # --- S26 (#59 + C3): one-time onboarding card shows and is marked
+        # read the moment it is shown; Esc dismisses; reload stays dismissed ---
+        page.evaluate("() => { try { localStorage.clear(); } catch (e) {} }")
+        page.goto(file_url, wait_until='domcontentloaded')
+        page.wait_for_selector('#dpb-preview-bar')
+        page.wait_for_timeout(150)
+        card_visible_first = page.evaluate(
+            "() => { const c = document.getElementById('dpb-onboard'); "
+            "return !!(c && !c.hidden); }")
+        # C3: strictly one-time — remembered on show, before any dismissal
+        remembered_on_show = page.evaluate(
+            "() => localStorage.getItem('dpb.preview.onboard.v1') === '1'")
+        page.keyboard.press('Escape')
+        page.wait_for_timeout(150)
+        card_hidden_after_esc = page.evaluate(
+            "() => { const c = document.getElementById('dpb-onboard'); "
+            "return !!(c && c.hidden); }")
+        remembered = page.evaluate(
+            "() => localStorage.getItem('dpb.preview.onboard.v1') === '1'")
+        # reload without clearing storage: card must stay dismissed
+        page.goto(file_url, wait_until='domcontentloaded')
+        page.wait_for_selector('#dpb-preview-bar')
+        page.wait_for_timeout(150)
+        card_visible_reload = page.evaluate(
+            "() => { const c = document.getElementById('dpb-onboard'); "
+            "return !!(c && !c.hidden); }")
+        # card must not carry internal ADR terms
+        card_text = page.evaluate(
+            "() => (document.getElementById('dpb-onboard') || {}).textContent || ''")
+        s26_ok = (
+            card_visible_first and remembered_on_show
+            and card_hidden_after_esc and remembered
+            and not card_visible_reload and 'ADR-0008' not in card_text
+        )
+        print(
+            f"  S26 onboarding card: first={card_visible_first} "
+            f"remembered_on_show={remembered_on_show} "
+            f"esc_dismiss={card_hidden_after_esc} remembered={remembered} "
+            f"reload_shown={card_visible_reload} -> {'OK' if s26_ok else 'FAIL'}"
+        )
+        if not s26_ok:
+            failures.append(
+                "S26: onboarding card must show once (marked read on show), "
+                "dismiss via Esc, and stay dismissed"
             )
 
         browser.close()
