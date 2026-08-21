@@ -24,56 +24,74 @@
 
 <!-- drawer (expanded) -->
 <dialog class="dpb-drawer" id="dpb-drawer" aria-label="{t_drawer_aria}">
-  <div class="dpb-drawer-head">
-    <span class="dpb-head-left">
-      <span class="dpb-round">{t_round}</span>
-      <h2 class="dpb-title">{summary_safe}</h2>
-    </span>
-    <button type="button" class="dpb-icon-btn" id="dpb-close-drawer" aria-label="{t_collapse}">−</button>
-  </div>
-  <div class="dpb-drawer-body">
-    <div class="dpb-pin-row">
-      <button type="button" class="dpb-pin-toggle" id="dpb-pin-toggle" aria-pressed="false" title="{t_pin_toggle_desc}">
-        <span aria-hidden="true">🎯</span><span class="dpb-pin-label">{t_pin_toggle}</span>
-      </button>
-      <span class="dpb-pin-count" id="dpb-pin-count">{t_pin_count}</span>
-    </div>
-
-    <div>
-      <p class="dpb-subhead">{t_anchors_head}</p>
-      <div class="dpb-anchors" id="dpb-anchors" aria-live="polite"></div>
-      <p class="dpb-empty">{t_anchors_empty}</p>
-    </div>
-
-    <div class="dpb-field">
-      <span class="dpb-label-row">
-        <span class="dpb-label">{t_field_label}</span>
-        <span class="dpb-hint" id="dpb-feedback-hint" role="alert">{t_field_hint}</span>
-      </span>
-      <textarea name="feedback" rows="2"
-        placeholder="{t_field_placeholder}"
-        autocomplete="off"></textarea>
-    </div>
-  </div>
-  <div class="dpb-drawer-foot">
-    <div class="dpb-abort-wrap">
-      <button type="button" class="dpb-btn dpb-btn-danger" id="dpb-abort" title="{t_terminate_desc}" aria-description="{t_terminate_desc}" aria-haspopup="dialog" aria-expanded="false" aria-controls="dpb-abort-popover">{t_terminate}</button>
-      <div class="dpb-popover" id="dpb-abort-popover" role="dialog" aria-label="{t_abort_popover_aria}" hidden>
-        <p class="dpb-popover-msg" id="dpb-abort-popover-msg">{t_terminate_confirm}</p>
-        <div class="dpb-popover-actions">
-          <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-abort-cancel">{t_cancel}</button>
-          <button type="submit" name="choice" value="__abort__" class="dpb-btn dpb-btn-danger" id="dpb-abort-confirm">{t_terminate_confirm_go}</button>
+      <div class="dpb-drawer-head">
+        <span class="dpb-head-left">
+          <span class="dpb-head-icon-box">
+            <svg class="dpb-head-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 13.5 L5 13.5 L13 5.5 L10.5 3 L2.5 11 Z"/><path d="M9.5 4 L12 6.5"/></svg>
+          </span>
+          <h2 class="dpb-title">{t_drawer_title}</h2>
+        </span>
+        <button type="button" class="dpb-icon-btn dpb-close-btn" id="dpb-close-drawer" aria-label="{t_collapse}" title="{t_collapse}">
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
+        </button>
+      </div>
+      <div class="dpb-drawer-body">
+        <div class="dpb-pin-row">
+          <button type="button" class="dpb-pin-toggle" id="dpb-pin-toggle" aria-pressed="false" title="{t_pin_toggle_desc}">
+            <span aria-hidden="true">🎯</span><span class="dpb-pin-label">{t_pin_toggle}</span>
+          </button>
+          <span class="dpb-pin-count" id="dpb-pin-count">{t_pin_count}</span>
+        </div>
+        <div class="dpb-anchors-section">
+          <div class="dpb-section-header">
+            <span class="dpb-subhead">{t_anchors_head}</span>
+          </div>
+          <div class="dpb-anchors" id="dpb-anchors" aria-live="polite"></div>
+          <div class="dpb-empty-clean" id="dpb-empty-clean">
+            <div class="dpb-empty-icon-wrap">
+              <svg aria-hidden="true" width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="8" cy="8" r="5.5"/>
+                <line x1="8" y1="1" x2="8" y2="3.5"/>
+                <line x1="8" y1="12.5" x2="8" y2="15"/>
+                <line x1="1" y1="8" x2="3.5" y2="8"/>
+                <line x1="12.5" y1="8" x2="15" y2="8"/>
+              </svg>
+            </div>
+            <p class="dpb-empty-clean-title">{t_drawer_empty_title}</p>
+            <p class="dpb-empty-clean-text">{t_drawer_empty_desc}</p>
+          </div>
         </div>
       </div>
-    </div>
-    <span class="dpb-sr-only" id="dpb-abort-status" role="alert"></span>
-    <div class="dpb-btns">
-      <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-draft" title="{t_draft_desc}" aria-description="{t_draft_desc}">{t_draft}</button>
-      {secondary_html}
-      <button type="submit" name="choice" value="{primary_val}" class="dpb-btn dpb-btn-primary" title="{t_confirm_desc}" aria-description="{t_confirm_desc}">{primary_label}</button>
-    </div>
-  </div>
-</dialog>
+      <div class="dpb-drawer-foot">
+        <div class="dpb-field dpb-overall-feedback">
+          <div class="dpb-label-row">
+            <span class="dpb-label">{t_field_label}</span>
+            <span class="dpb-hint" id="dpb-feedback-hint" role="alert"></span>
+          </div>
+          <textarea name="feedback" rows="3"
+            id="dpb-drawer-feedback"
+            placeholder="{t_field_placeholder}"
+            autocomplete="off"></textarea>
+        </div>
+        <div class="dpb-foot-actions">
+          <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-draft" title="{t_draft_desc}" aria-description="{t_draft_desc}">{t_draft}</button>
+          {secondary_html}
+          <button type="submit" name="choice" value="{skip_val}" class="dpb-btn dpb-btn-quiet" id="dpb-skip">{t_skip}</button>
+          <button type="submit" name="choice" value="{primary_val}" class="dpb-btn dpb-btn-primary" title="{t_confirm_desc}" aria-description="{t_confirm_desc}">{primary_label}</button>
+        </div>
+        <div class="dpb-abort-wrap">
+          <button type="button" class="dpb-btn dpb-btn-danger" id="dpb-abort" title="{t_terminate_desc}" aria-description="{t_terminate_desc}" aria-haspopup="dialog" aria-expanded="false" aria-controls="dpb-abort-popover">{t_terminate}</button>
+          <div class="dpb-popover" id="dpb-abort-popover" role="dialog" aria-label="{t_abort_popover_aria}" hidden>
+            <p class="dpb-popover-msg" id="dpb-abort-popover-msg">{t_terminate_confirm}</p>
+            <div class="dpb-popover-actions">
+              <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-abort-cancel">{t_cancel}</button>
+              <button type="submit" name="choice" value="__abort__" class="dpb-btn dpb-btn-danger" id="dpb-abort-confirm">{t_terminate_confirm_go}</button>
+            </div>
+          </div>
+        </div>
+        <span class="dpb-sr-only" id="dpb-abort-status" role="alert"></span>
+      </div>
+    </dialog>
   </form>
   <!-- W4: live region must stay in the accessibility tree while the drawer
        is open (the pill is display:none then), so it lives on the bar

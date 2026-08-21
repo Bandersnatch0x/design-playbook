@@ -277,23 +277,30 @@ hidden.value = JSON.stringify(anchors.map(function (a) {
   }
 
   function positionFloat(a, idx) {
-// ponytail: orphan guard — if target element left the DOM, drop the bubble
-if (!a.el || !a.el.isConnected) { removeBubble(a.selector); return; }
-var bubble = floatMap[a.selector];
-if (!bubble) return;
-var rect = a.el.getBoundingClientRect();
-var root = ensureFloatRoot();
-var nEl = bubble.querySelector(".dpb-float-n");
-if (nEl) nEl.textContent = String(idx + 1);
-bubble.style.left = (window.scrollX + rect.right + 8) + "px";
-var top = window.scrollY + rect.top;
-// keep on screen
-var maxTop = window.scrollY + window.innerHeight - 60;
-bubble.style.top = Math.min(top, maxTop) + "px";
-// flip to left if overflows right
-if (rect.right + 260 > window.innerWidth) {
-  bubble.style.left = (window.scrollX + rect.left - bubble.offsetWidth - 8) + "px";
-}
+    if (!a.el || !a.el.isConnected) { removeBubble(a.selector); return; }
+    var bubble = floatMap[a.selector];
+    if (!bubble) return;
+    var rect = a.el.getBoundingClientRect();
+    var root = ensureFloatRoot();
+    var nEl = bubble.querySelector(".dpb-float-n");
+    if (nEl) nEl.textContent = String(idx + 1);
+
+    var isDrawerOpen = bar.classList.contains("is-open") || (drawerEl && drawerEl.open);
+    var railW = isDrawerOpen ? (drawerEl.offsetWidth || 380) : 0;
+    var availableRight = window.innerWidth - railW;
+
+    var top = window.scrollY + rect.top;
+    var maxTop = window.scrollY + window.innerHeight - 60;
+    bubble.style.top = Math.min(top, maxTop) + "px";
+
+    var bw = bubble.offsetWidth || 220;
+    if (rect.right + 8 + bw <= availableRight) {
+      bubble.style.left = (window.scrollX + rect.right + 8) + "px";
+    } else if (rect.left - 8 - bw >= 0) {
+      bubble.style.left = (window.scrollX + rect.left - bw - 8) + "px";
+    } else {
+      bubble.style.left = (window.scrollX + Math.max(12, Math.min(rect.left, availableRight - bw - 12))) + "px";
+    }
   }
 
   function ensureBubble(a, idx) {
@@ -965,26 +972,44 @@ saveDraft();
 
   // ADR-0008 advisory UX check; Python Preview integrity is authoritative.
   // (non-empty feedback OR >=1 anchor) AND all anchors complete.
+  function isSkipChoice(choice) {
+    var c = String(choice || "").trim().toLowerCase();
+    var skipZH = String((I18N && I18N.skip) || "跳过").toLowerCase();
+    return c === "skip" || c === "跳过" || c === skipZH;
+  }
+
   form.addEventListener("submit", function (e) {
-syncHidden();
-var submitter = e.submitter;
-var choice = submitter && submitter.name === "choice" ? submitter.value : "";
-if (!choice || choice === "__abort__") { clearDraft(); return; }
-if (isSubstantive()) {
-  if (field) field.removeAttribute("aria-invalid");
-  if (hint) hint.classList.remove("is-on");
-  clearDraft();  // real submit: drop the persisted draft
-  return;
-}
-e.preventDefault();
-if (!bar.classList.contains("is-open")) openDrawer();
-if (field) {
-  field.setAttribute("aria-invalid", "true");
-  setTimeout(function () { field.focus(); }, 0);
-}
-if (hint) hint.classList.add("is-on");
-// I1: do NOT force pin mode on - that was an intent guess; the user may want
-// overall feedback, not element selection.
+    syncHidden();
+    var submitter = e.submitter;
+    var choice = submitter && submitter.name === "choice" ? submitter.value : "";
+    if (!choice || choice === "__abort__") { clearDraft(); return; }
+
+    if (isSkipChoice(choice)) {
+      if (field) field.removeAttribute("aria-invalid");
+      setHintGate(false);
+      clearDraft();
+      return;
+    }
+
+    if (isSubstantive()) {
+      if (field) field.removeAttribute("aria-invalid");
+      setHintGate(false);
+      appendCommentBlock();
+      clearDraft();
+      return;
+    }
+
+    e.preventDefault();
+    if (!bar.classList.contains("is-open")) openDrawer();
+    if (field) {
+      field.setAttribute("aria-invalid", "true");
+      field.classList.remove("is-shaking");
+      void field.offsetWidth;
+      field.classList.add("is-shaking");
+      setTimeout(function () { field.focus(); }, 0);
+    }
+    setHintGate(true);
+    announce(I18N.gate_hint || "请先添加批注或填写修改意见");
   });
   if (field) {
 field.addEventListener("input", function () {
@@ -1021,6 +1046,46 @@ try { localStorage.setItem(ONBOARD_KEY, "1"); } catch (e) {}
   }
   if (onboardCloseBtn) onboardCloseBtn.addEventListener("click", dismissOnboarding);
   showOnboarding();
+
+  // ---- Zoom / Canvas Scaling System ----
+  var currentZoom = 1.0;
+  var zoomOutBtn = document.getElementById("dpb-zoom-out");
+  var zoomInBtn = document.getElementById("dpb-zoom-in");
+  var zoomResetBtn = document.getElementById("dpb-zoom-reset");
+  var zoomFitBtn = document.getElementById("dpb-zoom-fit");
+
+  function applyZoom(z) {
+    currentZoom = Math.max(0.4, Math.min(2.0, Math.round(z * 100) / 100));
+    if (zoomResetBtn) zoomResetBtn.textContent = Math.round(currentZoom * 100) + "%";
+    var frame = protoFrame();
+    var wrap = document.querySelector(".wrap");
+    if (frame) {
+      frame.style.transform = currentZoom === 1.0 ? "" : "scale(" + currentZoom + ")";
+    }
+    if (wrap) {
+      wrap.style.transform = currentZoom === 1.0 ? "" : "scale(" + currentZoom + ")";
+    }
+    repositionAll();
+  }
+
+  function fitCanvas() {
+    var isDrawerOpen = bar.classList.contains("is-open") || (drawerEl && drawerEl.open);
+    var railW = isDrawerOpen ? (drawerEl.offsetWidth || 380) : 0;
+    var availW = window.innerWidth - railW - 48;
+    var wrap = document.querySelector(".wrap");
+    var targetW = wrap ? wrap.offsetWidth : 760;
+    if (targetW > 0 && availW < targetW) {
+      applyZoom(availW / targetW);
+    } else {
+      applyZoom(1.0);
+    }
+  }
+
+  if (zoomOutBtn) zoomOutBtn.addEventListener("click", function () { applyZoom(currentZoom - 0.1); });
+  if (zoomInBtn) zoomInBtn.addEventListener("click", function () { applyZoom(currentZoom + 0.1); });
+  if (zoomResetBtn) zoomResetBtn.addEventListener("click", function () { applyZoom(1.0); });
+  if (zoomFitBtn) zoomFitBtn.addEventListener("click", fitCanvas);
+
 
   // ---- #56: keep the sandbox bridge in sync with the parent pin state ----
   // The iframe element is parsed after this inline script, so attach the load

@@ -22,6 +22,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "ready": "可确认",
         "not_ready": "写意见或批注后再确认",
         "drawer_aria": "批注与确认",
+        "drawer_title": "批注与确认",
+        "drawer_empty_title": "还没有批注",
+        "drawer_empty_desc": "开启「点选批注」后点击页面元素添加锚点，或直接在下方写整体修改意见",
         "collapse": "收起",
         "pin_toggle": "点选批注",
         "pin_toggle_desc": "开启后点击页面元素添加批注锚点；再点一次或按 Esc 退出",
@@ -68,6 +71,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "done_title": "已记录",
         "done_body": "窗口即将自动关闭。",
         "confirm": "确认通过",
+        "skip": "跳过",
         "confirm_desc": "确认本轮通过并进入实现（Fill）；需有批注或整体意见",
         "revise": "需要修改",
         "revise_desc": "提交修改意见，进入下一轮原型",
@@ -84,6 +88,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "ready": "Ready",
         "not_ready": "Add notes or pin to confirm",
         "drawer_aria": "Annotate & confirm",
+        "drawer_title": "Annotations & confirm",
+        "drawer_empty_title": "No annotations yet",
+        "drawer_empty_desc": "Turn on pin mode and click an element to anchor a note, or write overall feedback below",
         "collapse": "Collapse",
         "pin_toggle": "Pick to annotate",
         "pin_toggle_desc": "When on, click page elements to add annotation anchors; click again or press Esc to exit",
@@ -130,6 +137,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "done_title": "Recorded",
         "done_body": "This window will close shortly.",
         "confirm": "Confirm",
+        "skip": "Skip",
         "confirm_desc": "Approve this round and proceed to Fill; needs notes or annotations",
         "revise": "Needs changes",
         "revise_desc": "Submit revision notes and open the next prototype round",
@@ -169,8 +177,14 @@ def default_options() -> list[str]:
     return [t("confirm"), t("revise")]
 
 
-# Union of confirm labels across ALL locales - backend must recognise a confirm
-# regardless of which locale the UI rendered in.
+# Union of skip labels across ALL locales - a skip is an explicit
+# non-confirm disposition (ADR-0008): it never enters CONFIRM_LABELS and
+# can never satisfy the confirm floor or G5.
+SKIP_LABELS: set[str] = {
+    _STRINGS[ZH]["skip"], _STRINGS[EN]["skip"],
+    "skip",
+}
+
 CONFIRM_LABELS: set[str] = {
     _STRINGS[ZH]["confirm"], _STRINGS[EN]["confirm"],
     "confirm", "confirmed", "pass", "ok",
