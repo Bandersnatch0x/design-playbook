@@ -179,7 +179,10 @@ def load_preferences_file(path: Path) -> PreferencesFile | None:
     if len(raw) > MAX_PREFERENCES_BYTES:
         return None
     try:
-        text = raw.decode("utf-8")
+        # utf-8-sig also accepts plain utf-8: a BOM written by Windows editors
+        # (legacy notepad, PowerShell 5 redirection) must not make a valid
+        # preference file read as corrupt and silently drop the team layer.
+        text = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
         return None
     return parse_preferences_text(text)
@@ -335,14 +338,22 @@ def _ensure_local_gitignore(root: Path) -> None:
     if gitignore.is_symlink():
         raise ValueError(f"refusing write through symlinked file: {gitignore}")
     try:
-        existing = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
+        # Read as bytes: read_text() would translate CRLF to LF in memory and
+        # the write-back would flip every line ending of the whole file.
+        existing = (
+            gitignore.read_bytes().decode("utf-8")
+            if gitignore.exists() else "")
     except (OSError, UnicodeDecodeError) as exc:
         raise ValueError(f"cannot update {gitignore}: {exc}") from exc
-    if LOCAL_GITIGNORE_ENTRY in existing.splitlines():
+    # Trailing whitespace is invisible to git; tolerate it when deciding the
+    # entry is already present so we never append a duplicate line.
+    if any(line.strip() == LOCAL_GITIGNORE_ENTRY
+           for line in existing.splitlines()):
         return
-    separator = "" if not existing or existing.endswith("\n") else "\n"
+    eol = "\r\n" if "\r\n" in existing else "\n"
+    separator = "" if not existing or existing.endswith("\n") else eol
     _atomic_write_text(
-        gitignore, f"{existing}{separator}{LOCAL_GITIGNORE_ENTRY}\n")
+        gitignore, f"{existing}{separator}{LOCAL_GITIGNORE_ENTRY}{eol}")
 
 
 def write_back(
