@@ -17,6 +17,8 @@ MAIN_SKILL = PKG / "skills" / "design-playbook" / "SKILL.md"
 UI_PICKER_SKILL = PKG / "skills" / "ui-picker" / "SKILL.md"
 BASELINE_SKILL = PKG / "skills" / "design-baseline" / "SKILL.md"
 INTAKE_SKILL = PKG / "skills" / "reference-intake" / "SKILL.md"
+CODEX_AGENTS = PKG / "codex" / "AGENTS.md"
+FIRST_RUN = PKG / "skills" / "design-playbook" / "references" / "first-run.md"
 
 
 def _heading_section(text: str, heading: str) -> str:
@@ -435,6 +437,23 @@ class AdaptiveRoutingSkillContractTests(unittest.TestCase):
 
         self.assertIn("**Done when:**", section)
         self.assertIn("run_profile.py route", section)
+
+    def test_codex_agents_intake_pointer_follows_router_flag(self) -> None:
+        text = CODEX_AGENTS.read_text(encoding="utf-8")
+
+        self.assertIn("requires_reference_contract", text)
+        self.assertIn("requires_baseline", text)
+        self.assertNotIn("when reference materials are present", text)
+        baseline_at = text.index("requires_baseline")
+        intake_at = text.index("requires_reference_contract")
+        self.assertLess(baseline_at, intake_at)
+
+    def test_first_run_guide_skips_follow_router_flags(self) -> None:
+        text = FIRST_RUN.read_text(encoding="utf-8")
+
+        self.assertIn("`requires_baseline`", text)
+        self.assertIn("`requires_reference_contract`", text)
+        self.assertNotIn("unless materials were provided", text)
 
     def test_reference_intake_heading_follows_router_flag(self) -> None:
         heading = _heading_section(
