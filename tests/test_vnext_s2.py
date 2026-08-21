@@ -646,6 +646,7 @@ class FixtureWalkthroughTests(unittest.TestCase):
                 *extra,
             ],
             capture_output=True, text=True, check=False,
+            encoding="utf-8", errors="replace",
         )
 
     def test_full_p3_chain_reaches_pass_with_preview(self) -> None:
@@ -674,6 +675,7 @@ class FixtureWalkthroughTests(unittest.TestCase):
                  "--run-root", str(run),
                  "--preview-dir", str(run / "preview")],
                 capture_output=True, text=True, check=False,
+            encoding="utf-8", errors="replace",
             )
             self.assertEqual(result.returncode, 1)
             self.assertIn("G10", result.stdout)
@@ -689,7 +691,8 @@ class FixtureWalkthroughTests(unittest.TestCase):
             [sys.executable,
              str(PKG / "scripts" / "g10_design_decisions.py"),
              str(P3_RUN / "decision-report.md")],
-            capture_output=True, text=True, check=False, env=env,
+            capture_output=True, text=True, check=False,
+            encoding="utf-8", errors="replace", env=env,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("G10 OK", result.stdout)
@@ -707,6 +710,7 @@ class FixtureWalkthroughTests(unittest.TestCase):
              "--contract-run", str(P2_RUN),
              "--shaping-dir", str(P2_RUN / "shaping")],
             capture_output=True, text=True, check=False,
+            encoding="utf-8", errors="replace",
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("RUN OK", result.stdout)

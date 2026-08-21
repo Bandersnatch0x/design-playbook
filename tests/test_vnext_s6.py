@@ -60,6 +60,7 @@ def _validate(run: Path, project: Path, *extra: str) -> subprocess.CompletedProc
             *extra,
         ],
         capture_output=True, text=True, check=False,
+        encoding="utf-8", errors="replace",
     )
 
 
@@ -216,6 +217,7 @@ class DogfoodFixtureTests(unittest.TestCase):
             [sys.executable, str(PKG / "scripts" / "run_status.py"),
              str(DOG_RUN)],
             capture_output=True, text=True, check=False,
+        encoding="utf-8", errors="replace",
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         for needle in ("tier P3", "E3", "R3 x1, R4 x1", "verdict: Pass"):
@@ -229,6 +231,7 @@ class DocLinkSelfCheckTests(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "check_doc_links.py")],
             capture_output=True, text=True, check=False,
+        encoding="utf-8", errors="replace",
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("DOC LINKS OK", result.stdout)
