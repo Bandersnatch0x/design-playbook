@@ -19,8 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Install workflow contract dependency
-        run: python3 -m pip install --disable-pip-version-check pyyaml==6.0.2
+      - name: Install workflow contract and lint dependencies
+        run: |
+          RUFF_VERSION=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); from _checks import RUFF_VERSION; print(RUFF_VERSION)")
+          python3 -m pip install --disable-pip-version-check pyyaml==6.0.2 "ruff==${RUFF_VERSION}"
       - name: Validate
         run: python3 scripts/validate.py
       - name: Cross-document link self-check (vNext S6)
@@ -52,84 +54,11 @@ jobs:
       - name: Queue monitor dialog state tests
         run: node packages/design-playbook/showcase/test_queue_monitor_state.js
 
-      - name: Syntax check (all Python)
-        # py_compile is the always-on syntax gate. The MCP stdio suites now
-        # also run as required gates below (ticket 06): preview mocks its
-        # browser layer (no chromium); evidence is split into a no-chromium
-        # pure-path group (contract/path validation) and a chromium capture
-        # group (real-browser screenshots / a11y / trace). py_compile still
-        # catches import/syntax regressions on the server launchers before
-        # the heavier stdio runs kick in.
-        run: |
-          python3 -m py_compile \
-            packages/design-playbook/mcp/preview/server.py \
-            packages/design-playbook/mcp/preview/integrity.py \
-            packages/design-playbook/mcp/preview/transaction.py \
-            packages/design-playbook/mcp/preview/versions.py \
-            packages/design-playbook/mcp/evidence/server.py \
-            packages/design-playbook/mcp/evidence/capture_contract.py \
-            packages/design-playbook/mcp/test_transport.py \
-            packages/design-playbook/mcp/preview/test_integrity.py \
-            packages/design-playbook/mcp/preview/test_server_stdio.py \
-            packages/design-playbook/mcp/preview/test_transaction.py \
-            packages/design-playbook/mcp/preview/test_versions.py \
-            packages/design-playbook/mcp/evidence/test_server_stdio.py \
-            packages/design-playbook/mcp/evidence/test_capture_contract.py \
-            packages/design-playbook-preview/server.py \
-            packages/design-playbook-evidence/server.py \
-            scripts/validate.py \
-            scripts/check_doc_links.py \
-            packages/design-playbook/scripts/rules_registry.py \
-            packages/design-playbook/scripts/rules_governance.py \
-            packages/design-playbook/scripts/learning_candidates.py \
-            scripts/release.py \
-            scripts/release_state.py \
-            scripts/release_transaction.py \
-            scripts/doctor.py \
-            scripts/install_smoke.py \
-            packages/design-playbook/skills/design-baseline/scripts/design_baseline.py \
-            tests/test_release.py \
-            tests/test_doctor.py \
-            tests/test_run_status.py \
-            tests/test_stages_registry.py \
-            tests/test_design_baseline.py \
-            tests/test_validate.py \
-            tests/test_aggregate_runs.py \
-            tests/test_normalize_lockstep.py \
-            tests/test_install_smoke.py \
-            tests/test_release_workflow.py \
-            tests/test_release_transaction.py \
-            tests/test_run_facts_snapshot.py \
-            tests/test_vnext_s1.py \
-            tests/test_vnext_s2.py \
-            tests/test_vnext_s3.py \
-            tests/test_vnext_s4.py \
-            tests/test_vnext_s5.py \
-            tests/test_vnext_s6.py \
-            packages/design-playbook/tests/test_queue_monitor.py \
-            packages/design-playbook/scripts/validate_run.py \
-            packages/design-playbook/scripts/g1_spec.py \
-            packages/design-playbook/scripts/g2_g4_pointback.py \
-            packages/design-playbook/scripts/g5_preview.py \
-            packages/design-playbook/scripts/g6_evidence.py \
-            packages/design-playbook/scripts/g6_records.py \
-            packages/design-playbook/scripts/g6_warnings.py \
-            packages/design-playbook/scripts/g9_shaping.py \
-            packages/design-playbook/scripts/g10_design_decisions.py \
-            packages/design-playbook/scripts/g11_coverage.py \
-            packages/design-playbook/scripts/g8_run_registry.py \
-            packages/design-playbook/scripts/method_semantics.py \
-            packages/design-playbook/scripts/interaction_dimensions.py \
-            packages/design-playbook/scripts/dd_entries.py \
-            packages/design-playbook/scripts/shaping_log.py \
-            packages/design-playbook/scripts/run_profile.py \
-            packages/design-playbook/scripts/repair_rounds.py \
-            packages/design-playbook/scripts/escalation_signals.py \
-            packages/design-playbook/scripts/g12_tier_boundary.py \
-            packages/design-playbook/scripts/stages.py \
-            packages/design-playbook/scripts/run_status.py \
-            packages/design-playbook/design_playbook.py \
-            packages/design-playbook/scripts/__init__.py
+      - name: Syntax check (all tracked Python)
+        # Keep syntax inventory dynamic so lower stacked PRs never reference
+        # files introduced only by a later stack layer. validate.py owns Ruff
+        # via scripts/_checks.py; this gate only guarantees compile.
+        run: python3 -m py_compile $(git ls-files '*.py')
 
       # ----------------------------------------------------------------
       # ticket 06: MCP stdio gates (required, merge-blocking).

@@ -401,6 +401,54 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("expects commands", result.stdout)
         self.assertIn("VALIDATION FAILED", result.stdout)
 
+    def test_fixture_without_git_skips_ruff(self) -> None:
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("ruff skipped", result.stdout)
+        self.assertIn("no git inventory", result.stdout)
+
+    def test_ci_installs_ruff_from_shared_pin(self) -> None:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import _checks
+        ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        self.assertEqual(_checks.RUFF_VERSION, "0.15.12")
+        self.assertIn("from _checks import RUFF_VERSION", ci)
+        self.assertIn('ruff==${RUFF_VERSION}', ci)
+        self.assertNotIn(f"ruff=={_checks.RUFF_VERSION}", ci)
+
+
+class RuffPinTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import _checks
+        cls.checks = _checks
+
+    def test_parse_ruff_version_from_cli_banners(self) -> None:
+        self.assertEqual(self.checks.parse_ruff_version("ruff 0.15.12\n"), "0.15.12")
+        self.assertEqual(
+            self.checks.parse_ruff_version(
+                "ruff 0.15.12 (66f93cf7e 2026-04-24)\n"
+            ),
+            "0.15.12",
+        )
+        self.assertIsNone(self.checks.parse_ruff_version("No module named ruff"))
+
+    def test_pin_errors_name_installed_and_required_versions(self) -> None:
+        self.assertEqual(
+            self.checks.ruff_pin_errors(None),
+            (
+                f"ruff {self.checks.RUFF_VERSION} is required; "
+                f"pip install ruff=={self.checks.RUFF_VERSION}",
+            ),
+        )
+        mismatch = self.checks.ruff_pin_errors("0.14.0")
+        self.assertEqual(len(mismatch), 1)
+        self.assertIn("ruff 0.14.0 is installed", mismatch[0])
+        self.assertIn(f"required ruff=={self.checks.RUFF_VERSION}", mismatch[0])
+        self.assertEqual(self.checks.ruff_pin_errors(self.checks.RUFF_VERSION), ())
+
 
 if __name__ == "__main__":
     unittest.main()

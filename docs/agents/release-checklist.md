@@ -8,7 +8,7 @@ Four scripts cover release health. The first three overlap on version + bundled-
 
 | Script | Purpose | Called by |
 | --- | --- | --- |
-| `scripts/validate.py` | Static structure gate (layout, bundled MCP, skill/command frontmatter, content residue, dogfood regression guards) | CI + `release.py` |
+| `scripts/validate.py` | Static structure gate (layout, bundled MCP, skill/command frontmatter, content residue, dogfood regression guards, pinned Ruff on git-tracked `*.py`) | CI + `release.py` |
 | `scripts/release.py` | Publish gate (tree clean, all main-package version sites plus DSH version/dependency lockstep, README badges + release notes, then validate + seam + adapter floor, creates tag) | human release + both publish workflows |
 | `scripts/doctor.py` | Read-only diagnostic aggregator (one-stop: layout + version three-point + bundled MCP + launchers + floor self-check) | human |
 | `scripts/install_smoke.py` | Live public-channel consumer check (isolated Claude config + exact inventory + strict validation + MCP handshakes + npm install); emits JSON/Markdown evidence | human after public main/npm update |

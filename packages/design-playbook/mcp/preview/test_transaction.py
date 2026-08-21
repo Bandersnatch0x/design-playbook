@@ -27,6 +27,17 @@ from design_playbook.mcp.preview.transaction import (  # noqa: E402
 )
 
 
+def _static_collect(choice: str, feedback: str):
+    def collect(*args: object) -> dict:
+        return {
+            "choice": choice,
+            "feedback": feedback,
+            "anchors": [],
+            "aborted": False,
+        }
+    return collect
+
+
 class PreviewDecisionTransactionTests(unittest.TestCase):
     def test_path_mode_persists_replayable_prototype_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -36,10 +47,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             run_preview_transaction(
                 path_arg=str(prototype), html=None, summary="summary", round_n=1,
                 report_ref="report.md", options=["确认通过", "需要修改"],
-                collect=lambda *args: {
-                    "choice": "确认通过", "feedback": "清晰",
-                    "anchors": [], "aborted": False,
-                },
+                collect=_static_collect("确认通过", "清晰"),
             )
 
             entry = json.loads(
@@ -243,10 +251,8 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             prototype = Path(tmp) / "round-1.html"
             prototype.write_text("reviewed", encoding="utf-8")
-            collect = lambda *args: {
-                "choice": "需要修改", "feedback": "adjust spacing",
-                "anchors": [], "aborted": False,
-            }
+            collect = _static_collect("需要修改", "adjust spacing")
+
             self._run(prototype, collect=collect)
             confirm_path = Path(tmp) / "confirm-round-1.json"
             invalid_text = "{"
@@ -633,10 +639,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
         collect=None,
     ) -> dict:
         if collect is None:
-            collect = lambda *args: {
-                "choice": "确认通过", "feedback": "清晰",
-                "anchors": [], "aborted": False,
-            }
+            collect = _static_collect("确认通过", "清晰")
         return run_preview_transaction(
             path_arg=str(prototype), html=None, summary=summary, round_n=1,
             report_ref=report_ref,

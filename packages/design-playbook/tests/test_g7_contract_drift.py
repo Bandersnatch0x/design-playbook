@@ -2,7 +2,6 @@
 """Process-boundary tests for G7 contract-drift diagnostics."""
 from __future__ import annotations
 
-import json
 import sys
 import tempfile
 import unittest

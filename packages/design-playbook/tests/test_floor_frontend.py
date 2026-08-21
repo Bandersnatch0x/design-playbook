@@ -9,7 +9,8 @@ frontend submit handler + readiness logic blocks non-substantive feedback
 adapter floor's structural semantics — no minimum length (ADR-0008). Also
 verifies the injected control follows live host/system color-scheme changes.
 """
-import sys, tempfile
+import sys
+import tempfile
 from pathlib import Path
 
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -62,7 +63,7 @@ CAPTURE_SUBMITTER_JS = """() => {
 control = preview_control._build_control(ROUND_N, SUMMARY, OPTIONS)
 
 # Prototype body with an anchorable element
-proto = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+proto = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <title>verify floor</title></head>
 <body>
 <h2 id="hdr">Run summary</h2>
@@ -345,7 +346,7 @@ def main():
         try:
             page.click('#dpb-draft', timeout=1000)
             draft_clicked = True
-        except:
+        except Exception:
             pass
         page.wait_for_timeout(200)
         drawer_open_after = page.evaluate("() => { const d = document.getElementById('dpb-drawer'); return !!(d && d.open); }")
