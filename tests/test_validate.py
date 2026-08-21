@@ -401,6 +401,22 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("expects commands", result.stdout)
         self.assertIn("VALIDATION FAILED", result.stdout)
 
+    def test_fixture_without_git_skips_ruff(self) -> None:
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("ruff skipped", result.stdout)
+        self.assertIn("no git inventory", result.stdout)
+
+    def test_ci_installs_ruff_from_shared_pin(self) -> None:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import _checks
+        ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        self.assertEqual(_checks.RUFF_VERSION, "0.15.12")
+        self.assertIn("from _checks import RUFF_VERSION", ci)
+        self.assertIn('ruff==${RUFF_VERSION}', ci)
+        self.assertNotIn(f"ruff=={_checks.RUFF_VERSION}", ci)
+
 
 if __name__ == "__main__":
     unittest.main()

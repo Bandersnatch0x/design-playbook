@@ -20,9 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install workflow contract and lint dependencies
-        run: python3 -m pip install --disable-pip-version-check pyyaml==6.0.2 ruff==0.15.12
-      - name: Ruff (all tracked Python)
-        run: python3 -m ruff check $(git ls-files '*.py')
+        run: |
+          RUFF_VERSION=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); from _checks import RUFF_VERSION; print(RUFF_VERSION)")
+          python3 -m pip install --disable-pip-version-check pyyaml==6.0.2 "ruff==${RUFF_VERSION}"
       - name: Validate
         run: python3 scripts/validate.py
       - name: Cross-document link self-check (vNext S6)
@@ -56,8 +56,8 @@ jobs:
 
       - name: Syntax check (all tracked Python)
         # Keep syntax inventory dynamic so lower stacked PRs never reference
-        # files introduced only by a later stack layer. Ruff above owns style;
-        # this gate guarantees every tracked Python file compiles.
+        # files introduced only by a later stack layer. validate.py owns Ruff
+        # via scripts/_checks.py; this gate only guarantees compile.
         run: python3 -m py_compile $(git ls-files '*.py')
 
       # ----------------------------------------------------------------

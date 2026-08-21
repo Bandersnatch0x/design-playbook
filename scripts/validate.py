@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""Static validation for the design-playbook plugin. No dependencies.
-Mirrors the static portion of docs/agents/release-checklist.md.
+"""Static validation for the design-playbook plugin.
+
+No third-party dependencies except pinned Ruff when a git inventory exists
+(issue #78). Mirrors the static portion of docs/agents/release-checklist.md.
 Exit non-zero on any failure.
 
 See docs/agents/release-checklist.md 'Validation surfaces' for the split
@@ -789,6 +791,21 @@ check_skill_prose(
 )
 check_skill_prose(run_checks, "ui-evaluator consumes craft registry audit rows", anchor="### 2. Run checks")
 check_skill_prose(verdict, "ui-evaluator pass requires all evidence rows", anchor="### 4. Verdict")
+
+print("== Ruff (tracked Python, issue #78) ==")
+tracked_python = _checks.git_tracked_python_files(ROOT)
+if tracked_python is None:
+    print("  info  ruff skipped (no git inventory in this tree)")
+else:
+    ruff_errors = _checks.ruff_check_errors(ROOT)
+    if ruff_errors:
+        for message in ruff_errors:
+            check(False, message)
+    else:
+        check(
+            True,
+            f"ruff=={_checks.RUFF_VERSION} clean ({len(tracked_python)} files)",
+        )
 
 print("== Run aggregate (v0.9) ==")
 # Smoke only runs where a dogfood corpus exists. Fixture copies (e.g.
