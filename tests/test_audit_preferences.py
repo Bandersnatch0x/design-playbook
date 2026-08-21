@@ -159,6 +159,16 @@ class FailClosedTests(unittest.TestCase):
             self.assertIsNone(audit_preferences.load_preferences_file(
                 Path(tmp) / "preferences.yaml"))
 
+    def test_utf8_bom_is_not_misread_as_corrupt(self) -> None:
+        # A BOM written by Windows editors (legacy notepad, PowerShell 5
+        # redirection) must not fail-closed away a valid preference file.
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "preferences.yaml"
+            path.write_bytes(b"\xef\xbb\xbfcraft_guard: false\n")
+            prefs = audit_preferences.load_preferences_file(path)
+        self.assertIsNotNone(prefs)
+        self.assertIs(prefs.craft_guard, False)
+
 
 class MergePrecedenceTests(unittest.TestCase):
     """Three-level merge (ADR-0033 D2/D3/D6): run declaration >
@@ -289,6 +299,7 @@ class CliTests(unittest.TestCase):
         return subprocess.run(
             [sys.executable, str(MODULE_PATH), *args],
             capture_output=True, text=True, check=False,
+            encoding="utf-8", errors="replace",
         )
 
     def test_plan_defaults_when_repo_has_no_preferences(self) -> None:
@@ -415,6 +426,7 @@ def _validate(spec: Path, pointback: Path, *extra: str):
     return subprocess.run(
         [sys.executable, str(VALIDATOR), str(spec), str(pointback), *extra],
         capture_output=True, text=True, check=False,
+            encoding="utf-8", errors="replace",
     )
 
 
@@ -422,6 +434,7 @@ def _run_status_json(run_root: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(RUN_STATUS), str(run_root), "--json"],
         capture_output=True, text=True, check=False,
+            encoding="utf-8", errors="replace",
     )
 
 
@@ -806,6 +819,33 @@ class WriteBackTests(unittest.TestCase):
             audit_preferences.write_back(repo, {"observe": False}, scope="local")
             lines = (repo / ".gitignore").read_text(encoding="utf-8").splitlines()
         self.assertEqual(lines, ["dist/", audit_preferences.LOCAL_GITIGNORE_ENTRY])
+
+    def test_local_scope_does_not_rewrite_crlf_gitignore_line_endings(self) -> None:
+        # A CRLF-committed Windows repository must see a one-line addition,
+        # not a whole-file line-ending flip in `git status`.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            (repo / ".gitignore").write_bytes(b"dist/\r\nbuild/\r\n")
+            audit_preferences.write_back(repo, {"observe": False}, scope="local")
+            raw = (repo / ".gitignore").read_bytes()
+        self.assertTrue(raw.startswith(b"dist/\r\nbuild/\r\n"))
+        self.assertIn(audit_preferences.LOCAL_GITIGNORE_ENTRY.encode("ascii"),
+                      raw)
+        self.assertNotIn(b"\r\n\n", raw)  # no mixed endings introduced
+
+    def test_local_scope_tolerates_trailing_space_on_existing_entry(self) -> None:
+        # git ignores trailing whitespace on ignore entries; the write-back
+        # must not append a duplicate line behind one.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            entry = audit_preferences.LOCAL_GITIGNORE_ENTRY + " \n"
+            (repo / ".gitignore").write_text(entry, encoding="utf-8")
+            audit_preferences.write_back(repo, {"observe": False}, scope="local")
+            lines = (repo / ".gitignore").read_text(
+                encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 1)  # no duplicate appended
+        self.assertEqual(lines[0].strip(),
+                         audit_preferences.LOCAL_GITIGNORE_ENTRY)
 
     def test_symlinked_preference_file_is_not_followed_on_write(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

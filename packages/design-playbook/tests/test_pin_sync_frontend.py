@@ -91,6 +91,8 @@ class BridgePinSyncProtocolTests(unittest.TestCase):
         self.assertIn("dpbPinLocate", js, "#57: locate channel missing")
         self.assertIn("dpbPinFlash", js, "#57: flash channel missing")
         self.assertIn("dpbPinAnchors", js, "#57: numbered-badge channel missing")
+        self.assertIn("dpbPinNote", js,
+                      "#57: incremental badge-note channel missing")
         self.assertIn("dpb-pin-badge", js,
                       "#57: badge rendering markup/class missing from bridge")
         # C2: strict shape check — array-ish objects must not slip through
@@ -292,6 +294,48 @@ class _PlaywrightPinSyncAdapter:
                                 "() => document.querySelectorAll("
                                 "'.dpb-pin-badge').length"))
 
+                        # --- #57: removing anchors must clear the in-iframe
+                        # badges AND the highlight; the empty list must reach
+                        # the bridge (not be swallowed by an early return).
+                        page.click('.dpb-anchor .rm[data-rm="0"]')
+                        page.wait_for_timeout(300)
+                        self.obs["rows_after_rm1"] = len(hidden())
+                        self.obs["badges_after_rm1"] = int(
+                            proto_doc.evaluate(
+                                "() => document.querySelectorAll("
+                                "'.dpb-pin-badge').length"))
+                        self.obs["highlight_after_rm1"] = bool(
+                            proto_doc.evaluate(
+                                "() => document.querySelector('#hdr')"
+                                ".classList.contains('dpb-pin-target')"))
+                        page.click('.dpb-anchor .rm[data-rm="0"]')
+                        page.wait_for_timeout(300)
+                        self.obs["rows_after_rm2"] = len(hidden())
+                        self.obs["badges_after_rm2"] = int(
+                            proto_doc.evaluate(
+                                "() => document.querySelectorAll("
+                                "'.dpb-pin-badge').length"))
+                        self.obs["highlight_after_rm2"] = bool(
+                            proto_doc.evaluate(
+                                "() => document.querySelector('#action')"
+                                ".classList.contains('dpb-pin-target')"))
+
+                        # --- undo both removals: anchors, badges and the
+                        # highlight come back through the full resync.
+                        page.keyboard.press("Control+z")
+                        page.wait_for_timeout(300)
+                        page.keyboard.press("Control+z")
+                        page.wait_for_timeout(400)
+                        self.obs["rows_after_undo"] = len(hidden())
+                        self.obs["badges_after_undo"] = int(
+                            proto_doc.evaluate(
+                                "() => document.querySelectorAll("
+                                "'.dpb-pin-badge').length"))
+                        self.obs["highlight_after_undo"] = bool(
+                            proto_doc.evaluate(
+                                "() => document.querySelector('#hdr')"
+                                ".classList.contains('dpb-pin-target')"))
+
                         with page.expect_response(
                             lambda response: response.url.endswith("/decide")
                             and response.request.method == "POST"
@@ -449,6 +493,48 @@ def main():
         failures.append(
             "S11: the dpbPinHello resend must restore the numbered badges "
             "(dpbPinAnchors) after the iframe lost its bridge state")
+
+    rm1_ok = (obs.get("rows_after_rm1") == 1
+              and obs.get("badges_after_rm1") == 1
+              and obs.get("highlight_after_rm1") is False)
+    print(
+        f"  S12 #57 removal clears badge + highlight: "
+        f"rows={obs.get('rows_after_rm1')} "
+        f"badges={obs.get('badges_after_rm1')} "
+        f"highlight={obs.get('highlight_after_rm1')} "
+        f"-> {'OK' if rm1_ok else 'FAIL'}")
+    if not rm1_ok:
+        failures.append(
+            "S12: removing an anchor must clear its iframe badge and its "
+            "dpb-pin-target highlight")
+
+    rm2_ok = (obs.get("rows_after_rm2") == 0
+              and obs.get("badges_after_rm2") == 0
+              and obs.get("highlight_after_rm2") is False)
+    print(
+        f"  S13 #57 remove-to-empty clears all: "
+        f"rows={obs.get('rows_after_rm2')} "
+        f"badges={obs.get('badges_after_rm2')} "
+        f"highlight={obs.get('highlight_after_rm2')} "
+        f"-> {'OK' if rm2_ok else 'FAIL'}")
+    if not rm2_ok:
+        failures.append(
+            "S13: removing the last anchor must clear every iframe badge "
+            "and highlight (empty list reaches the bridge)")
+
+    undo_ok = (obs.get("rows_after_undo") == 2
+               and obs.get("badges_after_undo") == 2
+               and obs.get("highlight_after_undo") is True)
+    print(
+        f"  S14 undo restores anchors + badges + highlight: "
+        f"rows={obs.get('rows_after_undo')} "
+        f"badges={obs.get('badges_after_undo')} "
+        f"highlight={obs.get('highlight_after_undo')} "
+        f"-> {'OK' if undo_ok else 'FAIL'}")
+    if not undo_ok:
+        failures.append(
+            "S14: undoing the removals must restore the anchors, badges and "
+            "highlights through the full resync")
 
     if adapter.error is not None:
         failures.append(f"adapter: {adapter.error}")

@@ -345,6 +345,9 @@ if (!anchors.length) {
   listEl.classList.remove("has-items");
   syncHidden();
   updateCounts();
+  // #57: the empty list must reach the iframe too — an early return here
+  // strands the badges after the user removes/undoes the last anchor.
+  syncAnchorsToFrame();
   return;
 }
 listEl.classList.add("has-items");
@@ -878,7 +881,9 @@ var i = Number(t.getAttribute("data-i"));
 anchors[i].comment = t.value;
 syncHidden();
 ensureBubble(anchors[i], i);
-syncAnchorsToFrame();  // #57: badge notes in the iframe follow comment edits
+// #57: one note updated in place — per-keystroke (IME composition) input
+// must not rebuild every badge inside the iframe.
+postToFrame({ dpbPinNote: { selector: anchors[i].selector, comment: t.value } });
 setReadiness();
 saveDraft();
   });

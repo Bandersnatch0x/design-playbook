@@ -656,6 +656,7 @@ class FixtureRunGateTests(unittest.TestCase):
                 *extra,
             ],
             capture_output=True, text=True, check=False,
+            encoding="utf-8", errors="replace",
         )
 
     def test_unsupported_profile_version_fails_production_gate(self) -> None:
@@ -683,6 +684,7 @@ class FixtureRunGateTests(unittest.TestCase):
                     "--shaping-dir", str(run / "shaping"),
                 ],
                 capture_output=True, text=True, check=False,
+            encoding="utf-8", errors="replace",
             )
             self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
             self.assertIn("run-profile invalid", result.stdout)
@@ -714,6 +716,7 @@ class FixtureRunGateTests(unittest.TestCase):
                  str(FIXTURE_RUN / "point-back.md"),
                  "--shaping-dir", str(sd)],
                 capture_output=True, text=True, check=False,
+            encoding="utf-8", errors="replace",
             )
             self.assertEqual(result.returncode, 1)
             self.assertIn("G9", result.stdout)

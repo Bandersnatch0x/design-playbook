@@ -425,7 +425,8 @@ class G8RunRegistryTests(unittest.TestCase):
                 [sys.executable,
                  str(PKG / "scripts" / "g8_run_registry.py"),
                  str(craft), "--plan", str(plan)],
-                capture_output=True, text=True, check=False, env=env,
+                capture_output=True, text=True, check=False,
+                encoding="utf-8", errors="replace", env=env,
             )
             self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
             self.assertIn("run-profile invalid", result.stdout)
@@ -438,7 +439,8 @@ class G8RunRegistryTests(unittest.TestCase):
             [sys.executable,
              str(PKG / "scripts" / "g8_run_registry.py"),
              str(P2_RUN / "craft-guard.md")],
-            capture_output=True, text=True, check=False, env=env,
+            capture_output=True, text=True, check=False,
+                encoding="utf-8", errors="replace", env=env,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("G8 OK", result.stdout)
@@ -478,6 +480,7 @@ class FixtureWalkthroughTests(unittest.TestCase):
                 *extra,
             ],
             capture_output=True, text=True, check=False,
+                encoding="utf-8", errors="replace",
         )
 
     def test_full_chain_still_reaches_pass(self) -> None:

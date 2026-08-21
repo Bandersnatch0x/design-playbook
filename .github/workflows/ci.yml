@@ -154,6 +154,15 @@ jobs:
             | tee /tmp/frontend-floor.log
           grep -Fx "FRONTEND FLOOR TEST PASSED" /tmp/frontend-floor.log
 
+      - name: Pin-to-annotate sync e2e (require chromium)
+        # #56/#57/#58: parent<->bridge state sync on the real sandbox path —
+        # pin state, badges, locate, removal/undo reconciliation.
+        if: steps.pw_install.outcome == 'success'
+        run: |
+          python3 packages/design-playbook/tests/test_pin_sync_frontend.py \
+            | tee /tmp/pin-sync.log
+          grep -Fx "PIN SYNC E2E TEST PASSED" /tmp/pin-sync.log
+
       - name: Queue monitor dialog timer races (require chromium)
         if: steps.pw_install.outcome == 'success'
         run: |
