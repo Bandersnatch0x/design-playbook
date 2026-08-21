@@ -821,6 +821,10 @@ def _build_parent_page(prototype_html: str, control_html: str) -> str:
         "html,body{margin:0;padding:0;height:100%;background:#0f1218;}"
         ".dpb-proto-frame{position:fixed;inset:0;width:100%;height:100%;"
         "border:0;background:#ffffff;}"
+        # Third state: while the drawer is open the 48px topbar (part of the
+        # injected control html) owns the strip across the top; the prototype
+        # frame dodges it so nothing clickable hides underneath (fixes #04).
+        "body.dpb-workspace .dpb-proto-frame{top:48px;height:calc(100% - 48px);}"
         "</style></head><body>"
         + control_html
         + '<iframe class="dpb-proto-frame" sandbox="allow-scripts" srcdoc="'

@@ -800,9 +800,9 @@ def _run_locked(
 
     confirm_labels = {label.casefold() for label in CONFIRM_LABELS}
     skip_labels = {label.casefold() for label in SKIP_LABELS}
-    # A skip is an explicit non-confirm disposition (ADR-0008 amendment):
-    # it is never a confirm, the floor evaluates it like any other
-    # submission, and it never satisfies G5 on its own.
+    # A skip is an explicit exempt pass (ADR-0008 amendment): never a
+    # confirm, the floor is not evaluated against it, and it never
+    # satisfies G5 on its own - no confirm record is written.
     is_skip = choice.casefold() in skip_labels
     user_confirmed = (
         not aborted and not rejected and choice.casefold() in confirm_labels
@@ -810,6 +810,9 @@ def _run_locked(
     if rejected:
         floor_pass = False
         floor_failure = str(submission.get("floor_failure") or "")
+    elif is_skip:
+        floor_pass = True
+        floor_failure = ""
     else:
         floor = evaluate_feedback_floor(raw_feedback, anchors)
         floor_pass, floor_failure = floor.passed, floor.reason

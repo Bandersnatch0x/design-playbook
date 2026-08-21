@@ -416,7 +416,8 @@ def main():
             "S4: element picking must continue while the drawer is collapsed")
 
     scrim_ok = obs.get("scrim_bg") in (
-        "rgba(15, 23, 42, 0.04)", "rgba(15,23,42,0.04)")
+        "rgba(15, 23, 42, 0.04)", "rgba(15,23,42,0.04)",   # dark glass-track
+        "rgba(17, 24, 39, 0.04)", "rgba(17,24,39,0.04)")  # light glass-track
     print(
         f"  S5 #58 scrim near-transparent while picking: "
         f"bg={obs.get('scrim_bg')!r} -> {'OK' if scrim_ok else 'FAIL'}")

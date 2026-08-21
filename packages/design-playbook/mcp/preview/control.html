@@ -13,7 +13,9 @@
   <input type="text" class="dpb-pill-feedback" id="dpb-pill-feedback"
     autocomplete="off" placeholder="{t_quick_feedback_placeholder}"
     aria-label="{t_quick_feedback_placeholder}" />
+  <span class="dpb-pill-divider" aria-hidden="true"></span>
   <span class="dpb-pill-actions">
+    <button type="submit" name="choice" value="{skip_val}" class="dpb-btn-pill-skip" id="dpb-pill-skip" title="{t_skip_desc}" aria-description="{t_skip_desc}">{t_skip}</button>
     {pill_secondary_html}
     <button type="button" class="dpb-btn-ghost" id="dpb-open-drawer" aria-haspopup="dialog">
       {t_annotate}<span class="dpb-badge-dot" id="dpb-pill-count">0</span>
@@ -30,18 +32,13 @@
             <svg class="dpb-head-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 13.5 L5 13.5 L13 5.5 L10.5 3 L2.5 11 Z"/><path d="M9.5 4 L12 6.5"/></svg>
           </span>
           <h2 class="dpb-title">{t_drawer_title}</h2>
+          <span class="dpb-drawer-count" id="dpb-drawer-count">0</span>
         </span>
         <button type="button" class="dpb-icon-btn dpb-close-btn" id="dpb-close-drawer" aria-label="{t_collapse}" title="{t_collapse}">
           <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
         </button>
       </div>
       <div class="dpb-drawer-body">
-        <div class="dpb-pin-row">
-          <button type="button" class="dpb-pin-toggle" id="dpb-pin-toggle" aria-pressed="false" title="{t_pin_toggle_desc}">
-            <span aria-hidden="true">🎯</span><span class="dpb-pin-label">{t_pin_toggle}</span>
-          </button>
-          <span class="dpb-pin-count" id="dpb-pin-count">{t_pin_count}</span>
-        </div>
         <div class="dpb-anchors-section">
           <div class="dpb-section-header">
             <span class="dpb-subhead">{t_anchors_head}</span>
@@ -76,7 +73,8 @@
         <div class="dpb-foot-actions">
           <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-draft" title="{t_draft_desc}" aria-description="{t_draft_desc}">{t_draft}</button>
           {secondary_html}
-          <button type="submit" name="choice" value="{skip_val}" class="dpb-btn dpb-btn-quiet" id="dpb-skip">{t_skip}</button>
+          <button type="submit" name="choice" value="{skip_val}" class="dpb-btn dpb-hidden" id="dpb-skip">{t_skip}</button>
+          <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-cancel">{t_cancel}</button>
           <button type="submit" name="choice" value="{primary_val}" class="dpb-btn dpb-btn-primary" title="{t_confirm_desc}" aria-description="{t_confirm_desc}">{primary_label}</button>
         </div>
         <div class="dpb-abort-wrap">
@@ -93,6 +91,28 @@
       </div>
     </dialog>
   </form>
+
+  <!-- 3. 第三态：48px 顶部工具条（点选/缩放控制） -->
+  <div class="dpb-topbar" id="dpb-topbar" hidden>
+    <div class="dpb-topbar-left">
+      <span class="dpb-topbar-info">
+        <span class="dpb-round">{t_round}</span>
+        <span class="dpb-topbar-title" title="{summary_safe}">{summary_safe}</span>
+      </span>
+      <span class="dpb-topbar-divider" aria-hidden="true"></span>
+      <span class="dpb-mode-seg" role="group">
+        <button type="button" class="dpb-pin-toggle" id="dpb-pin-toggle" aria-pressed="false" title="{t_pin_toggle_desc}"><span class="dpb-pin-label">{t_pin_toggle}</span></button>
+      </span>
+      <span class="dpb-pin-count" id="dpb-pin-count">{t_pin_count}</span>
+      <span class="dpb-topbar-divider" aria-hidden="true"></span>
+      <span class="dpb-zoom-seg" role="group">
+        <button type="button" class="dpb-zoom-btn" id="dpb-zoom-out" title="缩小">−</button>
+        <button type="button" class="dpb-zoom-label" id="dpb-zoom-reset" title="100%">100%</button>
+        <button type="button" class="dpb-zoom-btn" id="dpb-zoom-in" title="放大">+</button>
+        <button type="button" class="dpb-zoom-btn dpb-zoom-fit" id="dpb-zoom-fit" title="{t_zoom_fit}">{t_zoom_fit}</button>
+      </span>
+    </div>
+  </div>
   <!-- W4: live region must stay in the accessibility tree while the drawer
        is open (the pill is display:none then), so it lives on the bar
        itself, outside the pill. -->

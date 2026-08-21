@@ -66,10 +66,11 @@ skip is an **explicit non-confirm disposition**, deliberately outside
 
 - `user_confirmed` stays `false`; no `confirm-round-*.json` is written (the
   entry is audited in `log.md` like a revise, with `- selected: <skip label>`).
-- The floor **still evaluates** the submission honestly; an empty skip yields
-  `floor_pass=false` with the ordinary floor reason. No bypass, no fabricated
-  `floor_pass=true` — a skip therefore never satisfies G5, matching
-  "preview confirmation stays unskippable" (CONTEXT.md).
+- The floor is **not evaluated** against a skip (`floor_pass=true`,
+  `floor_failure=""`): an exempt pass is not a floor verdict on feedback.
+  Because `user_confirmed` stays `false` and no confirm record is written,
+  a skip never satisfies G5 — matching "preview confirmation stays
+  unskippable" (CONTEXT.md): you cannot skip **to** a confirmation.
 - The decision entry and transaction result carry `skipped: true` so
   orchestrators can narrate the round as user-declined rather than revise.
 - Frontend advisory (`control.js isSkipChoice`) mirrors `SKIP_LABELS`

@@ -47,6 +47,7 @@
   var hidden = document.getElementById("dpb-anchors-json");
   var openBtn = document.getElementById("dpb-open-drawer");
   var closeBtn = document.getElementById("dpb-close-drawer");
+  var topbarEl = document.getElementById("dpb-topbar");
   var pinCountEl = document.getElementById("dpb-pin-count");
   var pillCountEl = document.getElementById("dpb-pill-count");
   var drawerEl = document.getElementById("dpb-drawer");
@@ -495,6 +496,10 @@ if (drawerEl && typeof drawerEl.show === "function") {
   try { if (!drawerEl.open) drawerEl.show(); } catch (e) { /* fall through to is-open */ }
 }
 bar.classList.add("is-open");
+// Third state: the 48px topbar hosts pin mode + zoom while the drawer is
+// open; the workspace shifts down so nothing hides under it.
+if (topbarEl) topbarEl.hidden = false;
+document.body.classList.add("dpb-workspace");
 setTimeout(function () { if (closeBtn) closeBtn.focus(); }, 0);
   }
   function closeDrawer() {
@@ -504,6 +509,8 @@ setTimeout(function () { if (closeBtn) closeBtn.focus(); }, 0);
 bar.classList.remove("is-open");
 hideAbortPopover();  // Scheme A′: dismiss abort popover when drawer closes
 if (drawerEl && drawerEl.open && typeof drawerEl.close === "function") drawerEl.close();
+if (topbarEl) topbarEl.hidden = true;
+document.body.classList.remove("dpb-workspace");
 if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
   }
 
@@ -659,9 +666,9 @@ abortBtn.addEventListener("click", function (e) {
   if (abortCancel) {
 abortCancel.addEventListener("click", function () { hideAbortPopover(true); });
   }
-  // Click elsewhere in the drawer dismisses the abort popover (not the confirm
-  // submit control itself).
-  if (drawerEl) drawerEl.addEventListener("click", function (e) {
+  // Click elsewhere in the review chrome (drawer or topbar) dismisses the
+  // abort popover (not the abort wrap itself).
+  bar.addEventListener("click", function (e) {
 if (!abortPopoverOpen()) return;
 if (e.target.closest && e.target.closest(".dpb-abort-wrap")) return;
 hideAbortPopover(true);
@@ -978,6 +985,14 @@ saveDraft();
     return c === "skip" || c === "跳过" || c === skipZH;
   }
 
+  // ADR-0008 advisory gate hint (Scheme A′): show/clear the not-ready hint.
+  // Mirrors the pre-overhaul classList toggle; the span is role=alert and
+  // announce() carries the message for screen readers.
+  function setHintGate(on) {
+    if (!hint) return;
+    hint.classList.toggle("is-on", !!on);
+  }
+
   form.addEventListener("submit", function (e) {
     syncHidden();
     var submitter = e.submitter;
@@ -994,7 +1009,9 @@ saveDraft();
     if (isSubstantive()) {
       if (field) field.removeAttribute("aria-invalid");
       setHintGate(false);
-      appendCommentBlock();
+      // Anchor comments are folded into the feedback block by the Python
+      // adapter (_format_feedback) at collect time - the client never
+      // rewrites the payload (ADR-0013 authority stays server-side).
       clearDraft();
       return;
     }
