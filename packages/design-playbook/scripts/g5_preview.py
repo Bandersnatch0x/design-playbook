@@ -7,7 +7,6 @@ this module owns G5 diagnostics, never integrity rules.
 """
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from design_playbook.scripts._diagnostics import Finding, finding

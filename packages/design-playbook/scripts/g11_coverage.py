@@ -289,7 +289,7 @@ def check_sampling_matrix(
             "G11.matrix_gap",
             f"G11 coverage: sampling-matrix gap — {cell[0]}/{cell[1]} has "
             "no evidence and is not in the explicit unreviewed list",
-            owner=f"point-back.md#coverage",
+            owner="point-back.md#coverage",
             expected=f"sampling evidence or an unreviewed entry for "
                      f"{cell[0]}/{cell[1]}",
             actual="no matrix line",

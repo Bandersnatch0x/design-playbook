@@ -51,9 +51,9 @@ T = TypeVar("T")
 
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-from package_inventory import InventoryError
-from package_inventory import compare as _compare_inventory
-from package_inventory import from_npm, from_plugin, from_source
+from package_inventory import InventoryError  # noqa: E402
+from package_inventory import compare as _compare_inventory  # noqa: E402
+from package_inventory import from_npm, from_plugin, from_source  # noqa: E402
 
 RUNTIME_NAMES = {
     "design-playbook-preview": "preview",

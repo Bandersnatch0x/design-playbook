@@ -165,7 +165,8 @@ def _read_text(
             try:
                 return path.read_text(encoding=fallback_encoding), None
             except (OSError, UnicodeError) as fallback_exc:
-                exc = fallback_exc
+                return "", ArtifactReadFact(
+                    artifact, path, "unreadable", str(fallback_exc))
         return "", ArtifactReadFact(artifact, path, "unreadable", str(exc))
     except OSError as exc:
         return "", ArtifactReadFact(artifact, path, "unreadable", str(exc))

@@ -23,7 +23,6 @@ if str(_PKG_ROOT) not in sys.path:
 
 from design_playbook.mcp.evidence.ledger_syntax import (  # noqa: E402
     FieldOccurrence,
-    LedgerFacts,
     LedgerRow,
     parse_ledger,
 )

@@ -8,8 +8,14 @@ thresholds — change the map here, never at both call sites.
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+
+# Pinned Ruff for CI, validate.py, and release.py dry-run (issue #78).
+# Bump here only; ci.yml reads this constant instead of a second literal.
+RUFF_VERSION = "0.15.12"
 
 # Version line → exact shipped command set (ADR-0015 stable main / OPP-01).
 # main is the public install surface, so unreleased capability must never
@@ -88,6 +94,78 @@ def expected_commands(version: str) -> frozenset[str] | None:
     if key is None:
         return None
     return COMMAND_INVENTORY.get(key)
+
+
+def git_tracked_python_files(root: Path) -> tuple[str, ...] | None:
+    """Tracked ``*.py`` paths, or None when git inventory is unavailable."""
+    result = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "*.py"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    return tuple(
+        line.strip().replace("\\", "/")
+        for line in result.stdout.splitlines()
+        if line.strip()
+    )
+
+
+def parse_ruff_version(output: str) -> str | None:
+    """Parse ``ruff version`` / ``ruff --version`` banners to a semver."""
+    match = re.search(r"\bruff\s+(\d+\.\d+\.\d+)\b", output, flags=re.IGNORECASE)
+    return match.group(1) if match else None
+
+
+def ruff_pin_errors(installed: str | None) -> tuple[str, ...]:
+    """Require the installed Ruff version to equal ``RUFF_VERSION``."""
+    if installed is None:
+        return (
+            f"ruff {RUFF_VERSION} is required; pip install ruff=={RUFF_VERSION}",
+        )
+    if installed != RUFF_VERSION:
+        return (
+            f"ruff {installed} is installed; required ruff=={RUFF_VERSION}",
+        )
+    return ()
+
+
+def ruff_check_errors(root: Path) -> tuple[str, ...]:
+    """Run pinned Ruff on git-tracked Python. Empty tuple means clean.
+
+    Callers must skip when ``git_tracked_python_files`` returns None so
+    fixture copies without git (tests/test_validate.py) stay valid.
+    """
+    files = git_tracked_python_files(root)
+    if files is None:
+        return ()
+    if not files:
+        return ("ruff: git ls-files '*.py' returned no files",)
+    version_probe = subprocess.run(
+        [sys.executable, "-m", "ruff", "version"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    version_text = (version_probe.stdout or "") + (version_probe.stderr or "")
+    pin_errors = ruff_pin_errors(parse_ruff_version(version_text))
+    if pin_errors:
+        return pin_errors
+    result = subprocess.run(
+        [sys.executable, "-m", "ruff", "check", *files],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode == 0:
+        return ()
+    detail = ((result.stdout or "") + (result.stderr or "")).strip() or (
+        f"exit {result.returncode}"
+    )
+    return (f"ruff=={RUFF_VERSION} failed: {detail[:500]}",)
 
 
 def release_group_errors(

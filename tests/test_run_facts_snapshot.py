@@ -78,6 +78,19 @@ class RunFactsOptionalArtifactTests(unittest.TestCase):
             self.assertIsNone(facts.shaping_events)
             self.assertTrue(facts.shaping_error)
 
+    def test_unreadable_utf8_spec_keeps_decode_error_detail(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "spec.md").write_bytes(b"\xff\xfe")
+
+            facts = capture_run_facts(run_root=root)
+
+            errors = [error for error in facts.read_errors if error.artifact == "spec"]
+            self.assertEqual(len(errors), 1)
+            self.assertEqual(errors[0].code, "unreadable")
+            self.assertIn("utf-8", errors[0].message.lower())
+            self.assertNotEqual(errors[0].message, "invalid UTF-8")
+
 
 if __name__ == "__main__":
     unittest.main()
