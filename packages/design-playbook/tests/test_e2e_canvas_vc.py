@@ -293,6 +293,127 @@ class FrontendInteractionTests(unittest.TestCase):
             finally:
                 pw.close()
 
+    def test_draw_mode_records_stroke_anchor(self) -> None:
+        """Same-doc draw: stroke on the parent layer -> draw anchor + points."""
+        if sync_playwright is None:  # pragma: no cover
+            self.skipTest("playwright not installed")
+        with sync_playwright() as p:
+            pw = p.chromium.launch(headless=True)
+            try:
+                page = self._page(pw)
+                page.click("#dpb-open-drawer")
+                page.click("#dpb-draw-toggle")  # draw mode on (pin off)
+                self.assertTrue(
+                    page.evaluate("() => document.body.classList.contains('dpb-draw-mode')"))
+                # freehand stroke over the prototype area (clear of the
+                # onboarding card at top-left and the right drawer rail)
+                page.mouse.move(440, 320)
+                page.mouse.down()
+                page.mouse.move(560, 360, steps=3)
+                page.mouse.move(500, 420, steps=3)
+                page.mouse.move(440, 320, steps=3)
+                page.mouse.up()
+                page.wait_for_selector("#dpb-anchors .dpb-anchor")
+                anchors = page.evaluate(
+                    "() => JSON.parse(document.getElementById('dpb-anchors-json').value || '[]')")
+                self.assertEqual(len(anchors), 1)
+                self.assertEqual(anchors[0]["tag"], "draw")
+                self.assertTrue(anchors[0]["selector"].startswith("@draw-"))
+                self.assertGreaterEqual(len(anchors[0]["points"]), 4)
+                # stroke + numbered badge rendered on the parent SVG layer
+                self.assertGreaterEqual(
+                    page.locator("#dpb-draw-layer .dpb-draw-path").count(), 1)
+                self.assertGreaterEqual(
+                    page.locator("#dpb-draw-layer .dpb-draw-badge").count(), 1)
+                # comment flows through the ordinary anchor row
+                page.fill('#dpb-anchors input[data-i="0"]', "圈出标题区域")
+                anchors2 = page.evaluate(
+                    "() => JSON.parse(document.getElementById('dpb-anchors-json').value || '[]')")
+                self.assertEqual(anchors2[0]["comment"], "圈出标题区域")
+                # Esc exits draw mode; the stroke stays
+                page.keyboard.press("Escape")
+                self.assertFalse(
+                    page.evaluate("() => document.body.classList.contains('dpb-draw-mode')"))
+                self.assertGreaterEqual(
+                    page.locator("#dpb-draw-layer .dpb-draw-path").count(), 1)
+            finally:
+                pw.close()
+
+    def test_draw_mode_bridge_stroke_in_iframe(self) -> None:
+        """Sandbox path: the bridge captures the stroke, the anchor round-trips
+        through the transaction with its points."""
+        if sync_playwright is None:  # pragma: no cover
+            self.skipTest("playwright not installed")
+
+        class _DrawAdapter:
+            def __init__(self) -> None:
+                self.thread = None
+                self.error = None
+
+            def open(self, url: str) -> object:
+                def drive() -> None:
+                    try:
+                        with sync_playwright() as q:
+                            browser = q.chromium.launch(headless=True)
+                            try:
+                                page = browser.new_page()
+                                page.goto(url)
+                                page.wait_for_selector("#dpb-preview-bar .dpb-pill")
+                                page.click("#dpb-open-drawer")
+                                page.click("#dpb-draw-toggle")
+                                page.wait_for_timeout(200)
+                                # stroke over the iframe area (bridge captures);
+                                # clear of the onboarding card and drawer rail
+                                page.mouse.move(440, 320)
+                                page.mouse.down()
+                                page.mouse.move(560, 360, steps=3)
+                                page.mouse.move(500, 420, steps=3)
+                                page.mouse.move(440, 320, steps=3)
+                                page.mouse.up()
+                                page.wait_for_selector("#dpb-anchors .dpb-anchor")
+                                page.fill('#dpb-anchors input[data-i="0"]', "圈出主区域")
+                                page.fill('textarea[name="feedback"]', "整体走查通过")
+                                page.click(".dpb-drawer .dpb-btn-primary")
+                                page.wait_for_load_state("domcontentloaded")
+                            finally:
+                                browser.close()
+                    except Exception as exc:  # noqa: BLE001
+                        self.error = exc
+
+                self.thread = threading.Thread(target=drive, daemon=True)
+                self.thread.start()
+                return self
+
+            def close(self, handle: object) -> None:
+                assert handle is self
+                assert self.thread is not None
+                self.thread.join(timeout=30)
+                if self.thread.is_alive():
+                    raise AssertionError("draw adapter did not finish")
+                if self.error is not None:
+                    raise self.error
+
+        def collect(prototype: Path, summary: str, options: list[str],
+                    round_n: int) -> dict:
+            return review_session.collect_review(
+                prototype, summary, options, round_n, _DrawAdapter())
+
+        with tempfile.TemporaryDirectory() as tmp:
+            preview_dir = Path(tmp)
+            with mock.patch.object(
+                transaction, "_preview_dir_for", return_value=preview_dir
+            ):
+                decision = transaction.run_preview_transaction(
+                    path_arg=None, html=PROTO, summary=SUMMARY, round_n=ROUND_N,
+                    report_ref="r.md", options=OPTIONS, collect=collect)
+            self.assertTrue(decision["confirmed"])
+            anchor = decision["anchors"][0]
+            self.assertEqual(anchor["tag"], "draw")
+            self.assertTrue(anchor["selector"].startswith("@draw-"))
+            self.assertGreaterEqual(len(anchor["points"]), 4)
+            self.assertEqual(anchor["comment"], "圈出主区域")
+            self.assertIn("@draw-", decision["feedback"])
+
 
 if __name__ == "__main__":
     unittest.main()

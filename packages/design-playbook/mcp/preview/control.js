@@ -67,7 +67,9 @@
 
   function anchorSnapshot() {
     return JSON.stringify(anchors.map(function (a) {
-      return { selector: a.selector, label: a.label, comment: a.comment, tag: a.tag };
+      var o = { selector: a.selector, label: a.label, comment: a.comment, tag: a.tag };
+      if (a.points) o.points = a.points;
+      return o;
     }));
   }
 
@@ -87,8 +89,10 @@
     });
     anchors = (list || []).map(function (p) {
       var el = null;
-      try { if (p.selector) el = document.querySelector(p.selector); } catch (e) {}
-      return { selector: p.selector, label: p.label, comment: p.comment, tag: p.tag, el: el };
+      try { if (p.selector && String(p.selector).charAt(0) !== "@") el = document.querySelector(p.selector); } catch (e) {}
+      var a = { selector: p.selector, label: p.label, comment: p.comment, tag: p.tag, el: el };
+      if (p.points) a.points = p.points;
+      return a;
     }).filter(function (a) { return a.selector; });
     anchors.forEach(function (a) { if (a.el) a.el.classList.add("dpb-pin-target"); });
   }
@@ -143,7 +147,9 @@
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
         feedback: field ? field.value : "",
         anchors: anchors.map(function (a) {
-          return { selector: a.selector, label: a.label, comment: a.comment, tag: a.tag };
+          var o = { selector: a.selector, label: a.label, comment: a.comment, tag: a.tag };
+          if (a.points) o.points = a.points;
+          return o;
         })
       }));
     } catch (e) { /* quota / private-mode: draft is best-effort */ }
@@ -186,11 +192,20 @@
     // an answer to the bridge's dpbPinHello resend request).
     postToFrame({ dpbPinState: { on: pinOn } });
   }
+  function syncDrawToFrame() {
+    // Same ownership rule for draw mode: the bridge learns it only here.
+    postToFrame({ dpbDrawState: { on: drawOn } });
+  }
   function syncAnchorsToFrame() {
     // #57 scheme A: mirror the anchor list into the iframe as numbered
     // badges so cross-origin annotations stay visible on their elements.
+    // Draw anchors carry their stroke points so the bridge can render the
+    // freehand path in-frame (tag + points are additive for pin anchors).
     postToFrame({ dpbPinAnchors: anchors.map(function (a, i) {
-      return { selector: a.selector, n: i + 1, comment: a.comment || "" };
+      var o = { selector: a.selector, n: i + 1, comment: a.comment || "" };
+      if (a.tag) o.tag = a.tag;
+      if (a.points) o.points = a.points;
+      return o;
     }) });
   }
   var announceEl = document.getElementById("dpb-announce");
@@ -273,7 +288,9 @@ return (tag || "element") + " " + leaf;
 
   function syncHidden() {
 hidden.value = JSON.stringify(anchors.map(function (a) {
-  return { selector: a.selector, label: a.label, comment: a.comment, tag: a.tag };
+  var o = { selector: a.selector, label: a.label, comment: a.comment, tag: a.tag };
+  if (a.points) o.points = a.points;
+  return o;
 }));
   }
 
@@ -349,6 +366,7 @@ anchors.forEach(function (a) { liveSelectors[a.selector] = true; });
 Object.keys(floatMap).forEach(function (sel) {
   if (!liveSelectors[sel]) removeBubble(sel);
 });
+renderDrawStrokes();
 if (!anchors.length) {
   listEl.classList.remove("has-items");
   syncHidden();
@@ -467,21 +485,166 @@ if (hoverEl) {
 
   function setPin(on) {
 pinOn = !!on;
+if (pinOn && drawOn) setDraw(false);  // pick and draw are exclusive modes
 document.body.classList.toggle("dpb-pin-mode", pinOn);
 if (pinBtn) {
   pinBtn.classList.toggle("is-on", pinOn);
   pinBtn.setAttribute("aria-pressed", pinOn ? "true" : "false");
 }
 if (pinLabel) pinLabel.textContent = pinOn ? (I18N.pin_on || "") : (I18N.pin_off || "");
-// #58: when the drawer is collapsed while pin stays on, the pill annotate
-// button carries the pin indicator and is the one-click path back to the list.
+// #58: when the drawer is collapsed while pin/draw stays on, the pill annotate
+// button carries the active indicator and is the one-click path back to the list.
 if (openBtn) {
   openBtn.classList.toggle("is-pinning", pinOn);
-  openBtn.setAttribute("title", pinOn ? (I18N.pin_on || "") : (I18N.pin_toggle_desc || ""));
+  openBtn.classList.toggle("is-drawing", drawOn);
+  openBtn.setAttribute("title", pinOn ? (I18N.pin_on || "") : (drawOn ? (I18N.draw_on || "") : (I18N.pin_toggle_desc || "")));
 }
 if (!pinOn) clearHover();
 syncPinToFrame();  // #56: bridge switches interception mode instantly
   }
+
+  // ---- draw mode (圈画标注): freehand strokes recorded as draw anchors ----
+  // A draw anchor reuses the pin anchor pipeline ({selector,label,comment,tag}
+  // + points); selector "@draw-<n>" never matches a cssPath, so the floor and
+  // _format_feedback treat it like any other anchor (comment still required).
+  var drawOn = false;
+  var drawBtn = document.getElementById("dpb-draw-toggle");
+  var drawLayer = null;      // same-doc stroke layer (no iframe present)
+  var drawSeq = 0;
+  var livePts = null;
+  var livePathEl = null;
+
+  function drawSvgLayer() {
+    if (drawLayer && drawLayer.isConnected) return drawLayer;
+    drawLayer = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    drawLayer.id = "dpb-draw-layer";
+    drawLayer.setAttribute("aria-hidden", "true");
+    document.body.appendChild(drawLayer);
+    sizeDrawLayer();
+    attachDrawCapture();
+    return drawLayer;
+  }
+  function sizeDrawLayer() {
+    if (!drawLayer) return;
+    var d = document.documentElement;
+    drawLayer.setAttribute("width", String(Math.max(d.scrollWidth, window.innerWidth)));
+    drawLayer.setAttribute("height", String(Math.max(d.scrollHeight, window.innerHeight)));
+  }
+  window.addEventListener("resize", function () {
+    if (drawLayer) sizeDrawLayer();
+  });
+
+  function drawPathD(points) {
+    if (!points || !points.length) return "";
+    var d = "";
+    for (var i = 0; i < points.length; i++) {
+      d += (i ? "L" : "M") + points[i][0].toFixed(1) + " " + points[i][1].toFixed(1);
+    }
+    return d + (points.length > 2 ? " Z" : "");
+  }
+
+  function renderDrawStrokes() {
+    // Same-doc pages only: the sandboxed iframe renders its own strokes via
+    // the bridge (dpbPinAnchors sync), the parent layer stays empty there.
+    var hasDraw = anchors.some(function (a) { return a.tag === "draw" && a.points; });
+    if (!hasDraw && !drawLayer) return;
+    if (hasDraw) drawSvgLayer();
+    var stale = drawLayer.querySelectorAll(".dpb-draw-path, .dpb-draw-badge, .dpb-draw-live");
+    for (var i = 0; i < stale.length; i++) stale[i].remove();
+    anchors.forEach(function (a, idx) {
+      if (a.tag !== "draw" || !a.points) return;
+      var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", drawPathD(a.points));
+      path.setAttribute("class", "dpb-draw-path");
+      path.setAttribute("data-draw-n", String(idx + 1));
+      drawLayer.appendChild(path);
+      var p0 = a.points[0];
+      var g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      g.setAttribute("class", "dpb-draw-badge");
+      g.setAttribute("transform", "translate(" + p0[0].toFixed(1) + "," + Math.max(9, p0[1] - 12).toFixed(1) + ")");
+      var c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      c.setAttribute("r", "9");
+      c.setAttribute("class", "dpb-draw-badge-c");
+      var t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      t.setAttribute("text-anchor", "middle");
+      t.setAttribute("dy", "3.2");
+      t.textContent = String(idx + 1);
+      g.appendChild(c); g.appendChild(t);
+      drawLayer.appendChild(g);
+    });
+  }
+
+  function addDrawAnchor(points) {
+    if (!points || points.length < 4) return;  // a dot is not a stroke
+    drawSeq += 1;
+    pushHistory();
+    anchors.push({
+      selector: "@draw-" + drawSeq,
+      label: String(I18N.draw_label || "Draw {n}").replace("{n}", String(anchors.length + 1)),
+      comment: "",
+      tag: "draw",
+      points: points,
+    });
+    render();
+  }
+
+  function cancelLiveStroke() {
+    livePts = null;
+    if (livePathEl && livePathEl.parentNode) livePathEl.parentNode.removeChild(livePathEl);
+    livePathEl = null;
+  }
+
+  function attachDrawCapture() {
+    if (!drawLayer || drawLayer.__dpbCapture) return;
+    drawLayer.__dpbCapture = true;
+    drawLayer.addEventListener("pointerdown", function (e) {
+      if (!drawOn) return;
+      e.preventDefault();
+      livePts = [[e.clientX + window.scrollX, e.clientY + window.scrollY]];
+      livePathEl = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      livePathEl.setAttribute("class", "dpb-draw-path dpb-draw-live");
+      drawLayer.appendChild(livePathEl);
+      try { drawLayer.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    drawLayer.addEventListener("pointermove", function (e) {
+      if (!drawOn || !livePts) return;
+      e.preventDefault();
+      livePts.push([e.clientX + window.scrollX, e.clientY + window.scrollY]);
+      if (livePathEl) livePathEl.setAttribute("d", drawPathD(livePts));
+    });
+    drawLayer.addEventListener("pointerup", function (e) {
+      if (!drawOn || !livePts) return;
+      e.preventDefault();
+      var pts = livePts;
+      cancelLiveStroke();
+      addDrawAnchor(pts);
+    });
+    drawLayer.addEventListener("pointercancel", cancelLiveStroke);
+  }
+
+  function setDraw(on) {
+    drawOn = !!on;
+    if (drawOn && pinOn) setPin(false);  // pick and draw are exclusive modes
+    document.body.classList.toggle("dpb-draw-mode", drawOn);
+    if (drawBtn) {
+      drawBtn.classList.toggle("is-on", drawOn);
+      drawBtn.setAttribute("aria-pressed", drawOn ? "true" : "false");
+      var lb = drawBtn.querySelector(".dpb-pin-label");
+      if (lb) lb.textContent = drawOn ? (I18N.draw_on || I18N.draw_toggle || "") : (I18N.draw_toggle || "");
+    }
+    if (openBtn) {
+      openBtn.classList.toggle("is-pinning", pinOn);
+      openBtn.classList.toggle("is-drawing", drawOn);
+      openBtn.setAttribute("title", drawOn ? (I18N.draw_on || "") : (pinOn ? (I18N.pin_on || "") : (I18N.pin_toggle_desc || "")));
+    }
+    syncDrawToFrame();
+    if (drawOn) {
+      if (!protoFrame()) drawSvgLayer();  // same-doc capture surface
+    } else {
+      cancelLiveStroke();
+    }
+  }
+  if (drawBtn) drawBtn.addEventListener("click", function () { setDraw(!drawOn); });
 
   var lastFocus = null;
   function openDrawer() {
@@ -548,10 +711,9 @@ setPin(true);
 pillReadyEl.addEventListener("click", function () { focusFeedback(); });
   }
   // P1.5: click on scrim (outside drawer) closes the drawer. Fires only when pin
-  // is OFF (CSS sets scrim pointer-events:none while body.dpb-pin-mode is on, so
-  // pin-on clicks reach the page for element selection, not the scrim).
+  // and draw are OFF (CSS sets scrim pointer-events:none while body is in pin/draw mode).
   bar.addEventListener("click", function (e) {
-if (bar.classList.contains("is-open") && !pinOn && e.target === bar) closeDrawer();
+if (bar.classList.contains("is-open") && !pinOn && !drawOn && e.target === bar) closeDrawer();
   });
 
   // Draft: keep current feedback/anchors in the form and close without a
@@ -717,11 +879,9 @@ return Array.prototype.filter.call(nodes, function (el) {
   }
   document.addEventListener("keydown", function (e) {
 if (e.key === "Escape") {
-  // #59: Esc dismisses the one-time onboarding card first.
+  // #59: Esc dismisses the one-time onboarding card.
   if (onboardEl && !onboardEl.hidden) {
-    e.preventDefault();
     dismissOnboarding();
-    return;
   }
   if (abortPopoverOpen()) {
     e.preventDefault();
@@ -729,6 +889,7 @@ if (e.key === "Escape") {
     if (abortBtn && typeof abortBtn.focus === "function") abortBtn.focus();
     return;
   }
+  if (drawOn) { setDraw(false); return; }
   if (pinOn) { setPin(false); return; }
   if (bar.classList.contains("is-open")) { e.preventDefault(); closeDrawer(); }
   return;
@@ -757,7 +918,7 @@ if (abortPopoverOpen()) {
   }
   return;
 }
-if (!bar.classList.contains("is-open") || pinOn) return;  // pinOn: let Tab escape to prototype
+if (!bar.classList.contains("is-open") || pinOn || drawOn) return;  // pinOn/drawOn: let Tab escape to prototype
 var list = drawerFocusables();
 if (!list.length) return;
 var first = list[0];
@@ -855,7 +1016,19 @@ if (data.dpbPinHello) {
   // the badges too — a reload (or a draft restored before the iframe
   // parsed) must not strand the iframe without its numbered annotations.
   syncPinToFrame();
+  syncDrawToFrame();
   syncAnchorsToFrame();
+  return;
+}
+if (data.dpbDrawStroke) {
+  // Bridge finished a freehand stroke inside the sandboxed iframe; record
+  // it as a draw anchor (same pipeline as a pin pick).
+  if (!drawOn) return;
+  var pts = data.dpbDrawStroke.points;
+  if (!Array.isArray(pts) || pts.length < 4) return;
+  addDrawAnchor(pts.map(function (p) {
+    return [Number(p && p[0]) || 0, Number(p && p[1]) || 0];
+  }));
   return;
 }
 if (!pinOn) return;
@@ -933,8 +1106,31 @@ if (!t || !t.getAttribute) return;
 var loc = t.getAttribute("data-locate");
 if (loc != null) {
   e.preventDefault();
-  var a = anchors[Number(loc)];
+  var idx = Number(loc);
+  var a = anchors[idx];
   if (!a) return;
+  if (a.tag === "draw" || (a.selector && a.selector.charAt(0) === "@")) {
+    if (protoFrame()) {
+      postToFrame({ dpbDrawLocate: { selector: a.selector, n: idx + 1 } });
+    } else if (drawLayer) {
+      var targetPath = drawLayer.querySelector('.dpb-draw-path[data-draw-n="' + (idx + 1) + '"]');
+      if (targetPath) {
+        targetPath.classList.remove("dpb-draw-flash");
+        void targetPath.offsetWidth;
+        targetPath.classList.add("dpb-draw-flash");
+      }
+      if (a.points && a.points[0]) {
+        try {
+          window.scrollTo({
+            left: Math.max(0, Number(a.points[0][0]) - 100),
+            top: Math.max(0, Number(a.points[0][1]) - 100),
+            behavior: "smooth"
+          });
+        } catch (err) {}
+      }
+    }
+    return;
+  }
   if (a.el && a.el.isConnected) {
     a.el.scrollIntoView({ behavior: "smooth", block: "center" });
     a.el.classList.remove("dpb-pin-flash");
