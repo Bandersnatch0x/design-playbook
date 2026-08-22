@@ -430,6 +430,12 @@ def _parse_anchors(raw: str, round_n: int = 0) -> list[dict[str, Any]]:
             "comment": str(item.get("comment") or "").strip()[:500],
             "tag": tag,
         }
+        if "points" in item and isinstance(item["points"], list):
+            anchor["points"] = [
+                [float(p[0]), float(p[1])]
+                for p in item["points"]
+                if isinstance(p, (list, tuple)) and len(p) >= 2
+            ]
         if round_n > 0:
             anchor["node_id"] = _anchor_node_id(round_n, index, selector)
             anchor["features"] = _anchor_features(item, tag)
@@ -564,9 +570,26 @@ BRIDGE_SCRIPT = r"""<script>
     "@keyframes dpb-pin-flash{0%{box-shadow:0 0 0 0 rgba(20,184,166,.55)}" +
     "50%{box-shadow:0 0 0 8px rgba(20,184,166,.25)}" +
     "100%{box-shadow:0 0 0 0 rgba(20,184,166,0)}}" +
+    // Draw mode: stroke layer + crosshair while capturing. Strokes use the
+    // same red-orange the parent theme tokens use (#ff7849) — the sandboxed
+    // frame cannot read the parent's custom properties.
+    "#dpb-draw-layer{position:absolute;top:0;left:0;z-index:2147482999;" +
+    "pointer-events:none;overflow:visible}" +
+    "html.dpb-draw-mode{cursor:crosshair}" +
+    "#dpb-draw-layer .dpb-draw-path{fill:none;stroke:#ff7849;" +
+    "stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;opacity:.92}" +
+    "#dpb-draw-layer .dpb-draw-live{opacity:.65}" +
+    "#dpb-draw-layer .dpb-draw-badge-c{fill:#ff7849}" +
+    "#dpb-draw-layer .dpb-draw-badge text{fill:#3b1d10;" +
+    "font:700 11px/1 system-ui,sans-serif}" +
+    ".dpb-draw-flash{animation:dpb-draw-flash .9s ease-out 1}" +
+    "@keyframes dpb-draw-flash{0%{stroke-width:2.5px;filter:drop-shadow(0 0 0 rgba(244,96,42,0))}" +
+    "50%{stroke-width:5px;filter:drop-shadow(0 0 8px rgba(244,96,42,.85))}" +
+    "100%{stroke-width:2.5px;filter:drop-shadow(0 0 0 rgba(244,96,42,0))}}" +
     // W5: honor reduced-motion inside the iframe too (host control.css only
     // covers the parent document).
-    "@media (prefers-reduced-motion:reduce){.dpb-pin-flash{animation:none!important}}";
+    "@media (prefers-reduced-motion:reduce){.dpb-pin-flash{animation:none!important}}" +
+    "@media (prefers-reduced-motion:reduce){.dpb-draw-flash{animation:none!important}}";
   (document.head || document.documentElement).appendChild(style);
 
   // #56: pin state is owned by the parent control bar and synced down via
@@ -633,8 +656,9 @@ BRIDGE_SCRIPT = r"""<script>
     // #56: outside pin mode the bridge must not swallow clicks — links,
     // buttons, tabs and forms inside the prototype stay fully interactive.
     if (!pinOn) return;
-    var el = e.target;
-    if (!el || el === document.body || el === document.documentElement) return;
+    var raw = e.target;
+    if (!raw || raw === document.body || raw === document.documentElement) return;
+    var el = (hoverEl && hoverEl.contains(raw)) ? hoverEl : raw;
     e.preventDefault();
     e.stopPropagation();
     // highlight reconciliation is syncAnchors' job — the parent echoes the
@@ -685,6 +709,10 @@ BRIDGE_SCRIPT = r"""<script>
   }
   function syncAnchors(list) {
     clearBadges();
+    // Draw anchors have no cssPath to resolve — they render as strokes on
+    // the in-frame draw layer instead of element outlines/badges.
+    lastAnchorEcho = list || [];
+    renderDrawItems(lastAnchorEcho);
     // #57: the parent's list is the single owner of the cross-origin
     // highlight too — removals and undo/redo must drop the teal outline
     // from elements whose anchor is gone (el is null cross-origin, so the
@@ -692,6 +720,7 @@ BRIDGE_SCRIPT = r"""<script>
     // mirroring the same-origin behavior.
     var keepEls = [];
     list.forEach(function (item) {
+      if (item.tag === "draw") return;  // stroke anchors never match an element
       var keepEl = findEl(item.selector);
       if (keepEl) keepEls.push(keepEl);
     });
@@ -706,6 +735,7 @@ BRIDGE_SCRIPT = r"""<script>
     });
     var body = document.body || document.documentElement;
     list.forEach(function (item) {
+      if (item.tag === "draw") return;  // rendered by renderDrawItems
       var el = findEl(item.selector);
       if (!el) return;
       var n = document.createElement("span");
@@ -734,6 +764,116 @@ BRIDGE_SCRIPT = r"""<script>
   window.addEventListener("scroll", repositionBadges, true);
   window.addEventListener("resize", repositionBadges);
 
+  // ---- draw mode (圈画标注): freehand strokes captured in-frame ----
+  // The stroke is drawn live on an in-frame SVG overlay (coordinates stay
+  // local to this document); on pointerup the points travel to the parent,
+  // which records the draw anchor and echoes it back via dpbPinAnchors for
+  // the durable in-frame rendering below (renderDrawItems).
+  var drawOn = false;
+  var drawSvg = null;
+  var livePts = null;
+  var livePathEl = null;
+
+  function ensureDrawLayer() {
+    if (drawSvg && drawSvg.isConnected) return drawSvg;
+    drawSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    drawSvg.setAttribute("id", "dpb-draw-layer");
+    drawSvg.setAttribute("aria-hidden", "true");
+    sizeDrawLayer();
+    (document.body || document.documentElement).appendChild(drawSvg);
+    return drawSvg;
+  }
+  function sizeDrawLayer() {
+    if (!drawSvg) return;
+    var d = document.documentElement;
+    drawSvg.setAttribute("width", String(Math.max(d.scrollWidth, window.innerWidth)));
+    drawSvg.setAttribute("height", String(Math.max(d.scrollHeight, window.innerHeight)));
+  }
+  window.addEventListener("resize", function () {
+    if (drawSvg) { sizeDrawLayer(); renderDrawItems(lastAnchorEcho); }
+  });
+
+  function drawPathD(points) {
+    if (!points || !points.length) return "";
+    var d = "";
+    for (var i = 0; i < points.length; i++) {
+      d += (i ? "L" : "M") + Number(points[i][0]).toFixed(1) + " " + Number(points[i][1]).toFixed(1);
+    }
+    return d + (points.length > 2 ? " Z" : "");
+  }
+
+  function cancelLiveStroke() {
+    livePts = null;
+    if (livePathEl && livePathEl.parentNode) livePathEl.parentNode.removeChild(livePathEl);
+    livePathEl = null;
+  }
+
+  document.addEventListener("pointerdown", function (e) {
+    if (!drawOn) return;  // passive outside draw mode
+    e.preventDefault();
+    e.stopPropagation();
+    ensureDrawLayer();
+    livePts = [[e.clientX + window.scrollX, e.clientY + window.scrollY]];
+    livePathEl = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    livePathEl.setAttribute("class", "dpb-draw-path dpb-draw-live");
+    drawSvg.appendChild(livePathEl);
+  }, true);
+  document.addEventListener("pointermove", function (e) {
+    if (!drawOn || !livePts) return;
+    e.preventDefault();
+    livePts.push([e.clientX + window.scrollX, e.clientY + window.scrollY]);
+    if (livePathEl) livePathEl.setAttribute("d", drawPathD(livePts));
+  }, true);
+  document.addEventListener("pointerup", function (e) {
+    if (!drawOn || !livePts) return;
+    e.preventDefault();
+    var pts = livePts;
+    cancelLiveStroke();
+    if (pts.length >= 4) {
+      parent.postMessage({ dpbDrawStroke: { points: pts } }, "*");
+    }
+  }, true);
+
+  function setDrawOn(on) {
+    drawOn = !!on;
+    if (!on) cancelLiveStroke();
+    document.documentElement.classList.toggle("dpb-draw-mode", drawOn);
+  }
+
+  // Durable rendering of the parent's draw anchors (echoed via dpbPinAnchors).
+  var lastAnchorEcho = [];
+  function renderDrawItems(list) {
+    lastAnchorEcho = list || [];
+    var items = (list || []).filter(function (it) {
+      return it.tag === "draw" && it.points && it.points.length;
+    });
+    if (!items.length && !drawSvg) return;
+    ensureDrawLayer();
+    var stale = drawSvg.querySelectorAll(".dpb-draw-path, .dpb-draw-badge, .dpb-draw-live");
+    for (var i = 0; i < stale.length; i++) stale[i].remove();
+    (list || []).forEach(function (item) {
+      if (item.tag !== "draw" || !item.points || !item.points.length) return;
+      var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", drawPathD(item.points));
+      path.setAttribute("class", "dpb-draw-path");
+      path.setAttribute("data-draw-n", String(item.n));
+      drawSvg.appendChild(path);
+      var p0 = item.points[0];
+      var g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      g.setAttribute("class", "dpb-draw-badge");
+      g.setAttribute("transform", "translate(" + Number(p0[0]).toFixed(1) + "," + Math.max(9, Number(p0[1]) - 12).toFixed(1) + ")");
+      var c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      c.setAttribute("r", "9");
+      c.setAttribute("class", "dpb-draw-badge-c");
+      var t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      t.setAttribute("text-anchor", "middle");
+      t.setAttribute("dy", "3.2");
+      t.textContent = String(item.n);
+      g.appendChild(c); g.appendChild(t);
+      drawSvg.appendChild(g);
+    });
+  }
+
   window.addEventListener("message", function (e) {
     // W3: only the parent window may drive the bridge. The prototype scripts
     // share this window and must not be able to spoof pin state or badges.
@@ -746,9 +886,38 @@ BRIDGE_SCRIPT = r"""<script>
       if (!pinOn) clearHover();
       return;
     }
+    if (data.dpbDrawState) {
+      // Draw mode mirrors pin ownership: the parent flips it, the bridge
+      // only obeys. OFF means fully passive - pointer events pass through.
+      setDrawOn(!!data.dpbDrawState.on);
+      return;
+    }
     if (data.dpbPinLocate) {
       var locEl = findEl(String(data.dpbPinLocate.selector || ""));
       if (locEl) locateEl(locEl);
+      return;
+    }
+    if (data.dpbDrawLocate) {
+      var targetN = String(data.dpbDrawLocate.n || "");
+      var targetPath = drawSvg ? drawSvg.querySelector('.dpb-draw-path[data-draw-n="' + targetN + '"]') : null;
+      if (targetPath) {
+        targetPath.classList.remove("dpb-draw-flash");
+        void targetPath.offsetWidth;
+        targetPath.classList.add("dpb-draw-flash");
+      }
+      for (var di = 0; di < (lastAnchorEcho || []).length; di++) {
+        var dItem = lastAnchorEcho[di];
+        if (dItem.tag === "draw" && String(dItem.n) === targetN && dItem.points && dItem.points[0]) {
+          try {
+            window.scrollTo({
+              left: Math.max(0, Number(dItem.points[0][0]) - 100),
+              top: Math.max(0, Number(dItem.points[0][1]) - 100),
+              behavior: "smooth"
+            });
+          } catch (err) {}
+          break;
+        }
+      }
       return;
     }
     if (data.dpbPinFlash) {

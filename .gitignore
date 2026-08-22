@@ -52,3 +52,4 @@ docs/research/
 
 # firecrawl scratch output
 .firecrawl/
+.stitch/

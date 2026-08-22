@@ -32,6 +32,11 @@ class LabelSetTests(unittest.TestCase):
     def test_new_drawer_keys_exist_in_every_locale(self) -> None:
         for key in (
             "skip",
+            "skip_desc",
+            "zoom_fit",
+            "draw_toggle",
+            "draw_on",
+            "draw_label",
             "drawer_title",
             "drawer_empty_title",
             "drawer_empty_desc",
@@ -59,6 +64,7 @@ class LabelSetTests(unittest.TestCase):
         self.assertIn('id="dpb-topbar" hidden', html)
         self.assertIn('id="dpb-zoom-fit"', html)
         self.assertIn('id="dpb-pin-toggle"', html)
+        self.assertIn('id="dpb-draw-toggle"', html)
         # drawer skip stays hidden - the pill owns the skip channel
         self.assertIn('class="dpb-btn dpb-hidden" id="dpb-skip"', html)
 
