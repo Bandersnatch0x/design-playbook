@@ -1,6 +1,8 @@
 # Phase pointer
 
-**Current:** **v0.20.2 released** — 2026-08-16. Tag `v0.20.2`; npm `latest` is `design-playbook@0.20.2` and `dsh-design-playbook@0.20.2`; GitHub Release: https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.20.2. Patch deepens immutable RunFacts snapshots, release transaction verification, queue-monitor state ownership, normalized install inventory, and synthetic evidence fixture semantics. Full local matrix passed (`643 passed` + `174 subtests`), public install smoke passed against marketplace HEAD and npm 0.20.2. **渠道决策（ADR-0015）：main = stable channel**；community catalog 仍为 **PAUSED BY USER**.
+**Current:** **v0.20.2 released + three unreleased workstreams in flight** — 上次发布 2026-08-16（tag `v0.20.2`；npm `latest` = `design-playbook@0.20.2` / `dsh-design-playbook@0.20.2`；[GitHub Release](https://github.com/Bandersnatch0x/design-playbook/releases/tag/v0.20.2)）。此后有三条并行工作流尚未发布，见下表末三行。**渠道决策（ADR-0015）：main = stable channel**；community catalog 仍为 **PAUSED BY USER**.
+
+> 登记规则：v0.20.2 之后的每条工作流都必须在下表有一行，否则本文件无法用于判定范围内外（CLAUDE.md 第 4 条把本文件定为阶段权威）。
 
 | Phase | Status |
 | --- | --- |
@@ -44,6 +46,9 @@
 | preview control A′ | done (2026-08-08; abort popover + clamp/trap/cancel, pill revise submit, quick feedback, Ctrl+Enter floor, Esc/outside disarm pill arm; floor S1–S25 + control markup tests green) |
 | v0.12.0 release prep | in-progress (version surfaces + notes + inventory; tag/publish/smoke only on explicit ask) |
 | vNext ui/ux closed loop | done (map #23 十票全关 → S1-S6 六切片 PR #42 → 双轨评审 Pass 0 blocking → v0.20.0 released, 2026-08-15; spec: docs/specs/ui-ux-vnext/) |
+| adaptive routing + reference sources (#80) | shipped-unreleased (2026-08-21, `4bb7fda`; ADR-0032; spec `docs/specs/2026-08-17-adaptive-routing-reference-inputs-design.md`; `7ff2546` 为其孤儿资产回滚补丁) |
+| audit preferences (#81) | shipped-unreleased (2026-08-19, `d82f111`; ADR-0033; issues #65/#67/#69; `scripts/audit_preferences.py` + validate_run AUDIT.* + 4 测试文件) |
+| Stage 6/9 interactive review + static handoff (#36) | in-progress (spec `docs/specs/2026-08-22-...-implementation-plan.md`；分支 `feature/preview-skip-dock`，工作树未提交；Stage 6 约 85% 落地，Stage 9 挂错生命周期 → **ADR-0034** 定归属，解耦为 follow-up；两轴评审结论见下节) |
 
 ## v0 ship checklist (5/5 pass)
 
@@ -77,7 +82,27 @@
 
 - 圆桌决议落地并随 v0.10.0 发布：新 command `run-review`（第四 command，`.scratch/v0.10-run-review/` 四票全 resolved）。实现经 Orca 委托 grok worker（run `run_5bf575c510d8`），产物：`commands/run-review.md`（run-review/v1 契约 + 条件式 validate_run seam + repeat blocker 频次表 + 禁止块）、doctor GATE1 3→4、README/checklist/CI 同步、orchestrator pointer、`tests/test_normalize_lockstep.py`（shipped 文案 SSOT，aggregate_runs follower）。release commit/tag `aed0e87`；GitHub Release + npm + second-session install smoke 全绿。Fixed 素材已先行随 v0.9.1 patch 发出（2026-08-03）。
 
+## Two-axis review of #36 (2026-08-24)
+
+Standards 轴 + Spec 轴对 v0.20.2..工作树全量变更（83 文件）各跑一遍。**已修**（本轮，全量 pytest 绿 + `VALIDATION PASSED`）：
+
+- 交付凭证自建 confirm 判定，绕过 ADR-0008 floor —— 空反馈确认时 `transaction.py` 记 `confirmed=false` 而凭证发 `Pass`/`confirmed-user`。改为读 `confirm-round-*.json`（ADR-0034 §3），读不到即 fail-closed 并写明 `confirmationSource`。
+- `.gitignore` 的 `.stitch` 反选失效（`!.stitch/` 把整目录重新纳入），20 个设计草稿会被提交；`.agents/` 整目录忽略压住了 ADR-0009 发布面。两处规则改为逐级排除/反选。
+- `resolved` 标记在提交瞬间蒸发：`anchorSnapshot()` 保留而 `syncHidden()` 丢弃，服务端也不解析。
+- E2E 全套挂死 30 分钟：v9 onboarding 全屏遮罩吞掉 `frame_locator` 点击且不报错，driver 永不 POST → `done.wait(1800)`。三处 dismissal 合并为 `tests/preview_e2e_helpers.py` 单一副本。
+- `test_floor_frontend.py` / `test_pin_bridge_frontend.py` 是 main() 风格、无 `test_*`，**从未被 pytest 收集**（后者的 v9 改写从未验证过）。已补入口 + `validate.py` 新增 "test executability" 门禁防复发。
+- 其余：`SKIP_LABELS` 前端硬编码（违反 ADR-0008 单一标签源）、`profile` 硬编码 `P2-Standard` 谎报运行档位、ZIP 缺 spec §4.1 承诺的原型代码、`DESIGN_PLAYBOOK_RUN_ROOT` 压过原型实际位置、iframe 内涂鸦描边与 token/虚线不符、`validate.py` 漏检 `control.review.js`、7 个新测试未接入 CI、ADR-0022 引用错配。
+
+**ADR-0034 follow-up（2026-08-24 落地，issue #85–#93）**：Stage 9 已从 Preview 解耦到 Evidence 侧构建器 `mcp/evidence/handoff.py`（`build_static_handoff`），生命周期与审查轮次无关，产物落 run 树 `evidence/static-handoff/`；`review_session.py` 2079 → 1192 行，只剩 Stage 6；截图目标改为 Stage 7 交付物 `filled-ui.html`（#87）；交付页改为包内自有零 CDN 内容 `mcp/evidence/static_handoff_page.html`（#88）；条件门禁引入第四态 `not-applicable`，`gatesPassed` 只计「已求值且通过」，G6 前置条件以 `evidence/manifest.jsonl`（而非裸 `evidence/` 目录）为准并在写产物前采样，避免构建器自造前置条件（#89）；新增构建器测试套件 `mcp/evidence/test_handoff.py`（20 用例全绿）。spec #36 的 7 处偏离记入该文档新增 §0 实施修订记录（A1–A7，含 #90 confirm 契约回改 spec、#92 Stage 10 归档收窄、#93 文本纠错含 G8 标签）。
+
+**收尾**：`review_session.py` 2079 → 503 行，按内聚度拆为 `review_session.py`(503，会话状态机+页面装配+HTTP handler) / `owned_browser.py`(278，`BrowserInteraction` seam + 进程回收) / `pin_bridge.py`(450，注入的 `BRIDGE_SCRIPT` 及其 G5 信任边界契约)，旧导入路径经 re-export 全部保留；`capture_runtime.py` 两条重复 Playwright 路径并入私有 `_capture_page(..., probe: bool)`，`capture()` / `capture_and_probe()` 退化为薄包装且签名不变（#91 + 标准轴 M2）。产品内入口补为 orchestrator step 11「Static run handoff」（可选、按需，不参与验收判定）。
+
+**验收**：全量 `pytest packages/design-playbook` = **353 passed + 97 subtests**（含此前排除的 `test_e2e_canvas_vc.py` 7 项）· `scripts/validate.py` = **VALIDATION PASSED** · `test_handoff.py` 20/20 · 真实 Playwright 端到端冒烟在无 confirm 记录的 run 上诚实输出 `Pending` / `unsubstantiated` / 4 项 `not-applicable`。issue #85–#93 全部关闭。
+
+> ~~在上述 follow-up 落地前~~ `disclosure-review.json` 的 `gatesPassed` / `verdict` 现已可采信：确认状态由 `authority` / `verdict` / `confirmationSource` 承载，`gatesPassed` 只反映已求值通过数，交付判定看 `gatesResolved`（全部 `pass` 或 `not-applicable`）。
+
 ## Still open（2026-08-04 刷新）
+
 
 1. 3b community catalog：v0.10.0 提交包已刷新（`v0.4-cycle/community-catalog-checklist.md`），用户于 2026-08-04 暂停分发线；恢复时用可用认证账号提交并回填 ticket ID。
 
