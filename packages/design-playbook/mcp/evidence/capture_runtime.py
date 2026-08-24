@@ -5,6 +5,7 @@ Never writes manifest.jsonl; never accepts criterion refs (orchestrator binds).
 Returns relative ``artifact`` plus absolute ``written_path`` so RUN_ROOT/cwd
 misconfig is visible to the orchestrator.
 """
+
 from __future__ import annotations
 
 import json
@@ -14,6 +15,13 @@ from typing import Any, Protocol
 
 from design_playbook.mcp.evidence import containment
 from design_playbook.mcp.evidence.capture_contract import parse_capture_contract
+from design_playbook.mcp.evidence.disclosure import (
+    LAYOUT_PROBE_JS,
+    VIEWPORTS,
+    ViewportMetrics,
+    metric_payload,
+    probe_layout,
+)
 from design_playbook.mcp.preview.util import _log
 
 CAPTURE_TYPES = frozenset({"screenshot", "a11y tree", "interaction trace"})
@@ -47,6 +55,22 @@ class BrowserAdapter(Protocol):
         freeze: dict[str, Any],
     ) -> str:
         """Write one artifact and return the observed page state."""
+
+
+class ProbeBrowserAdapter(Protocol):
+    """Optional seam for capturing and probing one browser page."""
+
+    def capture_and_probe(
+        self,
+        *,
+        url: str,
+        capture_type: str,
+        actions: list[dict[str, Any]],
+        out_path: Path,
+        viewport: dict[str, Any],
+        freeze: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Capture an artifact and evaluate the layout probe before teardown."""
 
 
 def _failed(
@@ -187,16 +211,11 @@ def _reason_message(reason: str) -> str:
 # payload stays compatible; resolution_failure is the one new surface (the
 # old inline resolver propagated OSError uncaught).
 _REASON_MESSAGES = {
-    containment.REASON_ABSOLUTE_PATH:
-        "artifact_path must be relative to the configured run root",
-    containment.REASON_DOTDOT_SEGMENT:
-        "artifact_path must not contain '..' segments",
-    containment.REASON_RESOLUTION_FAILURE:
-        "artifact_path could not be resolved under the evidence/ subtree",
-    containment.REASON_CANONICAL_ESCAPE:
-        "artifact_path must stay under the evidence/ subtree",
-    containment.REASON_SYMLINK_ESCAPE:
-        "artifact_path symlink escapes the evidence/ subtree",
+    containment.REASON_ABSOLUTE_PATH: "artifact_path must be relative to the configured run root",
+    containment.REASON_DOTDOT_SEGMENT: "artifact_path must not contain '..' segments",
+    containment.REASON_RESOLUTION_FAILURE: "artifact_path could not be resolved under the evidence/ subtree",
+    containment.REASON_CANONICAL_ESCAPE: "artifact_path must stay under the evidence/ subtree",
+    containment.REASON_SYMLINK_ESCAPE: "artifact_path symlink escapes the evidence/ subtree",
 }
 
 
@@ -275,8 +294,7 @@ def _action_select_option(page: Any, action: dict, index: int, do: str) -> None:
     value = action.get("value")
     label = action.get("label")
     if value is None and label is None:
-        raise ValueError(
-            f"actions[{index}].value or label required for select_option")
+        raise ValueError(f"actions[{index}].value or label required for select_option")
     if value is not None:
         page.select_option(selector, value=value, timeout=10_000)
     else:
@@ -338,6 +356,7 @@ def _read_observed_state(page: Any) -> str:
         _log(f"observed_state probe failed: {exc}")
     return "unknown"
 
+
 def _write_screenshot(page: Any, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(path), full_page=True)
@@ -388,7 +407,7 @@ class PlaywrightBrowserAdapter:
 
         self._sync_playwright = sync_playwright
 
-    def capture(
+    def _capture_page(
         self,
         *,
         url: str,
@@ -397,7 +416,15 @@ class PlaywrightBrowserAdapter:
         out_path: Path,
         viewport: dict[str, Any],
         freeze: dict[str, Any],
-    ) -> str:
+        probe: bool,
+    ) -> tuple[str, ViewportMetrics | None]:
+        """Single Playwright capture path shared by the two adapter seams.
+
+        ``probe=False`` stops after the observed state (the plain
+        :class:`BrowserAdapter` contract); ``probe=True`` additionally
+        evaluates the layout probe on the same page before teardown so the
+        screenshot and its metrics share one browser pass.
+        """
         with self._sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
             try:
@@ -410,6 +437,8 @@ class PlaywrightBrowserAdapter:
                     color_scheme=viewport["colorScheme"],
                 )
                 page = context.new_page()
+                if viewport.get("media"):
+                    page.emulate_media(media=viewport["media"])
                 wait_until = (
                     "networkidle" if freeze.get("networkIdle") else "domcontentloaded"
                 )
@@ -427,12 +456,62 @@ class PlaywrightBrowserAdapter:
                     elif capture_type == "a11y tree":
                         _write_a11y_tree(page, out_path)
 
-                return _read_observed_state(page)
+                observed = _read_observed_state(page)
+                if not probe:
+                    return observed, None
+                raw = page.evaluate(LAYOUT_PROBE_JS)
+                metrics = probe_layout(lambda _js: raw)
+                return observed, metrics
             finally:
                 browser.close()
 
+    def capture(
+        self,
+        *,
+        url: str,
+        capture_type: str,
+        actions: list[dict[str, Any]],
+        out_path: Path,
+        viewport: dict[str, Any],
+        freeze: dict[str, Any],
+    ) -> str:
+        observed, _metrics = self._capture_page(
+            url=url,
+            capture_type=capture_type,
+            actions=actions,
+            out_path=out_path,
+            viewport=viewport,
+            freeze=freeze,
+            probe=False,
+        )
+        return observed
 
-def _validate_runtime_object(args: dict[str, Any]) -> tuple[str, str, str, list[dict[str, Any]]]:
+    def capture_and_probe(
+        self,
+        *,
+        url: str,
+        capture_type: str,
+        actions: list[dict[str, Any]],
+        out_path: Path,
+        viewport: dict[str, Any],
+        freeze: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Capture and probe the same page before closing its browser."""
+        observed, metrics = self._capture_page(
+            url=url,
+            capture_type=capture_type,
+            actions=actions,
+            out_path=out_path,
+            viewport=viewport,
+            freeze=freeze,
+            probe=True,
+        )
+        return {"observed_state": observed, "metrics": metrics}
+
+
+def _validate_runtime_object(
+    args: dict[str, Any],
+) -> tuple[str, str, str, list[dict[str, Any]]]:
     """Validate Runtime Object fields and return (url, cap_type, state, actions).
 
     Owns the field-level validation that execute_capture_plan previously
@@ -448,7 +527,7 @@ def _validate_runtime_object(args: dict[str, Any]) -> tuple[str, str, str, list[
         raise ValueError("url is required")
     if not isinstance(cap_type, str) or cap_type not in CAPTURE_TYPES:
         raise ValueError(
-            f'type must be one of {sorted(CAPTURE_TYPES)}; got {cap_type!r}'
+            f"type must be one of {sorted(CAPTURE_TYPES)}; got {cap_type!r}"
         )
     if not isinstance(state, str) or not state.strip():
         raise ValueError("state is required")
@@ -508,8 +587,7 @@ def execute_capture_plan(
     if out_path.exists() and not overwrite:
         return _failed(
             rel,
-            f"artifact already exists: {out_path} "
-            "(pass overwrite=true to replace)",
+            f"artifact already exists: {out_path} (pass overwrite=true to replace)",
             abs_written,
             request=request,
         )
@@ -548,3 +626,128 @@ def execute_capture_plan(
         )
 
     return _captured(rel, observed, abs_written, request)
+
+
+# --------------------------------------------------------------------------- #
+# Stage 9 delivery matrix: five-viewport capture + fold/overflow metrics       #
+# --------------------------------------------------------------------------- #
+
+
+def matrix_viewport(name: str) -> dict[str, Any]:
+    """Map a standard delivery viewport name to a capture-contract viewport.
+
+    ``sw``/``innerH`` become the contract ``width``/``height``; device pixels
+    stay at 1.0 with the Light color scheme so the matrix is reproducible.
+    The ``print`` viewport additionally carries ``media: "print"`` so the
+    adapter emulates print media (page breaks, print stylesheets) rather than
+    just resizing the window. Unknown names raise ValueError so a caller cannot
+    silently capture a non-standard viewport into the disclosure matrix.
+    """
+    ref = VIEWPORTS.get(name)
+    if ref is None:
+        raise ValueError(
+            f"unknown delivery viewport {name!r}; expected one of {sorted(VIEWPORTS)}"
+        )
+    viewport = {
+        "width": ref["sw"],
+        "height": ref["innerH"],
+        "devicePixelRatio": 1.0,
+        "colorScheme": "light",
+    }
+    if ref.get("kind") == "print":
+        viewport["media"] = "print"
+    return viewport
+
+
+def capture_delivery_matrix(
+    *,
+    url: str,
+    out_dir: Path | None = None,
+    freeze: dict[str, Any] | None = None,
+    browser_adapter: BrowserAdapter | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Drive the five standard delivery viewports and return their metrics.
+
+    For each of ``VIEWPORTS``, captures one full-page screenshot under
+    ``out_dir`` (``viewport-<name>.png``) and reads the layout probe. The
+    returned dict maps viewport name -> ``{metrics, screenshot}`` so a caller
+    can assemble the ``disclosure-review.json`` matrix and the ``/export-zip``
+    package from one pass.
+
+    ``out_dir`` defaults to the spec's canonical delivery path
+    ``output/playwright/static-handoff/`` (spec §5). ``browser_adapter`` uses
+    the same ``BrowserAdapter`` seam as ``execute_capture_plan`` (real
+    Playwright by default, injected fake in tests). Production adapters should
+    expose ``capture_and_probe`` so the snapshot and metrics share one page;
+    adapters without that seam remain explicitly ``unmeasured``.
+    """
+    freeze = freeze or {"enabled": True, "waitFonts": True, "networkIdle": False}
+    if browser_adapter is None:
+        browser_adapter = PlaywrightBrowserAdapter()
+
+    if out_dir is None:
+        out_dir = Path("output/playwright/static-handoff")
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    results: dict[str, dict[str, Any]] = {}
+    for name in VIEWPORTS:
+        viewport = matrix_viewport(name)
+        out_path = out_dir / f"viewport-{name}.png"
+        try:
+            capture_and_probe = getattr(browser_adapter, "capture_and_probe", None)
+            if callable(capture_and_probe):
+                captured = capture_and_probe(
+                    url=url,
+                    capture_type="screenshot",
+                    actions=[],
+                    out_path=out_path,
+                    viewport=viewport,
+                    freeze=freeze,
+                )
+                measured = captured.get("metrics") if isinstance(captured, dict) else None
+                if not isinstance(measured, ViewportMetrics):
+                    raise TypeError("capture_and_probe returned no ViewportMetrics")
+                metrics = metric_payload(measured)
+            else:
+                browser_adapter.capture(
+                    url=url,
+                    capture_type="screenshot",
+                    actions=[],
+                    out_path=out_path,
+                    viewport=viewport,
+                    freeze=freeze,
+                )
+                metrics = _unmeasured_metric_payload(name)
+            results[name] = {"metrics": metrics, "screenshot": str(out_path)}
+        except Exception as exc:  # noqa: BLE001 — preserve blocked evidence
+            _log(f"matrix capture/probe failed for {name}: {exc}")
+            results[name] = {
+                "metrics": metric_payload(
+                    ViewportMetrics(
+                        sw=VIEWPORTS[name]["sw"],
+                        innerH=VIEWPORTS[name]["innerH"],
+                        hOverflow=0,
+                        inFold=False,
+                        measurement_status="blocked",
+                        measurement_error=str(exc),
+                    )
+                ),
+                "screenshot": str(out_path),
+                "result": "blocked",
+                "error": str(exc),
+            }
+    return results
+
+
+def _unmeasured_metric_payload(name: str) -> dict[str, Any]:
+    """Return reference dimensions without claiming a layout measurement."""
+    ref = VIEWPORTS[name]
+    return metric_payload(
+        ViewportMetrics(
+            sw=ref["sw"],
+            innerH=ref["innerH"],
+            hOverflow=0,
+            inFold=False,
+            measurement_status="unmeasured",
+        )
+    )

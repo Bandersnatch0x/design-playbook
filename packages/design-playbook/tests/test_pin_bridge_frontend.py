@@ -30,6 +30,10 @@ from design_playbook.mcp.preview.i18n import default_options  # noqa: E402
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
+# Same directory; pytest's prepend import mode and direct `python <file>` runs
+# both put this directory on sys.path.
+from preview_e2e_helpers import dismiss_onboarding  # noqa: E402
+
 ROUND_N = 1
 SUMMARY = "pin bridge e2e - sandbox iframe"
 OPTIONS = default_options()
@@ -62,7 +66,11 @@ class _PlaywrightPinAdapter:
                     try:
                         page = browser.new_page()
                         page.goto(url, wait_until="domcontentloaded")
-                        page.wait_for_selector("#dpb-preview-bar")
+                        page.wait_for_selector("#dpb-root")
+                        page.wait_for_timeout(600)
+                        # Real pointer clicks below (#dpb-mode-preview) are
+                        # swallowed by the full-viewport onboarding scrim.
+                        dismiss_onboarding(page)
                         proto_frame = page.frame_locator("iframe.dpb-proto-frame")
 
                         def hidden() -> list[dict]:
@@ -73,10 +81,7 @@ class _PlaywrightPinAdapter:
                         def record(name: str) -> None:
                             self.snapshots[name] = hidden()
 
-                        page.click("#dpb-open-primary")
-                        page.wait_for_timeout(200)
-                        page.click("#dpb-pin-toggle")
-                        page.wait_for_timeout(150)
+                        # v9: boots in annotate+select (pick channel ON)
                         proto_frame.locator("#hdr").evaluate("el => el.click()")
                         page.wait_for_timeout(350)
                         record("s1")
@@ -97,13 +102,14 @@ class _PlaywrightPinAdapter:
                         page.wait_for_timeout(350)
                         record("s4")
 
-                        page.click("#dpb-pin-toggle")
+                        # pick channel OFF: preview mode deactivates it
+                        page.click("#dpb-mode-preview")
                         page.wait_for_timeout(150)
                         proto_frame.locator("#hdr").evaluate("el => el.click()")
                         page.wait_for_timeout(350)
                         record("s5")
 
-                        page.click("#dpb-pin-toggle")
+                        page.click("#dpb-mode-annotate")
                         page.wait_for_timeout(150)
                         proto_frame.locator("#hdr").evaluate("el => el.click()")
                         page.wait_for_timeout(250)
@@ -117,7 +123,7 @@ class _PlaywrightPinAdapter:
                             lambda response: response.url.endswith("/decide")
                             and response.request.method == "POST"
                         ):
-                            page.click(".dpb-drawer .dpb-btn-primary")
+                            page.click("#dpb-btn-approve")
                     finally:
                         browser.close()
             except Exception as exc:  # noqa: BLE001
@@ -224,6 +230,17 @@ def main():
         return 1
     print("PIN BRIDGE E2E TEST PASSED")
     return return_code
+
+
+def test_pin_bridge_end_to_end() -> None:
+    """pytest entry point for the main()-style harness below.
+
+    Without a ``test_*`` name pytest collected nothing from this module, so
+    its v9 rewrite (#dpb-root, mode buttons, dropped pin-toggle) shipped
+    without ever being executed. main() prints its own diagnostics and
+    returns non-zero on failure.
+    """
+    assert main() == 0, "pin bridge e2e reported failures (see captured stdout)"
 
 
 if __name__ == "__main__":

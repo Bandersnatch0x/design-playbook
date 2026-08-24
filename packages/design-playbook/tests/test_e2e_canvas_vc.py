@@ -40,9 +40,14 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - environment marker
     sync_playwright = None
 
+# Same directory; pytest's prepend import mode and direct `python <file>` runs
+# both put this directory on sys.path.
+from preview_e2e_helpers import dismiss_onboarding as _dismiss_onboarding  # noqa: E402
+
 SUMMARY = "e2e full flow"
 ROUND_N = 1
 OPTIONS = default_options()
+
 
 PROTO = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <title>e2e canvas</title></head>
@@ -68,13 +73,13 @@ class _PlaywrightReviewAdapter:
                     try:
                         page = browser.new_page()
                         page.goto(url)
-                        page.wait_for_selector("#dpb-preview-bar .dpb-pill")
-                        page.click("#dpb-open-drawer")
+                        page.wait_for_selector("#dpb-root")
+                        _dismiss_onboarding(page)
                         page.frame_locator("iframe.dpb-proto-frame").locator("#hdr").click()
                         page.wait_for_selector("#dpb-anchors .dpb-anchor")
                         page.fill('#dpb-anchors input[data-i="0"]', "tighten spacing")
                         page.fill('textarea[name="feedback"]', "looks good, ship it")
-                        page.click(".dpb-drawer .dpb-btn-primary")
+                        page.click("#dpb-btn-approve")
                         page.wait_for_load_state("domcontentloaded")
                     finally:
                         browser.close()
@@ -190,14 +195,14 @@ class FrontendInteractionTests(unittest.TestCase):
             pw = p.chromium.launch(headless=True)
             try:
                 page = self._page(pw)
-                page.wait_for_selector("#dpb-preview-bar .dpb-pill")
-                page.click("#dpb-open-drawer")  # pin mode on
+                page.wait_for_selector("#dpb-root")
+                _dismiss_onboarding(page)
                 page.click("#a")
                 page.wait_for_selector("#dpb-anchors .dpb-anchor")
                 page.evaluate(
                     """() => {
                         document.querySelector('#b').click();
-                        document.querySelector('#dpb-close-drawer').focus();
+                        document.querySelector('#dpb-undo-btn').focus();
                         return new Promise(resolve => setTimeout(resolve, 0));
                     }"""
                 )
@@ -206,7 +211,7 @@ class FrontendInteractionTests(unittest.TestCase):
                 # Ctrl/Cmd+Z undoes the second pin
                 self.assertEqual(
                     page.evaluate("document.activeElement.id"),
-                    "dpb-close-drawer",
+                    "dpb-undo-btn",
                 )
                 page.keyboard.press("Control+Z")
                 page.wait_for_function(
@@ -227,8 +232,8 @@ class FrontendInteractionTests(unittest.TestCase):
             pw = p.chromium.launch(headless=True)
             try:
                 page = self._page(pw)
-                page.wait_for_selector("#dpb-preview-bar .dpb-pill")
-                page.click("#dpb-open-drawer")
+                page.wait_for_selector("#dpb-root")
+                _dismiss_onboarding(page)
                 page.click("#a")
                 comment = page.locator('#dpb-anchors input[data-i="0"]')
                 comment.press_sequentially("draft comment")
@@ -248,14 +253,14 @@ class FrontendInteractionTests(unittest.TestCase):
             pw = p.chromium.launch(headless=True)
             try:
                 page = self._page(pw)
-                page.wait_for_selector("#dpb-preview-bar .dpb-pill")
-                page.click("#dpb-open-drawer")
+                page.wait_for_selector("#dpb-root")
+                _dismiss_onboarding(page)
                 page.click("#a")
                 comment = page.locator('#dpb-anchors input[data-i="0"]')
                 comment.fill("before")
-                page.locator("#dpb-close-drawer").focus()
+                page.locator("#dpb-undo-btn").focus()
                 comment.fill("after")
-                page.locator("#dpb-close-drawer").focus()
+                page.locator("#dpb-undo-btn").focus()
 
                 page.keyboard.press("Control+Z")
 
@@ -275,18 +280,18 @@ class FrontendInteractionTests(unittest.TestCase):
             pw = p.chromium.launch(headless=True)
             try:
                 page = self._page(pw)
-                page.wait_for_selector("#dpb-preview-bar .dpb-pill")
-                page.click("#dpb-open-drawer")
+                page.wait_for_selector("#dpb-root")
+                _dismiss_onboarding(page)
                 page.click("#a")
                 page.wait_for_selector("#dpb-anchors .dpb-anchor")
                 page.fill('#dpb-anchors input[data-i="0"]', "草稿评论")
                 page.fill('textarea[name="feedback"]', "草稿反馈")
                 # reload -> draft restored (per-run localStorage key)
                 page.reload()
-                page.wait_for_selector("#dpb-preview-bar .dpb-pill")
+                page.wait_for_selector("#dpb-root")
                 restored = page.input_value('textarea[name="feedback"]')
                 self.assertEqual(restored, "草稿反馈")
-                page.click("#dpb-open-drawer")
+                _dismiss_onboarding(page)
                 page.wait_for_selector("#dpb-anchors .dpb-anchor")
                 self.assertEqual(
                     page.input_value('#dpb-anchors input[data-i="0"]'), "草稿评论")
@@ -301,10 +306,10 @@ class FrontendInteractionTests(unittest.TestCase):
             pw = p.chromium.launch(headless=True)
             try:
                 page = self._page(pw)
-                page.click("#dpb-open-drawer")
+                _dismiss_onboarding(page)
                 page.click("#dpb-draw-toggle")  # draw mode on (pin off)
                 self.assertTrue(
-                    page.evaluate("() => document.body.classList.contains('dpb-draw-mode')"))
+                    page.evaluate("() => document.body.classList.contains('dpb-tool-draw')"))
                 # freehand stroke over the prototype area (clear of the
                 # onboarding card at top-left and the right drawer rail)
                 page.mouse.move(440, 320)
@@ -331,9 +336,10 @@ class FrontendInteractionTests(unittest.TestCase):
                     "() => JSON.parse(document.getElementById('dpb-anchors-json').value || '[]')")
                 self.assertEqual(anchors2[0]["comment"], "圈出标题区域")
                 # Esc exits draw mode; the stroke stays
+                page.locator("#dpb-undo-btn").focus()
                 page.keyboard.press("Escape")
                 self.assertFalse(
-                    page.evaluate("() => document.body.classList.contains('dpb-draw-mode')"))
+                    page.evaluate("() => document.body.classList.contains('dpb-tool-draw')"))
                 self.assertGreaterEqual(
                     page.locator("#dpb-draw-layer .dpb-draw-path").count(), 1)
             finally:
@@ -358,8 +364,8 @@ class FrontendInteractionTests(unittest.TestCase):
                             try:
                                 page = browser.new_page()
                                 page.goto(url)
-                                page.wait_for_selector("#dpb-preview-bar .dpb-pill")
-                                page.click("#dpb-open-drawer")
+                                page.wait_for_selector("#dpb-root")
+                                _dismiss_onboarding(page)
                                 page.click("#dpb-draw-toggle")
                                 page.wait_for_timeout(200)
                                 # stroke over the iframe area (bridge captures);
@@ -373,7 +379,7 @@ class FrontendInteractionTests(unittest.TestCase):
                                 page.wait_for_selector("#dpb-anchors .dpb-anchor")
                                 page.fill('#dpb-anchors input[data-i="0"]', "圈出主区域")
                                 page.fill('textarea[name="feedback"]', "整体走查通过")
-                                page.click(".dpb-drawer .dpb-btn-primary")
+                                page.click("#dpb-btn-approve")
                                 page.wait_for_load_state("domcontentloaded")
                             finally:
                                 browser.close()

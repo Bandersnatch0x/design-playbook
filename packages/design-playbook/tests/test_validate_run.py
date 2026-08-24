@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Regression-test the deterministic run seam and its diagnostics."""
+
 import hashlib
 import json
 import os
@@ -17,10 +18,7 @@ PASS = FIX / "pass"
 FAIL = FIX / "fail"
 
 
-def run(
-        spec: Path,
-        pointback: Path,
-        *extra: str) -> subprocess.CompletedProcess[str]:
+def run(spec: Path, pointback: Path, *extra: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(VALIDATOR), str(spec), str(pointback), *extra],
         capture_output=True,
@@ -29,8 +27,8 @@ def run(
 
 
 def expect_valid(
-        failures: list[str], name: str, spec: Path, pointback: Path,
-        *extra: str) -> None:
+    failures: list[str], name: str, spec: Path, pointback: Path, *extra: str
+) -> None:
     if not spec.is_file() or not pointback.is_file():
         failures.append(f"{name}: fixture pair is incomplete")
         return
@@ -38,7 +36,8 @@ def expect_valid(
     if result.returncode != 0:
         failures.append(
             f"{name}: expected exit 0, got {result.returncode}; "
-            f"stdout={result.stdout!r} stderr={result.stderr!r}")
+            f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        )
     elif result.stderr:
         failures.append(f"{name}: unexpected stderr {result.stderr!r}")
     elif "RUN OK" not in result.stdout:
@@ -48,8 +47,13 @@ def expect_valid(
 
 
 def expect_invalid(
-        failures: list[str], name: str, spec: Path, pointback: Path,
-        diagnostic: str, *extra: str) -> None:
+    failures: list[str],
+    name: str,
+    spec: Path,
+    pointback: Path,
+    diagnostic: str,
+    *extra: str,
+) -> None:
     if not spec.is_file() or not pointback.is_file():
         failures.append(f"{name}: fixture pair is incomplete")
         return
@@ -58,13 +62,14 @@ def expect_invalid(
         failures.append(
             f"{name}: expected artifact-invalid exit 1, got "
             f"{result.returncode}; stdout={result.stdout!r} "
-            f"stderr={result.stderr!r}")
+            f"stderr={result.stderr!r}"
+        )
     elif result.stderr:
         failures.append(f"{name}: unexpected stderr {result.stderr!r}")
     elif diagnostic not in result.stdout:
         failures.append(
-            f"{name}: expected diagnostic {diagnostic!r}; "
-            f"stdout={result.stdout!r}")
+            f"{name}: expected diagnostic {diagnostic!r}; stdout={result.stdout!r}"
+        )
     else:
         print(f"  ok    {name} rejects with {diagnostic!r}")
 
@@ -94,12 +99,14 @@ def _write_text(path: Path, text: str) -> None:
 
 
 def _confirm_record(
-        round_n: int, *,
-        confirmed: bool = True,
-        floor_pass: bool = True,
-        report_ref: str = "decision-report.md",
-        prototype_html_hash: str | None = None,
-        floor_failure: str = "") -> dict:
+    round_n: int,
+    *,
+    confirmed: bool = True,
+    floor_pass: bool = True,
+    report_ref: str = "decision-report.md",
+    prototype_html_hash: str | None = None,
+    floor_failure: str = "",
+) -> dict:
     """Build a confirm-round JSON payload mirroring trusted-side confirm.py.
 
     ``prototype_html_hash`` is omitted by default so legacy-style records can
@@ -255,6 +262,40 @@ result: pass
 """
 
 
+def _native_unlink(path: Path) -> None:
+    """Remove a file/symlink bypassing the OS traversal refusal + shim crash.
+
+    On some Windows sandboxes a symlink's *creation* succeeds but the OS
+    refuses to *traverse* it (treating it as an untrusted mount point, OSError
+    [WinError 448]), which also crashes the CodeBuddy safe-delete shim during
+    ``TemporaryDirectory`` cleanup (its ``_path_for_compare`` calls
+    ``os.path.realpath``). ``ctypes DeleteFileW`` deletes the link directly
+    without resolving it.
+    """
+    if os.name == "nt":
+        import ctypes
+
+        ctypes.windll.kernel32.DeleteFileW(str(path))
+    else:
+        os.unlink(path)
+
+
+def _symlink_traversable(link: Path) -> bool:
+    """True if ``link`` can actually be traversed (resolved) on this platform.
+
+    Used to skip the M6 realpath-escape assertion when the OS allows creating
+    a symlink but refuses to follow it - the test then cannot exercise the
+    realpath defence. The freshly-created link is cleaned up natively so the
+    enclosing ``TemporaryDirectory`` teardown does not crash.
+    """
+    try:
+        link.resolve(strict=False)
+        return True
+    except OSError:
+        _native_unlink(link)
+        return False
+
+
 def main() -> int:
     failures: list[str] = []
 
@@ -262,8 +303,7 @@ def main() -> int:
     if not pass_specs:
         failures.append("no pass fixtures found")
     for spec in pass_specs:
-        pointback = spec.with_name(
-            spec.name.replace("spec.md", "point-back.md"))
+        pointback = spec.with_name(spec.name.replace("spec.md", "point-back.md"))
         name = spec.name.replace(".spec.md", "").replace("spec", "default")
         expect_valid(failures, f"pass/{name}", spec, pointback)
 
@@ -284,61 +324,121 @@ def main() -> int:
         "showcase/preview-g5",
         PACKAGE / "showcase" / "01-spec.md",
         PACKAGE / "showcase" / "03-point-back.md",
-        "--preview-dir", str(PACKAGE / "showcase" / "preview"),
-        "--decision-report", str(PACKAGE / "showcase" / "preview" / "decision-report.md"),
+        "--preview-dir",
+        str(PACKAGE / "showcase" / "preview"),
+        "--decision-report",
+        str(PACKAGE / "showcase" / "preview" / "decision-report.md"),
     )
 
     cases = [
-        ("g1-spec-no-criteria", FAIL / "g1-spec-no-criteria.spec.md",
-         FAIL / "g1-spec-no-criteria.point-back.md",
-         "spec: L6.1 missing Given, When, Then"),
-        ("g1-missing-when", FAIL / "g1-missing-when.spec.md",
-         FAIL / "g1-spec-no-criteria.point-back.md",
-         "spec: L6.1 missing When"),
-        ("g1-missing-then", FAIL / "g1-missing-then.spec.md",
-         FAIL / "g1-spec-no-criteria.point-back.md",
-         "spec: L6.1 missing Then"),
-        ("g2-empty-source", FAIL / "g2-empty-source.spec.md",
-         FAIL / "g2-empty-source.point-back.md", "has empty source"),
-        ("g2-empty-issue", PASS / "zero-findings.spec.md",
-         FAIL / "g2-empty-issue.point-back.md", "has empty issue"),
-        ("g2-empty-fix", PASS / "zero-findings.spec.md",
-         FAIL / "g2-empty-fix.point-back.md", "has empty fix"),
-        ("g2-empty-severity", PASS / "zero-findings.spec.md",
-         FAIL / "g2-empty-severity.point-back.md", "has empty severity"),
-        ("g2-missing-evidence", PASS / "zero-findings.spec.md",
-         FAIL / "g2-missing-evidence.point-back.md",
-         "evidence: no criterion-shaped ledger entries"),
-        ("g2-empty-observed", PASS / "zero-findings.spec.md",
-         FAIL / "g2-empty-observed.point-back.md",
-         "evidence: row 3 has empty observed"),
-        ("g2-missing-l6", PASS / "zero-findings.spec.md",
-         FAIL / "g2-missing-l6.point-back.md",
-         "evidence: missing ledger row for L6.5"),
-        ("g2-repeated-l6", PASS / "zero-findings.spec.md",
-         FAIL / "g2-repeated-l6.point-back.md",
-         "evidence: repeated ledger rows for L6.4"),
-        ("g2-unknown-l6", PASS / "zero-findings.spec.md",
-         FAIL / "g2-unknown-l6.point-back.md",
-         "evidence: ledger references unknown L6.6"),
-        ("g2-pass-failed-evidence", PASS / "zero-findings.spec.md",
-         FAIL / "g2-pass-failed-evidence.point-back.md",
-         "evidence: Pass requires row 3 result pass, got 'fail'"),
-        ("g2-invalid-evidence-result", PASS / "zero-findings.spec.md",
-         FAIL / "g2-invalid-evidence-result.point-back.md",
-         "evidence: row 3 has invalid result 'maybe'"),
-        ("g3-fake-closure", FAIL / "g3-fake-closure.spec.md",
-         FAIL / "g3-fake-closure.point-back.md",
-         "Pass verdict but no '0 blocking' closure trail"),
-        ("g3-pass-no-closure", FAIL / "g3-pass-no-closure.spec.md",
-         FAIL / "g3-pass-no-closure.point-back.md",
-         "Pass verdict but no '0 blocking' closure trail"),
-        ("g3-missing-verdict", PASS / "zero-findings.spec.md",
-         FAIL / "g3-missing-verdict.point-back.md",
-         "missing explicit Verdict section"),
-        ("g4-underloop", FAIL / "g4-underloop.spec.md",
-         FAIL / "g4-underloop.point-back.md",
-         "no matching closure trail for issue 'abort run without confirm'"),
+        (
+            "g1-spec-no-criteria",
+            FAIL / "g1-spec-no-criteria.spec.md",
+            FAIL / "g1-spec-no-criteria.point-back.md",
+            "spec: L6.1 missing Given, When, Then",
+        ),
+        (
+            "g1-missing-when",
+            FAIL / "g1-missing-when.spec.md",
+            FAIL / "g1-spec-no-criteria.point-back.md",
+            "spec: L6.1 missing When",
+        ),
+        (
+            "g1-missing-then",
+            FAIL / "g1-missing-then.spec.md",
+            FAIL / "g1-spec-no-criteria.point-back.md",
+            "spec: L6.1 missing Then",
+        ),
+        (
+            "g2-empty-source",
+            FAIL / "g2-empty-source.spec.md",
+            FAIL / "g2-empty-source.point-back.md",
+            "has empty source",
+        ),
+        (
+            "g2-empty-issue",
+            PASS / "zero-findings.spec.md",
+            FAIL / "g2-empty-issue.point-back.md",
+            "has empty issue",
+        ),
+        (
+            "g2-empty-fix",
+            PASS / "zero-findings.spec.md",
+            FAIL / "g2-empty-fix.point-back.md",
+            "has empty fix",
+        ),
+        (
+            "g2-empty-severity",
+            PASS / "zero-findings.spec.md",
+            FAIL / "g2-empty-severity.point-back.md",
+            "has empty severity",
+        ),
+        (
+            "g2-missing-evidence",
+            PASS / "zero-findings.spec.md",
+            FAIL / "g2-missing-evidence.point-back.md",
+            "evidence: no criterion-shaped ledger entries",
+        ),
+        (
+            "g2-empty-observed",
+            PASS / "zero-findings.spec.md",
+            FAIL / "g2-empty-observed.point-back.md",
+            "evidence: row 3 has empty observed",
+        ),
+        (
+            "g2-missing-l6",
+            PASS / "zero-findings.spec.md",
+            FAIL / "g2-missing-l6.point-back.md",
+            "evidence: missing ledger row for L6.5",
+        ),
+        (
+            "g2-repeated-l6",
+            PASS / "zero-findings.spec.md",
+            FAIL / "g2-repeated-l6.point-back.md",
+            "evidence: repeated ledger rows for L6.4",
+        ),
+        (
+            "g2-unknown-l6",
+            PASS / "zero-findings.spec.md",
+            FAIL / "g2-unknown-l6.point-back.md",
+            "evidence: ledger references unknown L6.6",
+        ),
+        (
+            "g2-pass-failed-evidence",
+            PASS / "zero-findings.spec.md",
+            FAIL / "g2-pass-failed-evidence.point-back.md",
+            "evidence: Pass requires row 3 result pass, got 'fail'",
+        ),
+        (
+            "g2-invalid-evidence-result",
+            PASS / "zero-findings.spec.md",
+            FAIL / "g2-invalid-evidence-result.point-back.md",
+            "evidence: row 3 has invalid result 'maybe'",
+        ),
+        (
+            "g3-fake-closure",
+            FAIL / "g3-fake-closure.spec.md",
+            FAIL / "g3-fake-closure.point-back.md",
+            "Pass verdict but no '0 blocking' closure trail",
+        ),
+        (
+            "g3-pass-no-closure",
+            FAIL / "g3-pass-no-closure.spec.md",
+            FAIL / "g3-pass-no-closure.point-back.md",
+            "Pass verdict but no '0 blocking' closure trail",
+        ),
+        (
+            "g3-missing-verdict",
+            PASS / "zero-findings.spec.md",
+            FAIL / "g3-missing-verdict.point-back.md",
+            "missing explicit Verdict section",
+        ),
+        (
+            "g4-underloop",
+            FAIL / "g4-underloop.spec.md",
+            FAIL / "g4-underloop.point-back.md",
+            "no matching closure trail for issue 'abort run without confirm'",
+        ),
     ]
     for name, spec, pointback, diagnostic in cases:
         expect_invalid(failures, name, spec, pointback, diagnostic)
@@ -346,7 +446,8 @@ def main() -> int:
     missing = run(PASS / "zero-findings.spec.md", HERE / "__missing__.md")
     if missing.returncode != 2 or "RUN ERROR" not in missing.stdout:
         failures.append(
-            "missing input must be an operational exit 2, not artifact exit 1")
+            "missing input must be an operational exit 2, not artifact exit 1"
+        )
     else:
         print("  ok    missing input exits 2")
 
@@ -360,50 +461,59 @@ def main() -> int:
     def _run_status_json(run_root: Path) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, str(RUN_STATUS), str(run_root), "--json"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
 
     # G3 gate: each invalid cardinality rejects with its stable diagnostic.
     verdict_gate_cases = [
-        ("verdict/repeated-section",
-         "## Verdict\n\n**Pass.**\n\n## Verdict\n\n**Pass.**\n",
-         "repeated Verdict section"),
-        ("verdict/ambiguous-values",
-         "## Verdict\n\nPass\nRecirculate\n",
-         "exactly one Pass or Recirculate"),
-        ("verdict/no-value",
-         "## Verdict\n\nMaybe\n",
-         "exactly one Pass or Recirculate"),
+        (
+            "verdict/repeated-section",
+            "## Verdict\n\n**Pass.**\n\n## Verdict\n\n**Pass.**\n",
+            "repeated Verdict section",
+        ),
+        (
+            "verdict/ambiguous-values",
+            "## Verdict\n\nPass\nRecirculate\n",
+            "exactly one Pass or Recirculate",
+        ),
+        (
+            "verdict/no-value",
+            "## Verdict\n\nMaybe\n",
+            "exactly one Pass or Recirculate",
+        ),
     ]
     for name, verdict_section, diagnostic in verdict_gate_cases:
         with tempfile.TemporaryDirectory() as tmp:
             run_root = Path(tmp)
             _write_text(
-                run_root / "point-back.md",
-                _verdict_probe_pointback(verdict_section))
+                run_root / "point-back.md", _verdict_probe_pointback(verdict_section)
+            )
             result = run(verdict_spec, run_root / "point-back.md")
             if result.returncode != 1 or diagnostic not in result.stdout:
                 failures.append(
                     f"{name}: expected exit 1 with {diagnostic!r}; "
-                    f"got {result.returncode} {result.stdout!r}")
+                    f"got {result.returncode} {result.stdout!r}"
+                )
             else:
                 print(f"  ok    {name} rejects with {diagnostic!r}")
 
     # G3 gate: exactly one valid Pass or Recirculate still passes.
     for name, verdict_section in (
-            ("verdict/valid-pass", "## Verdict\n\n**Pass.**\n"),
-            ("verdict/valid-recirculate", "## Verdict\n\n**Recirculate.**\n"),
+        ("verdict/valid-pass", "## Verdict\n\n**Pass.**\n"),
+        ("verdict/valid-recirculate", "## Verdict\n\n**Recirculate.**\n"),
     ):
         with tempfile.TemporaryDirectory() as tmp:
             run_root = Path(tmp)
             _write_text(
-                run_root / "point-back.md",
-                _verdict_probe_pointback(verdict_section))
+                run_root / "point-back.md", _verdict_probe_pointback(verdict_section)
+            )
             result = run(verdict_spec, run_root / "point-back.md")
             if result.returncode != 0 or "RUN OK" not in result.stdout:
                 failures.append(
                     f"{name}: expected exit 0 RUN OK; "
-                    f"got {result.returncode} {result.stdout!r}")
+                    f"got {result.returncode} {result.stdout!r}"
+                )
             else:
                 print(f"  ok    {name} is valid")
 
@@ -413,13 +523,13 @@ def main() -> int:
     # Pass but the shared parser correctly rejects.
     verdict_status_cases = [
         ("verdict-status/missing-heading", ""),
-        ("verdict-status/repeated-section",
-         "## Verdict\n\n**Pass.**\n\n## Verdict\n\n**Pass.**\n"),
-        ("verdict-status/ambiguous-values",
-         "## Verdict\n\nPass\nRecirculate\n"),
+        (
+            "verdict-status/repeated-section",
+            "## Verdict\n\n**Pass.**\n\n## Verdict\n\n**Pass.**\n",
+        ),
+        ("verdict-status/ambiguous-values", "## Verdict\n\nPass\nRecirculate\n"),
         ("verdict-status/no-value", "## Verdict\n\nMaybe\n"),
-        ("verdict-status/pass-outside-section",
-         "## Verdict\n\n## Notes\n\nPass\n"),
+        ("verdict-status/pass-outside-section", "## Verdict\n\n## Notes\n\nPass\n"),
         ("verdict-status/inline-colon-heading", "## Verdict: Pass\n"),
         ("verdict-status/misshapen-heading", "## Verdict notes\n\nPass\n"),
     ]
@@ -428,23 +538,25 @@ def main() -> int:
             run_root = Path(tmp)
             _write_text(run_root / "spec.md", "spec\n")
             _write_text(
-                run_root / "point-back.md",
-                _verdict_probe_pointback(verdict_section))
+                run_root / "point-back.md", _verdict_probe_pointback(verdict_section)
+            )
             result = _run_status_json(run_root)
             if result.returncode != 0:
                 failures.append(
                     f"{name}: run_status exited {result.returncode}; "
-                    f"{result.stdout!r} {result.stderr!r}")
+                    f"{result.stdout!r} {result.stderr!r}"
+                )
                 continue
             payload = json.loads(result.stdout)
             if payload["verdict"] is not None:
                 failures.append(
-                    f"{name}: expected verdict None, got "
-                    f"{payload['verdict']!r}")
+                    f"{name}: expected verdict None, got {payload['verdict']!r}"
+                )
             elif "Run complete (Pass)" in payload["next"]:
                 failures.append(
                     f"{name}: run_status reported Run complete (Pass) from "
-                    f"invalid verdict: {payload['next']!r}")
+                    f"invalid verdict: {payload['next']!r}"
+                )
             else:
                 print(f"  ok    {name} does not complete the run")
 
@@ -454,18 +566,24 @@ def main() -> int:
         _write_text(run_root / "spec.md", "spec\n")
         _write_text(
             run_root / "point-back.md",
-            _verdict_probe_pointback("## Verdict\n\n**Pass.**\n"))
+            _verdict_probe_pointback("## Verdict\n\n**Pass.**\n"),
+        )
         result = _run_status_json(run_root)
         if result.returncode != 0:
             failures.append(
                 f"verdict-status/valid-pass: run_status exited "
-                f"{result.returncode}; {result.stdout!r} {result.stderr!r}")
+                f"{result.returncode}; {result.stdout!r} {result.stderr!r}"
+            )
         else:
             payload = json.loads(result.stdout)
-            if payload["verdict"] != "Pass" or "Run complete (Pass)" not in payload["next"]:
+            if (
+                payload["verdict"] != "Pass"
+                or "Run complete (Pass)" not in payload["next"]
+            ):
                 failures.append(
                     f"verdict-status/valid-pass: expected verdict Pass and "
-                    f"Run complete (Pass); got {payload!r}")
+                    f"Run complete (Pass); got {payload!r}"
+                )
             else:
                 print("  ok    verdict-status/valid-pass completes the run")
 
@@ -483,13 +601,13 @@ def main() -> int:
     )
 
     for name in (
-            "g5-preview-confirmed",
-            "g5-multi-round-last-confirmed",
-            "g5-aborted-then-confirmed",
-            "g5-floor-fail-then-revised"):
+        "g5-preview-confirmed",
+        "g5-multi-round-last-confirmed",
+        "g5-aborted-then-confirmed",
+        "g5-floor-fail-then-revised",
+    ):
         case = PASS / name
-        expect_valid(
-            failures, f"pass/{name}", spec, pb, *_g5_args(case))
+        expect_valid(failures, f"pass/{name}", spec, pb, *_g5_args(case))
 
     expect_invalid(
         failures,
@@ -555,9 +673,11 @@ def main() -> int:
             "summary": "review",
             "options": ["确认通过", "需要修改"],
         }
-        binding["digest"] = hashlib.sha256(json.dumps(
-            binding, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-        ).encode("utf-8")).hexdigest()
+        binding["digest"] = hashlib.sha256(
+            json.dumps(
+                binding, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+        ).hexdigest()
         entry = {
             "schema_version": 1,
             "decision_id": "decision-1",
@@ -570,8 +690,14 @@ def main() -> int:
             json.dumps(entry, ensure_ascii=False),
         )
         expect_invalid(
-            failures, "g5-decision-entry-without-confirm", spec, pb,
-            "G5 preview", "--preview-dir", str(preview))
+            failures,
+            "g5-decision-entry-without-confirm",
+            spec,
+            pb,
+            "G5 preview",
+            "--preview-dir",
+            str(preview),
+        )
 
         _write_text(preview / "round-1.html", prototype_body.decode("utf-8"))
         _write_text(run_root / "decision-report.md", "# decision report\n")
@@ -583,15 +709,25 @@ def main() -> int:
             ),
         )
         expect_valid(
-            failures, "g5-decision-entry-with-current-confirm", spec, pb,
-            "--preview-dir", str(preview))
+            failures,
+            "g5-decision-entry-with-current-confirm",
+            spec,
+            pb,
+            "--preview-dir",
+            str(preview),
+        )
 
     with tempfile.TemporaryDirectory() as tmp:
         preview = Path(tmp) / "preview"
         _write_text(preview / "decision-round-1.json", "{}")
         expect_valid(
-            failures, "g5-malformed-decision-lookalike", spec, pb,
-            "--preview-dir", str(preview))
+            failures,
+            "g5-malformed-decision-lookalike",
+            spec,
+            pb,
+            "--preview-dir",
+            str(preview),
+        )
 
     # --- G6 conditional evidence-binding gate (matrix) ---
     g6_spec, _ = _zero_findings_pair()
@@ -611,31 +747,48 @@ def main() -> int:
         str(PASS / "g6-no-evidence" / "evidence"),
     )
     for name in (
-            "g6-evidence-bound",
-            "g6-observed-with-commentary",
-            "g6-multi-entry-latest",
-            "g6-manual-provider"):
+        "g6-evidence-bound",
+        "g6-observed-with-commentary",
+        "g6-multi-entry-latest",
+        "g6-manual-provider",
+    ):
         case = PASS / name
         expect_valid(
-            failures, f"pass/{name}", g6_spec,
-            case / "point-back.md", *_g6_args(case))
+            failures, f"pass/{name}", g6_spec, case / "point-back.md", *_g6_args(case)
+        )
 
     expect_invalid(
-        failures, "g6-dangling-ref", g6_spec,
+        failures,
+        "g6-dangling-ref",
+        g6_spec,
         FAIL / "g6-dangling-ref" / "point-back.md",
-        "G6 evidence", *_g6_args(FAIL / "g6-dangling-ref"))
+        "G6 evidence",
+        *_g6_args(FAIL / "g6-dangling-ref"),
+    )
     expect_invalid(
-        failures, "g6-missing-artifact", g6_spec,
+        failures,
+        "g6-missing-artifact",
+        g6_spec,
         FAIL / "g6-missing-artifact" / "point-back.md",
-        "G6 evidence", *_g6_args(FAIL / "g6-missing-artifact"))
+        "G6 evidence",
+        *_g6_args(FAIL / "g6-missing-artifact"),
+    )
     expect_invalid(
-        failures, "g6-unknown-criterion", g6_spec,
+        failures,
+        "g6-unknown-criterion",
+        g6_spec,
         FAIL / "g6-unknown-criterion" / "point-back.md",
-        "G6 evidence", *_g6_args(FAIL / "g6-unknown-criterion"))
+        "G6 evidence",
+        *_g6_args(FAIL / "g6-unknown-criterion"),
+    )
     expect_invalid(
-        failures, "g6-pass-without-valid-binding", g6_spec,
+        failures,
+        "g6-pass-without-valid-binding",
+        g6_spec,
         FAIL / "g6-pass-without-valid-binding" / "point-back.md",
-        "G6 evidence", *_g6_args(FAIL / "g6-pass-without-valid-binding"))
+        "G6 evidence",
+        *_g6_args(FAIL / "g6-pass-without-valid-binding"),
+    )
 
     # --- G6 capture-contract snapshot full shape (ADR-0018) ---
     # Bound evidence must embed a full provider-echoed request snapshot:
@@ -644,28 +797,60 @@ def main() -> int:
     # hand-written checks); existing rule IDs/messages stay for the
     # schema-version and missing-viewport rows.
     capture_cases = [
-        ("g6-capture-missing-schema",
-         {"viewport": {"width": 1280, "height": 800,
-                       "devicePixelRatio": 1.0, "colorScheme": "light"}},
-         "G6.capture_schema", "missing schemaVersion=1"),
-        ("g6-capture-missing-viewport",
-         {"schemaVersion": 1},
-         "G6.capture_viewport", "missing viewport snapshot"),
-        ("g6-capture-viewport-shape",
-         {"schemaVersion": 1,
-          "viewport": {"width": 1280, "height": 800}},
-         "G6.capture_viewport_shape", "viewport snapshot malformed"),
-        ("g6-capture-missing-freeze",
-         {"schemaVersion": 1,
-          "viewport": {"width": 1280, "height": 800,
-                       "devicePixelRatio": 1.0, "colorScheme": "light"}},
-         "G6.capture_freeze", "freeze snapshot missing"),
-        ("g6-capture-bad-freeze-shape",
-         {"schemaVersion": 1,
-          "viewport": {"width": 1280, "height": 800,
-                       "devicePixelRatio": 1.0, "colorScheme": "light"},
-          "freeze": {"enabled": True}},
-         "G6.capture_freeze", "freeze snapshot malformed"),
+        (
+            "g6-capture-missing-schema",
+            {
+                "viewport": {
+                    "width": 1280,
+                    "height": 800,
+                    "devicePixelRatio": 1.0,
+                    "colorScheme": "light",
+                }
+            },
+            "G6.capture_schema",
+            "missing schemaVersion=1",
+        ),
+        (
+            "g6-capture-missing-viewport",
+            {"schemaVersion": 1},
+            "G6.capture_viewport",
+            "missing viewport snapshot",
+        ),
+        (
+            "g6-capture-viewport-shape",
+            {"schemaVersion": 1, "viewport": {"width": 1280, "height": 800}},
+            "G6.capture_viewport_shape",
+            "viewport snapshot malformed",
+        ),
+        (
+            "g6-capture-missing-freeze",
+            {
+                "schemaVersion": 1,
+                "viewport": {
+                    "width": 1280,
+                    "height": 800,
+                    "devicePixelRatio": 1.0,
+                    "colorScheme": "light",
+                },
+            },
+            "G6.capture_freeze",
+            "freeze snapshot missing",
+        ),
+        (
+            "g6-capture-bad-freeze-shape",
+            {
+                "schemaVersion": 1,
+                "viewport": {
+                    "width": 1280,
+                    "height": 800,
+                    "devicePixelRatio": 1.0,
+                    "colorScheme": "light",
+                },
+                "freeze": {"enabled": True},
+            },
+            "G6.capture_freeze",
+            "freeze snapshot malformed",
+        ),
     ]
     for name, request, rule_id, message in capture_cases:
         with tempfile.TemporaryDirectory() as tmp:
@@ -674,22 +859,24 @@ def main() -> int:
             _write_text(evidence / "L6.1.png", "png")
             _write_text(
                 evidence / "manifest.jsonl",
-                json.dumps({
-                    "criterion": "L6.1",
-                    "artifact": "L6.1.png",
-                    "ts": "2026-07-21T00:00:00+08:00",
-                    "request": request,
-                    "capture": {
-                        "type": "screenshot",
-                        "schemaVersion": 1,
+                json.dumps(
+                    {
+                        "criterion": "L6.1",
+                        "artifact": "L6.1.png",
+                        "ts": "2026-07-21T00:00:00+08:00",
                         "request": request,
-                    },
-                }) + "\n",
+                        "capture": {
+                            "type": "screenshot",
+                            "schemaVersion": 1,
+                            "request": request,
+                        },
+                    }
+                )
+                + "\n",
             )
             g6_pb = run_root / "point-back.md"
             _write_text(g6_pb, _g6_probe_pointback("evidence/L6.1.png"))
-            args = ["--evidence-dir", str(evidence),
-                    "--run-root", str(run_root)]
+            args = ["--evidence-dir", str(evidence), "--run-root", str(run_root)]
             result = run(g6_spec, g6_pb, *args)
             json_result = run(g6_spec, g6_pb, "--format", "json", *args)
             ok = (
@@ -701,7 +888,8 @@ def main() -> int:
             if not ok:
                 failures.append(
                     f"{name}: expected exit 1 with {rule_id} ({message!r}); "
-                    f"text={result.stdout!r} json={json_result.stdout!r}")
+                    f"text={result.stdout!r} json={json_result.stdout!r}"
+                )
             else:
                 print(f"  ok    {name} fails closed with {rule_id}")
 
@@ -716,31 +904,32 @@ def main() -> int:
         text_result = run(
             manifest_spec,
             manifest_pb,
-            "--evidence-dir", str(evidence),
-            "--run-root", str(run_root),
+            "--evidence-dir",
+            str(evidence),
+            "--run-root",
+            str(run_root),
         )
         json_result = run(
             manifest_spec,
             manifest_pb,
-            "--format", "json",
-            "--evidence-dir", str(evidence),
-            "--run-root", str(run_root),
+            "--format",
+            "json",
+            "--evidence-dir",
+            str(evidence),
+            "--run-root",
+            str(run_root),
         )
-        payload = (
-            json.loads(json_result.stdout)
-            if json_result.returncode == 1
-            else []
-        )
+        payload = json.loads(json_result.stdout) if json_result.returncode == 1 else []
         manifest_findings = [
-            item for item in payload
+            item
+            for item in payload
             if str(item.get("rule_id", "")).startswith("G6.manifest_")
         ]
         expected_rules = ["G6.manifest_json", "G6.manifest_entry"]
         if (
             text_result.returncode != 1
             or json_result.returncode != 1
-            or [item.get("rule_id") for item in manifest_findings]
-            != expected_rules
+            or [item.get("rule_id") for item in manifest_findings] != expected_rules
             or any(
                 item.get("message") not in text_result.stdout
                 for item in manifest_findings
@@ -767,15 +956,21 @@ def main() -> int:
         _write_text(
             preview / "confirm-round-1.json",
             json.dumps(
-                _confirm_record(1, prototype_html_hash=h1),
-                ensure_ascii=False, indent=2),
+                _confirm_record(1, prototype_html_hash=h1), ensure_ascii=False, indent=2
+            ),
         )
         _write_text(run_root / "decision-report.md", "# decision report\n")
         expect_invalid(
-            failures, "g5-stale-old-round-confirmed", spec, pb,
+            failures,
+            "g5-stale-old-round-confirmed",
+            spec,
+            pb,
             "stale",
-            "--preview-dir", str(preview),
-            "--decision-report", str(run_root / "decision-report.md"))
+            "--preview-dir",
+            str(preview),
+            "--decision-report",
+            str(run_root / "decision-report.md"),
+        )
 
     # A durable round-2 entry also makes round 2 current. It cannot let the
     # prior round-1 confirmation satisfy G5 when its projection is incomplete.
@@ -786,28 +981,50 @@ def main() -> int:
         _write_text(preview / "round-1.html", body.decode("utf-8"))
         _write_text(
             preview / "confirm-round-1.json",
-            json.dumps(_confirm_record(
-                1, prototype_html_hash=hashlib.sha256(body).hexdigest()
-            ), ensure_ascii=False),
+            json.dumps(
+                _confirm_record(
+                    1, prototype_html_hash=hashlib.sha256(body).hexdigest()
+                ),
+                ensure_ascii=False,
+            ),
         )
         binding = {
-            "round": 2, "prototype_html_hash": "c" * 64,
-            "report_ref": "decision-report.md", "summary": "round two",
+            "round": 2,
+            "prototype_html_hash": "c" * 64,
+            "report_ref": "decision-report.md",
+            "summary": "round two",
             "options": ["确认通过", "需要修改"],
         }
-        binding["digest"] = hashlib.sha256(json.dumps(
-            binding, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-        ).encode("utf-8")).hexdigest()
-        _write_text(preview / "decision-round-2.json", json.dumps({
-            "schema_version": 1, "decision_id": "decision-2",
-            "timestamp": "2026-07-26T00:00:01Z", "binding": binding,
-            "outcome": {"confirmed": False},
-        }, ensure_ascii=False))
+        binding["digest"] = hashlib.sha256(
+            json.dumps(
+                binding, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+        ).hexdigest()
+        _write_text(
+            preview / "decision-round-2.json",
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "decision_id": "decision-2",
+                    "timestamp": "2026-07-26T00:00:01Z",
+                    "binding": binding,
+                    "outcome": {"confirmed": False},
+                },
+                ensure_ascii=False,
+            ),
+        )
         _write_text(run_root / "decision-report.md", "# decision report\n")
         expect_invalid(
-            failures, "g5-decision-entry-makes-latest-round-current", spec, pb,
-            "latest round 2", "--preview-dir", str(preview),
-            "--decision-report", str(run_root / "decision-report.md"))
+            failures,
+            "g5-decision-entry-makes-latest-round-current",
+            spec,
+            pb,
+            "latest round 2",
+            "--preview-dir",
+            str(preview),
+            "--decision-report",
+            str(run_root / "decision-report.md"),
+        )
 
     # prototype on disk no longer hashes to the recorded prototype_html_hash
     # (prototype altered after confirm) -> G5 fail.
@@ -819,14 +1036,22 @@ def main() -> int:
             preview / "confirm-round-1.json",
             json.dumps(
                 _confirm_record(1, prototype_html_hash="0" * 64),
-                ensure_ascii=False, indent=2),
+                ensure_ascii=False,
+                indent=2,
+            ),
         )
         _write_text(run_root / "decision-report.md", "# decision report\n")
         expect_invalid(
-            failures, "g5-prototype-hash-mismatch", spec, pb,
+            failures,
+            "g5-prototype-hash-mismatch",
+            spec,
+            pb,
             "prototype_html_hash",
-            "--preview-dir", str(preview),
-            "--decision-report", str(run_root / "decision-report.md"))
+            "--preview-dir",
+            str(preview),
+            "--decision-report",
+            str(run_root / "decision-report.md"),
+        )
 
     # A current, confirmed, hash-matching record still passes (hash happy path
     # guards against the gate becoming a blanket reject).
@@ -838,14 +1063,20 @@ def main() -> int:
         _write_text(
             preview / "confirm-round-1.json",
             json.dumps(
-                _confirm_record(1, prototype_html_hash=h1),
-                ensure_ascii=False, indent=2),
+                _confirm_record(1, prototype_html_hash=h1), ensure_ascii=False, indent=2
+            ),
         )
         _write_text(run_root / "decision-report.md", "# decision report\n")
         expect_valid(
-            failures, "g5-prototype-hash-match", spec, pb,
-            "--preview-dir", str(preview),
-            "--decision-report", str(run_root / "decision-report.md"))
+            failures,
+            "g5-prototype-hash-match",
+            spec,
+            pb,
+            "--preview-dir",
+            str(preview),
+            "--decision-report",
+            str(run_root / "decision-report.md"),
+        )
 
     # CRLF working-tree bytes must match an LF-normalized confirm hash
     # (Windows core.autocrlf vs Linux CI checkout of the same blob).
@@ -860,13 +1091,21 @@ def main() -> int:
             preview / "confirm-round-1.json",
             json.dumps(
                 _confirm_record(1, prototype_html_hash=h_lf),
-                ensure_ascii=False, indent=2),
+                ensure_ascii=False,
+                indent=2,
+            ),
         )
         _write_text(run_root / "decision-report.md", "# decision report\n")
         expect_valid(
-            failures, "g5-prototype-hash-crlf-normalized", spec, pb,
-            "--preview-dir", str(preview),
-            "--decision-report", str(run_root / "decision-report.md"))
+            failures,
+            "g5-prototype-hash-crlf-normalized",
+            spec,
+            pb,
+            "--preview-dir",
+            str(preview),
+            "--decision-report",
+            str(run_root / "decision-report.md"),
+        )
 
     # --- G6 observed containment (issue 04): observed must not escape
     # the evidence/ subtree via ".." ---
@@ -876,15 +1115,22 @@ def main() -> int:
         _write_text(evidence / ".keep", "")  # evidence/ must be a directory
         _write_text(
             run_root / "spec.md",
-            "# real spec at run root (escape target, must NOT be reached)")
+            "# real spec at run root (escape target, must NOT be reached)",
+        )
         g6_spec, _ = _zero_findings_pair()
         g6_pb = run_root / "point-back.md"
         _write_text(g6_pb, _G6_ESCAPE_POINTBACK)
         expect_invalid(
-            failures, "g6-observed-escape-dotdot", g6_spec, g6_pb,
+            failures,
+            "g6-observed-escape-dotdot",
+            g6_spec,
+            g6_pb,
             "escapes evidence/",
-            "--evidence-dir", str(evidence),
-            "--run-root", str(run_root))
+            "--evidence-dir",
+            str(evidence),
+            "--run-root",
+            str(run_root),
+        )
 
     # --- M6: realpath defence against symlink escape. Mirror evidence/
     # server.py _resolve_artifact_path on the read side: Path.resolve and
@@ -904,22 +1150,37 @@ def main() -> int:
             # than false-fail. The escape is still exercised on Linux/CI.
             print("  skip  g6-symlink-escape (symlinks unavailable on this OS)")
         else:
+            if not _symlink_traversable(link):
+                # Creation succeeded but the OS refuses to follow the link
+                # (untrusted mount point on this sandbox); the realpath
+                # defence cannot be exercised, so skip. Already cleaned up.
+                print("  skip  g6-symlink-escape (symlink traversal unavailable)")
+                return
             _write_text(
                 evidence / "manifest.jsonl",
-                json.dumps({
-                    "criterion": "L6.1",
-                    "artifact": "link.txt",
-                    "ts": "2026-07-21T00:00:00+08:00",
-                }) + "\n",
+                json.dumps(
+                    {
+                        "criterion": "L6.1",
+                        "artifact": "link.txt",
+                        "ts": "2026-07-21T00:00:00+08:00",
+                    }
+                )
+                + "\n",
             )
             g6_spec, _ = _zero_findings_pair()
             g6_pb = run_root / "point-back.md"
             _write_text(g6_pb, _g6_probe_pointback("evidence/link.txt"))
             expect_invalid(
-                failures, "g6-symlink-escape-via-realpath", g6_spec, g6_pb,
+                failures,
+                "g6-symlink-escape-via-realpath",
+                g6_spec,
+                g6_pb,
                 "escapes evidence/",
-                "--evidence-dir", str(evidence),
-                "--run-root", str(run_root))
+                "--evidence-dir",
+                str(evidence),
+                "--run-root",
+                str(run_root),
+            )
 
     # --- LOW-3: observed prefix check is case-insensitive. An uppercase
     # EVIDENCE/ row must still bind to G6 (write boundary is casefold on
@@ -932,20 +1193,29 @@ def main() -> int:
         evidence.mkdir()
         _write_text(
             evidence / "manifest.jsonl",
-            json.dumps({
-                "criterion": "L6.1",
-                "artifact": "missing.png",
-                "ts": "2026-07-21T00:00:00+08:00",
-            }) + "\n",
+            json.dumps(
+                {
+                    "criterion": "L6.1",
+                    "artifact": "missing.png",
+                    "ts": "2026-07-21T00:00:00+08:00",
+                }
+            )
+            + "\n",
         )
         g6_spec, _ = _zero_findings_pair()
         g6_pb = run_root / "point-back.md"
         _write_text(g6_pb, _g6_probe_pointback("EVIDENCE/missing.png"))
         expect_invalid(
-            failures, "g6-uppercase-observed-prefix-binds", g6_spec, g6_pb,
+            failures,
+            "g6-uppercase-observed-prefix-binds",
+            g6_spec,
+            g6_pb,
             "artifact missing",
-            "--evidence-dir", str(evidence),
-            "--run-root", str(run_root))
+            "--evidence-dir",
+            str(evidence),
+            "--run-root",
+            str(run_root),
+        )
 
     # --- LOW-2: _prototype_target must keep prototype resolution inside
     # preview/. A prototype_path that resolves outside preview/ (e.g.
@@ -976,25 +1246,36 @@ def main() -> int:
                     "prototype_path": "../secret.txt",
                     "prototype_html_hash": secret_hash,
                 },
-                ensure_ascii=False, indent=2),
+                ensure_ascii=False,
+                indent=2,
+            ),
         )
         _write_text(run_root / "decision-report.md", "# decision report\n")
         expect_invalid(
-            failures, "g5-prototype-path-escapes-preview", spec, pb,
+            failures,
+            "g5-prototype-path-escapes-preview",
+            spec,
+            pb,
             "prototype html is missing",
-            "--preview-dir", str(preview),
-            "--decision-report", str(run_root / "decision-report.md"))
+            "--preview-dir",
+            str(preview),
+            "--decision-report",
+            str(run_root / "decision-report.md"),
+        )
 
     # --- ADR-0008 adapter floor self-check (bundled runtime) ---
     preview_server = PACKAGE / "mcp" / "preview" / "server.py"
     if preview_server.is_file():
         sc = subprocess.run(
             [sys.executable, str(preview_server), "--self-check"],
-            capture_output=True, text=True)
+            capture_output=True,
+            text=True,
+        )
         if sc.returncode != 0 or "FLOOR SELF-CHECK PASSED" not in sc.stdout:
             failures.append(
                 f"adapter floor self-check: exit {sc.returncode}; "
-                f"stdout={sc.stdout!r} stderr={sc.stderr!r}")
+                f"stdout={sc.stdout!r} stderr={sc.stderr!r}"
+            )
         else:
             print("  ok    adapter floor self-check passed")
     else:
@@ -1003,7 +1284,10 @@ def main() -> int:
     # --- Strict quality mode (opt-in require flags) ---
     strict_spec, strict_pb = _zero_findings_pair()
     strict_no_preview = run(strict_spec, strict_pb, "--require-preview")
-    if strict_no_preview.returncode != 1 or "require-preview" not in strict_no_preview.stdout:
+    if (
+        strict_no_preview.returncode != 1
+        or "require-preview" not in strict_no_preview.stdout
+    ):
         failures.append(
             "strict require-preview: expected exit 1 with diagnostic; "
             f"got {strict_no_preview.returncode} {strict_no_preview.stdout!r}"
@@ -1052,43 +1336,70 @@ def main() -> int:
     # The unaudited skeleton (audited: false) passes non-strict validation
     # (the pass-family glob above also covers pass/skeleton) but is
     # rejected by --strict and the --require-* flags with the AUDIT.*
-    # finding — no new gate number. The fail fixture is byte-identical to
-    # the single module's generator output; the lockstep check pins that.
+    # finding — no new gate number. One fixture pair serves both modes:
+    # the pass fixture is byte-identical to the single module's generator
+    # output (lockstep check below pins that), and the same pair feeds the
+    # strict rejections — identical bytes, different verdicts.
     if str(PACKAGE) not in sys.path:
         sys.path.insert(0, str(PACKAGE))
     from design_playbook.scripts.audit_preferences import (  # noqa: E402
         skeleton_pointback,
     )
 
-    skeleton_spec = FAIL / "skeleton-strict.spec.md"
-    skeleton_pb = FAIL / "skeleton-strict.point-back.md"
-    generated = skeleton_pointback(
-        skeleton_spec.read_text(encoding="utf-8"))
+    skeleton_spec = PASS / "skeleton.spec.md"
+    skeleton_pb = PASS / "skeleton.point-back.md"
+    generated = skeleton_pointback(skeleton_spec.read_text(encoding="utf-8"))
     if generated != skeleton_pb.read_text(encoding="utf-8"):
         failures.append(
-            "skeleton-strict fixture drifted from skeleton_pointback output")
+            "skeleton pass fixture drifted from skeleton_pointback output"
+        )
     else:
         print("  ok    skeleton fixture is byte-identical to the generator")
 
     audit_diagnostic = "AUDIT: point-back carries 'audited: false'"
     expect_invalid(
-        failures, "skeleton/strict", skeleton_spec, skeleton_pb,
-        audit_diagnostic, "--strict")
+        failures,
+        "skeleton/strict",
+        skeleton_spec,
+        skeleton_pb,
+        audit_diagnostic,
+        "--strict",
+    )
     expect_invalid(
-        failures, "skeleton/require-coverage", skeleton_spec, skeleton_pb,
-        audit_diagnostic, "--require-coverage")
+        failures,
+        "skeleton/require-coverage",
+        skeleton_spec,
+        skeleton_pb,
+        audit_diagnostic,
+        "--require-coverage",
+    )
     expect_invalid(
-        failures, "skeleton/require-evidence", skeleton_spec, skeleton_pb,
-        audit_diagnostic, "--require-evidence")
+        failures,
+        "skeleton/require-evidence",
+        skeleton_spec,
+        skeleton_pb,
+        audit_diagnostic,
+        "--require-evidence",
+    )
     expect_valid(
-        failures, "pass/skeleton-explicit",
-        PASS / "skeleton.spec.md", PASS / "skeleton.point-back.md")
+        failures,
+        "pass/skeleton-explicit",
+        PASS / "skeleton.spec.md",
+        PASS / "skeleton.point-back.md",
+    )
 
     # --- Structured diagnostics (vNext ticket 02) ---
     # JSON/text projections share one finding model: rule_id, severity, owner,
     # expected, actual, repair. Text keeps historical message substrings.
     required_json_fields = (
-        "rule_id", "severity", "owner", "expected", "actual", "repair", "message")
+        "rule_id",
+        "severity",
+        "owner",
+        "expected",
+        "actual",
+        "repair",
+        "message",
+    )
     structured_cases = [
         (
             "G1",
@@ -1139,12 +1450,14 @@ def main() -> int:
         if text_result.returncode != 1:
             failures.append(
                 f"structured/{gate}/text: expected exit 1, got "
-                f"{text_result.returncode}; stdout={text_result.stdout!r}")
+                f"{text_result.returncode}; stdout={text_result.stdout!r}"
+            )
             continue
         if json_result.returncode != 1:
             failures.append(
                 f"structured/{gate}/json: expected exit 1, got "
-                f"{json_result.returncode}; stdout={json_result.stdout!r}")
+                f"{json_result.returncode}; stdout={json_result.stdout!r}"
+            )
             continue
         try:
             payload = json.loads(json_result.stdout)
@@ -1153,41 +1466,47 @@ def main() -> int:
             continue
         if not isinstance(payload, list) or not payload:
             failures.append(
-                f"structured/{gate}/json: expected non-empty list, got "
-                f"{payload!r}")
+                f"structured/{gate}/json: expected non-empty list, got {payload!r}"
+            )
             continue
         first = payload[0]
         missing = [key for key in required_json_fields if key not in first]
         if missing:
             failures.append(
-                f"structured/{gate}/json: missing fields {missing} in {first!r}")
+                f"structured/{gate}/json: missing fields {missing} in {first!r}"
+            )
             continue
         if not str(first.get("rule_id", "")).startswith(prefix):
             failures.append(
                 f"structured/{gate}/json: rule_id {first.get('rule_id')!r} "
-                f"does not start with {prefix!r}")
+                f"does not start with {prefix!r}"
+            )
             continue
         if first.get("severity") != "error":
             failures.append(
                 f"structured/{gate}/json: severity must be error for "
-                f"artifact failures, got {first.get('severity')!r}")
+                f"artifact failures, got {first.get('severity')!r}"
+            )
             continue
         if first.get("message") not in text_result.stdout:
             failures.append(
                 f"structured/{gate}: text projection missing JSON message "
-                f"{first.get('message')!r}")
+                f"{first.get('message')!r}"
+            )
             continue
         print(f"  ok    structured/{gate} text+json share rule {first['rule_id']}")
 
     unknown_fmt = run(
         PASS / "zero-findings.spec.md",
         PASS / "zero-findings.point-back.md",
-        "--format", "sarif",
+        "--format",
+        "sarif",
     )
     if unknown_fmt.returncode != 2 or "unknown --format" not in unknown_fmt.stdout:
         failures.append(
             "structured/unknown-format: expected exit 2 with usage diagnostic; "
-            f"got {unknown_fmt.returncode} {unknown_fmt.stdout!r}")
+            f"got {unknown_fmt.returncode} {unknown_fmt.stdout!r}"
+        )
     else:
         print("  ok    structured/unknown-format exits 2")
 
@@ -1215,43 +1534,53 @@ def main() -> int:
         _write_text(
             evidence / "manifest.jsonl",
             "\n".join(
-                json.dumps({
-                    "criterion": "L6.1",
-                    "artifact": "L6.1.png",
-                    "ts": shared_ts,
-                    "request": capture_request,
-                    "capture": {
-                        "type": "screenshot",
-                        "schemaVersion": 1,
+                json.dumps(
+                    {
+                        "criterion": "L6.1",
+                        "artifact": "L6.1.png",
+                        "ts": shared_ts,
                         "request": capture_request,
-                    },
-                })
+                        "capture": {
+                            "type": "screenshot",
+                            "schemaVersion": 1,
+                            "request": capture_request,
+                        },
+                    }
+                )
                 for _ in range(2)
-            ) + "\n",
+            )
+            + "\n",
         )
         pb = run_root / "point-back.md"
         _write_text(pb, _g6_probe_pointback("evidence/L6.1.png"))
         warn_text = run(
             PASS / "zero-findings.spec.md",
             pb,
-            "--evidence-dir", str(evidence),
-            "--run-root", str(run_root),
+            "--evidence-dir",
+            str(evidence),
+            "--run-root",
+            str(run_root),
         )
         warn_json = run(
             PASS / "zero-findings.spec.md",
             pb,
-            "--format", "json",
-            "--evidence-dir", str(evidence),
-            "--run-root", str(run_root),
+            "--format",
+            "json",
+            "--evidence-dir",
+            str(evidence),
+            "--run-root",
+            str(run_root),
         )
         if warn_text.returncode != 0 or "WARN" not in warn_text.stdout:
             failures.append(
                 "structured/warning-text: expected exit 0 with WARN; "
-                f"got {warn_text.returncode} {warn_text.stdout!r}")
+                f"got {warn_text.returncode} {warn_text.stdout!r}"
+            )
         elif warn_json.returncode != 0:
             failures.append(
                 f"structured/warning-json: expected exit 0, got "
-                f"{warn_json.returncode} {warn_json.stdout!r}")
+                f"{warn_json.returncode} {warn_json.stdout!r}"
+            )
         else:
             try:
                 warn_payload = json.loads(warn_json.stdout)
@@ -1266,7 +1595,8 @@ def main() -> int:
                 if "warning" not in severities or "error" in severities:
                     failures.append(
                         "structured/warning-json: expected warning-only "
-                        f"findings, got {warn_payload!r}")
+                        f"findings, got {warn_payload!r}"
+                    )
                 else:
                     print("  ok    structured/warning stays exit 0")
 
@@ -1281,23 +1611,34 @@ def main() -> int:
         "vnext/p2-export-entry-full-chain",
         p2_run / "spec.md",
         p2_run / "point-back.md",
-        "--evidence-dir", str(p2_run / "evidence"),
-        "--run-root", str(p2_run),
-        "--contract-project", str(p2_project),
-        "--contract-run", str(p2_run),
-        "--shaping-dir", str(p2_run / "shaping"),
+        "--evidence-dir",
+        str(p2_run / "evidence"),
+        "--run-root",
+        str(p2_run),
+        "--contract-project",
+        str(p2_project),
+        "--contract-run",
+        str(p2_run),
+        "--shaping-dir",
+        str(p2_run / "shaping"),
     )
     expect_valid(
         failures,
         "vnext/p2-export-entry-strict-coverage",
         p2_run / "spec.md",
         p2_run / "point-back.md",
-        "--evidence-dir", str(p2_run / "evidence"),
-        "--run-root", str(p2_run),
-        "--contract-project", str(p2_project),
-        "--contract-run", str(p2_run),
-        "--shaping-dir", str(p2_run / "shaping"),
-        "--require-evidence", "--require-coverage",
+        "--evidence-dir",
+        str(p2_run / "evidence"),
+        "--run-root",
+        str(p2_run),
+        "--contract-project",
+        str(p2_project),
+        "--contract-run",
+        str(p2_run),
+        "--shaping-dir",
+        str(p2_run / "shaping"),
+        "--require-evidence",
+        "--require-coverage",
     )
 
     # G9 negative: a shaping log with an event outside the closed enum.
@@ -1305,19 +1646,31 @@ def main() -> int:
         bad_shaping = Path(tmp) / "shaping"
         _write_text(bad_shaping / "shaping-log.jsonl", '{"event": "exploded"}\n')
         expect_invalid(
-            failures, "vnext/g9-invalid-event",
-            p2_run / "spec.md", p2_run / "point-back.md",
-            "G9 shaping", "--shaping-dir", str(bad_shaping))
+            failures,
+            "vnext/g9-invalid-event",
+            p2_run / "spec.md",
+            p2_run / "point-back.md",
+            "G9 shaping",
+            "--shaping-dir",
+            str(bad_shaping),
+        )
 
     # G11 negative: vNext-shaped report without a Coverage statement block.
-    broken_pb = (p2_run / "point-back.md").read_text(encoding="utf-8").replace(
-        "## Coverage statement", "## Coverage draft", 1)
+    broken_pb = (
+        (p2_run / "point-back.md")
+        .read_text(encoding="utf-8")
+        .replace("## Coverage statement", "## Coverage draft", 1)
+    )
     with tempfile.TemporaryDirectory() as tmp:
         pb = Path(tmp) / "point-back.md"
         _write_text(pb, broken_pb)
         expect_invalid(
-            failures, "vnext/g11-missing-coverage",
-            p2_run / "spec.md", pb, "G11 coverage")
+            failures,
+            "vnext/g11-missing-coverage",
+            p2_run / "spec.md",
+            pb,
+            "G11 coverage",
+        )
 
     # --- ADR-0008 frontend floor JS intercept (playwright) ---
     # CI has no playwright (see ci.yml: browser suites stay local/release).
@@ -1326,20 +1679,24 @@ def main() -> int:
     if not frontend_test.is_file():
         failures.append("frontend floor test: test_floor_frontend.py not found")
     else:
-        has_pw = subprocess.run(
-            [sys.executable, "-c", "import playwright"],
-            capture_output=True,
-        ).returncode == 0
+        has_pw = (
+            subprocess.run(
+                [sys.executable, "-c", "import playwright"],
+                capture_output=True,
+            ).returncode
+            == 0
+        )
         if not has_pw:
             print("  skip  frontend floor intercept (playwright not installed)")
         else:
             ft = subprocess.run(
-                [sys.executable, str(frontend_test)],
-                capture_output=True, text=True)
+                [sys.executable, str(frontend_test)], capture_output=True, text=True
+            )
             if ft.returncode != 0 or "FRONTEND FLOOR TEST PASSED" not in ft.stdout:
                 failures.append(
                     f"frontend floor test: exit {ft.returncode}; "
-                    f"stdout={ft.stdout[-400:]!r} stderr={ft.stderr[-400:]!r}")
+                    f"stdout={ft.stdout[-400:]!r} stderr={ft.stderr[-400:]!r}"
+                )
             else:
                 print("  ok    frontend floor intercept test passed")
 

@@ -18,6 +18,14 @@ dist-ssr
 .scratch/
 .workbuddy/
 .workflow/
+# .agents/plugins/ is a publish surface (ADR-0009 dual publish; validate.py
+# hard-gates on marketplace.json), so it must stay trackable. Ignoring
+# `.agents/` wholesale leaves already-tracked files working while silently
+# swallowing any new file added there.
+.agents/*
+!.agents/plugins/
+# ADR-0034 §5: handoff artifacts belong under the run tree, not the process
+# cwd. This entry papers over that misplacement and retires with the move.
 output/
 
 # Stray debug screenshots at repo root (showcase/screenshots/ is tracked).
@@ -52,4 +60,14 @@ docs/research/
 
 # firecrawl scratch output
 .firecrawl/
-.stitch/
+
+# Stitch design sources stay local (ADR-0034 §6: exports under .stitch/ are
+# design sources, never runtime assets). git cannot re-include a file whose
+# parent directory is excluded, so exclude/re-include level by level rather
+# than writing `.stitch/` + `!.stitch/...`, which silently tracks everything.
+# The handoff page is the one tracked exception until it moves into
+# mcp/evidence/ per ADR-0034.
+.stitch/*
+!.stitch/designs/
+.stitch/designs/*
+!.stitch/designs/static-handoff-v1.html

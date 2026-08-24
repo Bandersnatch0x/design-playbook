@@ -49,6 +49,7 @@ from design_playbook.scripts.shaping_log import queue_state  # noqa: E402
 # come from the single audit_preferences module; status narration never
 # invites the user to confirm a verdict the audit never earned.
 from design_playbook.scripts.audit_preferences import (  # noqa: E402
+    AuditMarker,
     parse_audit_marker,
 )
 
@@ -220,14 +221,20 @@ def discover_runs(scratch: Path) -> list[Path]:
     return runs
 
 
-def _audit_disposition(pointback_text: str) -> str:
-    """Classify marker facts without treating ambiguity as legacy absence."""
-    marker = parse_audit_marker(pointback_text)
-    if not marker.present:
+def _audit_disposition(
+    pointback_text: str, *, marker: AuditMarker | None = None
+) -> str:
+    """Classify marker facts without treating ambiguity as legacy absence.
+
+    ``marker`` lets a caller that already parsed the text (render) reuse the
+    facts instead of parsing the same point-back twice.
+    """
+    facts = marker if marker is not None else parse_audit_marker(pointback_text)
+    if not facts.present:
         return "legacy"
-    if marker.audited is True:
+    if facts.audited is True:
         return "audited"
-    if marker.audited is False:
+    if facts.audited is False:
         return "unaudited"
     return "ambiguous"
 
@@ -402,7 +409,9 @@ def render(run_root: Path, *, as_json: bool) -> int:
     action = next_action(states, run_root, snapshot, facts)
     vnext = inspect_vnext(run_root, facts)
     audit_marker = parse_audit_marker(facts.pointback_text)
-    audit_disposition = _audit_disposition(facts.pointback_text)
+    audit_disposition = _audit_disposition(
+        facts.pointback_text, marker=audit_marker
+    )
     audited_projection = (
         False if audit_disposition in {"unaudited", "ambiguous"}
         else audit_marker.audited

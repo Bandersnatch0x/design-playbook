@@ -13,6 +13,7 @@ Covers the secure-ship 0.4.4 ticket 01 acceptance:
 - a normal human confirm with the token still records ``confirmed=True`` and
   ``floor_pass=True``; the durable decision transaction records ``prototype_html_hash``.
 """
+
 from __future__ import annotations
 
 import json
@@ -79,6 +80,12 @@ def _post_form(port: int, fields: dict[str, str]) -> bytes:
 def _extract_token(page: str) -> str | None:
     m = re.search(r'name="dpb_token"\s+value="([^"]+)"', page)
     return m.group(1) if m else None
+
+
+# How long a deliberately stuck /export-zip handler is held, and the ceiling
+# collect_review must return within while that handler is still in flight.
+STUCK_HANDLER_HOLD_S = 8.0
+TEARDOWN_CEILING_S = 5.0
 
 
 class _FakeBrowserAdapter:
@@ -188,10 +195,16 @@ def _collect_submitted_anchors(
 
 
 class ControlResourceAssemblyTests(unittest.TestCase):
-    @unittest.skipUnless(shutil.which("node"), "node is required for JavaScript syntax check")
+    @unittest.skipUnless(
+        shutil.which("node"), "node is required for JavaScript syntax check"
+    )
     def test_javascript_resource_is_valid_before_assembly(self) -> None:
         result = subprocess.run(
-            ["node", "--check", str(Path(preview_control.__file__).with_name("control.js"))],
+            [
+                "node",
+                "--check",
+                str(Path(preview_control.__file__).with_name("control.js")),
+            ],
             capture_output=True,
             text=True,
             check=False,
@@ -206,16 +219,19 @@ class ControlResourceAssemblyTests(unittest.TestCase):
             ["Confirm", "Revise"],
         )
 
-        self.assertIn("<style>\n#dpb-preview-bar", control)
+        self.assertIn("<style>", control)
+        self.assertIn("#dpb-root", control)
         self.assertIn('id="dpb-decide-form"', control)
         self.assertIn("window.DPB_I18N =", control)
         self.assertNotIn("reviseLabels", control)
         self.assertIn("isSubstantive()", control)
         self.assertNotIn("<unsafe>", control)
-        self.assertNotRegex(control, r"\{(?:t_|summary_safe|primary_|secondary_|pill_)[^}]*\}")
+        self.assertNotRegex(
+            control, r"\{(?:t_|summary_safe|primary_|secondary_|pill_)[^}]*\}"
+        )
 
     def test_build_control_scheme_a_prime_surface(self) -> None:
-        """Scheme A′ control chrome contracts (abort popover, pill revise submit)."""
+        """Scheme A′ control chrome contracts (abort popover, header revise submit)."""
         control = preview_control._build_control(
             1,
             "A-prime surface",
@@ -234,16 +250,15 @@ class ControlResourceAssemblyTests(unittest.TestCase):
             control,
             r'<button type="submit" name="choice" value="__abort__"[^>]*id="dpb-abort"',
         )
-        # Pill revise is a real submit (not type=button open-drawer only)
-        self.assertIn('class="dpb-btn-pill-secondary"', control)
+        # v9: the revise option renders as a header submit (secondary)
         self.assertRegex(
             control,
-            r'<button type="submit" name="choice" value="Needs changes" class="dpb-btn-pill-secondary"',
+            r'<button type="submit" name="choice" value="Needs changes"[^>]*class="[^"]*dpb-btn-secondary[^"]*"',
         )
-        # Pill quick feedback + readiness chip
-        self.assertIn('id="dpb-pill-feedback"', control)
-        self.assertIn('id="dpb-pill-ready"', control)
-        self.assertIn("z-index: 1001", control)
+        # v9 shell chrome: status pill + feedback field + announce region
+        self.assertIn('id="dpb-status-pill"', control)
+        self.assertIn('id="dpb-feedback"', control)
+        self.assertIn('id="dpb-announce"', control)
         self.assertIn("z-index: 999", control)
 
 
@@ -271,9 +286,7 @@ class TrustBoundaryIntegrationTests(unittest.TestCase):
                 },
             )
 
-        _run_collect(
-            "<html><body><h1>proto-marker-123</h1></body></html>", client
-        )
+        _run_collect("<html><body><h1>proto-marker-123</h1></body></html>", client)
         page = page_box["page"]
         self.assertIn("srcdoc=", page)
         m = re.search(r'<iframe[^>]*\bsandbox="([^"]*)"', page)
@@ -411,12 +424,14 @@ class TrustBoundaryIntegrationTests(unittest.TestCase):
         self.assertNotIn("rejected", decision)
 
     def test_normal_confirm_with_token_passes(self) -> None:
-        submitted = [{
-            "selector": "div.card > h2",
-            "label": 'h2 "Title"',
-            "comment": "tighten spacing",
-            "tag": "h2",
-        }]
+        submitted = [
+            {
+                "selector": "div.card > h2",
+                "label": 'h2 "Title"',
+                "comment": "tighten spacing",
+                "tag": "h2",
+            }
+        ]
 
         def client(port: int) -> None:
             page = _get_page(port)
@@ -446,9 +461,7 @@ class TrustBoundaryIntegrationTests(unittest.TestCase):
         self.assertRegex(decision["anchors"][0]["node_id"], r"^[0-9a-f]{8}$")
         self.assertEqual(
             decision["prototype_html_hash"],
-            prototype_html_digest(
-                b"<html><body><h1>real prototype</h1></body></html>"
-            ),
+            prototype_html_digest(b"<html><body><h1>real prototype</h1></body></html>"),
         )
         self.assertNotIn("confirmed", decision)
         self.assertNotIn("floor_pass", decision)
@@ -480,6 +493,31 @@ class TrustBoundaryIntegrationTests(unittest.TestCase):
         )
         self.assertNotEqual(round_three[0]["node_id"], round_three[1]["node_id"])
         self.assertNotEqual(round_three[0]["node_id"], round_four[0]["node_id"])
+
+    def test_resolved_flag_survives_submission(self) -> None:
+        """A reviewer's resolved marks must reach the decision, not evaporate.
+
+        The resolve toggle is real UI state and the draft channel already
+        round-trips it, but syncHidden() — the channel the decision is actually
+        submitted through — used to drop it, so every resolved mark vanished at
+        submit time with no trace in the decision record.
+        """
+        anchors = _collect_submitted_anchors(
+            [
+                {"selector": "#a", "label": "a", "comment": "", "tag": "h2",
+                 "resolved": True},
+                {"selector": "#b", "label": "b", "comment": "", "tag": "p"},
+                # Only the exact boolean counts — a truthy string must not
+                # silently close a reviewer's open item.
+                {"selector": "#c", "label": "c", "comment": "", "tag": "p",
+                 "resolved": "yes"},
+            ],
+            1,
+        )
+
+        self.assertTrue(anchors[0].get("resolved"))
+        self.assertNotIn("resolved", anchors[1])
+        self.assertNotIn("resolved", anchors[2])
 
     def test_round_zero_omits_anchor_v2_fields(self) -> None:
         anchors = _collect_submitted_anchors(
@@ -517,6 +555,40 @@ class TrustBoundaryIntegrationTests(unittest.TestCase):
             {"selector": "p", "comment": "y", "label": "p", "tag": "p"},
         )
 
+    def test_draw_anchor_points_are_sanitized_and_capped(self) -> None:
+        anchors = _collect_submitted_anchors(
+            [
+                {
+                    "selector": "@draw-1",
+                    "label": "draw 1",
+                    "comment": "circled",
+                    "tag": "draw",
+                    # malformed entries (short, non-list, non-numeric) sit
+                    # between valid ones and must be skipped, never fatal
+                    "points": (
+                        [[0, 0], ["bad", 1], [1], "nope", [10, 20], [None, 2]]
+                        + [[i, i] for i in range(600)]
+                    ),
+                },
+                {
+                    "selector": "@draw-2",
+                    "label": "draw 2",
+                    "comment": "all malformed",
+                    "tag": "draw",
+                    "points": [["x", "y"], [1], "z"],
+                },
+            ],
+            1,
+        )
+
+        self.assertEqual(anchors[0]["selector"], "@draw-1")
+        self.assertEqual(anchors[0]["tag"], "draw")
+        self.assertEqual(anchors[0]["points"][:2], [[0.0, 0.0], [10.0, 20.0]])
+        self.assertEqual(len(anchors[0]["points"]), 512)  # _DRAW_POINTS_MAX
+        # all-malformed points carry no key at all (an empty list would be
+        # a truthy "has points" for the JS renderers)
+        self.assertNotIn("points", anchors[1])
+
     def test_abort_with_token_is_recorded(self) -> None:
         def client(port: int) -> None:
             page = _get_page(port)
@@ -541,12 +613,7 @@ class TrustBoundaryIntegrationTests(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
-# Confirm record hash (existing trusted-side behavior unchanged)             #
-# --------------------------------------------------------------------------- #
-
-
-# --------------------------------------------------------------------------- #
-# pin-to-annotate postMessage bridge (G5 sandbox regression fix)              #
+# Stage 9 static-handoff delivery endpoints (/export-zip, /disclosure-review) #
 # --------------------------------------------------------------------------- #
 
 
@@ -587,11 +654,13 @@ class PinAnnotationBridgeTests(unittest.TestCase):
         self.assertTrue(review_session.BRIDGE_SCRIPT.rstrip().endswith("</script>"))
         # exactly one <script...> open + one </script> close
         self.assertEqual(
-            len(re.findall(r"<script\b", review_session.BRIDGE_SCRIPT)), 1,
+            len(re.findall(r"<script\b", review_session.BRIDGE_SCRIPT)),
+            1,
             "bridge must be a single <script> block",
         )
         self.assertEqual(
-            len(re.findall(r"</script>", review_session.BRIDGE_SCRIPT)), 1,
+            len(re.findall(r"</script>", review_session.BRIDGE_SCRIPT)),
+            1,
             "bridge must close exactly one <script> block",
         )
 
@@ -600,6 +669,7 @@ class PinAnnotationBridgeTests(unittest.TestCase):
         # errors that string assertions cannot). Skipped if node is absent.
         import shutil
         import subprocess
+
         node = shutil.which("node")
         if not node:
             self.skipTest("node not available; JS syntax check skipped")
@@ -621,20 +691,54 @@ class PinAnnotationBridgeTests(unittest.TestCase):
             except OSError:
                 pass
         self.assertEqual(
-            completed.returncode, 0,
+            completed.returncode,
+            0,
             f"bridge script is not valid JS: "
             f"{completed.stderr.decode('utf-8', 'replace')}",
         )
 
+    def test_bridge_draw_style_matches_the_parent_theme_tokens(self) -> None:
+        """The iframe's inlined draw style must track control.css.
+
+        The sandboxed frame cannot read the parent's custom properties, so the
+        bridge inlines literal values. That copy is the production path — when
+        it drifts, the dashed #E11D48 stroke in control.css is not what any
+        reviewer ever sees, and nothing else catches it.
+        """
+        css = (
+            Path(preview_control.__file__)
+            .with_name("control.css")
+            .read_text(encoding="utf-8")
+        )
+        bridge = review_session.BRIDGE_SCRIPT
+
+        for token, expected in (("--dpb-draw-stroke", "#E11D48"),
+                                ("--dpb-draw-ink", "#FFFFFF")):
+            self.assertIn(
+                f"{token}: {expected}", css,
+                f"control.css light-theme {token} changed; update the bridge copy",
+            )
+            self.assertIn(
+                expected, bridge,
+                f"bridge must inline the light-theme {token} value {expected}",
+            )
+        # spec §3.1: strokes are dashed. The parent dashes them; so must the
+        # frame that actually renders them.
+        self.assertIn("stroke-dasharray: 8 4", css)
+        self.assertIn("stroke-dasharray:8 4", bridge)
+
     def test_bridge_contains_postMessage_with_dpbPinAnchor(self) -> None:
         js = _bridge_inner_js()
-        self.assertIn("postMessage", js,
-                      "bridge must postMessage the anchor to the parent")
-        self.assertIn("dpbPinAnchor", js,
-                      "bridge must tag its messages with the dpbPinAnchor key")
+        self.assertIn(
+            "postMessage", js, "bridge must postMessage the anchor to the parent"
+        )
+        self.assertIn(
+            "dpbPinAnchor", js, "bridge must tag its messages with the dpbPinAnchor key"
+        )
         # postMessage target must be the parent window
         self.assertRegex(
-            js, r"parent\.postMessage\s*\(",
+            js,
+            r"parent\.postMessage\s*\(",
             "bridge must postMessage to parent (not top/opener)",
         )
 
@@ -643,49 +747,62 @@ class PinAnnotationBridgeTests(unittest.TestCase):
         # compute a selector for the clicked element on its own side of the
         # trust boundary. Assert the key branches are present.
         js = _bridge_inner_js()
-        self.assertIn("function cssPath", js,
-                      "cssPath function missing from bridge")
-        self.assertIn("CSS.escape", js,
-                      "cssPath must escape id/class via CSS.escape")
+        self.assertIn("function cssPath", js, "cssPath function missing from bridge")
+        self.assertIn("CSS.escape", js, "cssPath must escape id/class via CSS.escape")
         # id fast path
-        self.assertRegex(js, r'el\.id\b.*#"',
-                         "cssPath must short-circuit on element id")
+        self.assertRegex(
+            js, r'el\.id\b.*#"', "cssPath must short-circuit on element id"
+        )
         # nth-of-type branch (disambiguate siblings)
-        self.assertIn(":nth-of-type(", js,
-                       "cssPath must include :nth-of-type for sibling disambig")
+        self.assertIn(
+            ":nth-of-type(",
+            js,
+            "cssPath must include :nth-of-type for sibling disambig",
+        )
         # tag fallback
-        self.assertIn("tagName.toLowerCase()", js,
-                       "cssPath must fall back to lowercased tagName")
+        self.assertIn(
+            "tagName.toLowerCase()", js, "cssPath must fall back to lowercased tagName"
+        )
         # the click listener that fires cssPath + postMessage
-        self.assertIn('"click"', js,
-                      "bridge must register a click listener")
-        self.assertIn("dpb-pin-target", js,
-                      "bridge must highlight the clicked element in-iframe")
+        self.assertIn('"click"', js, "bridge must register a click listener")
+        self.assertIn(
+            "dpb-pin-target", js, "bridge must highlight the clicked element in-iframe"
+        )
 
     def test_bridge_does_not_reach_parent_dom_or_token(self) -> None:
         # G5 security contract: the bridge runs inside the sandboxed opaque-
         # origin iframe. It must NOT touch parent.document, parent.location,
         # or the decision token. It may only postMessage anchor data.
         js = _bridge_inner_js()
-        self.assertNotIn("parent.document", js,
-                         "bridge must not read parent.document (G5 boundary)")
-        self.assertNotIn("parent.location", js,
-                         "bridge must not read parent.location (G5 boundary)")
-        self.assertNotIn("dpb_token", js,
-                         "bridge must not reference the decision token")
-        self.assertNotIn("dpb_round", js,
-                         "bridge must not reference the decision round")
-        self.assertNotIn("/decide", js,
-                         "bridge must not POST to /decide (parent-only path)")
-        self.assertNotIn("localStorage", js,
-                         "bridge must not touch storage (no exfil channel)")
+        self.assertNotIn(
+            "parent.document", js, "bridge must not read parent.document (G5 boundary)"
+        )
+        self.assertNotIn(
+            "parent.location", js, "bridge must not read parent.location (G5 boundary)"
+        )
+        self.assertNotIn(
+            "dpb_token", js, "bridge must not reference the decision token"
+        )
+        self.assertNotIn(
+            "dpb_round", js, "bridge must not reference the decision round"
+        )
+        self.assertNotIn(
+            "/decide", js, "bridge must not POST to /decide (parent-only path)"
+        )
+        self.assertNotIn(
+            "localStorage", js, "bridge must not touch storage (no exfil channel)"
+        )
         # no fetch/XHR — the bridge's only outbound channel is postMessage
         self.assertNotRegex(
-            js, r"\bfetch\s*\(",
+            js,
+            r"\bfetch\s*\(",
             "bridge must not use fetch (postMessage is its only channel)",
         )
-        self.assertNotIn("XMLHttpRequest", js,
-                         "bridge must not use XHR (postMessage is its only channel)")
+        self.assertNotIn(
+            "XMLHttpRequest",
+            js,
+            "bridge must not use XHR (postMessage is its only channel)",
+        )
 
     def test_collect_routes_through_browser_adapter(self) -> None:
         """The public interface uses the supplied adapter end to end."""
@@ -705,9 +822,7 @@ class PinAnnotationBridgeTests(unittest.TestCase):
                 },
             )
 
-        _run_collect(
-            "<html><body>x</body></html>", client, fake_adapter=fake
-        )
+        _run_collect("<html><body>x</body></html>", client, fake_adapter=fake)
         self.assertEqual(len(fake.opened_urls), 1)
         self.assertEqual(len(fake.closed_handles), 1)
 

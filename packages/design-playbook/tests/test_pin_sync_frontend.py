@@ -116,8 +116,12 @@ class BridgePinSyncProtocolTests(unittest.TestCase):
             "W5: injected .dpb-pin-flash needs a reduced-motion fallback")
 
     def test_parent_control_js_drives_sync_channels(self) -> None:
-        js = (Path(preview_control.__file__).with_name("control.js")
-              .read_text(encoding="utf-8"))
+        # v9 splits the parent script into control.js + control.review.js and
+        # stitches them at the DPB_REVIEW_INSERT marker. Assert the assembled
+        # bundle — what actually ships into the page — so moving a channel
+        # between the two files cannot fail this while the feature still works,
+        # and dropping one still fails it.
+        _, _, js, _ = preview_control._load_resources()
         # #56: parent pushes pin state on toggle/load/hello
         self.assertIn("dpbPinState", js)
         self.assertIn("dpbPinHello", js)
@@ -126,23 +130,21 @@ class BridgePinSyncProtocolTests(unittest.TestCase):
         self.assertIn("dpbPinAnchors", js)
         self.assertIn("dpbPinLocate", js)
         self.assertIn("dpbPinFlash", js)
-        # W2: hello handshake AND iframe (re)load must resend the badges too,
-        # not only the pin state.
+        # W2: hello handshake must resend the badges too, not only the pin
+        # state (v9: the bridge posts hello on every (re)load; the parent
+        # answers with pin state + draw state + anchors).
         hello_idx = js.index("data.dpbPinHello")
         self.assertIn("syncAnchorsToFrame()", js[hello_idx:hello_idx + 400],
                       "W2: hello resend must include dpbPinAnchors")
-        load_idx = js.index('addEventListener("load"')
-        self.assertIn("syncAnchorsToFrame()", js[load_idx:load_idx + 400],
-                      "W2: iframe load resend must include dpbPinAnchors")
         # W3: the parent only accepts messages from its own prototype iframe
         self.assertIn("e.source !== srcFrame.contentWindow", js,
                       "W3: parent must source-check inbound pin messages")
-        # #58: collapsing the drawer must NOT turn pin off
-        close_fn = re.search(
-            r"function closeDrawer\(\)\s*\{(.*?)\n  \}", js, re.DOTALL)
-        self.assertIsNotNone(close_fn, "closeDrawer not found in control.js")
-        self.assertNotIn("setPin(false)", close_fn.group(1),
-                         "#58: closeDrawer must keep pin on")
+        # #58: collapsing the inspector must NOT turn the pick tool off
+        drawer_fn = re.search(
+            r"function setDrawer\(open[^)]*\)\s*\{(.*?)\n  \}", js, re.DOTALL)
+        self.assertIsNotNone(drawer_fn, "setDrawer not found in control.js")
+        self.assertNotIn("setTool(", drawer_fn.group(1),
+                         "#58: setDrawer must keep the active tool on")
 
 
 # --------------------------------------------------------------------------- #
@@ -166,7 +168,8 @@ class _PlaywrightPinSyncAdapter:
                     try:
                         page = browser.new_page()
                         page.goto(url, wait_until="domcontentloaded")
-                        page.wait_for_selector("#dpb-preview-bar")
+                        page.wait_for_selector("#dpb-root")
+                        page.wait_for_timeout(600)
                         proto_frame = page.frame_locator("iframe.dpb-proto-frame")
 
                         def hidden() -> list[dict]:
@@ -175,10 +178,11 @@ class _PlaywrightPinSyncAdapter:
                                 "'dpb-anchors-json').value || '[]')"
                             )
 
-                        page.click("#dpb-open-primary")
-                        page.wait_for_timeout(200)
-
                         # --- #56 passive bridge: pin off, click passes through
+                        # v9 boots in annotate+select (pin ON); preview mode
+                        # deactivates the pick channel for the passive check.
+                        page.click("#dpb-mode-preview")
+                        page.wait_for_timeout(200)
                         proto_frame.locator("#hdr").evaluate("el => el.click()")
                         page.wait_for_timeout(300)
                         self.obs["passive_rows"] = len(hidden())
@@ -187,22 +191,11 @@ class _PlaywrightPinSyncAdapter:
                                 "el => el.classList.contains('dpb-pin-target')")
                         )
 
-                        # --- turn pin on: bridge starts intercepting
-                        page.click("#dpb-pin-toggle")
+                        # --- back to annotate: the pick channel re-engages
+                        page.click("#dpb-mode-annotate")
                         page.wait_for_timeout(200)
                         self.obs["pin_aria"] = page.get_attribute(
                             "#dpb-pin-toggle", "aria-pressed")
-
-                        # --- W1: onboarding card stays clickable while pin is on
-                        self.obs["card_visible_pinned"] = page.evaluate(
-                            "() => { const c = document.getElementById("
-                            "'dpb-onboard'); return !!(c && !c.hidden); }")
-                        page.click("#dpb-onboard-close", force=True)
-                        page.wait_for_timeout(200)
-                        self.obs["card_closed_pinned"] = page.evaluate(
-                            "() => { const c = document.getElementById("
-                            "'dpb-onboard'); return !!(c && c.hidden); }")
-                        self.obs["rows_after_card_close"] = len(hidden())
 
                         # --- W3: spoofed dpbPinAnchor from the host page is dropped
                         page.evaluate(
@@ -216,30 +209,24 @@ class _PlaywrightPinSyncAdapter:
                         page.wait_for_timeout(300)
                         self.obs["on_rows"] = len(hidden())
 
-                        # --- #58 collapse the drawer; pin must stay on
-                        page.click("#dpb-close-drawer")
-                        page.wait_for_timeout(200)
+                        # --- #58 collapse the inspector; the pick tool stays on
+                        page.click("#dpb-inspector-close")
+                        page.wait_for_timeout(250)
                         self.obs["pin_after_collapse"] = page.evaluate(
-                            "() => document.body.classList.contains('dpb-pin-mode')")
-                        self.obs["pill_pinning"] = page.evaluate(
-                            "() => document.getElementById('dpb-open-drawer')"
-                            ".classList.contains('is-pinning')")
+                            "() => document.getElementById('dpb-pin-toggle')"
+                            ".getAttribute('aria-pressed') === 'true'")
                         self.obs["drawer_open_after_collapse"] = page.evaluate(
-                            "() => { const d = document.getElementById("
-                            "'dpb-drawer'); return !!(d && d.open); }")
+                            "() => !document.getElementById('dpb-inspector')"
+                            ".classList.contains('dpb-collapsed')")
 
                         # picking continues from the collapsed pill
                         proto_frame.locator("#action").evaluate("el => el.click()")
                         page.wait_for_timeout(300)
                         self.obs["rows_after_collapse_pick"] = len(hidden())
 
-                        # --- #58 scrim near-transparent while picking
-                        page.click("#dpb-open-drawer")  # reopen drawer
-                        page.wait_for_timeout(200)
-                        self.obs["scrim_bg"] = page.evaluate(
-                            "() => getComputedStyle(document.getElementById("
-                            "'dpb-preview-bar'), '::before')"
-                            ".getPropertyValue('background-color')")
+                        # --- reopen the inspector via the right-edge tab
+                        page.click("#dpb-reopen-tab")
+                        page.wait_for_timeout(250)
 
                         # --- #57 scheme A: badge mirrors into the iframe
                         page.wait_for_selector(
@@ -256,7 +243,10 @@ class _PlaywrightPinSyncAdapter:
                             .inner_text() if self.obs["badge_count"] else "")
 
                         # --- #57 scheme A: locate flashes inside the iframe
-                        page.click('.dpb-anchor [data-locate="1"]')
+                        # (v9: clicking a card row focuses + locates the anchor)
+                        page.click(
+                            "#dpb-anchors .dpb-anchor:nth-of-type(2) "
+                            ".dpb-anchor-meta")
                         page.wait_for_timeout(300)
                         self.obs["locate_flash"] = bool(
                             proto_frame.locator("#action").evaluate(
@@ -265,13 +255,13 @@ class _PlaywrightPinSyncAdapter:
 
                         # --- W4: live region stays mounted while drawer is open
                         self.obs["drawer_open_w4"] = page.evaluate(
-                            "() => { const d = document.getElementById("
-                            "'dpb-drawer'); return !!(d && d.open); }")
+                            "() => !document.getElementById('dpb-inspector')"
+                            ".classList.contains('dpb-collapsed')")
                         self.obs["announce_mounted"] = page.evaluate(
                             "() => { const a = document.getElementById("
                             "'dpb-announce'); return !!(a && a.isConnected && "
                             "a.parentElement && a.parentElement.id === "
-                            "'dpb-preview-bar'); }")
+                            "'dpb-root'); }")
 
                         # --- W2: hello handshake rebuilds the iframe badges.
                         # A (re)loaded iframe boots with an empty bridge state;
@@ -297,7 +287,7 @@ class _PlaywrightPinSyncAdapter:
                         # --- #57: removing anchors must clear the in-iframe
                         # badges AND the highlight; the empty list must reach
                         # the bridge (not be swallowed by an early return).
-                        page.click('.dpb-anchor .rm[data-rm="0"]')
+                        page.click('.dpb-anchor-rm[data-rm="0"]')
                         page.wait_for_timeout(300)
                         self.obs["rows_after_rm1"] = len(hidden())
                         self.obs["badges_after_rm1"] = int(
@@ -308,7 +298,7 @@ class _PlaywrightPinSyncAdapter:
                             proto_doc.evaluate(
                                 "() => document.querySelector('#hdr')"
                                 ".classList.contains('dpb-pin-target')"))
-                        page.click('.dpb-anchor .rm[data-rm="0"]')
+                        page.click('.dpb-anchor-rm[data-rm="0"]')
                         page.wait_for_timeout(300)
                         self.obs["rows_after_rm2"] = len(hidden())
                         self.obs["badges_after_rm2"] = int(
@@ -340,7 +330,7 @@ class _PlaywrightPinSyncAdapter:
                             lambda response: response.url.endswith("/decide")
                             and response.request.method == "POST"
                         ):
-                            page.click(".dpb-drawer .dpb-btn-primary")
+                            page.click("#dpb-btn-approve")
                     finally:
                         browser.close()
             except Exception as exc:  # noqa: BLE001
@@ -393,18 +383,16 @@ def main():
 
     collapse_ok = (
         obs.get("pin_after_collapse") is True
-        and obs.get("pill_pinning") is True
         and obs.get("drawer_open_after_collapse") is False
     )
     print(
         f"  S3 #58 collapse keeps pin: pin={obs.get('pin_after_collapse')} "
-        f"pill_pinning={obs.get('pill_pinning')} "
         f"drawer_closed={not obs.get('drawer_open_after_collapse')} "
         f"-> {'OK' if collapse_ok else 'FAIL'}")
     if not collapse_ok:
         failures.append(
-            "S3: collapsing the drawer must keep pin on (body class + pill "
-            "is-pinning indicator) without closing the session")
+            "S3: collapsing the inspector must keep the pick tool on "
+            "without closing the session")
 
     pick_ok = obs.get("rows_after_collapse_pick") == 2
     print(
@@ -414,17 +402,6 @@ def main():
     if not pick_ok:
         failures.append(
             "S4: element picking must continue while the drawer is collapsed")
-
-    scrim_ok = obs.get("scrim_bg") in (
-        "rgba(15, 23, 42, 0.04)", "rgba(15,23,42,0.04)",   # dark glass-track
-        "rgba(17, 24, 39, 0.04)", "rgba(17,24,39,0.04)")  # light glass-track
-    print(
-        f"  S5 #58 scrim near-transparent while picking: "
-        f"bg={obs.get('scrim_bg')!r} -> {'OK' if scrim_ok else 'FAIL'}")
-    if not scrim_ok:
-        failures.append(
-            "S5: pin-mode scrim must drop to near-transparent "
-            "(rgba(15,23,42,.04))")
 
     badge_ok = (obs.get("badge_count") == 2
                 and str(obs.get("badge_first_text", "")).strip().startswith("1"))
@@ -445,24 +422,7 @@ def main():
             "S7: locate on a cross-origin anchor must flash the element "
             "inside the iframe")
 
-    card_ok = (
-        obs.get("card_visible_pinned") is True
-        and obs.get("card_closed_pinned") is True
-        and obs.get("rows_after_card_close") == 0
-    )
-    print(
-        f"  S8 W1 onboarding card clickable while pinned: "
-        f"visible={obs.get('card_visible_pinned')} "
-        f"closed={obs.get('card_closed_pinned')} "
-        f"rows={obs.get('rows_after_card_close')} "
-        f"-> {'OK' if card_ok else 'FAIL'}")
-    if not card_ok:
-        failures.append(
-            "S8: with pin on, the onboarding card must close on click and "
-            "must not be recorded as an anchor")
-
-    spoof_ok = (obs.get("rows_after_spoof")
-                == obs.get("rows_after_card_close"))
+    spoof_ok = (obs.get("rows_after_spoof") == 0)
     print(
         f"  S9 W3 spoofed message rejected: "
         f"rows={obs.get('rows_after_spoof')} "
@@ -482,7 +442,7 @@ def main():
     if not w4_ok:
         failures.append(
             "S10: #dpb-announce must stay in the accessibility tree while "
-            "the drawer is open (direct child of #dpb-preview-bar)")
+            "the inspector is open (direct child of #dpb-root)")
 
     reload_ok = (obs.get("badges_lost") is True
                  and obs.get("badge_count_after_reload") == 2)

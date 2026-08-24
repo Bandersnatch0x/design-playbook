@@ -99,7 +99,7 @@ check((PKG / "mcp" / "preview" / "server.py").is_file(),
       "bundled preview runtime at mcp/preview/server.py")
 check((PKG / "mcp" / "preview" / "integrity.py").is_file(),
       "bundled preview integrity module at mcp/preview/integrity.py")
-for resource_name in ("control.html", "control.css", "control.js"):
+for resource_name in ("control.html", "control.css", "control.js", "control.review.js"):
     check((PKG / "mcp" / "preview" / resource_name).is_file(),
           f"bundled preview frontend resource at mcp/preview/{resource_name}")
 check((PKG / "mcp" / "evidence" / "server.py").is_file(),
@@ -791,6 +791,34 @@ check_skill_prose(
 )
 check_skill_prose(run_checks, "ui-evaluator consumes craft registry audit rows", anchor="### 2. Run checks")
 check_skill_prose(verdict, "ui-evaluator pass requires all evidence rows", anchor="### 4. Verdict")
+
+print("== Test executability (no tracked test file is unreachable) ==")
+# A tracked test file runs one of two ways: pytest collects it (needs a test_*
+# function) or ci.yml invokes it as a script. A file with neither never runs
+# anywhere and "passes" by being absent — the shape that let the v9 rewrite of
+# test_pin_bridge_frontend ship unverified. This gate bans that state; it does
+# not opine on which of the two mechanisms a given file should use.
+_all_tracked_python = _checks.git_tracked_python_files(ROOT)
+if _all_tracked_python is None:
+    print("  info  test-executability gate skipped (no git inventory in this tree)")
+else:
+    _ci_yml = ROOT / ".github" / "workflows" / "ci.yml"
+    _ci_text = _ci_yml.read_text(encoding="utf-8") if _ci_yml.is_file() else ""
+    _unreachable = sorted(
+        path
+        for path in _all_tracked_python
+        if Path(path).name.startswith("test_")
+        # fixtures/ is test data, not a suite; showcase ships a node harness.
+        and "/fixtures/" not in path
+        and not path.startswith("packages/design-playbook/showcase/")
+        and path not in _ci_text
+        and "def test_" not in (ROOT / path).read_text(encoding="utf-8", errors="replace")
+    )
+    check(
+        not _unreachable,
+        "every tracked test file is reachable by pytest or ci.yml"
+        + (f" (unreachable: {', '.join(_unreachable)})" if _unreachable else ""),
+    )
 
 print("== Ruff (tracked Python, issue #78) ==")
 tracked_python = _checks.git_tracked_python_files(ROOT)

@@ -1,0 +1,1358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>Static Handoff · 静态交付与证据导出 - Design Playbook</title>
+  
+  <!-- Tailwind CSS CDN with Plugins -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  
+  <!-- Material Symbols Icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+  
+  <!-- Curated Fonts: Geist, Inter, JetBrains Mono, Public Sans -->
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+
+  <!-- Tailwind Custom Theme Configuration -->
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            surface: "#F8FAFC",
+            'surface-container': "#FFFFFF",
+            'surface-container-high': "#F1F5F9",
+            'surface-container-highest': "#E2E8F0",
+            'on-surface': "#0F172A",
+            'on-surface-variant': "#475569",
+            'on-surface-subtle': "#94A3B8",
+            outline: "#E2E8F0",
+            'outline-subtle': "#CBD5E1",
+            primary: "#2563EB",
+            'primary-50': "#EFF6FF",
+            'primary-100': "#DBEAFE",
+            'primary-600': "#2563EB",
+            'primary-700': "#1D4ED8",
+            success: "#10B981",
+            'success-50': "#ECFDF5",
+            warning: "#F59E0B",
+            'warning-50': "#FFFBEB",
+            danger: "#E11D48",
+            'danger-50': "#FFF1F2",
+            tertiary: "#B45309",
+            'tertiary-50': "#FEF3C7"
+          },
+          borderRadius: {
+            DEFAULT: "0.25rem",
+            sm: "0.125rem",
+            md: "0.375rem",
+            lg: "0.5rem",
+            xl: "0.75rem",
+            '2xl': "1rem",
+            full: "9999px"
+          },
+          fontFamily: {
+            headline: ["Geist", "sans-serif"],
+            display: ["Geist", "sans-serif"],
+            body: ["Inter", "sans-serif"],
+            label: ["Public Sans", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          },
+          boxShadow: {
+            'glow-primary': '0 0 20px -3px rgba(37, 99, 235, 0.25)',
+            'floating-drawer': '-6px 0 28px -4px rgba(15, 23, 42, 0.06)',
+            'tool-card': '0 4px 20px -2px rgba(15, 23, 42, 0.08), 0 2px 6px -1px rgba(15, 23, 42, 0.04)',
+            'pin-tactile': '0 4px 12px -1px rgba(37, 99, 235, 0.35), 0 2px 4px -1px rgba(37, 99, 235, 0.2)'
+          },
+          transitionTimingFunction: {
+            'spring': 'cubic-bezier(0.16, 1, 0.3, 1)'
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20; }
+    .material-symbols-fill { font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 20; }
+    
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+    /* Subtle Canvas Grid */
+    .canvas-grid {
+      background-size: 20px 20px;
+      background-image: 
+        linear-gradient(to right, rgba(226, 232, 240, 0.4) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(226, 232, 240, 0.4) 1px, transparent 1px);
+      background-color: #F8FAFC;
+    }
+
+    /* Keycap Badge */
+    .keycap {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      padding: 1px 4px;
+      border-radius: 4px;
+      background: #F1F5F9;
+      border: 1px solid #CBD5E1;
+      box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
+      color: #475569;
+    }
+
+    /* Redline Guide Overlays */
+    .redline-box {
+      outline: 1.5px dashed #E11D48;
+      background-color: rgba(225, 29, 72, 0.04);
+      position: relative;
+    }
+
+    /* Fold line marker */
+    .fold-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: #3B82F6;
+      border-top: 1px dashed #2563EB;
+      z-index: 25;
+      pointer-events: none;
+    }
+    .fold-badge {
+      position: absolute;
+      right: 12px;
+      top: -10px;
+      background: #2563EB;
+      color: white;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    @keyframes toastIn {
+      from { transform: translateY(12px) scale(0.96); opacity: 0; }
+      to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    .toast-animate {
+      animation: toastIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .i18n-text {
+      transition: opacity 0.12s ease-in-out;
+    }
+  </style>
+</head>
+
+<body class="bg-surface font-body text-on-surface h-screen w-screen overflow-hidden flex flex-col antialiased select-none">
+
+  <!-- ========================================== -->
+  <!-- 1. Top Navigation Bar                      -->
+  <!-- ========================================== -->
+  <header class="bg-surface-container/95 backdrop-blur-md border-b border-outline h-12 flex justify-between items-center px-4 w-full shrink-0 z-50 shadow-xs relative">
+    
+    <!-- Left: Breadcrumb & Title -->
+    <div class="flex items-center gap-2 font-headline text-sm min-w-0">
+      <div class="w-6 h-6 rounded-md bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">DP</div>
+      <span class="text-on-surface font-bold text-sm tracking-tight i18n-text" data-i18n="appTitle">静态交付与证据导出</span>
+      <span class="text-on-surface-subtle">/</span>
+      <span class="text-on-surface-variant hover:text-on-surface cursor-pointer transition-colors text-xs font-medium i18n-text" data-i18n="screenTitle">星桥协作成员邀请</span>
+      <span class="text-on-surface-subtle">/</span>
+      <span id="handoff-status" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant border border-outline flex items-center gap-1">
+        <span class="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
+        <span>Loading handoff…</span>
+      </span>
+    </div>
+
+    <!-- Center: View Mode Segmented Switcher -->
+    <div class="absolute left-1/2 -translate-x-1/2 flex items-center bg-surface border border-outline rounded-lg p-0.5 shadow-inner">
+      <button id="view-mode-clean" onclick="setViewMode('clean')" class="px-3 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 bg-surface-container text-primary shadow-xs">
+        <span class="material-symbols-outlined text-[15px] material-symbols-fill">visibility</span>
+        <span class="i18n-text" data-i18n="modeClean">纯净渲染</span>
+        <span class="keycap text-[9px] py-0 px-1 ml-0.5 text-primary border-primary/20">V</span>
+      </button>
+      <button id="view-mode-redline" onclick="setViewMode('redline')" class="px-3 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface">
+        <span class="material-symbols-outlined text-[15px]">straighten</span>
+        <span class="i18n-text" data-i18n="modeRedline">红线标尺</span>
+        <span class="keycap text-[9px] py-0 px-1 ml-0.5">R</span>
+      </button>
+      <button id="view-mode-fold" onclick="setViewMode('fold')" class="px-3 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface">
+        <span class="material-symbols-outlined text-[15px]">splitscreen</span>
+        <span class="i18n-text" data-i18n="modeFold">首屏折叠线</span>
+        <span class="keycap text-[9px] py-0 px-1 ml-0.5">F</span>
+      </button>
+      <button id="view-mode-diff" onclick="setViewMode('diff')" class="px-3 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface">
+        <span class="material-symbols-outlined text-[15px]">compare</span>
+        <span class="i18n-text" data-i18n="modeDiff">多端并排对比</span>
+        <span class="keycap text-[9px] py-0 px-1 ml-0.5">D</span>
+      </button>
+    </div>
+
+    <!-- Right: Quick Export & Helper Triggers -->
+    <div class="flex items-center gap-2">
+      <!-- Copy Handoff JSON -->
+      <button onclick="copyHandoffJSON()" class="text-xs font-medium text-on-surface-variant hover:text-on-surface transition-colors h-8 px-2.5 rounded-md hover:bg-surface border border-outline/80 flex items-center gap-1.5" title="复制交付元数据 JSON [C]">
+        <span class="material-symbols-outlined text-[16px] text-tertiary">code_blocks</span>
+        <span class="i18n-text" data-i18n="btnCopyJSON">复制 JSON</span>
+        <span class="keycap text-[9px] py-0 px-1">C</span>
+      </button>
+
+      <!-- Open Export Package Modal -->
+      <button onclick="toggleExportModal(true)" class="text-xs font-semibold text-white bg-primary hover:bg-primary-700 transition-all h-8 px-3 rounded-md shadow-sm flex items-center gap-1.5 group cursor-pointer" title="打包导出交付资源包 [E]">
+        <span class="material-symbols-outlined text-[16px] group-hover:-translate-y-0.5 transition-transform">download_for_offline</span>
+        <span class="i18n-text" data-i18n="btnExportPackage">打包导出</span>
+        <span class="bg-primary-700/80 text-white font-mono text-[9px] py-0 px-1 rounded">E</span>
+      </button>
+
+      <div class="w-px h-4 bg-outline mx-0.5"></div>
+
+      <!-- Drawer Toggle in Top Header -->
+      <button id="header-drawer-btn" onclick="toggleDrawer()" class="text-xs font-medium text-on-surface-variant hover:text-on-surface transition-colors h-8 px-2 rounded-md hover:bg-surface flex items-center gap-1" title="收起/展开参数抽屉 [ [ ]">
+        <span class="material-symbols-outlined text-[16px]">dock_to_right</span>
+        <span class="keycap text-[9px] py-0 px-1">[</span>
+      </button>
+
+      <!-- Shortcut Help Trigger -->
+      <button onclick="toggleShortcutModal(true)" class="text-xs font-medium text-on-surface-variant hover:text-on-surface transition-colors h-8 px-2 rounded-md hover:bg-surface flex items-center gap-1" title="查看快捷键帮助 [?]">
+        <span class="material-symbols-outlined text-[16px]">keyboard</span>
+        <span class="keycap text-[9px] py-0 px-1">?</span>
+      </button>
+    </div>
+
+  </header>
+
+  <!-- ========================================== -->
+  <!-- 2. Workspace: Sidebar + Canvas + Drawer     -->
+  <!-- ========================================== -->
+  <div class="flex-1 flex overflow-hidden relative" id="workspace-container">
+
+    <!-- Left Navigation Sidebar: Viewports & Gates -->
+    <aside class="w-72 bg-surface-container border-r border-outline flex flex-col shrink-0 z-30 shadow-xs select-none">
+      
+      <!-- Top: Run & Disclosure Meta Header -->
+      <div class="p-3.5 border-b border-outline bg-surface-container-high/40">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant i18n-text" data-i18n="sectionMeta">交付运行凭据</span>
+          <span id="handoff-run-id" class="font-mono text-[10px] text-tertiary bg-tertiary-50 border border-tertiary/20 px-1.5 py-0.2 rounded">—</span>
+        </div>
+        <div class="space-y-1 text-xs">
+          <div class="flex items-center justify-between text-on-surface font-medium">
+            <span class="i18n-text" data-i18n="labelRunProfile">运行分级 (Profile)</span>
+            <span id="handoff-profile" class="font-mono text-primary font-bold">—</span>
+          </div>
+          <div class="flex items-center justify-between text-on-surface-variant text-[11px]">
+            <span class="i18n-text" data-i18n="labelTimestamp">时间戳 (Recorded)</span>
+            <span id="handoff-timestamp" class="font-mono text-[10px]">—</span>
+          </div>
+          <div class="flex items-center justify-between text-on-surface-variant text-[11px]">
+            <span class="i18n-text" data-i18n="labelAuthority">决策权威 (Authority)</span>
+            <span class="text-success font-medium flex items-center gap-0.5 text-[10px]">
+              <span class="material-symbols-outlined text-[12px]">verified_user</span>
+              <span id="handoff-authority-value">—</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 1: Multi-Viewport Matrix -->
+      <div class="p-3 border-b border-outline space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant i18n-text" data-i18n="sectionViewports">响应式断点交付快照</span>
+          <span class="text-[10px] text-on-surface-subtle font-mono">5 Files</span>
+        </div>
+
+        <div class="space-y-1.5" id="viewport-list">
+          <button id="vp-btn-1280" onclick="setViewport('1280x900')" class="w-full text-left p-2 rounded-lg border border-primary/30 bg-primary-50 flex items-center justify-between transition-all group cursor-pointer">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-[18px] text-primary">desktop_windows</span>
+              <div>
+                <div class="text-xs font-semibold text-on-surface group-hover:text-primary">Desktop 1280×900</div>
+                <div data-vp-status="1280x900" class="text-[10px] text-on-surface-variant font-mono">viewport-1280.png · measurement pending</div>
+              </div>
+            </div>
+            <span class="keycap text-[9px]">1</span>
+          </button>
+
+          <button id="vp-btn-768" onclick="setViewport('768x1024')" class="w-full text-left p-2 rounded-lg border border-outline bg-surface hover:bg-surface-container-high flex items-center justify-between transition-all group cursor-pointer">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-[18px] text-on-surface-variant">tablet_mac</span>
+              <div>
+                <div class="text-xs font-medium text-on-surface group-hover:text-primary">Tablet 768×1024</div>
+                <div data-vp-status="768x1024" class="text-[10px] text-on-surface-subtle font-mono">viewport-768.png · measurement pending</div>
+              </div>
+            </div>
+            <span class="keycap text-[9px]">2</span>
+          </button>
+
+          <button id="vp-btn-390" onclick="setViewport('390x844')" class="w-full text-left p-2 rounded-lg border border-outline bg-surface hover:bg-surface-container-high flex items-center justify-between transition-all group cursor-pointer">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-[18px] text-on-surface-variant">phone_iphone</span>
+              <div>
+                <div class="text-xs font-medium text-on-surface group-hover:text-primary">Mobile 390×844</div>
+                <div data-vp-status="390x844" class="text-[10px] text-on-surface-subtle font-mono">viewport-390.png · measurement pending</div>
+              </div>
+            </div>
+            <span class="keycap text-[9px]">3</span>
+          </button>
+
+          <button id="vp-btn-360" onclick="setViewport('360x800')" class="w-full text-left p-2 rounded-lg border border-outline bg-surface hover:bg-surface-container-high flex items-center justify-between transition-all group cursor-pointer">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-[18px] text-on-surface-variant">smartphone</span>
+              <div>
+                <div class="text-xs font-medium text-on-surface group-hover:text-primary">Compact 360×800</div>
+                <div data-vp-status="360x800" class="text-[10px] text-on-surface-subtle font-mono">viewport-360.png · measurement pending</div>
+              </div>
+            </div>
+            <span class="keycap text-[9px]">4</span>
+          </button>
+
+          <button id="vp-btn-print" onclick="setViewport('print')" class="w-full text-left p-2 rounded-lg border border-outline bg-surface hover:bg-surface-container-high flex items-center justify-between transition-all group cursor-pointer">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-[18px] text-on-surface-variant">print</span>
+              <div>
+                <div class="text-xs font-medium text-on-surface group-hover:text-primary">Print Media 1280</div>
+                <div data-vp-status="print" class="text-[10px] text-on-surface-subtle font-mono">print-media.png · measurement pending</div>
+              </div>
+            </div>
+            <span class="keycap text-[9px]">5</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Section 2: G-Gates Checklist -->
+      <div class="flex-1 overflow-y-auto p-3 space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant i18n-text" data-i18n="sectionGates">自动化质检门禁 (G1-G8)</span>
+          <span id="gate-count" class="text-[9px] font-bold text-on-surface-variant font-mono">— / 8</span>
+        </div>
+
+        <div class="space-y-1 text-xs">
+          <div class="p-1.5 bg-surface rounded border border-outline/70 flex items-center justify-between">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span data-gate-icon="1" class="material-symbols-outlined text-on-surface-subtle text-[15px]">radio_button_unchecked</span>
+              <span class="font-mono text-[11px] text-on-surface truncate">G1: Spec L1-L6 Given/When</span>
+            </div>
+            <span data-gate-status="1" class="text-[9px] font-mono text-on-surface-subtle">pending</span>
+          </div>
+
+          <div class="p-1.5 bg-surface rounded border border-outline/70 flex items-center justify-between">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span data-gate-icon="2" class="material-symbols-outlined text-on-surface-subtle text-[15px]">radio_button_unchecked</span>
+              <span class="font-mono text-[11px] text-on-surface truncate">G2: Finding Ledger 4-Fields</span>
+            </div>
+            <span data-gate-status="2" class="text-[9px] font-mono text-on-surface-subtle">pending</span>
+          </div>
+
+          <div class="p-1.5 bg-surface rounded border border-outline/70 flex items-center justify-between">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span data-gate-icon="3" class="material-symbols-outlined text-on-surface-subtle text-[15px]">radio_button_unchecked</span>
+              <span class="font-mono text-[11px] text-on-surface truncate">G3: Verdict Earned (Single Pass)</span>
+            </div>
+            <span data-gate-status="3" class="text-[9px] font-mono text-on-surface-subtle">pending</span>
+          </div>
+
+          <div class="p-1.5 bg-surface rounded border border-outline/70 flex items-center justify-between">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span data-gate-icon="4" class="material-symbols-outlined text-on-surface-subtle text-[15px]">radio_button_unchecked</span>
+              <span class="font-mono text-[11px] text-on-surface truncate">G4: Closure Coverage</span>
+            </div>
+            <span data-gate-status="4" class="text-[9px] font-mono text-on-surface-subtle">pending</span>
+          </div>
+
+          <div class="p-1.5 bg-surface rounded border border-outline/70 flex items-center justify-between">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span data-gate-icon="5" class="material-symbols-outlined text-on-surface-subtle text-[15px]">radio_button_unchecked</span>
+              <span class="font-mono text-[11px] text-on-surface truncate">G5: Preview Confirm</span>
+            </div>
+            <span data-gate-status="5" class="text-[9px] font-mono text-on-surface-subtle">pending</span>
+          </div>
+
+          <div class="p-1.5 bg-surface rounded border border-outline/70 flex items-center justify-between">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span data-gate-icon="6" class="material-symbols-outlined text-on-surface-subtle text-[15px]">radio_button_unchecked</span>
+              <span class="font-mono text-[11px] text-on-surface truncate">G6: Evidence Hash Bound</span>
+            </div>
+            <span data-gate-status="6" class="text-[9px] font-mono text-on-surface-subtle">pending</span>
+          </div>
+
+          <div class="p-1.5 bg-surface rounded border border-outline/70 flex items-center justify-between">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span data-gate-icon="7" class="material-symbols-outlined text-on-surface-subtle text-[15px]">radio_button_unchecked</span>
+              <span class="font-mono text-[11px] text-on-surface truncate">G7: Zero Contract Drift</span>
+            </div>
+            <span data-gate-status="7" class="text-[9px] font-mono text-on-surface-subtle">pending</span>
+          </div>
+
+          <div class="p-1.5 bg-surface rounded border border-outline/70 flex items-center justify-between">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span data-gate-icon="8" class="material-symbols-outlined text-on-surface-subtle text-[15px]">radio_button_unchecked</span>
+              <span class="font-mono text-[11px] text-on-surface truncate">G8: Rules Registry Self-Valid</span>
+            </div>
+            <span data-gate-status="8" class="text-[9px] font-mono text-on-surface-subtle">pending</span>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- Center: Main Canvas Workspace -->
+    <main id="canvas-container" class="flex-1 canvas-grid overflow-auto flex items-center justify-center relative p-12 cursor-default transition-all duration-300">
+
+      <!-- Left Floating Canvas Tools -->
+      <nav class="fixed left-[19rem] top-20 bg-surface-container/95 backdrop-blur-md shadow-tool-card border border-outline rounded-xl w-12 flex flex-col items-center py-2.5 space-y-1.5 z-40 transition-all duration-300">
+        <button id="tool-hand" onclick="setActiveTool('hand')" class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface hover:text-on-surface transition-all group relative" title="抓手平移画布 [H 或按住 Space 拖拽]">
+          <span class="material-symbols-outlined text-[19px]">pan_tool</span>
+        </button>
+
+        <button id="tool-inspect" onclick="setActiveTool('inspect')" class="w-8 h-8 rounded-lg flex items-center justify-center text-primary bg-primary-50 transition-all group relative" title="红线标尺与 Token 探针 [R]">
+          <span class="material-symbols-outlined text-[19px] material-symbols-fill">target</span>
+        </button>
+
+        <div class="w-5 h-px bg-outline my-1"></div>
+
+        <button onclick="handleZoom(0.1)" class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface hover:text-on-surface transition-all group relative" title="放大 [+]">
+          <span class="material-symbols-outlined text-[19px]">zoom_in</span>
+        </button>
+
+        <button onclick="handleZoom(-0.1)" class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface hover:text-on-surface transition-all group relative" title="缩小 [-]">
+          <span class="material-symbols-outlined text-[19px]">zoom_out</span>
+        </button>
+
+        <button onclick="resetZoom()" class="w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface hover:text-on-surface transition-all group relative" title="自适应居中 [0]">
+          <span class="material-symbols-outlined text-[19px]">fullscreen_exit</span>
+        </button>
+
+        <div class="w-5 h-px bg-outline my-1"></div>
+
+        <div class="flex flex-col items-center gap-0.5 text-[9px] font-mono text-on-surface-subtle" title="当前缩放比例">
+          <span id="zoom-indicator" class="font-medium text-[10px] text-on-surface-variant">85%</span>
+          <span>FIT</span>
+        </div>
+      </nav>
+
+      <!-- Artboard Wrapper with Pan & Zoom Transform -->
+      <div id="artboard-wrapper" class="relative transform origin-center transition-all duration-300 ease-spring" style="transform: scale(0.85);">
+        
+        <!-- Rendered Artboard Container -->
+        <div id="artboard" class="bg-surface-container rounded-xl shadow-2xl border border-outline overflow-hidden relative transition-all duration-300" style="width: 1024px; min-height: 720px;">
+          
+          <!-- Mock First-Fold Line Overlay -->
+          <div id="fold-line-element" class="fold-line top-[900px] hidden">
+            <span class="fold-badge">Fold Baseline (900px)</span>
+          </div>
+
+          <!-- Clean Delivered Screen Content -->
+          <div class="p-8 max-w-4xl mx-auto space-y-6 select-text" id="delivered-content">
+            
+            <div class="border-b border-outline pb-6 flex items-start justify-between" id="elem-header" onmouseenter="handleElementHover(this, 'Header · flex items-center', '100% × 84px', 'p-8 pb-6 border-b')">
+              <div>
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="px-2 py-0.5 bg-primary-50 text-primary text-xs font-bold rounded font-mono">SEC-INV-01</span>
+            <span data-authority class="text-xs text-on-surface-variant font-mono">authority: —</span>
+                </div>
+                <h1 class="font-headline font-extrabold text-2xl text-on-surface tracking-tight">星桥协作成员邀请 · 确认交付</h1>
+                <p class="text-xs text-on-surface-variant mt-1">在实际发送邀请前，单独呈现接收者、Member 角色、权限范围与计划时间。</p>
+              </div>
+              <div class="px-3 py-1.5 rounded-lg bg-surface border border-outline text-right">
+                <div class="text-[10px] text-on-surface-subtle font-mono">SOURCE SPEC</div>
+                <div class="text-xs font-bold text-on-surface font-mono">spec.md #L6.4</div>
+              </div>
+            </div>
+
+            <!-- Main Form Card -->
+            <div class="grid grid-cols-2 gap-5">
+              
+              <div class="bg-surface p-5 rounded-xl border border-outline space-y-4" id="elem-recipient-card" onmouseenter="handleElementHover(this, 'Card · bg-surface rounded-xl', '460px × 220px', 'p-5 border border-outline')">
+                <div class="flex items-center justify-between border-b border-outline/70 pb-2.5">
+                  <span class="text-xs font-bold text-on-surface flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[17px] text-primary">person</span>
+                    <span>接收者信息 (Recipient)</span>
+                  </span>
+                  <span class="text-[10px] text-success font-mono font-semibold">Valid</span>
+                </div>
+
+                <div class="space-y-2 text-xs">
+                  <div>
+                    <div class="text-[10px] text-on-surface-subtle uppercase">Target User</div>
+                    <div class="font-semibold text-on-surface text-sm">待确认接收者 (Recipient pending)</div>
+                    <div class="text-xs text-on-surface-variant font-mono">recipient not provided</div>
+                  </div>
+
+                  <div class="pt-2 border-t border-outline/50 flex justify-between items-center">
+                    <div>
+                      <div class="text-[10px] text-on-surface-subtle uppercase">Schedule Time</div>
+                      <div class="font-mono text-xs text-on-surface font-medium">2042-06-01 09:30 +08:00</div>
+                    </div>
+                    <span class="material-symbols-outlined text-on-surface-subtle text-[18px]">schedule</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="bg-surface p-5 rounded-xl border border-outline space-y-4" id="elem-perms-card" onmouseenter="handleElementHover(this, 'Card · Permissions Matrix', '460px × 220px', 'p-5 border border-outline')">
+                <div class="flex items-center justify-between border-b border-outline/70 pb-2.5">
+                  <span class="text-xs font-bold text-on-surface flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[17px] text-primary">lock_open</span>
+                    <span>权限与边界 (DD-02 明确声明)</span>
+                  </span>
+                  <span class="px-1.5 py-0.2 bg-primary/10 text-primary font-mono text-[10px] font-bold rounded">Member</span>
+                </div>
+
+                <div class="space-y-2 text-xs">
+                  <div class="flex items-start gap-2 text-success">
+                    <span class="material-symbols-outlined text-[16px] shrink-0 mt-0.5">check</span>
+                    <span class="text-xs text-on-surface"><strong>允许：</strong>可查看并编辑项目设计稿及批注内容。</span>
+                  </div>
+                  <div class="flex items-start gap-2 text-danger">
+                    <span class="material-symbols-outlined text-[16px] shrink-0 mt-0.5">close</span>
+                    <span class="text-xs text-on-surface"><strong>禁止：</strong>不可管理工作空间账单、组织权限或角色分配。</span>
+                  </div>
+                  <div class="p-2 rounded bg-surface-container text-[11px] text-on-surface-variant font-mono border border-outline/60 mt-1">
+                    Lifecycle: Sent → Pending → Active (on accept)
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Bottom Action Footer -->
+            <div class="p-4 bg-surface rounded-xl border border-outline flex items-center justify-between" id="elem-actions-footer" onmouseenter="handleElementHover(this, 'Footer · Action Bar', '100% × 68px', 'p-4 rounded-xl')">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-success text-[20px]">shield</span>
+                <div>
+                  <div class="text-xs font-semibold text-on-surface">双向核对完毕 · 状态机一致性已验证</div>
+                  <div class="text-[10px] text-on-surface-variant font-mono">decision-report.md#DD-01 & #DD-02 完全受控</div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-surface-container border border-outline text-on-surface hover:bg-surface-container-high transition-colors">
+                  取消 (Cancel)
+                </button>
+                <button class="px-4 py-1.5 text-xs font-bold rounded-lg bg-primary text-white hover:bg-primary-700 shadow-sm transition-all flex items-center gap-1">
+                  <span>确认并发送邀请</span>
+                  <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </main>
+
+    <!-- Right Drawer -->
+    <aside id="inspector-drawer" class="w-88 bg-surface-container border-l border-outline flex flex-col shrink-0 z-30 shadow-floating-drawer transition-all duration-300 ease-spring">
+      
+      <div class="h-12 border-b border-outline px-4 flex justify-between items-center bg-surface-container shrink-0">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary text-[18px]">data_object</span>
+          <span class="font-headline font-bold text-xs text-on-surface i18n-text" data-i18n="drawerTitle">交付参数与 Token 提取</span>
+        </div>
+        <button onclick="toggleDrawer()" class="text-on-surface-subtle hover:text-on-surface p-1 rounded-md hover:bg-surface transition-colors" title="收起抽屉 [ [ ]">
+          <span class="material-symbols-outlined text-[18px]">chevron_right</span>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+        
+        <div class="bg-surface p-3 rounded-lg border border-outline space-y-2">
+          <div class="flex items-center justify-between text-[11px] font-bold text-on-surface">
+            <span class="flex items-center gap-1 text-primary">
+              <span class="material-symbols-outlined text-[14px]">insights</span>
+              <span id="inspect-tag-title">Inspect Probe</span>
+            </span>
+            <span id="inspect-dimensions" class="font-mono text-[10px] text-tertiary">100% × 84px</span>
+          </div>
+          <div id="inspect-classes" class="font-mono text-[10px] text-on-surface-variant bg-surface-container p-2 rounded border border-outline/50 break-all leading-relaxed">
+            p-8 pb-6 border-b border-outline flex items-start justify-between
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="font-bold text-on-surface text-[11px] uppercase tracking-wider i18n-text" data-i18n="sectionDecisions">设计决策绑定 (Design Decisions)</div>
+          
+          <div class="p-2.5 rounded-lg border border-outline bg-surface space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="font-mono text-[10px] font-bold text-primary">DD-01</span>
+              <span data-authority class="text-[9px] font-mono text-on-surface-variant">—</span>
+            </div>
+            <p class="text-[11px] font-medium text-on-surface">发送前独立双向确认</p>
+            <p class="text-[10px] text-on-surface-variant">单独呈现接收者、Member 角色、权限范围与计划时间，要求明确确认。</p>
+          </div>
+
+          <div class="p-2.5 rounded-lg border border-outline bg-surface space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="font-mono text-[10px] font-bold text-primary">DD-02</span>
+              <span data-authority class="text-[9px] font-mono text-on-surface-variant">—</span>
+            </div>
+            <p class="text-[11px] font-medium text-on-surface">写清允许与禁止能力</p>
+            <p class="text-[10px] text-on-surface-variant">明确可查看/编辑项目内容，不可管理账单或组织角色。</p>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="font-bold text-on-surface text-[11px] uppercase tracking-wider i18n-text" data-i18n="sectionTokens">色彩与字阶规范 (Baseline Tokens)</div>
+          
+          <div class="grid grid-cols-2 gap-2">
+            <div class="p-2 bg-surface rounded border border-outline/80 flex items-center gap-2">
+              <div class="w-4 h-4 rounded bg-primary shrink-0"></div>
+              <div class="min-w-0">
+                <div class="text-[10px] font-bold text-on-surface truncate">Primary</div>
+                <div class="font-mono text-[9px] text-on-surface-subtle">#2563EB</div>
+              </div>
+            </div>
+
+            <div class="p-2 bg-surface rounded border border-outline/80 flex items-center gap-2">
+              <div class="w-4 h-4 rounded bg-on-surface shrink-0"></div>
+              <div class="min-w-0">
+                <div class="text-[10px] font-bold text-on-surface truncate">On Surface</div>
+                <div class="font-mono text-[9px] text-on-surface-subtle">#0F172A</div>
+              </div>
+            </div>
+
+            <div class="p-2 bg-surface rounded border border-outline/80 flex items-center gap-2">
+              <div class="w-4 h-4 rounded bg-success shrink-0"></div>
+              <div class="min-w-0">
+                <div class="text-[10px] font-bold text-on-surface truncate">Success</div>
+                <div class="font-mono text-[9px] text-on-surface-subtle">#10B981</div>
+              </div>
+            </div>
+
+            <div class="p-2 bg-surface rounded border border-outline/80 flex items-center gap-2">
+              <div class="w-4 h-4 rounded bg-danger shrink-0"></div>
+              <div class="min-w-0">
+                <div class="text-[10px] font-bold text-on-surface truncate">Danger</div>
+                <div class="font-mono text-[9px] text-on-surface-subtle">#E11D48</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-1.5 pt-2">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-bold text-on-surface-variant uppercase">Tailwind Component Export</span>
+            <button onclick="copyCodeSnippet()" class="text-[10px] text-primary hover:underline flex items-center gap-0.5">
+              <span class="material-symbols-outlined text-[12px]">content_copy</span>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre class="bg-surface p-2.5 rounded-lg border border-outline font-mono text-[9px] text-on-surface-variant overflow-x-auto"><code>&lt;div class="bg-surface p-5 rounded-xl border border-outline"&gt;
+  &lt;h3 class="font-bold text-xs text-on-surface"&gt;Recipient&lt;/h3&gt;
+  &lt;p class="text-xs text-on-surface-variant"&gt;Member&lt;/p&gt;
+&lt;/div&gt;</code></pre>
+        </div>
+
+      </div>
+
+      <div class="p-3 border-t border-outline bg-surface shrink-0">
+        <button onclick="toggleExportModal(true)" class="w-full py-2 bg-primary hover:bg-primary-700 text-white font-bold text-xs rounded-lg shadow-sm flex items-center justify-center gap-1.5 transition-all">
+          <span class="material-symbols-outlined text-[16px]">folder_zip</span>
+          <span class="i18n-text" data-i18n="btnExportAll">导出全套交付资源包</span>
+        </button>
+      </div>
+
+    </aside>
+
+    <!-- Floating Drawer Reopen Tab -->
+    <button id="drawer-reopen-btn" onclick="toggleDrawer(true)" class="fixed right-0 top-24 bg-surface-container/95 backdrop-blur-md border-y border-l border-outline shadow-tool-card rounded-l-xl px-2 py-3.5 z-40 flex flex-col items-center gap-2 hover:bg-surface text-on-surface-variant hover:text-primary transition-all duration-300 transform translate-x-full opacity-0 pointer-events-none group cursor-pointer" title="展开交付参数面板 [ [ ]">
+      <span class="material-symbols-outlined text-[18px] group-hover:-translate-x-0.5 transition-transform text-primary">dock_to_left</span>
+      <span class="[writing-mode:vertical-rl] text-[11px] font-semibold tracking-wider text-on-surface i18n-text" data-i18n="drawerTitle">交付参数</span>
+      <span class="w-4 h-4 bg-primary text-white font-mono text-[9px] font-bold rounded-full flex items-center justify-center">8</span>
+    </button>
+
+  </div>
+
+  <!-- Export Package Modal Overlay -->
+  <div id="export-modal" class="fixed inset-0 bg-on-surface/40 backdrop-blur-xs z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-200">
+    <div class="bg-surface-container border border-outline rounded-xl shadow-2xl w-full max-w-lg p-5 transform scale-95 transition-transform duration-200 space-y-4">
+      
+      <div class="flex items-center justify-between border-b border-outline pb-3">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary text-[22px]">archive</span>
+          <div>
+            <h3 class="font-headline font-bold text-sm text-on-surface i18n-text" data-i18n="modalExportTitle">打包导出静态交付资产 (Export Handoff Package)</h3>
+            <p class="text-[10px] text-on-surface-variant">包含多端全量高保真快照、JSON 凭证与 Tailwind 样式契约</p>
+          </div>
+        </div>
+        <button onclick="toggleExportModal(false)" class="text-on-surface-subtle hover:text-on-surface p-1 rounded-md hover:bg-surface">
+          <span class="material-symbols-outlined text-[18px]">close</span>
+        </button>
+      </div>
+
+      <div class="space-y-2.5 text-xs">
+        <label class="flex items-center gap-2.5 p-2 rounded bg-surface border border-outline cursor-pointer">
+          <input type="checkbox" checked class="rounded text-primary focus:ring-primary h-4 w-4">
+          <div class="flex-1">
+            <div class="font-semibold text-on-surface">5 端高保真快照 (PNG/Retina)</div>
+            <div class="text-[10px] text-on-surface-subtle font-mono">1280x900, 768x1024, 390x844, 360x800, Print</div>
+          </div>
+          <span class="font-mono text-[10px] text-on-surface-variant">~850 KB</span>
+        </label>
+
+        <label class="flex items-center gap-2.5 p-2 rounded bg-surface border border-outline cursor-pointer">
+          <input type="checkbox" checked class="rounded text-primary focus:ring-primary h-4 w-4">
+          <div class="flex-1">
+            <div class="font-semibold text-on-surface">披露审查清单 (disclosure-review.json)</div>
+            <div class="text-[10px] text-on-surface-subtle font-mono">首屏折叠线、视口溢出检测与门禁哈希绑定</div>
+          </div>
+          <span class="font-mono text-[10px] text-on-surface-variant">10.2 KB</span>
+        </label>
+
+        <label class="flex items-center gap-2.5 p-2 rounded bg-surface border border-outline cursor-pointer">
+          <input type="checkbox" checked class="rounded text-primary focus:ring-primary h-4 w-4">
+          <div class="flex-1">
+            <div class="font-semibold text-on-surface">独立 HTML 渲染包 (filled-ui.html)</div>
+            <div class="text-[10px] text-on-surface-subtle font-mono">开箱即用的前端高保真组件与交互模版</div>
+          </div>
+          <span class="font-mono text-[10px] text-on-surface-variant">32.4 KB</span>
+        </label>
+      </div>
+
+      <div class="pt-3 border-t border-outline flex items-center justify-end gap-2">
+        <button onclick="toggleExportModal(false)" class="px-3 py-1.5 rounded-lg border border-outline text-xs font-medium hover:bg-surface text-on-surface-variant transition-colors">
+          取消 (Cancel)
+        </button>
+        <button onclick="performDownloadPackage()" class="px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-700 text-white text-xs font-bold shadow-sm flex items-center gap-1.5 transition-all">
+          <span class="material-symbols-outlined text-[16px]">download</span>
+          <span>立即生成 ZIP 下载</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Keyboard Shortcuts Modal Overlay -->
+  <div id="shortcut-modal" class="fixed inset-0 bg-on-surface/40 backdrop-blur-xs z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-200">
+    <div class="bg-surface-container border border-outline rounded-xl shadow-2xl w-full max-w-md p-5 transform scale-95 transition-transform duration-200">
+      
+      <div class="flex items-center justify-between border-b border-outline pb-3 mb-4">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary text-[20px]">keyboard</span>
+          <h3 class="font-headline font-bold text-sm text-on-surface i18n-text" data-i18n="modalShortcutsTitle">快捷键指南 (Keyboard Shortcuts)</h3>
+        </div>
+        <button onclick="toggleShortcutModal(false)" class="text-on-surface-subtle hover:text-on-surface p-1 rounded-md hover:bg-surface">
+          <span class="material-symbols-outlined text-[18px]">close</span>
+        </button>
+      </div>
+
+      <div class="space-y-3.5 text-xs">
+        <div>
+          <div class="font-semibold text-on-surface-variant mb-1.5 text-[11px] uppercase tracking-wider i18n-text" data-i18n="groupViewports">视口切换与视图模式</div>
+          <div class="grid grid-cols-2 gap-2">
+            <div class="flex items-center justify-between bg-surface p-2 rounded border border-outline/60">
+              <span>桌面 / 平板 / 手机</span>
+              <span class="keycap">1 / 2 / 3 / 4 / 5</span>
+            </div>
+            <div class="flex items-center justify-between bg-surface p-2 rounded border border-outline/60">
+              <span>纯净渲染视图</span>
+              <span class="keycap">V</span>
+            </div>
+            <div class="flex items-center justify-between bg-surface p-2 rounded border border-outline/60">
+              <span>红线标尺探针</span>
+              <span class="keycap">R</span>
+            </div>
+            <div class="flex items-center justify-between bg-surface p-2 rounded border border-outline/60">
+              <span>首屏折叠线检测</span>
+              <span class="keycap">F</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="font-semibold text-on-surface-variant mb-1.5 text-[11px] uppercase tracking-wider i18n-text" data-i18n="groupActions">操作与画布控制</div>
+          <div class="grid grid-cols-2 gap-2">
+            <div class="flex items-center justify-between bg-surface p-2 rounded border border-outline/60">
+              <span>打包导出 ZIP</span>
+              <span class="keycap">E</span>
+            </div>
+            <div class="flex items-center justify-between bg-surface p-2 rounded border border-outline/60">
+              <span>复制 JSON 凭证</span>
+              <span class="keycap">C</span>
+            </div>
+            <div class="flex items-center justify-between bg-surface p-2 rounded border border-outline/60">
+              <span>平移拖动画布</span>
+              <span class="keycap">Space+拖拽 / H</span>
+            </div>
+            <div class="flex items-center justify-between bg-surface p-2 rounded border border-outline/60">
+              <span>自适应居中 / 缩放</span>
+              <span class="keycap">0 / + / -</span>
+            </div>
+            <div class="flex items-center justify-between bg-surface p-2 rounded border border-outline/60">
+              <span>切换中英双语</span>
+              <span class="keycap">L</span>
+            </div>
+            <div class="flex items-center justify-between bg-surface p-2 rounded border border-outline/60">
+              <span>折叠/展开抽屉</span>
+              <span class="keycap">[</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="mt-4 pt-3 border-t border-outline text-center">
+        <button onclick="toggleShortcutModal(false)" class="w-full py-1.5 bg-primary text-white font-medium text-xs rounded-lg hover:bg-primary-700 transition-colors">
+          知道了 (Got it)
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed top-14 right-6 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- JavaScript Engine -->
+  <script>
+    const state = {
+      lang: 'zh',
+      viewMode: 'clean',
+      activeTool: 'inspect',
+      viewport: '1280x900',
+      zoom: 0.85,
+      panX: 0,
+      panY: 0,
+      isPanning: false,
+      isSpacePressed: false,
+      panStartX: 0,
+      panStartY: 0,
+      drawerOpen: true
+    };
+
+    const i18nDict = {
+      zh: {
+        appTitle: '静态交付与证据导出',
+        screenTitle: '星桥协作成员邀请',
+        statusReady: '门禁状态加载中',
+        modeClean: '纯净渲染',
+        modeRedline: '红线标尺',
+        modeFold: '首屏折叠线',
+        modeDiff: '多端并排对比',
+        btnCopyJSON: '复制 JSON',
+        btnExportPackage: '打包导出',
+        sectionMeta: '交付运行凭据',
+        labelRunProfile: '运行分级 (Profile)',
+        labelTimestamp: '时间戳 (Recorded)',
+        labelAuthority: '决策权威 (Authority)',
+        sectionViewports: '响应式断点交付快照',
+        sectionGates: '自动化质检门禁 (G1-G8)',
+        drawerTitle: '交付参数与 Token 提取',
+        sectionDecisions: '设计决策绑定 (Design Decisions)',
+        sectionTokens: '色彩与字阶规范 (Baseline Tokens)',
+        btnExportAll: '导出全套交付资源包',
+        modalExportTitle: '打包导出静态交付资产 (Export Handoff Package)',
+        modalShortcutsTitle: '快捷键指南 (Keyboard Shortcuts)',
+        groupViewports: '视口切换与视图模式',
+        groupActions: '操作与画布控制'
+      },
+      en: {
+        appTitle: 'Static Handoff & Evidence Export',
+        screenTitle: 'Member Invite Handoff',
+        statusReady: 'Loading gate status',
+        modeClean: 'Clean Render',
+        modeRedline: 'Redlines & Specs',
+        modeFold: 'Fold Line',
+        modeDiff: 'Side-by-Side Diff',
+        btnCopyJSON: 'Copy JSON',
+        btnExportPackage: 'Export Package',
+        sectionMeta: 'Handoff Disclosure Summary',
+        labelRunProfile: 'Run Profile',
+        labelTimestamp: 'Recorded Timestamp',
+        labelAuthority: 'Decision Authority',
+        sectionViewports: 'Responsive Viewport Snapshots',
+        sectionGates: 'Quality Gate Checklist (G1-G8)',
+        drawerTitle: 'Handoff Parameters & Tokens',
+        sectionDecisions: 'Design Decision Bindings',
+        sectionTokens: 'Color & Typography Baseline',
+        btnExportAll: 'Export Full Handoff Archive',
+        modalExportTitle: 'Export Static Handoff Package',
+        modalShortcutsTitle: 'Keyboard Shortcuts Guide',
+        groupViewports: 'Viewports & Modes',
+        groupActions: 'Actions & Canvas Controls'
+      }
+    };
+
+    function updateLanguageUI() {
+      const dict = i18nDict[state.lang];
+      document.querySelectorAll('[data-i18n]').forEach(elem => {
+        const key = elem.getAttribute('data-i18n');
+        if (dict[key]) {
+          elem.style.opacity = '0';
+          setTimeout(() => {
+            elem.innerText = dict[key];
+            elem.style.opacity = '1';
+          }, 80);
+        }
+      });
+    }
+
+    function toggleLanguage() {
+      state.lang = state.lang === 'zh' ? 'en' : 'zh';
+      updateLanguageUI();
+      showToast(state.lang === 'zh' ? '已切换至中文' : 'Switched to English');
+    }
+
+    function setViewMode(mode) {
+      state.viewMode = mode;
+      ['clean', 'redline', 'fold', 'diff'].forEach(m => {
+        const btn = document.getElementById(`view-mode-${m}`);
+        if (btn) {
+          if (m === mode) {
+            btn.className = 'px-3 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 bg-surface-container text-primary shadow-xs';
+            btn.querySelector('.material-symbols-outlined').classList.add('material-symbols-fill');
+          } else {
+            btn.className = 'px-3 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface';
+            btn.querySelector('.material-symbols-outlined').classList.remove('material-symbols-fill');
+          }
+        }
+      });
+
+      const foldLine = document.getElementById('fold-line-element');
+      if (mode === 'fold') {
+        foldLine.classList.remove('hidden');
+        showToast(state.lang === 'zh' ? '已开启首屏折叠线标尺 (900px)' : 'Fold Line Enabled (900px)');
+      } else {
+        foldLine.classList.add('hidden');
+      }
+
+      enableRedlines(mode === 'redline');
+      if (mode === 'redline') showToast(state.lang === 'zh' ? '已开启红线标尺与探针模式' : 'Redline & Inspect Mode Enabled');
+      if (mode === 'diff') showToast(state.lang === 'zh' ? '多端并排比对模式' : 'Side-by-Side Diff View');
+    }
+
+    function enableRedlines(enable) {
+      ['elem-header', 'elem-recipient-card', 'elem-perms-card', 'elem-actions-footer'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) enable ? el.classList.add('redline-box') : el.classList.remove('redline-box');
+      });
+    }
+
+    function handleElementHover(el, title, dims, classes) {
+      if (state.viewMode !== 'redline' && state.activeTool !== 'inspect') return;
+      document.getElementById('inspect-tag-title').innerText = title;
+      document.getElementById('inspect-dimensions').innerText = dims;
+      document.getElementById('inspect-classes').innerText = classes;
+    }
+
+    function setViewport(vp) {
+      state.viewport = vp;
+      const artboard = document.getElementById('artboard');
+      ['1280', '768', '390', '360', 'print'].forEach(v => {
+        const btn = document.getElementById(`vp-btn-${v}`);
+        if (btn) {
+          btn.className = 'w-full text-left p-2 rounded-lg border border-outline bg-surface hover:bg-surface-container-high flex items-center justify-between transition-all group cursor-pointer';
+          btn.querySelector('.material-symbols-outlined').className = 'material-symbols-outlined text-[18px] text-on-surface-variant';
+        }
+      });
+
+      const activeKey = vp.split('x')[0];
+      const activeBtn = document.getElementById(`vp-btn-${activeKey}`);
+      if (activeBtn) {
+        activeBtn.className = 'w-full text-left p-2 rounded-lg border border-primary/30 bg-primary-50 flex items-center justify-between transition-all group cursor-pointer';
+        activeBtn.querySelector('.material-symbols-outlined').className = 'material-symbols-outlined text-[18px] text-primary';
+      }
+
+      if (vp === '1280x900') {
+        artboard.style.width = '1024px';
+        artboard.style.minHeight = '720px';
+        showToast(state.lang === 'zh' ? '切换为：Desktop 1280×900 快照' : 'Viewport: Desktop 1280×900');
+      } else if (vp === '768x1024') {
+        artboard.style.width = '768px';
+        artboard.style.minHeight = '820px';
+        showToast(state.lang === 'zh' ? '切换为：Tablet 768×1024 快照' : 'Viewport: Tablet 768×1024');
+      } else if (vp === '390x844') {
+        artboard.style.width = '390px';
+        artboard.style.minHeight = '844px';
+        showToast(state.lang === 'zh' ? '切换为：Mobile Standard 390×844 快照' : 'Viewport: Mobile 390×844');
+      } else if (vp === '360x800') {
+        artboard.style.width = '360px';
+        artboard.style.minHeight = '800px';
+        showToast(state.lang === 'zh' ? '切换为：Compact 360×800 快照' : 'Viewport: Compact 360×800');
+      } else if (vp === 'print') {
+        artboard.style.width = '960px';
+        artboard.style.minHeight = '650px';
+        showToast(state.lang === 'zh' ? '切换为：Print Media 打印快照' : 'Viewport: Print Media');
+      }
+    }
+
+    function setActiveTool(tool) {
+      state.activeTool = tool;
+      const hTool = document.getElementById('tool-hand');
+      const iTool = document.getElementById('tool-inspect');
+      const canvas = document.getElementById('canvas-container');
+
+      [hTool, iTool].forEach(b => {
+        if (b) b.className = 'w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface hover:text-on-surface transition-all';
+      });
+
+      if (tool === 'hand') {
+        if (hTool) hTool.className = 'w-8 h-8 rounded-lg flex items-center justify-center text-primary bg-primary-50 transition-all';
+        canvas.style.cursor = 'grab';
+        showToast(state.lang === 'zh' ? '抓手工具：拖拽平移画布 (H 或 Space)' : 'Hand Tool: Pan Canvas (H or Space)');
+      } else if (tool === 'inspect') {
+        if (iTool) iTool.className = 'w-8 h-8 rounded-lg flex items-center justify-center text-primary bg-primary-50 transition-all';
+        canvas.style.cursor = 'default';
+        showToast(state.lang === 'zh' ? '探针模式：悬浮查看元素类名与尺寸 (R)' : 'Inspect Probe Mode (R)');
+      }
+    }
+
+    function applyTransform(smooth = false) {
+      const wrapper = document.getElementById('artboard-wrapper');
+      const indicator = document.getElementById('zoom-indicator');
+      if (wrapper) {
+        wrapper.style.transition = smooth ? 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)' : 'none';
+        wrapper.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`;
+      }
+      if (indicator) indicator.innerText = `${Math.round(state.zoom * 100)}%`;
+    }
+
+    function handleZoom(delta) {
+      state.zoom = Math.min(2.5, Math.max(0.3, Math.round((state.zoom + delta) * 100) / 100));
+      applyTransform(true);
+    }
+
+    function resetZoom() {
+      state.zoom = 0.85;
+      state.panX = 0;
+      state.panY = 0;
+      applyTransform(true);
+      showToast(state.lang === 'zh' ? '已自适应居中与重置位置 (0)' : 'Reset Zoom & Center (0)');
+    }
+
+    const canvasContainer = document.getElementById('canvas-container');
+
+    canvasContainer.addEventListener('mousedown', (e) => {
+      if (state.activeTool === 'hand' || state.isSpacePressed || e.button === 1) {
+        e.preventDefault();
+        state.isPanning = true;
+        state.panStartX = e.clientX - state.panX;
+        state.panStartY = e.clientY - state.panY;
+        canvasContainer.style.cursor = 'grabbing';
+      }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (state.isPanning) {
+        e.preventDefault();
+        state.panX = e.clientX - state.panStartX;
+        state.panY = e.clientY - state.panStartY;
+        applyTransform(false);
+      }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (state.isPanning) {
+        state.isPanning = false;
+        canvasContainer.style.cursor = (state.isSpacePressed || state.activeTool === 'hand') ? 'grab' : 'default';
+      }
+    });
+
+    canvasContainer.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) {
+        const zoomDelta = -e.deltaY * 0.0015;
+        state.zoom = Math.min(2.5, Math.max(0.3, Math.round((state.zoom + zoomDelta) * 100) / 100));
+        applyTransform(false);
+      } else {
+        state.panX -= e.deltaX * 0.85;
+        state.panY -= e.deltaY * 0.85;
+        applyTransform(false);
+      }
+    }, { passive: false });
+
+    function toggleDrawer(forceOpen) {
+      if (typeof forceOpen === 'boolean') {
+        state.drawerOpen = forceOpen;
+      } else {
+        state.drawerOpen = !state.drawerOpen;
+      }
+      const drawer = document.getElementById('inspector-drawer');
+      const reopenBtn = document.getElementById('drawer-reopen-btn');
+      const headerBtn = document.getElementById('header-drawer-btn');
+
+      if (state.drawerOpen) {
+        drawer.style.marginRight = '0px';
+        drawer.style.opacity = '1';
+        drawer.style.pointerEvents = 'auto';
+        if (reopenBtn) {
+          reopenBtn.classList.add('translate-x-full', 'opacity-0', 'pointer-events-none');
+          reopenBtn.classList.remove('translate-x-0', 'opacity-100', 'pointer-events-auto');
+        }
+        if (headerBtn) headerBtn.classList.remove('text-primary', 'bg-primary-50');
+        showToast(state.lang === 'zh' ? '展开交付参数抽屉' : 'Drawer Opened');
+      } else {
+        drawer.style.marginRight = '-22rem';
+        drawer.style.opacity = '0';
+        drawer.style.pointerEvents = 'none';
+        if (reopenBtn) {
+          reopenBtn.classList.remove('translate-x-full', 'opacity-0', 'pointer-events-none');
+          reopenBtn.classList.add('translate-x-0', 'opacity-100', 'pointer-events-auto');
+        }
+        if (headerBtn) headerBtn.classList.add('text-primary', 'bg-primary-50');
+        showToast(state.lang === 'zh' ? '已收起参数抽屉 (点击右侧把手或按 [ 展开)' : 'Drawer Collapsed (Click right tab or press [ )');
+      }
+    }
+
+    function toggleExportModal(show) {
+      const modal = document.getElementById('export-modal');
+      if (!modal) return;
+      if (show) {
+        modal.classList.remove('hidden');
+        setTimeout(() => {
+          modal.classList.remove('opacity-0');
+          modal.querySelector('div').classList.remove('scale-95');
+          modal.querySelector('div').classList.add('scale-100');
+        }, 10);
+      } else {
+        modal.classList.add('opacity-0');
+        modal.querySelector('div').classList.remove('scale-100');
+        modal.querySelector('div').classList.add('scale-95');
+        setTimeout(() => modal.classList.add('hidden'), 200);
+      }
+    }
+
+    function toggleShortcutModal(show) {
+      const modal = document.getElementById('shortcut-modal');
+      if (!modal) return;
+      if (show) {
+        modal.classList.remove('hidden');
+        setTimeout(() => {
+          modal.classList.remove('opacity-0');
+          modal.querySelector('div').classList.remove('scale-95');
+          modal.querySelector('div').classList.add('scale-100');
+        }, 10);
+      } else {
+        modal.classList.add('opacity-0');
+        modal.querySelector('div').classList.remove('scale-100');
+        modal.querySelector('div').classList.add('scale-95');
+        setTimeout(() => modal.classList.add('hidden'), 200);
+      }
+    }
+
+    function showToast(msg) {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const toast = document.createElement('div');
+      toast.className = 'toast-animate bg-on-surface/95 text-white text-xs font-medium px-3.5 py-2.5 rounded-lg shadow-lg border border-white/10 backdrop-blur-md flex items-center gap-2 pointer-events-auto';
+      toast.innerHTML = `<span class="material-symbols-outlined text-[16px] text-primary-400">info</span><span>${msg}</span>`;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-10px)';
+        toast.style.transition = 'all 0.2s ease-out';
+        setTimeout(() => toast.remove(), 200);
+      }, 2400);
+    }
+
+    let handoffPayload = null;
+    let handoffFetch = null;
+
+    function setHandoffText(selector, value) {
+      document.querySelectorAll(selector).forEach((node) => {
+        node.textContent = String(value ?? '—');
+      });
+    }
+
+    function updateHandoffView(payload) {
+      handoffPayload = payload;
+      setHandoffText('#handoff-run-id', payload.runId);
+      setHandoffText('#handoff-profile', payload.profile);
+      setHandoffText('#handoff-timestamp', payload.timestamp);
+      setHandoffText('#handoff-authority-value', payload.authority);
+      setHandoffText('[data-authority]', `authority: ${payload.authority || '—'}`);
+      const gateCount = Number.isFinite(payload.gatesPassed) ? payload.gatesPassed : 0;
+      setHandoffText('#gate-count', `${gateCount} / 8 ${payload.verdict || 'Pending'}`);
+      const status = document.getElementById('handoff-status');
+      if (status) {
+        status.className = payload.verdict === 'Pass'
+          ? 'text-xs font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success border border-success/20 flex items-center gap-1'
+          : 'text-xs font-semibold px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant border border-outline flex items-center gap-1';
+        status.lastElementChild.textContent = `${gateCount}/8 gates · ${payload.verdict || 'Pending'}`;
+      }
+      const metrics = Object.fromEntries((payload.viewports || []).map((item) => [item.name, item.metrics || {}]));
+      document.querySelectorAll('[data-vp-status]').forEach((node) => {
+        const metric = metrics[node.dataset.vpStatus] || {};
+        const fold = metric.disclosure && metric.disclosure.inFold ? 'in-fold' : 'fold not confirmed';
+        node.textContent = `${node.textContent.split(' · ')[0]} · ${metric.measurementStatus || 'blocked'} · ${fold}`;
+      });
+      const gateStatuses = Array.isArray(payload.gateStatuses)
+        ? payload.gateStatuses
+        : Array.from({ length: 8 }, (_, index) => index < gateCount ? 'pass' : 'pending');
+      document.querySelectorAll('[data-gate-status]').forEach((node) => {
+        const gateNumber = Number(node.dataset.gateStatus || 0);
+        const gateState = gateStatuses[gateNumber - 1] || 'pending';
+        node.textContent = gateState;
+        node.classList.toggle('text-success', gateState === 'pass');
+        node.classList.toggle('text-error', gateState === 'fail');
+        node.classList.toggle('text-on-surface-subtle', gateState === 'pending');
+      });
+      document.querySelectorAll('[data-gate-icon]').forEach((node) => {
+        const gateNumber = Number(node.dataset.gateIcon || 0);
+        const gateState = gateStatuses[gateNumber - 1] || 'pending';
+        node.textContent = gateState === 'pass'
+          ? 'check_circle'
+          : gateState === 'fail' ? 'error' : 'radio_button_unchecked';
+        node.classList.toggle('text-success', gateState === 'pass');
+        node.classList.toggle('text-error', gateState === 'fail');
+        node.classList.toggle('text-on-surface-subtle', gateState === 'pending');
+      });
+    }
+
+    function loadHandoffPayload() {
+      if (!handoffFetch) {
+        handoffFetch = fetch('/disclosure-review.json', { cache: 'no-store' })
+          .then((response) => {
+            if (!response.ok) throw new Error(`handoff request failed (${response.status})`);
+            return response.json();
+          })
+          .then((payload) => {
+            updateHandoffView(payload);
+            return payload;
+          });
+      }
+      return handoffFetch;
+    }
+
+    function copyHandoffJSON() {
+      loadHandoffPayload().then((payload) => {
+        if (!navigator.clipboard || !navigator.clipboard.writeText) {
+          throw new Error('clipboard API unavailable');
+        }
+        return navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      }).then(() => {
+        showToast(state.lang === 'zh' ? '已复制真实 disclosure-review.json' : 'Copied disclosure-review.json');
+      }).catch((error) => {
+        showToast(state.lang === 'zh' ? `复制失败：${error.message}` : `Copy failed: ${error.message}`);
+      });
+    }
+
+    function copyCodeSnippet() {
+      const snippet = `<div class="bg-surface p-5 rounded-xl border border-outline">\n  <h3 class="font-bold text-xs text-on-surface">Recipient</h3>\n  <p class="text-xs text-on-surface-variant">Member</p>\n</div>`;
+      navigator.clipboard.writeText(snippet).then(() => {
+        showToast(state.lang === 'zh' ? '📋 已复制代码片段至剪贴板' : '📋 Code snippet copied');
+      });
+    }
+
+    function performDownloadPackage() {
+      toggleExportModal(false);
+      fetch('/export-zip', { cache: 'no-store' })
+        .then((response) => {
+          if (!response.ok) throw new Error(`export request failed (${response.status})`);
+          return response.blob();
+        })
+        .then((archive) => {
+          const objectUrl = URL.createObjectURL(archive);
+          const link = document.createElement('a');
+          link.href = objectUrl;
+          link.download = 'static-handoff.zip';
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+          showToast(state.lang === 'zh' ? '正在下载真实静态交付资源包' : 'Downloading static handoff archive');
+        })
+        .catch((error) => {
+          showToast(state.lang === 'zh' ? `下载失败：${error.message}` : `Download failed: ${error.message}`);
+        });
+    }
+
+    loadHandoffPayload().catch((error) => {
+      showToast(state.lang === 'zh' ? `交付数据加载失败：${error.message}` : `Handoff load failed: ${error.message}`);
+    });
+
+    window.addEventListener('keydown', (e) => {
+      const activeEl = document.activeElement;
+      const isInput = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+      if (isInput) return;
+
+      if (e.code === 'Space' && !state.isSpacePressed) {
+        e.preventDefault();
+        state.isSpacePressed = true;
+        if (!state.isPanning) canvasContainer.style.cursor = 'grab';
+      } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        e.preventDefault();
+        toggleShortcutModal(true);
+      } else if (e.key === 'Escape') {
+        const m1 = document.getElementById('export-modal');
+        const m2 = document.getElementById('shortcut-modal');
+        if (m1 && !m1.classList.contains('hidden')) toggleExportModal(false);
+        if (m2 && !m2.classList.contains('hidden')) toggleShortcutModal(false);
+      } else if (e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        toggleExportModal(true);
+      } else if (e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        copyHandoffJSON();
+      } else if (e.key.toLowerCase() === 'l') {
+        e.preventDefault();
+        toggleLanguage();
+      } else if (e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        setViewMode('clean');
+      } else if (e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        setViewMode('redline');
+        setActiveTool('inspect');
+      } else if (e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setViewMode('fold');
+      } else if (e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        setViewMode('diff');
+      } else if (e.key.toLowerCase() === 'h') {
+        e.preventDefault();
+        setActiveTool('hand');
+      } else if (e.key === '1') {
+        e.preventDefault();
+        setViewport('1280x900');
+      } else if (e.key === '2') {
+        e.preventDefault();
+        setViewport('768x1024');
+      } else if (e.key === '3') {
+        e.preventDefault();
+        setViewport('390x844');
+      } else if (e.key === '4') {
+        e.preventDefault();
+        setViewport('360x800');
+      } else if (e.key === '5') {
+        e.preventDefault();
+        setViewport('print');
+      } else if (e.key === '=' || e.key === '+') {
+        e.preventDefault();
+        handleZoom(0.1);
+      } else if (e.key === '-' || e.key === '_') {
+        e.preventDefault();
+        handleZoom(-0.1);
+      } else if (e.key === '0') {
+        e.preventDefault();
+        resetZoom();
+      } else if (e.key === '[' || e.key === ']') {
+        e.preventDefault();
+        toggleDrawer();
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Space') {
+        state.isSpacePressed = false;
+        if (!state.isPanning) {
+          canvasContainer.style.cursor = state.activeTool === 'hand' ? 'grab' : 'default';
+        }
+      }
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      updateLanguageUI();
+    });
+  </script>
+</body>
+</html>
