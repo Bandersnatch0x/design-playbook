@@ -42,6 +42,10 @@ jobs:
           python3 tests/test_reference_intake_fixtures.py
           python3 tests/test_reference_sources.py
           python3 tests/test_request_routing.py
+          python3 tests/test_audit_preferences.py
+          python3 tests/test_audit_preferences_prose.py
+          python3 tests/test_audit_skeleton.py
+          python3 tests/test_audit_writeback.py
           python3 tests/test_validate.py
           python3 tests/test_aggregate_runs.py
           python3 tests/test_normalize_lockstep.py
@@ -87,7 +91,10 @@ jobs:
             packages/design-playbook/mcp/preview/test_transaction.py \
             packages/design-playbook/mcp/preview/test_versions.py \
             packages/design-playbook/mcp/preview/test_server_stdio.py \
+            packages/design-playbook/mcp/preview/test_i18n_labels.py \
             packages/design-playbook/mcp/evidence/test_capture_contract.py \
+            packages/design-playbook/mcp/evidence/test_disclosure.py \
+            packages/design-playbook/mcp/evidence/test_delivery_matrix.py \
             -v
 
       - name: Evidence MCP stdio — pure-path tests (required, no Playwright)

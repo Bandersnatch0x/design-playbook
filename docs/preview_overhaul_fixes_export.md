@@ -1,5 +1,16 @@
 # 🛠️ Design Playbook v2 交互/视觉/架构修复与升级完整导出文档
 
+> ⚠️ **SUPERSEDED（2026-08-24）** —— 本文描述的「第一态灵动胶囊 + 第二态抽屉 + Topbar」
+> 三态 dock 架构**已不存在**。`feature/preview-skip-dock` 上的 v9 重写把 Preview 控制层
+> 换成了 app shell（header / canvas / 左侧工具栏 / 右侧 inspector）；`dpb-pill` 与
+> `dpb-topbar` 在 `packages/design-playbook/mcp/preview/` 下现已零命中。
+>
+> 保留本文仅作历史记录。**不要据此实现或评审**：`e453d7a` 及更早提交的代码与此一致，
+> 当前工作树不再一致。现行设计基线见
+> `docs/specs/2026-08-22-interactive-review-and-static-handoff-implementation-plan.md`
+> 与 `.stitch/designs/preview-confirm-v9.html`；Stage 9 归属见 ADR-0034。
+> 本文不是 ADR 也不是 spec，不具决策地位。
+
 > **导出时间**：2026-08-22  
 > **涉及模块**：`packages/design-playbook/mcp/preview/`  
 > **覆盖范围**：第一态灵动胶囊、第二态抽屉面板、Topbar 工具条、防遮挡智能避让算法、满高自适应排版、ADR-0008 规范化 Skip 决策与 Hallmark CSS Tokens。

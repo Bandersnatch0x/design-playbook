@@ -77,19 +77,73 @@ def _ensure_within_run(path: Path, run_root: Path) -> None:
         ) from exc
 
 
+def _empty_manifest(
+    run_id: str, captured_at: str
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    """Fresh manifest skeleton for a run with no recorded sources yet."""
+    sources: list[dict[str, object]] = []
+    manifest: dict[str, object] = {
+        "schema": MANIFEST_SCHEMA,
+        "run_id": run_id,
+        "captured_at": captured_at,
+        "tool": "reference-intake",
+        "sources": sources,
+    }
+    return manifest, sources
+
+
+def _validate_source_entry(source: object, index: int, seen_ids: set[str]) -> None:
+    """Validate one ``manifest.sources[index]`` entry, rejecting duplicates."""
+    if not isinstance(source, dict):
+        raise ReferenceSourceError(f"manifest sources[{index}] must be an object")
+    source_id = _validate_identifier(
+        source.get("id"), f"manifest sources[{index}].id"
+    )
+    if source_id in seen_ids:
+        raise ReferenceSourceError(f"duplicate source id: {source_id!r}")
+    seen_ids.add(source_id)
+    if source.get("kind") not in SOURCE_KINDS:
+        raise ReferenceSourceError(f"manifest sources[{index}].kind is invalid")
+    _validate_nonempty_text(
+        source.get("locator"), f"manifest sources[{index}].locator"
+    )
+    if "sha256" not in source:
+        raise ReferenceSourceError(
+            f"manifest sources[{index}].sha256 is required"
+        )
+    digest = source["sha256"]
+    if digest is not None and (
+        not isinstance(digest, str)
+        or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+    ):
+        raise ReferenceSourceError(
+            f"manifest sources[{index}].sha256 must be null or lowercase hex"
+        )
+    storage = source.get("storage")
+    if storage is not None and storage not in STORAGE_KINDS:
+        raise ReferenceSourceError(f"manifest sources[{index}].storage is invalid")
+    acquisition = source.get("acquired_via")
+    if acquisition is not None and acquisition not in ACQUISITION_METHODS:
+        raise ReferenceSourceError(
+            f"manifest sources[{index}].acquired_via is invalid"
+        )
+    if "provider" in source:
+        _validate_provider(source["provider"])
+    if "media_type" in source:
+        _validate_nonempty_text(
+            source["media_type"], f"manifest sources[{index}].media_type"
+        )
+    if "captured_at" in source:
+        _validate_timestamp(
+            source["captured_at"], f"manifest sources[{index}].captured_at"
+        )
+
+
 def _load_manifest(
     manifest_path: Path, *, run_id: str, captured_at: str
 ) -> tuple[dict[str, object], list[dict[str, object]]]:
     if not manifest_path.exists():
-        sources: list[dict[str, object]] = []
-        manifest: dict[str, object] = {
-            "schema": MANIFEST_SCHEMA,
-            "run_id": run_id,
-            "captured_at": captured_at,
-            "tool": "reference-intake",
-            "sources": sources,
-        }
-        return manifest, sources
+        return _empty_manifest(run_id, captured_at)
 
     try:
         loaded = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -109,49 +163,7 @@ def _load_manifest(
 
     seen_ids: set[str] = set()
     for index, source in enumerate(sources):
-        if not isinstance(source, dict):
-            raise ReferenceSourceError(f"manifest sources[{index}] must be an object")
-        source_id = _validate_identifier(
-            source.get("id"), f"manifest sources[{index}].id"
-        )
-        if source_id in seen_ids:
-            raise ReferenceSourceError(f"duplicate source id: {source_id!r}")
-        seen_ids.add(source_id)
-        if source.get("kind") not in SOURCE_KINDS:
-            raise ReferenceSourceError(f"manifest sources[{index}].kind is invalid")
-        _validate_nonempty_text(
-            source.get("locator"), f"manifest sources[{index}].locator"
-        )
-        if "sha256" not in source:
-            raise ReferenceSourceError(
-                f"manifest sources[{index}].sha256 is required"
-            )
-        digest = source["sha256"]
-        if digest is not None and (
-            not isinstance(digest, str)
-            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
-        ):
-            raise ReferenceSourceError(
-                f"manifest sources[{index}].sha256 must be null or lowercase hex"
-            )
-        storage = source.get("storage")
-        if storage is not None and storage not in STORAGE_KINDS:
-            raise ReferenceSourceError(f"manifest sources[{index}].storage is invalid")
-        acquisition = source.get("acquired_via")
-        if acquisition is not None and acquisition not in ACQUISITION_METHODS:
-            raise ReferenceSourceError(
-                f"manifest sources[{index}].acquired_via is invalid"
-            )
-        if "provider" in source:
-            _validate_provider(source["provider"])
-        if "media_type" in source:
-            _validate_nonempty_text(
-                source["media_type"], f"manifest sources[{index}].media_type"
-            )
-        if "captured_at" in source:
-            _validate_timestamp(
-                source["captured_at"], f"manifest sources[{index}].captured_at"
-            )
+        _validate_source_entry(source, index, seen_ids)
     return loaded, sources
 
 

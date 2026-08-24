@@ -37,6 +37,12 @@ REQUEST_INTENTS = frozenset(
 )
 REQUEST_CONSEQUENCES = frozenset({"none", "local", "feature", "structural"})
 NO_RUN_INTENTS = frozenset({"answer", "review", "diagnose", "plan"})
+NO_RUN_REASON = ("non-durable request does not require Design I/O artifacts",)
+TIER_REASONS = {
+    "P1": ("local fix has no full-tier trigger or decided-field addition",),
+    "P2": ("request does not meet a P1 or P3 condition",),
+    "P3": ("structural consequence, decided-field revision, or multi-domain work",),
+}
 
 
 @dataclass(frozen=True)
@@ -137,7 +143,7 @@ def route_request(facts: RequestFacts) -> RouteDecision:
             requires_reference_contract=False,
             requires_spec=False,
             criteria=(),
-            reasons=("non-durable request does not require Design I/O artifacts",),
+            reasons=NO_RUN_REASON,
         )
 
     requires_baseline = facts.existing_product and not facts.baseline_ready
@@ -157,11 +163,6 @@ def route_request(facts: RequestFacts) -> RouteDecision:
         tier = "P1"
     else:
         tier = "P2"
-    reasons = {
-        "P1": ("local fix has no full-tier trigger or decided-field addition",),
-        "P2": ("request does not meet a P1 or P3 condition",),
-        "P3": ("structural consequence, decided-field revision, or multi-domain work",),
-    }
     return RouteDecision(
         mode="design-run",
         tier=tier,
@@ -171,7 +172,7 @@ def route_request(facts: RequestFacts) -> RouteDecision:
         criteria=(
             p3_criteria if tier == "P3" else _lower_tier_criteria(facts, tier)
         ),
-        reasons=reasons[tier],
+        reasons=TIER_REASONS[tier],
     )
 
 
@@ -321,7 +322,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(json.dumps(asdict(decision), indent=2, sort_keys=True))
         return 0
-    raise ValueError(f"unknown command: {args.command!r}")
+    return 2  # argparse (required=True subparsers) never reaches here
 
 
 if __name__ == "__main__":

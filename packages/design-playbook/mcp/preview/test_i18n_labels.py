@@ -51,22 +51,20 @@ class LabelSetTests(unittest.TestCase):
         html = preview_control._build_control(
             round_n=1, summary="评审", options=["确认通过", "需要修改"]
         )
-        self.assertIn('id="dpb-skip"', html)
+        self.assertIn('id="dpb-btn-skip"', html)
         self.assertIn(i18n._STRINGS[i18n.ZH]["skip"], html)
 
-    def test_control_page_renders_pill_skip_and_topbar(self) -> None:
-        # fixes-matrix #01/#04: skip lives in the pill; the 48px topbar hosts
-        # pin mode + zoom controls and starts hidden.
+    def test_control_page_renders_v9_shell_chrome(self) -> None:
+        # v9 app shell: header actions + toolbar tools + inspector + dual i18n.
         html = preview_control._build_control(
             round_n=1, summary="评审", options=["确认通过", "需要修改"]
         )
-        self.assertIn('id="dpb-pill-skip"', html)
-        self.assertIn('id="dpb-topbar" hidden', html)
-        self.assertIn('id="dpb-zoom-fit"', html)
-        self.assertIn('id="dpb-pin-toggle"', html)
-        self.assertIn('id="dpb-draw-toggle"', html)
-        # drawer skip stays hidden - the pill owns the skip channel
-        self.assertIn('class="dpb-btn dpb-hidden" id="dpb-skip"', html)
+        for i in ("dpb-header", "dpb-toolbar", "dpb-inspector", "dpb-canvas",
+                  "dpb-btn-approve", "dpb-btn-skip", "dpb-pin-toggle",
+                  "dpb-draw-toggle", "dpb-zoom-fit", "dpb-status-pill",
+                  "dpb-comment-input", "dpb-shortcut-modal"):
+            self.assertIn(f'id="{i}"', html, f"missing {i}")
+        self.assertIn("DPB_I18N_DUAL", html)
 
 
 if __name__ == "__main__":

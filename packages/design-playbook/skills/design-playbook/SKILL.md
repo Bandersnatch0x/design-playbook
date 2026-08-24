@@ -266,6 +266,27 @@ Cross-run review of multiple `.scratch/<run>/` runs lives in command **run-revie
 
 Machine seam (optional local check): `python scripts/validate_run.py <spec.md> <point-back.md> [--preview-dir <preview/>] [--decision-report <report>] [--evidence-dir <evidence/>] [--run-root <run>]`.
 
+### 11. Static run handoff (optional, on request)
+
+Build the delivery credential only when the user asks to hand this run off to implementation. It is **not** a pipeline obligation and never gates acceptance — the authoritative verdict is `point-back.md`.
+
+```bash
+python -c "from design_playbook.mcp.evidence.handoff import build_static_handoff; \
+  from pathlib import Path; \
+  r = build_static_handoff(Path('.scratch/<run>'), Path('<fill-surface>'), round_n=<n>, summary='<one line>'); \
+  print(r.index_html)"
+```
+
+The builder reads durable run artifacts only — its lifetime is independent of any review round, so it needs no review server, no browser session, and no port (ADR-0034). Everything lands under `.scratch/<run>/evidence/static-handoff/`: `index.html` (the delivery page, package-owned and CDN-free), `disclosure-review.json`, `static-handoff.zip`, `snapshots/`.
+
+Three honesty rules the builder enforces — do not paper over any of them:
+
+- **`confirmed` comes from `confirm-round-*.json`**, never from a choice label or your own reasoning. No record → `confirmationSource: unsubstantiated` and the verdict stays `Pending`. Report that as-is.
+- **Capture targets the Fill surface itself**, not the review shell. A zero measured dimension marks the viewport `blocked` and blocks the verdict.
+- **An untriggered conditional gate is `not-applicable`, not passed.** Delivery reads "every gate `pass` or `not-applicable`" — never an "8/8" count.
+
+**Done when:** the user asked for a handoff; `index.html` exists under the run tree; and you reported `verdict` / `authority` / `confirmationSource` verbatim, including a `Pending` one.
+
 ## Recirculate
 
 When a finding has no owner or you need the observable -> declaration routing, use the **authoritative recirculate map in `ui-evaluator`** (do not duplicate it here). Fix only the owning layer, then resume from the step that consumes it.

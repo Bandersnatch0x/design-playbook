@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Static Handoff - Design Playbook</title>
+<style>
+  :root{
+    --primary:#2563EB; --bg:#F8FAFC; --surface:#FFFFFF; --border:#E2E8F0;
+    --ink:#0F172A; --muted:#64748B; --ok:#10B981; --bad:#E11D48; --na:#94A3B8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",
+    "Hiragino Sans GB","Microsoft YaHei",sans-serif;}
+  .wrap{max-width:960px;margin:0 auto;padding:32px 20px 64px;}
+  header{border-bottom:2px solid var(--primary);padding-bottom:16px;margin-bottom:24px;}
+  h1{margin:0;font-size:22px;letter-spacing:-.01em;}
+  .sub{color:var(--muted);font-size:12.5px;margin-top:6px;}
+  .sub code{font:12px/1 ui-monospace,"JetBrains Mono",Consolas,monospace;}
+  h2{font-size:15px;margin:28px 0 10px;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:4px;
+    padding:12px 14px;}
+  .card .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;}
+  .card .v{font-size:16px;font-weight:650;margin-top:2px;}
+  .v.pass{color:var(--ok)} .v.recirculate{color:var(--primary)}
+  .v.pending,.v.blocked{color:var(--muted)}
+  table{width:100%;border-collapse:collapse;background:var(--surface);
+    border:1px solid var(--border);font-size:13px;}
+  th,td{padding:7px 10px;border-bottom:1px solid var(--border);text-align:left;}
+  th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;
+    background:#F1F5F9;}
+  tr:last-child td{border-bottom:0}
+  .st{font-family:ui-monospace,Consolas,monospace;font-size:12px;}
+  .st-pass{color:var(--ok)} .st-fail{color:var(--bad)}
+  .st-pending{color:var(--muted)} .st-not-applicable{color:var(--na)}
+  .note{background:#FFFBEB;border:1px solid #FDE68A;border-radius:4px;
+    padding:10px 12px;font-size:12.5px;color:#92400E;margin-top:10px;}
+  ul.decisions{margin:0;padding-left:20px;}
+  ul.decisions li{margin:4px 0;}
+  ul.decisions code{font:12px ui-monospace,Consolas,monospace;color:var(--primary);}
+  ul.decisions small{color:var(--muted);}
+  .dl{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;}
+  .dl a{display:inline-block;background:var(--primary);color:#fff;border-radius:4px;
+    padding:9px 16px;text-decoration:none;font-weight:600;font-size:13px;}
+  .dl a.secondary{background:var(--surface);color:var(--ink);
+    border:1px solid var(--border);}
+  .snaps{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+    gap:12px;margin-top:14px;}
+  .snaps figure{margin:0;background:var(--surface);border:1px solid var(--border);
+    border-radius:4px;overflow:hidden;}
+  .snaps img{display:block;width:100%;height:auto;}
+  .snaps figcaption{padding:6px 10px;font-size:11.5px;color:var(--muted);
+    font-family:ui-monospace,Consolas,monospace;}
+  details{margin-top:24px;}
+  details summary{cursor:pointer;color:var(--muted);font-size:12.5px;}
+  details pre{background:var(--ink);color:#E2E8F0;border-radius:4px;padding:14px;
+    overflow:auto;font:12px/1.5 ui-monospace,"JetBrains Mono",Consolas,monospace;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Static Handoff</h1>
+    <div class="sub">Delivery credential &middot; run <code>%RUN_ID%</code> &middot; generated %TIMESTAMP%</div>
+  </header>
+
+  <div class="grid">
+    <div class="card"><div class="k">Verdict</div>
+      <div class="v %VERDICT_LOWERCASE%">%VERDICT%</div></div>
+    <div class="card"><div class="k">Decision authority</div>
+      <div class="v">%AUTHORITY%</div></div>
+    <div class="card"><div class="k">Run profile</div>
+      <div class="v">%PROFILE%</div></div>
+    <div class="card"><div class="k">Gates passed</div>
+      <div class="v">%GATES_PASSED% / 8</div></div>
+    <div class="card"><div class="k">Capture</div>
+      <div class="v">%CAPTURE_STATUS%</div></div>
+  </div>
+  <div class="note">%CONFIRMATION_NOTE%</div>
+
+  <h2>Gate matrix</h2>
+  <table>
+    <thead><tr><th>Gate</th><th>Status</th></tr></thead>
+    <tbody>%GATE_ROWS%</tbody>
+  </table>
+
+  <h2>Viewport disclosure</h2>
+  <table>
+    <thead><tr><th>Viewport</th><th>sw</th><th>innerH</th><th>hOverflow</th>
+      <th>inFold</th><th>Measurement</th></tr></thead>
+    <tbody>%VIEWPORT_ROWS%</tbody>
+  </table>
+
+  <h2>Decisions</h2>
+  <ul class="decisions">%DECISION_ITEMS%</ul>
+
+  <h2>Artifacts</h2>
+  <p>This page is the delivery surface. Everything below sits next to it on disk.</p>
+  <div class="dl">
+    <a href="static-handoff.zip">Download ZIP (credential + snapshots + code)</a>
+    <a class="secondary" href="disclosure-review.json">disclosure-review.json</a>
+    <a class="secondary" href="deliverable.html">deliverable.html</a>
+  </div>
+  <div class="snaps">%SNAPSHOT_FIGURES%</div>
+
+  <details>
+    <summary>Full disclosure payload (machine-readable)</summary>
+    <pre><script type="application/json">%PAYLOAD_JSON%</script></pre>
+  </details>
+</div>
+</body>
+</html>

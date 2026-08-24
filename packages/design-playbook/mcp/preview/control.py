@@ -12,19 +12,34 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from design_playbook.mcp.preview.i18n import CONFIRM_LABELS, REVISE_LABELS, t
+from design_playbook.mcp.preview.i18n import (
+    CONFIRM_LABELS,
+    REVISE_LABELS,
+    SKIP_LABELS,
+    t,
+)
 
 HERE = Path(__file__).resolve().parent
 
 
 @lru_cache(maxsize=1)
-def _load_resources() -> tuple[str, str, str]:
+def _load_resources() -> tuple[str, str, str, str]:
     """Load immutable frontend resources bundled beside this module."""
     try:
-        return tuple(
+        html_tpl, css_tpl, js_tpl, review_tpl = tuple(
             (HERE / name).read_text(encoding="utf-8")
-            for name in ("control.html", "control.css", "control.js")
+            for name in (
+                "control.html",
+                "control.css",
+                "control.js",
+                "control.review.js",
+            )
         )
+        marker = "/* DPB_REVIEW_INSERT */"
+        if marker not in js_tpl:
+            raise RuntimeError("control.js is missing the review insertion marker")
+        js_tpl = js_tpl.replace(marker, review_tpl, 1)
+        return html_tpl, css_tpl, js_tpl, review_tpl
     except (OSError, UnicodeError) as exc:
         raise RuntimeError(
             f"Failed to load preview control resources from {HERE}"
@@ -77,12 +92,6 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         )
         (primary_bits if primary else secondary_bits).append(bit)
     secondary_html = "\n".join(secondary_bits)
-    # Scheme A′: pill revise is a real submit (same choice value as drawer secondary).
-    # Keep type=submit name=choice; only restyle for the pill.
-    pill_secondary_html = "\n".join(
-        b.replace('class="dpb-btn dpb-btn-secondary"', 'class="dpb-btn-pill-secondary"')
-        for b in secondary_bits
-    )
     summary_safe = html_lib.escape(summary)
     primary_opt = next(
         (o for o in options if o in CONFIRM_LABELS or o.casefold() in confirm_cf),
@@ -94,30 +103,54 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
     # Translations with quotes, braces, or "/{" must not break JS or raise KeyError.
     # HTML {t_xxx} placeholders stay on .format (html.escape-safe static chrome).
     JS_KEYS = (
+        "app_title",
         "locate",
         "locate_anchor",
         "skip",
+        "mode_preview",
+        "mode_annotate",
         "draw_label",
         "draw_on",
+        "status_ready",
+        "status_not_ready",
+        "quick_approve",
+        "filter_all",
+        "filter_pending",
+        "filter_resolved",
+        "mark_resolved",
+        "reopen",
+        "tag_copy",
+        "tag_layout",
+        "tag_visual",
+        "comment_placeholder",
+        "field_label",
+        "field_placeholder",
         "anchor_num_pre",
         "anchor_num_post",
         "anchor_placeholder",
         "remove_num_pre",
         "remove",
-        "pin_count_pre",
-        "pin_count_post",
-        "ready",
-        "not_ready",
-        "pin_on",
-        "pin_off",
+        "duplicate_anchor",
+        "gate_hint",
         "terminate_confirm",
         "terminate_confirm_go",
-        "abort_cancelled",  # popover dismiss a11y broadcast
+        "abort_cancelled",
         "abort_popover_aria",
-        "quick_feedback_placeholder",
-        "pin_toggle_desc",  # #58 pill annotate-button title while pinning
-        "duplicate_anchor",  # #60 duplicate pick live announcement ({n})
-        "onboard_title",  # #59 one-time onboarding card
+        "drawer_title",
+        "toast_mode_preview",
+        "toast_mode_annotate",
+        "toast_pin_added",
+        "toast_loop_done",
+        "toast_note_added",
+        "toast_resolved",
+        "toast_reopened",
+        "toast_drawer_open",
+        "toast_drawer_closed",
+        "toast_lang",
+        "toast_undo",
+        "toast_focus",
+        "toast_vp",
+        "onboard_title",
         "onboard_pick",
         "onboard_write",
         "onboard_submit",
@@ -126,57 +159,83 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
     )
     # json.dumps is JS-safe for quotes/backslashes; also neutralize </script>
     # and U+2028/2029 (pre-ES2019 JS string breaks) in case translations ever
-    # carry them — defense, not a current risk.
-    i18n_json = (
-        json.dumps({k: t(k) for k in JS_KEYS}, ensure_ascii=False)
-        .replace("</", "<\\/")
-        .replace("\u2028", "\\u2028")
-        .replace("\u2029", "\\u2029")
-    )
+    # carry them - defense, not a current risk.
+    def _js_safe(obj: object) -> str:
+        return (
+            json.dumps(obj, ensure_ascii=False)
+            .replace("</", "<\\/")
+            .replace("\u2028", "\\u2028")
+            .replace("\u2029", "\\u2029")
+        )
 
-    html_tpl, css_tpl, js_tpl = _load_resources()
+    i18n_json = _js_safe({k: t(k) for k in JS_KEYS})
+    # Dual-locale dictionary for the live L toggle (v9): both tables ship so
+    # the client can swap languages without a server round-trip.
+    from design_playbook.mcp.preview.i18n import EN, ZH, _STRINGS
+
+    dual_json = _js_safe(
+        {k: {"zh": _STRINGS[ZH].get(k, ""), "en": _STRINGS[EN].get(k, "")}
+         for k in JS_KEYS}
+    )
+    html_tpl, css_tpl, js_tpl, _review_tpl = _load_resources()
     js_formatted = js_tpl
     html_formatted = html_tpl.format(
         summary_safe=summary_safe,
         secondary_html=secondary_html,
-        pill_secondary_html=pill_secondary_html,
         primary_val=primary_val,
         primary_label=primary_label,
-        t_region=html_lib.escape(t("region_label"), quote=True),
+        skip_val=html_lib.escape(t("skip"), quote=True),
+        t_app_title=html_lib.escape(t("app_title")),
         t_round=html_lib.escape(t("round_n", n=round_n)),
-        t_annotate=html_lib.escape(t("annotate")),
-        t_pill_open=html_lib.escape(t("pill_open")),
-        t_not_ready=html_lib.escape(t("not_ready")),
-        t_drawer_aria=html_lib.escape(t("drawer_aria"), quote=True),
-        t_drawer_title=html_lib.escape(t("drawer_title")),
-        t_drawer_empty_title=html_lib.escape(t("drawer_empty_title")),
-        t_drawer_empty_desc=html_lib.escape(t("drawer_empty_desc")),
+        t_vp_desktop=html_lib.escape(t("vp_desktop"), quote=True),
+        t_vp_tablet=html_lib.escape(t("vp_tablet"), quote=True),
+        t_vp_mobile=html_lib.escape(t("vp_mobile"), quote=True),
+        t_mode_preview=html_lib.escape(t("mode_preview")),
+        t_mode_annotate=html_lib.escape(t("mode_annotate")),
+        t_drawer_toggle=html_lib.escape(t("drawer_toggle"), quote=True),
+        t_shortcuts_open=html_lib.escape(t("shortcuts_open"), quote=True),
         t_skip=html_lib.escape(t("skip")),
         t_skip_desc=html_lib.escape(t("skip_desc"), quote=True),
-        t_zoom_fit=html_lib.escape(t("zoom_fit")),
-        t_draw_toggle=html_lib.escape(t("draw_toggle"), quote=True),
-        skip_val=html_lib.escape(t("skip"), quote=True),
-        t_collapse=html_lib.escape(t("collapse"), quote=True),
-        t_pin_toggle=html_lib.escape(t("pin_toggle")),
-        t_pin_toggle_desc=html_lib.escape(t("pin_toggle_desc"), quote=True),
-        t_pin_count=html_lib.escape(t("pin_count", n=0)),
-        t_anchors_head=html_lib.escape(t("anchors_head")),
-        t_field_label=html_lib.escape(t("field_label")),
-        t_field_placeholder=html_lib.escape(t("field_placeholder"), quote=True),
         t_terminate=html_lib.escape(t("terminate")),
         t_terminate_desc=html_lib.escape(t("terminate_desc"), quote=True),
         t_terminate_confirm=html_lib.escape(t("terminate_confirm")),
         t_terminate_confirm_go=html_lib.escape(t("terminate_confirm_go")),
         t_abort_popover_aria=html_lib.escape(t("abort_popover_aria"), quote=True),
         t_cancel=html_lib.escape(t("cancel")),
-        t_quick_feedback_placeholder=html_lib.escape(
-            t("quick_feedback_placeholder"), quote=True
-        ),
-        t_ready_hint=html_lib.escape(t("ready_hint"), quote=True),
+        t_confirm_desc=html_lib.escape(t("confirm_desc"), quote=True),
+        t_tool_select=html_lib.escape(t("tool_select"), quote=True),
+        t_tool_draw=html_lib.escape(t("tool_draw"), quote=True),
+        t_tool_hand=html_lib.escape(t("tool_hand"), quote=True),
+        t_undo_label=html_lib.escape(t("undo_label"), quote=True),
+        t_zoom_out_t=html_lib.escape(t("zoom_out_t"), quote=True),
+        t_zoom_in_t=html_lib.escape(t("zoom_in_t"), quote=True),
+        t_zoom_fit=html_lib.escape(t("zoom_fit"), quote=True),
+        t_draw_toggle=html_lib.escape(t("draw_toggle")),
+        t_status_not_ready=html_lib.escape(t("status_not_ready")),
+        t_quick_approve=html_lib.escape(t("quick_approve")),
+        t_drawer_title=html_lib.escape(t("drawer_title")),
+        t_roam_prev=html_lib.escape(t("roam_prev"), quote=True),
+        t_roam_next=html_lib.escape(t("roam_next"), quote=True),
+        t_roam_label=html_lib.escape(t("roam_label")),
+        t_filter_all=html_lib.escape(t("filter_all")),
+        t_filter_pending=html_lib.escape(t("filter_pending")),
+        t_filter_resolved=html_lib.escape(t("filter_resolved")),
+        t_tag_copy=html_lib.escape(t("tag_copy")),
+        t_tag_layout=html_lib.escape(t("tag_layout")),
+        t_tag_visual=html_lib.escape(t("tag_visual")),
+        t_enter_hint=html_lib.escape(t("enter_hint")),
+        t_comment_placeholder=html_lib.escape(t("comment_placeholder"), quote=True),
+        t_comment_send=html_lib.escape(t("comment_send"), quote=True),
+        t_field_label=html_lib.escape(t("field_label")),
+        t_field_placeholder=html_lib.escape(t("field_placeholder"), quote=True),
         t_draft=html_lib.escape(t("draft")),
         t_draft_desc=html_lib.escape(t("draft_desc"), quote=True),
-        t_confirm_desc=html_lib.escape(t("confirm_desc"), quote=True),
-        t_onboard_title=html_lib.escape(t("onboard_title"), quote=True),
+        t_lang_toggle=html_lib.escape(t("lang_toggle")),
+        t_shortcuts_title=html_lib.escape(t("shortcuts_title")),
+        t_group_global=html_lib.escape(t("group_global")),
+        t_group_tools=html_lib.escape(t("group_tools")),
+        t_got_it=html_lib.escape(t("got_it")),
+        t_onboard_title=html_lib.escape(t("onboard_title")),
         t_onboard_pick=html_lib.escape(t("onboard_pick")),
         t_onboard_write=html_lib.escape(t("onboard_write")),
         t_onboard_submit=html_lib.escape(t("onboard_submit")),
@@ -184,10 +243,19 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         t_onboard_close=html_lib.escape(t("onboard_close")),
     )
 
+    # ADR-0008: SKIP_LABELS in i18n.py is the single label source. Ship the
+    # whole cross-locale set rather than the active locale's word, so adding a
+    # locale keeps the frontend and transaction.py in step automatically.
+    skip_labels_json = json.dumps(
+        sorted(label.casefold() for label in SKIP_LABELS), ensure_ascii=False
+    )
+
     return (
         f"<style>\n{css_tpl}\n</style>\n"
         f"{html_formatted}\n"
         f"<script>window.DPB_I18N = {i18n_json};</script>\n"
+        f"<script>window.DPB_I18N_DUAL = {dual_json};</script>\n"
+        f"<script>window.DPB_SKIP_LABELS = {skip_labels_json};</script>\n"
         f"<script>window.DPB_DRAFT_KEY = {json.dumps(draft_key)};</script>\n"
         f"<script>\n{js_formatted}\n</script>"
     )
