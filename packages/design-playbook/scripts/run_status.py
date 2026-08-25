@@ -13,6 +13,7 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 # Package-local scripts directory (works for installed plugin and monorepo
@@ -69,6 +70,79 @@ from design_playbook.scripts.repair_rounds import (  # noqa: E402
     parse_close_reason,
     parse_round_facts,
 )
+
+
+class NextActionKind(str, Enum):
+    """Closed Snapshot v1 kinds for owner-emitted next actions.
+
+    Only kinds an existing owner branch actually emits are members;
+    ``agent-command`` and ``source-review`` stay absent until an owner
+    emits them.
+    """
+
+    STOP = "stop"
+    CONTINUE = "continue"
+    HUMAN_DECISION = "human-decision"
+
+
+class NextActionActor(str, Enum):
+    """Closed Snapshot v1 actor for one owner-emitted next action."""
+
+    RUN_OPERATOR = "run-operator"
+    AGENT = "agent"
+
+
+@dataclass(frozen=True)
+class NextActionOwner:
+    """Actor and optional semantic role responsible for an action."""
+
+    actor: NextActionActor
+    role: str | None
+
+
+@dataclass(frozen=True)
+class NextAction:
+    """Structured owner result; narration is never parsed to construct it."""
+
+    action_id: str
+    kind: NextActionKind
+    label: str
+    owner: NextActionOwner
+    copyable_agent_command: str | None
+
+
+@dataclass(frozen=True)
+class NextActionProjection:
+    """One canonical action and only owner-sanctioned alternatives."""
+
+    primary: NextAction
+    alternatives: tuple[NextAction, ...]
+
+
+def _next_action(
+    action_id: str,
+    kind: NextActionKind,
+    actor: NextActionActor,
+    label: str,
+) -> NextAction:
+    """Build one owner-emitted action.
+
+    ``copyable_agent_command`` stays ``None`` until an existing owner
+    emits one exact command; converting narration is forbidden
+    (Snapshot v1 section 7.5).
+    """
+    return NextAction(
+        action_id=action_id,
+        kind=kind,
+        label=label,
+        owner=NextActionOwner(actor=actor, role=None),
+        copyable_agent_command=None,
+    )
+
+
+def _action_projection(action: NextAction) -> NextActionProjection:
+    """Wrap one canonical action; no owner sanctions alternatives yet."""
+    return NextActionProjection(primary=action, alternatives=())
 
 
 @dataclass(frozen=True)
@@ -301,7 +375,14 @@ def _baseline_next_action(facts: RunFacts) -> str | None:
             "complete prepare/confirm (or re-run prepare) before Fill.")
 
 
-def _preview_next_action(snapshot: PreviewSnapshot) -> str:
+def _preview_next_action(snapshot: PreviewSnapshot) -> NextAction:
+    """Typed action for the Preview branch; narration renders its label.
+
+    Preview presence and confirm validity come from the one integrity
+    snapshot; this never re-derives G5 facts. Human-decision kinds are
+    the HITL branches (confirm/revise belongs to the run operator);
+    re-running a preview round is an agent continuation.
+    """
     confirm = snapshot.canonical_current_confirm
     if confirm is None:
         invalid = next(
@@ -313,23 +394,54 @@ def _preview_next_action(snapshot: PreviewSnapshot) -> str:
             None,
         )
         if invalid is not None:
-            return f"Preview confirm unreadable ({invalid.path.name}); re-run preview*."
-        return ("Preview artifacts exist without a confirm for the latest "
-                "round — finish preview* HITL (G5) before fill.")
+            return _next_action(
+                "action.recover-preview-confirm",
+                NextActionKind.CONTINUE,
+                NextActionActor.AGENT,
+                f"Preview confirm unreadable ({invalid.path.name}); "
+                "re-run preview*.",
+            )
+        return _next_action(
+            "action.finish-preview-hitl",
+            NextActionKind.HUMAN_DECISION,
+            NextActionActor.RUN_OPERATOR,
+            "Preview artifacts exist without a confirm for the latest "
+            "round — finish preview* HITL (G5) before fill.",
+        )
     payload = confirm.data
     if isinstance(payload, dict) and payload.get("aborted") is True:
-        return (f"Preview ABORTED in {confirm.path.name} — must not proceed to "
-                f"fill; re-run preview* from the current round.")
+        return _next_action(
+            "action.rerun-preview-after-abort",
+            NextActionKind.CONTINUE,
+            NextActionActor.AGENT,
+            f"Preview ABORTED in {confirm.path.name} — must not proceed to "
+            f"fill; re-run preview* from the current round.",
+        )
     # Status narrates the transaction outcome only. Prototype facts remain
     # G5's fail-closed concern; run_status does not become a second gate.
     if confirm.valid:
-        return "Preview confirmed and floor passed — resume at fill."
+        return _next_action(
+            "action.resume-after-preview",
+            NextActionKind.CONTINUE,
+            NextActionActor.AGENT,
+            "Preview confirmed and floor passed — resume at fill.",
+        )
     if isinstance(payload, dict) and payload.get("confirmed") is True:
         reason = payload.get("floor_failure") or "floor_pass is not true"
-        return (f"Preview confirmed in {confirm.path.name} but feedback floor "
-                f"failed ({reason}) — must not proceed to fill; re-run "
-                f"preview* HITL.")
-    return "Preview open without decision — complete preview* confirm/revise."
+        return _next_action(
+            "action.rerun-preview-after-floor-failure",
+            NextActionKind.HUMAN_DECISION,
+            NextActionActor.RUN_OPERATOR,
+            f"Preview confirmed in {confirm.path.name} but feedback floor "
+            f"failed ({reason}) — must not proceed to fill; re-run "
+            f"preview* HITL.",
+        )
+    return _next_action(
+        "action.complete-preview-decision",
+        NextActionKind.HUMAN_DECISION,
+        NextActionActor.RUN_OPERATOR,
+        "Preview open without decision — complete preview* confirm/revise.",
+    )
 
 
 def next_action(
@@ -338,54 +450,139 @@ def next_action(
     preview_snapshot: PreviewSnapshot | None = None,
     run_facts: RunFacts | None = None,
 ) -> str:
+    """Legacy narration seam: render the typed projection's primary label.
+
+    The typed resolver (:func:`project_next_action`) owns every forward
+    branch; this function never re-derives owner branches, and no
+    consumer may parse the narration back into domain facts or commands.
+    """
+    return project_next_action(
+        states, run_root, preview_snapshot, run_facts,
+    ).primary.label
+
+
+def project_next_action(
+    states: list[StageState],
+    run_root: Path,
+    preview_snapshot: PreviewSnapshot | None = None,
+    run_facts: RunFacts | None = None,
+) -> NextActionProjection:
+    """Project the canonical structured action from owner facts.
+
+    Single forward branch source for every existing owner branch of the
+    legacy narration, in owner precedence order: the design-baseline
+    gate, the accept ladder (audit disposition, then the escalated-stop
+    waiting state ahead of any verdict-derived hint, then the verdict),
+    the empty run, the stage-resume loop, and the generic latest-stage
+    fallback. Narration renders ``primary.label``; it never re-derives
+    branches, and no consumer may parse the narration back into domain
+    facts or commands.
+    """
     facts = run_facts or capture_run_facts(run_root=run_root)
     snapshot = preview_snapshot or facts.preview or inspect_preview(run_root / "preview")
-    present = {state.key: state for state in states if state.present}
+    present = {state.key for state in states if state.present}
     if "baseline" in present:
         blocked = _baseline_next_action(facts)
         if blocked is not None:
-            return blocked
+            # The design-baseline gate is a human confirm/waive owner
+            # (ADR-0012): every blocked sub-state resolves to the same
+            # typed operator action, with the owner's blocker as label.
+            return _action_projection(_next_action(
+                "action.resolve-design-baseline",
+                NextActionKind.HUMAN_DECISION,
+                NextActionActor.RUN_OPERATOR,
+                blocked,
+            ))
     if "accept" in present:
         audit_disposition = _audit_disposition(facts.pointback_text)
         if audit_disposition == "unaudited":
-            return ("point-back.md is the unaudited skeleton "
-                    "(audited: false) — not audited; run the ui-evaluator "
-                    "audit to earn a real verdict.")
+            return _action_projection(_next_action(
+                "action.audit-unaudited-point-back",
+                NextActionKind.CONTINUE,
+                NextActionActor.AGENT,
+                "point-back.md is the unaudited skeleton "
+                "(audited: false) — not audited; run the ui-evaluator "
+                "audit to earn a real verdict.",
+            ))
         if audit_disposition == "ambiguous":
-            return ("point-back.md has duplicate or malformed audited markers "
-                    "— fix the marker and run ui-evaluator before trusting "
-                    "its verdict.")
+            return _action_projection(_next_action(
+                "action.repair-audit-marker",
+                NextActionKind.CONTINUE,
+                NextActionActor.AGENT,
+                "point-back.md has duplicate or malformed audited markers "
+                "— fix the marker and run ui-evaluator before trusting "
+                "its verdict.",
+            ))
         verdict = verdict_of(run_root, facts)
         # vNext S4: an escalated stop is a waiting state — repairing again
-        # is exactly wrong; narrate the two-round budget and the three-way
-        # user disposition before any verdict-derived hint.
+        # is exactly wrong; the three-way user disposition comes before any
+        # verdict-derived hint.
         if parse_close_reason(facts.pointback_text) == "escalated-stop":
-            return ("Escalated stop — the same blocking finding survived two "
-                    "repair rounds without new evidence; user disposition "
-                    "required (revise the owning declaration / accept the "
-                    "risk and record / keep suspended).")
+            return _action_projection(_next_action(
+                "action.disposition-escalated-stop",
+                NextActionKind.HUMAN_DECISION,
+                NextActionActor.RUN_OPERATOR,
+                "Escalated stop — the same blocking finding survived two "
+                "repair rounds without new evidence; user disposition "
+                "required (revise the owning declaration / accept the "
+                "risk and record / keep suspended).",
+            ))
         # verdict_of returns "Pass" only from one uniquely valid Pass
-        # (ADR-0025); exact equality avoids any string-prefix inference that
-        # could complete a run from malformed or repeated Verdict text.
+        # (ADR-0025); exact equality avoids any string-prefix inference
+        # that could complete a run from malformed or repeated Verdict
+        # text.
         if verdict == "Pass":
-            return "Run complete (Pass). Ship or start a new run."
+            return _action_projection(_next_action(
+                "action.stop-after-pass",
+                NextActionKind.STOP,
+                NextActionActor.RUN_OPERATOR,
+                "Run complete (Pass). Ship or start a new run.",
+            ))
         if verdict == "Recirculate":
-            return "Verdict is Recirculate — repair from point-back findings, then re-run ui-evaluator."
-        return "point-back.md present — confirm ## Verdict, then stop or recirculate."
+            return _action_projection(_next_action(
+                "action.repair-after-recirculate",
+                NextActionKind.CONTINUE,
+                NextActionActor.AGENT,
+                "Verdict is Recirculate — repair from point-back "
+                "findings, then re-run ui-evaluator.",
+            ))
+        return _action_projection(_next_action(
+            "action.confirm-verdict",
+            NextActionKind.CONTINUE,
+            NextActionActor.AGENT,
+            "point-back.md present — confirm ## Verdict, then stop or "
+            "recirculate.",
+        ))
     if not present:
-        return "No run artifacts — start with /design-playbook:design-io <ask> (design-baseline?, reference-intake?, or ux-spec)."
-
+        return _action_projection(_next_action(
+            "action.start-run",
+            NextActionKind.CONTINUE,
+            NextActionActor.RUN_OPERATOR,
+            "No run artifacts — start with "
+            "/design-playbook:design-io <ask> (design-baseline?, "
+            "reference-intake?, or ux-spec).",
+        ))
     for state in reversed(states):
         if not state.present or state.key == "accept":
             continue
         if state.key == "preview":
-            return _preview_next_action(snapshot)
+            return _action_projection(_preview_next_action(snapshot))
         stage = STAGES_BY_KEY.get(state.key)
         if stage is not None and stage.resume_action is not None:
-            return stage.resume_action
-
+            return _action_projection(_next_action(
+                f"action.resume-after-{state.key}",
+                NextActionKind.CONTINUE,
+                NextActionActor.AGENT,
+                stage.resume_action,
+            ))
     last = [state for state in states if state.present][-1]
-    return f"Latest artifact stage: {last.key} ({last.skill}). Continue the orchestrator sequence from there."
+    return _action_projection(_next_action(
+        "action.continue-orchestrator",
+        NextActionKind.CONTINUE,
+        NextActionActor.AGENT,
+        f"Latest artifact stage: {last.key} ({last.skill}). "
+        "Continue the orchestrator sequence from there.",
+    ))
 
 
 def render(run_root: Path, *, as_json: bool) -> int:
