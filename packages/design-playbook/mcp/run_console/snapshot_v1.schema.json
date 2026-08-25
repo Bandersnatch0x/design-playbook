@@ -1,0 +1,655 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://design-playbook.local/contracts/run-snapshot-v1.schema.json",
+  "title": "Run Snapshot v1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "identity",
+    "intent",
+    "execution",
+    "evaluation",
+    "nextActions",
+    "limitations",
+    "sources"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "identity": {
+      "type": "object",
+      "required": ["snapshot", "run", "product", "profile"],
+      "additionalProperties": false,
+      "properties": {
+        "snapshot": { "$ref": "#/$defs/snapshotMetadata" },
+        "run": { "$ref": "#/$defs/runAssertion" },
+        "product": { "$ref": "#/$defs/productAssertion" },
+        "profile": { "$ref": "#/$defs/profileAssertion" }
+      }
+    },
+    "intent": {
+      "type": "object",
+      "required": ["summary", "criteria", "contract"],
+      "additionalProperties": false,
+      "properties": {
+        "summary": { "$ref": "#/$defs/stringAssertion" },
+        "criteria": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/criterionAssertion" }
+        },
+        "contract": { "$ref": "#/$defs/contractAssertion" }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "required": ["progress", "preview", "repair"],
+      "additionalProperties": false,
+      "properties": {
+        "progress": { "$ref": "#/$defs/progressAssertion" },
+        "preview": { "$ref": "#/$defs/previewAssertion" },
+        "repair": { "$ref": "#/$defs/repairAssertion" }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "required": ["verdict", "criteria", "findings", "coverage"],
+      "additionalProperties": false,
+      "properties": {
+        "verdict": { "$ref": "#/$defs/verdictAssertion" },
+        "criteria": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/criterionEvaluationAssertion" }
+        },
+        "findings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/findingAssertion" }
+        },
+        "coverage": { "$ref": "#/$defs/coverageAssertion" }
+      }
+    },
+    "nextActions": {
+      "type": "object",
+      "required": ["primary", "alternatives"],
+      "additionalProperties": false,
+      "properties": {
+        "primary": { "$ref": "#/$defs/nextActionAssertion" },
+        "alternatives": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nextActionAssertion" }
+        }
+      }
+    },
+    "limitations": {
+      "type": "object",
+      "required": ["items"],
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/limitationAssertion" }
+        }
+      }
+    },
+    "sources": {
+      "type": "object",
+      "required": ["sourceSetHash", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "sourceSetHash": { "$ref": "#/$defs/digest" },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/sourceRecord" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "domainId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$"
+    },
+    "sourceRef": {
+      "type": "string",
+      "pattern": "^source\\.[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)*$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "nullableDigest": {
+      "anyOf": [
+        { "$ref": "#/$defs/digest" },
+        { "type": "null" }
+      ]
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?Z$"
+    },
+    "nullableTimestamp": {
+      "anyOf": [
+        { "$ref": "#/$defs/timestamp" },
+        { "type": "null" }
+      ]
+    },
+    "nullableString": {
+      "anyOf": [
+        { "type": "string" },
+        { "type": "null" }
+      ]
+    },
+    "nullableDomainId": {
+      "anyOf": [
+        { "$ref": "#/$defs/domainId" },
+        { "type": "null" }
+      ]
+    },
+    "role": {
+      "type": "string",
+      "enum": ["product", "design", "engineering"]
+    },
+    "nullableRole": {
+      "anyOf": [
+        { "$ref": "#/$defs/role" },
+        { "type": "null" }
+      ]
+    },
+    "stringArray": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "sourceRefArray": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/sourceRef" }
+    },
+    "digestArray": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/digest" }
+    },
+    "assertionSource": {
+      "type": "object",
+      "required": ["refs", "observedSetHash", "verifiedSetHash"],
+      "additionalProperties": false,
+      "properties": {
+        "refs": { "$ref": "#/$defs/sourceRefArray" },
+        "observedSetHash": { "$ref": "#/$defs/nullableDigest" },
+        "verifiedSetHash": { "$ref": "#/$defs/nullableDigest" }
+      }
+    },
+    "conflict": {
+      "type": "object",
+      "required": ["sourceRef", "hash", "summary"],
+      "additionalProperties": false,
+      "properties": {
+        "sourceRef": { "$ref": "#/$defs/sourceRef" },
+        "hash": { "$ref": "#/$defs/nullableDigest" },
+        "summary": { "type": "string", "minLength": 1 }
+      }
+    },
+    "reason": {
+      "type": "object",
+      "required": [
+        "code",
+        "message",
+        "sourceRefs",
+        "observedHashes",
+        "verifiedHashes",
+        "conflicts"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "not-produced",
+            "source-missing",
+            "source-unreadable",
+            "source-malformed",
+            "source-version-unsupported",
+            "no-canonical-value",
+            "dependency-unavailable",
+            "attestation-missing",
+            "owner-unmapped",
+            "source-changed-during-build",
+            "attestation-invalidated",
+            "partial-write",
+            "conflicting-authorities",
+            "invariant-violation"
+          ]
+        },
+        "message": { "type": "string", "minLength": 1 },
+        "sourceRefs": { "$ref": "#/$defs/sourceRefArray" },
+        "observedHashes": { "$ref": "#/$defs/digestArray" },
+        "verifiedHashes": { "$ref": "#/$defs/digestArray" },
+        "conflicts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/conflict" }
+        }
+      }
+    },
+    "approval": {
+      "type": "object",
+      "required": [
+        "claimId",
+        "claimHash",
+        "requiredRole",
+        "authorityKey",
+        "sourceRef",
+        "sourceHash",
+        "state",
+        "attestationId"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "claimId": { "$ref": "#/$defs/domainId" },
+        "claimHash": { "$ref": "#/$defs/digest" },
+        "requiredRole": { "$ref": "#/$defs/role" },
+        "authorityKey": { "$ref": "#/$defs/domainId" },
+        "sourceRef": { "$ref": "#/$defs/sourceRef" },
+        "sourceHash": { "$ref": "#/$defs/digest" },
+        "state": {
+          "type": "string",
+          "enum": ["missing", "valid", "invalidated"]
+        },
+        "attestationId": { "$ref": "#/$defs/nullableDomainId" }
+      }
+    },
+    "assertion": {
+      "type": "object",
+      "required": ["id", "availability", "result", "reason", "source", "approval"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/domainId" },
+        "availability": {
+          "type": "string",
+          "enum": ["known", "unknown", "stale", "inconsistent"]
+        },
+        "result": {},
+        "reason": {
+          "anyOf": [
+            { "$ref": "#/$defs/reason" },
+            { "type": "null" }
+          ]
+        },
+        "source": { "$ref": "#/$defs/assertionSource" },
+        "approval": {
+          "anyOf": [
+            { "$ref": "#/$defs/approval" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "snapshotMetadata": {
+      "type": "object",
+      "required": ["builtAt", "sourceSetHash", "buildState"],
+      "additionalProperties": false,
+      "properties": {
+        "builtAt": { "$ref": "#/$defs/timestamp" },
+        "sourceSetHash": { "$ref": "#/$defs/digest" },
+        "buildState": { "type": "string", "enum": ["current", "degraded"] }
+      }
+    },
+    "runResult": {
+      "type": "object",
+      "required": ["runId", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "runId": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{15,127}$"
+        },
+        "label": { "$ref": "#/$defs/nullableString" }
+      }
+    },
+    "productResult": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "const": "design-playbook" },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "profileResult": {
+      "type": "object",
+      "required": ["declaredTier", "effectiveTier", "confirmedBy"],
+      "additionalProperties": false,
+      "properties": {
+        "declaredTier": { "enum": ["P1", "P2", "P3", null] },
+        "effectiveTier": { "enum": ["P1", "P2", "P3", null] },
+        "confirmedBy": { "enum": ["human", null] }
+      }
+    },
+    "criterionResult": {
+      "type": "object",
+      "required": ["criterionId", "title", "given", "when", "then"],
+      "additionalProperties": false,
+      "properties": {
+        "criterionId": { "type": "string", "minLength": 1 },
+        "title": { "$ref": "#/$defs/nullableString" },
+        "given": { "type": "string" },
+        "when": { "type": "string" },
+        "then": { "type": "string" }
+      }
+    },
+    "contractResult": {
+      "type": "object",
+      "required": ["openFields", "assumedFields", "staleFields", "blocking"],
+      "additionalProperties": false,
+      "properties": {
+        "openFields": { "$ref": "#/$defs/stringArray" },
+        "assumedFields": { "$ref": "#/$defs/stringArray" },
+        "staleFields": { "$ref": "#/$defs/stringArray" },
+        "blocking": { "type": "boolean" }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "required": ["stageId", "label", "presence", "skipReason"],
+      "additionalProperties": false,
+      "properties": {
+        "stageId": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "presence": { "type": "string", "enum": ["present", "absent", "skipped"] },
+        "skipReason": { "$ref": "#/$defs/nullableString" }
+      }
+    },
+    "progressResult": {
+      "type": "object",
+      "required": ["observedStages", "latestObservedStage"],
+      "additionalProperties": false,
+      "properties": {
+        "observedStages": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/stage" }
+        },
+        "latestObservedStage": { "$ref": "#/$defs/nullableString" }
+      }
+    },
+    "previewResult": {
+      "type": "object",
+      "required": ["state", "round"],
+      "additionalProperties": false,
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": ["absent", "open", "confirmed", "aborted", "invalid"]
+        },
+        "round": {
+          "anyOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "repairResult": {
+      "type": "object",
+      "required": ["rounds", "closeReason", "waitingForHuman", "routes"],
+      "additionalProperties": false,
+      "properties": {
+        "rounds": { "type": "integer", "minimum": 0 },
+        "closeReason": { "enum": ["pass", "escalated-stop", "aborted", null] },
+        "waitingForHuman": { "type": "boolean" },
+        "routes": { "$ref": "#/$defs/stringArray" }
+      }
+    },
+    "evidenceBinding": {
+      "type": "object",
+      "required": ["artifactId", "sourceRef", "contentHash"],
+      "additionalProperties": false,
+      "properties": {
+        "artifactId": { "$ref": "#/$defs/domainId" },
+        "sourceRef": { "$ref": "#/$defs/sourceRef" },
+        "contentHash": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "criterionEvaluationResult": {
+      "type": "object",
+      "required": [
+        "criterionId",
+        "outcome",
+        "requiredProof",
+        "observedSummary",
+        "evidenceBindings"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "criterionId": { "type": "string", "minLength": 1 },
+        "outcome": {
+          "type": "string",
+          "enum": ["pass", "fail", "blocked", "notApplicable"]
+        },
+        "requiredProof": { "type": "string" },
+        "observedSummary": { "type": "string" },
+        "evidenceBindings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidenceBinding" }
+        }
+      }
+    },
+    "findingOwner": {
+      "type": "object",
+      "required": ["kind", "domainId", "sourceRef"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["declaration", "artifact", "decision", "unknown"]
+        },
+        "domainId": { "$ref": "#/$defs/nullableDomainId" },
+        "sourceRef": {
+          "anyOf": [
+            { "$ref": "#/$defs/sourceRef" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "findingResult": {
+      "type": "object",
+      "required": [
+        "findingId",
+        "criterionIds",
+        "issue",
+        "severity",
+        "disposition",
+        "owner",
+        "repair"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "findingId": { "type": "string", "minLength": 1 },
+        "criterionIds": { "$ref": "#/$defs/stringArray" },
+        "issue": { "type": "string" },
+        "severity": { "type": "string", "enum": ["S3", "S2", "S1", "S0"] },
+        "disposition": { "type": "string", "enum": ["blocking", "advisory", "info"] },
+        "owner": { "$ref": "#/$defs/findingOwner" },
+        "repair": { "type": "string" }
+      }
+    },
+    "coverageResult": {
+      "type": "object",
+      "required": ["declared", "reviewed", "unreviewed", "complete"],
+      "additionalProperties": false,
+      "properties": {
+        "declared": { "type": "integer", "minimum": 0 },
+        "reviewed": { "type": "integer", "minimum": 0 },
+        "unreviewed": { "type": "integer", "minimum": 0 },
+        "complete": { "type": "boolean" }
+      }
+    },
+    "nextActionOwner": {
+      "type": "object",
+      "required": ["actor", "role"],
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "type": "string",
+          "enum": ["run-operator", "semantic-approver", "agent", "validator"]
+        },
+        "role": { "$ref": "#/$defs/nullableRole" }
+      }
+    },
+    "nextActionResult": {
+      "type": "object",
+      "required": ["actionId", "kind", "label", "owner", "copyableAgentCommand"],
+      "additionalProperties": false,
+      "properties": {
+        "actionId": { "$ref": "#/$defs/domainId" },
+        "kind": {
+          "type": "string",
+          "enum": ["agent-command", "human-decision", "source-review", "continue", "stop"]
+        },
+        "label": { "type": "string", "minLength": 1 },
+        "owner": { "$ref": "#/$defs/nextActionOwner" },
+        "copyableAgentCommand": { "$ref": "#/$defs/nullableString" }
+      }
+    },
+    "limitationResult": {
+      "type": "object",
+      "required": ["code", "summary", "affectsAssertionIds"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "summary": { "type": "string", "minLength": 1 },
+        "affectsAssertionIds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/domainId" }
+        }
+      }
+    },
+    "sourceRecord": {
+      "type": "object",
+      "required": [
+        "sourceRef",
+        "authorityKey",
+        "kind",
+        "locator",
+        "readState",
+        "observedHash",
+        "verifiedHash",
+        "freshness",
+        "observedAt",
+        "verifiedAt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "sourceRef": { "$ref": "#/$defs/sourceRef" },
+        "authorityKey": { "$ref": "#/$defs/domainId" },
+        "kind": {
+          "type": "string",
+          "enum": ["artifact", "authority-record", "package", "session-selection"]
+        },
+        "locator": {
+          "anyOf": [
+            { "type": "string", "pattern": "^src_[A-Za-z0-9_-]{16,}$" },
+            { "type": "null" }
+          ]
+        },
+        "readState": {
+          "type": "string",
+          "enum": ["complete", "missing", "unreadable", "malformed", "unsupported"]
+        },
+        "observedHash": { "$ref": "#/$defs/nullableDigest" },
+        "verifiedHash": { "$ref": "#/$defs/nullableDigest" },
+        "freshness": { "type": "string", "enum": ["current", "changed", "unverified"] },
+        "observedAt": { "$ref": "#/$defs/timestamp" },
+        "verifiedAt": { "$ref": "#/$defs/nullableTimestamp" }
+      }
+    },
+    "runAssertion": {
+      "allOf": [
+        { "$ref": "#/$defs/assertion" },
+        { "properties": { "result": { "anyOf": [{ "$ref": "#/$defs/runResult" }, { "type": "null" }] } } }
+      ]
+    },
+    "productAssertion": {
+      "allOf": [
+        { "$ref": "#/$defs/assertion" },
+        { "properties": { "result": { "anyOf": [{ "$ref": "#/$defs/productResult" }, { "type": "null" }] } } }
+      ]
+    },
+    "profileAssertion": {
+      "allOf": [
+        { "$ref": "#/$defs/assertion" },
+        { "properties": { "result": { "anyOf": [{ "$ref": "#/$defs/profileResult" }, { "type": "null" }] } } }
+      ]
+    },
+    "stringAssertion": {
+      "allOf": [
+        { "$ref": "#/$defs/assertion" },
+        { "properties": { "result": { "anyOf": [{ "type": "string" }, { "type": "null" }] } } }
+      ]
+    },
+    "criterionAssertion": {
+      "allOf": [
+        { "$ref": "#/$defs/assertion" },
+        { "properties": { "result": { "anyOf": [{ "$ref": "#/$defs/criterionResult" }, { "type": "null" }] } } }
+      ]
+    },
+    "contractAssertion": {
+      "allOf": [
+        { "$ref": "#/$defs/assertion" },
+        { "properties": { "result": { "anyOf": [{ "$ref": "#/$defs/contractResult" }, { "type": "null" }] } } }
+      ]
+    },
+    "progressAssertion": {
+      "allOf": [
+        { "$ref": "#/$defs/assertion" },
+        { "properties": { "result": { "anyOf": [{ "$ref": "#/$defs/progressResult" }, { "type": "null" }] } } }
+      ]
+    },
+    "previewAssertion": {
+      "allOf": [
+        { "$ref": "#/$defs/assertion" },
+        { "properties": { "result": { "anyOf": [{ "$ref": "#/$defs/previewResult" }, { "type": "null" }] } } }
+      ]
+    },
+    "repairAssertion": {
+      "allOf": [
+        { "$ref": "#/$defs/assertion" },
+        { "properties": { "result": { "anyOf": [{ "$ref": "#/$defs/repairResult" }, { "type": "null" }] } } }
+      ]
+    },
+    "verdictAssertion": {
+      "allOf": [
+        { "$ref": "#/$defs/assertion" },
+        { "properties": { "result": { "enum": ["Pass", "Recirculate", null] } } }
+      ]
+    },
+    "criterionEvaluationAssertion": {
+      "allOf": [
+        { "$ref": "#/$defs/assertion" },
+        { "properties": { "result": { "anyOf": [{ "$ref": "#/$defs/criterionEvaluationResult" }, { "type": "null" }] } } }
+      ]
+    },
+    "findingAssertion": {
+      "allOf": [
+        { "$ref": "#/$defs/assertion" },
+        { "properties": { "result": { "anyOf": [{ "$ref": "#/$defs/findingResult" }, { "type": "null" }] } } }
+      ]
+    },
+    "coverageAssertion": {
+      "allOf": [
+        { "$ref": "#/$defs/assertion" },
+        { "properties": { "result": { "anyOf": [{ "$ref": "#/$defs/coverageResult" }, { "type": "null" }] } } }
+      ]
+    },
+    "nextActionAssertion": {
+      "allOf": [
+        { "$ref": "#/$defs/assertion" },
+        { "properties": { "result": { "anyOf": [{ "$ref": "#/$defs/nextActionResult" }, { "type": "null" }] } } }
+      ]
+    },
+    "limitationAssertion": {
+      "allOf": [
+        { "$ref": "#/$defs/assertion" },
+        { "properties": { "result": { "anyOf": [{ "$ref": "#/$defs/limitationResult" }, { "type": "null" }] } } }
+      ]
+    }
+  }
+}
