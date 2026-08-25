@@ -167,6 +167,16 @@ class RunConsoleSession:
         self._built = True
         return built.document
 
+    def invalidate_snapshot_cache(self) -> None:
+        """Drop the cached snapshot so the next build is a full rebuild.
+
+        The token, identity, and closed flag are untouched. The rebuild
+        itself re-runs through ``build_snapshot``: if it fails, no new
+        document is installed, so the prior snapshot is never served as
+        current afterwards (the typed refresh action, RCV1-009).
+        """
+        self._built = False
+
     def resolve_source(
         self, locator: object, *, max_chars: int = DEFAULT_EXCERPT_MAX_CHARS
     ) -> SourceView:

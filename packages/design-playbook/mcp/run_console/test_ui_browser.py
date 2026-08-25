@@ -412,11 +412,15 @@ class AccessibilityTest(BrowserTestCase):
         self.open()
         # The app moves initial focus to the main status region; Tab from
         # there enters the fact grid, Shift+Tab walks back through the
-        # reload control to the skip link: the full DOM tab order.
+        # refresh action, the reload control, and the language toggle to
+        # the skip link: the full DOM tab order.
         self.page.keyboard.press("Tab")
         self.assertEqual(self.page.evaluate(
             "() => document.activeElement.closest('.fact').querySelector('h3').textContent"),
             "1. Intent")
+        self.page.keyboard.press("Shift+Tab")
+        self.assertEqual(self.page.evaluate("() => document.activeElement.id"),
+                         "refresh-button")
         self.page.keyboard.press("Shift+Tab")
         self.assertEqual(self.page.evaluate("() => document.activeElement.id"),
                          "reload-button")
@@ -426,6 +430,7 @@ class AccessibilityTest(BrowserTestCase):
         self.page.keyboard.press("Shift+Tab")
         self.assertTrue(self.page.evaluate(
             "() => document.activeElement.classList.contains('skip-link')"))
+        self.page.keyboard.press("Tab")
         self.page.keyboard.press("Tab")
         self.page.keyboard.press("Tab")
         self.page.keyboard.press("Tab")
