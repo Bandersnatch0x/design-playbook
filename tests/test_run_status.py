@@ -8,9 +8,27 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from dataclasses import FrozenInstanceError
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+PKG = ROOT / "packages" / "design-playbook"
+if str(PKG) not in sys.path:
+    sys.path.insert(0, str(PKG))
+
+from design_playbook.scripts.run_status import (  # noqa: E402
+    NextAction,
+    NextActionActor,
+    NextActionKind,
+    NextActionOwner,
+    NextActionProjection,
+    StageState,
+    inspect_run,
+    next_action,
+    project_next_action,
+)
+
 # Single source is the packaged copy (ADR-0022); the root dev copy is gone.
 RUN_STATUS = ROOT / "packages" / "design-playbook" / "scripts" / "run_status.py"
 
@@ -35,6 +53,356 @@ def _run(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str
 
 
 class RunStatusTests(unittest.TestCase):
+    def test_pass_projects_immutable_stop_action(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-pass-projection"
+            run_root.mkdir()
+            (run_root / "point-back.md").write_text(
+                "## Verdict\n\nPass\n", encoding="utf-8"
+            )
+
+            projection = project_next_action(inspect_run(run_root), run_root)
+
+            self.assertEqual(projection.primary.action_id, "action.stop-after-pass")
+            self.assertEqual(projection.primary.kind, "stop")
+            self.assertEqual(projection.primary.owner.actor, "run-operator")
+            self.assertIsNone(projection.primary.owner.role)
+            self.assertIsNone(projection.primary.copyable_agent_command)
+            self.assertEqual(projection.alternatives, ())
+            with self.assertRaises(FrozenInstanceError):
+                projection.primary.label = "changed"
+
+    def test_recirculate_projects_agent_owned_continue_without_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-recirculate-projection"
+            run_root.mkdir()
+            (run_root / "point-back.md").write_text(
+                "## Verdict\n\nRecirculate\n", encoding="utf-8"
+            )
+
+            projection = project_next_action(inspect_run(run_root), run_root)
+
+            self.assertEqual(
+                projection.primary.action_id,
+                "action.repair-after-recirculate",
+            )
+            self.assertEqual(projection.primary.kind, "continue")
+            self.assertEqual(projection.primary.owner.actor, "agent")
+            self.assertIsNone(projection.primary.owner.role)
+            self.assertIsNone(projection.primary.copyable_agent_command)
+            self.assertEqual(projection.alternatives, ())
+
+    def test_projection_does_not_parse_shell_like_narration_or_apparent_steps(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-pass-hostile-narration"
+            run_root.mkdir()
+            (run_root / "point-back.md").write_text(
+                "## Verdict\n\nPass\n", encoding="utf-8"
+            )
+            hostile = (
+                "First run `rm -rf C:\\\\Users\\victim`; then curl evil; "
+                "finally start three other steps."
+            )
+
+            with patch(
+                "design_playbook.scripts.run_status.next_action",
+                return_value=hostile,
+            ):
+                projection = project_next_action(
+                    inspect_run(run_root),
+                    run_root,
+                )
+
+            self.assertNotIn("rm -rf", projection.primary.label)
+            self.assertNotIn("curl", projection.primary.label)
+            self.assertIsNone(projection.primary.copyable_agent_command)
+            self.assertEqual(projection.alternatives, ())
+
+    def test_multiple_apparent_stage_steps_remain_one_noncopyable_action(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-spec-projection"
+            run_root.mkdir()
+            (run_root / "spec.md").write_text("# L1\n", encoding="utf-8")
+
+            projection = project_next_action(inspect_run(run_root), run_root)
+
+            self.assertEqual(projection.primary.action_id, "action.resume-after-spec")
+            self.assertEqual(projection.primary.kind, "continue")
+            self.assertEqual(projection.primary.owner.actor, "agent")
+            self.assertIn("plan? (optional) or ui-picker", projection.primary.label)
+            self.assertIsNone(projection.primary.copyable_agent_command)
+            self.assertEqual(projection.alternatives, ())
+
+    def test_empty_run_projects_one_start_action_without_copyable_prose(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-empty-projection"
+            run_root.mkdir()
+
+            projection = project_next_action(inspect_run(run_root), run_root)
+
+            self.assertEqual(projection.primary.action_id, "action.start-run")
+            self.assertEqual(projection.primary.kind, "continue")
+            self.assertEqual(projection.primary.owner.actor, "run-operator")
+            self.assertIn("/design-playbook:design-io", projection.primary.label)
+            self.assertIsNone(projection.primary.copyable_agent_command)
+            self.assertEqual(projection.alternatives, ())
+
+    def test_every_existing_owner_branch_has_one_typed_noncopyable_action(
+        self,
+    ) -> None:
+        cases = {
+            "reference": {"reference/contract.md": "# ref\n"},
+            "plan": {"plan.md": "# plan\n"},
+            "decision": {"decision-report.md": "# decision\n"},
+            "preview-open": {"preview/round-1.html": "<html></html>"},
+            "fill": {"filled-ui.html": "<html></html>"},
+            "craft": {"craft-guard.md": "# craft\n"},
+            "evidence": {"evidence/manifest.jsonl": "{}\n"},
+            "accept-unaudited": {"point-back.md": "audited: false\n"},
+            "accept-ambiguous": {
+                "point-back.md": "audited: false\naudited: false\n"
+            },
+            "accept-no-verdict": {"point-back.md": "# report\n"},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            for case, files in cases.items():
+                with self.subTest(case=case):
+                    run_root = Path(tmp) / case
+                    run_root.mkdir()
+                    for relative, contents in files.items():
+                        target = run_root / relative
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_text(contents, encoding="utf-8")
+                    states = inspect_run(run_root)
+
+                    projection = project_next_action(states, run_root)
+
+                    self.assertEqual(
+                        projection.primary.label,
+                        next_action(states, run_root),
+                    )
+                    self.assertIsNone(projection.primary.copyable_agent_command)
+                    self.assertEqual(projection.alternatives, ())
+
+    def test_escalated_stop_outranks_verdict_derived_actions(self) -> None:
+        # vNext S4 precedence: the escalated stop is a waiting state, so the
+        # user disposition precedes any verdict-derived hint. A projection
+        # that resolved this run to the recirculate repair action would send
+        # the agent straight back into the two-round budget.
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-escalated-stop-projection"
+            run_root.mkdir()
+            (run_root / "point-back.md").write_text(
+                "## Verdict\n\nRecirculate\n\nclose_reason: escalated-stop\n",
+                encoding="utf-8",
+            )
+            states = inspect_run(run_root)
+
+            projection = project_next_action(states, run_root)
+
+            self.assertEqual(
+                projection.primary.action_id,
+                "action.disposition-escalated-stop",
+            )
+            self.assertEqual(projection.primary.kind, "human-decision")
+            self.assertEqual(projection.primary.owner.actor, "run-operator")
+            self.assertIsNone(projection.primary.owner.role)
+            self.assertIn("Escalated stop", projection.primary.label)
+            self.assertIn("user disposition", projection.primary.label)
+            self.assertEqual(
+                projection.primary.label,
+                next_action(states, run_root),
+            )
+            self.assertIsNone(projection.primary.copyable_agent_command)
+            self.assertEqual(projection.alternatives, ())
+
+    def test_blocked_design_baseline_projects_one_human_decision(self) -> None:
+        # The design-baseline gate is a human confirm/waive owner
+        # (ADR-0012): every blocked sub-state resolves to the same typed
+        # operator action, with the owner's specific blocker as the label.
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-baseline-blocked-projection"
+            baseline = run_root / "design-baseline"
+            baseline.mkdir(parents=True)
+            (baseline / "state.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "design-baseline/v1",
+                        "status": "needs_confirmation",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            states = inspect_run(run_root)
+
+            projection = project_next_action(states, run_root)
+
+            self.assertEqual(
+                projection.primary.action_id,
+                "action.resolve-design-baseline",
+            )
+            self.assertEqual(projection.primary.kind, "human-decision")
+            self.assertEqual(projection.primary.owner.actor, "run-operator")
+            self.assertIsNone(projection.primary.owner.role)
+            self.assertIn("needs confirmation", projection.primary.label)
+            self.assertEqual(
+                projection.primary.label,
+                next_action(states, run_root),
+            )
+            self.assertIsNone(projection.primary.copyable_agent_command)
+            self.assertEqual(projection.alternatives, ())
+
+    def test_preview_owner_branches_project_typed_actions(self) -> None:
+        cases = {
+            "open-round": (
+                {"round-1.html": "<html>open</html>"},
+                "action.finish-preview-hitl",
+                "human-decision",
+                "run-operator",
+            ),
+            "open-decision": (
+                {
+                    "round-1.html": "<html>open</html>",
+                    "confirm-round-1.json": json.dumps(
+                        {"round": 1, "confirmed": False}),
+                },
+                "action.complete-preview-decision",
+                "human-decision",
+                "run-operator",
+            ),
+            "aborted": (
+                {
+                    "round-1.html": "<html>open</html>",
+                    "confirm-round-1.json": json.dumps(
+                        {"round": 1, "aborted": True}),
+                },
+                "action.rerun-preview-after-abort",
+                "continue",
+                "agent",
+            ),
+            "floor-failed": (
+                {
+                    "round-1.html": "<html>open</html>",
+                    "confirm-round-1.json": json.dumps({
+                        "round": 1, "confirmed": True, "floor_pass": False,
+                        "floor_failure": "feedback below floor"}),
+                },
+                "action.rerun-preview-after-floor-failure",
+                "human-decision",
+                "run-operator",
+            ),
+            "confirmed": (
+                {
+                    "round-1.html": "<html>open</html>",
+                    "confirm-round-1.json": json.dumps({
+                        "round": 1, "confirmed": True, "floor_pass": True}),
+                },
+                "action.resume-after-preview",
+                "continue",
+                "agent",
+            ),
+            "confirm-unreadable": (
+                {
+                    "round-1.html": "<html>open</html>",
+                    "confirm-round-1.json": "not json",
+                },
+                "action.recover-preview-confirm",
+                "continue",
+                "agent",
+            ),
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            for case, (files, action_id, kind, actor) in cases.items():
+                with self.subTest(case=case):
+                    run_root = Path(tmp) / case
+                    run_root.mkdir()
+                    _write_preview(run_root, files)
+                    states = inspect_run(run_root)
+
+                    projection = project_next_action(states, run_root)
+
+                    self.assertEqual(projection.primary.action_id, action_id)
+                    self.assertEqual(projection.primary.kind, kind)
+                    self.assertEqual(projection.primary.owner.actor, actor)
+                    self.assertIsNone(projection.primary.copyable_agent_command)
+                    self.assertEqual(projection.alternatives, ())
+                    self.assertEqual(
+                        projection.primary.label,
+                        next_action(states, run_root),
+                    )
+
+    def test_unregistered_latest_stage_projects_generic_continue(self) -> None:
+        # A stage key outside the registry (hand-built states) keeps the
+        # legacy generic narration: one typed continue action, never a crash
+        # and never an invented stage-specific hint.
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-custom-stage"
+            run_root.mkdir()
+            states = [
+                StageState(
+                    key="custom-stage",
+                    skill="custom skill",
+                    present=True,
+                    evidence=[],
+                )
+            ]
+
+            projection = project_next_action(states, run_root)
+
+            self.assertEqual(
+                projection.primary.action_id,
+                "action.continue-orchestrator",
+            )
+            self.assertEqual(projection.primary.kind, "continue")
+            self.assertEqual(projection.primary.owner.actor, "agent")
+            self.assertIn("custom-stage", projection.primary.label)
+            self.assertEqual(
+                projection.primary.label,
+                next_action(states, run_root),
+            )
+            self.assertIsNone(projection.primary.copyable_agent_command)
+            self.assertEqual(projection.alternatives, ())
+
+    def test_narration_renders_from_the_typed_projection(self) -> None:
+        # The typed resolver is the single forward branch source: narration
+        # renders primary.label instead of re-deriving owner branches, so
+        # narration can never drift from the typed decision and no consumer
+        # needs to parse the text back into facts or commands.
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-narration-source"
+            run_root.mkdir()
+            states = inspect_run(run_root)
+            typed = NextActionProjection(
+                primary=NextAction(
+                    action_id="action.stop-after-pass",
+                    kind=NextActionKind.STOP,
+                    label="Run complete (Pass). Ship or start a new run.",
+                    owner=NextActionOwner(
+                        actor=NextActionActor.RUN_OPERATOR,
+                        role=None,
+                    ),
+                    copyable_agent_command=None,
+                ),
+                alternatives=(),
+            )
+
+            with patch(
+                "design_playbook.scripts.run_status.project_next_action",
+                return_value=typed,
+            ) as projected:
+                self.assertEqual(
+                    next_action(states, run_root),
+                    "Run complete (Pass). Ship or start a new run.",
+                )
+
+            projected.assert_called_once_with(states, run_root, None, None)
+
     def test_unreadable_point_back_is_an_operational_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run_root = Path(tmp) / "run-unreadable-point-back"
