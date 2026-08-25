@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="packages/design-playbook/showcase/screenshots/hero.png" alt="design-playbook — Design I/O for coding agents" width="100%" />
+<img src="packages/design-playbook/showcase/screenshots/hero.png" alt="design-playbook — evidence-backed UI delivery for coding agents" width="100%" />
 
 # 🎴 design-playbook
 
-### *Design I/O for coding agents — declarations + contracts that make UI generation constrained, reviewable, and recirculatable.*
+### *Evidence-backed UI delivery for coding agents — declare intent, prove the result, and recirculate failures to their source.*
 
 [![Version](https://img.shields.io/badge/Version-0.20.2-2DD4BF?style=flat-square&logo=semver&logoColor=black)](.#)
 [![License](https://img.shields.io/badge/License-MIT-2DD4BF?style=flat-square&logo=opensourceinitiative&logoColor=black)](./packages/design-playbook/LICENSE)
@@ -13,7 +13,7 @@
 [![Commands](https://img.shields.io/badge/Commands-4-2DD4BF?style=flat-square)](.#)
 [![Codex](https://img.shields.io/badge/Codex-ready-2DD4BF?style=flat-square)](./packages/design-playbook/codex/AGENTS.md)
 
-*Not another style/palette pack. Compose with `ui-ux-pro-max` + `frontend-design`; this plugin owns the **pipeline and acceptance**.*
+*Not another style/palette pack. Compose with `ui-ux-pro-max` + `frontend-design`; this plugin owns the **delivery pipeline, evidence semantics, and acceptance loop**.*
 
 </div>
 
@@ -21,12 +21,14 @@
 
 ## ✨ What it is
 
-A Claude Code / Codex plugin. One predictable pass per run — **Design I/O**: `design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard† → (observe*†) → ui-evaluator†`, where acceptance **points back** to the declaration that owns each failure, and blocking findings **recirculate** until closed. `?` = conditional entry (`design-baseline?` for UI work in an existing product; `reference-intake?` when screenshot/URL/design/product analogy is present); `preview*`/`observe*` run only when their optional MCP adapter is present (`preview_prototype` before Fill, `execute_capture_plan` after craft) — otherwise skipped. `preview*` is a human-in-the-loop confirm gate (G5); `observe*` captures criterion-addressable runtime evidence into a manifest the evaluator binds to a criterion (G6). `†` = user-selectable audit stages (ADR-0033): `craft-guard†` / `observe†` / `ui-evaluator†` can be switched off by the user — the pipeline asks once on the first run and remembers the choice as the default in `.design-playbook/preferences.yaml` (version-controlled; per-machine overrides go in `preferences.local.yaml`, gitignored). Skipping `ui-evaluator†` still produces the point-back skeleton marked `audited: false`, which strict validation refuses to accept as an audited result.
+A Claude Code / Codex plugin for evidence-backed UI delivery. Its mechanism is one predictable **Design I/O** pass per run: `design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard† → (observe*†) → ui-evaluator†`, where acceptance **points back** to the declaration that owns each failure, and blocking findings **recirculate** until closed. `?` = conditional entry (`design-baseline?` for UI work in an existing product; `reference-intake?` when screenshot/URL/design/product analogy is present); `preview*`/`observe*` run only when their optional MCP adapter is present (`preview_prototype` before Fill, `execute_capture_plan` after craft) — otherwise skipped. `preview*` is a human-in-the-loop confirm gate (G5); `observe*` captures criterion-addressable runtime evidence into a manifest the evaluator binds to a criterion (G6). `†` = user-selectable audit stages (ADR-0033): `craft-guard†` / `observe†` / `ui-evaluator†` can be switched off by the user — the pipeline asks once on the first run and remembers the choice as the default in `.design-playbook/preferences.yaml` (version-controlled; per-machine overrides go in `preferences.local.yaml`, gitignored). Skipping `ui-evaluator†` still produces the point-back skeleton marked `audited: false`, which strict validation refuses to accept as an audited result.
 
 - **Declarations** *(what good is)*: `spec` · `domain` · `craft` · `design` · `components` · `template`
 - **Contracts** *(how work enters the pipeline)*: `skill` (timing) · `evaluator` (acceptance + recirculate)
 
 > 🎬 **Try it:** `/design-playbook:design-io <your ask>` — one pass lands `spec.md`, a decision report, and a point-back ledger under `.scratch/<run>/` (artifact shape: [`showcase/01-spec.md`](./packages/design-playbook/showcase/01-spec.md)). **See it run on a real project:** the [`showcase/`](./packages/design-playbook/showcase) folder is a full Design I/O pass against SwarSight — spec, decision report, and point-back critique with a closed recirculate trail.
+
+> 🧭 **Planned invited trial:** a local, single-run Closed-loop Run Console will project the existing artifacts so an operator can identify intent, source verdict, blocker source, and next owner without opening raw files. It is not shipped yet, is not a cloud Workspace, and will not become a second run-state authority.
 
 > 🖼️ **Screenshots & multimodality:** understanding screenshot content depends on the **host model's multimodal/vision capability**. The plugin itself only *registers* images (locator + SHA-256 + metadata) — it provides no image understanding of its own. A host without vision rides the user's text description instead.
 
