@@ -9,6 +9,11 @@
 
 (function () {
   var SNAPSHOT_PATH = "/api/v1/snapshot";
+  /* The single typed action from the closed allowlist (RCV1-009): a full
+     snapshot rebuild. The body is the exact closed payload — no fields,
+     no variations, no generic command channel. */
+  var REFRESH_ACTION_PATH = "/api/v1/actions/refresh";
+  var REFRESH_ACTION_BODY = JSON.stringify({ schemaVersion: 1, action: "refresh" });
   var VIEW_IDS = [
     "loading", "ready", "no-token", "closed", "unsupported",
     "build-error", "error", "network",
@@ -27,6 +32,8 @@
       app_subtitle: "Read-only view of one validated run snapshot",
       app_notice: "This console is read-only. It renders the snapshot exactly as built; it never edits run files, never executes commands, and stores nothing — no analytics, no remote requests, no storage.",
       reload_snapshot: "Reload snapshot",
+      refresh_snapshot: "Refresh snapshot",
+      refresh_title: "Rebuild the snapshot from the run files (R)",
       retry_connection: "Retry connection",
       run_line: "Run {runId} · built {builtAt}",
       unknown_run: "unknown run",
@@ -237,6 +244,8 @@
       app_subtitle: "单次验证运行快照的只读视图",
       app_notice: "本控制台为纯只读视图。它严格按构建时原样呈现快照；绝不修改运行文件，绝不执行任何命令，且不存储任何内容 — 无数据统计、无远程请求、无本地存储。",
       reload_snapshot: "重新加载快照",
+      refresh_snapshot: "刷新快照",
+      refresh_title: "从运行文件重建快照 (R)",
       retry_connection: "重试连接",
       run_line: "运行 {runId} · 构建于 {builtAt}",
       unknown_run: "未知运行",
@@ -535,6 +544,12 @@
     if (notice) notice.textContent = d.app_notice;
     var reloadBtn = document.getElementById("reload-button");
     if (reloadBtn) reloadBtn.textContent = d.reload_snapshot;
+    var refreshBtn = document.getElementById("refresh-button");
+    if (refreshBtn) {
+      refreshBtn.setAttribute("title", d.refresh_title);
+      var refreshLabel = document.getElementById("refresh-button-label");
+      if (refreshLabel) refreshLabel.textContent = d.refresh_snapshot;
+    }
     var langBtn = document.getElementById("lang-toggle-button");
     if (langBtn) {
       langBtn.setAttribute("title", d.toggle_title);
@@ -654,27 +669,60 @@
   }
 
   /* ---------------------------------------------------------------- */
-  /* Authenticated read requests — the only network access.            */
+  /* Authenticated read requests — the only network access, plus the  */
+  /* one typed action POST from the closed allowlist (RCV1-009).      */
   /* ---------------------------------------------------------------- */
+
+  function parseJsonResponse(response) {
+    return response.text().then(function (text) {
+      var body = null;
+      if (text) {
+        try { body = JSON.parse(text); } catch (err) { body = null; }
+      }
+      return { status: response.status, ok: response.ok, body: body };
+    });
+  }
 
   function requestJson(path) {
     return window.fetch(path, {
       headers: { Authorization: "Bearer " + sessionToken },
       cache: "no-store",
-    }).then(function (response) {
-      return response.text().then(function (text) {
-        var body = null;
-        if (text) {
-          try { body = JSON.parse(text); } catch (err) { body = null; }
-        }
-        return { status: response.status, ok: response.ok, body: body };
-      });
-    });
+    }).then(parseJsonResponse);
+  }
+
+  /* The refresh action: same-origin POST of the exact closed payload.
+     Nothing else about the request varies, so no other command can be
+     smuggled through this path. */
+  function requestRefreshAction() {
+    return window.fetch(REFRESH_ACTION_PATH, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + sessionToken,
+        "Content-Type": "application/json",
+      },
+      body: REFRESH_ACTION_BODY,
+      cache: "no-store",
+    }).then(parseJsonResponse);
   }
 
   function loadSnapshot() {
     showView("loading");
     requestJson(SNAPSHOT_PATH).then(function (result) {
+      classifySnapshotResult(result);
+    }).catch(function () {
+      lastError = { type: "network" };
+      showView("network", true);
+    });
+  }
+
+  /* A full rebuild on the server. The response is a complete snapshot
+     document (or the typed error envelope), so the same classification
+     applies — a failed rebuild shows the build-error view and never the
+     previous snapshot as current. */
+  function refreshSnapshot() {
+    if (!sessionToken) return;
+    showView("loading");
+    requestRefreshAction().then(function (result) {
       classifySnapshotResult(result);
     }).catch(function () {
       lastError = { type: "network" };
@@ -1520,6 +1568,9 @@
     var reloadBtn = document.getElementById("reload-button");
     if (reloadBtn) reloadBtn.addEventListener("click", loadSnapshot);
 
+    var refreshBtn = document.getElementById("refresh-button");
+    if (refreshBtn) refreshBtn.addEventListener("click", refreshSnapshot);
+
     var langBtn = document.getElementById("lang-toggle-button");
     if (langBtn) {
       langBtn.addEventListener("click", toggleLanguage);
@@ -1531,16 +1582,26 @@
     );
 
     window.addEventListener("keydown", function (e) {
-      if (e.key === "l" || e.key === "L") {
-        var active = document.activeElement;
-        var tag = active ? active.tagName.toLowerCase() : "";
-        if (tag === "input" || tag === "textarea" || tag === "select" || (active && active.isContentEditable)) {
-          return;
-        }
-        if (e.ctrlKey || e.metaKey || e.altKey) return;
-        e.preventDefault();
-        toggleLanguage();
+      var key = e.key;
+      var isLang = key === "l" || key === "L";
+      var isRefresh = key === "r" || key === "R";
+      if (!isLang && !isRefresh) return;
+      var active = document.activeElement;
+      var tag = active ? active.tagName.toLowerCase() : "";
+      if (tag === "input" || tag === "textarea" || tag === "select" || (active && active.isContentEditable)) {
+        return;
       }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (isRefresh) {
+        /* The refresh control exists only while a snapshot is rendered. */
+        var readyView = document.getElementById("view-ready");
+        if (!readyView || readyView.hidden) return;
+        e.preventDefault();
+        refreshSnapshot();
+        return;
+      }
+      e.preventDefault();
+      toggleLanguage();
     });
 
     factGridKeyboard();

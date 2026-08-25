@@ -3,8 +3,10 @@
 One process-owned server instance serves exactly one selected run over
 one IP-literal loopback listener on an ephemeral port. Every route
 requires the session bearer token compared in constant time; the exact
-Host/Origin policy is enforced before authentication; only GET/HEAD
-exist, with matching HEAD bodies suppressed; every response carries the
+Host/Origin policy is enforced before authentication; the read API is
+GET/HEAD-only with matching HEAD bodies suppressed, plus the single
+typed POST action route ``/api/v1/actions/refresh`` from the closed
+allowlist in actions.py (RCV1-009); every response carries the
 restrictive header policy (CSP ``frame-ancestors 'none'``, nosniff,
 no-store, no CORS); and every failure is one fixed, bounded JSON error
 envelope that leaks no path, token, locator, or traceback (S24-S28,
@@ -21,6 +23,17 @@ import socketserver
 import threading
 from urllib.parse import parse_qsl, urlsplit
 
+from .actions import (
+    CONTENT_TYPE_UNSUPPORTED,
+    CONTENT_TYPE_UNSUPPORTED_MESSAGE,
+    REFRESH_ALLOWED_METHODS,
+    REFRESH_ROUTE,
+    ActionPayloadError,
+    content_type_is_json,
+    parse_json_action_body,
+    perform_refresh,
+    validate_refresh_payload,
+)
 from .contract import (
     SNAPSHOT_CONTRACT_INVALID,
     SNAPSHOT_VERSION,
@@ -80,6 +93,7 @@ _STATUS_BY_CODE = {
     METHOD_NOT_ALLOWED: 405,
     SOURCE_HASH_MISMATCH: 409,
     REQUEST_TOO_LARGE: 413,
+    CONTENT_TYPE_UNSUPPORTED: 415,
     SNAPSHOT_CONTRACT_INVALID: 422,
     SNAPSHOT_BUILD_FAILED: 500,
 }
@@ -156,7 +170,13 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
                 505: (400, ACTION_PAYLOAD_INVALID),
             }
             status, error_code = mapping.get(code, (400, ACTION_PAYLOAD_INVALID))
-            headers = {"Allow": ALLOWED_METHODS} if status == 405 else None
+            headers = None
+            if status == 405:
+                allow = ALLOWED_METHODS
+                path = getattr(self, "path", "")
+                if isinstance(path, str) and urlsplit(path).path == REFRESH_ROUTE:
+                    allow = REFRESH_ALLOWED_METHODS
+                headers = {"Allow": allow}
             self._send_json(
                 status, _error_payload(error_code), close=True, extra_headers=headers
             )
@@ -211,8 +231,21 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
         if not token_is_valid(session.token, presented):
             self._send_error(SESSION_TOKEN_INVALID)
             return
-        self._drain_body()
         path = split.path
+        if path == REFRESH_ROUTE:
+            # The one typed action route (RCV1-009), straight from the
+            # closed allowlist; every other name under /api/v1/actions/
+            # stays routeless (the 404 below).
+            if self.command != "POST":
+                self._drain_body()
+                self._send_error(
+                    METHOD_NOT_ALLOWED,
+                    extra_headers={"Allow": REFRESH_ALLOWED_METHODS},
+                )
+                return
+            self._serve_refresh(session, split.query)
+            return
+        self._drain_body()
         if path == ROUTE_SNAPSHOT:
             if not read_only:
                 self._send_error(
@@ -337,6 +370,75 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_error(SNAPSHOT_CONTRACT_INVALID, message=str(exc))
             return
         self._send_json(200, document)
+
+    def _serve_refresh(self, session: RunConsoleSession, query: str) -> None:
+        """POST /api/v1/actions/refresh: one full snapshot rebuild (RCV1-009).
+
+        The closed payload, the JSON content type, and the body bound
+        are all enforced before any rebuild happens, so every rejection
+        has zero partial effects: nothing is rebuilt and the served
+        document does not change.
+        """
+        if query:
+            # The typed action accepts no request parameters.
+            self._send_error(ACTION_PAYLOAD_INVALID)
+            return
+        if not content_type_is_json(self._single_header("Content-Type")):
+            self._send_error(
+                CONTENT_TYPE_UNSUPPORTED, message=CONTENT_TYPE_UNSUPPORTED_MESSAGE
+            )
+            return
+        body = self._read_bounded_body()
+        if body is None:
+            self._send_error(ACTION_PAYLOAD_INVALID)
+            return
+        try:
+            payload = parse_json_action_body(body)
+            validate_refresh_payload(payload)
+        except ActionPayloadError:
+            self._send_error(ACTION_PAYLOAD_INVALID)
+            return
+        try:
+            document = perform_refresh(session)
+        except RunConsoleSessionError:
+            # A closed session presents no valid token.
+            self._send_error(SESSION_TOKEN_INVALID)
+            return
+        except SnapshotBuildError:
+            # Never serve a previous snapshot as current.
+            self._send_error(SNAPSHOT_BUILD_FAILED)
+            return
+        try:
+            validate_snapshot(document)
+        except SnapshotContractError as exc:
+            self._send_error(SNAPSHOT_CONTRACT_INVALID, message=str(exc))
+            return
+        self._send_json(200, document)
+
+    def _read_bounded_body(self) -> bytes | None:
+        """Read the in-bound (already size-checked) body, exactly once.
+
+        A short body (the client closed mid-request) fails closed to a
+        bounded rejection instead of a partial parse.
+        """
+        values = self.headers.get_all("Content-Length")
+        if not values:
+            return b""
+        try:
+            remaining = int(values[0])
+        except ValueError:
+            return None
+        if remaining < 0:
+            return None
+        chunks = []
+        while remaining > 0:
+            chunk = self.rfile.read(min(remaining, 65536))
+            if not chunk:
+                self.close_connection = True
+                return None
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        return b"".join(chunks)
 
     def _serve_source(self, session: RunConsoleSession, path: str, query: str) -> None:
         locator = path[len(_SOURCES_PREFIX):]

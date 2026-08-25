@@ -549,7 +549,11 @@ class MethodAndRouteTest(_ServerTestCase):
             "/api/v1/nope",
             "/api/v1/snapshot/",
             "/api/v1/snapshot/x",
-            "/api/v1/actions/refresh",
+            # The refresh action route exists (RCV1-009) and answers
+            # GET with 405 below; other action paths stay routeless.
+            "/api/v1/actions",
+            "/api/v1/actions/",
+            "/api/v1/actions/repair",
             "/api/v1/sources",
         ):
             with self.subTest(path=path):
@@ -557,16 +561,18 @@ class MethodAndRouteTest(_ServerTestCase):
                 self.assertEqual(status, 404)
                 _assert_error(payload, ROUTE_NOT_FOUND)
 
-    def test_post_refresh_action_does_not_exist(self) -> None:
+    def test_post_refresh_pipeline_rejects_before_payload_checks(self) -> None:
+        # The refresh action route (RCV1-009) sits behind the same exact
+        # Origin policy as every non-read route: even a garbage body and
+        # content type get the 403, never a 400 or 415.
         status, _, payload = self._api(
             "POST",
             "/api/v1/actions/refresh",
-            origin=self.server.origin,
-            headers={"Content-Type": "application/json"},
-            body=json.dumps({"schemaVersion": 1, "action": "refresh"}).encode(),
+            headers={"Content-Type": "text/plain"},
+            body=b"not json",
         )
-        self.assertEqual(status, 404)
-        _assert_error(payload, ROUTE_NOT_FOUND)
+        self.assertEqual(status, 403)
+        _assert_error(payload, ORIGIN_INVALID)
 
     def test_malformed_locators_are_404_locator_invalid(self) -> None:
         good_hash = "sha256:" + "a" * 64
