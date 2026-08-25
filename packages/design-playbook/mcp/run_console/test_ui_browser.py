@@ -421,8 +421,12 @@ class AccessibilityTest(BrowserTestCase):
         self.assertEqual(self.page.evaluate("() => document.activeElement.id"),
                          "reload-button")
         self.page.keyboard.press("Shift+Tab")
+        self.assertEqual(self.page.evaluate("() => document.activeElement.id"),
+                         "lang-toggle-button")
+        self.page.keyboard.press("Shift+Tab")
         self.assertTrue(self.page.evaluate(
             "() => document.activeElement.classList.contains('skip-link')"))
+        self.page.keyboard.press("Tab")
         self.page.keyboard.press("Tab")
         self.page.keyboard.press("Tab")
         self.assertEqual(self.page.evaluate(
@@ -705,6 +709,88 @@ class SecurityTest(BrowserTestCase):
             "changed after the snapshot", timeout=10000
         )
         self.assertEqual(stale.locator("pre.excerpt").count(), 0)
+
+
+class LanguageToggleTest(BrowserTestCase):
+    """Tests language toggle button, shortcut key, bilingual dictionary, and memory persistence."""
+
+    def test_language_toggle_button_switches_labels_in_place(self) -> None:
+        self.open()
+        # Default is English
+        self.assertEqual(self.page.evaluate("() => document.documentElement.lang"), "en")
+        self.assertEqual(self.page.locator("h1").inner_text(), "Run Console")
+        self.assertIn("1. Intent", self.fact(1).inner_text())
+        self.assertIn("2. Verdict", self.fact(2).inner_text())
+        self.assertIn("3. Blocker", self.fact(3).inner_text())
+        self.assertIn("4. Next action", self.fact(4).inner_text())
+
+        # Click language toggle button
+        lang_btn = self.page.locator("#lang-toggle-button")
+        lang_btn.click()
+
+        # Switched to Chinese
+        self.assertEqual(self.page.evaluate("() => document.documentElement.lang"), "zh-CN")
+        self.assertEqual(self.page.locator("h1").inner_text(), "运行控制台")
+        self.assertIn("1. 意图", self.fact(1).inner_text())
+        self.assertIn("2. 结论", self.fact(2).inner_text())
+        self.assertIn("3. 阻塞项", self.fact(3).inner_text())
+        self.assertIn("4. 下一动作", self.fact(4).inner_text())
+
+        # Detail section headings in Chinese
+        self.assertEqual(
+            self.page.locator("#section-identity h2").inner_text(), "身份标识"
+        )
+        self.assertEqual(
+            self.page.locator("#section-intent h2").inner_text(), "意图"
+        )
+        self.assertEqual(
+            self.page.locator("#section-execution h2").inner_text(), "执行"
+        )
+        self.assertEqual(
+            self.page.locator("#section-evaluation h2").inner_text(), "评估"
+        )
+        self.assertEqual(
+            self.page.locator("#section-next-actions h2").inner_text(), "后续动作"
+        )
+        self.assertEqual(
+            self.page.locator("#section-limitations h2").inner_text(), "局限性"
+        )
+        self.assertEqual(
+            self.page.locator("#section-sources h2").inner_text(), "源数据"
+        )
+
+        # Toggle back to English
+        lang_btn.click()
+        self.assertEqual(self.page.evaluate("() => document.documentElement.lang"), "en")
+        self.assertEqual(self.page.locator("h1").inner_text(), "Run Console")
+        self.assertIn("1. Intent", self.fact(1).inner_text())
+
+    def test_keyboard_shortcut_l_toggles_language(self) -> None:
+        self.open()
+        self.assertEqual(self.page.evaluate("() => document.documentElement.lang"), "en")
+
+        # Press 'l' key
+        self.page.keyboard.press("l")
+        self.assertEqual(self.page.evaluate("() => document.documentElement.lang"), "zh-CN")
+        self.assertEqual(self.page.locator("h1").inner_text(), "运行控制台")
+
+        # Press 'L' key (Shift+l)
+        self.page.keyboard.press("Shift+L")
+        self.assertEqual(self.page.evaluate("() => document.documentElement.lang"), "en")
+        self.assertEqual(self.page.locator("h1").inner_text(), "Run Console")
+
+    def test_language_persists_only_in_memory_no_storage_apis(self) -> None:
+        self.open()
+        self.page.locator("#lang-toggle-button").click()
+        self.assertEqual(self.page.evaluate("() => document.documentElement.lang"), "zh-CN")
+
+        # Zero storage usage
+        local_len = self.page.evaluate("() => window.localStorage.length")
+        session_len = self.page.evaluate("() => window.sessionStorage.length")
+        cookies = self.page.evaluate("() => document.cookie")
+        self.assertEqual(local_len, 0)
+        self.assertEqual(session_len, 0)
+        self.assertEqual(cookies, "")
 
 
 if __name__ == "__main__":
