@@ -15,6 +15,7 @@ the legacy shape (compatibility contract: no retroactive re-checking).
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 from design_playbook.scripts._diagnostics import Finding, finding
 
@@ -23,6 +24,67 @@ SPEC_LAYERS = ["L1", "L2", "L3", "L4", "L5", "L6"]
 SPEC_SCHEMA_2 = re.compile(r"spec-schema:\s*2\b")
 FIVE_STATES = ("initial", "loading", "success", "failure", "empty")
 PATH_REF = re.compile(r"\(path:\s*(P\d+)\)")
+
+
+@dataclass(frozen=True)
+class SpecificationCriterion:
+    """One owner-parsed authoritative L6 acceptance criterion."""
+
+    criterion_id: str
+    title: str | None
+    given: str
+    when: str
+    then: str
+
+
+@dataclass(frozen=True)
+class SpecificationProjection:
+    """Immutable intent values owned by one Specification."""
+
+    summary: str
+    criteria: tuple[SpecificationCriterion, ...]
+
+
+class SpecificationProjectionError(ValueError):
+    """A stable, path-free reason that intent cannot be projected."""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
+@dataclass(frozen=True)
+class _L6Syntax:
+    """Single owner parse used by both validation and projection."""
+
+    text: str
+    positions: tuple[tuple[str, int | None, int | None], ...]
+
+    @property
+    def missing(self) -> tuple[str, ...]:
+        return tuple(name for name, start, _ in self.positions if start is None)
+
+    @property
+    def ordered(self) -> bool:
+        starts = tuple(start for _, start, _ in self.positions)
+        return None not in starts and starts == tuple(sorted(starts))
+
+    def projection(self, criterion_id: str) -> SpecificationCriterion:
+        offsets = {name: (start, end) for name, start, end in self.positions}
+        given_start, given_end = offsets["Given"]
+        when_start, when_end = offsets["When"]
+        then_start, then_end = offsets["Then"]
+        assert None not in (
+            given_start, given_end, when_start, when_end, then_start, then_end)
+        assert given_start < when_start < then_start
+
+        return SpecificationCriterion(
+            criterion_id=criterion_id,
+            title=_criterion_title(self.text[:given_start]),
+            given=_clause(self.text[given_end:when_start]),
+            when=_clause(self.text[when_end:then_start]),
+            then=_text_value(self.text[then_end:]),
+        )
 
 
 def _l6_body(text: str) -> str:
@@ -38,6 +100,95 @@ def _l6_items(text: str) -> list[str]:
         _l6_body(text),
         re.M | re.S,
     )]
+
+
+def _l6_syntax(text: str) -> tuple[_L6Syntax, ...]:
+    items: list[_L6Syntax] = []
+    for item in _l6_items(text):
+        positions = tuple(
+            (keyword, match.start(), match.end()) if match else
+            (keyword, None, None)
+            for keyword in ("Given", "When", "Then")
+            for match in (re.search(rf"\b{keyword}\b", item, re.I),)
+        )
+        items.append(_L6Syntax(text=item, positions=positions))
+    return tuple(items)
+
+
+def _text_value(text: str) -> str:
+    return " ".join(text.strip().split())
+
+
+def _criterion_title(text: str) -> str | None:
+    value = _text_value(text)
+    if not value:
+        return None
+    if value.endswith(":"):
+        value = value[:-1].rstrip()
+    return value or None
+
+
+def _clause(text: str) -> str:
+    return _text_value(text).strip(" ,，")
+
+
+def _l1_summary(text: str) -> str:
+    parts = re.split(
+        r"^#+\s*L1\b[^\r\n]*(?:\r?\n|\Z)",
+        text,
+        maxsplit=1,
+        flags=re.M,
+    )
+    body = (
+        re.split(r"^##\s+", parts[1], maxsplit=1, flags=re.M)[0]
+        if len(parts) == 2 else ""
+    )
+    for line in body.splitlines():
+        value = re.sub(r"^(?:[-*]|\d+[.)])\s+", "", line.strip())
+        if not value:
+            continue
+        labelled = re.match(
+            r"(?:Outcome summary|Goal|用户可见目标|一句话定义)\s*[:：]\s*(.*)",
+            value,
+            re.I,
+        )
+        if labelled:
+            return _text_value(labelled.group(1))
+        return _text_value(value)
+    return ""
+
+
+def project_specification(text: str) -> SpecificationProjection:
+    """Return the Specification owner's typed intent projection."""
+    summary = _l1_summary(text)
+    if not summary:
+        raise SpecificationProjectionError("summary-missing")
+
+    syntax = _l6_syntax(text)
+    if not syntax:
+        raise SpecificationProjectionError("criteria-missing")
+
+    criteria: list[SpecificationCriterion] = []
+    normalized: set[tuple[str | None, str, str, str]] = set()
+    for number, item in enumerate(syntax, 1):
+        if item.missing:
+            raise SpecificationProjectionError("criterion-incomplete")
+        if not item.ordered:
+            raise SpecificationProjectionError("criterion-out-of-order")
+        criterion = item.projection(f"L6.{number}")
+        if not all((criterion.given, criterion.when, criterion.then)):
+            raise SpecificationProjectionError("criterion-malformed")
+        identity = (
+            criterion.title,
+            criterion.given,
+            criterion.when,
+            criterion.then,
+        )
+        if identity in normalized:
+            raise SpecificationProjectionError("criterion-duplicate")
+        normalized.add(identity)
+        criteria.append(criterion)
+    return SpecificationProjection(summary=summary, criteria=tuple(criteria))
 
 
 def _layer_body(text: str, layer: str) -> str:
@@ -206,7 +357,7 @@ def check_spec(text: str) -> list[Finding]:
                 actual="missing",
                 repair=f"Add a top-level {layer} section to the spec",
             ))
-    items = _l6_items(text)
+    items = _l6_syntax(text)
     if not items:
         errs.append(finding(
             "G1.no_criteria",
@@ -217,11 +368,7 @@ def check_spec(text: str) -> list[Finding]:
             repair="Add Given/When/Then acceptance criteria under L6",
         ))
     for number, item in enumerate(items, 1):
-        positions = {
-            keyword: re.search(rf"\b{keyword}\b", item, re.I)
-            for keyword in ("Given", "When", "Then")
-        }
-        missing = [name for name, match in positions.items() if not match]
+        missing = item.missing
         if missing:
             errs.append(finding(
                 "G1.missing_gwt",
@@ -232,8 +379,7 @@ def check_spec(text: str) -> list[Finding]:
                 repair=f"Complete Given/When/Then for L6.{number}",
             ))
             continue
-        if not (positions["Given"].start() < positions["When"].start() <
-                positions["Then"].start()):
+        if not item.ordered:
             errs.append(finding(
                 "G1.gwt_order",
                 f"G1 spec: L6.{number} must order Given -> When -> Then",
