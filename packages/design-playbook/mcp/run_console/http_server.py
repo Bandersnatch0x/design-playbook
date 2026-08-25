@@ -60,6 +60,7 @@ from .session import (
     RunConsoleSessionError,
 )
 from .snapshot_builder import SnapshotBuildError
+from .ui import UIResources
 
 ROUTE_SNAPSHOT = "/api/v1/snapshot"
 _SOURCES_PREFIX = "/api/v1/sources/"
@@ -204,6 +205,8 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
         if query_carries_auth_material(split.query):
             self._send_error(SESSION_TOKEN_INVALID)
             return
+        if self._maybe_serve_ui(split.path, split.query):
+            return
         presented = extract_bearer_token(self._single_header("Authorization"))
         if not token_is_valid(session.token, presented):
             self._send_error(SESSION_TOKEN_INVALID)
@@ -277,6 +280,45 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
             remaining -= len(chunk)
 
     # -- routes ---------------------------------------------------------
+
+    def _maybe_serve_ui(self, path: str, query: str) -> bool:
+        """Serve the immutable static UI shell (RCV1-007).
+
+        Browser navigations and subresource loads cannot carry an
+        Authorization header, so the four exact UI routes are served to
+        requests that present no bearer token. Any request that does
+        present a token is an API request and keeps pure API semantics.
+        The bytes are frozen at server start; there is no filesystem
+        access here, so traversal and listing have no surface.
+        """
+        if self.headers.get_all("Authorization"):
+            return False
+        resource = self.server.ui.lookup(path)
+        if resource is None:
+            return False
+        if self.command not in ("GET", "HEAD"):
+            self._send_error(
+                METHOD_NOT_ALLOWED, extra_headers={"Allow": ALLOWED_METHODS}
+            )
+            return True
+        if query:
+            self._send_error(ACTION_PAYLOAD_INVALID)
+            return True
+        self._send_static(resource)
+        return True
+
+    def _send_static(self, resource) -> None:
+        headers = security_headers()
+        headers["Content-Security-Policy"] = resource.content_security_policy
+        self.send_response(200)
+        for name, value in headers.items():
+            self.send_header(name, value)
+        self.send_header("Content-Type", resource.content_type)
+        self.send_header("Content-Length", str(len(resource.body)))
+        self.end_headers()
+        self._responded = True
+        if self.command != "HEAD":
+            self.wfile.write(resource.body)
 
     def _serve_snapshot(self, session: RunConsoleSession) -> None:
         try:
@@ -380,6 +422,7 @@ class RunConsoleHTTPServer(http.server.ThreadingHTTPServer):
         *,
         bind_host: str = DEFAULT_BIND_HOST,
         port: int = 0,
+        ui_directory=None,
     ) -> None:
         if not isinstance(session, RunConsoleSession):
             raise TypeError("session must be a RunConsoleSession")
@@ -389,6 +432,8 @@ class RunConsoleHTTPServer(http.server.ThreadingHTTPServer):
         super().__init__((host, port), RunConsoleRequestHandler)
         self.session = session
         self.bind_host = host
+        # The UI bytes are frozen once, before the first request.
+        self.ui = UIResources(ui_directory)
         bound_host, bound_port = self.socket.getsockname()[:2]
         if bound_host != host:
             self.server_close()
@@ -454,10 +499,11 @@ def serve_run_console(
     *,
     bind_host: str = DEFAULT_BIND_HOST,
     port: int = 0,
+    ui_directory=None,
 ) -> RunConsoleHTTPServer:
     """Bind one loopback listener for the session and start serving."""
     server = RunConsoleHTTPServer(
-        session, bind_host=bind_host, port=port
+        session, bind_host=bind_host, port=port, ui_directory=ui_directory
     )
     server.start_serving()
     return server

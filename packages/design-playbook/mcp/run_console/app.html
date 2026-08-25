@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Run Console — read-only run snapshot</title>
+<link rel="stylesheet" href="app.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<header class="app-header">
+  <div class="app-header-row">
+    <div class="app-header-title">
+      <p class="app-kicker">Design Playbook</p>
+      <h1>Run Console</h1>
+      <p class="app-subtitle">Read-only view of one validated run snapshot</p>
+    </div>
+    <div class="app-header-actions" id="header-actions" data-hidden="true">
+      <p class="run-id-line" id="run-id-line"></p>
+      <button type="button" id="reload-button" class="button">Reload snapshot</button>
+    </div>
+  </div>
+  <p class="app-notice">This console is read-only. It renders the snapshot exactly as
+  built; it never edits run files, never executes commands, and stores nothing — no
+  analytics, no remote requests, no storage.</p>
+</header>
+
+<main id="main" tabindex="-1" role="status" aria-live="polite" aria-busy="true">
+
+  <!-- Loading: skeleton blocks with fixed heights; announced as busy. -->
+  <section class="view" id="view-loading" data-view="loading" aria-label="Loading">
+    <h2 class="view-heading" tabindex="-1">Loading run snapshot…</h2>
+    <p class="sr-only">The run snapshot is loading from the local console server.</p>
+    <div class="skeleton" aria-hidden="true">
+      <div class="skeleton-block skeleton-fact-grid">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+      </div>
+      <div class="skeleton-block skeleton-line"></div>
+      <div class="skeleton-block skeleton-line"></div>
+      <div class="skeleton-block skeleton-line skeleton-line-short"></div>
+    </div>
+  </section>
+
+  <!-- Resolved: the validated snapshot. -->
+  <section class="view" id="view-ready" data-view="ready" hidden>
+    <div id="build-state-banner"></div>
+    <section class="facts-section" aria-labelledby="facts-heading">
+      <h2 id="facts-heading">At a glance</h2>
+      <p class="section-hint">The four facts needed to understand this run, in snapshot
+      order: intent, verdict, blocker, and next owner.</p>
+      <div class="fact-grid" id="fact-grid" role="list"
+           aria-label="Run comprehension facts: intent, verdict, blocker, next action"></div>
+    </section>
+    <div id="detail-sections"></div>
+  </section>
+
+  <!-- No token in the fragment: the launcher URL was not used. -->
+  <section class="view view-error" id="view-no-token" data-view="no-token" hidden
+           role="alert" aria-labelledby="no-token-heading">
+    <h2 class="view-heading" id="no-token-heading" tabindex="-1">No session token</h2>
+    <p>This page was opened without a session token. Open the console with the exact
+    URL printed by the launcher — it points at this same host and port and ends with
+    <code>/#token=TOKEN</code>.</p>
+    <p class="error-detail">The token travels only in the URL fragment, is removed from
+    the address bar and history immediately after load, and is used solely for the
+    Authorization header of this page’s requests. It is never stored.</p>
+  </section>
+
+  <!-- Closed session: 401 SESSION_TOKEN_INVALID. -->
+  <section class="view view-error" id="view-closed" data-view="closed" hidden
+           role="alert" aria-labelledby="closed-heading">
+    <h2 class="view-heading" id="closed-heading" tabindex="-1">Session closed</h2>
+    <p>The session token is invalid or the console session has closed. Start the
+    console again with the launcher and open the fresh URL it prints.</p>
+    <p class="error-detail" id="closed-detail"></p>
+  </section>
+
+  <!-- Unsupported snapshot version. -->
+  <section class="view view-error" id="view-unsupported" data-view="unsupported" hidden
+           role="alert" aria-labelledby="unsupported-heading">
+    <h2 class="view-heading" id="unsupported-heading" tabindex="-1">
+      Unsupported snapshot version</h2>
+    <p id="unsupported-detail"></p>
+    <p class="error-detail">This console renders only Snapshot v1. No partial or
+    fallback rendering is attempted for other versions.</p>
+  </section>
+
+  <!-- Build error: SNAPSHOT_BUILD_FAILED (retryable). -->
+  <section class="view view-error" id="view-build-error" data-view="build-error" hidden
+           role="alert" aria-labelledby="build-error-heading">
+    <h2 class="view-heading" id="build-error-heading" tabindex="-1">
+      Snapshot could not be built</h2>
+    <p>The console server failed to build a valid snapshot for this run. No previous
+    snapshot is shown in its place.</p>
+    <p class="error-detail" id="build-error-detail"></p>
+    <button type="button" class="button" data-reload>Reload snapshot</button>
+  </section>
+
+  <!-- Any other API error. -->
+  <section class="view view-error" id="view-error" data-view="error" hidden
+           role="alert" aria-labelledby="error-heading">
+    <h2 class="view-heading" id="error-heading" tabindex="-1">The snapshot could not
+    be loaded</h2>
+    <p id="error-detail"></p>
+    <button type="button" class="button" data-reload>Reload snapshot</button>
+  </section>
+
+  <!-- Network failure: the server is unreachable. -->
+  <section class="view view-error" id="view-network" data-view="network" hidden
+           role="alert" aria-labelledby="network-heading">
+    <h2 class="view-heading" id="network-heading" tabindex="-1">
+      Console server unreachable</h2>
+    <p>The local console server did not answer. It may have stopped — restart it with
+    the launcher and reopen the URL it prints.</p>
+    <button type="button" class="button" data-reload>Retry connection</button>
+  </section>
+
+</main>
+</body>
+</html>
