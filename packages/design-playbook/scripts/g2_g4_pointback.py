@@ -257,12 +257,14 @@ def _verdict(
     return facts.canonical, []
 
 
-def check_pointback(
-        text: str, expected_l6: int, *,
-        ledger_facts: LedgerFacts | None = None,
-        verdict_facts: VerdictFacts | None = None) -> list[Finding]:
+def _check_pointback_facts(
+        text: str, expected_l6: int,
+        pointback_findings: list[dict[str, list[str]]], *,
+        ledger_facts: LedgerFacts,
+        verdict_facts: VerdictFacts) -> list[Finding]:
+    """Apply Point-back policy to one canonical set of parsed syntax facts."""
     errs: list[Finding] = []
-    pb_findings = _findings(text)
+    pb_findings = pointback_findings
     verdict, verdict_errs = _verdict(text, verdict_facts)
     errs += verdict_errs
     is_pass = verdict == "pass"
@@ -451,3 +453,17 @@ def check_pointback(
                     repair="Remove the orphan closure or restore the finding",
                 ))
     return errs
+
+
+def check_pointback(
+        text: str, expected_l6: int, *,
+        ledger_facts: LedgerFacts | None = None,
+        verdict_facts: VerdictFacts | None = None) -> list[Finding]:
+    """Validate Point-back text while preserving the historical diagnostics."""
+    return _check_pointback_facts(
+        text,
+        expected_l6,
+        _findings(text),
+        ledger_facts=ledger_facts or parse_ledger(text),
+        verdict_facts=verdict_facts or parse_verdict(text),
+    )
