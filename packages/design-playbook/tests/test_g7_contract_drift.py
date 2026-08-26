@@ -2,6 +2,7 @@
 """Process-boundary tests for G7 contract-drift diagnostics."""
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
@@ -90,6 +91,41 @@ class G7Tests(unittest.TestCase):
             cv.dump_contract(project / cv.CONTRACT_FILENAME, applied)
             findings = g7.check_g7(project, run)
             self.assertEqual(findings, [], [item.message for item in findings])
+
+
+    def test_conflicting_resolution_lists_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "p"
+            run = Path(tmp) / "r"
+            _seed(project)
+            cv.bind_first(project, run, acknowledgements=["a.goal"])
+            snapshot_path = run / cv.BIND_SNAPSHOT_FILENAME
+            snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            # A hand-forged record claiming one field is both open and assumed:
+            # no bind_first output can reach this state.
+            snapshot["open_fields"] = ["a.goal"]
+            snapshot["assumed_fields"] = ["a.goal"]
+            snapshot_path.write_text(json.dumps(snapshot), encoding="utf-8")
+            findings = g7.check_g7(project, run)
+            self.assertTrue(
+                any(
+                    item.rule_id == "G7.conflicting_resolution"
+                    for item in findings
+                ),
+                [item.rule_id for item in findings],
+            )
+
+    def test_non_utf8_snapshot_is_a_finding_not_a_crash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "p"
+            run = Path(tmp) / "r"
+            _seed(project)
+            cv.bind_first(project, run, acknowledgements=["a.goal"])
+            (run / cv.BIND_SNAPSHOT_FILENAME).write_bytes(b"\xff\xfe")
+            findings = g7.check_g7(project, run)
+            self.assertTrue(
+                any(item.rule_id == "G7.missing_binding" for item in findings)
+            )
 
 
 if __name__ == "__main__":

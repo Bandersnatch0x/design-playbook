@@ -9,9 +9,9 @@ the bound source:
   unknown, malformed, expired, cross-session, and cross-run requests all
   collapse into one uniform ``SOURCE_LOCATOR_INVALID`` answer with no
   path, token, or containment detail;
-- the bound target is re-read through the containment owner seam for
-  evidence artifacts and through structural containment checks for the
-  remaining run/package roots, so traversal, absolute, encoded, and
+- the bound target is re-read through the containment owner seam
+  (``read_artifact`` under the evidence subtree, ``read_under`` for the
+  run and package roots, ADR-0039), so traversal, absolute, encoded, and
   symlink-escaping targets read zero bytes outside the bound source;
 - the current content is hashed exactly the way the Snapshot hashed it
   (raw bytes for artifacts, normalized decoded text for text sources)
@@ -26,11 +26,10 @@ from __future__ import annotations
 
 import hashlib
 import html
-import os
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path
 
-from design_playbook.mcp.evidence.containment import read_artifact
+from design_playbook.mcp.evidence.containment import read_artifact, read_under
 from design_playbook.mcp.run_console.source_registry import (
     LocatorBinding,
     SourceRegistry,
@@ -139,46 +138,18 @@ def _read_bound_source(
         return None
     if target.startswith("evidence/"):
         # Evidence artifacts (and the Manifest itself) go through the
-        # containment owner seam: symlink and canonical escapes, missing
+        # evidence containment seam: symlink and canonical escapes, missing
         # files, and traversal are rejected before any byte is read.
         result = read_artifact(target, registry.selected_root)
-        if not result.ok or result.path is None:
-            return None
-        try:
-            return result.path.read_bytes()
-        except OSError:
-            return None
-    if binding.kind == "package":
-        return _read_contained(package_root, target)
-    return _read_contained(registry.selected_root, target)
-
-
-def _read_contained(root: Path, relpath: str) -> bytes | None:
-    """Read one run/package-root file through structural containment.
-
-    Absolute (native, POSIX, and Windows), ``..``-bearing, escaping, and
-    non-file targets are rejected without reading; this mirrors the
-    containment owner's defence for the roots that seam does not own.
-    """
-    requested = Path(relpath)
-    if (
-        requested.is_absolute()
-        or PureWindowsPath(relpath).is_absolute()
-        or PurePosixPath(relpath).is_absolute()
-    ):
-        return None
-    if any(part == ".." for part in requested.parts):
+    else:
+        # Run-root and package-root sources go through the same owner's
+        # generalized read primitive (ADR-0039): one resolver, one set of
+        # escape classes, no local mirror.
+        root = package_root if binding.kind == "package" else registry.selected_root
+        result = read_under(root, target)
+    if not result.ok or result.path is None:
         return None
     try:
-        base = root.resolve(strict=False)
-        candidate = (root / requested).resolve(strict=False)
-        candidate.relative_to(base)
-        Path(os.path.realpath(candidate)).relative_to(os.path.realpath(base))
-    except (OSError, ValueError):
-        return None
-    if not candidate.is_file():
-        return None
-    try:
-        return candidate.read_bytes()
+        return result.path.read_bytes()
     except OSError:
         return None

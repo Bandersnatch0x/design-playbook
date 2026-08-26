@@ -8,12 +8,12 @@ from typing import Literal, cast
 
 from design_playbook.mcp.evidence.ledger_syntax import parse_ledger
 from design_playbook.scripts.audit_preferences import parse_audit_marker
-from design_playbook.scripts.g2_g4_pointback import (
+from design_playbook.scripts.finding_syntax import (
     VALID_DISPOSITIONS,
-    _check_pointback_facts,
-    _findings,
+    parse_findings,
     severity_axis,
 )
+from design_playbook.scripts.g2_g4_pointback import _check_pointback_facts
 from design_playbook.scripts.g11_coverage import check_coverage
 from design_playbook.scripts.g6_records import ledger_observed
 from design_playbook.scripts.verdict_syntax import parse_verdict
@@ -168,7 +168,7 @@ def project_pointback(
     marker = parse_audit_marker(text)
     verdict_facts = parse_verdict(text)
     ledger_facts = parse_ledger(text)
-    pointback_findings = _findings(text)
+    pointback_findings = parse_findings(text)
 
     if marker.present and marker.audited is None:
         raise PointBackProjectionError("audit-marker-ambiguous")

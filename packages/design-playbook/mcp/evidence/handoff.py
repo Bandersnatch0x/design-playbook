@@ -527,23 +527,35 @@ def _decision_records_from_run(
 ) -> list[dict[str, str]]:
     """Normalize the durable round decision into §4.2 ``decisions`` entries.
 
-    Reads ``preview/decision-round-<n>.json`` (the transaction record) for the
-    reviewer's actual choice and feedback. Aborted/absent entries fall back to
-    the run summary; a truly empty handoff yields an empty list.
+    Reads the round's decision entry through the Preview transaction seam
+    (``load_entry`` validates the binding digest and entry shape the writer
+    actually produces), so the reviewer's real choice (``selected_options``)
+    and feedback are what lands in the handoff. Aborted, absent, or invalid
+    entries fall back to the run summary; a truly empty handoff yields an
+    empty list.
     """
+    from design_playbook.mcp.preview.integrity import decision_name
+    from design_playbook.mcp.preview.transaction import (
+        PreviewTransactionError,
+        load_entry,
+    )
+
     records: list[dict[str, str]] = []
     authority = "confirmed-user" if confirmed else "pending-user"
     choice = ""
     feedback = ""
-    entry_path = run_root / "preview" / f"decision-round-{round_n}.json"
+    entry_path = run_root / "preview" / decision_name(round_n)
     try:
-        entry = json.loads(entry_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
+        entry = load_entry(entry_path)
+    except PreviewTransactionError:
         entry = None
     if isinstance(entry, dict):
         outcome = entry.get("outcome")
         if isinstance(outcome, dict):
-            choice = str(outcome.get("choice") or "")
+            selected = outcome.get("selected_options")
+            choice = (
+                str(selected[0]) if isinstance(selected, list) and selected else ""
+            )
             feedback = str(outcome.get("feedback") or "")
     if choice:
         records.append(

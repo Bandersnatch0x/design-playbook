@@ -5,6 +5,11 @@ complete evidence row and every finding has issue/source/fix/severity (G2),
 one explicit verdict with Pass requiring all evidence to pass (G3), and
 closure-trail coverage preventing blockers being dropped (G4).
 
+The finding-paragraph grammar itself is not owned here: ``finding_syntax``
+parses field lines, the severity axis, and closure trails once for every
+consumer (ADR-0025 / ADR-0039), and this module keeps only the policy that
+projects those facts into G2-G4 diagnostics.
+
 vNext S1 (review-prototype Q1/Q4): findings may carry additional field
 lines (track / confidence / disposition / evidence / assumes / rule / dd).
 The four required fields and the machine face are unchanged; additional
@@ -23,76 +28,21 @@ import re
 
 from design_playbook.scripts._diagnostics import Finding, finding
 from design_playbook.mcp.evidence.ledger_syntax import EVIDENCE_FIELDS, LedgerFacts, parse_ledger
+from design_playbook.scripts.finding_syntax import (
+    FINDING_FIELDS,
+    SEVERITY_LEGACY,
+    SEVERITY_NEW,
+    VALID_CONFIDENCE,
+    VALID_DISPOSITIONS,
+    VALID_TRACKS,
+    closure_targets,
+    normalise_issue,
+    parse_findings,
+    severity_axis,
+)
 from design_playbook.scripts.verdict_syntax import VerdictFacts, parse_verdict
 
-FINDING_FIELDS = ("issue", "source", "fix", "severity")
-EXTRA_FINDING_FIELDS = (
-    "track", "confidence", "disposition", "evidence", "assumes", "rule", "dd",
-    # vNext S3 interaction-track annotations (review-prototype 1.2): the
-    # dimension refinement plus its objective/subjective face and judgment
-    # source. Validated by interaction_dimensions.py; parsed here so every
-    # consumer sees the same field set.
-    "dimension", "face", "basis",
-    # vNext S4 recirculation annotations (loop-prototype 2.2 / 7.1): the
-    # second-hop repair route (R1 | R2-line | R2-structural | R3 | R4 | R5,
-    # multiple values legal for multi-layer findings) and the machine round
-    # counter for blocking findings (rounds survived through repair +
-    # re-evaluate). Validated by repair_rounds.py / escalation_signals.py /
-    # g12_tier_boundary.py; parsed here so every consumer sees one field set.
-    "route", "rounds",
-)
-FIELD_LINE = re.compile(
-    r"^(issue|source|fix|severity|track|confidence|disposition|evidence|"
-    r"assumes|rule|dd|dimension|face|basis|route|rounds):[ \t]*(.*)$",
-    re.I | re.M)
-CLOSURE_LINE = re.compile(
-    r"^\s*[-*]\s*closes:[ \t]*(.*?)[ \t]*->[^\n]*\b0 blocking\b",
-    re.I | re.M,
-)
 VALID_RESULTS = {"pass", "fail", "blocked", "n/a"}
-
-# Severity axis (review-prototype Q1). vNext S5 removed the legacy aliases
-# (vnext-prototype Q5=B, two-stage migration complete): only S3|S2|S1|S0 are
-# legal; the old spellings are structural errors.
-SEVERITY_NEW = frozenset({"S3", "S2", "S1", "S0"})
-SEVERITY_LEGACY = frozenset({"high (blocking)", "high", "med", "low"})
-VALID_TRACKS = frozenset({"product", "interaction", "cross-cutting"})
-VALID_CONFIDENCE = frozenset({"high", "medium", "low"})
-VALID_DISPOSITIONS = frozenset({"blocking", "advisory", "info"})
-
-
-def severity_axis(value: str) -> str | None:
-    """Map a severity value onto the axis; None when invalid.
-
-    The exact axis spelling is required — the legacy aliases were removed
-    in vNext S5 (they used to fold onto S3/S2/S1/S1 during the alias
-    period).
-    """
-    stripped = value.strip()
-    if stripped in SEVERITY_NEW:
-        return stripped
-    return None
-
-
-def _findings(text: str) -> list[dict[str, list[str]]]:
-    """Parse finding paragraphs without using a required field as delimiter.
-
-    Additional-field-only blocks (e.g. a bare ``track:`` line outside a
-    finding) do not count as findings — at least one of the four required
-    fields must be present.
-    """
-    findings = []
-    for block in re.split(r"\n\s*\n", text):
-        matches = FIELD_LINE.findall(block)
-        if not matches:
-            continue
-        fields = {field: [] for field in FINDING_FIELDS + EXTRA_FINDING_FIELDS}
-        for name, value in matches:
-            fields[name.lower()].append(value.strip())
-        if not any(fields[field] for field in FINDING_FIELDS):
-            continue
-        findings.append(fields)
-    return findings
 
 
 def _check_evidence(
@@ -212,10 +162,6 @@ def _check_evidence(
             repair="Remove the unknown L6 row or add the criterion to the spec",
         ))
     return errs
-
-
-def _normalise_issue(value: str) -> str:
-    return " ".join(value.casefold().split())
 
 
 def _verdict(
@@ -405,10 +351,8 @@ def _check_pointback_facts(
             blocking.append((i, issue))
 
     if is_pass and blocking:
-        closure_targets = [
-            _normalise_issue(target) for target in CLOSURE_LINE.findall(text)
-        ]
-        if not closure_targets:
+        targets = closure_targets(text)
+        if not targets:
             errs.append(finding(
                 "G4.missing_closure_trail",
                 "G4 point-back: Pass verdict but no '0 blocking' closure trail",
@@ -418,10 +362,10 @@ def _check_pointback_facts(
                 repair="Record a 0-blocking closure for each blocking finding",
             ))
         else:
-            known_targets = {_normalise_issue(issue) for _, issue in blocking}
+            known_targets = {normalise_issue(issue) for _, issue in blocking}
             for i, issue in blocking:
-                target = _normalise_issue(issue)
-                matches = closure_targets.count(target)
+                target = normalise_issue(issue)
+                matches = targets.count(target)
                 if matches == 0:
                     errs.append(finding(
                         "G4.unmatched_closure",
@@ -442,7 +386,7 @@ def _check_pointback_facts(
                         actual=str(matches),
                         repair=f"Keep one closure trail for issue '{issue}'",
                     ))
-            for target in sorted(set(closure_targets) - known_targets):
+            for target in sorted(set(targets) - known_targets):
                 errs.append(finding(
                     "G4.orphan_closure",
                     "G4 point-back: closure trail targets no blocking finding: "
@@ -463,7 +407,7 @@ def check_pointback(
     return _check_pointback_facts(
         text,
         expected_l6,
-        _findings(text),
+        parse_findings(text),
         ledger_facts=ledger_facts or parse_ledger(text),
         verdict_facts=verdict_facts or parse_verdict(text),
     )

@@ -168,6 +168,7 @@ def _load_manifest(
 
 
 def _atomic_write(path: Path, data: bytes) -> None:
+    # ponytail: skill payload stays import-free of mcp.preview.transaction.
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
         dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"

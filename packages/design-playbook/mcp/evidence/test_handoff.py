@@ -69,6 +69,22 @@ def _recording_capture_runner(seen: dict[str, str]):
     return runner
 
 
+def handoff_binding(
+    *, round_n: int, prototype_html_hash: str, report_ref: str,
+    summary: str, options: list[str],
+) -> dict[str, Any]:
+    """A digest-valid transaction binding, built by the integrity owner."""
+    from design_playbook.mcp.preview.integrity import compute_binding_digest
+
+    return compute_binding_digest(
+        round_n=round_n,
+        prototype_html_hash=prototype_html_hash,
+        report_ref=report_ref,
+        summary=summary,
+        options=options,
+    )
+
+
 def _clean_capture_matrix() -> dict[str, dict[str, Any]]:
     return {
         name: {
@@ -110,19 +126,21 @@ def _make_run(tmp: Path, *, with_confirm: bool = True) -> Path:
     entry = {
         "schema_version": 1,
         "decision_id": "dd-0001",
-        "binding": {
-            "round": 1,
-            "prototype_html_hash": "0" * 16,
-            "report_ref": "r.md",
-            "summary": "s",
-            "options": ["确认通过"],
-            "digest": "x",
-        },
+        "binding": handoff_binding(round_n=1, prototype_html_hash="0" * 16,
+                                   report_ref="r.md", summary="s",
+                                   options=["确认通过"]),
         "outcome": {
-            "choice": "确认通过",
-            "feedback": "ship it",
             "confirmed": True,
+            "user_confirmed": True,
             "floor_pass": True,
+            "floor_failure": "",
+            "selected_options": ["确认通过"],
+            "feedback": "ship it",
+            "anchors": [],
+            "aborted": False,
+            "rejected": False,
+            "rejection": "",
+            "skipped": False,
         },
         "timestamp": "2026-08-24 00:00:00 +0000",
     }

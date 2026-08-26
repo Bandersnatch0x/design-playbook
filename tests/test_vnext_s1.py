@@ -28,11 +28,11 @@ import rules_registry  # noqa: E402
 from design_playbook.scripts import g11_coverage  # noqa: E402
 from design_playbook.scripts._diagnostics import finding, render_text  # noqa: E402
 from design_playbook.scripts.g1_spec import check_spec  # noqa: E402
-from design_playbook.scripts.g2_g4_pointback import (  # noqa: E402
-    _findings,
-    check_pointback,
+from design_playbook.scripts.finding_syntax import (  # noqa: E402
+    parse_findings as _findings,
     severity_axis,
 )
+from design_playbook.scripts.g2_g4_pointback import check_pointback  # noqa: E402
 from design_playbook.scripts.g9_shaping import check_g9  # noqa: E402
 from design_playbook.scripts.run_profile import (  # noqa: E402
     parse_run_profile,

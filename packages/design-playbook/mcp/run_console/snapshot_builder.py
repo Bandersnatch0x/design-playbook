@@ -39,6 +39,12 @@ from design_playbook.mcp.run_console.source_registry import (
     SourceRegistryError,
     select_source_registry,
 )
+from design_playbook.scripts.contract_v1 import (
+    BIND_CONFLICTING_RESOLUTION,
+    BIND_PARTIAL_WRITE,
+    bind_resolution_lists,
+    parse_bind_snapshot,
+)
 from design_playbook.scripts.escalation_signals import effective_tier
 from design_playbook.scripts.g1_spec import (
     SpecificationProjectionError,
@@ -314,31 +320,6 @@ class _Builder:
 
     # -- read states --------------------------------------------------
 
-    def _spec_state(self, facts: RunFacts) -> str:
-        for error in facts.read_errors:
-            if error.artifact == "spec":
-                return error.code
-        if facts.spec_path is None:
-            # No spec file exists: the owner selects no path and records no
-            # read error for an unselected file, so absence maps here.
-            return "missing"
-        return "complete"
-
-    def _pointback_state(self, facts: RunFacts) -> str:
-        for error in facts.read_errors:
-            if error.artifact == "point_back":
-                return error.code
-        return "complete"
-
-    def _plan_state(self, facts: RunFacts) -> str:
-        for error in facts.read_errors:
-            if error.artifact == "plan":
-                # The owner drops missing-plan facts; only failures remain.
-                return "unreadable"
-        if not (self._run_root / "plan.md").is_file():
-            return "missing"
-        return "complete"
-
     def _manifest_state(self, facts: RunFacts, capture: _Capture) -> str:
         if self._manifest_degraded:
             # The Manifest was read, but a declared binding cannot be
@@ -381,7 +362,7 @@ class _Builder:
             )
 
         # identity.profile: run-profile owner over the captured plan text.
-        plan_state = self._plan_state(facts)
+        plan_state = facts.artifact_state("plan")
         if plan_state == "missing":
             self._draft_unknown("identity.profile", (_REF_PROFILE,), "source-missing")
         elif plan_state == "unreadable":
@@ -413,7 +394,7 @@ class _Builder:
                 )
 
         # intent: specification owner over the captured spec text.
-        spec_state = self._spec_state(facts)
+        spec_state = facts.artifact_state("spec")
         spec_summary: str | None = None
         spec_criteria: tuple[Any, ...] = ()
         spec_code: str | None = None
@@ -508,7 +489,7 @@ class _Builder:
         self._draft("execution.preview", (_REF_PREVIEW,), "known", preview_result)
 
         # execution.repair: repair narration owner.
-        pointback_state = self._pointback_state(facts)
+        pointback_state = facts.artifact_state("point_back")
         if pointback_state == "missing":
             self._draft_unknown("execution.repair", (_REF_REPAIR,), "source-missing")
         elif pointback_state == "unreadable":
@@ -574,43 +555,14 @@ class _Builder:
                 "intent.contract", (_REF_CONTRACT,), "source-unreadable"
             )
             return
-        try:
-            payload = json.loads(capture.contract_text or "")
-        except json.JSONDecodeError:
-            # A torn write of a JSON authority record is a partial write.
+        # The bind-snapshot read authority classifies the captured text
+        # (ADR-0039); the Console maps its states onto snapshot availability
+        # and never re-implements the parse or the resolution invariant.
+        read = parse_bind_snapshot(capture.contract_text or "")
+        if read.state == BIND_PARTIAL_WRITE:
             self._draft_unknown("intent.contract", (_REF_CONTRACT,), "partial-write")
             return
-        if not isinstance(payload, dict):
-            self._draft_unknown(
-                "intent.contract", (_REF_CONTRACT,), "source-malformed"
-            )
-            return
-        field_lists: dict[str, list[str]] = {}
-        for name in ("open_fields", "assumed_fields", "stale_fields"):
-            value = payload.get(name)
-            if not isinstance(value, list) or any(
-                not isinstance(item, str) for item in value
-            ):
-                self._draft_unknown(
-                    "intent.contract", (_REF_CONTRACT,), "source-malformed"
-                )
-                return
-            field_lists[name] = value
-        blockers = payload.get("blockers", [])
-        if not isinstance(blockers, list):
-            self._draft_unknown(
-                "intent.contract", (_REF_CONTRACT,), "source-malformed"
-            )
-            return
-        open_fields = set(field_lists["open_fields"])
-        assumed_fields = set(field_lists["assumed_fields"])
-        stale_fields = set(field_lists["stale_fields"])
-        overlap = (
-            (open_fields & assumed_fields)
-            | (open_fields & stale_fields)
-            | (assumed_fields & stale_fields)
-        )
-        if overlap:
+        if read.state == BIND_CONFLICTING_RESOLUTION:
             self._drafts.append(
                 _DraftAssertion(
                     "intent.contract",
@@ -634,14 +586,27 @@ class _Builder:
                 )
             )
             return
+        if not read.complete or read.data is None:
+            self._draft_unknown(
+                "intent.contract", (_REF_CONTRACT,), "source-malformed"
+            )
+            return
+        payload = read.data
+        field_lists = bind_resolution_lists(payload)
+        blockers = payload.get("blockers", [])
+        if not isinstance(blockers, list):
+            self._draft_unknown(
+                "intent.contract", (_REF_CONTRACT,), "source-malformed"
+            )
+            return
         self._draft(
             "intent.contract",
             (_REF_CONTRACT,),
             "known",
             {
-                "openFields": sorted(open_fields),
-                "assumedFields": sorted(assumed_fields),
-                "staleFields": sorted(stale_fields),
+                "openFields": sorted(set(field_lists["open_fields"])),
+                "assumedFields": sorted(set(field_lists["assumed_fields"])),
+                "staleFields": sorted(set(field_lists["stale_fields"])),
                 "blocking": bool(blockers),
             },
         )
@@ -912,13 +877,13 @@ class _Builder:
             if capture.package_text is not None
             else None,
         )
-        plan_state = self._plan_state(facts)
+        plan_state = facts.artifact_state("plan")
         add(
             self._registry.source("run.profile"),
             plan_state,
             _digest_text(facts.plan_text) if plan_state == "complete" else None,
         )
-        spec_state = self._spec_state(facts)
+        spec_state = facts.artifact_state("spec")
         add(
             self._registry.source("intent.specification"),
             spec_state,
@@ -941,7 +906,7 @@ class _Builder:
             "complete",
             _digest_json(self._preview_digest(facts.preview)),
         )
-        pointback_state = self._pointback_state(facts)
+        pointback_state = facts.artifact_state("point_back")
         for key in ("execution.repair", "evaluation.evaluator", "evaluation.ledger"):
             add(
                 self._registry.source(key),

@@ -21,6 +21,7 @@ import json
 import re
 from pathlib import Path
 
+from design_playbook.mcp.preview.integrity import confirm_name
 from design_playbook.scripts._diagnostics import Finding, finding
 from design_playbook.scripts.dd_entries import (
     ADAPTER_HANDLE,
@@ -752,7 +753,7 @@ def _preview_link_checks(
         if link is None:
             continue
         round_n, decision_id = link
-        confirm_path = preview_dir / f"confirm-round-{round_n}.json"
+        confirm_path = preview_dir / confirm_name(round_n)
         if not confirm_path.is_file():
             errs.append(finding(
                 "G10.preview_link_broken",
@@ -760,7 +761,7 @@ def _preview_link_checks(
                 f"preview-round-{round_n} but {confirm_path.name} is "
                 "missing",
                 owner=_fmt(entry.id),
-                expected=f"preview/confirm-round-{round_n}.json",
+                expected=f"preview/{confirm_name(round_n)}",
                 actual="missing",
                 repair="Re-run the preview transaction round or fix the "
                        "confirmation record",

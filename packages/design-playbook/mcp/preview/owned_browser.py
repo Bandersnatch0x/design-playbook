@@ -18,7 +18,7 @@ import webbrowser
 from pathlib import Path
 from typing import Any, Protocol
 
-from design_playbook.mcp.preview.util import _log
+from design_playbook.mcp.util import log as _log
 
 
 def _screen_size() -> tuple[int, int]:

@@ -6,14 +6,17 @@ decision log. Reports structural consistency only — never user identity.
 """
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 from typing import Any
 
 from design_playbook.scripts._diagnostics import Finding, finding
 from design_playbook.scripts.contract_v1 import (
+    BIND_COMPLETE,
+    BIND_CONFLICTING_RESOLUTION,
+    BIND_PARTIAL_WRITE,
     BIND_SNAPSHOT_FILENAME,
+    BindSnapshotRead,
     CONTRACT_FILENAME,
     DECISIONS_FILENAME,
     ContractError,
@@ -23,27 +26,35 @@ from design_playbook.scripts.contract_v1 import (
     load_contract,
     load_decisions,
     normalize_contract,
+    read_bind_snapshot,
 )
 
 
-def _load_bind_snapshot(run_dir: Path) -> dict[str, Any]:
-    path = run_dir / BIND_SNAPSHOT_FILENAME
-    if not path.is_file():
-        raise ContractError(f"missing bind-first snapshot: {path.name}")
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ContractError(f"bind snapshot malformed JSON: {exc}") from exc
-    if not isinstance(data, dict):
-        raise ContractError("bind snapshot must be an object")
-    return data
+def _complete_bind_payload(read: BindSnapshotRead) -> dict[str, Any]:
+    """Project a non-conflict bind read into G7's usable snapshot or error."""
+    if read.state == BIND_PARTIAL_WRITE:
+        raise ContractError(f"bind snapshot malformed JSON: {read.detail}")
+    if read.state != BIND_COMPLETE or read.data is None:
+        raise ContractError(read.detail or "bind snapshot must be an object")
+    return read.data
 
 
 def check_g7(project_dir: Path, run_dir: Path) -> list[Finding]:
     """Return G7 findings. Empty means structural consistency holds."""
     findings: list[Finding] = []
+    read = read_bind_snapshot(run_dir)
+    if read.state == BIND_CONFLICTING_RESOLUTION:
+        return [finding(
+            "G7.conflicting_resolution",
+            "G7 contract: bind snapshot claims conflicting resolutions for "
+            f"{read.detail}",
+            owner=BIND_SNAPSHOT_FILENAME,
+            expected="disjoint open/assumed/stale field lists",
+            actual=read.detail,
+            repair="Re-run bind_first; never hand-edit contract-bind.json",
+        )]
     try:
-        snap = _load_bind_snapshot(run_dir)
+        snap = _complete_bind_payload(read)
     except ContractError as exc:
         return [finding(
             "G7.missing_binding",
@@ -68,6 +79,7 @@ def check_g7(project_dir: Path, run_dir: Path) -> list[Finding]:
 
     bound_contract_sha = snap.get("contract_sha")
     bound_log_sha = snap.get("decision_log_sha")
+
     if not isinstance(bound_contract_sha, str) or not bound_contract_sha:
         findings.append(finding(
             "G7.missing_binding",

@@ -31,7 +31,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date
 
-from design_playbook.scripts.g2_g4_pointback import FIELD_LINE
+from design_playbook.scripts.finding_syntax import parse_findings
 
 MIN_DISTINCT_RUNS = 3
 MIN_DISTINCT_CONTEXTS = 2
@@ -202,25 +202,18 @@ def occurrences_from_pointbacks(
     occurrences: list[Occurrence] = []
     items = texts_by_run.items() if isinstance(texts_by_run, dict) else texts_by_run
     for run_id, text in items:
-        for block in re.split(r"\n\s*\n", text):
-            matches = FIELD_LINE.findall(block)
-            if not matches:
-                continue
-            values: dict[str, list[str]] = {}
-            for name, value in matches:
-                values.setdefault(name.lower(), []).append(value.strip())
-            issue = (values.get("issue") or [""])[0]
+        for parsed in parse_findings(text):
+            issue = (parsed["issue"] or [""])[0]
             if not issue.strip():
                 continue
-            severity = (values.get("severity") or [""])[0]
             occurrences.append(Occurrence(
                 run=run_id,
                 issue=issue,
                 task_context=contexts.get(run_id, ""),
-                track=(values.get("track") or [""])[0],
-                severity=severity,
-                confidence=(values.get("confidence") or [""])[0],
-                rule=(values.get("rule") or [""])[0],
+                track=(parsed["track"] or [""])[0],
+                severity=(parsed["severity"] or [""])[0],
+                confidence=(parsed["confidence"] or [""])[0],
+                rule=(parsed["rule"] or [""])[0],
             ))
     return occurrences
 

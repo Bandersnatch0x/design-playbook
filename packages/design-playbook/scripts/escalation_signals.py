@@ -42,7 +42,7 @@ from dataclasses import dataclass
 
 from design_playbook.scripts._diagnostics import Finding, finding
 from design_playbook.scripts.dd_entries import is_positive_finding
-from design_playbook.scripts.g2_g4_pointback import _findings
+from design_playbook.scripts.finding_syntax import parse_findings
 from design_playbook.scripts.repair_rounds import is_blocking
 
 VALID_ROUTES = frozenset({
@@ -98,7 +98,7 @@ def finding_routes(parsed: dict[str, list[str]]) -> frozenset[str]:
 def parse_routes(text: str) -> tuple[tuple[int, str, frozenset[str]], ...]:
     """(finding index, issue, routes) for every route-annotated finding."""
     out: list[tuple[int, str, frozenset[str]]] = []
-    for index, parsed in enumerate(_findings(text), 1):
+    for index, parsed in enumerate(parse_findings(text), 1):
         routes = finding_routes(parsed)
         if not routes:
             continue
@@ -119,7 +119,7 @@ def route_hits(text: str) -> dict[str, int]:
 def blocking_layer_spans(text: str) -> list[tuple[str, int]]:
     """Blocking findings spanning >= 2 distinct declaration layers."""
     spans: list[tuple[str, int]] = []
-    for parsed in _findings(text):
+    for parsed in parse_findings(text):
         if not is_blocking(parsed):
             continue
         layers = {
@@ -135,7 +135,7 @@ def blocking_layer_spans(text: str) -> list[tuple[str, int]]:
 def check_routes(text: str) -> list[Finding]:
     """Validate route annotations (G12 rule ids; empty = pass/absent)."""
     errs: list[Finding] = []
-    for index, parsed in enumerate(_findings(text), 1):
+    for index, parsed in enumerate(parse_findings(text), 1):
         values = parsed.get("route", [])
         if not values:
             continue
@@ -175,7 +175,7 @@ def dd_targets(text: str) -> tuple[str, ...]:
     misuse as a structural error instead).
     """
     targets: list[str] = []
-    for parsed in _findings(text):
+    for parsed in parse_findings(text):
         if is_positive_finding(parsed):
             continue
         targets.extend(value.strip() for value in parsed.get("dd", [])

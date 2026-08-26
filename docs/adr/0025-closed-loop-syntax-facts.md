@@ -49,3 +49,4 @@ migrate; no compatibility parser is layered beside them.
 Syntax knowledge becomes local and testable through two small interfaces.
 Gate policy remains explicit at each enforcement site, while the sanctioned
 status correction prevents invalid Verdict text from reporting completion.
+ADR-0039 adds the third syntax-facts module for finding paragraphs.

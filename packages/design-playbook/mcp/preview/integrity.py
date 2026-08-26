@@ -16,6 +16,21 @@ _DECISION_NAME = re.compile(r"^decision-round-(\d+)\.json$", re.I)
 _LOG_ROUND = re.compile(r"^## round (\d+)", re.MULTILINE)
 
 
+def confirm_name(round_n: int) -> str:
+    """The confirm-record filename for one round (single owner, ADR-0039)."""
+    return f"confirm-round-{round_n}.json"
+
+
+def decision_name(round_n: int) -> str:
+    """The decision-entry filename for one round (single owner, ADR-0039)."""
+    return f"decision-round-{round_n}.json"
+
+
+def prototype_name(round_n: int) -> str:
+    """The prototype filename for one round (single owner, ADR-0039)."""
+    return f"round-{round_n}.html"
+
+
 @dataclass(frozen=True)
 class FloorResult:
     passed: bool
@@ -295,7 +310,7 @@ def inspect_preview(preview_dir: Path) -> PreviewSnapshot:
         valid = _is_confirmed_valid(data)
         if (
             current_round is not None
-            and path == preview_dir / f"confirm-round-{current_round}.json"
+            and path == preview_dir / confirm_name(current_round)
         ):
             canonical_current_confirm = ConfirmRecord(
                 path=path,
@@ -330,7 +345,7 @@ def inspect_preview(preview_dir: Path) -> PreviewSnapshot:
                     )
                 )
             else:
-                prototype = preview_dir / f"round-{current_round}.html"
+                prototype = preview_dir / prototype_name(current_round)
                 try:
                     preview_root = preview_dir.resolve()
                     resolved = prototype.resolve()

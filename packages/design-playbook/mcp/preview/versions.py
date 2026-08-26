@@ -32,6 +32,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
+from design_playbook.mcp.preview.integrity import decision_name
 from design_playbook.mcp.preview.transaction import (
     DirectoryLockError,
     PROJECTION_LOCK_NAME,
@@ -44,7 +45,7 @@ from design_playbook.mcp.preview.transaction import (
     valid_entries,
 )
 from design_playbook.mcp.preview import compatibility
-from design_playbook.mcp.preview.util import _now_iso
+from design_playbook.mcp.util import now_iso as _now_iso
 
 VERSION_SCHEMA_VERSION = 1
 MAX_NAME_LENGTH = 80
@@ -155,7 +156,7 @@ def create_named_version(
     path: Path | None = None
     try:
         with _version_lock(preview_dir):
-            entry = load_entry(preview_dir / f"decision-round-{round_n}.json")
+            entry = load_entry(preview_dir / decision_name(round_n))
             if entry is None:
                 raise VersionError(f"round {round_n} has no decision entry")
             seq = _next_seq(preview_dir)

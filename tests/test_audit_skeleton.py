@@ -38,10 +38,10 @@ from design_playbook.scripts import audit_preferences  # noqa: E402
 from design_playbook.mcp.evidence.ledger_syntax import parse_ledger  # noqa: E402
 from design_playbook.scripts.g1_spec import _l6_items  # noqa: E402
 from design_playbook.scripts.g11_coverage import check_coverage  # noqa: E402
-from design_playbook.scripts.g2_g4_pointback import (  # noqa: E402
-    _findings as pointback_findings,
-    check_pointback,
+from design_playbook.scripts.finding_syntax import (  # noqa: E402
+    parse_findings as pointback_findings,
 )
+from design_playbook.scripts.g2_g4_pointback import check_pointback  # noqa: E402
 from design_playbook.scripts.verdict_syntax import parse_verdict  # noqa: E402
 
 VALIDATOR = PKG / "scripts" / "validate_run.py"

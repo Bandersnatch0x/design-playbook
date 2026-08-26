@@ -24,6 +24,12 @@ ROOT = Path(__file__).resolve().parents[1]
 PKG = ROOT / "packages" / "design-playbook"
 SCRIPTS = PKG / "scripts"
 DOCS = ROOT / "docs" / "agents" / "vnext-live-dogfood.md"
+if str(PKG) not in sys.path:
+    sys.path.insert(0, str(PKG))
+
+from design_playbook.mcp.evidence.capture_contract import (  # noqa: E402
+    validate_capture_snapshot,
+)
 
 DEFAULT_ASK = (
     "Build a greenfield ops alert inbox: table of alerts with severity, "
@@ -200,6 +206,7 @@ def checklist() -> int:
 
 
 def _manifest_capture_ok(manifest: Path) -> list[str]:
+    """Project capture-contract read authority over each manifest line."""
     problems: list[str] = []
     if not manifest.is_file():
         return problems
@@ -215,25 +222,16 @@ def _manifest_capture_ok(manifest: Path) -> list[str]:
         if not isinstance(row, dict):
             problems.append(f"manifest.jsonl:{i} not an object")
             continue
+        capture = row.get("capture") if isinstance(row.get("capture"), dict) else {}
         request = row.get("request")
         if not isinstance(request, dict):
-            capture = row.get("capture") if isinstance(row.get("capture"), dict) else {}
-            request = capture.get("request") if isinstance(capture.get("request"), dict) else {}
-            version = capture.get("schemaVersion") if isinstance(capture, dict) else None
-        else:
-            version = request.get("schemaVersion")
-            if version is None:
-                capture = row.get("capture") if isinstance(row.get("capture"), dict) else {}
-                version = capture.get("schemaVersion")
-        if version != 1:
-            problems.append(
-                f"manifest.jsonl:{i} missing schemaVersion=1 "
-                f"(got {version!r}) — recapture"
+            request = (
+                capture.get("request")
+                if isinstance(capture.get("request"), dict)
+                else {}
             )
-            continue
-        viewport = request.get("viewport") if isinstance(request, dict) else None
-        if not isinstance(viewport, dict):
-            problems.append(f"manifest.jsonl:{i} missing viewport snapshot")
+        for fact in validate_capture_snapshot(request):
+            problems.append(f"manifest.jsonl:{i} {fact.code}: {fact.detail}")
     return problems
 
 
