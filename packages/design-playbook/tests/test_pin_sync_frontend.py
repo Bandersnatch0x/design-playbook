@@ -35,6 +35,9 @@ from design_playbook.mcp.preview.i18n import default_options  # noqa: E402
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
+# Same directory; pytest's prepend import mode and direct `python <file>` runs
+# both put this directory on sys.path.
+from preview_e2e_helpers import dismiss_onboarding  # noqa: E402
 
 ROUND_N = 1
 SUMMARY = "pin sync e2e - collapse keeps pin"
@@ -170,6 +173,9 @@ class _PlaywrightPinSyncAdapter:
                         page.goto(url, wait_until="domcontentloaded")
                         page.wait_for_selector("#dpb-root")
                         page.wait_for_timeout(600)
+                        # Real pointer clicks below (#dpb-mode-preview) are
+                        # swallowed by the full-viewport onboarding scrim.
+                        dismiss_onboarding(page)
                         proto_frame = page.frame_locator("iframe.dpb-proto-frame")
 
                         def hidden() -> list[dict]:
