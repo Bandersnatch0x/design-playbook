@@ -22,6 +22,18 @@
       <p class="app-subtitle" id="app-subtitle">Read-only view of one validated run snapshot</p>
     </div>
     <div class="app-header-actions" id="header-actions" data-hidden="true">
+      <div class="build-state-wrapper" id="build-state-wrapper">
+        <button type="button" class="build-state-chip chip-current" id="build-state-chip" aria-expanded="false" aria-controls="build-state-popover" title="View build state details">
+          <span class="chip-dot" aria-hidden="true"></span>
+          <span class="chip-label" id="build-state-chip-label">Snapshot current</span>
+          <svg class="chip-caret" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="build-state-popover" id="build-state-popover" role="status" aria-live="polite" hidden>
+          <div id="build-state-banner"></div>
+        </div>
+      </div>
       <p class="run-id-line" id="run-id-line"></p>
       <button type="button" id="lang-toggle-button" class="button button-secondary" title="Switch language (L)">
         <span id="lang-toggle-label">中文</span><kbd>L</kbd>
@@ -56,14 +68,27 @@
 
   <!-- Resolved: the validated snapshot. -->
   <section class="view" id="view-ready" data-view="ready" hidden>
-    <div id="build-state-banner"></div>
     <section class="facts-section" aria-labelledby="facts-heading">
-      <h2 id="facts-heading">At a glance</h2>
-      <p class="section-hint" id="facts-hint">The four facts needed to understand this run, in snapshot
-      order: intent, verdict, blocker, and next owner.</p>
+      <div class="facts-header">
+        <h2 id="facts-heading">At a glance</h2>
+        <p class="section-hint" id="facts-hint">The four facts needed to understand this run, in snapshot
+        order: intent, verdict, blocker, and next owner.</p>
+      </div>
       <div class="fact-grid" id="fact-grid" role="list"
            aria-label="Run comprehension facts: intent, verdict, blocker, next action"></div>
     </section>
+    <nav class="section-jump-nav" id="section-jump-nav" aria-label="Section navigation">
+      <span class="jump-nav-label" id="jump-nav-label">Jump to:</span>
+      <div class="jump-nav-links">
+        <a class="jump-link" href="#section-identity"><span class="jump-bullet">#</span><span class="jump-text" id="jump-identity">Identity</span></a>
+        <a class="jump-link" href="#section-intent"><span class="jump-bullet">#</span><span class="jump-text" id="jump-intent">Intent</span></a>
+        <a class="jump-link" href="#section-execution"><span class="jump-bullet">#</span><span class="jump-text" id="jump-execution">Execution</span></a>
+        <a class="jump-link" href="#section-evaluation"><span class="jump-bullet">#</span><span class="jump-text" id="jump-evaluation">Evaluation</span></a>
+        <a class="jump-link" href="#section-next-actions"><span class="jump-bullet">#</span><span class="jump-text" id="jump-next-actions">Next actions</span></a>
+        <a class="jump-link" href="#section-limitations"><span class="jump-bullet">#</span><span class="jump-text" id="jump-limitations">Limitations</span></a>
+        <a class="jump-link" href="#section-sources"><span class="jump-bullet">#</span><span class="jump-text" id="jump-sources">Sources</span></a>
+      </div>
+    </nav>
     <div id="detail-sections"></div>
   </section>
 
