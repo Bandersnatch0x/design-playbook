@@ -64,7 +64,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from design_playbook.scripts.g2_g4_pointback import _findings
+from design_playbook.scripts.finding_syntax import parse_findings
 
 # --- closed enums (design-prototype 4.1 machine face) -----------------------
 
@@ -439,7 +439,7 @@ def positive_dd_refs(
     (fail-closed) instead of silently reading them as challenges.
     """
     out: list[tuple[int, tuple[str, ...]]] = []
-    for index, parsed in enumerate(_findings(text), 1):
+    for index, parsed in enumerate(parse_findings(text), 1):
         refs = tuple(
             value.strip().rstrip(",") for value in parsed.get("dd", [])
             if value.strip())
@@ -451,7 +451,7 @@ def positive_dd_refs(
 def _positive_dd_block(block: str) -> bool:
     return any(
         parsed.get("dd") and is_positive_finding(parsed)
-        for parsed in _findings(block)
+        for parsed in parse_findings(block)
     )
 
 

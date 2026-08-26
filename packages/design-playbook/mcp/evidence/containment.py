@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Single Evidence artifact containment authority (ADR-0026).
+"""Single Evidence artifact containment authority (ADR-0026, ADR-0039).
 
 This is the one deep module that resolves an artifact path under
 ``<run_root>/evidence/`` and rejects every escape class at resolution time.
@@ -15,6 +15,13 @@ reason codes to their existing payloads, rule IDs, messages, and repair text
 without re-checking containment. Collapsing both callers into one mode-driven
 helper was rejected because it would hide their different existence timing
 and error contracts (ADR-0026).
+
+ADR-0039 extends the same invariant to arbitrary roots: ``read_under``
+exposes the canonical resolution for one existing regular file under any
+directory, and the Run Console's source reads (run root, package root)
+consume it instead of mirroring the escape classes. The ``evidence/``
+operations remain the ADR-0026 contract surface - same reason codes, same
+existence timing - now expressed as specializations of the one resolver.
 
 Threat-model limit (ADR-0026, explicit): this module resolves and validates
 the path; it does NOT perform the write. Path resolution alone cannot close
@@ -73,22 +80,30 @@ class ContainmentResult:
         return self.reason == ""
 
 
-def _resolve(
-        artifact_path: str,
-        run_root: Path,
+def _resolve_candidate(
+        candidate_root: Path,
+        relpath: str,
+        boundary_root: Path,
         *,
         require_existing_file: bool) -> ContainmentResult:
-    """Canonical containment resolution shared by write_target and read_artifact.
+    """Canonical containment resolution shared by every operation here.
+
+    ``relpath`` joins ``candidate_root`` to form the candidate; the resolved
+    candidate (and its realpath) must stay under ``boundary_root``. The
+    evidence operations pass the run root as the candidate root and the
+    evidence subtree as the boundary (their paths are run-root-relative,
+    including the ``evidence/`` prefix); ``read_under`` passes the same root
+    for both.
 
     Rejects, in order: native/POSIX/Windows absolute paths; any ``..``
     segment (defence in depth before resolution); resolution failures
     (OSError during resolve); canonical escapes (resolved candidate leaves
-    the evidence/ subtree); observed symlink escapes (realpath leaves the
-    evidence/ subtree - Path.resolve and os.path.realpath can disagree on
+    the boundary root); observed symlink escapes (realpath leaves the
+    boundary root - Path.resolve and os.path.realpath can disagree on
     symlink chains across platforms). When ``require_existing_file`` is set,
     a candidate that is not an existing regular file is rejected last.
     """
-    requested = Path(artifact_path)
+    requested = Path(relpath)
 
     # 1. Absolute path rejection: native, POSIX, and Windows forms. Checking
     #    all three means a Windows drive path is rejected on POSIX and a POSIX
@@ -96,8 +111,8 @@ def _resolve(
     #    Path flavour.
     if (
         requested.is_absolute()
-        or PureWindowsPath(artifact_path).is_absolute()
-        or PurePosixPath(artifact_path).is_absolute()
+        or PureWindowsPath(relpath).is_absolute()
+        or PurePosixPath(relpath).is_absolute()
     ):
         return ContainmentResult(None, REASON_ABSOLUTE_PATH)
 
@@ -106,41 +121,67 @@ def _resolve(
     if any(part == ".." for part in requested.parts):
         return ContainmentResult(None, REASON_DOTDOT_SEGMENT)
 
-    # 3. Resolution. Both the evidence root and the candidate are resolved
+    # 3. Resolution. Both the boundary root and the candidate are resolved
     #    here; an OSError (e.g. a pathological symlink chain on a platform
     #    whose resolver raises) is caught and surfaced as a resolution
     #    failure rather than propagated.
     try:
-        evidence_root = (run_root / EVIDENCE_SUBDIR).resolve(strict=False)
-        candidate = (run_root / requested).resolve(strict=False)
+        boundary = boundary_root.resolve(strict=False)
+        candidate = (candidate_root / requested).resolve(strict=False)
     except OSError:
         return ContainmentResult(None, REASON_RESOLUTION_FAILURE)
 
-    # 4. Canonical escape: the resolved candidate must stay under the evidence
-    #    root. Catches ``spec.md`` and ``skills/x`` (siblings of evidence/).
+    # 4. Canonical escape: the resolved candidate must stay under the
+    #    boundary root. For the evidence operations this catches ``spec.md``
+    #    and ``skills/x`` (siblings of evidence/).
     try:
-        candidate.relative_to(evidence_root)
+        candidate.relative_to(boundary)
     except ValueError:
         return ContainmentResult(None, REASON_CANONICAL_ESCAPE)
 
     # 5. Symlink escape (defence in depth): realpath must also stay under the
-    #    evidence root. Path.resolve and os.path.realpath can disagree on
-    #    symlink chains across platforms, so a symlink under evidence/ that
-    #    resolves outside must be rejected even when step 4 passed.
+    #    boundary root. Path.resolve and os.path.realpath can disagree on
+    #    symlink chains across platforms, so a symlink under the boundary
+    #    that resolves outside must be rejected even when step 4 passed.
     try:
-        Path(os.path.realpath(candidate)).relative_to(
-            os.path.realpath(evidence_root)
-        )
+        Path(os.path.realpath(candidate)).relative_to(os.path.realpath(boundary))
     except ValueError:
         return ContainmentResult(None, REASON_SYMLINK_ESCAPE)
 
-    # 6. Read side: require an existing regular file. The write side permits a
-    #    nonexistent suffix and stops here (the Provider's manifest-refusal
+    # 6. Read side: require an existing regular file. The write side permits
+    #    a nonexistent suffix and stops here (the Provider's manifest-refusal
     #    and overwrite checks are separate policy, not containment).
     if require_existing_file and not candidate.is_file():
         return ContainmentResult(None, REASON_NOT_REGULAR_FILE)
 
     return ContainmentResult(candidate, "")
+
+
+def _resolve(
+        artifact_path: str,
+        run_root: Path,
+        *,
+        require_existing_file: bool) -> ContainmentResult:
+    """Resolve an evidence artifact path (run-root-relative) under evidence/."""
+    return _resolve_candidate(
+        run_root,
+        artifact_path,
+        run_root / EVIDENCE_SUBDIR,
+        require_existing_file=require_existing_file,
+    )
+
+
+def read_under(root: Path, relpath: str) -> ContainmentResult:
+    """Resolve one existing regular file under an arbitrary root (ADR-0039).
+
+    The same escape classes as the evidence operations, for callers whose
+    authority root is not the evidence subtree (Run Console source reads
+    under the selected run root or the package root). ``relpath`` is
+    root-relative. Resolution-only, same TOCTOU limit as above.
+    """
+    return _resolve_candidate(
+        root, relpath, root, require_existing_file=True
+    )
 
 
 def write_target(artifact_path: str, run_root: Path) -> ContainmentResult:

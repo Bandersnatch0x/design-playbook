@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
-"""Containment tests for the single Evidence artifact authority (ADR-0026).
+"""Containment tests for the single Evidence artifact authority (ADR-0026,
+ADR-0039).
 
 ``design_playbook.mcp.evidence.containment`` is the one deep module that
 resolves an artifact path under ``<run_root>/evidence/`` and rejects every
-escape class at resolution time. It exposes two distinct operations -
+escape class at resolution time. It exposes three resolution operations -
 ``write_target`` (permits a nonexistent suffix; checks the existing resolved
-prefix) and ``read_artifact`` (additionally requires an existing regular
-file) - backed by one private canonical implementation and stable reason
-codes. The Provider runtime (``capture_runtime._resolve_artifact_path``) and G6
+prefix), ``read_artifact`` (additionally requires an existing regular file),
+and ``read_under`` (same read rules under an arbitrary root) - backed by one
+private canonical implementation and stable reason codes. The Provider
+runtime (``capture_runtime._resolve_artifact_path``) and G6
 (``g6_evidence.check_evidence``) map those codes to their existing payloads,
 rule IDs, messages, and repair text without re-checking containment.
 
 These tests pin:
-  * each reason-code class for both operations;
+  * each reason-code class for both evidence operations;
   * the read/write existence-timing difference;
+  * ``read_under`` for arbitrary roots without an evidence/ prefix;
   * the shared private implementation (same reason for the same input);
   * the explicit TOCTOU threat-model limit (resolution only, no write);
   * the Provider reason -> ValueError mapping (existing messages preserved);
@@ -44,6 +47,7 @@ from design_playbook.mcp.evidence.containment import (  # noqa: E402
     REASON_RESOLUTION_FAILURE,
     REASON_SYMLINK_ESCAPE,
     read_artifact,
+    read_under,
     write_target,
 )
 from design_playbook.mcp.evidence import capture_runtime  # noqa: E402
@@ -280,6 +284,110 @@ class ReadArtifactTests(unittest.TestCase):
             self.assertTrue(result.ok, result)
 
 
+class ReadUnderTests(unittest.TestCase):
+    """read_under: same escape classes, arbitrary root, existing regular file.
+
+    ``relpath`` is root-relative. The evidence/ prefix is not inserted: a
+    double-prefixed path is a caller bug, not a containment feature.
+    """
+
+    def test_succeeds_for_existing_regular_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "spec.md").write_text("spec", encoding="utf-8")
+            result = read_under(root, "spec.md")
+            self.assertTrue(result.ok, result)
+            self.assertEqual(
+                result.path, (root / "spec.md").resolve(strict=False)
+            )
+
+    def test_nested_path_is_not_double_prefixed(self) -> None:
+        # Regression: evidence paths are run-root-relative and already include
+        # the evidence/ prefix. read_under(root, "evidence/a.png") must resolve
+        # root/evidence/a.png, never root/evidence/evidence/a.png.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "evidence").mkdir()
+            (root / "evidence" / "a.png").write_text("png", encoding="utf-8")
+            result = read_under(root, "evidence/a.png")
+            self.assertTrue(result.ok, result)
+            self.assertEqual(
+                result.path,
+                (root / "evidence" / "a.png").resolve(strict=False),
+            )
+
+    def test_requires_existing_regular_file_for_nonexistent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result = read_under(root, "missing.md")
+            self.assertEqual(result.reason, REASON_NOT_REGULAR_FILE)
+            self.assertIsNone(result.path)
+
+    def test_rejects_directory_as_not_regular_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "sub").mkdir()
+            result = read_under(root, "sub")
+            self.assertEqual(result.reason, REASON_NOT_REGULAR_FILE)
+
+    def test_rejects_native_posix_absolute_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = read_under(Path(tmp), "/etc/passwd")
+            self.assertEqual(result.reason, REASON_ABSOLUTE_PATH)
+
+    def test_rejects_windows_drive_absolute_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = read_under(Path(tmp), "C:\\evidence\\x.png")
+            self.assertEqual(result.reason, REASON_ABSOLUTE_PATH)
+
+    def test_rejects_dotdot_segment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = read_under(Path(tmp), "../spec.md")
+            self.assertEqual(result.reason, REASON_DOTDOT_SEGMENT)
+
+    def test_rejects_dotdot_in_middle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = read_under(Path(tmp), "dir/../spec.md")
+            self.assertEqual(result.reason, REASON_DOTDOT_SEGMENT)
+
+    def test_rejects_symlink_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            secret = root.parent / "secret.txt"
+            secret.write_text("secret", encoding="utf-8")
+            try:
+                link = root / "link.txt"
+                _make_symlink_or_skip(self, secret, link)
+                result = read_under(root, "link.txt")
+                self.assertIn(
+                    result.reason,
+                    {REASON_CANONICAL_ESCAPE, REASON_SYMLINK_ESCAPE},
+                )
+            finally:
+                secret.unlink(missing_ok=True)
+
+    def test_accepts_symlink_to_file_inside_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            real = root / "real.txt"
+            real.write_text("real", encoding="utf-8")
+            link = root / "link.txt"
+            _make_symlink_or_skip(self, real, link)
+            result = read_under(root, "link.txt")
+            self.assertTrue(result.ok, result)
+
+    def test_evidence_read_still_rejects_run_root_sibling(self) -> None:
+        # ADR-0026 evidence boundary is unchanged: spec.md is still an escape
+        # for read_artifact even after read_under accepts it under the run root.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _evidence_run(tmp)
+            (root / "spec.md").write_text("spec", encoding="utf-8")
+            self.assertTrue(read_under(root, "spec.md").ok)
+            self.assertEqual(
+                read_artifact("spec.md", root).reason, REASON_CANONICAL_ESCAPE
+            )
+
+
 class SharedImplementationTests(unittest.TestCase):
     """Both operations share one private canonical implementation and the
     same stable reason codes for the same input."""
@@ -422,10 +530,11 @@ class ToctouLimitTests(unittest.TestCase):
             self.assertFalse((root / "evidence" / "dir").exists())
 
     def test_no_write_primitive_is_exposed(self) -> None:
-        # The public surface is the two resolution operations plus the result
-        # shape and reason constants - no commit/write/atomic primitive. The
-        # absence of a write primitive is the structural expression of the
-        # threat-model limit: containment cannot claim what it cannot enforce.
+        # The public surface is the three resolution operations plus the
+        # result shape and reason constants - no commit/write/atomic
+        # primitive. The absence of a write primitive is the structural
+        # expression of the threat-model limit: containment cannot claim
+        # what it cannot enforce.
         public = {
             name
             for name in dir(containment)
@@ -433,6 +542,7 @@ class ToctouLimitTests(unittest.TestCase):
         }
         self.assertIn("write_target", public)
         self.assertIn("read_artifact", public)
+        self.assertIn("read_under", public)
         for forbidden in ("write", "commit", "atomic_write", "save", "create"):
             self.assertNotIn(
                 forbidden,

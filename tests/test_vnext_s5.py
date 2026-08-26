@@ -31,10 +31,8 @@ if str(PKG / "scripts") not in sys.path:
 import rules_registry  # noqa: E402  (standalone seam, same as validate.py)
 from design_playbook.scripts import learning_candidates as lc  # noqa: E402
 from design_playbook.scripts import rules_governance as rg  # noqa: E402
-from design_playbook.scripts.g2_g4_pointback import (  # noqa: E402
-    check_pointback,
-    severity_axis,
-)
+from design_playbook.scripts.finding_syntax import severity_axis  # noqa: E402
+from design_playbook.scripts.g2_g4_pointback import check_pointback  # noqa: E402
 
 REGISTRY_TEXT = (PKG / "skills" / "design-playbook" / "references"
                  / "rules.md").read_text(encoding="utf-8")

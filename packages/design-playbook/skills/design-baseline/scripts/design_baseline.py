@@ -138,6 +138,7 @@ def _roots(project_root: Path | str, run_root: Path | str) -> tuple[Path, Path]:
 
 
 def _atomic_write_text(path: Path, content: str) -> None:
+    # ponytail: skill payload stays import-free of mcp.preview.transaction.
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     temporary = Path(temporary_name)

@@ -38,7 +38,7 @@ from design_playbook.mcp.preview.owned_browser import (  # noqa: F401
     _screen_size,
 )
 from design_playbook.mcp.preview.pin_bridge import BRIDGE_SCRIPT
-from design_playbook.mcp.preview.util import _log
+from design_playbook.mcp.util import log as _log
 
 __all__ = [
     "BRIDGE_SCRIPT",

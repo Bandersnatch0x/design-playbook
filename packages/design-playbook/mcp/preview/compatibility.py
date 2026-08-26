@@ -12,7 +12,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from design_playbook.mcp.preview.integrity import prototype_html_digest
+from design_playbook.mcp.preview.integrity import (
+    decision_name,
+    prototype_html_digest,
+    prototype_name,
+)
 
 VERSION_SCHEMA_VERSION = 1
 VALID_KINDS = frozenset({"confirmed", "revised", "custom"})
@@ -94,11 +98,11 @@ def state_at(
     decisions: DecisionAccess,
 ) -> dict[str, Any]:
     """Read the compatible Preview state at round N."""
-    entry = decisions.load_entry(preview_dir / f"decision-round-{round_n}.json")
+    entry = decisions.load_entry(preview_dir / decision_name(round_n))
     if entry is None:
         raise VersionError(f"round {round_n} has no decision entry")
 
-    prototype = preview_dir / f"round-{round_n}.html"
+    prototype = preview_dir / prototype_name(round_n)
     prototype_html = None
     prototype_path = None
     prototype_mode = entry.get("prototype_mode")

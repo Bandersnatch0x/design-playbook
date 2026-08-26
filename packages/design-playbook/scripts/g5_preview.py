@@ -13,7 +13,9 @@ from design_playbook.scripts._diagnostics import Finding, finding
 from design_playbook.mcp.preview.integrity import (
     ConfirmRecord,
     PreviewSnapshot,
+    confirm_name,
     inspect_preview,
+    prototype_name,
 )
 
 
@@ -143,7 +145,7 @@ def _g5_fact_findings(snapshot: PreviewSnapshot) -> list[Finding]:
             )]
         if fact.code == "hash_mismatch":
             round_name = (
-                f"round-{snapshot.current_round}.html"
+                prototype_name(snapshot.current_round)
                 if snapshot.current_round is not None else "preview/"
             )
             return [finding(
@@ -184,10 +186,10 @@ def check_preview(
             return [finding(
                 "G5.stale_round",
                 f"G5 preview: latest round {latest} has no "
-                f"confirm-round-{latest}.json (stale confirmation; only an "
+                f"{confirm_name(latest)} (stale confirmation; only an "
                 f"older round may be confirmed)",
                 owner="preview/",
-                expected=f"confirm-round-{latest}.json",
+                expected=confirm_name(latest),
                 actual="stale older confirm only",
                 repair=f"Confirm the latest round ({latest})",
             )]

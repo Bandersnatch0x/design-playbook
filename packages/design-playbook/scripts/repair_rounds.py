@@ -37,10 +37,10 @@ import re
 from dataclasses import dataclass
 
 from design_playbook.scripts._diagnostics import Finding, finding
-from design_playbook.scripts.g2_g4_pointback import (
-    CLOSURE_LINE,
-    _findings,
-    _normalise_issue,
+from design_playbook.scripts.finding_syntax import (
+    closure_targets,
+    normalise_issue,
+    parse_findings,
 )
 from design_playbook.scripts.verdict_syntax import VerdictFacts, parse_verdict
 
@@ -110,7 +110,7 @@ def parse_round_facts(text: str) -> RoundFacts:
     """Collect round annotations without applying policy."""
     rounds_by_issue: list[tuple[str, int]] = []
     max_rounds = 0
-    for parsed in _findings(text):
+    for parsed in parse_findings(text):
         values = parsed.get("rounds", [])
         if not values:
             continue
@@ -193,11 +193,9 @@ def check_rounds(
 
     # Two-round stop: an unclosed blocking finding at rounds >= 2 must be
     # narrated as escalated-stop (the stop then waits on the user).
-    closure_targets = {
-        _normalise_issue(target) for target in CLOSURE_LINE.findall(text)
-    }
+    closed = set(closure_targets(text))
     stopping: list[str] = []
-    for parsed in _findings(text):
+    for parsed in parse_findings(text):
         values = parsed.get("rounds", [])
         if not values or not is_blocking(parsed):
             continue
@@ -208,7 +206,7 @@ def check_rounds(
         if count < TWO_ROUND_STOP:
             continue
         issue = parsed["issue"][0] if parsed["issue"] else ""
-        if _normalise_issue(issue) in closure_targets:
+        if normalise_issue(issue) in closed:
             continue  # closed on a later round: the normal chain, no stop
         stopping.append(issue)
     if stopping and facts.close_reason != "escalated-stop":

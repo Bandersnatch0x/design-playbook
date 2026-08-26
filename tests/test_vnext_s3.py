@@ -30,7 +30,7 @@ from design_playbook.scripts.g11_coverage import (  # noqa: E402
     check_sampling_matrix,
     spec_matrix_cells,
 )
-from design_playbook.scripts.g2_g4_pointback import _findings  # noqa: E402
+from design_playbook.scripts.finding_syntax import parse_findings as _findings  # noqa: E402
 from design_playbook.scripts.g8_run_registry import (  # noqa: E402
     check_g8_run,
     load_registry,

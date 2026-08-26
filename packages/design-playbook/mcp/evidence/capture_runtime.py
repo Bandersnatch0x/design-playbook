@@ -22,7 +22,7 @@ from design_playbook.mcp.evidence.disclosure import (
     metric_payload,
     probe_layout,
 )
-from design_playbook.mcp.preview.util import _log
+from design_playbook.mcp.util import log as _log
 
 CAPTURE_TYPES = frozenset({"screenshot", "a11y tree", "interaction trace"})
 ALLOWED_ARGUMENTS = frozenset(

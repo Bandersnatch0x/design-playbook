@@ -26,10 +26,13 @@ from design_playbook.mcp.preview.control import _format_feedback
 from design_playbook.mcp.preview.i18n import CONFIRM_LABELS, SKIP_LABELS
 from design_playbook.mcp.preview.integrity import (
     compute_binding_digest,
+    confirm_name,
+    decision_name,
     evaluate_feedback_floor,
     prototype_html_digest,
+    prototype_name,
 )
-from design_playbook.mcp.preview.util import _now_iso
+from design_playbook.mcp.util import now_iso as _now_iso
 
 BrowserCollector = Callable[[Path, str, list[str], int], dict[str, Any]]
 ENTRY_SCHEMA_VERSION = 1
@@ -62,7 +65,7 @@ def _resolve_prototype(
     if not html:
         raise ValueError("path or html is required")
     return (
-        preview_dir / f"round-{round_n}.html",
+        preview_dir / prototype_name(round_n),
         prototype_html_digest(html.encode("utf-8")),
     )
 
@@ -446,6 +449,8 @@ def _round_lock(
 
 def atomic_write(path: Path, content: str) -> None:
     """Flush a same-directory temporary file before atomically replacing path."""
+    if path.is_symlink():
+        raise ValueError(f"refusing write through symlinked file: {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
@@ -544,7 +549,7 @@ def _confirm_record(entry: dict[str, Any]) -> dict[str, Any]:
         "selected_options": outcome["selected_options"],
         "feedback": outcome["feedback"],
         "timestamp": entry["timestamp"],
-        "prototype_path": f"preview/round-{binding['round']}.html",
+        "prototype_path": f"preview/{prototype_name(binding['round'])}",
         "prototype_html_hash": binding["prototype_html_hash"],
         "decision_id": entry["decision_id"],
     }
@@ -563,7 +568,7 @@ def load_confirm_for_entry(
     binding = entry["binding"]
     outcome = entry["outcome"]
     round_n = int(binding["round"])
-    path = preview_dir / f"confirm-round-{round_n}.json"
+    path = preview_dir / confirm_name(round_n)
     if not path.is_file():
         return None
     try:
@@ -635,7 +640,7 @@ def valid_entries(preview_dir: Path) -> list[dict[str, Any]]:
 def _commit_projections_unlocked(preview_dir: Path, entry: dict[str, Any]) -> str:
     binding = entry["binding"]
     outcome = entry["outcome"]
-    confirm_path = preview_dir / f"confirm-round-{binding['round']}.json"
+    confirm_path = preview_dir / confirm_name(binding["round"])
     if confirm_path.is_file():
         try:
             load_confirm_for_entry(preview_dir, entry, allow_legacy=False)
@@ -715,7 +720,7 @@ def run_preview_transaction(
         round_n=round_n, prototype_html_hash=prototype_hash,
         report_ref=report_ref, summary=summary, options=options,
     )
-    entry_path = preview_dir / f"decision-round-{round_n}.json"
+    entry_path = preview_dir / decision_name(round_n)
     existing = load_entry(entry_path)
     decision_id = str(existing.get("decision_id") if existing else uuid.uuid4().hex)
     try:
@@ -732,7 +737,7 @@ def run_preview_transaction(
     except PreviewTransactionError:
         raise
     except OSError as exc:
-        confirm_path = preview_dir / f"confirm-round-{round_n}.json"
+        confirm_path = preview_dir / confirm_name(round_n)
         log_path = preview_dir / "log.md"
         if not entry_path.is_file():
             artifact = entry_path
@@ -755,7 +760,7 @@ def _run_locked(
     preview_dir: Path, prototype_hash: str, binding: dict[str, Any],
     decision_id: str,
 ) -> dict[str, Any]:
-    entry_path = preview_dir / f"decision-round-{round_n}.json"
+    entry_path = preview_dir / decision_name(round_n)
     # Re-resolve inside the lock to detect TOCTOU: if the path-mode file
     # changed between run_preview_transaction and lock acquisition, the
     # recomputed hash will not match binding["digest"].
@@ -780,7 +785,7 @@ def _run_locked(
         confirm_path = _commit_projections(preview_dir, existing)
         return _result(existing, confirm_path)
 
-    legacy_confirm = preview_dir / f"confirm-round-{round_n}.json"
+    legacy_confirm = preview_dir / confirm_name(round_n)
     if legacy_confirm.is_file():
         raise TransactionConflict(
             f"legacy confirm cannot be overwritten; use next round: {legacy_confirm}",

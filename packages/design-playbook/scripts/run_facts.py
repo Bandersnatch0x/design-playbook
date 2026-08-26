@@ -33,6 +33,26 @@ class ArtifactReadFact:
     line_number: int | None = None
 
 
+# Presence is one fact per artifact, not a per-artifact convention (ADR-0039).
+# Consumers ask ``artifact_state`` instead of learning which artifacts keep a
+# ``missing`` read error, which expose a boolean, and which must be re-stated
+# by the caller.
+STATE_COMPLETE = "complete"
+STATE_MISSING = "missing"
+STATE_UNREADABLE = "unreadable"
+STATED_ARTIFACTS = (
+    "spec",
+    "point_back",
+    "plan",
+    "decision_report",
+    "craft_guard",
+    "manifest",
+    "baseline",
+    "shaping",
+    "run_profile",
+)
+
+
 @dataclass(frozen=True)
 class RunFacts:
     """One immutable view of the artifacts consumed by run policy."""
@@ -46,7 +66,6 @@ class RunFacts:
     pointback_text: str
     plan_text: str
     plan_fill_artifacts: tuple[str, ...]
-    craft_guard_exists: bool
     craft_guard_text: str
     ledger: LedgerFacts
     verdict: VerdictFacts
@@ -61,6 +80,7 @@ class RunFacts:
     decision_entries: tuple[DDEntry, ...] = ()
     shaping_events: tuple[dict[str, Any], ...] | None = None
     shaping_error: str | None = None
+    _artifact_states: tuple[tuple[str, str], ...] = ()
 
     @property
     def manifest_entries(self) -> tuple[dict[str, Any], ...]:
@@ -74,6 +94,25 @@ class RunFacts:
             return None
         return json.loads(self._baseline_text)
 
+    def artifact_state(self, artifact: str) -> str:
+        """``complete`` | ``missing`` | ``unreadable`` for one run artifact.
+
+        The same three values for every artifact in ``STATED_ARTIFACTS``: the
+        loader already established presence while reading, so no consumer has
+        to re-stat the file or infer absence from an empty text field.
+        """
+        if artifact not in STATED_ARTIFACTS:
+            raise KeyError(artifact)
+        for name, state in self._artifact_states:
+            if name == artifact:
+                return state
+        return STATE_MISSING
+
+    @property
+    def craft_guard_exists(self) -> bool:
+        """Derived from the uniform craft_guard presence fact."""
+        return self.artifact_state("craft_guard") != STATE_MISSING
+
 
 @dataclass(frozen=True)
 class _OptionalRunFacts:
@@ -83,23 +122,26 @@ class _OptionalRunFacts:
     decision_entries: tuple[DDEntry, ...] = ()
     shaping_events: tuple[dict[str, Any], ...] | None = None
     shaping_error: str | None = None
-    craft_guard_exists: bool = False
     craft_guard_text: str = ""
     read_errors: tuple[ArtifactReadFact, ...] = ()
 
 
 def _read_manifest(
     evidence_dir: Path | None,
-) -> tuple[tuple[str, ...], tuple[ArtifactReadFact, ...]]:
+) -> tuple[tuple[str, ...], tuple[ArtifactReadFact, ...], str]:
     if evidence_dir is None:
-        return (), ()
+        return (), (), STATE_MISSING
     path = evidence_dir / "manifest.jsonl"
     if not path.is_file():
-        return (), ()
+        return (), (), STATE_MISSING
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
-        return (), (ArtifactReadFact("manifest", path, "unreadable", str(exc)),)
+        return (
+            (),
+            (ArtifactReadFact("manifest", path, "unreadable", str(exc)),),
+            STATE_UNREADABLE,
+        )
     entries: list[str] = []
     errors: list[ArtifactReadFact] = []
     for line_number, line in enumerate(text.splitlines(), start=1):
@@ -130,7 +172,7 @@ def _read_manifest(
             )
             continue
         entries.append(line)
-    return tuple(entries), tuple(errors)
+    return tuple(entries), tuple(errors), STATE_COMPLETE
 
 
 def _read_baseline(run_root: Path | None) -> tuple[str | None, str | None]:
@@ -241,7 +283,6 @@ def _read_optional_run_facts(run_root: Path | None) -> _OptionalRunFacts:
     craft_guard_text, craft_error = _read_text(
         "craft_guard", run_root / "craft-guard.md"
     )
-    craft_guard_exists = craft_error is None or craft_error.code != "missing"
     errors = tuple(error for error in (plan_error, report_error, craft_error) if error)
     return _OptionalRunFacts(
         plan_text=plan_text,
@@ -250,10 +291,94 @@ def _read_optional_run_facts(run_root: Path | None) -> _OptionalRunFacts:
         decision_entries=entries,
         shaping_events=shaping_events,
         shaping_error=shaping_error,
-        craft_guard_exists=craft_guard_exists,
         craft_guard_text=craft_guard_text,
         read_errors=errors,
     )
+
+
+def _error_state(error: ArtifactReadFact | None) -> str:
+    if error is None:
+        return STATE_COMPLETE
+    if error.code == STATE_MISSING:
+        return STATE_MISSING
+    return STATE_UNREADABLE
+
+
+def _artifact_states(
+    run_root: Path | None,
+    spec_path: Path | None,
+    spec_error: ArtifactReadFact | None,
+    pointback_path: Path | None,
+    pointback_error: ArtifactReadFact | None,
+    optional_errors: tuple[ArtifactReadFact, ...],
+    *,
+    manifest_state: str,
+    baseline_text: str | None,
+    baseline_error: str | None,
+    shaping_events: tuple[dict[str, Any], ...] | None,
+    shaping_error: str | None,
+    run_profile: RunProfile | None,
+) -> tuple[tuple[str, str], ...]:
+    """One uniform presence fact per run artifact, captured while loading.
+
+    ``spec``/``point_back`` record no read error when no path was selected,
+    so their absence is derived from the path; the optional artifacts always
+    produce an error object (missing or unreadable) or none (complete) once
+    a run root is probed - without a root they were never read at all.
+    """
+    states: list[tuple[str, str]] = [
+        (
+            "spec",
+            STATE_MISSING
+            if spec_path is None and spec_error is None
+            else _error_state(spec_error),
+        ),
+        (
+            "point_back",
+            STATE_MISSING
+            if pointback_path is None and pointback_error is None
+            else _error_state(pointback_error),
+        ),
+    ]
+    by_artifact = {error.artifact: error for error in optional_errors}
+    for artifact in ("plan", "decision_report", "craft_guard"):
+        error = by_artifact.get(artifact)
+        if error is None and run_root is None:
+            states.append((artifact, STATE_MISSING))
+        else:
+            states.append((artifact, _error_state(error)))
+    plan_state = next(state for name, state in states if name == "plan")
+    if plan_state != STATE_COMPLETE:
+        profile_state = plan_state
+    elif run_profile is None:
+        profile_state = STATE_MISSING
+    else:
+        profile_state = STATE_COMPLETE
+    if run_root is None:
+        shaping_state = STATE_MISSING
+        baseline_state = STATE_MISSING
+    else:
+        if shaping_error:
+            shaping_state = STATE_UNREADABLE
+        elif shaping_events is None:
+            shaping_state = STATE_MISSING
+        else:
+            shaping_state = STATE_COMPLETE
+        if baseline_error:
+            baseline_state = STATE_UNREADABLE
+        elif baseline_text is None:
+            baseline_state = STATE_MISSING
+        else:
+            baseline_state = STATE_COMPLETE
+    states.extend(
+        (
+            ("manifest", manifest_state),
+            ("baseline", baseline_state),
+            ("shaping", shaping_state),
+            ("run_profile", profile_state),
+        )
+    )
+    return tuple(states)
 
 
 def capture_run_facts(
@@ -288,7 +413,7 @@ def capture_run_facts(
         fallback_encoding=pointback_fallback_encoding,
     )
     baseline_text, baseline_error = _read_baseline(run_root)
-    manifest_lines, manifest_errors = _read_manifest(evidence_dir)
+    manifest_lines, manifest_errors, manifest_state = _read_manifest(evidence_dir)
     preview = inspect_preview(preview_dir) if preview_dir is not None else None
     optional = _read_optional_run_facts(run_root)
     return RunFacts(
@@ -301,7 +426,6 @@ def capture_run_facts(
         pointback_text=pointback_text,
         plan_text=optional.plan_text,
         plan_fill_artifacts=_plan_fill_artifacts(run_root, optional.plan_text),
-        craft_guard_exists=optional.craft_guard_exists,
         craft_guard_text=optional.craft_guard_text,
         ledger=parse_ledger(pointback_text),
         verdict=parse_verdict(pointback_text),
@@ -322,4 +446,18 @@ def capture_run_facts(
         decision_entries=optional.decision_entries,
         shaping_events=optional.shaping_events,
         shaping_error=optional.shaping_error,
+        _artifact_states=_artifact_states(
+            run_root,
+            spec_path,
+            spec_error,
+            pointback_path,
+            pointback_error,
+            optional.read_errors,
+            manifest_state=manifest_state,
+            baseline_text=baseline_text,
+            baseline_error=baseline_error,
+            shaping_events=optional.shaping_events,
+            shaping_error=optional.shaping_error,
+            run_profile=optional.run_profile,
+        ),
     )

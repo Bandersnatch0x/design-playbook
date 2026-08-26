@@ -53,10 +53,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -70,6 +68,7 @@ if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
 from design_playbook.mcp.evidence.ledger_syntax import parse_ledger  # noqa: E402
+from design_playbook.mcp.preview.transaction import atomic_write  # noqa: E402
 from design_playbook.scripts.g1_spec import _l6_items  # noqa: E402
 from design_playbook.scripts.g11_coverage import check_coverage  # noqa: E402
 from design_playbook.scripts.g2_g4_pointback import check_pointback  # noqa: E402
@@ -320,18 +319,8 @@ def _serialize_preferences(fields: dict[str, bool]) -> str:
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
-    """Replace one regular file without following a target symlink."""
-    if path.is_symlink():
-        raise ValueError(f"refusing write through symlinked file: {path}")
-    fd, temporary = tempfile.mkstemp(
-        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
-    temporary_path = Path(temporary)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
-            handle.write(text)
-        os.replace(temporary_path, path)
-    finally:
-        temporary_path.unlink(missing_ok=True)
+    """Replace one regular file through the preview atomic-write primitive."""
+    atomic_write(path, text)
 
 
 def _ensure_local_gitignore(root: Path) -> None:

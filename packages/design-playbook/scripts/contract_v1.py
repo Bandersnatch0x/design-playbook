@@ -7,7 +7,9 @@ and validators do not reimplement authority rules. See ADR-0017 / ADR-0019.
 Public surface:
   normalize_contract, contract_sha, decision_log_sha,
   load_contract, dump_contract, load_decisions, append_decision,
-  promote_fields, bind_first, apply_decisions, verify_contract
+  promote_fields, bind_first, apply_decisions, verify_contract,
+  read_bind_snapshot, parse_bind_snapshot, bind_resolution_lists,
+  bind_resolution_conflicts
 """
 from __future__ import annotations
 
@@ -410,6 +412,113 @@ def bind_first(
         encoding="utf-8",
     )
     return result
+
+
+# --- run-side bind snapshot read authority (ADR-0039) ----------------------
+#
+# ``contract-bind.json`` is written by ``bind_first`` above and read back by
+# three consumers with different vocabularies (G7 findings, G12 diff input,
+# Run Snapshot availability). The read itself and the resolution invariant
+# live here, beside the shape that produced them; each consumer projects the
+# one result into its own failure vocabulary.
+
+BIND_COMPLETE = "complete"
+BIND_MISSING = "missing"
+BIND_UNREADABLE = "unreadable"
+BIND_PARTIAL_WRITE = "partial-write"
+BIND_MALFORMED = "malformed"
+BIND_CONFLICTING_RESOLUTION = "conflicting-resolution"
+
+RESOLUTION_LIST_FIELDS = ("open_fields", "assumed_fields", "stale_fields")
+
+
+@dataclass(frozen=True)
+class BindSnapshotRead:
+    """One read of a run-side bind snapshot: state, payload, and detail."""
+
+    state: str
+    data: dict[str, Any] | None = None
+    detail: str = ""
+
+    @property
+    def complete(self) -> bool:
+        return self.state == BIND_COMPLETE
+
+
+def parse_bind_snapshot(text: str) -> BindSnapshotRead:
+    """Parse captured bind-snapshot text. No filesystem access, never raises.
+
+    A JSON decode failure is reported as ``partial-write``: the writer above
+    replaces the file atomically, so unparsable bytes mean the reader observed
+    a torn write rather than a semantically invalid record. Overlapping
+    resolution lists are ``conflicting-resolution``, not complete: the
+    invariant lives here so every consumer sees the same unusable state.
+    """
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        return BindSnapshotRead(BIND_PARTIAL_WRITE, detail=str(exc))
+    if not isinstance(data, dict):
+        return BindSnapshotRead(
+            BIND_MALFORMED, detail="bind snapshot must be an object"
+        )
+    try:
+        lists = bind_resolution_lists(data)
+    except ContractError as exc:
+        return BindSnapshotRead(BIND_MALFORMED, data=data, detail=str(exc))
+    conflicts = bind_resolution_conflicts(lists)
+    if conflicts:
+        return BindSnapshotRead(
+            BIND_CONFLICTING_RESOLUTION,
+            data=data,
+            detail=", ".join(conflicts),
+        )
+    return BindSnapshotRead(BIND_COMPLETE, data)
+
+
+def read_bind_snapshot(run_dir: Path) -> BindSnapshotRead:
+    """Read ``<run_dir>/contract-bind.json`` once. Never raises."""
+    path = run_dir / BIND_SNAPSHOT_FILENAME
+    if not path.is_file():
+        return BindSnapshotRead(
+            BIND_MISSING, detail=f"missing bind-first snapshot: {path.name}"
+        )
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        return BindSnapshotRead(BIND_UNREADABLE, detail=str(exc))
+    return parse_bind_snapshot(text)
+
+
+def bind_resolution_lists(snapshot: Mapping[str, Any]) -> dict[str, list[str]]:
+    """The three resolution lists, validated as lists of strings."""
+    lists: dict[str, list[str]] = {}
+    for name in RESOLUTION_LIST_FIELDS:
+        value = snapshot.get(name)
+        if not isinstance(value, list) or any(
+            not isinstance(item, str) for item in value
+        ):
+            raise ContractError(f"bind snapshot {name} must be a list of strings")
+        lists[name] = list(value)
+    return lists
+
+
+def bind_resolution_conflicts(lists: Mapping[str, list[str]]) -> list[str]:
+    """Fields claimed by more than one resolution set.
+
+    A contract field carries exactly one resolution, so the three lists are
+    disjoint by construction. Any overlap means the record no longer describes
+    a reachable contract state; every consumer treats the result as
+    inconsistent rather than reading one of the conflicting claims.
+    """
+    open_fields = set(lists["open_fields"])
+    assumed_fields = set(lists["assumed_fields"])
+    stale_fields = set(lists["stale_fields"])
+    return sorted(
+        (open_fields & assumed_fields)
+        | (open_fields & stale_fields)
+        | (assumed_fields & stale_fields)
+    )
 
 
 def verify_contract(

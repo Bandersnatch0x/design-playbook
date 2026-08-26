@@ -48,4 +48,5 @@ containment-preserving primitive; callers must not add another preflight check.
 Containment changes become local and reason-code behavior becomes testable.
 Read and write callers retain their distinct compatibility surfaces. The
 explicit threat-model limit prevents the shared module from overstating its
-security guarantee.
+security guarantee. ADR-0039 adds `read_under` for arbitrary roots; the
+evidence write/read operations and reason codes stay the contract surface.

@@ -12,7 +12,10 @@ PKG = ROOT / "packages" / "design-playbook"
 if str(PKG) not in sys.path:
     sys.path.insert(0, str(PKG))
 
-from design_playbook.scripts.run_facts import capture_run_facts  # noqa: E402
+from design_playbook.scripts.run_facts import (  # noqa: E402
+    STATED_ARTIFACTS,
+    capture_run_facts,
+)
 
 
 class RunFactsOptionalArtifactTests(unittest.TestCase):
@@ -42,6 +45,8 @@ class RunFactsOptionalArtifactTests(unittest.TestCase):
             self.assertEqual([entry.id for entry in facts.decision_entries], ["DD-0001"])
             self.assertEqual(facts.shaping_events[0]["event"], "asked")
             self.assertIsNone(facts.shaping_error)
+            self.assertEqual(facts.artifact_state("run_profile"), "complete")
+            self.assertEqual(facts.artifact_state("shaping"), "complete")
 
     def test_snapshot_does_not_change_when_run_files_mutate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -57,6 +62,45 @@ class RunFactsOptionalArtifactTests(unittest.TestCase):
             self.assertIn("run-profile: v1", facts.plan_text)
             self.assertEqual(facts.run_profile.tier, "P1")
             self.assertEqual(facts.plan_fill_artifacts, ("artifact.txt",))
+
+    def test_artifact_state_is_uniform_across_artifacts(self) -> None:
+        """One presence vocabulary: no per-artifact conventions (ADR-0039)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "spec.md").write_text("# spec\n", encoding="utf-8")
+            (root / "plan.md").write_text("# plan\n", encoding="utf-8")
+            # plan.md is unreadable bytes: the state is unreadable, not a
+            # re-stat away from the caller.
+            (root / "plan.md").write_bytes(b"\xff\xfe")
+            facts = capture_run_facts(run_root=root)
+            self.assertEqual(facts.artifact_state("spec"), "complete")
+            self.assertEqual(facts.artifact_state("plan"), "unreadable")
+            self.assertEqual(facts.artifact_state("point_back"), "missing")
+            self.assertEqual(facts.artifact_state("decision_report"), "missing")
+            self.assertEqual(facts.artifact_state("craft_guard"), "missing")
+            self.assertEqual(facts.artifact_state("manifest"), "missing")
+            self.assertEqual(facts.artifact_state("baseline"), "missing")
+            self.assertEqual(facts.artifact_state("shaping"), "missing")
+            self.assertEqual(facts.artifact_state("run_profile"), "unreadable")
+
+    def test_artifact_state_without_a_run_root_is_missing(self) -> None:
+        facts = capture_run_facts()
+        for artifact in STATED_ARTIFACTS:
+            self.assertEqual(facts.artifact_state(artifact), "missing")
+
+    def test_artifact_state_rejects_unknown_artifacts(self) -> None:
+        facts = capture_run_facts()
+        with self.assertRaises(KeyError):
+            facts.artifact_state("telemetry")
+
+    def test_run_profile_missing_is_not_the_same_as_unreadable_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "plan.md").write_text("# plan\n", encoding="utf-8")
+            facts = capture_run_facts(run_root=root)
+            self.assertEqual(facts.artifact_state("plan"), "complete")
+            self.assertEqual(facts.artifact_state("run_profile"), "missing")
+            self.assertIsNone(facts.run_profile)
 
     def test_empty_craft_guard_presence_is_captured(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -77,6 +121,7 @@ class RunFactsOptionalArtifactTests(unittest.TestCase):
             facts = capture_run_facts(run_root=root)
             self.assertIsNone(facts.shaping_events)
             self.assertTrue(facts.shaping_error)
+            self.assertEqual(facts.artifact_state("shaping"), "unreadable")
 
     def test_unreadable_utf8_spec_keeps_decode_error_detail(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

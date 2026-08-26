@@ -235,5 +235,122 @@ class ContractV1Tests(unittest.TestCase):
             self.assertIn("decision_log_sha", snap)
 
 
+class BindSnapshotReadTests(unittest.TestCase):
+    """One read authority for contract-bind.json (ADR-0039)."""
+
+    def test_read_states_cover_missing_torn_and_malformed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp)
+            path = run / cv.BIND_SNAPSHOT_FILENAME
+
+            self.assertEqual(cv.read_bind_snapshot(run).state, cv.BIND_MISSING)
+
+            path.write_text('{"ok": tr', encoding="utf-8")
+            self.assertEqual(
+                cv.read_bind_snapshot(run).state, cv.BIND_PARTIAL_WRITE
+            )
+
+            path.write_text("[]", encoding="utf-8")
+            self.assertEqual(cv.read_bind_snapshot(run).state, cv.BIND_MALFORMED)
+
+            path.write_bytes(b"\xff\xfe")
+            self.assertEqual(cv.read_bind_snapshot(run).state, cv.BIND_UNREADABLE)
+
+            path.write_text(
+                json.dumps(
+                    {
+                        "open_fields": [],
+                        "assumed_fields": [],
+                        "stale_fields": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            read = cv.read_bind_snapshot(run)
+            self.assertTrue(read.complete)
+            self.assertEqual(read.data["open_fields"], [])
+
+            path.write_text('{"ok": true}', encoding="utf-8")
+            self.assertEqual(cv.read_bind_snapshot(run).state, cv.BIND_MALFORMED)
+
+    def test_resolution_lists_require_string_lists(self) -> None:
+        with self.assertRaises(cv.ContractError):
+            cv.bind_resolution_lists({"open_fields": ["a"], "assumed_fields": []})
+        with self.assertRaises(cv.ContractError):
+            cv.bind_resolution_lists(
+                {"open_fields": [1], "assumed_fields": [], "stale_fields": []}
+            )
+        lists = cv.bind_resolution_lists(
+            {"open_fields": ["a.goal"], "assumed_fields": [], "stale_fields": []}
+        )
+        self.assertEqual(lists["open_fields"], ["a.goal"])
+
+    def test_one_field_cannot_hold_two_resolutions(self) -> None:
+        self.assertEqual(
+            cv.bind_resolution_conflicts(
+                {"open_fields": [], "assumed_fields": [], "stale_fields": []}
+            ),
+            [],
+        )
+        self.assertEqual(
+            cv.bind_resolution_conflicts(
+                {
+                    "open_fields": ["a.goal"],
+                    "assumed_fields": ["a.goal"],
+                    "stale_fields": ["b.scope"],
+                }
+            ),
+            ["a.goal"],
+        )
+
+    def test_overlapping_lists_are_not_a_complete_read(self) -> None:
+        read = cv.parse_bind_snapshot(
+            json.dumps(
+                {
+                    "open_fields": ["a.goal"],
+                    "assumed_fields": ["a.goal"],
+                    "stale_fields": [],
+                }
+            )
+        )
+        self.assertEqual(read.state, cv.BIND_CONFLICTING_RESOLUTION)
+        self.assertFalse(read.complete)
+        self.assertIn("a.goal", read.detail)
+
+    def test_g12_degrades_overlap_to_none(self) -> None:
+        from design_playbook.scripts.g12_tier_boundary import load_bind_snapshot
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp)
+            (run / cv.BIND_SNAPSHOT_FILENAME).write_text(
+                json.dumps(
+                    {
+                        "open_fields": ["a.goal"],
+                        "assumed_fields": ["a.goal"],
+                        "stale_fields": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertIsNone(load_bind_snapshot(run))
+
+    def test_bind_first_output_satisfies_the_invariant(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "p"
+            run = Path(tmp) / "r"
+            cv.promote_fields(
+                {"a.goal": _field("ship"), "b.risk": _field("x", resolution="open")},
+                project_dir=project,
+                changelog_summary="seed",
+                at="2026-08-26T00:00:00Z",
+            )
+            cv.bind_first(project, run)
+            read = cv.read_bind_snapshot(run)
+            self.assertTrue(read.complete)
+            self.assertEqual(
+                cv.bind_resolution_conflicts(cv.bind_resolution_lists(read.data)), []
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

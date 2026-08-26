@@ -48,7 +48,6 @@ silent for them.
 """
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -56,7 +55,6 @@ from typing import Any, Mapping
 
 from design_playbook.scripts._diagnostics import Finding, finding
 from design_playbook.scripts.contract_v1 import (
-    BIND_SNAPSHOT_FILENAME,
     CONTRACT_FILENAME,
     DECISIONS_FILENAME,
     ContractError,
@@ -64,6 +62,7 @@ from design_playbook.scripts.contract_v1 import (
     load_contract,
     load_decisions,
     normalize_contract,
+    read_bind_snapshot,
 )
 from design_playbook.scripts.escalation_signals import (
     EscalationSignal,
@@ -75,7 +74,7 @@ from design_playbook.scripts.escalation_signals import (
     recorded_regrades,
     tier_rank,
 )
-from design_playbook.scripts.g2_g4_pointback import _findings
+from design_playbook.scripts.finding_syntax import parse_findings
 from design_playbook.scripts.repair_rounds import is_blocking
 
 CRITERION_PATH = re.compile(r"^l6\.c\d+$")
@@ -118,15 +117,13 @@ def bind_fields(snapshot: Mapping[str, Any]) -> dict[str, Any] | None:
 
 
 def load_bind_snapshot(run_dir: Path) -> dict[str, Any] | None:
-    """Read contract-bind.json; None when missing or unreadable."""
-    path = run_dir / BIND_SNAPSHOT_FILENAME
-    if not path.is_file():
-        return None
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
-        return None
-    return data if isinstance(data, dict) else None
+    """Bind snapshot for the diff; None when it is not completely readable.
+
+    The read, the torn-write classification, and the resolution invariant are
+    owned by ``contract_v1`` (ADR-0039); G12 needs only "usable or not".
+    """
+    read = read_bind_snapshot(run_dir)
+    return read.data if read.complete else None
 
 
 def load_effective_contract(project_dir: Path) -> dict[str, Any] | None:
@@ -172,7 +169,7 @@ def contract_touch(
 
 def blocking_count(pointback_text: str) -> int:
     """Number of blocking findings in the report."""
-    return sum(1 for parsed in _findings(pointback_text)
+    return sum(1 for parsed in parse_findings(pointback_text)
                if is_blocking(parsed))
 
 

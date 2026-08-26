@@ -33,7 +33,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from design_playbook.scripts._diagnostics import Finding, finding
-from design_playbook.scripts.g2_g4_pointback import _findings
+from design_playbook.scripts.finding_syntax import parse_findings
 
 VALID_FACES = frozenset({"objective", "subjective"})
 VALID_BASES = frozenset({"agent-judgment", "human-evidence",
@@ -148,7 +148,7 @@ def check_dimensions(text: str) -> list[Finding]:
             repair=repair,
         ))
 
-    for index, parsed in enumerate(_findings(text), 1):
+    for index, parsed in enumerate(parse_findings(text), 1):
         dimensions = parsed.get("dimension", [])
         faces = parsed.get("face", [])
         bases = parsed.get("basis", [])
