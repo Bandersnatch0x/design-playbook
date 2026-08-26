@@ -45,6 +45,17 @@ from design_playbook.mcp.run_console.snapshot_builder import SnapshotBuildError 
 _PLAYWRIGHT = None
 _BROWSER = None
 
+# Chromium refuses to navigate to ports on its restricted list with
+# ERR_UNSAFE_PORT. The ephemeral bind below retries past those.
+_CHROMIUM_RESTRICTED_PORTS = frozenset({
+    1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69,
+    77, 79, 87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119,
+    123, 135, 137, 139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515,
+    526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636, 989, 990,
+    993, 995, 1719, 1720, 1723, 2049, 3659, 4045, 5060, 5061, 6000, 6565,
+    6665, 6666, 6667, 6668, 6669, 6697, 10080,
+})
+
 _LONG_SUMMARY = (
     "一句话定义：控制字符\x07与超长文本混合压力测试。" + "队列监控页设计基线与验收标准说明。" * 12 +
     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" * 6 +
@@ -92,7 +103,15 @@ class ConsoleHarness:
             run_root=self.run_root,
             now_fn=lambda: "2026-08-25T10:00:00Z",
         )
-        self.server = serve_run_console(self.session, bind_host="127.0.0.1", port=0)
+        self.server = self._serve_on_navigable_port()
+
+    def _serve_on_navigable_port(self):
+        for _ in range(20):
+            server = serve_run_console(self.session, bind_host="127.0.0.1", port=0)
+            if server.port not in _CHROMIUM_RESTRICTED_PORTS:
+                return server
+            server.server_close()
+        raise OSError("could not bind an ephemeral port outside the Chromium restricted list")
 
     @property
     def origin(self) -> str:
@@ -284,6 +303,9 @@ class StateMachineTest(BrowserTestCase):
         # answers the closed session with 401) or open a new one (refused).
         # Either way an explicit error view replaces the snapshot view.
         expect(self.page.locator("#view-ready")).to_be_hidden()
+        self.page.locator("#view-network, #view-closed").first.wait_for(
+            state="visible", timeout=10000
+        )
         explicit = [
             name for name in ("#view-network", "#view-closed")
             if self.page.locator(name).is_visible()
@@ -412,8 +434,8 @@ class AccessibilityTest(BrowserTestCase):
         self.open()
         # The app moves initial focus to the main status region; Tab from
         # there enters the fact grid, Shift+Tab walks back through the
-        # refresh action, the reload control, and the language toggle to
-        # the skip link: the full DOM tab order.
+        # refresh action, the reload control, the language toggle, and
+        # the build-state chip to the skip link: the full DOM tab order.
         self.page.keyboard.press("Tab")
         self.assertEqual(self.page.evaluate(
             "() => document.activeElement.closest('.fact').querySelector('h3').textContent"),
@@ -428,8 +450,12 @@ class AccessibilityTest(BrowserTestCase):
         self.assertEqual(self.page.evaluate("() => document.activeElement.id"),
                          "lang-toggle-button")
         self.page.keyboard.press("Shift+Tab")
+        self.assertEqual(self.page.evaluate("() => document.activeElement.id"),
+                         "build-state-chip")
+        self.page.keyboard.press("Shift+Tab")
         self.assertTrue(self.page.evaluate(
             "() => document.activeElement.classList.contains('skip-link')"))
+        self.page.keyboard.press("Tab")
         self.page.keyboard.press("Tab")
         self.page.keyboard.press("Tab")
         self.page.keyboard.press("Tab")
@@ -494,7 +520,7 @@ class AccessibilityTest(BrowserTestCase):
             self.console.session, "build_snapshot", side_effect=slow_build
         ):
             self.page.goto(self.console.url(f"#token={self.console.token}"),
-                           wait_until="commit")
+                            wait_until="commit")
             expect(self.page.locator("#view-loading")).to_be_visible()
             animation = self.page.evaluate(
                 "() => getComputedStyle(document.querySelector('.skeleton-block'))"
@@ -581,8 +607,12 @@ class SecurityTest(BrowserTestCase):
         javascript_anchors = self.page.evaluate(
             "() => document.querySelectorAll('a[href^=\"javascript:\"]').length")
         self.assertEqual(javascript_anchors, 0)
-        # Only the static skip link exists; data never becomes links.
-        self.assertEqual(self.page.locator("a").count(), 1)
+        # 1 skip link (#main) + 7 section jump links (#section-...) = 8 safe in-page anchor links
+        self.assertEqual(self.page.locator("a").count(), 8)
+        anchors = self.page.locator("a").all()
+        for a in anchors:
+            href = a.get_attribute("href")
+            self.assertTrue(href and href.startswith("#"), f"Anchor href '{href}' is not an in-page fragment")
 
     def test_token_paths_and_stacks_never_appear_in_the_dom(self) -> None:
         self.open()
@@ -798,5 +828,115 @@ class LanguageToggleTest(BrowserTestCase):
         self.assertEqual(cookies, "")
 
 
+class RCV1R1LegibilityRemediationTest(BrowserTestCase):
+    """Rigorous browser tests for the RCV1-R1 Legibility Remediation features."""
+
+    def test_fact1_deterministic_split_and_verbatim_byte_identity(self) -> None:
+        self.open()
+        snapshot_intent = self.console.snapshot()["intent"]["summary"]["result"]
+        fact1_body = self.fact(1).locator(".fact-intent-body")
+        expect(fact1_body).to_be_visible()
+
+        lead_el = fact1_body.locator(".intent-lead")
+        expect(lead_el).to_be_visible()
+        lead_text = lead_el.inner_text()
+
+        # The concatenated lead + detail text must be byte-identical to snapshot summary
+        detail_count = fact1_body.locator(".intent-detail").count()
+        detail_text = fact1_body.locator(".intent-detail").inner_text() if detail_count > 0 else ""
+        combined_text = lead_text + detail_text
+        self.assertEqual(combined_text, snapshot_intent)
+
+        # No synthesized prefix like '一句话定义：'
+        self.assertNotIn("一句话定义：", combined_text)
+        self.assertNotIn("一句话定义", combined_text)
+
+        # Hostile script payload is rendered as verbatim plain text
+        self.assertIn("<script>alert(1)</script>", lead_text)
+
+    def test_status_chip_semantics_and_popover_interaction(self) -> None:
+        self.open()
+        chip = self.page.locator("#build-state-chip")
+        expect(chip).to_be_visible()
+
+        # Button semantics: must NOT have role="status" (preserves native button a11y tree role)
+        self.assertIsNone(chip.get_attribute("role"))
+        self.assertEqual(chip.evaluate("el => el.tagName.toLowerCase()"), "button")
+        self.assertEqual(chip.get_attribute("aria-expanded"), "false")
+        self.assertEqual(chip.get_attribute("aria-controls"), "build-state-popover")
+
+        # Independent popover has role="status" and aria-live="polite"
+        popover = self.page.locator("#build-state-popover")
+        self.assertEqual(popover.get_attribute("role"), "status")
+        self.assertEqual(popover.get_attribute("aria-live"), "polite")
+        expect(popover).to_be_hidden()
+
+        # Clicking chip opens popover
+        chip.click()
+        self.assertEqual(chip.get_attribute("aria-expanded"), "true")
+        expect(popover).to_be_visible()
+        expect(self.page.locator("#build-state-banner")).to_contain_text("current")
+
+        # Pressing Escape closes popover and focuses chip
+        self.page.keyboard.press("Escape")
+        self.assertEqual(chip.get_attribute("aria-expanded"), "false")
+        expect(popover).to_be_hidden()
+        self.assertEqual(self.page.evaluate("() => document.activeElement.id"), "build-state-chip")
+
+    def test_fact4_owner_in_primary_weight_as_badge(self) -> None:
+        self.open()
+        fact4 = self.fact(4)
+        owner_badge = fact4.locator(".fact-owner-badge")
+        expect(owner_badge).to_be_visible()
+        self.assertEqual(owner_badge.inner_text(), "run-operator")
+
+        action_label = fact4.locator(".fact-action-label")
+        expect(action_label).to_be_visible()
+        self.assertIn("Run complete (Pass)", action_label.inner_text())
+
+    def test_section_jump_links_and_anchors(self) -> None:
+        self.open()
+        nav = self.page.locator("#section-jump-nav")
+        expect(nav).to_be_visible()
+
+        expected_sections = [
+            "#section-identity",
+            "#section-intent",
+            "#section-execution",
+            "#section-evaluation",
+            "#section-next-actions",
+            "#section-limitations",
+            "#section-sources",
+        ]
+        links = nav.locator("a.jump-link").all()
+        self.assertEqual(len(links), 7)
+        for link, expected_href in zip(links, expected_sections):
+            self.assertEqual(link.get_attribute("href"), expected_href)
+            # Verify target section exists in DOM
+            target = self.page.locator(expected_href)
+            expect(target).to_be_attached()
+
+    def test_bilingual_coverage_for_r1_features(self) -> None:
+        self.open()
+        # English state
+        expect(self.page.locator("#jump-nav-label")).to_have_text("Jump to:")
+        expect(self.page.locator("#jump-identity")).to_have_text("Identity")
+        expect(self.page.locator("#jump-sources")).to_have_text("Sources")
+        expect(self.page.locator("#build-state-chip-label")).to_have_text("Snapshot current")
+
+        # Switch to Chinese
+        self.page.locator("#lang-toggle-button").click()
+        expect(self.page.locator("#jump-nav-label")).to_have_text("快速跳转:")
+        expect(self.page.locator("#jump-identity")).to_have_text("身份标识")
+        expect(self.page.locator("#jump-sources")).to_have_text("源数据")
+        expect(self.page.locator("#build-state-chip-label")).to_have_text("快照为最新状态")
+
+        # Switch back to English
+        self.page.locator("#lang-toggle-button").click()
+        expect(self.page.locator("#jump-nav-label")).to_have_text("Jump to:")
+        expect(self.page.locator("#build-state-chip-label")).to_have_text("Snapshot current")
+
+
 if __name__ == "__main__":
     unittest.main()
+

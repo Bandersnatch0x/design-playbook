@@ -42,12 +42,27 @@
       loading_sr: "The run snapshot is loading from the local console server.",
 
       facts_heading: "At a glance",
-      facts_hint: "The four facts needed to understand this run, in snapshot order: intent, verdict, blocker, and next owner.",
+      facts_hint: "The four facts of this run, in snapshot order: intent, verdict, blocker, next owner.",
       facts_aria: "Run comprehension facts: intent, verdict, blocker, next action",
       fact_intent: "Intent",
       fact_verdict: "Verdict",
       fact_blocker: "Blocker",
       fact_next_action: "Next action",
+
+      chip_current: "Snapshot current",
+      chip_degraded: "Degraded build",
+      chip_tooltip: "View build state details",
+      popover_title_current: "Build state: current",
+      popover_title_degraded: "Build state: degraded",
+
+      jump_label: "Jump to:",
+      jump_identity: "Identity",
+      jump_intent: "Intent",
+      jump_execution: "Execution",
+      jump_evaluation: "Evaluation",
+      jump_next_actions: "Next actions",
+      jump_limitations: "Limitations",
+      jump_sources: "Sources",
 
       verdict_pass: "Pass",
       verdict_recirculate: "Recirculate",
@@ -254,12 +269,27 @@
       loading_sr: "正在从本地控制台服务加载运行快照。",
 
       facts_heading: "运行概览",
-      facts_hint: "理解本次运行所需的四个核心事实（按快照顺序）：意图、结论、阻塞项和下一动作。",
+      facts_hint: "理解本次运行所需的四个核心事实（按快照顺序）：意图、结论、阻塞项、下一动作。",
       facts_aria: "运行理解核心事实：意图、结论、阻塞项、下一动作",
       fact_intent: "意图",
       fact_verdict: "结论",
       fact_blocker: "阻塞项",
       fact_next_action: "下一动作",
+
+      chip_current: "快照为最新状态",
+      chip_degraded: "降级构建",
+      chip_tooltip: "查看构建状态详情",
+      popover_title_current: "构建状态: 最新 (current)",
+      popover_title_degraded: "构建状态: 降级 (degraded)",
+
+      jump_label: "快速跳转:",
+      jump_identity: "身份标识",
+      jump_intent: "意图",
+      jump_execution: "执行",
+      jump_evaluation: "评估",
+      jump_next_actions: "后续动作",
+      jump_limitations: "局限性",
+      jump_sources: "源数据",
 
       verdict_pass: "Pass",
       verdict_recirculate: "Recirculate",
@@ -556,6 +586,16 @@
       var label = document.getElementById("lang-toggle-label");
       if (label) label.textContent = d.toggle_target_label;
     }
+
+    var chipBtn = document.getElementById("build-state-chip");
+    if (chipBtn) chipBtn.setAttribute("title", d.chip_tooltip);
+    var jumpNavLabel = document.getElementById("jump-nav-label");
+    if (jumpNavLabel) jumpNavLabel.textContent = d.jump_label;
+    ["identity", "intent", "execution", "evaluation", "next_actions", "limitations", "sources"].forEach(function (k) {
+      var node = document.getElementById("jump-" + k.replace(/_/g, "-"));
+      if (node) node.textContent = d["jump_" + k];
+    });
+
     var loadHead = document.getElementById("loading-heading");
     if (loadHead) loadHead.textContent = d.loading_heading;
     var loadSr = document.getElementById("loading-sr");
@@ -873,12 +913,32 @@
     return node;
   }
 
+  function splitIntentSummary(text) {
+    var str = String(text);
+    var match = /^([^。？！；.?!;\n]+[。？！；.?!;])([\s\S]*)$/.exec(str);
+    var container = el("div", { class: "fact-value fact-intent-body" });
+    if (match && match[2] && match[2].trim().length > 0) {
+      var lead = el("span", { class: "intent-lead", text: match[1] });
+      var detail = el("span", { class: "intent-detail", text: match[2] });
+      container.appendChild(lead);
+      container.appendChild(detail);
+    } else {
+      var leadOnly = el("span", { class: "intent-lead", text: str });
+      container.appendChild(leadOnly);
+    }
+    if (str.length > CLAMP_LIMIT) {
+      container.classList.add("is-clamped");
+      container.setAttribute("title", str);
+    }
+    return container;
+  }
+
   function renderFacts(snapshot) {
     var grid = document.getElementById("fact-grid");
     clear(grid);
 
-    /* 1 — Intent. */
-    var intentNodes = assertionNodes(snapshot.intent.summary, clampNode);
+    /* 1 — Intent with deterministic split lead / detail. */
+    var intentNodes = assertionNodes(snapshot.intent.summary, splitIntentSummary);
     grid.appendChild(factCard(1, t("fact_intent"), intentNodes));
 
     /* 2 — Verdict. */
@@ -927,11 +987,20 @@
     }
     grid.appendChild(factCard(3, t("fact_blocker"), blockerNodes));
 
-    /* 4 — Next owner / action. */
-    var actionNodes = assertionNodes(snapshot.nextActions.primary, function (result) {
-      return clampNode(result.label);
-    });
+    /* 4 — Next owner / action. Owner in primary weight in fact-value, action next to it. */
     var primary = snapshot.nextActions.primary;
+    var actionNodes = assertionNodes(primary, function (result) {
+      var owner = result.owner || {};
+      var ownerActor = String(owner.actor || t("unspecified"));
+      var ownerBadge = el("span", { class: "fact-owner-badge", text: ownerActor });
+      var labelSpan = el("span", { class: "fact-action-label", text: String(result.label) });
+      var container = el("div", { class: "fact-value fact-action-value" }, ownerBadge, labelSpan);
+      if (result.label && String(result.label).length > CLAMP_LIMIT) {
+        container.classList.add("is-clamped");
+        container.setAttribute("title", String(result.label));
+      }
+      return container;
+    });
     if (primary && primary.availability === "known" && primary.result) {
       var owner = primary.result.owner || {};
       var ownerActor = String(owner.actor || t("unspecified"));
@@ -1008,20 +1077,27 @@
   }
 
   function renderBuildState(snapshot) {
-    var banner = document.getElementById("build-state-banner");
-    clear(banner);
     var meta = snapshot.identity.snapshot || {};
     var state = String(meta.buildState || "unknown");
-    var text = state === "degraded"
-      ? t("build_state_degraded")
-      : t("build_state_current");
-    banner.appendChild(el(
-      "p",
-      { class: "banner " + (state === "degraded" ? "banner-degraded" : "banner-current"),
-        role: "status" },
-      el("span", { class: "banner-strong", text: t("build_state_banner", { state: state }) }),
-      " " + text
-    ));
+    var isDegraded = state === "degraded";
+
+    var chip = document.getElementById("build-state-chip");
+    if (chip) {
+      chip.className = "build-state-chip " + (isDegraded ? "chip-degraded" : "chip-current");
+      var chipLabel = document.getElementById("build-state-chip-label");
+      if (chipLabel) {
+        chipLabel.textContent = isDegraded ? t("chip_degraded") : t("chip_current");
+      }
+    }
+
+    var banner = document.getElementById("build-state-banner");
+    if (banner) {
+      clear(banner);
+      var titleText = t("build_state_banner", { state: state });
+      var descText = isDegraded ? t("build_state_degraded") : t("build_state_current");
+      banner.appendChild(el("p", { class: "popover-title", text: titleText }));
+      banner.appendChild(el("p", { class: "popover-desc", text: descText }));
+    }
   }
 
   function renderIdentity(details, snapshot) {
@@ -1574,6 +1650,31 @@
     var langBtn = document.getElementById("lang-toggle-button");
     if (langBtn) {
       langBtn.addEventListener("click", toggleLanguage);
+    }
+
+    var chipBtn = document.getElementById("build-state-chip");
+    var popover = document.getElementById("build-state-popover");
+    if (chipBtn && popover) {
+      chipBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var isExpanded = chipBtn.getAttribute("aria-expanded") === "true";
+        chipBtn.setAttribute("aria-expanded", !isExpanded ? "true" : "false");
+        popover.hidden = isExpanded;
+      });
+      document.addEventListener("click", function (e) {
+        var wrapper = document.getElementById("build-state-wrapper");
+        if (wrapper && !wrapper.contains(e.target) && !popover.hidden) {
+          chipBtn.setAttribute("aria-expanded", "false");
+          popover.hidden = true;
+        }
+      });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && !popover.hidden) {
+          chipBtn.setAttribute("aria-expanded", "false");
+          popover.hidden = true;
+          chipBtn.focus();
+        }
+      });
     }
 
     Array.prototype.forEach.call(
