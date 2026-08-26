@@ -11,6 +11,7 @@ is reimplemented. Every operation is read-only for the run tree.
 from __future__ import annotations
 
 import secrets
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -105,6 +106,10 @@ class RunConsoleSession:
         self._now_fn = now_fn if now_fn is not None else _utc_now
         self._token: str | None = secrets.token_urlsafe(token_entropy_bytes)
         self._session_secret: bytes | None = secrets.token_bytes(32)
+        # The HTTP server handles requests on independent worker threads.  A
+        # snapshot and the registry that issued its locators are one logical
+        # value, so lifecycle transitions must be serialized at this seam.
+        self._state_lock = threading.RLock()
         self._closed = False
         self._built = False
         self._document: dict | None = None
@@ -120,24 +125,29 @@ class RunConsoleSession:
     @property
     def token(self) -> str | None:
         """The session bearer token, or ``None`` once closed."""
-        return self._token
+        with self._state_lock:
+            return self._token
 
     @property
     def closed(self) -> bool:
-        return self._closed
+        with self._state_lock:
+            return self._closed
 
     @property
     def built(self) -> bool:
-        return self._built
+        with self._state_lock:
+            return self._built
 
     @property
     def run_id(self) -> str | None:
-        return self._registry.run_id if self._registry is not None else None
+        with self._state_lock:
+            return self._registry.run_id if self._registry is not None else None
 
     @property
     def registry(self):
         """The registry that issued the served snapshot's locators."""
-        return self._registry
+        with self._state_lock:
+            return self._registry
 
     # -- lifecycle -----------------------------------------------------
 
@@ -148,24 +158,27 @@ class RunConsoleSession:
         :class:`SnapshotBuildError` and never installs a document, so no
         older snapshot can be served as current.
         """
-        if self._closed:
-            raise RunConsoleSessionError(SESSION_CLOSED)
-        if self._built:
-            document = self._document
-            if document is None:  # pragma: no cover - invariant
+        with self._state_lock:
+            if self._closed:
                 raise RunConsoleSessionError(SESSION_CLOSED)
-            return document
-        assert self._session_secret is not None
-        built = _build_snapshot(
-            selected_root=self._run_root,
-            package_root=self._package_root,
-            session_secret=self._session_secret,
-            now=self._now_fn(),
-        )
-        self._registry = built.registry
-        self._document = built.document
-        self._built = True
-        return built.document
+            if self._built:
+                document = self._document
+                if document is None:  # pragma: no cover - invariant
+                    raise RunConsoleSessionError(SESSION_CLOSED)
+                return document
+            assert self._session_secret is not None
+            built = _build_snapshot(
+                selected_root=self._run_root,
+                package_root=self._package_root,
+                session_secret=self._session_secret,
+                now=self._now_fn(),
+            )
+            # Publish the document and the registry while holding the same
+            # lock.  Readers can therefore never observe a mixed pair.
+            self._registry = built.registry
+            self._document = built.document
+            self._built = True
+            return built.document
 
     def invalidate_snapshot_cache(self) -> None:
         """Drop the cached snapshot so the next build is a full rebuild.
@@ -175,7 +188,22 @@ class RunConsoleSession:
         document is installed, so the prior snapshot is never served as
         current afterwards (the typed refresh action, RCV1-009).
         """
-        self._built = False
+        with self._state_lock:
+            self._built = False
+            self._document = None
+            self._registry = None
+
+    def rebuild_snapshot(self) -> dict:
+        """Invalidate and rebuild as one serialized lifecycle transition."""
+        with self._state_lock:
+            if self._closed:
+                raise RunConsoleSessionError(SESSION_CLOSED)
+            self._built = False
+            self._document = None
+            self._registry = None
+            # Keep this call indirect so callers/tests that replace the
+            # public build seam still observe the rebuild attempt.
+            return self.build_snapshot()
 
     def resolve_source(
         self, locator: object, *, max_chars: int = DEFAULT_EXCERPT_MAX_CHARS
@@ -186,29 +214,34 @@ class RunConsoleSession:
         uniform typed rejection; a changed source is the typed hash
         mismatch. No path or locator detail crosses the seam.
         """
-        if self._closed:
-            raise RunConsoleSessionError(SESSION_CLOSED)
-        registry = self._registry
-        if not self._built or registry is None:
-            # No snapshot has been built, so no locator can be valid.
-            raise SourceViewError(SOURCE_LOCATOR_INVALID)
-        now = self._now_fn()
-        binding = registry.lookup_locator(locator, now)
-        excerpt = resolve_source_excerpt(
-            registry=registry,
-            package_root=self._package_root,
-            locator=locator,
-            now=now,
-            max_chars=max_chars,
-        )
-        return SourceView(excerpt=excerpt, anchor=binding.anchor if binding else None)
+        with self._state_lock:
+            if self._closed:
+                raise RunConsoleSessionError(SESSION_CLOSED)
+            registry = self._registry
+            if not self._built or registry is None:
+                # No snapshot has been built, so no locator can be valid.
+                raise SourceViewError(SOURCE_LOCATOR_INVALID)
+            now = self._now_fn()
+            binding = registry.lookup_locator(locator, now)
+            excerpt = resolve_source_excerpt(
+                registry=registry,
+                package_root=self._package_root,
+                locator=locator,
+                now=now,
+                max_chars=max_chars,
+            )
+            return SourceView(
+                excerpt=excerpt, anchor=binding.anchor if binding else None
+            )
 
     def close(self) -> None:
         """Invalidate the token and every locator; drop the document."""
-        if self._closed:
-            return
-        self._closed = True
-        self._token = None
-        self._session_secret = None
-        self._registry = None
-        self._document = None
+        with self._state_lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._token = None
+            self._session_secret = None
+            self._registry = None
+            self._document = None
+            self._built = False

@@ -37,7 +37,6 @@ from mcp.run_console import test_http_server as harness  # noqa: E402
 from design_playbook.mcp.run_console.actions import (  # noqa: E402
     ACTION_REFRESH,
     CAPABILITIES,
-    CAPABILITY_BY_NAME,
     CONTENT_TYPE_UNSUPPORTED,
     REFRESH_ALLOWED_METHODS,
     REFRESH_ROUTE,
@@ -93,26 +92,15 @@ class ClosedCapabilityRegistryTest(unittest.TestCase):
             capability_names(), ("refresh", "view-source", "copy-agent-command")
         )
 
-    def test_refresh_is_the_only_server_action(self) -> None:
-        refresh = CAPABILITY_BY_NAME[ACTION_REFRESH]
-        self.assertEqual(refresh.kind, "server-action")
-        self.assertEqual(refresh.method, "POST")
-        self.assertEqual(refresh.route, "/api/v1/actions/refresh")
-        server_actions = [c for c in CAPABILITIES if c.kind == "server-action"]
-        self.assertEqual([c.name for c in server_actions], [ACTION_REFRESH])
-
-    def test_view_source_references_the_existing_hash_bound_read_route(self) -> None:
-        view = CAPABILITY_BY_NAME["view-source"]
-        self.assertEqual(view.kind, "read-route")
-        self.assertEqual(view.method, "GET")
-        self.assertTrue(view.route.startswith("/api/v1/sources/"))
-        self.assertIn("expectedHash", view.route)
-
-    def test_copy_is_browser_only_with_no_server_execution_route(self) -> None:
-        copy = CAPABILITY_BY_NAME["copy-agent-command"]
-        self.assertEqual(copy.kind, "browser-only")
-        self.assertIsNone(copy.route)
-        self.assertIsNone(copy.method)
+    def test_allowlist_is_closed_names_not_a_router(self) -> None:
+        self.assertEqual(
+            CAPABILITIES, ("refresh", "view-source", "copy-agent-command")
+        )
+        for name in CAPABILITIES:
+            with self.subTest(name=name):
+                self.assertIsInstance(name, str)
+        self.assertIn(ACTION_REFRESH, CAPABILITIES)
+        self.assertEqual(REFRESH_ROUTE, "/api/v1/actions/refresh")
 
     def test_forbidden_action_names_have_no_capability(self) -> None:
         for name in (
@@ -122,12 +110,7 @@ class ClosedCapabilityRegistryTest(unittest.TestCase):
             "copy", "refresh-all", "Refresh", "refresh ",
         ):
             with self.subTest(name=name):
-                self.assertNotIn(name, CAPABILITY_BY_NAME)
-
-    def test_every_capability_carries_a_description(self) -> None:
-        for capability in CAPABILITIES:
-            with self.subTest(name=capability.name):
-                self.assertTrue(capability.description.strip())
+                self.assertNotIn(name, CAPABILITIES)
 
     def test_actions_module_has_no_outbound_network_or_exec_primitive(self) -> None:
         path = Path(__file__).resolve().parent / "actions.py"

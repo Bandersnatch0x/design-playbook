@@ -18,7 +18,8 @@ If both exist, the outcome is ``requires-new-ticket`` and the
 coordinator must split a separately scoped implementation ticket
 (S36/S37). Otherwise the Diagnostic-export preview and write stay
 disabled (S35): no schema is invented, no ad-hoc export payload is
-authorized, no route is added, and no directory or partial file
+authorized, the two specified routes answer with the typed
+``ACTION_UNAVAILABLE`` gate, and no directory or partial file
 appears. This module is a test file only — the disabled outcome owns
 no runtime file.
 
@@ -46,8 +47,9 @@ never hard-coded to "disabled"):
    ``diagnostic-export`` as an unmapped gate (no source record, no
    issuable locator); the closed typed-action allowlist
    (``actions.py``) exposes exactly refresh, view-source, and
-   copy-agent-command; no HTTP route answers any export-shaped
-   request; and the built snapshot carries the
+   copy-agent-command; the two specified S35 routes answer with the
+   typed ``ACTION_UNAVAILABLE`` gate while every other export-shaped
+   spelling stays routeless; and the built snapshot carries the
    ``diagnostic-export-contract-unavailable`` limitation instead of
    any export fact.
 
@@ -81,13 +83,13 @@ from mcp.run_console import test_http_server as harness  # noqa: E402
 
 from design_playbook.mcp.run_console.actions import (  # noqa: E402
     CAPABILITIES,
-    CAPABILITY_BY_NAME,
-    KIND_SERVER_ACTION,
     capability_names,
 )
 from design_playbook.mcp.run_console.contract import validate_snapshot  # noqa: E402
 from design_playbook.mcp.run_console.request_security import (  # noqa: E402
+    ACTION_UNAVAILABLE,
     ERROR_MESSAGES,
+    METHOD_NOT_ALLOWED,
     ROUTE_NOT_FOUND,
 )
 from design_playbook.mcp.run_console.session import RunConsoleSession  # noqa: E402
@@ -1016,13 +1018,18 @@ _EXPORT_PAYLOAD = {
 }
 _EXPORT_BODY = json.dumps(_EXPORT_PAYLOAD).encode("utf-8")
 
-# Every export-shaped route spelling, including generic export and
-# trial-export routes that must not exist either.
-_EXPORT_ROUTES = (
-    "/api/v1/actions/diagnostic-export",
-    "/api/v1/actions/diagnostic-export/",
+# The two S35 route spellings: known, gated paths answered with the
+# typed ACTION_UNAVAILABLE refusal.
+_SPEC_EXPORT_ROUTES = (
     "/api/v1/actions/diagnostic-export/preview",
     "/api/v1/actions/diagnostic-export/write",
+)
+
+# Every other export-shaped route spelling, including generic export
+# and trial-export routes that must not exist at all.
+_FAKE_EXPORT_ROUTES = (
+    "/api/v1/actions/diagnostic-export",
+    "/api/v1/actions/diagnostic-export/",
     "/api/v1/actions/export",
     "/api/v1/actions/export-diagnostics",
     "/api/v1/actions/trial-export",
@@ -1031,6 +1038,17 @@ _EXPORT_ROUTES = (
     "/api/v1/exports",
     "/api/v1/trial-export",
 )
+
+_EXPORT_ROUTES = _SPEC_EXPORT_ROUTES + _FAKE_EXPORT_ROUTES
+
+
+def _expected_gate(path: str) -> tuple[int, str]:
+    """S35 per-path contract: the two specified routes are known but
+    disabled; every other export-shaped spelling stays routeless."""
+    if path in _SPEC_EXPORT_ROUTES:
+        return 409, ACTION_UNAVAILABLE
+    return 404, ROUTE_NOT_FOUND
+
 
 # Outbound client machinery no run_console runtime module may contain:
 # with none of these primitives present, no request — routeless or not
@@ -1051,7 +1069,7 @@ _OUTBOUND_MARKERS = (
 
 
 class DisabledActionSurfaceTest(harness._ServerTestCase):
-    """S35: the capability is absent — no entry, no route, no owner call."""
+    """S35: the capability is gated — no entry, no owner call, typed refusal."""
 
     def _export(self, path, *, method="POST", body=_EXPORT_BODY):
         """One export request with valid credentials and closed body."""
@@ -1066,59 +1084,59 @@ class DisabledActionSurfaceTest(harness._ServerTestCase):
         )
         for name in ("diagnostic-export", "export", "trial-export", "exports"):
             with self.subTest(name=name):
-                self.assertNotIn(name, CAPABILITY_BY_NAME)
-        for capability in CAPABILITIES:
-            with self.subTest(capability=capability.name):
-                self.assertNotIn("export", capability.name.lower())
-                self.assertNotIn("export", (capability.route or "").lower())
-        # refresh stays the only server action: nothing but a full
-        # snapshot rebuild can ever be dispatched, so no preview, write,
-        # or upload owner call of any kind exists to make.
-        server_actions = [c for c in CAPABILITIES if c.kind == KIND_SERVER_ACTION]
-        self.assertEqual([c.name for c in server_actions], ["refresh"])
-        # The closed runtime error vocabulary has no ACTION_UNAVAILABLE
-        # code: the capability is absent (routeless), not merely refused.
-        self.assertNotIn("ACTION_UNAVAILABLE", ERROR_MESSAGES)
+                self.assertNotIn(name, CAPABILITIES)
+        for name in CAPABILITIES:
+            with self.subTest(capability=name):
+                self.assertNotIn("export", name.lower())
+        self.assertEqual(CAPABILITIES[0], "refresh")
+        # The closed runtime error vocabulary carries the fixed
+        # ACTION_UNAVAILABLE code so the gated routes can distinguish a
+        # known, disabled capability from a typo — while the allowlist
+        # above stays the only dispatchable surface (S35).
+        self.assertIn("ACTION_UNAVAILABLE", ERROR_MESSAGES)
 
-    def test_the_server_module_declares_no_export_route(self) -> None:
-        # Any future mention — even a comment — must force this gate
-        # test to be re-derived consciously, mirroring the boundary
-        # scans in test_actions.py.
+    def test_the_server_module_declares_exactly_the_two_gated_routes(self) -> None:
+        # The two S35 route spellings are the only export-shaped route
+        # literals the server may declare: any new spelling — even in a
+        # comment — must force this gate test to be re-derived
+        # consciously, mirroring the boundary scans in test_actions.py.
         source = (Path(__file__).resolve().parent / "http_server.py").read_text(
             encoding="utf-8"
         )
-        self.assertNotIn("export", source.lower())
+        route_literals = set(re.findall(r'"(/api/v1/[^"]*export[^"]*)"', source))
+        self.assertEqual(route_literals, set(_SPEC_EXPORT_ROUTES))
 
-    def test_export_preview_and_write_posts_are_routeless(self) -> None:
-        # A perfectly formed section 12.5 export request finds no route
-        # at any export-shaped path: the capability is absent, not
-        # merely refused.
+    def test_export_posts_are_typed_refusals(self) -> None:
+        # A perfectly formed section 12.5 export request is refused
+        # with the typed gate: the two specified routes are known but
+        # disabled (S35), and every other export-shaped spelling stays
+        # routeless.
         for path in _EXPORT_ROUTES:
             with self.subTest(path=path):
                 status, _, payload = self._export(path)
-                self.assertEqual(status, 404)
-                harness._assert_error(payload, ROUTE_NOT_FOUND)
+                expected_status, expected_code = _expected_gate(path)
+                self.assertEqual(status, expected_status)
+                harness._assert_error(payload, expected_code)
 
-    def test_the_export_routes_support_no_http_method(self) -> None:
-        # Unlike /api/v1/actions/refresh (405 for non-POST), the routes
-        # do not exist at all: every method is a routeless 404.
-        for route in (
-            "/api/v1/actions/diagnostic-export/preview",
-            "/api/v1/actions/diagnostic-export/write",
-        ):
+    def test_the_gated_export_routes_support_no_method_but_post(self) -> None:
+        # Like /api/v1/actions/refresh, the two gated routes answer
+        # non-POST methods with 405: they are known paths whose only
+        # specified method is the gated POST (S35).
+        for route in _SPEC_EXPORT_ROUTES:
             for method in ("GET", "HEAD", "PUT", "DELETE", "PATCH", "OPTIONS"):
                 with self.subTest(route=route, method=method):
-                    status, _, payload = self._export(route, method=method)
-                    self.assertEqual(status, 404)
+                    status, fields, payload = self._export(route, method=method)
+                    self.assertEqual(status, 405)
+                    self.assertEqual(fields.get("allow"), "POST")
                     if method != "HEAD":
-                        harness._assert_error(payload, ROUTE_NOT_FOUND)
+                        harness._assert_error(payload, METHOD_NOT_ALLOWED)
 
     def test_export_attempts_reach_no_owner_and_write_no_file(self) -> None:
         before_tree = harness._tree_digest(self.run_root)
         _, _, served_before = self._api("GET", "/api/v1/snapshot")
         for path in _EXPORT_ROUTES:
             status, _, _ = self._export(path)
-            self.assertEqual(status, 404)
+            self.assertEqual(status, _expected_gate(path)[0])
         # Zero owner calls: nothing was previewed, written, uploaded, or
         # rebuilt — the served snapshot is byte-identical, the run tree
         # still has exactly its fixture bytes, and no export directory
@@ -1147,13 +1165,10 @@ class DisabledActionSurfaceTest(harness._ServerTestCase):
             }
         ).encode("utf-8")
         before_tree = harness._tree_digest(self.run_root)
-        for path in (
-            "/api/v1/actions/diagnostic-export/preview",
-            "/api/v1/actions/diagnostic-export/write",
-        ):
+        for path in _SPEC_EXPORT_ROUTES:
             status, _, payload = self._export(path, body=body)
-            self.assertEqual(status, 404)
-            harness._assert_error(payload, ROUTE_NOT_FOUND)
+            self.assertEqual(status, 409)
+            harness._assert_error(payload, ACTION_UNAVAILABLE)
             # No path, token, or source content ever reaches a
             # response — and no export-shaped artifact exists to leak
             # into, because none is ever created.
@@ -1176,8 +1191,7 @@ class DisabledActionSurfaceTest(harness._ServerTestCase):
         before_tree = harness._tree_digest(self.run_root)
         for path in _EXPORT_ROUTES:
             status, _, payload = self._export(path, body=body)
-            self.assertEqual(status, 404)
-            harness._assert_error(payload, ROUTE_NOT_FOUND)
+            self.assertEqual(status, _expected_gate(path)[0])
             self.assertNotIn(b"example.invalid", payload)
         # No outbound call of any kind: no run_console runtime module
         # contains an upload or client primitive at all (S40), so a
@@ -1216,7 +1230,7 @@ class DisabledActionSurfaceTest(harness._ServerTestCase):
         ).encode("utf-8")
         for path in _EXPORT_ROUTES:
             status, _, payload = self._export(path, body=body)
-            self.assertEqual(status, 404)
+            self.assertEqual(status, _expected_gate(path)[0])
             self.assertNotIn(b"evidence/diagnostic-export.json", payload)
         # ADR-0036 rule 9: an export never enters evidence/, a Manifest,
         # or an Evaluator decision — the gate keeps it disabled
@@ -1246,7 +1260,7 @@ class DisabledActionSurfaceTest(harness._ServerTestCase):
             self.skipTest("symlink creation unavailable on this host")
         for path in _EXPORT_ROUTES:
             status, _, _ = self._export(path)
-            self.assertEqual(status, 404)
+            self.assertEqual(status, _expected_gate(path)[0])
         # Nothing is ever written through the link: the victim
         # directory keeps exactly its canary bytes, the trial-export
         # entry is still only the symlink, and no export-shaped file

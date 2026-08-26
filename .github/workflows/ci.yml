@@ -95,6 +95,21 @@ jobs:
             packages/design-playbook/mcp/evidence/test_capture_contract.py \
             packages/design-playbook/mcp/evidence/test_disclosure.py \
             packages/design-playbook/mcp/evidence/test_delivery_matrix.py \
+            packages/design-playbook/mcp/evidence/test_containment.py \
+            packages/design-playbook/mcp/evidence/test_handoff.py \
+            -v
+
+      - name: Run Console — pure-Python tests (required, no Playwright)
+        # Contract, registry, builder, parity, session, security, and
+        # action-allowlist tests. Browser files are excluded here and
+        # collected in the chromium gate below so a missing Playwright
+        # install cannot skip this group (same split as Evidence
+        # PurePathTests / CaptureTests).
+        run: |
+          python3 -m pytest packages/design-playbook/mcp/run_console \
+            --ignore=packages/design-playbook/mcp/run_console/test_ui_browser.py \
+            --ignore=packages/design-playbook/mcp/run_console/test_ui_actions.py \
+            --ignore=packages/design-playbook/mcp/run_console/test_read_only_trial.py \
             -v
 
       - name: Evidence MCP stdio — pure-path tests (required, no Playwright)
@@ -175,6 +190,15 @@ jobs:
         run: |
           python3 -m pytest \
             packages/design-playbook/tests/test_queue_monitor.py \
+            -v
+
+      - name: Run Console — browser tests (require chromium)
+        if: steps.pw_install.outcome == 'success'
+        run: |
+          python3 -m pytest \
+            packages/design-playbook/mcp/run_console/test_ui_browser.py \
+            packages/design-playbook/mcp/run_console/test_ui_actions.py \
+            packages/design-playbook/mcp/run_console/test_read_only_trial.py \
             -v
 
       - name: Preview canvas version-control e2e (require chromium)
