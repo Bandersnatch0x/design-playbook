@@ -22,6 +22,7 @@ ORIGIN_INVALID = "ORIGIN_INVALID"
 METHOD_NOT_ALLOWED = "METHOD_NOT_ALLOWED"
 REQUEST_TOO_LARGE = "REQUEST_TOO_LARGE"
 ACTION_PAYLOAD_INVALID = "ACTION_PAYLOAD_INVALID"
+ACTION_UNAVAILABLE = "ACTION_UNAVAILABLE"
 ROUTE_NOT_FOUND = "ROUTE_NOT_FOUND"
 SNAPSHOT_BUILD_FAILED = "SNAPSHOT_BUILD_FAILED"
 
@@ -31,6 +32,7 @@ ERROR_MESSAGES: dict[str, str] = {
     METHOD_NOT_ALLOWED: "The request method is not allowed for this resource.",
     REQUEST_TOO_LARGE: "The request body is too large.",
     ACTION_PAYLOAD_INVALID: "The request parameters are invalid.",
+    ACTION_UNAVAILABLE: "The requested action is not currently available.",
     ROUTE_NOT_FOUND: "The requested resource does not exist.",
     SNAPSHOT_BUILD_FAILED: "The run snapshot could not be built.",
 }

@@ -1,15 +1,15 @@
 """Closed typed-action allowlist for the run console (RCV1-009).
 
 This module is the single source of truth for which typed capabilities
-the run console exposes. The allowlist is closed: adding a capability
-means editing this module and its tests together. There is no generic
-dispatch — the HTTP layer wires exactly one server action route
+the run console exposes. The allowlist is closed names: adding a
+capability means editing this tuple and its tests together. Dispatch
+stays in the HTTP layer — there is one server action route
 (``POST /api/v1/actions/refresh``), the hash-bound source view is the
-existing read route, and the copy capability is browser-only clipboard
-work with no server execution route at all. Role attestation and
-diagnostic export stay explicitly disabled, and every forbidden action
-name (repair, rerun, provider, file edit, upload, ...) has no entry
-here and no route anywhere.
+existing read route, and copy is browser-only clipboard work with no
+server execution route. Role attestation and diagnostic export stay
+explicitly disabled, and every forbidden action name (repair, rerun,
+provider, file edit, upload, ...) has no entry here and no route
+anywhere.
 
 Nothing in this module opens a socket, spawns a process, or writes to
 the run tree: the only effect of the refresh action is one full
@@ -18,8 +18,6 @@ snapshot rebuild through the RCV1-005 seams.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
-from typing import Mapping
 
 from .request_security import ACTION_PAYLOAD_INVALID
 from .session import (
@@ -41,67 +39,19 @@ REFRESH_ROUTE = "/api/v1/actions/refresh"
 REFRESH_ALLOWED_METHODS = "POST"
 REFRESH_SCHEMA_VERSION = 1
 
-# Capability kinds: a server action is dispatched by the HTTP layer; a
-# read route already exists in http_server; a browser-only capability
-# has no server execution route at all.
-KIND_SERVER_ACTION = "server-action"
-KIND_READ_ROUTE = "read-route"
-KIND_BROWSER_ONLY = "browser-only"
-
-
-@dataclass(frozen=True)
-class Capability:
-    """One entry of the closed allowlist."""
-
-    name: str
-    kind: str
-    method: str | None
-    route: str | None
-    description: str
-
-
-CAPABILITIES: tuple[Capability, ...] = (
-    Capability(
-        name=ACTION_REFRESH,
-        kind=KIND_SERVER_ACTION,
-        method="POST",
-        route=REFRESH_ROUTE,
-        description=(
-            "One full snapshot rebuild, requested with the closed payload "
-            '{"schemaVersion": 1, "action": "refresh"}.'
-        ),
-    ),
-    Capability(
-        name="view-source",
-        kind=KIND_READ_ROUTE,
-        method="GET",
-        route="/api/v1/sources/<locator>?expectedHash=<sha256>",
-        description=(
-            "The existing hash-bound source view: an opaque locator plus "
-            "the hash bound at build time, answered with a text excerpt."
-        ),
-    ),
-    Capability(
-        name="copy-agent-command",
-        kind=KIND_BROWSER_ONLY,
-        method=None,
-        route=None,
-        description=(
-            "Browser-only clipboard copy of the exact owner-provided "
-            "copyableAgentCommand of a known next action; the command is "
-            "never run, never sent anywhere, and never synthesized."
-        ),
-    ),
+# Closed names only. Route and method live with the HTTP layer that
+# actually dispatches them (ADR-0038 §5 allowlist as contract object,
+# not as a second router).
+CAPABILITIES: tuple[str, ...] = (
+    ACTION_REFRESH,
+    "view-source",
+    "copy-agent-command",
 )
-
-CAPABILITY_BY_NAME: Mapping[str, Capability] = {
-    capability.name: capability for capability in CAPABILITIES
-}
 
 
 def capability_names() -> tuple[str, ...]:
     """The closed allowlist, in registry order."""
-    return tuple(capability.name for capability in CAPABILITIES)
+    return CAPABILITIES
 
 
 class ActionPayloadError(ValueError):
@@ -192,5 +142,8 @@ def perform_refresh(session: RunConsoleSession) -> dict:
     """
     if session.closed:
         raise RunConsoleSessionError(SESSION_CLOSED)
-    _discard_cached_snapshot(session)
-    return session.build_snapshot()
+    # Keep invalidation and publication in one session-level critical
+    # section.  Otherwise a second HTTP worker can rebuild between these two
+    # calls and publish a document whose locators do not match the registry
+    # currently used by source reads.
+    return session.rebuild_snapshot()

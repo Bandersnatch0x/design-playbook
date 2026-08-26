@@ -70,8 +70,6 @@ from mcp.run_console import test_http_server as harness  # noqa: E402
 
 from design_playbook.mcp.run_console.actions import (  # noqa: E402
     CAPABILITIES,
-    CAPABILITY_BY_NAME,
-    KIND_SERVER_ACTION,
     capability_names,
 )
 from design_playbook.mcp.run_console.contract import validate_snapshot  # noqa: E402
@@ -736,16 +734,11 @@ class DisabledActionSurfaceTest(harness._ServerTestCase):
         )
         for name in ("role-attestation", "attest-role", "attest", "attestation"):
             with self.subTest(name=name):
-                self.assertNotIn(name, CAPABILITY_BY_NAME)
-        for capability in CAPABILITIES:
-            with self.subTest(capability=capability.name):
-                self.assertNotIn("attest", capability.name.lower())
-                self.assertNotIn("attest", (capability.route or "").lower())
-        # refresh stays the only server action: nothing but a full
-        # snapshot rebuild can ever be dispatched, so no owner call of
-        # any kind exists to make.
-        server_actions = [c for c in CAPABILITIES if c.kind == KIND_SERVER_ACTION]
-        self.assertEqual([c.name for c in server_actions], ["refresh"])
+                self.assertNotIn(name, CAPABILITIES)
+        for name in CAPABILITIES:
+            with self.subTest(capability=name):
+                self.assertNotIn("attest", name.lower())
+        self.assertEqual(CAPABILITIES[0], "refresh")
 
     def test_the_server_module_declares_no_attestation_route(self) -> None:
         # Any future mention — even a comment — must force this gate

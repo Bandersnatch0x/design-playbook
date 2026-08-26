@@ -15,7 +15,9 @@ import json
 import re
 import sys
 import tempfile
+import threading
 import unittest
+from unittest import mock
 from pathlib import Path
 
 _PKG_ROOT = Path(__file__).resolve().parents[2]
@@ -35,6 +37,7 @@ from design_playbook.mcp.run_console.session import (  # noqa: E402
     RunConsoleSessionError,
     SourceView,
 )
+import design_playbook.mcp.run_console.session as session_module  # noqa: E402
 
 _FIXTURES = Path(__file__).resolve().parent / "fixtures"
 _NOW = "2026-08-25T10:00:00Z"
@@ -183,6 +186,64 @@ class SessionSnapshotTest(unittest.TestCase):
         first = self.session.build_snapshot()
         second = self.session.build_snapshot()
         self.assertIs(first, second)
+
+    def test_concurrent_builds_publish_one_document_registry_pair(self) -> None:
+        """A concurrent first read must not publish mismatched locators."""
+        real_build = session_module._build_snapshot
+        first_returned = threading.Event()
+        second_entered = threading.Event()
+        release_first = threading.Event()
+        call_number = 0
+        call_lock = threading.Lock()
+
+        def controlled_build(*args, **kwargs):
+            nonlocal call_number
+            with call_lock:
+                call_number += 1
+                number = call_number
+            built = real_build(*args, **kwargs)
+            if number == 1:
+                first_returned.set()
+                release_first.wait(timeout=2)
+            elif number == 2:
+                second_entered.set()
+            return built
+
+        documents: list[dict] = []
+        errors: list[BaseException] = []
+
+        def read_snapshot() -> None:
+            try:
+                documents.append(self.session.build_snapshot())
+            except BaseException as exc:  # pragma: no cover - diagnostic guard
+                errors.append(exc)
+
+        with mock.patch.object(
+            session_module, "_build_snapshot", side_effect=controlled_build
+        ):
+            first = threading.Thread(target=read_snapshot)
+            first.start()
+            self.assertTrue(first_returned.wait(timeout=5))
+            second = threading.Thread(target=read_snapshot)
+            second.start()
+            # On the unfixed implementation the second build enters while
+            # the first result is waiting to publish. The fixed session lock
+            # keeps it out; releasing the first build handles both cases.
+            second_entered.wait(timeout=1)
+            release_first.set()
+            first.join(timeout=5)
+            second.join(timeout=5)
+
+        self.assertFalse(first.is_alive() or second.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(len(documents), 2)
+        self.assertIs(documents[0], documents[1])
+        record = _record(documents[0], "source.specification")
+        self.assertIsNotNone(record["locator"])
+        self.assertEqual(
+            self.session.resolve_source(record["locator"]).excerpt.content_hash,
+            record["observedHash"],
+        )
 
     def test_run_id_and_registry_follow_the_build(self) -> None:
         self.assertIsNone(self.session.run_id)

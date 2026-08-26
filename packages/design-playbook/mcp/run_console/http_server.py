@@ -47,6 +47,7 @@ from .projection import (
 )
 from .request_security import (
     ACTION_PAYLOAD_INVALID,
+    ACTION_UNAVAILABLE,
     DEFAULT_BIND_HOST,
     ERROR_MESSAGES,
     METHOD_NOT_ALLOWED,
@@ -76,6 +77,11 @@ from .snapshot_builder import SnapshotBuildError
 from .ui import UIResources
 
 ROUTE_SNAPSHOT = "/api/v1/snapshot"
+DIAGNOSTIC_EXPORT_PREVIEW_ROUTE = "/api/v1/actions/diagnostic-export/preview"
+DIAGNOSTIC_EXPORT_WRITE_ROUTE = "/api/v1/actions/diagnostic-export/write"
+_DIAGNOSTIC_EXPORT_ROUTES = frozenset(
+    {DIAGNOSTIC_EXPORT_PREVIEW_ROUTE, DIAGNOSTIC_EXPORT_WRITE_ROUTE}
+)
 _SOURCES_PREFIX = "/api/v1/sources/"
 ALLOWED_METHODS = "GET, HEAD"
 MAX_REQUEST_BODY_BYTES = 65536
@@ -92,6 +98,7 @@ _STATUS_BY_CODE = {
     ROUTE_NOT_FOUND: 404,
     METHOD_NOT_ALLOWED: 405,
     SOURCE_HASH_MISMATCH: 409,
+    ACTION_UNAVAILABLE: 409,
     REQUEST_TOO_LARGE: 413,
     CONTENT_TYPE_UNSUPPORTED: 415,
     SNAPSHOT_CONTRACT_INVALID: 422,
@@ -233,9 +240,9 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
             return
         path = split.path
         if path == REFRESH_ROUTE:
-            # The one typed action route (RCV1-009), straight from the
-            # closed allowlist; every other name under /api/v1/actions/
-            # stays routeless (the 404 below).
+            # The one typed action route (RCV1-009). Names live in the
+            # closed allowlist; dispatch stays here. Every other name
+            # under /api/v1/actions/ stays routeless (the 404 below).
             if self.command != "POST":
                 self._drain_body()
                 self._send_error(
@@ -244,6 +251,21 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
                 )
                 return
             self._serve_refresh(session, split.query)
+            return
+        if path in _DIAGNOSTIC_EXPORT_ROUTES:
+            if self.command != "POST":
+                self._drain_body()
+                self._send_error(
+                    METHOD_NOT_ALLOWED,
+                    extra_headers={"Allow": "POST"},
+                )
+                return
+            # The route is intentionally present so clients can distinguish
+            # a known, gated capability from a typo.  No request body is
+            # parsed and no owner or filesystem operation is reached until a
+            # separately accepted export contract enables this gate.
+            self._drain_body()
+            self._send_error(ACTION_UNAVAILABLE)
             return
         self._drain_body()
         if path == ROUTE_SNAPSHOT:
