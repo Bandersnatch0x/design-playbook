@@ -89,6 +89,7 @@ VALIDATOR_FORBIDDEN_FLAGS = (
 UX_SPEC_SLICE = "ux-spec-slice"
 UX_SPEC_RUN_ROOT = ".scratch/host-scenario-ux-spec"
 UX_SPEC_SPEC = "spec.md"
+UX_SPEC_SKILL_MD = (PKG / "skills" / "ux-spec" / "SKILL.md").as_posix()
 UX_SPEC_SHAPING_LOG = "shaping/shaping-log.jsonl"
 POINT_BACK_STUB_NAME = "point-back-stub.md"
 
@@ -163,6 +164,10 @@ def _ux_spec_prompt() -> str:
         "",
         "Drive the design-playbook `ux-spec` skill ONLY for the ask above - "
         "no ui-picker, no Fill, no preview confirm, no code scaffolding.",
+        "Protocol access: this plugin's same-named `ux-spec` command shadows "
+        "the skill in the Skill tool registry (the tool injects only the thin "
+        f"command body). Read the full protocol at `{UX_SPEC_SKILL_MD}` "
+        "first and follow its S0-S6 session protocol exactly.",
         "This is a headless run: interactive clarifying questions cannot be "
         "answered. Per the ux-spec protocol, every unanswered clarification "
         "must become an explicit-risk assumption recorded in CP-C - never a "
@@ -250,6 +255,11 @@ SCENARIOS: dict[str, ScenarioPack] = {
             "cwd": "fresh temp target directory (the run root lands under it)",
             "env": "CLAUDE_CONFIG_DIR pointed at a fresh temp directory",
             "plugin": f"--plugin-dir {PKG} (local package, no marketplace)",
+            "plugin_reads": (
+                "--allowedTools Read(<plugin>/**): headless sandbox grants "
+                "reads only inside the temp cwd, so the skill references/ "
+                "files (e.g. the DD block format) stay reachable"
+            ),
         },
     ),
     UI_PICKER_SLICE: ScenarioPack(
@@ -295,6 +305,11 @@ SCENARIOS: dict[str, ScenarioPack] = {
             "cwd": "fresh temp target directory (the run root lands under it)",
             "env": "CLAUDE_CONFIG_DIR pointed at a fresh temp directory",
             "plugin": f"--plugin-dir {PKG} (local package, no marketplace)",
+            "plugin_reads": (
+                "--allowedTools Read(<plugin>/**): headless sandbox grants "
+                "reads only inside the temp cwd, so the skill references/ "
+                "files (e.g. the DD block format) stay reachable"
+            ),
         },
         seed_artifacts=((DOGFOOD_SPEC_SEED, UI_PICKER_SPEC),),
         decision_report_artifact=UI_PICKER_REPORT,
@@ -738,11 +753,15 @@ def run_scenario(
     pack = SCENARIOS[config.scenario]
 
     owned_temp = temp_root is None
+    # Windows mkdtemp may return an 8.3 short-name path (e.g. AMSTER~1);
+    # Claude Code's sandbox flags such segments as a suspicious Windows
+    # path pattern and denies every headless write inside the target cwd,
+    # so normalize to the resolved long form.
     work_root = (
         Path(tempfile.mkdtemp(prefix="design-playbook-host-scenario-"))
         if owned_temp
         else temp_root
-    )
+    ).resolve()
     work_root.mkdir(parents=True, exist_ok=True)
     target_dir = work_root / "target"
     config_dir = work_root / "claude-config"
@@ -818,6 +837,8 @@ def run_scenario(
                 str(PKG),
                 "--permission-mode",
                 "acceptEdits",
+                "--allowedTools",
+                f"Read({PKG.as_posix()}/**)",
                 "-p",
                 pack.prompt,
             ]
