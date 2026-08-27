@@ -4,33 +4,44 @@
 
 # 🎴 design-playbook
 
-### *给 coding agent 的 Design I/O — 用声明 + 契约让 UI 生成可控、可验收、可回流。*
+### *Agent 交付的 UI 没人能验证。这个插件让它拿出证据。*
 
 [![Version](https://img.shields.io/badge/Version-0.20.2-2DD4BF?style=flat-square&logo=semver&logoColor=black)](.#)
 [![License](https://img.shields.io/badge/License-MIT-2DD4BF?style=flat-square&logo=opensourceinitiative&logoColor=black)](./packages/design-playbook/LICENSE)
 [![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-2DD4BF?style=flat-square&logo=claude&logoColor=black)](.#)
 [![Skills](https://img.shields.io/badge/Skills-8-2DD4BF?style=flat-square)](.#)
-[![Commands](https://img.shields.io/badge/Commands-4-2DD4BF?style=flat-square)](.#)
+[![Commands](https://img.shields.io/badge/Commands-6-2DD4BF?style=flat-square)](.#)
 [![Codex](https://img.shields.io/badge/Codex-ready-2DD4BF?style=flat-square)](./packages/design-playbook/codex/AGENTS.md)
 
-*不是又一套风格/色板库。与 `ui-ux-pro-max` + `frontend-design` 互补；本插件管**链路与验收**。*
+先声明什么是好，再对着声明生成，最后对着同一份声明验收——
+每个问题都指回拥有它的那份 spec、领域规则或工艺规则。
+
+*不是又一套风格/色板库。与 `ui-ux-pro-max` + `frontend-design` 互补；本插件管**交付链路、证据语义与验收闭环**。*
 
 </div>
 
 ---
 
-## ✨ 它是什么
+## ⚡ 一条链路跑到底
 
-Claude Code / Codex 插件。每次跑同一条可预测链路 — **Design I/O**：`design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard† → (observe*†) → ui-evaluator†`，验收把每个问题**指回**所属声明，blocking 必须**回流**直到闭环。`?` 为条件入场：已有产品的 UI 修改先跑 `design-baseline?`，有截图/URL/设计稿/产品类比时再跑 `reference-intake?`；`preview*`/`observe*` 仅在对应可选 MCP 工具（`preview_prototype` / `execute_capture_plan`）存在时运行，否则跳过直进下一阶段。`†` = 用户可选的审计阶段（ADR-0033）：`craft-guard†` / `observe†` / `ui-evaluator†` 可由用户关闭 — 首次运行问一次，选择作为默认记入 `.design-playbook/preferences.yaml`（版本化；本机覆盖写在 `preferences.local.yaml`，已 gitignore）。跳过 `ui-evaluator†` 仍会生成标记 `audited: false` 的 point-back 骨架，strict 校验不会把它当作已审计结果放行。
+每个 run 执行同一条可预测的 **Design I/O** 链路：
 
-- **声明** *（什么是好）*：`spec` · `domain` · `craft` · `design` · `components` · `template`
-- **契约** *（怎么进链路）*：`skill`（时机）· `evaluator`（验收 + 回流）
+```text
+design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?)
+  → ui-picker → (preview*) → fill → craft-guard† → (observe*†) → ui-evaluator†
+                              ▲                                       │
+                              └────────────── recirculate ───────────┘
+```
 
-> 🎬 **试一把**：`/design-playbook:design-io <需求>` — 一次通过产出 `spec.md`、决策报告与 point-back 台账，落在 `.scratch/<run>/`（产物形态见 [`showcase/01-spec.md`](./packages/design-playbook/showcase/01-spec.md)）。**真实项目实跑**：[`showcase/`](./packages/design-playbook/showcase) 是对 SwarSight 的一次完整 Design I/O 实测 — spec、决策报告、point-back 评审 + 闭环回流轨迹。
+| 标记 | 含义 |
+| :--- | :--- |
+| `?` | 条件入场——已有产品的 UI 修改先跑 `design-baseline?`；需求里带截图 / URL / 类比时再跑 `reference-intake?` |
+| `*` | 适配器阶段——仅在其打包的 MCP 工具注册时运行；否则跳过，绝不硬报错 |
+| `†` | 用户可选审计阶段（ADR-0033）——首次运行问一次，选择记入 `.design-playbook/preferences.yaml`（版本化；本机覆盖写在 gitignore 的 `preferences.local.yaml`） |
 
-> 🖼️ **截图与多模态**：截图内容理解依赖**宿主模型的多模态/视觉能力**；插件本身只做图片登记（locator + SHA-256 + metadata），不提供图片内容理解。无视觉宿主改骑用户提供的文字说明。
+验收是 **point-back**：每个发现都点名拥有它的声明，blocking 发现**回流**到该阶段直到闭环。跳过 `ui-evaluator†` 仍会产出 point-back 骨架——但标记 `audited: false`，strict 校验不把它当已审计结果放行。Agent 永远不能悄悄给自己的作业打分。
 
-## 📦 安装
+## 🎬 试一把
 
 **Claude Code**
 
@@ -46,7 +57,19 @@ codex plugin marketplace add Bandersnatch0x/design-playbook
 codex plugin add design-playbook@design-playbook
 ```
 
-> Codex 安装细节、marketplace 不可用时的 `[mcp_servers.*]` 直配 fallback、preview 前置条件（系统 Chromium + python）：见 [`packages/design-playbook/codex/AGENTS.md`](./packages/design-playbook/codex/AGENTS.md)。`preview*`/`observe*` 仅在对应 MCP 工具注册后运行，否则编排器**静默跳过**（不是报错）。
+然后带命名空间调用（裸 `/design-io` 仅是 `--plugin-dir` 开发态别名）：
+
+```text
+/design-playbook:design-io <你的 UI 需求>
+```
+
+一次通过在 `.scratch/<run>/` 落下三样产物：
+
+1. **`spec.md`**——六层的"什么是好"声明（意图 → 验收）
+2. **决策报告**——骨架 + 组件语义，写在任何代码之前
+3. **Point-back 台账**——验收发现（各自点名 owning 声明）+ 闭环轨迹
+
+Codex 安装细节、marketplace 不可用时的 `[mcp_servers.*]` 直配 fallback、preview 前置条件：见 [`packages/design-playbook/codex/AGENTS.md`](./packages/design-playbook/codex/AGENTS.md)。
 
 <details>
 <summary>本地开发 / 自测</summary>
@@ -62,11 +85,25 @@ codex plugin marketplace add <仓库根绝对路径>
 codex plugin add design-playbook@design-playbook
 ```
 
-Codex bridge 说明：[`packages/design-playbook/codex/AGENTS.md`](./packages/design-playbook/codex/AGENTS.md)。
-
 </details>
 
-调用一律**带命名空间**：`/design-playbook:design-io <需求>`。裸 `/design-io` 仅 `--plugin-dir` 开发态别名。
+## 📸 眼见为实
+
+对 [SwarSight](./packages/design-playbook/showcase) 的一次完整实跑——真实第三方工作台，一行需求，每个关键产物都留了底：
+
+| | |
+| :---: | :---: |
+| **1 · ux-spec**——写 UI 之前的六层 spec | **2 · ui-picker**——写代码之前的决策报告 |
+| ![六层 spec](packages/design-playbook/showcase/screenshots/01-spec.png) | ![决策报告](packages/design-playbook/showcase/screenshots/02-decision-report.png) |
+| **3 · ui-evaluator**——point-back + 回流闭环 | **结果**——六项检查全绿 |
+| ![Point-back 发现](packages/design-playbook/showcase/screenshots/03-point-back.png) | ![六项检查全绿](packages/design-playbook/showcase/screenshots/04-gates.png) |
+
+完整产物——spec、决策报告、point-back 评审、preview 人工确认演示、dogfood 实跑界面：[`showcase/`](./packages/design-playbook/showcase)。
+
+## 🔒 声明与契约
+
+- **声明** *（什么是好）*：`spec` · `domain` · `craft` · `design` · `components` · `template`
+- **契约** *（怎么进链路）*：`skill`（时机）· `evaluator`（验收 + 回流）
 
 ## 🧩 Skills 与命令
 
@@ -97,6 +134,19 @@ Codex bridge 说明：[`packages/design-playbook/codex/AGENTS.md`](./packages/de
 
 完整矩阵与重入语义见 [`docs/specs/ui-ux-vnext/loop-prototype.md`](./docs/specs/ui-ux-vnext/loop-prototype.md)。
 
+## 🔌 适配器（随主插件打包）
+
+Preview / Evidence MCP 运行时已放进主插件（`packages/design-playbook/mcp/` +
+带 `${CLAUDE_PLUGIN_ROOT}` 的 `.mcp.json`）。marketplace 安装即注册两个工具，
+无需第二包；orchestrator 仍会**探测**，宿主无 MCP 工具时跳过对应步骤。
+
+| 适配器 | MCP 工具 | 启用 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `design-playbook-preview` | `preview_prototype` | `preview*` 人工确认门（G5） | 已打包；需系统 Edge/Chrome 弹窗（缺失回退默认浏览器） |
+| `design-playbook-evidence` | `execute_capture_plan` | `observe*` 运行时取证（G6）——需 Playwright + Chromium | 已打包；取证在运行时仍可选 |
+
+文档：[preview](./packages/design-playbook-preview/#install--mcp-config) · [evidence](./packages/design-playbook-evidence/#install--mcp-config)
+
 ## 🔗 与生态组合
 
 | 包 | 用来做 |
@@ -105,19 +155,6 @@ Codex bridge 说明：[`packages/design-playbook/codex/AGENTS.md`](./packages/de
 | [ui-ux-pro-max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | 风格 / 色板 / 字体检索 |
 | `frontend-design` | 反模板视觉方向 |
 | [native-feel-skill](https://github.com/yetone/native-feel-skill) | 原生手感深度（WebView、IPC、内存） |
-
-## 🔌 适配器（v0.3+ 随主插件打包）
-
-Preview / Evidence MCP 运行时已放进主插件（`packages/design-playbook/mcp/` +
-带 `${CLAUDE_PLUGIN_ROOT}` 的 `.mcp.json`）。marketplace 安装后即可注册两个工具，
-无需第二包。orchestrator 仍会**探测**；宿主无 MCP 工具时跳过对应步骤。
-
-| 适配器 | MCP 工具 | 启用 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `design-playbook-preview` | `preview_prototype` | `preview*` 人工确认门（G5） | 已打包；需系统 Edge/Chrome 弹窗（缺失回退默认浏览器）；兄弟目录为兼容 launcher |
-| `design-playbook-evidence` | `execute_capture_plan` | `observe*` 运行时取证（G6）——需 Playwright + Chromium | 已打包；取证在运行时仍可选 |
-
-文档：[preview](./packages/design-playbook-preview/#install--mcp-config) · [evidence](./packages/design-playbook-evidence/#install--mcp-config)
 
 ## 🗂️ 目录结构
 
@@ -137,6 +174,12 @@ CONTEXT.md  .scratch/             ← 词汇表、spec、票、dogfood 日志
 
 仓库根 = GitHub 门面 + 工程壳 · package = 唯一运行时表面 · `product-*` 维护命令只留根，绝不进 package。
 
+## 🪞 边界与实话
+
+- **多模态**——截图内容理解依赖**宿主模型的视觉能力**。插件本身只做图片登记（locator + SHA-256 + metadata）；无视觉宿主改骑你给的文字说明。
+- **Run Console**——规划中：本地单 run 控制台，把已有 run 产物投影成运营者可直接读的意图、来源判定、阻塞来源与下一 owner。尚未发布、不是云端 Workspace、永远不会成为第二运行态权威。
+- **证明 vs 形态**——`scripts/validate_run.py` 机检的是 run 产物的*形态*与闭环轨迹；不宣称每个未来 run 自动就是高质量 UI。showcase 是一次被演示的通过，不是统计保证。
+
 ## 📄 许可
 
 MIT（原创内容）。见 [`LICENSE`](./packages/design-playbook/LICENSE) + [`NOTICE`](./packages/design-playbook/NOTICE)。不主张任何第三方 playbook 内容的权利。
@@ -145,6 +188,6 @@ MIT（原创内容）。见 [`LICENSE`](./packages/design-playbook/LICENSE) + [`
 
 <div align="center">
 
-[English](README.md) · [实测展示](./packages/design-playbook/showcase) · [Workflow](./docs/agents/product-workflow.md)
+[English](README.md) · [实测展示](./packages/design-playbook/showcase) · [Releases](./docs/releases) · [Workflow](./docs/agents/product-workflow.md)
 
 </div>
