@@ -73,6 +73,13 @@ from install_smoke import (  # noqa: E402
 )
 from vnext_live_dogfood import DEFAULT_ASK  # noqa: E402
 
+# Pack stage keys are validated against the packaged stage registry
+# (ADR-0022 import seam): a renamed STAGES key fails at import time, not
+# at nightly runtime with a confusing run-status mismatch.
+if str(PKG) not in sys.path:
+    sys.path.insert(0, str(PKG))
+from design_playbook.scripts.stages import STAGES_BY_KEY  # noqa: E402
+
 VALIDATOR_SCRIPT = ROOT / "packages" / "design-playbook" / "scripts" / "validate_run.py"
 RUN_STATUS_SCRIPT = ROOT / "packages" / "design-playbook" / "scripts" / "run_status.py"
 VALIDATOR_FORBIDDEN_FLAGS = (
@@ -108,7 +115,7 @@ UI_PICKER_FORBIDDEN = (
 )
 # Stage key from packages/design-playbook/scripts/stages.py: "decision"
 # (skill ui-picker) is present when decision-report.md exists at the run
-# root top level.
+# root top level. ScenarioPack.__post_init__ rejects keys not in STAGES.
 UI_PICKER_DECISION_STAGE = "decision"
 DOGFOOD_SPEC_SEED = "packages/design-playbook/examples/dogfood/run/spec.md"
 
@@ -138,7 +145,9 @@ class ScenarioPack:
     report: it is a required expected artifact, gets copied to evidence,
     and engages validate_run.py's ``--decision-report`` (G10) gate.
     ``run_status_required_stages`` names stage keys the real run_status.py
-    must report present on the temp run root after the validator passes.
+    must report present on the temp run root after the validator passes;
+    every key is validated against ``STAGES_BY_KEY`` at construction, so a
+    renamed registry key fails here, not as a nightly run-status mismatch.
     All three default off, so pre-existing packs keep their exact shape.
     """
 
@@ -155,6 +164,18 @@ class ScenarioPack:
     seed_artifacts: tuple[tuple[str, str], ...] = ()
     decision_report_artifact: str | None = None
     run_status_required_stages: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        unknown = [
+            key for key in self.run_status_required_stages
+            if key not in STAGES_BY_KEY
+        ]
+        if unknown:
+            raise ValueError(
+                f"scenario {self.name!r}: unknown stage keys {unknown} in "
+                "run_status_required_stages; use keys from "
+                "design_playbook.scripts.stages STAGES"
+            )
 
 
 def _ux_spec_prompt() -> str:

@@ -76,5 +76,56 @@ class StagesRegistryTests(unittest.TestCase):
                     self.assertTrue(stage.resume_action)
 
 
+SKILL_MD = (
+    ROOT / "packages" / "design-playbook" / "skills" / "design-playbook"
+    / "SKILL.md"
+)
+
+
+def _skill_md_stage_flow() -> list[str]:
+    """Stage tokens from SKILL.md's Steps data-flow line, in order.
+
+    The line is the single ordered stage declaration the skill prose owns:
+    ``design-baseline? -> reference-intake? -> ... -> ui-evaluator``.
+    ``?``/``*`` suffixes and grouping parens are stripped; they are
+    conditionality markers, not part of the skill token.
+    """
+    text = SKILL_MD.read_text(encoding="utf-8")
+    for line in text.splitlines():
+        stripped = line.strip().strip("`")
+        if stripped.startswith("design-baseline?") and "→" in stripped:
+            tokens = [
+                token.strip().strip("()").rstrip("?*")
+                for token in stripped.split("→")
+            ]
+            return [token for token in tokens if token]
+    raise AssertionError("SKILL.md Steps data-flow line not found")
+
+
+class StageMirrorLockstepTests(unittest.TestCase):
+    """SKILL.md Steps and STAGES must not drift apart (ADR-0021).
+
+    STAGES is the machine SSOT for status/resume narration; SKILL.md is
+    the prose every agent reads. Before this test the mirror was
+    hand-synced only. ``native-craft`` is the one data-flow step with no
+    STAGES entry: it is a conditional shell step that writes no
+    run-root marker, so run_status does not narrate it.
+    """
+
+    def test_stage_flow_matches_stages_order(self) -> None:
+        flow = _skill_md_stage_flow()
+        self.assertEqual(
+            [token for token in flow if token != "native-craft"],
+            [stage.skill.rstrip("*") for stage in STAGES],
+        )
+
+    def test_every_stage_marker_is_named_in_skill_md(self) -> None:
+        text = SKILL_MD.read_text(encoding="utf-8")
+        for stage in STAGES:
+            for marker in stage.markers:
+                with self.subTest(stage=stage.key, marker=marker):
+                    self.assertIn(marker, text)
+
+
 if __name__ == "__main__":
     unittest.main()

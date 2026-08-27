@@ -131,10 +131,11 @@ def _run_gate_validation(run_root: Path) -> dict[str, Any]:
         }
     try:
         from design_playbook.scripts import validate_run
+        from design_playbook.scripts.validate_run import RunInputs
 
-        errors, warnings = validate_run.run(
-            str(spec),
-            str(point_back),
+        errors, warnings = validate_run.run(RunInputs(
+            spec_path=str(spec),
+            point_back_path=str(point_back),
             preview_dir=str(run_root / "preview")
             if (run_root / "preview").is_dir()
             else None,
@@ -145,7 +146,7 @@ def _run_gate_validation(run_root: Path) -> dict[str, Any]:
             if (run_root / "evidence").is_dir()
             else None,
             run_root=str(run_root),
-        )
+        ))
     except (OSError, UnicodeError, ValueError) as exc:
         return {
             "available": False,

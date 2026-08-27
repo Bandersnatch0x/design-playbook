@@ -17,7 +17,7 @@ PKG = ROOT / "packages" / "design-playbook"
 if str(PKG) not in sys.path:
     sys.path.insert(0, str(PKG))
 
-from design_playbook.scripts.run_status import (  # noqa: E402
+from design_playbook.scripts.status_projection import (  # noqa: E402
     NextAction,
     NextActionActor,
     NextActionKind,
@@ -107,7 +107,7 @@ class RunStatusTests(unittest.TestCase):
             )
 
             with patch(
-                "design_playbook.scripts.run_status.next_action",
+                "design_playbook.scripts.status_projection.next_action",
                 return_value=hostile,
             ):
                 projection = project_next_action(
@@ -393,7 +393,7 @@ class RunStatusTests(unittest.TestCase):
             )
 
             with patch(
-                "design_playbook.scripts.run_status.project_next_action",
+                "design_playbook.scripts.status_projection.project_next_action",
                 return_value=typed,
             ) as projected:
                 self.assertEqual(

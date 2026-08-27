@@ -37,6 +37,7 @@ from design_playbook.scripts.learning_candidates import (  # noqa: E402
     occurrences_from_pointbacks,
 )
 from design_playbook.scripts.run_facts import RunFacts, capture_run_facts  # noqa: E402
+from design_playbook.scripts.validate_run import RunInputs  # noqa: E402
 from design_playbook.scripts.validate_run import run as validate_run  # noqa: E402
 
 DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
@@ -126,14 +127,14 @@ def gate_status(run_dir: Path, run_facts: RunFacts | None = None) -> dict[str, s
     if spec is None or "point-back.md" not in facts.existing_paths:
         return {"status": "skipped", "detail": "no spec.md + point-back.md pair"}
     try:
-        errors, _warnings = validate_run(
-            str(spec),
-            str(facts.pointback_path),
+        errors, _warnings = validate_run(RunInputs(
+            spec_path=str(spec),
+            point_back_path=str(facts.pointback_path),
             preview_dir=str(facts.preview_dir),
             evidence_dir=str(facts.evidence_dir),
             run_root=str(run_dir),
             run_facts=facts,
-        )
+        ))
     except (OSError, UnicodeError):
         # The historical subprocess exited non-zero for validator I/O errors;
         # its RUN ERROR line was filtered, leaving this fallback projection.

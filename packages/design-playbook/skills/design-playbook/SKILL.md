@@ -69,7 +69,7 @@ Never edit out the `audited: false` marker or upgrade the skeleton's verdict: `v
 
 ## Steps
 
-> **Stage-list mirror:** packaged `scripts/run_status.py` -> `STAGES` mirrors this section's steps and artifact filenames for status/resume narration. If you add/remove a step or change an artifact filename here, update that table.
+> **Stage-list mirror:** packaged `scripts/stages.py` -> `STAGES` mirrors this section's steps and artifact filenames for status/resume narration. `tests/test_stages_registry.py` holds the two in lockstep — when a step or artifact filename changes here, update `STAGES` until that test is green.
 
 Do in order. Data flow:
 
@@ -122,7 +122,7 @@ Gate artifact is only `.scratch/<run>/design-baseline/state.json` (`schema: desi
 
 ### 2. `reference-intake` (when `requires_reference_contract`)
 
-Invoke **reference-intake**. Produce `.scratch/<run>/reference/contract.md` + `manifest.json` (ADR-0011).
+Invoke **reference-intake**. Produce `.scratch/<run>/reference/contract.md` + `reference/manifest.json` (ADR-0011).
 
 **Done when:** **reference-intake**'s own completion criteria hold (that skill is SSOT). Smoke: sources inventoried; observed vs inferred labeled; Keep/Change/Do not copy present for product-analogy, third-party URL, **and third-party screenshot/design**; license/brand risks recorded. Does not write `spec.md` or a decision report.
 
@@ -198,7 +198,7 @@ Implement structure from the decision report + `spec` + confirmed project `DESIG
 
 If a reused host component conflicts with spec L5, record the conflict and recirculate to `spec` via the authoritative map in `ui-evaluator` before choosing a minimal patch or explicit acceptance.
 
-**Fill artifact location:** the Fill surface may live in the host tree (product side) instead of the run root. When it does, register the path(s) in `plan.md` as `fill: <path>` field lines (one per line; run-root-relative or host-project-relative; unfenced column-0 lines — fenced example/prose blocks are never read as declarations) — `run-status` judges the fill stage on those declared paths in addition to `filled-ui.*` in the run root. An out-of-run Fill surface with no registered path leaves the fill stage unchecked.
+**Fill artifact location:** the Fill surface may live in the host tree (product side) instead of the run root; a run-root Fill lands as `filled-ui.html` + `filled-ui.md`. When the surface lives in the host tree, register the path(s) in `plan.md` as `fill: <path>` field lines (one per line; run-root-relative or host-project-relative; unfenced column-0 lines — fenced example/prose blocks are never read as declarations) — `run-status` judges the fill stage on those declared paths in addition to `filled-ui.html` / `filled-ui.md` in the run root. An out-of-run Fill surface with no registered path leaves the fill stage unchecked.
 
 Load on demand (only if the fill needs them):
 

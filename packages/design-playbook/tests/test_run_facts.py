@@ -13,7 +13,10 @@ if str(PACKAGE) not in sys.path:
     sys.path.insert(0, str(PACKAGE))
 
 from design_playbook.scripts.run_facts import capture_run_facts  # noqa: E402
-from design_playbook.scripts.run_status import inspect_run, next_action  # noqa: E402
+from design_playbook.scripts.status_projection import (  # noqa: E402
+    inspect_run,
+    next_action,
+)
 
 
 class RunFactsTests(unittest.TestCase):
