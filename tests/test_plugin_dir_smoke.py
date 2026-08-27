@@ -161,6 +161,31 @@ class PluginListParserTests(unittest.TestCase):
                 json.dumps(payload), FIXTURE_PLUGIN_DIR, FIXTURE_EXPECTED
             )
 
+    def test_absent_mcp_servers_key_tolerated_with_note(self) -> None:
+        """Host CLI 2.1.246+ stopped echoing mcpServers (plugin-cache rework,
+        undocumented). The key's absence is host schema drift, not a
+        registration failure; the details MCP line and stdio probes carry
+        the registration claim."""
+        payload = json.loads(_fixture_list_payload())
+        del payload[0]["mcpServers"]
+        parsed = smoke._parse_plugin_list(
+            json.dumps(payload), FIXTURE_PLUGIN_DIR, FIXTURE_EXPECTED
+        )
+
+        self.assertEqual(parsed["id"], "design-playbook@inline")
+        self.assertEqual(parsed["version"], FIXTURE_EXPECTED["version"])
+        self.assertEqual(parsed["mcp_servers"], [])
+        self.assertEqual(parsed["mcp_entrypoints"], {})
+        self.assertIn("mcpServers", parsed["mcp_schema_note"])
+
+    def test_present_but_empty_mcp_servers_fails_closed(self) -> None:
+        payload = json.loads(_fixture_list_payload())
+        payload[0]["mcpServers"] = {}
+        with self.assertRaisesRegex(smoke.SmokeFailure, "mcpServers mismatch"):
+            smoke._parse_plugin_list(
+                json.dumps(payload), FIXTURE_PLUGIN_DIR, FIXTURE_EXPECTED
+            )
+
     def test_invalid_json_fails_closed(self) -> None:
         with self.assertRaisesRegex(smoke.SmokeFailure, "invalid JSON"):
             smoke._parse_plugin_list("not json", FIXTURE_PLUGIN_DIR, FIXTURE_EXPECTED)
@@ -285,7 +310,9 @@ class SkipSemanticsTests(unittest.TestCase):
 
 
 class OrchestrationTests(unittest.TestCase):
-    def _fake_command(self, expected, *, details_components=None):
+    def _fake_command(
+        self, expected, *, details_components=None, omit_list_mcp_servers=False
+    ):
         def run(
             cmd: list[str],
             *,
@@ -302,25 +329,23 @@ class OrchestrationTests(unittest.TestCase):
             assert Path(env["CLAUDE_CONFIG_DIR"]).is_dir()
             assert "DESIGN_PLAYBOOK_RUN_ROOT" in env
             if cmd[3:6] == ["plugin", "list", "--json"]:
-                stdout = json.dumps(
-                    [
-                        {
-                            "id": "design-playbook@inline",
-                            "version": expected["version"],
-                            "scope": "session",
-                            "enabled": True,
-                            "installPath": str(smoke.PKG),
-                            "mcpServers": {
-                                name: {
-                                    "command": "python",
-                                    "args": [f"${{CLAUDE_PLUGIN_ROOT}}/{path}"],
-                                    "timeout": 3600000,
-                                }
-                                for name, path in expected["mcp_entrypoints"].items()
-                            },
+                entry = {
+                    "id": "design-playbook@inline",
+                    "version": expected["version"],
+                    "scope": "session",
+                    "enabled": True,
+                    "installPath": str(smoke.PKG),
+                }
+                if not omit_list_mcp_servers:
+                    entry["mcpServers"] = {
+                        name: {
+                            "command": "python",
+                            "args": [f"${{CLAUDE_PLUGIN_ROOT}}/{path}"],
+                            "timeout": 3600000,
                         }
-                    ]
-                )
+                        for name, path in expected["mcp_entrypoints"].items()
+                    }
+                stdout = json.dumps([entry])
             elif cmd[3:6] == ["plugin", "details", smoke.PLUGIN_NAME]:
                 components = (
                     details_components
@@ -336,7 +361,9 @@ class OrchestrationTests(unittest.TestCase):
 
         return run
 
-    def _run_flow(self, expected, *, details_components=None) -> dict:
+    def _run_flow(
+        self, expected, *, details_components=None, omit_list_mcp_servers=False
+    ) -> dict:
         with tempfile.TemporaryDirectory() as tmp:
             work_root = Path(tmp) / "work"
             config = smoke.PluginDirSmokeConfig(
@@ -344,7 +371,11 @@ class OrchestrationTests(unittest.TestCase):
                 plugin_dir=smoke.PKG,
                 output_dir=Path(tmp) / "evidence",
             )
-            fake = self._fake_command(expected, details_components=details_components)
+            fake = self._fake_command(
+                expected,
+                details_components=details_components,
+                omit_list_mcp_servers=omit_list_mcp_servers,
+            )
             with (
                 mock.patch.object(
                     smoke, "_host_available", return_value="fixture-claude"
@@ -384,6 +415,21 @@ class OrchestrationTests(unittest.TestCase):
         self.assertFalse(
             [check for check in result["checks"] if check["status"] != "pass"]
         )
+
+    def test_absent_list_mcp_servers_flow_passes_with_warning(self) -> None:
+        """The 2.1.247 CI shape: list entry omits mcpServers; the flow must
+        pass with the drift visible as a warning while the strict details
+        and stdio-probe stages still carry the registration claim."""
+        expected = smoke._source_expectations()
+        result = self._run_flow(expected, omit_list_mcp_servers=True)
+
+        self.assertEqual(result["status"], "pass", result.get("error"))
+        self.assertEqual(result["loaded"]["mcp_servers"], [])
+        self.assertTrue(
+            any("mcpServers" in warning for warning in result["warnings"]),
+            "schema drift must be visible as a warning, never silent green",
+        )
+        self.assertEqual(len(result["mcp"]), 2)
 
     def test_component_drift_fails_the_flow(self) -> None:
         expected = smoke._source_expectations()

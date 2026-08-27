@@ -10,9 +10,13 @@ The live surface is observed three ways, all fail-closed against the
 canonical expectations from ``package_inventory.from_source``:
 
 - ``claude --plugin-dir <pkg> plugin list --json`` — structured session
-  plugin entry (id/version/scope/installPath/mcpServers). Note the host
-  CLI exits 0 even when the plugin is not found, so every check here is
-  content-based, never exit-code-based.
+  plugin entry (id/version/scope/installPath). ``mcpServers`` is
+  optional: host CLI 2.1.246+ stopped echoing it (plugin-cache rework,
+  undocumented schema change, observed 2026-08-27). When the key is
+  present its server set is asserted exactly; when absent the load-time
+  registration claim is carried by the ``plugin details`` MCP line and
+  the stdio probes below, and the smoke records a warning instead of
+  failing on host schema drift.
 - ``claude --plugin-dir <pkg> plugin details <name>`` — rendered
   component inventory. Its Skills line merges skills and commands into
   one multiset, so the handshake compares sorted(skills + commands).
@@ -117,6 +121,21 @@ def _parse_plugin_list(
         f"loaded installPath mismatch: {install_path}",
     )
     servers = entry.get("mcpServers")
+    if servers is None:
+        return {
+            "id": INLINE_PLUGIN_ID,
+            "version": version,
+            "scope": "session",
+            "enabled": True,
+            "install_path": str(install_path),
+            "mcp_servers": [],
+            "mcp_entrypoints": {},
+            "mcp_schema_note": (
+                "host CLI omitted mcpServers from plugin list --json "
+                "(schema drift since CLI 2.1.246); registration is proven "
+                "by the plugin details MCP line and the stdio probes"
+            ),
+        }
     _require(isinstance(servers, dict), "loaded mcpServers missing")
     _require(
         sorted(servers) == expected["mcp_servers"],
@@ -316,6 +335,8 @@ def run_smoke(
                 ),
             )
             result["loaded"] = loaded
+            if isinstance(loaded, dict) and loaded.get("mcp_schema_note"):
+                result["warnings"].append(str(loaded["mcp_schema_note"]))
 
             details = recorder.stage(
                 "plugin details",
