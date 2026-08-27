@@ -75,6 +75,17 @@ COMMAND_INVENTORY: dict[tuple[int, int], frozenset[str]] = {
         "run-status",
         "doctor",
     }),
+    # 0.21 keeps the 0.20 command surface (docs appeal + install-smoke
+    # hardening minor: README refresh, plugin-dir handshake, nightly
+    # scenarios); no new commands.
+    (0, 21): frozenset({
+        "design-io",
+        "ux-spec",
+        "ui-review",
+        "run-review",
+        "run-status",
+        "doctor",
+    }),
 }
 STABLE_SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 
