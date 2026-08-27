@@ -1,0 +1,148 @@
+# Nightly host scenarios (issue #51).
+#
+# Scheduled / workflow_dispatch only - never a PR gate. Runs the plugin-dir
+# inventory handshake (scripts/plugin_dir_smoke.py) plus the two recorded
+# host slices (scripts/host_scenario.py run ux-spec-slice and
+# ui-picker-slice) against a real Claude Code CLI, then uploads the
+# evidence artifacts.
+#
+# Verdict semantics: red means a real failure (exit 1, or an rc that never
+# got recorded after a hard crash). Exit 2 is an explicit skip (e.g. the
+# ANTHROPIC_API_KEY secret is absent, or the host binary is missing): it is
+# summarized in the step summary - visible, never silently green, and not
+# red either.
+#
+# Out of scope by design: no /design-io live dogfood, no public install
+# smoke, no marketplace install, and no HITL surfaces (preview confirm,
+# persistent-contract decided writes). Those remain human release gates.
+# PR CI (.github/workflows/ci.yml) is intentionally untouched by this
+# workflow: PRs run only the deterministic unit suites.
+
+name: Nightly host scenarios
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-host-scenarios
+  cancel-in-progress: false
+
+jobs:
+  host-scenarios:
+    name: Inventory handshake + host slices
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22.14.0"
+
+      - name: Install Claude Code CLI (npm)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global @anthropic-ai/claude-code
+          claude --version
+
+      # Each run step captures the script's exit code without letting a
+      # non-zero exit fail the job: 0 pass, 2 skip (credentials or host
+      # binary absent), anything else fail. Only the verdict step below
+      # turns rcs into the job result, so one failing slice never hides
+      # the other slice's evidence.
+      - name: Inventory handshake (plugin-dir smoke)
+        shell: bash
+        run: |
+          set +e
+          python3 scripts/plugin_dir_smoke.py
+          rc=$?
+          set -e
+          echo "HANDSHAKE_RC=$rc" >> "$GITHUB_ENV"
+          echo "plugin-dir inventory handshake exit code: $rc"
+
+      - name: "Host slice: ux-spec-slice"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        shell: bash
+        run: |
+          set +e
+          python3 scripts/host_scenario.py run ux-spec-slice
+          rc=$?
+          set -e
+          echo "UX_SPEC_RC=$rc" >> "$GITHUB_ENV"
+          echo "ux-spec-slice exit code: $rc"
+
+      - name: "Host slice: ui-picker-slice"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        shell: bash
+        run: |
+          set +e
+          python3 scripts/host_scenario.py run ui-picker-slice
+          rc=$?
+          set -e
+          echo "UI_PICKER_RC=$rc" >> "$GITHUB_ENV"
+          echo "ui-picker-slice exit code: $rc"
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-scenario-evidence
+          path: |
+            .scratch/plugin-dir-smoke/
+            .scratch/host-scenario/
+          if-no-files-found: ignore
+
+      - name: Verdict (skip is visible; only failures are red)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          verdict_rc=0
+
+          emit_row() {
+            local label="$1" rc="$2" classification
+            if [[ -z "$rc" ]]; then
+              classification="FAIL (rc unset - step never ran)"
+              verdict_rc=1
+            elif [[ "$rc" == "0" ]]; then
+              classification="pass"
+            elif [[ "$rc" == "2" ]]; then
+              classification="SKIP (visible: credentials or host binary absent - see uploaded evidence)"
+            else
+              classification="FAIL"
+              verdict_rc=1
+            fi
+            printf '| %s | %s | %s |\n' "$label" "${rc:-unset}" "$classification"
+          }
+
+          {
+            echo "## Nightly host scenarios"
+            echo ""
+            echo "| Step | Exit code | Classification |"
+            echo "| --- | --- | --- |"
+            emit_row "plugin-dir inventory handshake" "${HANDSHAKE_RC:-}"
+            emit_row "host slice ux-spec-slice" "${UX_SPEC_RC:-}"
+            emit_row "host slice ui-picker-slice" "${UI_PICKER_RC:-}"
+            echo ""
+            echo "Exit-code semantics: 0 = pass, 2 = skip (explicit, summarized above -"
+            echo "never silently green, and not red), anything else or unset = fail."
+            echo "Evidence for every run, including skips and failures, is in the"
+            echo "\`host-scenario-evidence\` artifact."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit "$verdict_rc"
