@@ -317,6 +317,31 @@ class PromptTests(unittest.TestCase):
         self.assertIn("S0-S6", prompt)
         self.assertIn("Stop immediately after emitting spec.md", prompt)
 
+    def test_prompt_points_at_shadowed_skill_protocol_file(self) -> None:
+        prompt = runner.SCENARIOS[SCENARIO].prompt
+
+        self.assertIn(
+            "same-named `ux-spec` command shadows",
+            prompt,
+            "the Skill tool resolves design-playbook:ux-spec to the thin "
+            "command body (verified on Claude Code 2.1.245), so the prompt "
+            "must hand the model the SKILL.md path directly",
+        )
+        self.assertIn(
+            (runner.PKG / "skills" / "ux-spec" / "SKILL.md").as_posix(), prompt
+        )
+
+    def test_plugin_ux_spec_command_routes_to_skill_file(self) -> None:
+        command = (runner.PKG / "commands" / "ux-spec.md").read_text(encoding="utf-8")
+
+        self.assertIn("skills/ux-spec/SKILL.md", command)
+        self.assertNotIn(
+            "Run skill **ux-spec**",
+            command,
+            "name-based delegation is self-referential: the Skill tool "
+            "injects this very command body for design-playbook:ux-spec",
+        )
+
 
 class RegistryTests(unittest.TestCase):
     def test_list_prints_scenario_and_pack_elements(self) -> None:
@@ -467,6 +492,25 @@ class FailSemanticsTests(unittest.TestCase):
 
 
 class CommandShapeTests(unittest.TestCase):
+    def test_temporary_root_is_resolved_long_form(self) -> None:
+        with _run_main(_claude_writer(FIXTURE_SPEC)) as (
+            code,
+            payload,
+            _markdown,
+            _output,
+            _calls,
+        ):
+            self.assertEqual(code, 0)
+            root = Path(payload["temporary_root"]["path"])
+            self.assertEqual(
+                root,
+                root.resolve(),
+                "the work root must be normalized to its long form: an "
+                "8.3 short-name segment (e.g. AMSTER~1) makes Claude "
+                "Code's sandbox deny every headless write inside the "
+                "target cwd",
+            )
+
     def test_claude_command_shape_env_cwd_timeout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp) / "work"
@@ -488,17 +532,19 @@ class CommandShapeTests(unittest.TestCase):
                     str(runner.PKG),
                     "--permission-mode",
                     "acceptEdits",
+                    "--allowedTools",
+                    f"Read({runner.PKG.as_posix()}/**)",
                     "-p",
                     runner.SCENARIOS[SCENARIO].prompt,
                 ],
             )
             isolated = Path(call["env"]["CLAUDE_CONFIG_DIR"])
-            self.assertEqual(isolated, work / "claude-config")
+            self.assertEqual(isolated, work.resolve() / "claude-config")
             self.assertTrue(isolated.is_dir())
             ambient = os.environ.get("CLAUDE_CONFIG_DIR")
             if ambient:
                 self.assertNotEqual(isolated.resolve(), Path(ambient).resolve())
-            self.assertEqual(Path(call["cwd"]), work / "target")
+            self.assertEqual(Path(call["cwd"]), work.resolve() / "target")
             self.assertEqual(call["timeout"], 600)
             self.assertEqual(call["input_text"], "")
 
@@ -527,7 +573,7 @@ class CommandShapeTests(unittest.TestCase):
             self.assertTrue(pointback_arg.is_absolute())
             self.assertEqual(spec_arg.name, "spec.md")
             self.assertEqual(pointback_arg.name, "point-back-stub.md")
-            self.assertEqual(spec_arg.parent, work / "target" / RUN_ROOT_REL)
+            self.assertEqual(spec_arg.parent, work.resolve() / "target" / RUN_ROOT_REL)
             for flag in runner.VALIDATOR_FORBIDDEN_FLAGS:
                 self.assertNotIn(flag, cmd)
             self.assertNotIn("--decision-report", cmd)
@@ -853,14 +899,16 @@ class UiPickerCommandShapeTests(unittest.TestCase):
                     str(runner.PKG),
                     "--permission-mode",
                     "acceptEdits",
+                    "--allowedTools",
+                    f"Read({runner.PKG.as_posix()}/**)",
                     "-p",
                     runner.SCENARIOS[UI_SCENARIO].prompt,
                 ],
             )
             isolated = Path(call["env"]["CLAUDE_CONFIG_DIR"])
-            self.assertEqual(isolated, work / "claude-config")
+            self.assertEqual(isolated, work.resolve() / "claude-config")
             self.assertTrue(isolated.is_dir())
-            self.assertEqual(Path(call["cwd"]), work / "target")
+            self.assertEqual(Path(call["cwd"]), work.resolve() / "target")
             self.assertEqual(call["timeout"], 600)
             self.assertEqual(call["input_text"], "")
 
@@ -875,7 +923,7 @@ class UiPickerCommandShapeTests(unittest.TestCase):
             ) as calls:
                 result = runner.run_scenario(config, temp_root=work)
             self.assertEqual(result["status"], "pass", result.get("error"))
-            run_root = work / "target" / UI_RUN_ROOT_REL
+            run_root = work.resolve() / "target" / UI_RUN_ROOT_REL
             validator_calls = [
                 call
                 for call in calls
