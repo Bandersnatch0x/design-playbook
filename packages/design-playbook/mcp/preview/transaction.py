@@ -38,6 +38,7 @@ from design_playbook.scripts.g1_spec import (
     project_specification,
 )
 
+
 class BrowserCollector(Protocol):
     def __call__(
         self,
@@ -47,7 +48,8 @@ class BrowserCollector(Protocol):
         round_n: int,
         *,
         criteria: list[dict[str, str]],
-    ) -> dict[str, Any]: ...
+    ) -> dict[str, Any]:
+        ...
 
 
 ENTRY_SCHEMA_VERSION = 1

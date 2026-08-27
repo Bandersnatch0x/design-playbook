@@ -505,6 +505,129 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
             ],
         )
 
+    def test_box_drag_anchor_survives_confirm_roundtrip(self) -> None:
+        class Adapter:
+            def __init__(self) -> None:
+                self.thread: threading.Thread | None = None
+                self.error: Exception | None = None
+
+            def open(self, url: str) -> object:
+                def drive() -> None:
+                    try:
+                        with sync_playwright() as pw:
+                            browser = pw.chromium.launch(headless=True)
+                            try:
+                                page = browser.new_page(viewport={"width": 1280, "height": 800})
+                                page.goto(url, wait_until="domcontentloaded")
+                                page.wait_for_selector("#dpb-root")
+                                dismiss_onboarding(page)
+                                page.click("#dpb-box-toggle")
+                                artboard = page.locator("#dpb-artboard").bounding_box()
+                                assert artboard is not None
+                                x1, y1 = artboard["x"] + 120, artboard["y"] + 140
+                                x2, y2 = artboard["x"] + 260, artboard["y"] + 240
+                                page.mouse.move(x1, y1)
+                                page.mouse.down()
+                                page.mouse.move(x2, y2, steps=4)
+                                page.mouse.up()
+                                page.wait_for_selector("#dpb-anchors .dpb-anchor")
+                                page.fill('#dpb-anchors input[data-i="0"]', "highlight this area")
+                                with page.expect_response(
+                                    lambda response: response.url.endswith("/decide")
+                                    and response.request.method == "POST"
+                                ):
+                                    page.click("#dpb-btn-approve")
+                            finally:
+                                browser.close()
+                    except Exception as exc:  # noqa: BLE001
+                        self.error = exc
+
+                self.thread = threading.Thread(target=drive, daemon=True)
+                self.thread.start()
+                return self
+
+            def close(self, handle: object) -> None:
+                self.thread.join(timeout=20)
+                if self.thread.is_alive():
+                    raise AssertionError("Playwright box adapter did not finish")
+                if self.error is not None:
+                    raise self.error
+
+        with tempfile.TemporaryDirectory() as tmp:
+            prototype = Path(tmp) / "prototype.html"
+            prototype.write_text("<html><body><main>box target</main></body></html>", encoding="utf-8")
+            decision = review_session.collect_review(
+                prototype,
+                "box roundtrip",
+                ["确认通过", "需要修改"],
+                1,
+                Adapter(),
+            )
+
+        self.assertFalse(decision["aborted"])
+        self.assertEqual(decision["anchors"][0]["tag"], "box")
+        self.assertEqual(decision["anchors"][0]["comment"], "highlight this area")
+        self.assertTrue(decision["anchors"][0]["selector"].startswith("@box-"))
+        self.assertGreater(decision["anchors"][0]["rect"]["width"], 20)
+        self.assertGreater(decision["anchors"][0]["rect"]["height"], 20)
+
+    def test_ruler_probe_is_transient_and_keyboard_tools_switch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            file_url = _write_control_page(root, [])
+
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch(headless=True)
+                try:
+                    page = browser.new_page(viewport={"width": 1280, "height": 800})
+                    page.goto(file_url, wait_until="domcontentloaded")
+                    page.wait_for_selector("#dpb-root")
+                    dismiss_onboarding(page)
+
+                    page.keyboard.press("b")
+                    self.assertTrue(page.locator("body").evaluate(
+                        "el => el.classList.contains('dpb-tool-box')"))
+                    self.assertEqual(
+                        page.locator("#dpb-box-toggle").get_attribute("aria-pressed"),
+                        "true",
+                    )
+                    page.keyboard.press("r")
+                    self.assertTrue(page.locator("body").evaluate(
+                        "el => el.classList.contains('dpb-tool-ruler')"))
+                    self.assertEqual(
+                        page.locator("#dpb-ruler-toggle").get_attribute("aria-pressed"),
+                        "true",
+                    )
+
+                    target = page.locator("#prototype h1").bounding_box()
+                    artboard = page.locator("#dpb-artboard").bounding_box()
+                    assert target is not None
+                    assert artboard is not None
+                    page.mouse.move(target["x"] + 160, target["y"] + 4)
+                    page.wait_for_selector("#dpb-draw-layer .dpb-ruler-hover")
+                    self.assertIn(
+                        "px",
+                        page.locator("#dpb-draw-layer .dpb-ruler-badge.is-hover text").evaluate("el => el.textContent"),
+                    )
+                    page.mouse.click(artboard["x"] + 80, artboard["y"] + 90)
+                    page.mouse.click(artboard["x"] + 180, artboard["y"] + 150)
+                    page.wait_for_selector("#dpb-draw-layer .dpb-ruler-line")
+                    self.assertEqual(
+                        page.evaluate(
+                            "() => document.getElementById('dpb-anchors-json').value"
+                        ),
+                        "[]",
+                    )
+                    page.keyboard.press("Escape")
+                    self.assertEqual(
+                        page.locator("#dpb-draw-layer .dpb-ruler-line").count(), 0
+                    )
+                    self.assertEqual(
+                        page.locator("#dpb-draw-layer .dpb-ruler-hover").count(), 0
+                    )
+                finally:
+                    browser.close()
+
 
 # --------------------------------------------------------------------------- #
 # Integration tests: parent-page rendering + HTTP decide flow                 #

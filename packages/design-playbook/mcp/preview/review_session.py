@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import math
 import os
 import re
 import secrets
@@ -211,6 +212,20 @@ def _parse_anchors(raw: str, round_n: int = 0) -> list[dict[str, Any]]:
                     continue
             if pts:
                 anchor["points"] = pts[:_DRAW_POINTS_MAX]
+        rect = item.get("rect")
+        if isinstance(rect, dict):
+            try:
+                parsed_rect = {
+                    "x": float(rect.get("x")),
+                    "y": float(rect.get("y")),
+                    "width": float(rect.get("width")),
+                    "height": float(rect.get("height")),
+                }
+            except (TypeError, ValueError):
+                parsed_rect = None
+            if parsed_rect and all(math.isfinite(v) for v in parsed_rect.values()):
+                if parsed_rect["width"] > 0 and parsed_rect["height"] > 0:
+                    anchor["rect"] = parsed_rect
         if round_n > 0:
             anchor["node_id"] = _anchor_node_id(round_n, index, selector)
             anchor["features"] = _anchor_features(item, tag)

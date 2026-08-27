@@ -51,6 +51,11 @@ class LabelSetTests(unittest.TestCase):
             "criteria_empty",
             "criteria_toggle_title",
             "theme_toggle",
+            "tool_box",
+            "tool_ruler",
+            "box_label",
+            "ruler_size",
+            "ruler_distance",
         ):
             for locale in (i18n.ZH, i18n.EN):
                 value = i18n._STRINGS[locale].get(key)
@@ -72,7 +77,8 @@ class LabelSetTests(unittest.TestCase):
         )
         for i in ("dpb-header", "dpb-toolbar", "dpb-inspector", "dpb-canvas",
                   "dpb-btn-approve", "dpb-btn-skip", "dpb-pin-toggle",
-                  "dpb-draw-toggle", "dpb-zoom-fit", "dpb-status-pill",
+                  "dpb-draw-toggle", "dpb-box-toggle", "dpb-ruler-toggle",
+                  "dpb-zoom-fit", "dpb-status-pill",
                   "dpb-comment-input", "dpb-shortcut-modal", "dpb-spec-panel",
                   "dpb-criteria-json", "dpb-criteria-toggle", "dpb-theme-toggle"):
             self.assertIn(f'id="{i}"', html, f"missing {i}")

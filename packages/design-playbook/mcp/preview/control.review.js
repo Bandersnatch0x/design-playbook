@@ -5,6 +5,7 @@
   // ---- annotation list rendering (v9 cards) ----
   function kindChip(a) {
     if (a.tag === "draw") return "draw";
+    if (a.tag === "box") return "box";
     if (a.tag === "pin") return "pin";
     if (a.tag === "copy" || a.tag === "layout" || a.tag === "visual") return a.tag;
     if (String(a.selector).charAt(0) === "@") return "note";
@@ -432,7 +433,7 @@
     if (e.key === "Escape") {
       if (modal && !modal.hidden) { e.preventDefault(); toggleModal(false); return; }
       if (abortPopoverOpen()) { e.preventDefault(); hideAbortPopover(true); if (abortBtn) abortBtn.focus(); return; }
-      if (tool === "draw" || tool === "hand") { setTool("select"); return; }
+      if (tool === "draw" || tool === "box" || tool === "ruler" || tool === "hand") { setTool("select"); return; }
       // v9: Esc is the skip channel when no overlay/tool is active
       var skipBtn = document.getElementById("dpb-btn-skip");
       if (skipBtn) form.requestSubmit(skipBtn);
@@ -460,6 +461,8 @@
     if (k === "k") { e.preventDefault(); roam(-1); return; }
     if (k === "v") { e.preventDefault(); setMode("preview"); setTool("select", true); return; }
     if (k === "d") { e.preventDefault(); setTool(tool === "draw" ? "select" : "draw"); return; }
+    if (k === "b") { e.preventDefault(); setTool(tool === "box" ? "select" : "box"); return; }
+    if (k === "r") { e.preventDefault(); setTool(tool === "ruler" ? "select" : "ruler"); return; }
     if (k === "p") { e.preventDefault(); setTool("select"); setMode("annotate"); return; }
     if (e.key === "=" || e.key === "+") { e.preventDefault(); handleZoom(0.1); return; }
     if (e.key === "-" || e.key === "_") { e.preventDefault(); handleZoom(-0.1); return; }
@@ -473,7 +476,7 @@
   document.addEventListener("keyup", function (e) {
     if (e.code === "Space") {
       isSpaceDown = false;
-      if (!isPanning) canvas.style.cursor = tool === "hand" ? "grab" : (tool === "draw" ? "crosshair" : "default");
+      if (!isPanning) canvas.style.cursor = tool === "hand" ? "grab" : ((tool === "draw" || tool === "box" || tool === "ruler") ? "crosshair" : "default");
     }
   });
 
@@ -513,5 +516,6 @@
   fitCanvas();
   syncPinToFrame();
   syncDrawToFrame();
+  syncRulerToFrame();
   syncAnchorsToFrame();
   if (!onboardingWasSeen()) setTimeout(function () { toggleOnboarding(true); }, 0);

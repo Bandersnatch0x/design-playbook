@@ -275,7 +275,9 @@ body.dpb-shell { overflow: hidden; height: 100vh; }
 .dpb-draw-layer {
   position: absolute; inset: 0; z-index: 30; pointer-events: none; overflow: visible;
 }
-body.dpb-tool-draw .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
+body.dpb-tool-draw .dpb-draw-layer,
+body.dpb-tool-box .dpb-draw-layer,
+body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-draw-layer .dpb-draw-path {
   fill: none; stroke: var(--dpb-draw-stroke); stroke-width: 2.4;
   stroke-dasharray: 8 4; stroke-linecap: round; stroke-linejoin: round; opacity: .92;
@@ -285,6 +287,27 @@ body.dpb-tool-draw .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-draw-layer .dpb-draw-badge text {
   fill: var(--dpb-draw-ink); font: 700 11px/1 system-ui, sans-serif;
 }
+.dpb-draw-layer .dpb-box-rect {
+  fill: var(--dpb-accent-wash); stroke: var(--dpb-accent); stroke-width: 2;
+  stroke-dasharray: 6 4; opacity: .9;
+}
+.dpb-draw-layer .dpb-box-live { opacity: .65; }
+.dpb-draw-layer .dpb-box-badge rect,
+.dpb-draw-layer .dpb-ruler-badge rect {
+  fill: var(--dpb-accent); stroke: var(--dpb-highlight); stroke-width: 1;
+}
+.dpb-draw-layer .dpb-box-badge text,
+.dpb-draw-layer .dpb-ruler-badge text {
+  fill: var(--dpb-accent-ink); font: 700 11px/1 ui-monospace, Consolas, monospace;
+}
+.dpb-draw-layer .dpb-ruler-hover {
+  fill: var(--dpb-accent-wash); stroke: var(--dpb-accent); stroke-width: 1.5;
+  stroke-dasharray: 4 3; pointer-events: none;
+}
+.dpb-draw-layer .dpb-ruler-line {
+  stroke: var(--dpb-accent); stroke-width: 2; stroke-linecap: round; pointer-events: none;
+}
+.dpb-draw-layer .dpb-ruler-point { fill: var(--dpb-accent); stroke: var(--dpb-elev); stroke-width: 2; pointer-events: none; }
 .dpb-pins-layer { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
 .dpb-free-pin {
   position: absolute; width: 28px; height: 28px; margin: -14px 0 0 -14px;

@@ -94,6 +94,12 @@
       <button type="button" id="dpb-draw-toggle" aria-pressed="false" title="{t_tool_draw} [D]">
         <svg viewBox="0 0 16 16" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 13.5l1-3.2 7-7 2.2 2.2-7 7-3.2 1Z"/><path d="M10 3.5 12.5 6"/></svg>
       </button>
+      <button type="button" id="dpb-box-toggle" aria-pressed="false" title="{t_tool_box} [B]">
+        <svg viewBox="0 0 16 16" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="10" height="10" rx="1.5"/><path d="M5 1.8v2.4M11 1.8v2.4M5 11.8v2.4M11 11.8v2.4M1.8 5h2.4M11.8 5h2.4M1.8 11h2.4M11.8 11h2.4"/></svg>
+      </button>
+      <button type="button" id="dpb-ruler-toggle" aria-pressed="false" title="{t_tool_ruler} [R]">
+        <svg viewBox="0 0 16 16" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 11.5 11.5 2.5l2 2-9 9-2-2Z"/><path d="M6 10 4.8 8.8M8 8 6.8 6.8M10 6 8.8 4.8"/></svg>
+      </button>
       <button type="button" id="dpb-hand-toggle" aria-pressed="false" title="{t_tool_hand} [H]">
         <svg viewBox="0 0 16 16" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 8V3.2a1.1 1.1 0 0 1 2.2 0V7m0-2.4a1.1 1.1 0 0 1 2.2 0V7m0-1.6a1.1 1.1 0 0 1 2.2 0V9c0 2.8-1.8 5-4.6 5S4.4 12 3.4 9.6L2.6 7.4a1.05 1.05 0 0 1 1.9-.8L5 8.4"/></svg>
       </button>
@@ -215,6 +221,8 @@
         <div class="dpb-modal-grid">
           <span class="i18n" data-i18n="mode_preview">{t_mode_preview}</span><kbd>V</kbd>
           <span class="i18n" data-i18n="draw_toggle">{t_draw_toggle}</span><kbd>D</kbd>
+          <span class="i18n" data-i18n="tool_box">{t_tool_box}</span><kbd>B</kbd>
+          <span class="i18n" data-i18n="tool_ruler">{t_tool_ruler}</span><kbd>R</kbd>
           <span class="i18n" data-i18n="roam_label">{t_roam_label}</span><kbd>J / K</kbd>
           <span class="i18n" data-i18n="undo_label">{t_undo_label}</span><kbd>Ctrl + Z</kbd>
           <span class="i18n" data-i18n="tool_hand">{t_tool_hand}</span><kbd>Space / H</kbd>

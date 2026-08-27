@@ -78,6 +78,14 @@ BRIDGE_SCRIPT = r"""<script>
     "#dpb-draw-layer .dpb-draw-badge-c{fill:#E11D48}" +
     "#dpb-draw-layer .dpb-draw-badge text{fill:#FFFFFF;" +
     "font:700 11px/1 system-ui,sans-serif}" +
+    ".dpb-ruler-hover-target{outline:1.5px dashed #2563EB!important;" +
+    "outline-offset:1px!important;background-color:rgba(37,99,235,.08)!important}" +
+    "#dpb-ruler-layer{position:absolute;top:0;left:0;z-index:2147482998;" +
+    "pointer-events:none;overflow:visible}" +
+    "#dpb-ruler-layer .dpb-ruler-line{stroke:#2563EB;stroke-width:2;stroke-linecap:round}" +
+    "#dpb-ruler-layer .dpb-ruler-point{fill:#2563EB;stroke:#FFFFFF;stroke-width:2}" +
+    "#dpb-ruler-layer .dpb-ruler-badge rect{fill:#2563EB;stroke:rgba(255,255,255,.45);stroke-width:1}" +
+    "#dpb-ruler-layer .dpb-ruler-badge text{fill:#FFFFFF;font:700 11px/1 ui-monospace,Consolas,monospace}" +
     ".dpb-draw-flash{animation:dpb-draw-flash .9s ease-out 1}" +
     "@keyframes dpb-draw-flash{0%{stroke-width:2.5px;filter:drop-shadow(0 0 0 rgba(244,96,42,0))}" +
     "50%{stroke-width:5px;filter:drop-shadow(0 0 8px rgba(244,96,42,.85))}" +
@@ -269,6 +277,12 @@ BRIDGE_SCRIPT = r"""<script>
   var drawSvg = null;
   var livePts = null;
   var livePathEl = null;
+  var rulerOn = false;
+  var rulerSvg = null;
+  var rulerHoverEl = null;
+  var rulerPinnedPoint = null;
+  var rulerSizeLabel = "{w}×{h} px";
+  var rulerDistanceLabel = "{d} px";
 
   function ensureDrawLayer() {
     if (drawSvg && drawSvg.isConnected) return drawSvg;
@@ -287,7 +301,80 @@ BRIDGE_SCRIPT = r"""<script>
   }
   window.addEventListener("resize", function () {
     if (drawSvg) { sizeDrawLayer(); renderDrawItems(lastAnchorEcho); }
+    if (rulerSvg) sizeRulerLayer();
   });
+
+  function ensureRulerLayer() {
+    if (rulerSvg && rulerSvg.isConnected) return rulerSvg;
+    rulerSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    rulerSvg.setAttribute("id", "dpb-ruler-layer");
+    rulerSvg.setAttribute("aria-hidden", "true");
+    sizeRulerLayer();
+    (document.body || document.documentElement).appendChild(rulerSvg);
+    return rulerSvg;
+  }
+  function sizeRulerLayer() {
+    if (!rulerSvg) return;
+    var d = document.documentElement;
+    rulerSvg.setAttribute("width", String(Math.max(d.scrollWidth, window.innerWidth)));
+    rulerSvg.setAttribute("height", String(Math.max(d.scrollHeight, window.innerHeight)));
+  }
+  function clearRuler() {
+    rulerPinnedPoint = null;
+    if (rulerHoverEl) rulerHoverEl.classList.remove("dpb-ruler-hover-target");
+    rulerHoverEl = null;
+    if (rulerSvg) rulerSvg.innerHTML = "";
+  }
+  function rulerText(key, values) {
+    var text = key === "size" ? rulerSizeLabel : rulerDistanceLabel;
+    Object.keys(values).forEach(function (k) { text = text.replace("{" + k + "}", String(values[k])); });
+    return text;
+  }
+  function drawRulerBadge(x, y, label, className) {
+    ensureRulerLayer();
+    var g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("class", className || "dpb-ruler-badge");
+    var w = Math.max(34, String(label).length * 7 + 12);
+    var bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("x", String(Math.max(0, x))); bg.setAttribute("y", String(Math.max(0, y)));
+    bg.setAttribute("width", String(w)); bg.setAttribute("height", "18"); bg.setAttribute("rx", "9");
+    var t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", String(Math.max(0, x) + w / 2)); t.setAttribute("y", String(Math.max(14, y + 11)));
+    t.setAttribute("text-anchor", "middle"); t.setAttribute("dy", "3.2"); t.textContent = String(label);
+    g.appendChild(bg); g.appendChild(t); rulerSvg.appendChild(g);
+    return g;
+  }
+  function showRulerHover(el) {
+    ensureRulerLayer();
+    var stale = rulerSvg.querySelectorAll(".dpb-ruler-badge.is-hover");
+    for (var i = 0; i < stale.length; i++) stale[i].remove();
+    if (rulerHoverEl && rulerHoverEl !== el) rulerHoverEl.classList.remove("dpb-ruler-hover-target");
+    rulerHoverEl = el;
+    if (!el || el === document.body || el === document.documentElement) return;
+    el.classList.add("dpb-ruler-hover-target");
+    var r = el.getBoundingClientRect();
+    drawRulerBadge(window.scrollX + r.left + 6, Math.max(0, window.scrollY + r.top - 24), rulerText("size", {
+      w: Math.round(r.width), h: Math.round(r.height)
+    }), "dpb-ruler-badge is-hover");
+  }
+  function drawRulerLine(a, b) {
+    ensureRulerLayer();
+    var stale = rulerSvg.querySelectorAll(".dpb-ruler-line, .dpb-ruler-point, .dpb-ruler-badge.is-line");
+    for (var i = 0; i < stale.length; i++) stale[i].remove();
+    var line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", String(a[0])); line.setAttribute("y1", String(a[1]));
+    line.setAttribute("x2", String(b[0])); line.setAttribute("y2", String(b[1]));
+    line.setAttribute("class", "dpb-ruler-line"); rulerSvg.appendChild(line);
+    [a, b].forEach(function (p) {
+      var c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      c.setAttribute("cx", String(p[0])); c.setAttribute("cy", String(p[1])); c.setAttribute("r", "4");
+      c.setAttribute("class", "dpb-ruler-point"); rulerSvg.appendChild(c);
+    });
+    var dx = b[0] - a[0], dy = b[1] - a[1];
+    drawRulerBadge((a[0] + b[0]) / 2 + 6, (a[1] + b[1]) / 2 - 24, rulerText("distance", {
+      d: Math.round(Math.sqrt(dx * dx + dy * dy))
+    }), "dpb-ruler-badge is-line");
+  }
 
   function drawPathD(points) {
     if (!points || !points.length) return "";
@@ -332,6 +419,24 @@ BRIDGE_SCRIPT = r"""<script>
     cancelLiveStroke();
     if (pts.length >= 4) {
       parent.postMessage({ dpbDrawStroke: { points: pts } }, "*");
+    }
+  }, true);
+
+  document.addEventListener("mousemove", function (e) {
+    if (!rulerOn) return;
+    showRulerHover(e.target);
+  }, true);
+  document.addEventListener("click", function (e) {
+    if (!rulerOn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var pt = [e.clientX + window.scrollX, e.clientY + window.scrollY];
+    if (!rulerPinnedPoint) {
+      rulerPinnedPoint = pt;
+      drawRulerLine(pt, pt);
+    } else {
+      drawRulerLine(rulerPinnedPoint, pt);
+      rulerPinnedPoint = null;
     }
   }, true);
 
@@ -391,6 +496,13 @@ BRIDGE_SCRIPT = r"""<script>
       // Draw mode mirrors pin ownership: the parent flips it, the bridge
       // only obeys. OFF means fully passive - pointer events pass through.
       setDrawOn(!!data.dpbDrawState.on);
+      return;
+    }
+    if (data.dpbRulerState) {
+      rulerOn = !!data.dpbRulerState.on;
+      if (data.dpbRulerState.sizeLabel) rulerSizeLabel = String(data.dpbRulerState.sizeLabel);
+      if (data.dpbRulerState.distanceLabel) rulerDistanceLabel = String(data.dpbRulerState.distanceLabel);
+      if (!rulerOn) clearRuler();
       return;
     }
     if (data.dpbPinLocate) {
