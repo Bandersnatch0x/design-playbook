@@ -212,6 +212,15 @@ def _ui_picker_prompt() -> str:
         "(comparison) entries; if an E-tier entry is truly needed, record "
         "`kind: user` + `report-batch` in its confirmation block per the "
         "adapter-absent rule. Do NOT reference preview confirm rounds.",
+        "DD entry YAML shape (G10 parses exactly this): list items inside "
+        "`candidates`, `comparison.axes`, and `selection.rejected` are "
+        "single-line flow maps `- {k: v, k: v, ...}`, never indented "
+        "field-style blocks. Example candidate item: "
+        "`- {id: A, source: agent, created_at: 2026-08-27T00:00:00Z, "
+        "fidelity: description, summary: <one line>, deviations: none, "
+        "assets: []}`. Fold a long item onto following lines only at a "
+        "comma, and never put ASCII commas or braces inside a value "
+        "(use full-width punctuation in prose).",
         "Write the finished decision report - top block (design-baseline, "
         "scene, density, template, regions, components, baseline-changes, "
         "risks), then the DD entries - to exactly "
