@@ -8,7 +8,7 @@ Runtime for the optional **observe\*** step. Writes capture artifacts only — *
 | --- | --- |
 | Unset | Artifact paths resolve under the **MCP process cwd** |
 | `"."` (default in package `.mcp.json`) | Same — relative to process cwd, **not** the chat workspace root |
-| Absolute path | Preferred for cross-repo dogfood: set to the run root (e.g. `D:/…/host-app/.scratch/playbook-smoke/<run>`) so `evidence/L6.*.png` lands next to `manifest.jsonl` |
+| Absolute path | Preferred for cross-repo dogfood: set to the run root (e.g. `/path/to/host-app/.scratch/playbook-smoke/<run>`) so `evidence/L6.*.png` lands next to `manifest.jsonl` |
 
 Relative values are resolved with `Path(value).resolve()` at process start semantics (cwd-relative). If captures appear under the plugin monorepo instead of the host run, check cwd and this env — the tool also returns **`written_path`** (absolute) so mis-roots are obvious without a filesystem search.
 

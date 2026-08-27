@@ -50,3 +50,11 @@ Separately, `_static_handoff_path()` resolves to `parents[4] / ".stitch" / "desi
   - run-tree artifact placement, retiring the `output/` ignore entry.
 - Until that work lands, `gatesPassed` and `verdict` in `disclosure-review.json` are not trustworthy acceptance signals and must not be cited as run evidence.
 - ADR-0008 and ADR-0013 are unchanged and remain the sole confirmation authority. This decision removes a competing one; it does not add a rule.
+
+## Amendment (2026-08-27)
+
+The one-file tracking exception for `.stitch/designs/static-handoff-v1.html`
+(a `.gitignore` re-include citing §6) is withdrawn: **no** Stitch export is
+tracked. §6 already states the principle — exports under `.stitch/` are
+design sources, never runtime assets — and the shipped delivery page
+(`mcp/evidence/static_handoff_page.html`) is the only distributable form.

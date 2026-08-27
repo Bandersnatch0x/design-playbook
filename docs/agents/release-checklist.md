@@ -57,7 +57,7 @@ Defaults come from the local package manifest and exact source inventory. The sc
 - [ ] Do not configure `NPM_TOKEN` / `NODE_AUTH_TOKEN`; both publish workflows use job-scoped GitHub OIDC with npm Trusted Publishing.
 - [ ] After the first successful OIDC publish, disable traditional token publishing where appropriate and revoke obsolete npm automation tokens and GitHub secrets.
 
-The requirements and the `/path/to/pi-switch` comparison are recorded in `.scratch/design-playbook-v0/research/npm-trusted-publishing.md`.
+The requirements and the local reference-implementation comparison are recorded in `.scratch/design-playbook-v0/research/npm-trusted-publishing.md` (local working notes, untracked).
 
 ## Version + tag + publish (tag-triggered, irreversible)
 

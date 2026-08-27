@@ -1,13 +1,14 @@
-// Screenshot the design-playbook showcase into PNGs using SwarSight's playwright-core + cached chromium.
-// Run: node scripts/screenshot-showcase.mjs
+// Screenshot the design-playbook showcase into PNGs with playwright-core.
+// Run: DPB_PLAYWRIGHT_PKG=<abs package.json of a project with playwright-core> \
+//      DPB_CHROMIUM=<abs chrome executable> node scripts/screenshot-showcase.mjs
 import { createRequire } from "node:module";
-const require = createRequire("/path/to/SwarSight/frontend/package.json");
+const require = createRequire(process.env.DPB_PLAYWRIGHT_PKG ?? import.meta.url);
 const { chromium } = require("playwright-core");
 import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-const EXE =
-  "/home/user/AppData/Local/ms-playwright/chromium-1223/chrome-win64/chrome.exe";
+const EXE = process.env.DPB_CHROMIUM;
+if (!EXE) throw new Error("set DPB_CHROMIUM to a Chromium executable path");
 const OUT = path.resolve("packages/design-playbook/showcase/screenshots");
 mkdirSync(OUT, { recursive: true });
 const VERSION = JSON.parse(

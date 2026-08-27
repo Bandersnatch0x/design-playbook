@@ -1,9 +1,9 @@
 # 交互式审查与静态交付工作台落地方案 (Interactive Review & Static Handoff Implementation Plan)
 
 - **工单/状态**：`#36` · **已定稿** (Approved by Roundtable Review)
-- **关联设计原型**：
-  - [`.stitch/designs/preview-confirm-v9.html`](file:////path/to/design-playbook-fresh/.stitch/designs/preview-confirm-v9.html) (Stage 6 Preview)
-  - [`.stitch/designs/static-handoff-v1.html`](file:////path/to/design-playbook-fresh/.stitch/designs/static-handoff-v1.html) (Stage 9 Static Handoff)
+- **关联设计原型**（Stitch 导出为本地设计源，不入库——见 `.gitignore` 与 ADR-0034 §6）：
+  - `.stitch/designs/preview-confirm-v9.html` (Stage 6 Preview)
+  - `.stitch/designs/static-handoff-v1.html` (Stage 9 Static Handoff)
 - **Stitch 项目链接**：[Google Stitch Project 4555543666448040473](https://stitch.withgoogle.com/projects/4555543666448040473)
 - **设计基线规范**：`Light Mode` · `#2563EB (Primary)` · `Geist / Inter / JetBrains Mono` · `Roundness 4px`
 - **关联规范与 ADR**：`ADR-0013 (Preview Transaction)` · `ADR-0017 (Persistent Contract)` · `ADR-0021 (Stage Registry)` · `ADR-0034 (Static Handoff Ownership & Lifecycle)`

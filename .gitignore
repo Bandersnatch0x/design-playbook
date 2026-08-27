@@ -62,12 +62,6 @@ docs/research/
 .firecrawl/
 
 # Stitch design sources stay local (ADR-0034 §6: exports under .stitch/ are
-# design sources, never runtime assets). git cannot re-include a file whose
-# parent directory is excluded, so exclude/re-include level by level rather
-# than writing `.stitch/` + `!.stitch/...`, which silently tracks everything.
-# static-handoff-v1.html is kept tracked as the historical Stitch prototype;
-# the shipped delivery page is mcp/evidence/static_handoff_page.html.
-.stitch/*
-!.stitch/designs/
-.stitch/designs/*
-!.stitch/designs/static-handoff-v1.html
+# design sources, never runtime assets; none are tracked). The shipped
+# delivery page is mcp/evidence/static_handoff_page.html.
+.stitch/
