@@ -38,7 +38,7 @@ design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?
 | :--- | :--- |
 | `?` | Conditional entry — `design-baseline?` for UI work in an existing product; `reference-intake?` when the ask carries a screenshot / URL / analogy |
 | `*` | Adapter stage — runs only when its bundled MCP tool is registered; otherwise skipped, never a hard error |
-| `†` | User-selectable audit stage (ADR-0033) — asked once on first run, remembered in `.design-playbook/preferences.yaml` (version-controlled; per-machine overrides in gitignored `preferences.local.yaml`) |
+| `†` | user-selectable audit stage (ADR-0033) — asked once on first run, remembered in `.design-playbook/preferences.yaml` (version-controlled; per-machine overrides in gitignored `preferences.local.yaml`) |
 
 Acceptance is **point-back**: every finding names the declaration that owns it,
 and blocking findings **recirculate** to that stage until they close. Skip
