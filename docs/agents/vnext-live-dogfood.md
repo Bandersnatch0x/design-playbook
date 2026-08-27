@@ -26,7 +26,7 @@ Scene class: agent-ops list. Goal is process, not shipping the page.
 - [ ] Repo on the vNext commits (validate + package scripts present)
 - [ ] `python scripts/validate.py` → VALIDATION PASSED
 - [ ] `python packages/design-playbook/scripts/doctor.py` runs (degraded without `DESIGN_PLAYBOOK_RUN_ROOT` is ok pre-run)
-- [ ] Host can load plugin: `claude --plugin-dir <abs>/packages/design-playbook` **or** installed plugin
+- [ ] Host can load plugin: `claude --plugin-dir <abs>/packages/design-playbook` **or** installed plugin (machine handshake: `python scripts/plugin_dir_smoke.py` from isolated config)
 - [ ] MCP `tools/list` shows `preview_prototype` and/or `execute_capture_plan` (note which)
 - [ ] If observe* will run: Playwright + Chromium installed
 

@@ -50,6 +50,7 @@ jobs:
           python3 tests/test_aggregate_runs.py
           python3 tests/test_normalize_lockstep.py
           python3 tests/test_install_smoke.py
+          python3 tests/test_plugin_dir_smoke.py
           python3 tests/test_release_workflow.py
           python3 tests/test_release_transaction.py
           python3 tests/test_vnext_s1.py
