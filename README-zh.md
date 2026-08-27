@@ -86,7 +86,7 @@ Agent 永远不能悄悄给自己的作业打分：
 | **3 · ui-evaluator**——point-back + 回流闭环 | **结果**——六项检查全绿 |
 | ![Point-back 发现](packages/design-playbook/showcase/screenshots/03-point-back.png) | ![六项检查全绿](packages/design-playbook/showcase/screenshots/04-gates.png) |
 
-**人工确认门实况（`preview*`）**——生成的原型直接渲染在评审工作台里：点选元素锚定意见、写逐点或整体批注，然后确认放行或打回重做：
+**人工确认门实况（`preview*`）**——生成的原型直接渲染在评审工作台里：spec 的验收准则以清单形式列在旁边（你的核对勾选随决策一并记录），可点选元素、拖拽高亮框、圈画、测量间距来锚定意见——然后签署放行或打回重做：
 
 ![Preview 确认工作台——批注后确认或打回](packages/design-playbook/showcase/screenshots/05-preview-confirm.png)
 

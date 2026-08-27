@@ -86,7 +86,7 @@ A full pass against [SwarSight](./packages/design-playbook/showcase) — a real 
 | **3 · ui-evaluator** — point-back + recirculate closure | **Result** — all six gates green |
 | ![Point-back findings](packages/design-playbook/showcase/screenshots/03-point-back.png) | ![All six gates green](packages/design-playbook/showcase/screenshots/04-gates.png) |
 
-**Live human-confirm gate (`preview*`)** — the generated prototype renders inside a review workbench: click elements to anchor feedback, write per-anchor or overall notes, then confirm or send it back for another round:
+**Live human-confirm gate (`preview*`)** — the generated prototype renders inside a review workbench: the spec's acceptance criteria sit in a checklist beside it (your ticks are recorded with the decision), and you can click elements, drag highlight boxes, sketch, or measure spacing to anchor feedback — then sign off or send it back for another round:
 
 ![Preview confirm workbench — annotate, then confirm or revise](packages/design-playbook/showcase/screenshots/05-preview-confirm.png)
 
