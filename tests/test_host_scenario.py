@@ -34,6 +34,8 @@ runner = _load_module()
 
 SCENARIO = "ux-spec-slice"
 RUN_ROOT_REL = ".scratch/host-scenario-ux-spec"
+UI_SCENARIO = "ui-picker-slice"
+UI_RUN_ROOT_REL = ".scratch/host-scenario-ui-picker"
 
 # A six-layer ops-alert-inbox spec that satisfies every G1 rule including the
 # spec-schema: 2 deep rules (duties table, path table, full five-state matrix,
@@ -86,6 +88,31 @@ BROKEN_SPEC = FIXTURE_SPEC.replace(
     "- When 页面加载完成 Then 显示空态引导与刷新入口 (path: P2)",
 )
 
+# ui-picker slice fixtures: the packaged dogfood pair is the known-good
+# (spec, decision report) shape (machine-verified by tests/test_vnext_s6.py).
+DOGFOOD_RUN = ROOT / "packages" / "design-playbook" / "examples" / "dogfood" / "run"
+DOGFOOD_SPEC_BYTES = (DOGFOOD_RUN / "spec.md").read_bytes()
+
+# G10-PASSING decision report for the dogfood spec, ground-truthed through
+# the runner's exact invocation shape:
+#   validate_run.py --format json <dogfood spec.md> <runner._point_back_stub
+#   stub> --decision-report <this report> --format json
+# exits 0 with findings []. The verbatim packaged report needed no trimming:
+# its E-tier preview-round confirmations stay legal because G10's
+# _preview_link_checks disengages without --preview-dir.
+DECISION_REPORT_FIXTURE = (DOGFOOD_RUN / "decision-report.md").read_text(
+    encoding="utf-8"
+)
+
+# Ground-truthed broken variant: DD-0002's tier outside
+# record|compare|explore trips exactly one finding, G10.invalid_tier,
+# under the same invocation.
+BROKEN_DECISION_REPORT = DECISION_REPORT_FIXTURE.replace(
+    "id: DD-0002\ntier: explore",
+    "id: DD-0002\ntier: exotic",
+)
+assert BROKEN_DECISION_REPORT != DECISION_REPORT_FIXTURE
+
 
 def _make_fill(run_root: Path) -> None:
     fill = run_root / "fill"
@@ -95,6 +122,16 @@ def _make_fill(run_root: Path) -> None:
 
 def _make_confirm_round(run_root: Path) -> None:
     (run_root / "confirm-round-1.json").write_text("{}", encoding="utf-8")
+
+
+def _make_filled_ui(run_root: Path) -> None:
+    (run_root / "filled-ui.md").write_text("filled ui", encoding="utf-8")
+
+
+def _make_preview_round(run_root: Path) -> None:
+    preview = run_root / "preview"
+    preview.mkdir(parents=True, exist_ok=True)
+    (preview / "confirm-round-1.json").write_text("{}", encoding="utf-8")
 
 
 def _claude_writer(spec_text: str, *, extras=()):
@@ -111,6 +148,35 @@ def _claude_writer(spec_text: str, *, extras=()):
         for make in extras:
             make(run_root)
         return subprocess.CompletedProcess(cmd, 0, stdout="spec.md emitted", stderr="")
+
+    return behavior
+
+
+def _ui_picker_claude_writer(report_text: str, *, extras=(), mutate_spec=None):
+    """Fake headless CLI for the ui-picker slice.
+
+    Asserts at call time that the runner already seeded the dogfood spec
+    into the run root (seed-before-run ordering) and that its bytes equal
+    the packaged spec, then emits the decision report. ``mutate_spec``
+    simulates a host that violates the declaration-input contract.
+    """
+
+    def behavior(cmd, *, env, cwd, timeout):
+        del env, timeout
+        run_root = Path(cwd) / UI_RUN_ROOT_REL
+        seeded = run_root / "spec.md"
+        assert seeded.is_file(), "seeded spec.md must exist before claude runs"
+        assert seeded.read_bytes() == DOGFOOD_SPEC_BYTES, (
+            "seeded spec must equal the packaged dogfood spec bytes"
+        )
+        if mutate_spec is not None:
+            seeded.write_text(mutate_spec, encoding="utf-8")
+        (run_root / "decision-report.md").write_text(report_text, encoding="utf-8")
+        for make in extras:
+            make(run_root)
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout="decision-report.md emitted", stderr=""
+        )
 
     return behavior
 
@@ -134,11 +200,13 @@ def _claude_raises(exc: Exception):
 
 
 def _fake_host_run(claude_behavior, *, validator="stub"):
-    """Fake ``_run_host_command`` dispatching on cmd[0].
+    """Fake ``_run_host_command`` dispatching on cmd[0] / cmd[1].
 
     claude calls go to the behavior; validate_run.py calls either return a
     canned clean result ("stub") or execute the real validator subprocess
-    ("real") so the G1 contract is exercised end to end.
+    ("real") so the G1/G10 contract is exercised end to end; run_status.py
+    calls always execute the real subprocess so the stage check is real
+    too (it only reads files under the temp run root).
     """
     calls: list[dict] = []
 
@@ -155,7 +223,20 @@ def _fake_host_run(claude_behavior, *, validator="stub"):
         if cmd[0] == "claude":
             return claude_behavior(cmd, env=env, cwd=cwd, timeout=timeout)
         assert cmd[0] == sys.executable, f"unexpected command: {cmd[0]}"
-        assert cmd[1] == str(runner.VALIDATOR_SCRIPT)
+        if cmd[1] == str(runner.RUN_STATUS_SCRIPT):
+            return subprocess.run(
+                cmd,
+                cwd=cwd,
+                env=env,
+                input=input_text,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout,
+                check=False,
+            )
+        assert cmd[1] == str(runner.VALIDATOR_SCRIPT), f"unexpected script: {cmd[1]}"
         if validator == "real":
             return subprocess.run(
                 cmd,
@@ -449,6 +530,7 @@ class CommandShapeTests(unittest.TestCase):
             self.assertEqual(spec_arg.parent, work / "target" / RUN_ROOT_REL)
             for flag in runner.VALIDATOR_FORBIDDEN_FLAGS:
                 self.assertNotIn(flag, cmd)
+            self.assertNotIn("--decision-report", cmd)
             self.assertEqual(call["cwd"], runner.ROOT)
 
 
@@ -554,6 +636,465 @@ class EndToEndValidatorTests(unittest.TestCase):
             self.assertTrue(
                 (output / "spec.md").is_file(),
                 "the failing spec must still be captured as evidence",
+            )
+
+
+class UiPickerPromptTests(unittest.TestCase):
+    def test_prompt_pins_preexisting_spec_as_declaration_input(self) -> None:
+        prompt = runner.SCENARIOS[UI_SCENARIO].prompt
+
+        self.assertIn(f"{UI_RUN_ROOT_REL}/spec.md", prompt)
+        self.assertIn("six-layer spec", prompt)
+        self.assertIn("declaration input", prompt)
+        self.assertIn("do not modify it", prompt)
+        self.assertIn("do not generate a new spec", prompt)
+
+    def test_prompt_declares_headless_no_pause_semantics(self) -> None:
+        prompt = runner.SCENARIOS[UI_SCENARIO].prompt
+
+        self.assertIn("headless", prompt.lower())
+        self.assertIn("the user is not in the loop", prompt)
+        self.assertIn("never pause for confirmation", prompt)
+        self.assertIn("agent-decided entries", prompt)
+        self.assertIn("documented default", prompt)
+        self.assertIn("DD entry with rationale", prompt)
+
+    def test_prompt_requires_dd_entries_with_tier_rules(self) -> None:
+        prompt = runner.SCENARIOS[UI_SCENARIO].prompt
+
+        self.assertIn("references/decisions.md", prompt)
+        self.assertIn("At least one DD entry is REQUIRED", prompt)
+        self.assertIn("R-tier", prompt)
+        self.assertIn("C-tier", prompt)
+        self.assertIn("E-tier", prompt)
+        self.assertIn("`kind: user` + `report-batch`", prompt)
+        self.assertIn("adapter-absent rule", prompt)
+        self.assertIn("Do NOT reference preview confirm rounds", prompt)
+
+    def test_prompt_pins_report_path_top_block_and_stop(self) -> None:
+        prompt = runner.SCENARIOS[UI_SCENARIO].prompt
+
+        self.assertIn(f"{UI_RUN_ROOT_REL}/decision-report.md", prompt)
+        for field in (
+            "design-baseline",
+            "scene",
+            "density",
+            "template",
+            "regions",
+            "components",
+            "baseline-changes",
+            "risks",
+        ):
+            self.assertIn(field, prompt)
+        self.assertIn("waiver/explicit-new path", prompt)
+        self.assertIn("Stop immediately after writing the decision report", prompt)
+
+    def test_prompt_restricted_to_ui_picker_only(self) -> None:
+        prompt = runner.SCENARIOS[UI_SCENARIO].prompt
+
+        self.assertIn("`ui-picker`", prompt)
+        self.assertIn("No Fill", prompt)
+        self.assertIn("no preview", prompt)
+        self.assertIn("no code scaffolding", prompt)
+        self.assertIn("no ui-evaluator", prompt)
+        self.assertIn("no craft-guard", prompt)
+        self.assertNotIn("`ux-spec`", prompt)
+
+
+class UiPickerRegistryTests(unittest.TestCase):
+    def test_ui_picker_pack_declares_slice_elements(self) -> None:
+        pack = runner.SCENARIOS[UI_SCENARIO]
+
+        self.assertEqual(pack.run_root, UI_RUN_ROOT_REL)
+        self.assertEqual(pack.spec_artifact, "spec.md")
+        self.assertEqual(
+            pack.seed_artifacts,
+            (
+                (
+                    "packages/design-playbook/examples/dogfood/run/spec.md",
+                    "spec.md",
+                ),
+            ),
+        )
+        self.assertEqual(pack.expected_artifacts, ("spec.md", "decision-report.md"))
+        self.assertEqual(pack.audit_artifacts, ())
+        self.assertEqual(
+            pack.forbidden_artifacts,
+            ("fill/**", "filled-ui.md", "preview/**", "confirm-round-*.json"),
+        )
+        self.assertEqual(pack.decision_report_artifact, "decision-report.md")
+        self.assertEqual(pack.run_status_required_stages, ("decision",))
+        self.assertEqual(pack.timeout_seconds, 600)
+        self.assertEqual(
+            pack.validator["decision_report"],
+            "decision-report.md (G10 engages on DD entries; G5 stays quiet "
+            "because no --preview-dir is passed)",
+        )
+        self.assertNotIn("--decision-report", pack.validator["forbidden_flags"])
+        for flag in (
+            "--run-root",
+            "--shaping-dir",
+            "--evidence-dir",
+            "--preview-dir",
+            "--strict",
+        ):
+            self.assertIn(flag, pack.validator["forbidden_flags"])
+        self.assertEqual(set(pack.isolation), set(runner.SCENARIOS[SCENARIO].isolation))
+
+    def test_ux_spec_pack_unchanged_by_new_fields(self) -> None:
+        pack = runner.SCENARIOS[SCENARIO]
+
+        self.assertEqual(pack.seed_artifacts, ())
+        self.assertIsNone(pack.decision_report_artifact)
+        self.assertEqual(pack.run_status_required_stages, ())
+        self.assertNotIn("decision_report", pack.validator)
+        self.assertIn("--decision-report", pack.validator["forbidden_flags"])
+
+    def test_list_prints_both_scenarios(self) -> None:
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            code = runner.main(["list"])
+
+        self.assertEqual(code, 0)
+        output = buffer.getvalue()
+        self.assertIn(SCENARIO, output)
+        self.assertIn(UI_SCENARIO, output)
+        self.assertIn(UI_RUN_ROOT_REL, output)
+        self.assertIn("packages/design-playbook/examples/dogfood/run/spec.md", output)
+        self.assertIn("decision report:    decision-report.md", output)
+        self.assertIn("run-status stages:  decision", output)
+        self.assertIn("filled-ui.md", output)
+
+
+class UiPickerSeedingTests(unittest.TestCase):
+    def test_seed_lands_before_claude_runs_and_survives(self) -> None:
+        # The fake claude asserts at call time that the seeded spec.md
+        # already exists with the packaged dogfood bytes.
+        with _run_main(
+            _ui_picker_claude_writer(DECISION_REPORT_FIXTURE),
+            argv=(UI_SCENARIO,),
+        ) as (code, payload, _markdown, _output, _calls):
+            self.assertEqual(code, 0)
+            self.assertEqual(payload["status"], "pass", payload.get("error"))
+            seed_stage = [
+                check
+                for check in payload["checks"]
+                if check["name"] == "seed declaration inputs"
+            ]
+            self.assertEqual(seed_stage[-1]["status"], "pass")
+            self.assertEqual(seed_stage[-1]["detail"], "spec.md")
+            immutability = [
+                check
+                for check in payload["checks"]
+                if check["name"] == "seed immutability"
+            ]
+            self.assertEqual(immutability[-1]["status"], "pass")
+
+    def test_seed_mutation_fails_scenario(self) -> None:
+        behavior = _ui_picker_claude_writer(
+            DECISION_REPORT_FIXTURE, mutate_spec="# mutated spec\n"
+        )
+        with _run_main(behavior, argv=(UI_SCENARIO,)) as (
+            code,
+            payload,
+            _markdown,
+            _output,
+            _calls,
+        ):
+            self.assertEqual(code, 1)
+            self.assertEqual(payload["status"], "fail")
+            self.assertIn("declaration input was modified", payload["error"])
+            immutability = [
+                check
+                for check in payload["checks"]
+                if check["name"] == "seed immutability"
+            ]
+            self.assertEqual(immutability[-1]["status"], "fail")
+            self.assertIsNone(
+                payload["validator"],
+                "a mutated declaration input must fail before any gate runs",
+            )
+
+    def test_missing_decision_report_fails(self) -> None:
+        with _run_main(_claude_returns(0, stdout="done"), argv=(UI_SCENARIO,)) as (
+            code,
+            payload,
+            _markdown,
+            _output,
+            _calls,
+        ):
+            self.assertEqual(code, 1)
+            self.assertEqual(payload["status"], "fail")
+            self.assertIn("required artifact missing", payload["error"])
+            self.assertIn("decision-report.md", payload["error"])
+
+
+class UiPickerCommandShapeTests(unittest.TestCase):
+    def test_ui_picker_claude_command_shape_env_cwd_timeout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp) / "work"
+            config = runner.HostScenarioConfig(
+                scenario=UI_SCENARIO, output_dir=Path(tmp) / "evidence"
+            )
+            with _host_patch(
+                _ui_picker_claude_writer(DECISION_REPORT_FIXTURE)
+            ) as calls:
+                result = runner.run_scenario(config, temp_root=work)
+            self.assertEqual(result["status"], "pass", result.get("error"))
+            claude_calls = [call for call in calls if call["cmd"][0] == "claude"]
+
+            self.assertEqual(len(claude_calls), 1)
+            call = claude_calls[0]
+            self.assertEqual(
+                call["cmd"],
+                [
+                    "claude",
+                    "--plugin-dir",
+                    str(runner.PKG),
+                    "--permission-mode",
+                    "acceptEdits",
+                    "-p",
+                    runner.SCENARIOS[UI_SCENARIO].prompt,
+                ],
+            )
+            isolated = Path(call["env"]["CLAUDE_CONFIG_DIR"])
+            self.assertEqual(isolated, work / "claude-config")
+            self.assertTrue(isolated.is_dir())
+            self.assertEqual(Path(call["cwd"]), work / "target")
+            self.assertEqual(call["timeout"], 600)
+            self.assertEqual(call["input_text"], "")
+
+    def test_ui_picker_validator_and_run_status_command_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp) / "work"
+            config = runner.HostScenarioConfig(
+                scenario=UI_SCENARIO, output_dir=Path(tmp) / "evidence"
+            )
+            with _host_patch(
+                _ui_picker_claude_writer(DECISION_REPORT_FIXTURE)
+            ) as calls:
+                result = runner.run_scenario(config, temp_root=work)
+            self.assertEqual(result["status"], "pass", result.get("error"))
+            run_root = work / "target" / UI_RUN_ROOT_REL
+            validator_calls = [
+                call
+                for call in calls
+                if call["cmd"][0] == sys.executable
+                and call["cmd"][1] == str(runner.VALIDATOR_SCRIPT)
+            ]
+            self.assertEqual(len(validator_calls), 1)
+            cmd = validator_calls[0]["cmd"]
+            self.assertEqual(cmd[0], sys.executable)
+            self.assertEqual(cmd[1], str(runner.VALIDATOR_SCRIPT))
+            self.assertEqual(cmd[2:4], ["--format", "json"])
+            spec_arg = Path(cmd[4])
+            pointback_arg = Path(cmd[5])
+            self.assertEqual(cmd[6], "--decision-report")
+            report_arg = Path(cmd[7])
+            self.assertEqual(len(cmd), 8)
+            for arg in (spec_arg, pointback_arg, report_arg):
+                self.assertTrue(arg.is_absolute())
+            self.assertEqual(spec_arg.name, "spec.md")
+            self.assertEqual(pointback_arg.name, "point-back-stub.md")
+            self.assertEqual(report_arg.name, "decision-report.md")
+            self.assertEqual(spec_arg.parent, run_root)
+            self.assertEqual(report_arg.parent, run_root)
+            for flag in (
+                "--run-root",
+                "--shaping-dir",
+                "--evidence-dir",
+                "--preview-dir",
+                "--strict",
+                "--require-preview",
+                "--require-evidence",
+                "--require-coverage",
+            ):
+                self.assertNotIn(flag, cmd)
+            self.assertEqual(validator_calls[0]["cwd"], runner.ROOT)
+
+            run_status_calls = [
+                call
+                for call in calls
+                if call["cmd"][0] == sys.executable
+                and call["cmd"][1] == str(runner.RUN_STATUS_SCRIPT)
+            ]
+            self.assertEqual(len(run_status_calls), 1)
+            rs_cmd = run_status_calls[0]["cmd"]
+            self.assertEqual(rs_cmd[2], "--json")
+            self.assertEqual(Path(rs_cmd[3]), run_root)
+            self.assertEqual(run_status_calls[0]["cwd"], runner.ROOT)
+
+
+class RunStatusStageTests(unittest.TestCase):
+    """Unit tests for the run-status stage helper against the REAL
+    run_status.py subprocess (two fixture run roots)."""
+
+    def test_helper_reports_decision_stage_present(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run"
+            run_root.mkdir()
+            (run_root / "spec.md").write_text("spec\n", encoding="utf-8")
+            (run_root / "decision-report.md").write_text("# report\n", encoding="utf-8")
+            present = runner._require_run_status_stages(run_root, ("decision",))
+
+        self.assertIn("spec", present)
+        self.assertIn("decision", present)
+
+    def test_helper_fails_when_required_stage_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run"
+            run_root.mkdir()
+            (run_root / "spec.md").write_text("spec\n", encoding="utf-8")
+            with self.assertRaises(runner.SmokeFailure) as ctx:
+                runner._require_run_status_stages(run_root, ("decision",))
+
+        message = str(ctx.exception)
+        self.assertIn("missing", message)
+        self.assertIn("decision", message)
+
+
+class UiPickerEndToEndTests(unittest.TestCase):
+    """The critical seam: real validate_run.py (G1+G10) and real
+    run_status.py judge the fake host's seeded-spec + decision-report run."""
+
+    def test_ui_picker_pass_end_to_end(self) -> None:
+        with _run_main(
+            _ui_picker_claude_writer(DECISION_REPORT_FIXTURE),
+            validator="real",
+            argv=(UI_SCENARIO,),
+        ) as (code, payload, markdown, output, _calls):
+            self.assertEqual(code, 0)
+            self.assertEqual(payload["status"], "pass")
+            self.assertEqual(payload["exit_code"], 0)
+            self.assertEqual(payload["validator"]["exit_code"], 0)
+            self.assertEqual(payload["validator"]["findings"], [])
+            self.assertEqual(payload["validator"]["g1_findings"], [])
+            self.assertEqual(payload["point_back"]["l6_count"], 3)
+            self.assertFalse(
+                [check for check in payload["checks"] if check["status"] != "pass"]
+            )
+            self.assertIn("**Status:** **PASS**", markdown)
+            for name in (
+                "result.json",
+                "result.md",
+                "spec.md",
+                "decision-report.md",
+                "point-back-stub.md",
+            ):
+                self.assertTrue(
+                    (output / name).is_file(), f"missing evidence copy: {name}"
+                )
+            self.assertEqual(
+                payload["artifacts"]["audit_copied"],
+                ["spec.md", "decision-report.md", "point-back-stub.md"],
+            )
+            self.assertEqual(payload["run_status"]["required_stages"], ["decision"])
+            self.assertIn("decision", payload["run_status"]["present_stages"])
+            self.assertFalse(payload["temporary_root"]["retained"])
+            self.assertFalse(Path(payload["temporary_root"]["path"]).exists())
+
+    def test_ui_picker_broken_report_fails_with_g10_finding(self) -> None:
+        with _run_main(
+            _ui_picker_claude_writer(BROKEN_DECISION_REPORT),
+            validator="real",
+            argv=(UI_SCENARIO,),
+        ) as (code, payload, _markdown, output, _calls):
+            self.assertEqual(code, 1)
+            self.assertEqual(payload["status"], "fail")
+            self.assertEqual(payload["validator"]["exit_code"], 1)
+            rule_ids = [item["rule_id"] for item in payload["validator"]["findings"]]
+            self.assertIn("G10.invalid_tier", rule_ids)
+            self.assertEqual(
+                payload["validator"]["g1_findings"],
+                [
+                    item
+                    for item in payload["validator"]["findings"]
+                    if item["rule_id"].startswith("G1")
+                ],
+            )
+            self.assertIn("validator findings", payload["error"])
+            self.assertIsNone(
+                payload["run_status"],
+                "the run-status stage must not run when the validator fails",
+            )
+            for name in ("spec.md", "decision-report.md"):
+                self.assertTrue(
+                    (output / name).is_file(),
+                    f"the failing run must still be captured as evidence: {name}",
+                )
+
+
+class UiPickerForbiddenTests(unittest.TestCase):
+    def test_ui_picker_fill_directory_fails(self) -> None:
+        behavior = _ui_picker_claude_writer(
+            DECISION_REPORT_FIXTURE, extras=(_make_fill,)
+        )
+        with _run_main(behavior, argv=(UI_SCENARIO,)) as (
+            code,
+            payload,
+            _markdown,
+            _output,
+            _calls,
+        ):
+            self.assertEqual(code, 1)
+            self.assertEqual(payload["status"], "fail")
+            self.assertIn("forbidden artifacts present", payload["error"])
+            self.assertIn("fill", payload["error"])
+
+    def test_ui_picker_filled_ui_md_fails(self) -> None:
+        behavior = _ui_picker_claude_writer(
+            DECISION_REPORT_FIXTURE, extras=(_make_filled_ui,)
+        )
+        with _run_main(behavior, argv=(UI_SCENARIO,)) as (
+            code,
+            payload,
+            _markdown,
+            _output,
+            _calls,
+        ):
+            self.assertEqual(code, 1)
+            self.assertEqual(payload["status"], "fail")
+            self.assertIn("forbidden artifacts present", payload["error"])
+            self.assertIn("filled-ui.md", payload["error"])
+
+    def test_ui_picker_preview_dir_and_confirm_round_fail(self) -> None:
+        behavior = _ui_picker_claude_writer(
+            DECISION_REPORT_FIXTURE, extras=(_make_preview_round,)
+        )
+        with _run_main(behavior, argv=(UI_SCENARIO,)) as (
+            code,
+            payload,
+            _markdown,
+            _output,
+            _calls,
+        ):
+            self.assertEqual(code, 1)
+            self.assertEqual(payload["status"], "fail")
+            self.assertIn("forbidden artifacts present", payload["error"])
+            self.assertIn("preview", payload["error"])
+            self.assertIn("confirm-round-1.json", payload["error"])
+
+
+class UiPickerSkipSemanticsTests(unittest.TestCase):
+    def test_ui_picker_not_logged_in_skips_without_gates(self) -> None:
+        behavior = _claude_returns(1, stdout="Not logged in · Please run /login\n")
+        with _run_main(behavior, argv=(UI_SCENARIO,)) as (
+            code,
+            payload,
+            _markdown,
+            _output,
+            calls,
+        ):
+            self.assertEqual(code, 2)
+            self.assertEqual(payload["status"], "skip")
+            self.assertIn("Not logged in", payload["skip_reason"])
+            self.assertEqual(payload["exit_code"], 1)
+            self.assertIsNone(payload["validator"])
+            self.assertIsNone(payload["run_status"])
+            self.assertEqual(
+                [call for call in calls if call["cmd"][0] == sys.executable],
+                [],
+                "no validator or run_status call may happen on a skip",
             )
 
 
