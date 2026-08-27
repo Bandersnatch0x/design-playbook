@@ -812,6 +812,25 @@ class UiPickerRegistryTests(unittest.TestCase):
         self.assertNotIn("decision_report", pack.validator)
         self.assertIn("--decision-report", pack.validator["forbidden_flags"])
 
+    def test_pack_stage_keys_must_exist_in_stages_registry(self) -> None:
+        # A renamed STAGES key must fail at pack construction, not surface
+        # as a nightly run-status mismatch.
+        base = {
+            field: getattr(runner.SCENARIOS[UI_SCENARIO], field)
+            for field in (
+                "run_root", "spec_artifact", "prompt", "expected_artifacts",
+                "audit_artifacts", "forbidden_artifacts", "validator",
+                "timeout_seconds", "isolation",
+            )
+        }
+        with self.assertRaises(ValueError) as ctx:
+            runner.ScenarioPack(
+                name="bogus-slice", run_status_required_stages=("decisions",),
+                **base,
+            )
+        self.assertIn("unknown stage keys", str(ctx.exception))
+        self.assertIn("'decisions'", str(ctx.exception))
+
     def test_list_prints_both_scenarios(self) -> None:
         buffer = io.StringIO()
         with redirect_stdout(buffer):

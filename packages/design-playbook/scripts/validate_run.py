@@ -75,6 +75,7 @@ Usage:
       [--format text|json]
 Exit 0 + "RUN OK"; exit 1 + one line per artifact violation; exit 2 on usage
 or artifact I/O errors. JSON mode projects the same findings as a list.
+In-process consumers construct ``RunInputs`` and call ``run(inputs)``.
 
 Strict quality mode (opt-in):
   --require-preview   fail when preview did not occur (G5 must fire)
@@ -93,6 +94,7 @@ is a pre-audit floor and may legitimately precede the audit.
 """
 import argparse
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 # One import seam (ADR-0022): package root on sys.path once, then absolute
@@ -231,27 +233,44 @@ def _audit_marker_findings(
     )]
 
 
-def run(
-        spec_path: str,
-        pb_path: str,
-        preview_dir: str | None = None,
-        decision_report: str | None = None,
-        evidence_dir: str | None = None,
-        run_root: str | None = None,
-        require_preview: bool = False,
-        require_evidence: bool = False,
-        contract_project: str | None = None,
-        contract_run: str | None = None,
-        shaping_dir: str | None = None,
-        require_coverage: bool = False,
-        run_facts: RunFacts | None = None) -> tuple[list[Finding], list[Finding]]:
+@dataclass(frozen=True)
+class RunInputs:
+    """One validator invocation: artifact paths, strict-mode flags, and an
+    optional pre-captured run snapshot. The CLI builds it from argparse;
+    in-process callers construct it directly."""
+
+    spec_path: str
+    point_back_path: str
+    preview_dir: str | None = None
+    decision_report: str | None = None
+    evidence_dir: str | None = None
+    run_root: str | None = None
+    require_preview: bool = False
+    require_evidence: bool = False
+    require_coverage: bool = False
+    contract_project: str | None = None
+    contract_run: str | None = None
+    shaping_dir: str | None = None
+    run_facts: RunFacts | None = None
+
+
+def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
     """Return ``(errors, warnings)``. Errors fail the run; warnings do not."""
+    spec_path = inputs.spec_path
+    pb_path = inputs.point_back_path
+    decision_report = inputs.decision_report
+    require_preview = inputs.require_preview
+    require_evidence = inputs.require_evidence
+    require_coverage = inputs.require_coverage
+    contract_project = inputs.contract_project
+    contract_run = inputs.contract_run
+    shaping_dir = inputs.shaping_dir
     errs: list[Finding] = []
     warns: list[Finding] = []
-    pd = Path(preview_dir) if preview_dir else None
-    ed = Path(evidence_dir) if evidence_dir else None
-    rr = Path(run_root) if run_root else None
-    facts = run_facts or capture_run_facts(
+    pd = Path(inputs.preview_dir) if inputs.preview_dir else None
+    ed = Path(inputs.evidence_dir) if inputs.evidence_dir else None
+    rr = Path(inputs.run_root) if inputs.run_root else None
+    facts = inputs.run_facts or capture_run_facts(
         spec_path=Path(spec_path), pointback_path=Path(pb_path),
         preview_dir=pd, evidence_dir=ed, run_root=rr,
     )
@@ -585,9 +604,9 @@ def main(argv: list[str]) -> int:
         return 2
 
     try:
-        errs, warns = run(
-            args.spec,
-            args.point_back,
+        errs, warns = run(RunInputs(
+            spec_path=args.spec,
+            point_back_path=args.point_back,
             preview_dir=args.preview_dir,
             decision_report=args.decision_report,
             evidence_dir=args.evidence_dir,
@@ -598,7 +617,7 @@ def main(argv: list[str]) -> int:
             contract_run=args.contract_run,
             shaping_dir=args.shaping_dir,
             require_coverage=args.require_coverage,
-        )
+        ))
     except (OSError, UnicodeError) as exc:
         if fmt == "json":
             print(render_json([finding(

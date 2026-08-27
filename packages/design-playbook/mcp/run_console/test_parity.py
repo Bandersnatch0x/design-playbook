@@ -61,7 +61,7 @@ from design_playbook.scripts.run_facts import capture_run_facts  # noqa: E402
 from design_playbook.scripts.run_metadata import (  # noqa: E402
     project_package_metadata,
 )
-from design_playbook.scripts.run_status import (  # noqa: E402
+from design_playbook.scripts.status_projection import (  # noqa: E402
     inspect_run,
     inspect_vnext,
     project_next_action,

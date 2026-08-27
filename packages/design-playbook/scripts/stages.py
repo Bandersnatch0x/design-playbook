@@ -9,15 +9,17 @@ filenames the pipeline's agents and gates share.
 plan / decision / preview / fill / craft / evidence / accept) used for
 status/resume narration. Each regular stage owns its resume action beside
 its key, skill, and markers; Preview and Accept keep their integrity/verdict
-logic in ``run_status.py``. When you add/remove a step or change an artifact
-filename in SKILL.md, update this table — this module is that drift surface.
+logic in ``status_projection.py``. When you add/remove a step or change an artifact
+filename in SKILL.md, update this table — this module is that drift surface,
+and ``tests/test_stages_registry.py`` (StageMirrorLockstepTests) fails while
+the two disagree.
 Preview stage presence is *not* listed here by markers: it is derived by
 Preview integrity (``mcp/preview/integrity.py``, C1).
 
 The artifact-name constants are shared with ``validate_run.py`` (G6) and
-``run_status.py`` (verdict/status reads). ``STAGES`` markers reference the
-constants where they overlap, so the table and the constants cannot
-disagree. Persistent-contract names (``decisions.jsonl``) stay with
+``status_projection.py`` (verdict/status reads). ``STAGES`` markers
+reference the constants where they overlap, so the table and the constants
+cannot disagree. Persistent-contract names (``decisions.jsonl``) stay with
 ``contract_v1.py`` (ADR-0017); Preview round/confirm/decision filename
 patterns stay with the Preview integrity module.
 """

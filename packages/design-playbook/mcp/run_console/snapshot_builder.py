@@ -63,7 +63,7 @@ from design_playbook.scripts.run_metadata import (
     project_package_metadata,
 )
 from design_playbook.scripts.run_profile import validate_run_profile
-from design_playbook.scripts.run_status import (
+from design_playbook.scripts.status_projection import (
     inspect_run,
     inspect_vnext,
     project_next_action,
