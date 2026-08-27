@@ -4,7 +4,7 @@ Date: YYYY-MM-DD
 Ask: <one-line product UI ask>
 Scene: <class, chosen to differ from prior dogfoods>
 
-## Process gates (six)
+## Process gates
 
 | Gate | Pass |
 | --- | --- |
@@ -45,4 +45,4 @@ For each blocking finding, record: `recirculate -> fix -> re-eval -> 0 blocking`
 
 ## Verdict
 
-<pass/fail across six gates; one line>
+<pass/fail across the gates above; one line>
