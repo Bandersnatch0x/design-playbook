@@ -667,6 +667,77 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             self.assertFalse((Path(tmp) / "confirm-round-1.json").exists())
             self.assertFalse((Path(tmp) / "log.md").exists())
 
+    def test_confirm_record_includes_spec_criteria_review(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prototype = root / "round-1.html"
+            report = root / "report.md"
+            spec = root / "spec.md"
+            prototype.write_text("<html><body>reviewed</body></html>", encoding="utf-8")
+            report.write_text("# Decision report\n", encoding="utf-8")
+            spec.write_text(
+                """# Spec
+
+## L1 Goal
+- Outcome summary: Review a queue monitor UI.
+## L2 Structure
+Page.
+## L3 Flow
+Flow.
+## L4 Details
+Details.
+## L5 Edges
+Edges.
+## L6 Acceptance
+1. Queue cards: Given jobs exist, When the monitor renders, Then active and queued counts are visible.
+2. Failure affordance: Given failed jobs exist, When a reviewer scans the table, Then retry guidance is visible.
+""",
+                encoding="utf-8",
+            )
+
+            def collect(
+                prototype: Path,
+                summary: str,
+                options: list[str],
+                round_n: int,
+                *,
+                criteria: list[dict[str, str]],
+            ) -> dict:
+                self.assertEqual(
+                    [item["id"] for item in criteria], ["L6.1", "L6.2"]
+                )
+                return {
+                    "choice": "确认通过",
+                    "feedback": "checked criteria",
+                    "anchors": [],
+                    "aborted": False,
+                    "criteria_review": [
+                        {"id": "L6.2", "title": "tampered", "checked": True}
+                    ],
+                }
+
+            result = run_preview_transaction(
+                path_arg=str(prototype),
+                html=None,
+                summary="summary",
+                round_n=1,
+                report_ref=str(report),
+                options=["确认通过", "需要修改"],
+                collect=collect,
+            )
+            entry = json.loads((root / "decision-round-1.json").read_text(
+                encoding="utf-8"))
+            confirm = json.loads((root / "confirm-round-1.json").read_text(
+                encoding="utf-8"))
+
+        expected = [
+            {"id": "L6.1", "title": "Queue cards", "checked": False},
+            {"id": "L6.2", "title": "Failure affordance", "checked": True},
+        ]
+        self.assertEqual(result["criteria_review"], expected)
+        self.assertEqual(entry["outcome"]["criteria_review"], expected)
+        self.assertEqual(confirm["criteria_review"], expected)
+
     def _run(
         self, prototype: Path, *, summary: str = "summary",
         report_ref: str = "report.md", options: list[str] | None = None,

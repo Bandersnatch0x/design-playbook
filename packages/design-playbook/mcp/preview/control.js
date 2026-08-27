@@ -1,10 +1,11 @@
 (function () {
   "use strict";
 
-  // ---- theme bootstrap (host preference, same contract as before) ----
+  // ---- theme bootstrap (host preference, stored choice, system fallback) ----
   var root = document.getElementById("dpb-root");
   var floatRoot = document.getElementById("dpb-float-root");
   var toastsRoot = document.getElementById("dpb-toasts");
+  var THEME_STORAGE_KEY = "dpb.preview.theme";
 
   var colorScheme = window.matchMedia
     ? window.matchMedia("(prefers-color-scheme: dark)")
@@ -19,15 +20,35 @@
     return null;
   }
 
-  function syncTheme() {
+  function storedTheme() {
+    try {
+      var v = localStorage.getItem(THEME_STORAGE_KEY);
+      return v === "light" || v === "dark" ? v : null;
+    } catch (e) { return null; }
+  }
+
+  function updateThemeIcon(theme) {
+    var icon = document.getElementById("dpb-theme-icon");
+    if (icon) icon.textContent = theme === "dark" ? "☀" : "☾";
+  }
+
+  function applyTheme(theme, persist) {
     if (!root) return;
-    var html = document.documentElement;
-    var body = document.body;
-    var theme = explicitTheme(html) || explicitTheme(body)
-      || (colorScheme && colorScheme.matches ? "dark" : "light");
     root.setAttribute("data-theme", theme);
     if (floatRoot) floatRoot.setAttribute("data-theme", theme);
     if (toastsRoot) toastsRoot.setAttribute("data-theme", theme);
+    updateThemeIcon(theme);
+    if (persist) {
+      try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch (e) {}
+    }
+  }
+
+  function syncTheme() {
+    var html = document.documentElement;
+    var body = document.body;
+    var theme = explicitTheme(html) || explicitTheme(body) || storedTheme()
+      || (colorScheme && colorScheme.matches ? "dark" : "light");
+    applyTheme(theme, false);
   }
   syncTheme();
 
@@ -56,6 +77,7 @@
     if (ci) ci.placeholder = tt("comment_placeholder");
     var fb = document.getElementById("dpb-feedback");
     if (fb) fb.placeholder = tt("field_placeholder");
+    syncCriteriaHidden();
     updateStatus();
   }
 
@@ -88,6 +110,12 @@
   var handBtn = document.getElementById("dpb-hand-toggle");
   var modePreviewBtn = document.getElementById("dpb-mode-preview");
   var modeAnnotateBtn = document.getElementById("dpb-mode-annotate");
+  var criteriaHidden = document.getElementById("dpb-criteria-json");
+  var criteriaPanel = document.getElementById("dpb-spec-panel");
+  var criteriaToggle = document.getElementById("dpb-criteria-toggle");
+  var criteriaCount = document.getElementById("dpb-criteria-count");
+  var criteriaChecks = document.querySelectorAll(".dpb-criterion-check");
+  var themeToggle = document.getElementById("dpb-theme-toggle");
 
   // ---- state ----
   var anchors = [];
@@ -105,6 +133,56 @@
   var zoom = 1, panX = 0, panY = 0;
   var isPanning = false, isSpaceDown = false, panStartX = 0, panStartY = 0;
   var livePts = null, livePathEl = null;
+
+  // ---- criteria review state (human record only) ----
+  function criteriaCountLabel(checked, total) {
+    return String(tt("criteria_count"))
+      .replace("{checked}", String(checked))
+      .replace("{total}", String(total));
+  }
+  function criteriaSnapshot() {
+    var items = [];
+    for (var i = 0; i < criteriaChecks.length; i++) {
+      var check = criteriaChecks[i];
+      var id = (check.getAttribute("data-criterion-id") || "").trim();
+      if (!id) continue;
+      items.push({
+        id: id,
+        title: check.getAttribute("data-criterion-title") || "",
+        checked: check.checked === true,
+      });
+    }
+    return items;
+  }
+  function syncCriteriaHidden() {
+    var items = criteriaSnapshot();
+    if (criteriaHidden) criteriaHidden.value = JSON.stringify(items);
+    if (criteriaCount) {
+      var checked = items.filter(function (item) { return item.checked; }).length;
+      criteriaCount.textContent = criteriaCountLabel(checked, items.length);
+    }
+    if (criteriaToggle) criteriaToggle.hidden = items.length === 0;
+  }
+  function setSpecPanel(open) {
+    if (!criteriaPanel) return;
+    criteriaPanel.classList.toggle("dpb-collapsed", !open);
+    root.classList.toggle("dpb-spec-collapsed", !open);
+    if (criteriaToggle) criteriaToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  for (var ci = 0; ci < criteriaChecks.length; ci++) {
+    criteriaChecks[ci].addEventListener("change", syncCriteriaHidden);
+  }
+  if (criteriaToggle) {
+    criteriaToggle.addEventListener("click", function () {
+      setSpecPanel(criteriaPanel.classList.contains("dpb-collapsed"));
+    });
+  }
+  if (themeToggle) {
+    themeToggle.addEventListener("click", function () {
+      var current = root.getAttribute("data-theme") === "dark" ? "dark" : "light";
+      applyTheme(current === "dark" ? "light" : "dark", true);
+    });
+  }
 
   // ---- utils ----
   function esc(s) {

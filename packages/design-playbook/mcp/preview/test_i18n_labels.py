@@ -21,6 +21,12 @@ class LabelSetTests(unittest.TestCase):
         # it must never be recognised as a confirm.
         self.assertFalse(i18n.SKIP_LABELS & i18n.CONFIRM_LABELS)
 
+    def test_confirm_labels_keep_new_and_historical_cta_labels(self) -> None:
+        self.assertIn("确认签署决策", i18n.CONFIRM_LABELS)
+        self.assertIn("Confirm & sign decision", i18n.CONFIRM_LABELS)
+        self.assertIn("确认通过", i18n.CONFIRM_LABELS)
+        self.assertIn("Confirm", i18n.CONFIRM_LABELS)
+
     def test_pass_remains_a_confirm_and_is_not_a_skip(self) -> None:
         self.assertIn("pass", i18n.CONFIRM_LABELS)
         self.assertNotIn("pass", i18n.SKIP_LABELS)
@@ -40,6 +46,11 @@ class LabelSetTests(unittest.TestCase):
             "drawer_title",
             "drawer_empty_title",
             "drawer_empty_desc",
+            "criteria_title",
+            "criteria_count",
+            "criteria_empty",
+            "criteria_toggle_title",
+            "theme_toggle",
         ):
             for locale in (i18n.ZH, i18n.EN):
                 value = i18n._STRINGS[locale].get(key)
@@ -62,7 +73,8 @@ class LabelSetTests(unittest.TestCase):
         for i in ("dpb-header", "dpb-toolbar", "dpb-inspector", "dpb-canvas",
                   "dpb-btn-approve", "dpb-btn-skip", "dpb-pin-toggle",
                   "dpb-draw-toggle", "dpb-zoom-fit", "dpb-status-pill",
-                  "dpb-comment-input", "dpb-shortcut-modal"):
+                  "dpb-comment-input", "dpb-shortcut-modal", "dpb-spec-panel",
+                  "dpb-criteria-json", "dpb-criteria-toggle", "dpb-theme-toggle"):
             self.assertIn(f'id="{i}"', html, f"missing {i}")
         self.assertIn("DPB_I18N_DUAL", html)
 

@@ -1,7 +1,8 @@
 <!-- v9 app shell: header / canvas workspace / left toolbar / right inspector -->
-<div id="dpb-root" data-theme="light">
+<div id="dpb-root">
   <form method="POST" action="/decide" id="dpb-decide-form">
   <input type="hidden" name="anchors_json" id="dpb-anchors-json" value="[]" />
+  <input type="hidden" name="criteria_json" id="dpb-criteria-json" value="{criteria_hidden}" />
 
   <!-- 1. Header: breadcrumb / viewport+mode / global actions -->
   <header class="dpb-header" id="dpb-header">
@@ -34,6 +35,13 @@
     </div>
 
     <div class="dpb-header-right">
+      <button type="button" id="dpb-criteria-toggle" title="{t_criteria_toggle_title}" aria-expanded="true" aria-controls="dpb-spec-panel" data-total="{criteria_count}"{criteria_toggle_hidden}>
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6.5 4h7M6.5 8h7M6.5 12h7"/><path d="M2.5 4.2 3.4 5l1.7-2M2.5 8.2 3.4 9l1.7-2M2.5 12.2 3.4 13l1.7-2"/></svg>
+        <span id="dpb-criteria-count" data-i18n="criteria_count">{criteria_count_label}</span>
+      </button>
+      <button type="button" id="dpb-theme-toggle" title="{t_theme_toggle}" aria-label="{t_theme_toggle}">
+        <span id="dpb-theme-icon" aria-hidden="true">☾</span>
+      </button>
       <button type="button" id="dpb-drawer-toggle" title="{t_drawer_toggle} [ [ ]">
         <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M10 3v10"/></svg><kbd>[</kbd>
       </button>
@@ -68,6 +76,17 @@
 
   <!-- 2. Workspace: canvas + floating toolbar -->
   <div class="dpb-workspace" id="dpb-workspace">
+    <aside class="dpb-spec-panel" id="dpb-spec-panel" aria-labelledby="dpb-spec-title">
+      <div class="dpb-spec-head">
+        <div class="dpb-spec-title-row">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6.5 4h7M6.5 8h7M6.5 12h7"/><path d="M2.5 4.2 3.4 5l1.7-2M2.5 8.2 3.4 9l1.7-2M2.5 12.2 3.4 13l1.7-2"/></svg>
+          <h2 id="dpb-spec-title" class="i18n" data-i18n="criteria_title">{t_criteria_title}</h2>
+        </div>
+      </div>
+      <div class="dpb-spec-list" id="dpb-spec-list">
+        {criteria_html}
+      </div>
+    </aside>
     <nav class="dpb-toolbar" id="dpb-toolbar" aria-label="tools">
       <button type="button" id="dpb-pin-toggle" aria-pressed="true" title="{t_tool_select} [V]">
         <svg viewBox="0 0 16 16" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14 4.8 11.2M2 14l.7-2.6 6.9-6.9 1.9 1.9-6.9 6.9L2 14Z"/><path d="m10.5 3.5 2 2 1.6-1.6a1.42 1.42 0 0 0-2-2l-1.6 1.6Z"/></svg>

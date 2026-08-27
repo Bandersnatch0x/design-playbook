@@ -22,6 +22,50 @@ from design_playbook.mcp.preview.i18n import (
 HERE = Path(__file__).resolve().parent
 
 
+def _normalise_criteria(criteria: list[dict[str, Any]] | None) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    for criterion in criteria or []:
+        if not isinstance(criterion, dict):
+            continue
+        criterion_id = str(
+            criterion.get("id") or criterion.get("criterion_id") or ""
+        ).strip()
+        if not criterion_id:
+            continue
+        items.append({
+            "id": criterion_id,
+            "title": str(criterion.get("title") or "").strip(),
+            "then": str(criterion.get("then") or "").strip(),
+        })
+    return items
+
+
+def _render_criteria_cards(criteria: list[dict[str, str]]) -> str:
+    if not criteria:
+        return (
+            '<p class="dpb-spec-empty i18n" data-i18n="criteria_empty">'
+            f'{html_lib.escape(t("criteria_empty"))}</p>'
+        )
+
+    cards: list[str] = []
+    for criterion in criteria:
+        criterion_id = criterion["id"]
+        title = criterion["title"]
+        label = f"{criterion_id}: {title}" if title else criterion_id
+        cards.append(
+            '<article class="dpb-spec-card">'
+            '<label class="dpb-spec-check-row">'
+            '<input type="checkbox" class="dpb-criterion-check" '
+            f'data-criterion-id="{html_lib.escape(criterion_id, quote=True)}" '
+            f'data-criterion-title="{html_lib.escape(title, quote=True)}" />'
+            f'<span>{html_lib.escape(label)}</span>'
+            '</label>'
+            f'<p>{html_lib.escape(criterion["then"])}</p>'
+            '</article>'
+        )
+    return "\n".join(cards)
+
+
 @lru_cache(maxsize=1)
 def _load_resources() -> tuple[str, str, str, str]:
     """Load immutable frontend resources bundled beside this module."""
@@ -46,7 +90,12 @@ def _load_resources() -> tuple[str, str, str, str]:
         ) from exc
 
 
-def _build_control(round_n: int, summary: str, options: list[str]) -> str:
+def _build_control(
+    round_n: int,
+    summary: str,
+    options: list[str],
+    criteria: list[dict[str, Any]] | None = None,
+) -> str:
     """Build the injected confirm control-bar HTML (ADR-0008 floor-aware).
 
     Shared by collect_review (runtime) and test_floor_frontend
@@ -54,6 +103,22 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
     """
     confirm_cf = {c.casefold() for c in CONFIRM_LABELS}
     revise_cf = {r.casefold() for r in REVISE_LABELS}
+    criteria_items = _normalise_criteria(criteria)
+    criteria_hidden = html_lib.escape(
+        json.dumps(
+            [
+                {"id": item["id"], "title": item["title"], "checked": False}
+                for item in criteria_items
+            ],
+            ensure_ascii=False,
+        ),
+        quote=True,
+    )
+    criteria_count = len(criteria_items)
+    criteria_count_label = html_lib.escape(
+        t("criteria_count", checked=0, total=criteria_count)
+    )
+    criteria_toggle_hidden = " hidden" if criteria_count == 0 else ""
 
     def display_label(opt: str) -> str:
         """Render known confirm/revise labels in the ACTIVE locale.
@@ -137,6 +202,11 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         "abort_cancelled",
         "abort_popover_aria",
         "drawer_title",
+        "criteria_title",
+        "criteria_count",
+        "criteria_empty",
+        "criteria_toggle_title",
+        "theme_toggle",
         "toast_mode_preview",
         "toast_mode_annotate",
         "toast_pin_added",
@@ -181,6 +251,11 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
     js_formatted = js_tpl
     html_formatted = html_tpl.format(
         summary_safe=summary_safe,
+        criteria_html=_render_criteria_cards(criteria_items),
+        criteria_hidden=criteria_hidden,
+        criteria_count_label=criteria_count_label,
+        criteria_count=criteria_count,
+        criteria_toggle_hidden=criteria_toggle_hidden,
         secondary_html=secondary_html,
         primary_val=primary_val,
         primary_label=primary_label,
@@ -214,6 +289,10 @@ def _build_control(round_n: int, summary: str, options: list[str]) -> str:
         t_status_not_ready=html_lib.escape(t("status_not_ready")),
         t_quick_approve=html_lib.escape(t("quick_approve")),
         t_drawer_title=html_lib.escape(t("drawer_title")),
+        t_criteria_title=html_lib.escape(t("criteria_title")),
+        t_criteria_empty=html_lib.escape(t("criteria_empty")),
+        t_criteria_toggle_title=html_lib.escape(t("criteria_toggle_title"), quote=True),
+        t_theme_toggle=html_lib.escape(t("theme_toggle"), quote=True),
         t_roam_prev=html_lib.escape(t("roam_prev"), quote=True),
         t_roam_next=html_lib.escape(t("roam_next"), quote=True),
         t_roam_label=html_lib.escape(t("roam_label")),

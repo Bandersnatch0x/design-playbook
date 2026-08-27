@@ -218,6 +218,30 @@ def _parse_anchors(raw: str, round_n: int = 0) -> list[dict[str, Any]]:
     return out[:40]
 
 
+def _parse_criteria_review(raw: str) -> list[dict[str, Any]]:
+    if not raw or not raw.strip():
+        return []
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(data, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        criterion_id = str(item.get("id") or "").strip()
+        if not criterion_id:
+            continue
+        out.append({
+            "id": criterion_id[:120],
+            "title": str(item.get("title") or "").strip()[:240],
+            "checked": item.get("checked") is True,
+        })
+    return out[:80]
+
+
 def _done_page_html() -> bytes:
     # Owned Chromium is killed by the server after submit; JS is best-effort only.
     # Use unique %markers + str.replace (not .format) so the CSS/JS braces don't
@@ -342,6 +366,7 @@ def collect_review(
     options: list[str],
     round_n: int,
     browser_adapter: BrowserInteraction | None = None,
+    criteria: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Serve prototype + control form; block until user submits or aborts.
 
@@ -370,7 +395,7 @@ def collect_review(
         submission["prototype_html_hash"] = prototype_html_hash
         return submission
 
-    control = _build_control(round_n, summary.strip(), options)
+    control = _build_control(round_n, summary.strip(), options, criteria=criteria)
     # G5 trust boundary: one-time token + first-decision-wins session. The
     # token renders as a hidden field in the PARENT control form (trusted);
     # the sandboxed prototype iframe cannot read it, so a forged
@@ -414,6 +439,9 @@ def collect_review(
             anchors = _parse_anchors(
                 (form.get("anchors_json") or ["[]"])[0], posted_round
             )
+            criteria_review = _parse_criteria_review(
+                (form.get("criteria_json") or ["[]"])[0]
+            )
             # G5: validate the one-time decision token before trusting choice.
             # A sandboxed prototype cannot read the hidden token, so a forged
             # fetch('/decide', ...) arrives without it and fails closed.
@@ -435,6 +463,7 @@ def collect_review(
                             "feedback": feedback,
                             "aborted": True,
                             "anchors": anchors,
+                            "criteria_review": criteria_review,
                             "rejected": True,
                             "rejection": session.last_rejection,
                         }
@@ -446,6 +475,7 @@ def collect_review(
                         "feedback": feedback,
                         "aborted": choice == "__abort__",
                         "anchors": anchors,
+                        "criteria_review": criteria_review,
                     }
                 )
             reply = _done_page_html()

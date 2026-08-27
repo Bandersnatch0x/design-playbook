@@ -25,6 +25,7 @@
 | A5 | §5「Stage 9 交付页挂载」使用 `.stitch/designs/static-handoff-v1.html`，并由 Preview 提供 `/export-zip` 端点 | 交付页作为包内自有内容随包分发：`packages/design-playbook/mcp/evidence/static_handoff_page.html`（零 CDN）。ZIP 由 Evidence 侧构建器直接落盘为 `static-handoff.zip`，**不存在** HTTP 端点 | ADR-0034 §6 · issue #88 |
 | A6 | §4.1 截图矩阵由审查会话驱动 | 截图目标是 **Stage 7 交付物本身**（`filled-ui.html`），不是审查外壳 | ADR-0034 §4 · issue #87 |
 | A7 | §5「Stage 10 门禁自校验 · 签署最终 `point-back.md`」隐含归档全部 Stage 9 产物 | Stage 10 只签署与指回，**不**复制或再归档 Stage 9 产物；产物的唯一权威副本留在 run 树内 `evidence/static-handoff/` | ADR-0034 §2（生命周期归属）· issue #92 |
+| A8 | v10 预览确认工作台引入 Spec Matrix 与签署 CTA | Spec Matrix 只展示由 `report_ref` 同级 `spec.md` 经 G1 owner parser 投影出的 L6 验收准则；复选框仅是评审员人工核验记录，**不是**机器门禁状态。G5 时不会展示 G1-G8 通过/待整改状态，G1-G8 chip row 有意省略 | ADR-0039（单一 L6 parser）· ADR-0008（确认/反馈地板不变） |
 
 ---
 

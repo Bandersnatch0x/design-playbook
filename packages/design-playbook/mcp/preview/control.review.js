@@ -347,6 +347,7 @@
     if (targetBtn) form.requestSubmit(targetBtn); else form.requestSubmit();
   }
   form.addEventListener("submit", function (e) {
+    syncCriteriaHidden();
     var submitter = e.submitter;
     var choice = submitter && submitter.name === "choice" ? submitter.value : "";
     if (!choice || choice === "__abort__") { clearDraft(); return; }
@@ -506,6 +507,7 @@
   setViewport("desktop", true);
   setMode("annotate", true);
   setTool("select", true);
+  syncCriteriaHidden();
   loadDraft();
   setReadiness();
   fitCanvas();
