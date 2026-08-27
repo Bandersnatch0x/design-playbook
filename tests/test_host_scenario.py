@@ -357,6 +357,7 @@ class RegistryTests(unittest.TestCase):
         self.assertIn("shaping/shaping-log.jsonl", output)
         self.assertIn("fill/**", output)
         self.assertIn("confirm-round-*.json", output)
+        self.assertIn("2400", output)
         self.assertIn("600", output)
         self.assertIn(str(runner.VALIDATOR_SCRIPT), output)
 
@@ -430,7 +431,7 @@ class FailSemanticsTests(unittest.TestCase):
         behavior = _claude_raises(
             runner.SmokeFailure(
                 "command failed to start/finish: claude: Command "
-                "'['claude', '-p']' timed out after 600 seconds"
+                "'['claude', '-p']' timed out after 2400 seconds"
             )
         )
         with _run_main(behavior) as (code, payload, _markdown, _output, _calls):
@@ -545,7 +546,7 @@ class CommandShapeTests(unittest.TestCase):
             if ambient:
                 self.assertNotEqual(isolated.resolve(), Path(ambient).resolve())
             self.assertEqual(Path(call["cwd"]), work.resolve() / "target")
-            self.assertEqual(call["timeout"], 600)
+            self.assertEqual(call["timeout"], 2400)
             self.assertEqual(call["input_text"], "")
 
     def test_validator_command_shape_and_flags(self) -> None:

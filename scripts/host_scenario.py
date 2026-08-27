@@ -250,7 +250,13 @@ SCENARIOS: dict[str, ScenarioPack] = {
             ),
             "pass_when": "exit 0 and parsed JSON findings == []",
         },
-        timeout_seconds=600,
+        # Evidence from local real-credential verification (2026-08-27):
+        # a clean S0-S6 run needs ~1200s to emit a G1-passing spec, 600s
+        # times out with nothing emitted, and provider-latency retries can
+        # consume another multiple of that. 2400s = 2x the observed clean
+        # completion time. ui-picker-slice stays at 600s: both verified
+        # runs completed inside it.
+        timeout_seconds=2400,
         isolation={
             "cwd": "fresh temp target directory (the run root lands under it)",
             "env": "CLAUDE_CONFIG_DIR pointed at a fresh temp directory",
