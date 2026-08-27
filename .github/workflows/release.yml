@@ -94,7 +94,8 @@ jobs:
 
       - name: Install release test dependencies
         run: |
-          python3 -m pip install --disable-pip-version-check pytest playwright pyyaml==6.0.2
+          RUFF_VERSION=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); from _checks import RUFF_VERSION; print(RUFF_VERSION)")
+          python3 -m pip install --disable-pip-version-check pytest playwright pyyaml==6.0.2 "ruff==${RUFF_VERSION}"
           python3 -m playwright install --with-deps chromium
 
       - name: Run release gates
