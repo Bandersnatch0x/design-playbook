@@ -28,7 +28,14 @@ from design_playbook.mcp.preview.transaction import (  # noqa: E402
 
 
 def _static_collect(choice: str, feedback: str):
-    def collect(*args: object) -> dict:
+    def collect(
+        prototype: Path,
+        summary: str,
+        options: list[str],
+        round_n: int,
+        *,
+        criteria: list[dict[str, str]],
+    ) -> dict:
         return {
             "choice": choice,
             "feedback": feedback,
@@ -81,7 +88,12 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
         seen: list[tuple[Path, str, list[str], int]] = []
 
         def collect(
-            prototype: Path, summary: str, options: list[str], round_n: int
+            prototype: Path,
+            summary: str,
+            options: list[str],
+            round_n: int,
+            *,
+            criteria: list[dict[str, str]],
         ) -> dict:
             seen.append((prototype, summary, options, round_n))
             return {
@@ -227,7 +239,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             prototype.write_text("reviewed", encoding="utf-8")
             calls = 0
 
-            def collect(*args: object) -> dict:
+            def collect(*args: object, criteria: list[dict[str, str]]) -> dict:
                 nonlocal calls
                 calls += 1
                 return {
@@ -344,7 +356,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
                 prototype.write_text("reviewed", encoding="utf-8")
                 calls = 0
 
-                def collect(*args: object) -> dict:
+                def collect(*args: object, criteria: list[dict[str, str]]) -> dict:
                     nonlocal calls
                     calls += 1
                     return {
@@ -382,7 +394,9 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             release = threading.Event()
             first_error: list[BaseException] = []
 
-            def blocking_collect(*args: object) -> dict:
+            def blocking_collect(
+                *args: object, criteria: list[dict[str, str]]
+            ) -> dict:
                 entered.set()
                 release.wait(3)
                 return {
@@ -401,7 +415,9 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             self.assertTrue(entered.wait(2))
             second_calls = 0
 
-            def second_collect(*args: object) -> dict:
+            def second_collect(
+                *args: object, criteria: list[dict[str, str]]
+            ) -> dict:
                 nonlocal second_calls
                 second_calls += 1
                 return {}
@@ -424,7 +440,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             release = threading.Event()
             errors: list[BaseException] = []
 
-            def collect(*args: object) -> dict:
+            def collect(*args: object, criteria: list[dict[str, str]]) -> dict:
                 entered.set()
                 release.wait(2)
                 return {
@@ -637,7 +653,9 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             prototype = Path(tmp) / "round-1.html"
             prototype.write_text("reviewed", encoding="utf-8")
 
-            def fail_collect(*args: object) -> dict:
+            def fail_collect(
+                *args: object, criteria: list[dict[str, str]]
+            ) -> dict:
                 raise RuntimeError("browser closed")
 
             with self.assertRaisesRegex(RuntimeError, "browser closed"):
@@ -755,7 +773,12 @@ Edges.
         self, submission: dict
     ) -> tuple[dict, dict | None, str]:
         def collect(
-            prototype: Path, summary: str, options: list[str], round_n: int
+            prototype: Path,
+            summary: str,
+            options: list[str],
+            round_n: int,
+            *,
+            criteria: list[dict[str, str]],
         ) -> dict:
             return submission
 

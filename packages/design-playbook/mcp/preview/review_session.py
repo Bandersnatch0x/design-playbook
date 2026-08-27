@@ -366,7 +366,8 @@ def collect_review(
     options: list[str],
     round_n: int,
     browser_adapter: BrowserInteraction | None = None,
-    criteria: list[dict[str, Any]] | None = None,
+    *,
+    criteria: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Serve prototype + control form; block until user submits or aborts.
 

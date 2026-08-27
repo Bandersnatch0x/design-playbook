@@ -104,14 +104,21 @@ class E2EFullFlowTests(unittest.TestCase):
     def test_real_browser_full_flow_and_vc(self) -> None:
         if sync_playwright is None:  # pragma: no cover
             self.skipTest("playwright not installed")
-        def collect(prototype: Path, summary: str, options: list[str],
-                    round_n: int) -> dict:
+        def collect(
+            prototype: Path,
+            summary: str,
+            options: list[str],
+            round_n: int,
+            *,
+            criteria: list[dict[str, str]],
+        ) -> dict:
             return review_session.collect_review(
                 prototype,
                 summary,
                 options,
                 round_n,
                 _PlaywrightReviewAdapter(),
+                criteria=criteria,
             )
         with tempfile.TemporaryDirectory() as tmp:
             preview_dir = Path(tmp)
@@ -399,10 +406,22 @@ class FrontendInteractionTests(unittest.TestCase):
                 if self.error is not None:
                     raise self.error
 
-        def collect(prototype: Path, summary: str, options: list[str],
-                    round_n: int) -> dict:
+        def collect(
+            prototype: Path,
+            summary: str,
+            options: list[str],
+            round_n: int,
+            *,
+            criteria: list[dict[str, str]],
+        ) -> dict:
             return review_session.collect_review(
-                prototype, summary, options, round_n, _DrawAdapter())
+                prototype,
+                summary,
+                options,
+                round_n,
+                _DrawAdapter(),
+                criteria=criteria,
+            )
 
         with tempfile.TemporaryDirectory() as tmp:
             preview_dir = Path(tmp)

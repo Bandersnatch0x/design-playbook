@@ -34,11 +34,15 @@ from urllib.parse import urlencode
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
+_TESTS_ROOT = _PKG_ROOT / "tests"
+if str(_TESTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_TESTS_ROOT))
 from design_playbook.mcp.preview import review_session  # noqa: E402
 from design_playbook.mcp.preview import control as preview_control  # noqa: E402
 from design_playbook.mcp.preview import transaction  # noqa: E402
 from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
+from preview_e2e_helpers import dismiss_onboarding  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
@@ -122,20 +126,6 @@ def _write_control_page(root: Path, criteria: list[dict[str, str]]) -> str:
         encoding="utf-8",
     )
     return page_path.as_uri()
-
-
-def _hide_onboarding(page: Any) -> None:
-    page.wait_for_timeout(80)
-    page.evaluate(
-        """() => {
-          const modal = document.getElementById('dpb-onboarding-modal');
-          if (modal) {
-            modal.hidden = true;
-            modal.setAttribute('aria-hidden', 'true');
-          }
-          try { localStorage.setItem('dpb.onboarding.v1', '1'); } catch (e) {}
-        }"""
-    )
 
 
 # How long a deliberately stuck /export-zip handler is held, and the ceiling
@@ -332,7 +322,7 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                     page = browser.new_page()
                     page.goto(file_url, wait_until="domcontentloaded")
                     page.wait_for_selector("#dpb-spec-panel")
-                    _hide_onboarding(page)
+                    dismiss_onboarding(page)
 
                     self.assertIn(
                         "验收准则 (Spec Matrix)",
@@ -395,7 +385,7 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                     page = browser.new_page()
                     page.goto(file_url, wait_until="domcontentloaded")
                     page.wait_for_selector("#dpb-spec-panel")
-                    _hide_onboarding(page)
+                    dismiss_onboarding(page)
 
                     self.assertEqual(page.locator(".dpb-spec-card").count(), 0)
                     self.assertIn(
@@ -425,7 +415,7 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                     page = browser.new_page()
                     page.goto(file_url, wait_until="domcontentloaded")
                     page.wait_for_selector("#dpb-root")
-                    _hide_onboarding(page)
+                    dismiss_onboarding(page)
                     before = page.locator("#dpb-root").get_attribute("data-theme")
                     page.click("#dpb-theme-toggle")
                     after = page.locator("#dpb-root").get_attribute("data-theme")
@@ -469,7 +459,7 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                                 page = browser.new_page()
                                 page.goto(url, wait_until="domcontentloaded")
                                 page.wait_for_selector("#dpb-root")
-                                _hide_onboarding(page)
+                                dismiss_onboarding(page)
                                 page.check(
                                     '.dpb-criterion-check[data-criterion-id="L6.2"]'
                                 )

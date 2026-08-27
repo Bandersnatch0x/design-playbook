@@ -7,7 +7,6 @@ and result construction for one Preview decision.
 from __future__ import annotations
 
 import errno
-import inspect
 import json
 import os
 import tempfile
@@ -16,7 +15,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, BinaryIO, Callable, Iterator
+from typing import Any, BinaryIO, Iterator, Protocol
 
 if os.name == "nt":
     import msvcrt
@@ -39,7 +38,18 @@ from design_playbook.scripts.g1_spec import (
     project_specification,
 )
 
-BrowserCollector = Callable[..., dict[str, Any]]
+class BrowserCollector(Protocol):
+    def __call__(
+        self,
+        prototype: Path,
+        summary: str,
+        options: list[str],
+        round_n: int,
+        *,
+        criteria: list[dict[str, str]],
+    ) -> dict[str, Any]: ...
+
+
 ENTRY_SCHEMA_VERSION = 1
 
 
@@ -66,40 +76,6 @@ def _criteria_from_report_ref(report_ref: str) -> list[dict[str, str]]:
         {"id": item.criterion_id, "title": item.title or "", "then": item.then}
         for item in projection.criteria
     ]
-
-
-def _collect_with_criteria(
-    collect: BrowserCollector,
-    prototype: Path,
-    summary: str,
-    options: list[str],
-    round_n: int,
-    criteria: list[dict[str, str]],
-) -> dict[str, Any]:
-    try:
-        signature = inspect.signature(collect)
-    except (TypeError, ValueError):
-        return collect(prototype, summary, options, round_n)
-
-    params = signature.parameters
-    if "criteria" in params or any(
-        param.kind == inspect.Parameter.VAR_KEYWORD for param in params.values()
-    ):
-        return collect(
-            prototype, summary, options, round_n, criteria=criteria
-        )
-    positional = [
-        param for param in params.values()
-        if param.kind in (
-            inspect.Parameter.POSITIONAL_ONLY,
-            inspect.Parameter.POSITIONAL_OR_KEYWORD,
-        )
-    ]
-    if len(positional) >= 5 or any(
-        param.kind == inspect.Parameter.VAR_POSITIONAL for param in params.values()
-    ):
-        return collect(prototype, summary, options, round_n, criteria)
-    return collect(prototype, summary, options, round_n)
 
 
 def _criteria_review_from_submission(
@@ -878,8 +854,8 @@ def _run_locked(
         )
 
     prototype = _ensure_prototype(path_arg, html, round_n, preview_dir)
-    submission = _collect_with_criteria(
-        collect, prototype, summary, options, round_n, criteria
+    submission = collect(
+        prototype, summary, options, round_n, criteria=criteria
     )
     anchors = list(submission.get("anchors") or [])
     raw_feedback = str(submission.get("feedback") or "")
