@@ -212,6 +212,15 @@ def _ui_picker_prompt() -> str:
         "(comparison) entries; if an E-tier entry is truly needed, record "
         "`kind: user` + `report-batch` in its confirmation block per the "
         "adapter-absent rule. Do NOT reference preview confirm rounds.",
+        "DD entry YAML shape (G10 parses exactly this): list items inside "
+        "`candidates`, `comparison.axes`, and `selection.rejected` are "
+        "single-line flow maps `- {k: v, k: v, ...}`, never indented "
+        "field-style blocks. Example candidate item: "
+        "`- {id: A, source: agent, created_at: 2026-08-27T00:00:00Z, "
+        "fidelity: description, summary: <one line>, deviations: none, "
+        "assets: []}`. Fold a long item onto following lines only at a "
+        "comma, and never put ASCII commas or braces inside a value "
+        "(use full-width punctuation in prose).",
         "Write the finished decision report - top block (design-baseline, "
         "scene, density, template, regions, components, baseline-changes, "
         "risks), then the DD entries - to exactly "
@@ -250,7 +259,13 @@ SCENARIOS: dict[str, ScenarioPack] = {
             ),
             "pass_when": "exit 0 and parsed JSON findings == []",
         },
-        timeout_seconds=600,
+        # Evidence from local real-credential verification (2026-08-27):
+        # a clean S0-S6 run needs ~1200s to emit a G1-passing spec, 600s
+        # times out with nothing emitted, and provider-latency retries can
+        # consume another multiple of that. 2400s = 2x the observed clean
+        # completion time. ui-picker-slice stays at 600s: both verified
+        # runs completed inside it.
+        timeout_seconds=2400,
         isolation={
             "cwd": "fresh temp target directory (the run root lands under it)",
             "env": "CLAUDE_CONFIG_DIR pointed at a fresh temp directory",

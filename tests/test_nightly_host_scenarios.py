@@ -202,7 +202,9 @@ class NightlyHostScenariosWorkflowContractTests(unittest.TestCase):
         )
         self.assertFalse(self.document["concurrency"]["cancel-in-progress"])
         self.assertEqual(self.job["runs-on"], "ubuntu-latest")
-        self.assertEqual(self.job["timeout-minutes"], 45)
+        # 75 minutes absorbs the 2400s ux-spec-slice worst case plus the
+        # handshake, ui-picker slice, and evidence upload.
+        self.assertEqual(self.job["timeout-minutes"], 75)
 
     def test_ci_still_runs_only_the_deterministic_suites(self) -> None:
         host_line = "python3 tests/test_host_scenario.py"
