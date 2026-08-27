@@ -1,6 +1,6 @@
 # vNext live dogfood checklist
 
-Operational list for one **interactive** greenfield Design I/O run that proves vNext package surfaces before **0.12.0** release prep.
+Operational list for one **interactive** greenfield Design I/O run that proves package surfaces before release prep.
 
 Companion script (preflight + post-verify):
 
@@ -26,7 +26,7 @@ Scene class: agent-ops list. Goal is process, not shipping the page.
 - [ ] Repo on the vNext commits (validate + package scripts present)
 - [ ] `python scripts/validate.py` → VALIDATION PASSED
 - [ ] `python packages/design-playbook/scripts/doctor.py` runs (degraded without `DESIGN_PLAYBOOK_RUN_ROOT` is ok pre-run)
-- [ ] Host can load plugin: `claude --plugin-dir <abs>/packages/design-playbook` **or** installed plugin (machine handshake: `python scripts/plugin_dir_smoke.py` from isolated config)
+- [ ] Host can load plugin: `claude --plugin-dir <abs>/packages/design-playbook` **or** installed plugin (machine handshake: `python scripts/plugin_dir_smoke.py` — creates its own isolated config)
 - [ ] MCP `tools/list` shows `preview_prototype` and/or `execute_capture_plan` (note which)
 - [ ] If observe* will run: Playwright + Chromium installed
 
@@ -48,7 +48,7 @@ Copy this order; mark pauses when the agent stops for you.
 | 9 | observe* | only if adapter present | set `DESIGN_PLAYBOOK_RUN_ROOT` to run abs path | each capture has `schemaVersion: 1` + viewport + freeze; manifest append per capture |
 | 10 | Accept | `ui-evaluator` + verdict | Recirculate → smallest fix if blocking | point-back ledger; run artifact index shown |
 | 11 | Machine seam | — | run `verify` (below) | exit 0 or known accepted warnings only |
-| 12 | Log | write dogfood md from template | — | six gates + artifact index filled |
+| 12 | Log | write dogfood md from template | — | six process gates + artifact index filled |
 
 Skip narration required when preview* or observe* absent:
 
@@ -90,6 +90,8 @@ Automated:
 - [ ] If `preview/` exists → G5 path via `--preview-dir` (+ `--decision-report` when present)
 - [ ] If ledger cites `evidence/` → G6 via `--evidence-dir` / `--run-root`; capture schemaVersion=1 on bound rows
 - [ ] If `contract.json` + bind snapshot → G7 via `--contract-project` / `--contract-run`
+- [ ] If `craft-guard.md` in run root → G8 run-level registry (auto-engaged via `--run-root`)
+- [ ] If `shaping/` under run root → G9 shaping exit (auto-engaged via `--run-root`)
 - [ ] `run_status.py --json` returns stages + `next`
 - [ ] `doctor.py --json --run-root <run>` not `broken`
 
@@ -113,8 +115,8 @@ Add a short **vNext extras** section: bind/G7, capture schema, doctor level, ada
 
 | Result | Meaning |
 | --- | --- |
-| **pass** | Full route attempted; machine verify green (or only accepted WARN); six gates filled; log written |
+| **pass** | Full route attempted; machine verify green (or only accepted WARN); six process gates filled; log written |
 | **pass-with-skips** | preview* and/or observe* honestly skipped + enable path narrated; rest green |
 | **fail** | Silent skip of Done-when, unversioned capture accepted, agent self-promoted `decided`, or verify red without known cause |
 
-Only **pass** or **pass-with-skips** unblocks **0.12.0** release prep.
+Only **pass** or **pass-with-skips** unblocks release prep.

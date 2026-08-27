@@ -170,6 +170,7 @@ def checklist() -> int:
     print("Host load (pick one):")
     print(f"  claude --plugin-dir {PKG}")
     print("  # or installed: /design-playbook:design-io <ask>")
+    print(f"  # machine handshake (creates its own isolated config): python {ROOT / 'scripts' / 'plugin_dir_smoke.py'}")
     print()
     print("Observe env (when adapter present):")
     print("  set DESIGN_PLAYBOOK_RUN_ROOT=<abs path to .scratch/<run>>")
