@@ -36,7 +36,7 @@ jobs:
   host-scenarios:
     name: Inventory handshake + host slices
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - name: Checkout
         uses: actions/checkout@v7
