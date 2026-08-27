@@ -28,7 +28,14 @@ from design_playbook.mcp.preview.transaction import (  # noqa: E402
 
 
 def _static_collect(choice: str, feedback: str):
-    def collect(*args: object) -> dict:
+    def collect(
+        prototype: Path,
+        summary: str,
+        options: list[str],
+        round_n: int,
+        *,
+        criteria: list[dict[str, str]],
+    ) -> dict:
         return {
             "choice": choice,
             "feedback": feedback,
@@ -81,7 +88,12 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
         seen: list[tuple[Path, str, list[str], int]] = []
 
         def collect(
-            prototype: Path, summary: str, options: list[str], round_n: int
+            prototype: Path,
+            summary: str,
+            options: list[str],
+            round_n: int,
+            *,
+            criteria: list[dict[str, str]],
         ) -> dict:
             seen.append((prototype, summary, options, round_n))
             return {
@@ -227,7 +239,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             prototype.write_text("reviewed", encoding="utf-8")
             calls = 0
 
-            def collect(*args: object) -> dict:
+            def collect(*args: object, criteria: list[dict[str, str]]) -> dict:
                 nonlocal calls
                 calls += 1
                 return {
@@ -344,7 +356,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
                 prototype.write_text("reviewed", encoding="utf-8")
                 calls = 0
 
-                def collect(*args: object) -> dict:
+                def collect(*args: object, criteria: list[dict[str, str]]) -> dict:
                     nonlocal calls
                     calls += 1
                     return {
@@ -382,7 +394,9 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             release = threading.Event()
             first_error: list[BaseException] = []
 
-            def blocking_collect(*args: object) -> dict:
+            def blocking_collect(
+                *args: object, criteria: list[dict[str, str]]
+            ) -> dict:
                 entered.set()
                 release.wait(3)
                 return {
@@ -401,7 +415,9 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             self.assertTrue(entered.wait(2))
             second_calls = 0
 
-            def second_collect(*args: object) -> dict:
+            def second_collect(
+                *args: object, criteria: list[dict[str, str]]
+            ) -> dict:
                 nonlocal second_calls
                 second_calls += 1
                 return {}
@@ -424,7 +440,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             release = threading.Event()
             errors: list[BaseException] = []
 
-            def collect(*args: object) -> dict:
+            def collect(*args: object, criteria: list[dict[str, str]]) -> dict:
                 entered.set()
                 release.wait(2)
                 return {
@@ -637,7 +653,9 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             prototype = Path(tmp) / "round-1.html"
             prototype.write_text("reviewed", encoding="utf-8")
 
-            def fail_collect(*args: object) -> dict:
+            def fail_collect(
+                *args: object, criteria: list[dict[str, str]]
+            ) -> dict:
                 raise RuntimeError("browser closed")
 
             with self.assertRaisesRegex(RuntimeError, "browser closed"):
@@ -667,6 +685,77 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             self.assertFalse((Path(tmp) / "confirm-round-1.json").exists())
             self.assertFalse((Path(tmp) / "log.md").exists())
 
+    def test_confirm_record_includes_spec_criteria_review(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prototype = root / "round-1.html"
+            report = root / "report.md"
+            spec = root / "spec.md"
+            prototype.write_text("<html><body>reviewed</body></html>", encoding="utf-8")
+            report.write_text("# Decision report\n", encoding="utf-8")
+            spec.write_text(
+                """# Spec
+
+## L1 Goal
+- Outcome summary: Review a queue monitor UI.
+## L2 Structure
+Page.
+## L3 Flow
+Flow.
+## L4 Details
+Details.
+## L5 Edges
+Edges.
+## L6 Acceptance
+1. Queue cards: Given jobs exist, When the monitor renders, Then active and queued counts are visible.
+2. Failure affordance: Given failed jobs exist, When a reviewer scans the table, Then retry guidance is visible.
+""",
+                encoding="utf-8",
+            )
+
+            def collect(
+                prototype: Path,
+                summary: str,
+                options: list[str],
+                round_n: int,
+                *,
+                criteria: list[dict[str, str]],
+            ) -> dict:
+                self.assertEqual(
+                    [item["id"] for item in criteria], ["L6.1", "L6.2"]
+                )
+                return {
+                    "choice": "确认通过",
+                    "feedback": "checked criteria",
+                    "anchors": [],
+                    "aborted": False,
+                    "criteria_review": [
+                        {"id": "L6.2", "title": "tampered", "checked": True}
+                    ],
+                }
+
+            result = run_preview_transaction(
+                path_arg=str(prototype),
+                html=None,
+                summary="summary",
+                round_n=1,
+                report_ref=str(report),
+                options=["确认通过", "需要修改"],
+                collect=collect,
+            )
+            entry = json.loads((root / "decision-round-1.json").read_text(
+                encoding="utf-8"))
+            confirm = json.loads((root / "confirm-round-1.json").read_text(
+                encoding="utf-8"))
+
+        expected = [
+            {"id": "L6.1", "title": "Queue cards", "checked": False},
+            {"id": "L6.2", "title": "Failure affordance", "checked": True},
+        ]
+        self.assertEqual(result["criteria_review"], expected)
+        self.assertEqual(entry["outcome"]["criteria_review"], expected)
+        self.assertEqual(confirm["criteria_review"], expected)
+
     def _run(
         self, prototype: Path, *, summary: str = "summary",
         report_ref: str = "report.md", options: list[str] | None = None,
@@ -684,7 +773,12 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
         self, submission: dict
     ) -> tuple[dict, dict | None, str]:
         def collect(
-            prototype: Path, summary: str, options: list[str], round_n: int
+            prototype: Path,
+            summary: str,
+            options: list[str],
+            round_n: int,
+            *,
+            criteria: list[dict[str, str]],
         ) -> dict:
             return submission
 

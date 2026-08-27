@@ -1,10 +1,11 @@
 (function () {
   "use strict";
 
-  // ---- theme bootstrap (host preference, same contract as before) ----
+  // ---- theme bootstrap (host preference, stored choice, system fallback) ----
   var root = document.getElementById("dpb-root");
   var floatRoot = document.getElementById("dpb-float-root");
   var toastsRoot = document.getElementById("dpb-toasts");
+  var THEME_STORAGE_KEY = "dpb.preview.theme";
 
   var colorScheme = window.matchMedia
     ? window.matchMedia("(prefers-color-scheme: dark)")
@@ -19,15 +20,35 @@
     return null;
   }
 
-  function syncTheme() {
+  function storedTheme() {
+    try {
+      var v = localStorage.getItem(THEME_STORAGE_KEY);
+      return v === "light" || v === "dark" ? v : null;
+    } catch (e) { return null; }
+  }
+
+  function updateThemeIcon(theme) {
+    var icon = document.getElementById("dpb-theme-icon");
+    if (icon) icon.textContent = theme === "dark" ? "☀" : "☾";
+  }
+
+  function applyTheme(theme, persist) {
     if (!root) return;
-    var html = document.documentElement;
-    var body = document.body;
-    var theme = explicitTheme(html) || explicitTheme(body)
-      || (colorScheme && colorScheme.matches ? "dark" : "light");
     root.setAttribute("data-theme", theme);
     if (floatRoot) floatRoot.setAttribute("data-theme", theme);
     if (toastsRoot) toastsRoot.setAttribute("data-theme", theme);
+    updateThemeIcon(theme);
+    if (persist) {
+      try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch (e) {}
+    }
+  }
+
+  function syncTheme() {
+    var html = document.documentElement;
+    var body = document.body;
+    var theme = explicitTheme(html) || explicitTheme(body) || storedTheme()
+      || (colorScheme && colorScheme.matches ? "dark" : "light");
+    applyTheme(theme, false);
   }
   syncTheme();
 
@@ -56,6 +77,8 @@
     if (ci) ci.placeholder = tt("comment_placeholder");
     var fb = document.getElementById("dpb-feedback");
     if (fb) fb.placeholder = tt("field_placeholder");
+    syncCriteriaHidden();
+    syncRulerToFrame();
     updateStatus();
   }
 
@@ -85,26 +108,86 @@
   var modal = document.getElementById("dpb-shortcut-modal");
   var pinBtn = document.getElementById("dpb-pin-toggle");
   var drawBtn = document.getElementById("dpb-draw-toggle");
+  var boxBtn = document.getElementById("dpb-box-toggle");
+  var rulerBtn = document.getElementById("dpb-ruler-toggle");
   var handBtn = document.getElementById("dpb-hand-toggle");
   var modePreviewBtn = document.getElementById("dpb-mode-preview");
   var modeAnnotateBtn = document.getElementById("dpb-mode-annotate");
+  var criteriaHidden = document.getElementById("dpb-criteria-json");
+  var criteriaPanel = document.getElementById("dpb-spec-panel");
+  var criteriaToggle = document.getElementById("dpb-criteria-toggle");
+  var criteriaCount = document.getElementById("dpb-criteria-count");
+  var criteriaChecks = document.querySelectorAll(".dpb-criterion-check");
+  var themeToggle = document.getElementById("dpb-theme-toggle");
 
   // ---- state ----
   var anchors = [];
   var historyStack = [];
   var redoStack = [];
   var DRAFT_KEY = window.DPB_DRAFT_KEY || "";
-  var drawSeq = 0, noteSeq = 0, freePinSeq = 0;
+  var drawSeq = 0, boxSeq = 0, noteSeq = 0, freePinSeq = 0;
   var activeIdx = -1;
   var resolvedSet = {};          // selector -> true (local resolve state)
   var filter = "all";
   var activeTag = "copy";
-  var tool = "select";           // 'select' | 'draw' | 'hand'
+  var tool = "select";           // 'select' | 'draw' | 'box' | 'ruler' | 'hand'
   var mode = "annotate";         // 'preview' | 'annotate'
   var viewport = "desktop";
   var zoom = 1, panX = 0, panY = 0;
   var isPanning = false, isSpaceDown = false, panStartX = 0, panStartY = 0;
   var livePts = null, livePathEl = null;
+  var liveBoxStart = null, liveBoxEl = null;
+  var rulerPinnedPoint = null;
+
+  // ---- criteria review state (human record only) ----
+  function criteriaCountLabel(checked, total) {
+    return String(tt("criteria_count"))
+      .replace("{checked}", String(checked))
+      .replace("{total}", String(total));
+  }
+  function criteriaSnapshot() {
+    var items = [];
+    for (var i = 0; i < criteriaChecks.length; i++) {
+      var check = criteriaChecks[i];
+      var id = (check.getAttribute("data-criterion-id") || "").trim();
+      if (!id) continue;
+      items.push({
+        id: id,
+        title: check.getAttribute("data-criterion-title") || "",
+        checked: check.checked === true,
+      });
+    }
+    return items;
+  }
+  function syncCriteriaHidden() {
+    var items = criteriaSnapshot();
+    if (criteriaHidden) criteriaHidden.value = JSON.stringify(items);
+    if (criteriaCount) {
+      var checked = items.filter(function (item) { return item.checked; }).length;
+      criteriaCount.textContent = criteriaCountLabel(checked, items.length);
+    }
+    if (criteriaToggle) criteriaToggle.hidden = items.length === 0;
+  }
+  function setSpecPanel(open) {
+    if (!criteriaPanel) return;
+    criteriaPanel.classList.toggle("dpb-collapsed", !open);
+    root.classList.toggle("dpb-spec-collapsed", !open);
+    if (criteriaToggle) criteriaToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  for (var ci = 0; ci < criteriaChecks.length; ci++) {
+    criteriaChecks[ci].addEventListener("change", syncCriteriaHidden);
+  }
+  if (criteriaToggle) {
+    criteriaToggle.addEventListener("click", function () {
+      setSpecPanel(criteriaPanel.classList.contains("dpb-collapsed"));
+    });
+  }
+  if (themeToggle) {
+    themeToggle.addEventListener("click", function () {
+      var current = root.getAttribute("data-theme") === "dark" ? "dark" : "light";
+      applyTheme(current === "dark" ? "light" : "dark", true);
+    });
+  }
 
   // ---- utils ----
   function esc(s) {
@@ -163,6 +246,7 @@
       fitCanvas();
       syncPinToFrame();
       syncDrawToFrame();
+      syncRulerToFrame();
       syncAnchorsToFrame();
     });
   } else {
@@ -231,7 +315,7 @@
   window.addEventListener("mouseup", function () {
     if (isPanning) {
       isPanning = false;
-      canvas.style.cursor = tool === "hand" ? "grab" : (tool === "draw" ? "crosshair" : "default");
+      canvas.style.cursor = tool === "hand" ? "grab" : ((tool === "draw" || tool === "box" || tool === "ruler") ? "crosshair" : "default");
     }
   });
   canvas.addEventListener("wheel", function (e) {
@@ -255,6 +339,25 @@
       (e.clientY - r.top) / zoom,
     ];
   }
+  function normalRect(a, b) {
+    var x1 = Math.min(a[0], b[0]);
+    var y1 = Math.min(a[1], b[1]);
+    var x2 = Math.max(a[0], b[0]);
+    var y2 = Math.max(a[1], b[1]);
+    return {
+      x: Math.round(x1 * 10) / 10,
+      y: Math.round(y1 * 10) / 10,
+      width: Math.round((x2 - x1) * 10) / 10,
+      height: Math.round((y2 - y1) * 10) / 10,
+    };
+  }
+  function rulerLabel(key, values) {
+    var text = String(tt(key));
+    Object.keys(values).forEach(function (k) {
+      text = text.replace("{" + k + "}", String(values[k]));
+    });
+    return text;
+  }
 
   // ---- mode: preview (clean) vs annotate (v9) ----
   function setMode(m, quiet) {
@@ -276,22 +379,36 @@
 
   // ---- tools ----
   function setTool(t, quiet) {
+    var prev = tool;
     tool = t;
-    if (t === "draw" && mode === "preview") setMode("annotate", true);
+    if ((t === "draw" || t === "box" || t === "ruler") && mode === "preview") setMode("annotate", true);
+    if (t !== "box") cancelLiveBox();
+    if (t !== "ruler" && prev === "ruler") clearRuler();
     pinBtn.setAttribute("aria-pressed", t === "select" ? "true" : "false");
     drawBtn.setAttribute("aria-pressed", t === "draw" ? "true" : "false");
+    if (boxBtn) boxBtn.setAttribute("aria-pressed", t === "box" ? "true" : "false");
+    if (rulerBtn) rulerBtn.setAttribute("aria-pressed", t === "ruler" ? "true" : "false");
     handBtn.setAttribute("aria-pressed", t === "hand" ? "true" : "false");
     document.body.classList.toggle("dpb-tool-draw", t === "draw");
+    document.body.classList.toggle("dpb-tool-box", t === "box");
+    document.body.classList.toggle("dpb-tool-ruler", t === "ruler");
     document.body.classList.toggle("dpb-tool-select", t === "select");
-    canvas.style.cursor = t === "hand" ? "grab" : (t === "draw" ? "crosshair" : "default");
+    canvas.style.cursor = t === "hand" ? "grab" : ((t === "draw" || t === "box" || t === "ruler") ? "crosshair" : "default");
+    if (drawLayer) drawLayer.style.pointerEvents = (t === "ruler" && protoFrame()) ? "none" : "";
     if (!quiet) {
       if (t === "draw") toast(tt("tool_draw"));
+      else if (t === "box") toast(tt("tool_box"));
+      else if (t === "ruler") toast(tt("tool_ruler"));
       else if (t === "hand") toast(tt("tool_hand"));
     }
     syncPinToFrame();
+    syncDrawToFrame();
+    syncRulerToFrame();
   }
   pinBtn.addEventListener("click", function () { setTool("select"); });
   drawBtn.addEventListener("click", function () { setTool(tool === "draw" ? "select" : "draw"); });
+  if (boxBtn) boxBtn.addEventListener("click", function () { setTool(tool === "box" ? "select" : "box"); });
+  if (rulerBtn) rulerBtn.addEventListener("click", function () { setTool(tool === "ruler" ? "select" : "ruler"); });
   handBtn.addEventListener("click", function () { setTool(tool === "hand" ? "select" : "hand"); });
 
   // ---- sandbox iframe bridge channel (#56/#57 + draw) ----
@@ -312,6 +429,13 @@
   function syncDrawToFrame() {
     postToFrame({ dpbDrawState: { on: tool === "draw" && mode === "annotate" } });
   }
+  function syncRulerToFrame() {
+    postToFrame({ dpbRulerState: {
+      on: tool === "ruler" && mode === "annotate",
+      sizeLabel: tt("ruler_size"),
+      distanceLabel: tt("ruler_distance"),
+    } });
+  }
   function syncAnchorsToFrame() {
     // #57 scheme A: mirror the anchor list into the iframe as numbered
     // badges; draw anchors carry stroke points for in-frame rendering.
@@ -319,6 +443,7 @@
       var o = { selector: a.selector, n: i + 1, comment: a.comment || "" };
       if (a.tag) o.tag = a.tag;
       if (a.points) o.points = a.points;
+      if (a.rect) o.rect = a.rect;
       return o;
     }) });
   }
@@ -406,6 +531,7 @@
     return JSON.stringify(anchors.map(function (a) {
       var o = { selector: a.selector, label: a.label, comment: a.comment, tag: a.tag };
       if (a.points) o.points = a.points;
+      if (a.rect) o.rect = a.rect;
       if (a.kind) o.kind = a.kind;
       if (resolvedSet[a.selector]) o.resolved = true;
       return o;
@@ -429,6 +555,7 @@
       } catch (e) {}
       var a = { selector: p.selector, label: p.label, comment: p.comment, tag: p.tag, el: el };
       if (p.points) a.points = p.points;
+      if (p.rect) a.rect = p.rect;
       if (p.resolved) resolvedSet[p.selector] = true;
       return a;
     }).filter(function (a) { return a.selector; });
@@ -487,6 +614,7 @@
     hidden.value = JSON.stringify(anchors.map(function (a) {
       var o = { selector: a.selector, label: a.label, comment: a.comment, tag: a.tag };
       if (a.points) o.points = a.points;
+      if (a.rect) o.rect = a.rect;
       if (resolvedSet[a.selector]) o.resolved = true;
       return o;
     }));
@@ -583,12 +711,39 @@
     return d + (points.length > 2 ? " Z" : "");
   }
   function renderDrawStrokes() {
-    var items = anchors.filter(function (a) { return a.tag === "draw" && a.points; });
-    if (!items.length && !drawLayer.firstChild) return;
+    var items = anchors.filter(function (a) { return (a.tag === "draw" && a.points) || (a.tag === "box" && a.rect); });
+    var stale = drawLayer.querySelectorAll(".dpb-draw-path, .dpb-draw-badge, .dpb-draw-live, .dpb-box-rect, .dpb-box-badge, .dpb-box-live");
+    if (!items.length && !stale.length) return;
     sizeDrawLayer();
-    var stale = drawLayer.querySelectorAll(".dpb-draw-path, .dpb-draw-badge, .dpb-draw-live");
     for (var i = 0; i < stale.length; i++) stale[i].remove();
     anchors.forEach(function (a, idx) {
+      if (a.tag === "box" && a.rect) {
+        var rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        rect.setAttribute("x", String(a.rect.x));
+        rect.setAttribute("y", String(a.rect.y));
+        rect.setAttribute("width", String(a.rect.width));
+        rect.setAttribute("height", String(a.rect.height));
+        rect.setAttribute("rx", "4");
+        rect.setAttribute("class", "dpb-box-rect");
+        drawLayer.appendChild(rect);
+        var bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        bg.setAttribute("x", String(Math.max(0, Number(a.rect.x) - 1)));
+        bg.setAttribute("y", String(Math.max(0, Number(a.rect.y) - 22)));
+        bg.setAttribute("width", "28");
+        bg.setAttribute("height", "18");
+        bg.setAttribute("rx", "9");
+        var text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        text.setAttribute("x", String(Math.max(0, Number(a.rect.x) + 13)));
+        text.setAttribute("y", String(Math.max(14, Number(a.rect.y) - 9)));
+        text.setAttribute("text-anchor", "middle");
+        text.setAttribute("dy", "3.2");
+        text.textContent = String(idx + 1);
+        var badge = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        badge.setAttribute("class", "dpb-box-badge");
+        badge.appendChild(bg); badge.appendChild(text);
+        drawLayer.appendChild(badge);
+        return;
+      }
       if (a.tag !== "draw" || !a.points) return;
       var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
       path.setAttribute("d", drawPathD(a.points));
@@ -633,7 +788,151 @@
     if (livePathEl && livePathEl.parentNode) livePathEl.parentNode.removeChild(livePathEl);
     livePathEl = null;
   }
+  function cancelLiveBox() {
+    liveBoxStart = null;
+    if (liveBoxEl && liveBoxEl.parentNode) liveBoxEl.parentNode.removeChild(liveBoxEl);
+    liveBoxEl = null;
+  }
+  function clearRuler() {
+    rulerPinnedPoint = null;
+    if (!drawLayer) return;
+    var stale = drawLayer.querySelectorAll(".dpb-ruler-hover, .dpb-ruler-badge, .dpb-ruler-line, .dpb-ruler-point");
+    for (var i = 0; i < stale.length; i++) stale[i].remove();
+  }
+  function artboardElementAt(e) {
+    if (!drawLayer) return null;
+    var prior = drawLayer.style.pointerEvents;
+    drawLayer.style.pointerEvents = "none";
+    var el = document.elementFromPoint(e.clientX, e.clientY);
+    drawLayer.style.pointerEvents = prior;
+    if (!el || !el.closest || !el.closest("#dpb-artboard-inner")) return null;
+    return el;
+  }
+  function rectForElement(el) {
+    var r = el.getBoundingClientRect();
+    var ar = artboard.getBoundingClientRect();
+    return {
+      x: Math.round(((r.left - ar.left) / zoom) * 10) / 10,
+      y: Math.round(((r.top - ar.top) / zoom) * 10) / 10,
+      width: Math.round((r.width / zoom) * 10) / 10,
+      height: Math.round((r.height / zoom) * 10) / 10,
+    };
+  }
+  function drawBadge(x, y, text, className) {
+    var g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("class", className || "dpb-ruler-badge");
+    var label = String(text || "");
+    var w = Math.max(34, label.length * 7 + 12);
+    var bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("x", String(Math.max(0, x)));
+    bg.setAttribute("y", String(Math.max(0, y)));
+    bg.setAttribute("width", String(w));
+    bg.setAttribute("height", "18");
+    bg.setAttribute("rx", "9");
+    var t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", String(Math.max(0, x) + w / 2));
+    t.setAttribute("y", String(Math.max(14, y + 11)));
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("dy", "3.2");
+    t.textContent = label;
+    g.appendChild(bg); g.appendChild(t);
+    drawLayer.appendChild(g);
+    return g;
+  }
+  function renderRulerHover(e) {
+    var stale = drawLayer.querySelectorAll(".dpb-ruler-hover, .dpb-ruler-badge.is-hover");
+    for (var i = 0; i < stale.length; i++) stale[i].remove();
+    var el = artboardElementAt(e);
+    if (!el) return;
+    var rect = rectForElement(el);
+    if (rect.width <= 0 || rect.height <= 0) return;
+    var r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    r.setAttribute("x", String(rect.x));
+    r.setAttribute("y", String(rect.y));
+    r.setAttribute("width", String(rect.width));
+    r.setAttribute("height", String(rect.height));
+    r.setAttribute("rx", "4");
+    r.setAttribute("class", "dpb-ruler-hover");
+    drawLayer.appendChild(r);
+    drawBadge(rect.x + 6, Math.max(0, rect.y - 24), rulerLabel("ruler_size", {
+      w: Math.round(rect.width), h: Math.round(rect.height),
+    }), "dpb-ruler-badge is-hover");
+  }
+  function renderRulerLine(a, b) {
+    var stale = drawLayer.querySelectorAll(".dpb-ruler-line, .dpb-ruler-point, .dpb-ruler-badge.is-line");
+    for (var i = 0; i < stale.length; i++) stale[i].remove();
+    var line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", String(a[0])); line.setAttribute("y1", String(a[1]));
+    line.setAttribute("x2", String(b[0])); line.setAttribute("y2", String(b[1]));
+    line.setAttribute("class", "dpb-ruler-line");
+    drawLayer.appendChild(line);
+    [a, b].forEach(function (p) {
+      var c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      c.setAttribute("cx", String(p[0])); c.setAttribute("cy", String(p[1]));
+      c.setAttribute("r", "4"); c.setAttribute("class", "dpb-ruler-point");
+      drawLayer.appendChild(c);
+    });
+    var dx = b[0] - a[0], dy = b[1] - a[1];
+    var d = Math.round(Math.sqrt(dx * dx + dy * dy));
+    drawBadge((a[0] + b[0]) / 2 + 6, (a[1] + b[1]) / 2 - 24, rulerLabel("ruler_distance", { d: d }), "dpb-ruler-badge is-line");
+  }
 
+  drawLayer.addEventListener("pointerdown", function (e) {
+    if (tool !== "box" || mode !== "annotate") return;
+    e.preventDefault();
+    liveBoxStart = toArtboardPoint(e);
+    liveBoxEl = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    liveBoxEl.setAttribute("class", "dpb-box-rect dpb-box-live");
+    liveBoxEl.setAttribute("rx", "4");
+    drawLayer.appendChild(liveBoxEl);
+    try { drawLayer.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  drawLayer.addEventListener("pointermove", function (e) {
+    if (tool === "ruler" && mode === "annotate") renderRulerHover(e);
+    if (tool !== "box" || !liveBoxStart || !liveBoxEl) return;
+    e.preventDefault();
+    var rect = normalRect(liveBoxStart, toArtboardPoint(e));
+    liveBoxEl.setAttribute("x", String(rect.x));
+    liveBoxEl.setAttribute("y", String(rect.y));
+    liveBoxEl.setAttribute("width", String(rect.width));
+    liveBoxEl.setAttribute("height", String(rect.height));
+  });
+  drawLayer.addEventListener("pointerup", function (e) {
+    if (tool !== "box" || !liveBoxStart) return;
+    e.preventDefault();
+    var rect = normalRect(liveBoxStart, toArtboardPoint(e));
+    cancelLiveBox();
+    addBoxAnchor(rect);
+  });
+  drawLayer.addEventListener("pointerleave", function () {
+    if (tool === "ruler") {
+      var stale = drawLayer.querySelectorAll(".dpb-ruler-hover, .dpb-ruler-badge.is-hover");
+      for (var i = 0; i < stale.length; i++) stale[i].remove();
+    }
+  });
+  function rulerEventInArtboard(e) {
+    var r = artboard.getBoundingClientRect();
+    return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+  }
+  document.addEventListener("mousemove", function (e) {
+    if (tool !== "ruler" || mode !== "annotate" || protoFrame()) return;
+    if (!rulerEventInArtboard(e)) return;
+    renderRulerHover(e);
+  }, true);
+  document.addEventListener("pointerup", function (e) {
+    if (tool !== "ruler" || mode !== "annotate" || protoFrame()) return;
+    if (!rulerEventInArtboard(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var pt = toArtboardPoint(e);
+    if (!rulerPinnedPoint) {
+      rulerPinnedPoint = pt;
+      renderRulerLine(pt, pt);
+    } else {
+      renderRulerLine(rulerPinnedPoint, pt);
+      rulerPinnedPoint = null;
+    }
+  }, true);
   drawLayer.addEventListener("pointerdown", function (e) {
     if (tool !== "draw" || mode !== "annotate") return;
     e.preventDefault();
@@ -656,7 +955,7 @@
     cancelLiveStroke();
     addDrawAnchor(pts);
   });
-  drawLayer.addEventListener("pointercancel", cancelLiveStroke);
+  drawLayer.addEventListener("pointercancel", function () { cancelLiveStroke(); cancelLiveBox(); });
 
   // free pin: click on the canvas/viewport chrome while select tool is on
   canvas.addEventListener("click", function (e) {
@@ -684,6 +983,20 @@
     toast(ttN("toast_loop_done", anchors.length));
     if (commentInput) commentInput.focus();
   }
+  function addBoxAnchor(rect) {
+    if (!rect || rect.width < 4 || rect.height < 4) return;
+    boxSeq += 1;
+    pushHistory();
+    anchors.push({
+      selector: "@box-" + boxSeq,
+      label: ttN("box_label", anchors.length + 1),
+      comment: "",
+      tag: "box",
+      rect: rect,
+    });
+    render();
+    if (commentInput) commentInput.focus();
+  }
   function addFreePinAnchor(pt) {
     freePinSeq += 1;
     pushHistory();
@@ -708,6 +1021,7 @@
     if (data.dpbPinHello) {
       syncPinToFrame();
       syncDrawToFrame();
+      syncRulerToFrame();
       syncAnchorsToFrame();
       return;
     }

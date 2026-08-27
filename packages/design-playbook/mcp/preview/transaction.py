@@ -15,7 +15,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, BinaryIO, Callable, Iterator
+from typing import Any, BinaryIO, Iterator, Protocol
 
 if os.name == "nt":
     import msvcrt
@@ -33,8 +33,25 @@ from design_playbook.mcp.preview.integrity import (
     prototype_name,
 )
 from design_playbook.mcp.util import now_iso as _now_iso
+from design_playbook.scripts.g1_spec import (
+    SpecificationProjectionError,
+    project_specification,
+)
 
-BrowserCollector = Callable[[Path, str, list[str], int], dict[str, Any]]
+
+class BrowserCollector(Protocol):
+    def __call__(
+        self,
+        prototype: Path,
+        summary: str,
+        options: list[str],
+        round_n: int,
+        *,
+        criteria: list[dict[str, str]],
+    ) -> dict[str, Any]:
+        ...
+
+
 ENTRY_SCHEMA_VERSION = 1
 
 
@@ -44,6 +61,43 @@ def _preview_dir_for(path: Path | None) -> Path:
     scratch = Path.cwd() / ".scratch" / "preview-adapter" / "preview"
     scratch.mkdir(parents=True, exist_ok=True)
     return scratch
+
+
+def _criteria_from_report_ref(report_ref: str) -> list[dict[str, str]]:
+    try:
+        report_path = Path(report_ref).expanduser().resolve()
+        if not report_path.is_file():
+            return []
+        spec_path = report_path.parent / "spec.md"
+        if not spec_path.is_file():
+            return []
+        projection = project_specification(spec_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, SpecificationProjectionError):
+        return []
+    return [
+        {"id": item.criterion_id, "title": item.title or "", "then": item.then}
+        for item in projection.criteria
+    ]
+
+
+def _criteria_review_from_submission(
+    submission: dict[str, Any], criteria: list[dict[str, str]]
+) -> list[dict[str, Any]]:
+    if not criteria:
+        return []
+    raw = submission.get("criteria_review")
+    posted: dict[str, bool] = {}
+    if isinstance(raw, list):
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            criterion_id = str(item.get("id") or "").strip()
+            if criterion_id:
+                posted[criterion_id] = item.get("checked") is True
+    return [
+        {"id": item["id"], "title": item["title"], "checked": posted.get(item["id"], False)}
+        for item in criteria
+    ]
 
 
 def _resolve_prototype(
@@ -555,6 +609,8 @@ def _confirm_record(entry: dict[str, Any]) -> dict[str, Any]:
     }
     if outcome.get("floor_failure"):
         record["floor_failure"] = outcome["floor_failure"]
+    if outcome.get("criteria_review"):
+        record["criteria_review"] = list(outcome["criteria_review"])
     return record
 
 
@@ -685,7 +741,7 @@ def _commit_projections(preview_dir: Path, entry: dict[str, Any]) -> str:
 def _result(entry: dict[str, Any], confirm_path: str) -> dict[str, Any]:
     binding = entry["binding"]
     outcome = entry["outcome"]
-    return {
+    result = {
         "confirmed": outcome["confirmed"],
         "floor_pass": outcome["floor_pass"],
         "selected_options": list(outcome["selected_options"]),
@@ -697,6 +753,9 @@ def _result(entry: dict[str, Any], confirm_path: str) -> dict[str, Any]:
         "skipped": bool(outcome.get("skipped")),
         "decision_id": entry["decision_id"],
     }
+    if outcome.get("criteria_review"):
+        result["criteria_review"] = list(outcome["criteria_review"])
+    return result
 
 
 def run_preview_transaction(
@@ -713,6 +772,7 @@ def run_preview_transaction(
     summary = summary.strip()
     report_ref = report_ref.strip()
     preview_dir = _preview_dir_for(Path(path_arg) if path_arg else None)
+    criteria = _criteria_from_report_ref(report_ref)
     _prototype, prototype_hash = _resolve_prototype(
         path_arg, html, round_n, preview_dir,
     )
@@ -731,6 +791,7 @@ def run_preview_transaction(
             return _run_locked(
                 path_arg=path_arg, html=html, summary=summary, round_n=round_n,
                 report_ref=report_ref, options=options, collect=collect,
+                criteria=criteria,
                 preview_dir=preview_dir, prototype_hash=prototype_hash,
                 binding=binding, decision_id=decision_id,
             )
@@ -757,6 +818,7 @@ def run_preview_transaction(
 def _run_locked(
     *, path_arg: str | None, html: str | None, summary: str, round_n: int,
     report_ref: str, options: list[str], collect: BrowserCollector,
+    criteria: list[dict[str, str]],
     preview_dir: Path, prototype_hash: str, binding: dict[str, Any],
     decision_id: str,
 ) -> dict[str, Any]:
@@ -794,10 +856,13 @@ def _run_locked(
         )
 
     prototype = _ensure_prototype(path_arg, html, round_n, preview_dir)
-    submission = collect(prototype, summary, options, round_n)
+    submission = collect(
+        prototype, summary, options, round_n, criteria=criteria
+    )
     anchors = list(submission.get("anchors") or [])
     raw_feedback = str(submission.get("feedback") or "")
     feedback = _format_feedback(raw_feedback, anchors)
+    criteria_review = _criteria_review_from_submission(submission, criteria)
     rejected = bool(submission.get("rejected"))
     aborted = bool(submission.get("aborted"))
     choice = str(submission.get("choice") or "")
@@ -851,6 +916,8 @@ def _run_locked(
             "skipped": is_skip,
         },
     }
+    if criteria_review:
+        entry["outcome"]["criteria_review"] = criteria_review
     atomic_write(entry_path, json_text(entry))
     confirm_path = _commit_projections(preview_dir, entry)
     return _result(entry, confirm_path)

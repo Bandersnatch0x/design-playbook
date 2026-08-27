@@ -34,9 +34,15 @@ from urllib.parse import urlencode
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
+_TESTS_ROOT = _PKG_ROOT / "tests"
+if str(_TESTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_TESTS_ROOT))
 from design_playbook.mcp.preview import review_session  # noqa: E402
 from design_playbook.mcp.preview import control as preview_control  # noqa: E402
+from design_playbook.mcp.preview import transaction  # noqa: E402
 from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
+from playwright.sync_api import sync_playwright  # noqa: E402
+from preview_e2e_helpers import dismiss_onboarding  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
@@ -80,6 +86,46 @@ def _post_form(port: int, fields: dict[str, str]) -> bytes:
 def _extract_token(page: str) -> str | None:
     m = re.search(r'name="dpb_token"\s+value="([^"]+)"', page)
     return m.group(1) if m else None
+
+
+SPEC_FIXTURE = """# Spec
+
+## L1 Goal
+- Outcome summary: Review a queue monitor UI.
+## L2 Structure
+Page.
+## L3 Flow
+Flow.
+## L4 Details
+Details.
+## L5 Edges
+Edges.
+## L6 Acceptance
+1. Queue cards: Given jobs exist, When the monitor renders, Then active and queued counts are visible.
+2. Failure affordance: Given failed jobs exist, When a reviewer scans the table, Then retry guidance is visible.
+"""
+
+
+def _write_spec_fixture(root: Path) -> Path:
+    report = root / "report.md"
+    report.write_text("# Decision report\n", encoding="utf-8")
+    (root / "spec.md").write_text(SPEC_FIXTURE, encoding="utf-8")
+    return report
+
+
+def _write_control_page(root: Path, criteria: list[dict[str, str]]) -> str:
+    control = preview_control._build_control(
+        1, "Spec matrix workbench", ["确认通过", "需要修改"], criteria=criteria
+    )
+    page_path = root / "workbench.html"
+    page_path.write_text(
+        "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"></head>"
+        "<body><section id=\"prototype\"><h1>Prototype</h1></section>"
+        + control
+        + "</body></html>",
+        encoding="utf-8",
+    )
+    return page_path.as_uri()
 
 
 # How long a deliberately stuck /export-zip handler is held, and the ceiling
@@ -260,6 +306,327 @@ class ControlResourceAssemblyTests(unittest.TestCase):
         self.assertIn('id="dpb-feedback"', control)
         self.assertIn('id="dpb-announce"', control)
         self.assertIn("z-index: 999", control)
+
+
+class SpecMatrixWorkbenchTests(unittest.TestCase):
+    def test_spec_matrix_renders_criteria_and_updates_hidden_field(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = _write_spec_fixture(root)
+            criteria = transaction._criteria_from_report_ref(str(report))
+            file_url = _write_control_page(root, criteria)
+
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch(headless=True)
+                try:
+                    page = browser.new_page()
+                    page.goto(file_url, wait_until="domcontentloaded")
+                    page.wait_for_selector("#dpb-spec-panel")
+                    dismiss_onboarding(page)
+
+                    self.assertIn(
+                        "验收准则 (Spec Matrix)",
+                        page.locator("#dpb-spec-title").inner_text(),
+                    )
+                    self.assertEqual(page.locator(".dpb-spec-card").count(), 2)
+                    self.assertIn(
+                        "L6.1: Queue cards",
+                        page.locator(".dpb-spec-card").first.inner_text(),
+                    )
+                    self.assertIn(
+                        "active and queued counts are visible.",
+                        page.locator(".dpb-spec-card").first.inner_text(),
+                    )
+                    self.assertEqual(
+                        page.locator("#dpb-criteria-count").inner_text(),
+                        "准则 0/2",
+                    )
+
+                    pane_text = page.locator("#dpb-spec-panel").inner_text()
+                    self.assertNotIn("G1", pane_text)
+                    self.assertNotIn("待整改", pane_text)
+                    self.assertNotIn("通过", pane_text)
+
+                    page.check('.dpb-criterion-check[data-criterion-id="L6.1"]')
+                    self.assertEqual(
+                        page.locator("#dpb-criteria-count").inner_text(),
+                        "准则 1/2",
+                    )
+                    payload = page.evaluate(
+                        "() => JSON.parse(document.getElementById('dpb-criteria-json').value)"
+                    )
+                    self.assertEqual(
+                        payload,
+                        [
+                            {"id": "L6.1", "title": "Queue cards", "checked": True},
+                            {"id": "L6.2", "title": "Failure affordance", "checked": False},
+                        ],
+                    )
+
+                    page.click("#dpb-criteria-toggle")
+                    self.assertIn(
+                        "dpb-collapsed",
+                        page.locator("#dpb-spec-panel").get_attribute("class") or "",
+                    )
+                finally:
+                    browser.close()
+
+    def test_spec_matrix_empty_state_without_spec_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = root / "report.md"
+            report.write_text("# Decision report\n", encoding="utf-8")
+            criteria = transaction._criteria_from_report_ref(str(report))
+            file_url = _write_control_page(root, criteria)
+
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch(headless=True)
+                try:
+                    page = browser.new_page()
+                    page.goto(file_url, wait_until="domcontentloaded")
+                    page.wait_for_selector("#dpb-spec-panel")
+                    dismiss_onboarding(page)
+
+                    self.assertEqual(page.locator(".dpb-spec-card").count(), 0)
+                    self.assertIn(
+                        "无 spec 判据来源",
+                        page.locator("#dpb-spec-list").inner_text(),
+                    )
+                    self.assertTrue(page.locator("#dpb-criteria-toggle").is_hidden())
+                    self.assertEqual(
+                        page.evaluate(
+                            "() => document.getElementById('dpb-criteria-json').value"
+                        ),
+                        "[]",
+                    )
+                finally:
+                    browser.close()
+
+    def test_dark_toggle_flips_root_theme_and_persists_choice(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = _write_spec_fixture(root)
+            criteria = transaction._criteria_from_report_ref(str(report))
+            file_url = _write_control_page(root, criteria)
+
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch(headless=True)
+                try:
+                    page = browser.new_page()
+                    page.goto(file_url, wait_until="domcontentloaded")
+                    page.wait_for_selector("#dpb-root")
+                    dismiss_onboarding(page)
+                    before = page.locator("#dpb-root").get_attribute("data-theme")
+                    page.click("#dpb-theme-toggle")
+                    after = page.locator("#dpb-root").get_attribute("data-theme")
+                    stored = page.evaluate(
+                        "() => localStorage.getItem('dpb.preview.theme')"
+                    )
+                    icon = page.locator("#dpb-theme-icon").inner_text()
+
+                    self.assertIn(before, ("light", "dark"))
+                    self.assertEqual(after, "dark" if before == "light" else "light")
+                    self.assertEqual(stored, after)
+                    self.assertEqual(icon, "☀" if after == "dark" else "☾")
+                finally:
+                    browser.close()
+
+    def test_confirm_roundtrip_contains_criteria_review(self) -> None:
+        criteria = [
+            {
+                "id": "L6.1",
+                "title": "Queue cards",
+                "then": "active and queued counts are visible.",
+            },
+            {
+                "id": "L6.2",
+                "title": "Failure affordance",
+                "then": "retry guidance is visible.",
+            },
+        ]
+
+        class Adapter:
+            def __init__(self) -> None:
+                self.thread: threading.Thread | None = None
+                self.error: Exception | None = None
+
+            def open(self, url: str) -> object:
+                def drive() -> None:
+                    try:
+                        with sync_playwright() as pw:
+                            browser = pw.chromium.launch(headless=True)
+                            try:
+                                page = browser.new_page()
+                                page.goto(url, wait_until="domcontentloaded")
+                                page.wait_for_selector("#dpb-root")
+                                dismiss_onboarding(page)
+                                page.check(
+                                    '.dpb-criterion-check[data-criterion-id="L6.2"]'
+                                )
+                                page.fill("#dpb-feedback", "criteria checked")
+                                with page.expect_response(
+                                    lambda response: response.url.endswith("/decide")
+                                    and response.request.method == "POST"
+                                ):
+                                    page.click("#dpb-btn-approve")
+                            finally:
+                                browser.close()
+                    except Exception as exc:  # noqa: BLE001
+                        self.error = exc
+
+                self.thread = threading.Thread(target=drive, daemon=True)
+                self.thread.start()
+                return self
+
+            def close(self, handle: object) -> None:
+                self.thread.join(timeout=20)
+                if self.thread.is_alive():
+                    raise AssertionError("Playwright criteria adapter did not finish")
+                if self.error is not None:
+                    raise self.error
+
+        with tempfile.TemporaryDirectory() as tmp:
+            prototype = Path(tmp) / "prototype.html"
+            prototype.write_text("<html><body>criteria</body></html>", encoding="utf-8")
+            decision = review_session.collect_review(
+                prototype,
+                "criteria roundtrip",
+                ["确认通过", "需要修改"],
+                1,
+                Adapter(),
+                criteria=criteria,
+            )
+
+        self.assertEqual(
+            decision["criteria_review"],
+            [
+                {"id": "L6.1", "title": "Queue cards", "checked": False},
+                {"id": "L6.2", "title": "Failure affordance", "checked": True},
+            ],
+        )
+
+    def test_box_drag_anchor_survives_confirm_roundtrip(self) -> None:
+        class Adapter:
+            def __init__(self) -> None:
+                self.thread: threading.Thread | None = None
+                self.error: Exception | None = None
+
+            def open(self, url: str) -> object:
+                def drive() -> None:
+                    try:
+                        with sync_playwright() as pw:
+                            browser = pw.chromium.launch(headless=True)
+                            try:
+                                page = browser.new_page(viewport={"width": 1280, "height": 800})
+                                page.goto(url, wait_until="domcontentloaded")
+                                page.wait_for_selector("#dpb-root")
+                                dismiss_onboarding(page)
+                                page.click("#dpb-box-toggle")
+                                artboard = page.locator("#dpb-artboard").bounding_box()
+                                assert artboard is not None
+                                x1, y1 = artboard["x"] + 120, artboard["y"] + 140
+                                x2, y2 = artboard["x"] + 260, artboard["y"] + 240
+                                page.mouse.move(x1, y1)
+                                page.mouse.down()
+                                page.mouse.move(x2, y2, steps=4)
+                                page.mouse.up()
+                                page.wait_for_selector("#dpb-anchors .dpb-anchor")
+                                page.fill('#dpb-anchors input[data-i="0"]', "highlight this area")
+                                with page.expect_response(
+                                    lambda response: response.url.endswith("/decide")
+                                    and response.request.method == "POST"
+                                ):
+                                    page.click("#dpb-btn-approve")
+                            finally:
+                                browser.close()
+                    except Exception as exc:  # noqa: BLE001
+                        self.error = exc
+
+                self.thread = threading.Thread(target=drive, daemon=True)
+                self.thread.start()
+                return self
+
+            def close(self, handle: object) -> None:
+                self.thread.join(timeout=20)
+                if self.thread.is_alive():
+                    raise AssertionError("Playwright box adapter did not finish")
+                if self.error is not None:
+                    raise self.error
+
+        with tempfile.TemporaryDirectory() as tmp:
+            prototype = Path(tmp) / "prototype.html"
+            prototype.write_text("<html><body><main>box target</main></body></html>", encoding="utf-8")
+            decision = review_session.collect_review(
+                prototype,
+                "box roundtrip",
+                ["确认通过", "需要修改"],
+                1,
+                Adapter(),
+            )
+
+        self.assertFalse(decision["aborted"])
+        self.assertEqual(decision["anchors"][0]["tag"], "box")
+        self.assertEqual(decision["anchors"][0]["comment"], "highlight this area")
+        self.assertTrue(decision["anchors"][0]["selector"].startswith("@box-"))
+        self.assertGreater(decision["anchors"][0]["rect"]["width"], 20)
+        self.assertGreater(decision["anchors"][0]["rect"]["height"], 20)
+
+    def test_ruler_probe_is_transient_and_keyboard_tools_switch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            file_url = _write_control_page(root, [])
+
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch(headless=True)
+                try:
+                    page = browser.new_page(viewport={"width": 1280, "height": 800})
+                    page.goto(file_url, wait_until="domcontentloaded")
+                    page.wait_for_selector("#dpb-root")
+                    dismiss_onboarding(page)
+
+                    page.keyboard.press("b")
+                    self.assertTrue(page.locator("body").evaluate(
+                        "el => el.classList.contains('dpb-tool-box')"))
+                    self.assertEqual(
+                        page.locator("#dpb-box-toggle").get_attribute("aria-pressed"),
+                        "true",
+                    )
+                    page.keyboard.press("r")
+                    self.assertTrue(page.locator("body").evaluate(
+                        "el => el.classList.contains('dpb-tool-ruler')"))
+                    self.assertEqual(
+                        page.locator("#dpb-ruler-toggle").get_attribute("aria-pressed"),
+                        "true",
+                    )
+
+                    target = page.locator("#prototype h1").bounding_box()
+                    artboard = page.locator("#dpb-artboard").bounding_box()
+                    assert target is not None
+                    assert artboard is not None
+                    page.mouse.move(target["x"] + 160, target["y"] + 4)
+                    page.wait_for_selector("#dpb-draw-layer .dpb-ruler-hover")
+                    self.assertIn(
+                        "px",
+                        page.locator("#dpb-draw-layer .dpb-ruler-badge.is-hover text").evaluate("el => el.textContent"),
+                    )
+                    page.mouse.click(artboard["x"] + 80, artboard["y"] + 90)
+                    page.mouse.click(artboard["x"] + 180, artboard["y"] + 150)
+                    page.wait_for_selector("#dpb-draw-layer .dpb-ruler-line")
+                    self.assertEqual(
+                        page.evaluate(
+                            "() => document.getElementById('dpb-anchors-json').value"
+                        ),
+                        "[]",
+                    )
+                    page.keyboard.press("Escape")
+                    self.assertEqual(
+                        page.locator("#dpb-draw-layer .dpb-ruler-line").count(), 0
+                    )
+                    self.assertEqual(
+                        page.locator("#dpb-draw-layer .dpb-ruler-hover").count(), 0
+                    )
+                finally:
+                    browser.close()
 
 
 # --------------------------------------------------------------------------- #
