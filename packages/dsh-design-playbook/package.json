@@ -1,6 +1,6 @@
 {
   "name": "dsh-design-playbook",
-  "version": "0.21.1",
+  "version": "0.21.2",
   "description": "Thin DSH bundle that bridges design-playbook's preview + evidence MCP servers into a DeepSeek Harness profile. Depends on the design-playbook package for the server implementations.",
   "keywords": [
     "dsh-plugin",
@@ -24,7 +24,7 @@
     "NOTICE"
   ],
   "dependencies": {
-    "design-playbook": "^0.21.1"
+    "design-playbook": "^0.21.2"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-mcp-client": ">=0.1.0-rc.6"

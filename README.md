@@ -6,7 +6,7 @@
 
 ### *Agents ship UI nobody can verify. This plugin makes them prove it.*
 
-[![Version](https://img.shields.io/badge/Version-0.21.1-2DD4BF?style=flat-square&logo=semver&logoColor=black)](https://www.npmjs.com/package/design-playbook)
+[![Version](https://img.shields.io/badge/Version-0.21.2-2DD4BF?style=flat-square&logo=semver&logoColor=black)](https://www.npmjs.com/package/design-playbook)
 [![License](https://img.shields.io/badge/License-MIT-2DD4BF?style=flat-square&logo=opensourceinitiative&logoColor=black)](./packages/design-playbook/LICENSE)
 [![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-2DD4BF?style=flat-square&logo=claude&logoColor=black)](#-try-it)
 [![Skills](https://img.shields.io/badge/Skills-8-2DD4BF?style=flat-square)](#-skills--commands)
