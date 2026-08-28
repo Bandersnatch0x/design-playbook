@@ -452,7 +452,7 @@ false-positives: trade terms that look technical but are the user's own working 
 owner: craft -> R4
 provenance: benchmark-input-only
 status: advisory
-fix: rename user-visible nouns to the objects users control (spec L1 word list when present) and keep implementation names inside code and logs
+fix: rename user-visible nouns to the objects users control (spec L1 word list when present) and keep implementation names inside code and logs; the bar holds across scripts — CJK nouns name the user's recognized object in the user's own words rather than loan-translating system terms, and Latin-script casing conventions never transfer to CJK naming
 related: COPY-01@1
 history: 1 | 2026-08-28 | docs | initial registry registration, benchmark-informed copy entry in first-party wording
 ```

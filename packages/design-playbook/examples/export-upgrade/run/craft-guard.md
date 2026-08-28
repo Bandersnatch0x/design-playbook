@@ -21,8 +21,8 @@ Registry: `skills/design-playbook/references/rules.md`, full catalog (P3 run: �
 | COPY-02@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；用户侧命名审查所需的界面名词与实现命名对照未采集 | - | - | - | - | - |
 | COPY-03@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；错误信息语气审查所需的错误态文案样本未采集 | - | - | - | - | - |
 | A11Y-02@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；可见键盘焦点判定所需的聚焦态截图与键盘走查未采集（a11y 树无法证明视觉属性） | - | - | - | - | - |
-| CRAFT-09@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；选择器优先级冲突审查所需的样式源走查未执行 | - | - | - | - | - |
-| CRAFT-10@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；结构装置与内容属性对应关系的走查未执行 | - | - | - | - | - |
-| DECIDE-01@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；DD-0003/DD-0004（explore 档）理由中无 anti-default 自检答案可回溯 | - | - | - | - | - |
+| CRAFT-09@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；归档缺审计面样式源——无填充产物源文件归档，candidates/preview 为一次性原型资产而非填充面源码 | - | - | - | - | - |
+| CRAFT-10@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；归档缺审计面源标记与结构装置的视觉捕捉——evidence 仅交互轨迹 JSON，无填充产物源文件归档 | - | - | - | - | - |
+| DECIDE-01@1 | applicable | - | clear | 选中方向为启用既有 status region 收纳导出任务（candidates/B.html 草图 + preview round 1/2 用户确认），非未审视的默认外观收敛 | DD-0003 理由可回溯 l1.scenes（导出中切页全局可查）与 PERF-01 比较轴；DD-0004 理由可回溯 l6.c2（跨视图状态闭环）与基线 status region 惯例声明——均引用 brief 具体事实 | 常规方向经比较矩阵沿 brief 轴证成，非未审视默认；基线声明的是 status region 惯例而非默认外观身份 | - |
 
-注：2026-08-28 注册批（COPY-01/02/03、A11Y-02、CRAFT-09/10、DECIDE-01）晚于本 run 存档；按三态谓词补记，blocked 行在理由列记缺失证据面。
+注：2026-08-28 注册批（COPY-01/02/03、A11Y-02、CRAFT-09/10、DECIDE-01）晚于本 run 存档；按三态谓词补记——blocked 行在理由列点名缺失的证据面；DECIDE-01 依归档内可读的决策报告求值为 applicable。
