@@ -113,10 +113,17 @@ class BridgePinSyncProtocolTests(unittest.TestCase):
         # W5: the flash animation injected into the iframe must degrade under
         # prefers-reduced-motion (host control.css only covers the parent).
         js = _bridge_inner_js()
+        self.assertIn("@media (prefers-reduced-motion:reduce)", js)
+        self.assertNotIn("{*,*::before,*::after", js)
         self.assertIn(
-            "@media (prefers-reduced-motion:reduce)"
-            "{.dpb-pin-flash{animation:none!important}}", js,
-            "W5: injected .dpb-pin-flash needs a reduced-motion fallback")
+            ".dpb-pin-badge,.dpb-pin-badge::before,.dpb-pin-badge::after,",
+            js,
+        )
+        self.assertIn(".dpb-pin-badge-note,#dpb-draw-layer,#dpb-draw-layer *", js)
+        self.assertIn("#dpb-ruler-layer,#dpb-ruler-layer *", js)
+        self.assertIn(".dpb-pin-flash,.dpb-draw-flash{animation:none!important}", js)
+        self.assertIn(".dpb-pin-badge.dpb-pin-drop", js)
+        self.assertIn(".dpb-pin-badge.dpb-active::after", js)
 
     def test_parent_control_js_drives_sync_channels(self) -> None:
         # v9 splits the parent script into control.js + control.review.js and

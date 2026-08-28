@@ -53,12 +53,20 @@ BRIDGE_SCRIPT = r"""<script>
     ".dpb-pin-badge{position:absolute;z-index:2147483000;min-width:18px;height:18px;" +
     "padding:0 5px;border-radius:999px;background:#14b8a6;color:#042f2e;" +
     "font:700 11px/18px system-ui,sans-serif;text-align:center;pointer-events:none;" +
-    "box-shadow:0 1px 3px rgba(0,0,0,.3)}" +
+    "box-shadow:0 1px 3px rgba(0,0,0,.3);transform-origin:center;" +
+    "transition:transform .2s cubic-bezier(.16,1,.3,1),box-shadow .2s cubic-bezier(.16,1,.3,1)}" +
+    ".dpb-pin-badge.dpb-pin-drop{animation:dpb-pin-drop .38s cubic-bezier(.16,1,.3,1) both}" +
+    ".dpb-pin-badge.dpb-active::after{content:'';position:absolute;inset:-4px;border-radius:999px;" +
+    "border:2px solid rgba(20,184,166,.35);animation:dpb-pulse-ring 1.8s cubic-bezier(.24,0,.38,1) infinite}" +
     ".dpb-pin-badge-note{position:absolute;z-index:2147483000;max-width:220px;" +
     "padding:4px 8px;border-radius:8px;background:#1f2430;color:#f3f4f6;" +
     "border:1px solid #2c3444;font:11px/1.4 system-ui,sans-serif;" +
     "word-break:break-word;pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.25)}" +
     ".dpb-pin-flash{animation:dpb-pin-flash .9s ease-out 1}" +
+    "@keyframes dpb-pin-drop{0%{transform:translateY(-16px) scale(1.3);opacity:0}" +
+    "60%{transform:translateY(2px) scale(.95);opacity:1}" +
+    "80%{transform:translateY(-1px) scale(1.02)}100%{transform:translateY(0) scale(1);opacity:1}}" +
+    "@keyframes dpb-pulse-ring{0%{transform:scale(.9);opacity:.72}100%{transform:scale(1.9);opacity:0}}" +
     "@keyframes dpb-pin-flash{0%{box-shadow:0 0 0 0 rgba(20,184,166,.55)}" +
     "50%{box-shadow:0 0 0 8px rgba(20,184,166,.25)}" +
     "100%{box-shadow:0 0 0 0 rgba(20,184,166,0)}}" +
@@ -92,8 +100,10 @@ BRIDGE_SCRIPT = r"""<script>
     "100%{stroke-width:2.5px;filter:drop-shadow(0 0 0 rgba(244,96,42,0))}}" +
     // W5: honor reduced-motion inside the iframe too (host control.css only
     // covers the parent document).
-    "@media (prefers-reduced-motion:reduce){.dpb-pin-flash{animation:none!important}}" +
-    "@media (prefers-reduced-motion:reduce){.dpb-draw-flash{animation:none!important}}";
+    "@media (prefers-reduced-motion:reduce){.dpb-pin-badge,.dpb-pin-badge::before,.dpb-pin-badge::after," +
+    ".dpb-pin-badge-note,#dpb-draw-layer,#dpb-draw-layer *,#dpb-ruler-layer,#dpb-ruler-layer *{" +
+    "scroll-behavior:auto!important;transition-duration:1ms!important;transition-delay:0ms!important}" +
+    ".dpb-pin-badge.dpb-pin-drop,.dpb-pin-badge.dpb-active::after,.dpb-pin-flash,.dpb-draw-flash{animation:none!important}}";
   (document.head || document.documentElement).appendChild(style);
 
   // #56: pin state is owned by the parent control bar and synced down via
@@ -243,9 +253,12 @@ BRIDGE_SCRIPT = r"""<script>
       var el = findEl(item.selector);
       if (!el) return;
       var n = document.createElement("span");
-      n.className = "dpb-pin-badge";
+      n.className = "dpb-pin-badge" + (item.active ? " dpb-active" : "") + (item.fresh ? " dpb-pin-drop" : "");
       n.setAttribute("aria-hidden", "true");
       n.textContent = String(item.n);
+      if (item.fresh) {
+        n.addEventListener("animationend", function () { this.classList.remove("dpb-pin-drop"); }, { once: true });
+      }
       body.appendChild(n);
       var note = document.createElement("div");
       note.className = "dpb-pin-badge-note";

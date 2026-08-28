@@ -27,9 +27,14 @@
     } catch (e) { return null; }
   }
 
+  var THEME_ICONS = {
+    light: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 10.6A5.6 5.6 0 0 1 5.4 2.8 6.1 6.1 0 1 0 13.2 10.6Z"/></svg>',
+    dark: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3.1"/><path d="M8 1.5v1.4M8 13.1v1.4M1.5 8h1.4M13.1 8h1.4M3.4 3.4l1 1M11.6 11.6l1 1M12.6 3.4l-1 1M4.4 11.6l-1 1"/></svg>',
+  };
+
   function updateThemeIcon(theme) {
     var icon = document.getElementById("dpb-theme-icon");
-    if (icon) icon.textContent = theme === "dark" ? "☀" : "☾";
+    if (icon) icon.innerHTML = THEME_ICONS[theme === "dark" ? "dark" : "light"];
   }
 
   function applyTheme(theme, persist) {
@@ -159,6 +164,13 @@
     }
     return items;
   }
+  function syncCriteriaCards() {
+    for (var i = 0; i < criteriaChecks.length; i++) {
+      var check = criteriaChecks[i];
+      var card = check.closest ? check.closest(".dpb-spec-card") : null;
+      if (card) card.classList.toggle("dpb-checked", check.checked === true);
+    }
+  }
   function syncCriteriaHidden() {
     var items = criteriaSnapshot();
     if (criteriaHidden) criteriaHidden.value = JSON.stringify(items);
@@ -167,6 +179,7 @@
       criteriaCount.textContent = criteriaCountLabel(checked, items.length);
     }
     if (criteriaToggle) criteriaToggle.hidden = items.length === 0;
+    syncCriteriaCards();
   }
   function setSpecPanel(open) {
     if (!criteriaPanel) return;
@@ -444,6 +457,8 @@
       if (a.tag) o.tag = a.tag;
       if (a.points) o.points = a.points;
       if (a.rect) o.rect = a.rect;
+      if (i === activeIdx) o.active = true;
+      if (a.__fresh) o.fresh = true;
       return o;
     }) });
   }
@@ -516,15 +531,24 @@
       }
     }
     pushHistory();
-    anchors.push({
+    anchors.push(markFresh({
       selector: selector,
       label: labelFor(el),
       comment: "",
       tag: el.tagName.toLowerCase(),
       el: el,
-    });
+    }));
     render();
   }, true);
+
+  function markFresh(a) {
+    a.__fresh = true;
+    return a;
+  }
+  function clearEntranceClass(el, className) {
+    if (!el) return;
+    el.addEventListener("animationend", function () { el.classList.remove(className); }, { once: true });
+  }
 
   // ---- anchor pipeline (kept from the pre-v9 control, points-aware) ----
   function anchorSnapshot() {
@@ -661,6 +685,7 @@
     }
     var nEl = bubble.querySelector(".dpb-float-n");
     if (nEl) nEl.textContent = String(idx + 1);
+    bubble.classList.toggle("dpb-active", idx === activeIdx);
     var noteEl = bubble.querySelector(".dpb-float-note");
     if (noteEl) noteEl.textContent = a.comment || "";
   }
@@ -771,10 +796,14 @@
       if (!a.points || a.tag === "draw") return;
       var p0 = a.points[0];
       var pin = document.createElement("div");
-      pin.className = "dpb-free-pin" + (resolvedSet[a.selector] ? " dpb-resolved" : "");
+      pin.className = "dpb-free-pin"
+        + (resolvedSet[a.selector] ? " dpb-resolved" : "")
+        + (idx === activeIdx ? " dpb-active" : "")
+        + (a.__fresh ? " dpb-pin-drop" : "");
       pin.textContent = String(idx + 1);
       pin.style.left = p0[0] + "px";
       pin.style.top = p0[1] + "px";
+      if (a.__fresh) clearEntranceClass(pin, "dpb-pin-drop");
       pin.addEventListener("click", function (e) {
         e.stopPropagation();
         focusAnchor(idx);
@@ -972,13 +1001,13 @@
     if (!points || points.length < 4) return;
     drawSeq += 1;
     pushHistory();
-    anchors.push({
+    anchors.push(markFresh({
       selector: "@draw-" + drawSeq,
       label: ttN("draw_label", anchors.length + 1),
       comment: "",
       tag: "draw",
       points: points,
-    });
+    }));
     render();
     toast(ttN("toast_loop_done", anchors.length));
     if (commentInput) commentInput.focus();
@@ -987,26 +1016,26 @@
     if (!rect || rect.width < 4 || rect.height < 4) return;
     boxSeq += 1;
     pushHistory();
-    anchors.push({
+    anchors.push(markFresh({
       selector: "@box-" + boxSeq,
       label: ttN("box_label", anchors.length + 1),
       comment: "",
       tag: "box",
       rect: rect,
-    });
+    }));
     render();
     if (commentInput) commentInput.focus();
   }
   function addFreePinAnchor(pt) {
     freePinSeq += 1;
     pushHistory();
-    anchors.push({
+    anchors.push(markFresh({
       selector: "@pin-" + freePinSeq,
       label: ttN("toast_pin_added", anchors.length + 1),
       comment: "",
       tag: "pin",
       points: [pt],
-    });
+    }));
     render();
     toast(ttN("toast_pin_added", anchors.length));
     if (commentInput) commentInput.focus();
@@ -1048,12 +1077,12 @@
       }
     }
     pushHistory();
-    anchors.push({
+    anchors.push(markFresh({
       selector: selector,
       label: labelForTag(tag, selector),
       comment: "",
       tag: tag,
-    });
+    }));
     render();
   });
 
