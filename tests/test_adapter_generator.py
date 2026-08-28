@@ -248,14 +248,14 @@ class GeneratorCLITests(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0)
 
-    def test_unimplemented_tier3_agent_exits_nonzero(self) -> None:
+    def test_unknown_agent_name_exits_nonzero(self) -> None:
         result = subprocess.run(
-            [sys.executable, str(GENERATOR), "kiro-ide"],
+            [sys.executable, str(GENERATOR), "nonexistent-agent-xyz-s3"],
             capture_output=True, text=True, encoding="utf-8",
             cwd=PKG, timeout=15,
         )
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("renderer", result.stderr.lower())
+        self.assertIn("unknown agent", result.stderr.lower())
 
 
 class NodeShimSmokeTests(unittest.TestCase):
@@ -705,6 +705,68 @@ class GitHubCopilotRendererTests(unittest.TestCase):
         self.assertIn("my-server", data["servers"], "pre-existing server preserved")
 
 
+class Tier3RendererTests(unittest.TestCase):
+    """Tier-3 generic renderer: AGENTS.md floor for all 22 agents."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.manifest, cls.out = _render_to_tmp("generic")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.out, ignore_errors=True)
+
+    def test_agents_md_written_with_markers(self) -> None:
+        f = self.out / "AGENTS.md"
+        self.assertTrue(f.is_file())
+        text = f.read_text(encoding="utf-8")
+        self.assertIn("<!-- design-playbook:begin -->", text)
+        self.assertIn("<!-- design-playbook:end -->", text)
+        self.assertIn("design-playbook", text)
+
+    def test_agents_md_has_mcp_guide(self) -> None:
+        text = (self.out / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("MCP install guide", text)
+        self.assertIn("persistent dependency", text)
+        self.assertIn("design-playbook-preview", text)
+        self.assertIn("design-playbook-evidence", text)
+
+    def test_agents_md_has_commands_section(self) -> None:
+        text = (self.out / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("Commands", text)
+        self.assertIn("design-io", text)
+        self.assertIn("doctor", text)
+
+    def test_agents_md_user_content_preserved(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            (t / "AGENTS.md").write_text("# Team Rules\n\nDo not break production.\n", encoding="utf-8")
+            gen_mod.render("generic", out_dir=t, dry_run=False)
+            text = (t / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("Do not break production.", text)
+        self.assertIn("<!-- design-playbook:begin -->", text)
+
+    def test_total_file_count(self) -> None:
+        self.assertEqual(len(self.manifest["files"]), 1)
+        self.assertEqual(self.manifest["files"][0]["path"], "AGENTS.md")
+
+    def test_all_three_verification_agents_render(self) -> None:
+        for agent in ("generic", "qoder", "trae"):
+            with tempfile.TemporaryDirectory() as tmp:
+                m = gen_mod.render(agent, out_dir=Path(tmp), dry_run=False)
+                self.assertEqual(len(m["files"]), 1)
+                self.assertEqual(m["files"][0]["path"], "AGENTS.md")
+
+    def test_all_22_tier3_agents_have_renderers(self) -> None:
+        tier3 = [row.agent for row in matrix_mod.MATRIX if row.tier == 3]
+        self.assertEqual(len(tier3), 22)
+        for agent in tier3:
+            with tempfile.TemporaryDirectory() as tmp:
+                # Should not raise NotImplementedError
+                m = gen_mod.render(agent, out_dir=Path(tmp), dry_run=True)
+                self.assertEqual(m["agent"], agent)
+
+
 class Tier2ListTests(unittest.TestCase):
     """--list must show all Tier-2 renderers as (renderer ready)."""
 
@@ -729,6 +791,13 @@ class Tier2ListTests(unittest.TestCase):
         out = self._list_output()
         line = next((ln for ln in out.splitlines() if "codex" in ln), "")
         self.assertIn("renderer ready", line)
+
+    def test_all_tier3_agents_shown_as_ready(self) -> None:
+        out = self._list_output()
+        tier3_agents = [row.agent for row in matrix_mod.MATRIX if row.tier == 3]
+        for agent in tier3_agents:
+            line = next((ln for ln in out.splitlines() if agent in ln), "")
+            self.assertIn("renderer ready", line, f"{agent} not shown as renderer ready")
 
 
 class Tier2DryRunTests(unittest.TestCase):
