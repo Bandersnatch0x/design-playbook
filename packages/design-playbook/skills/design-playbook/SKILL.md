@@ -277,7 +277,7 @@ python -c "from design_playbook.mcp.evidence.handoff import build_static_handoff
   print(r.index_html)"
 ```
 
-The builder reads durable run artifacts only — its lifetime is independent of any review round, so it needs no review server, no browser session, and no port (ADR-0034). Everything lands under `.scratch/<run>/evidence/static-handoff/`: `index.html` (the delivery page, package-owned and CDN-free), `disclosure-review.json`, `static-handoff.zip`, `snapshots/`.
+The builder reads durable run artifacts only — its lifetime is independent of any review round, so it needs no review server, no browser session, and no port (ADR-0034). Everything lands under `.scratch/<run>/evidence/static-handoff/`: `index.html` (the delivery page, package-owned and CDN-free), `disclosure-review.json`, `deliverable.html` (the reviewed Fill-surface copy the page links), `static-handoff.zip`, `snapshots/`.
 
 Three honesty rules the builder enforces — do not paper over any of them:
 

@@ -59,6 +59,7 @@ class StaticHandoffResult:
     json_path: Path
     zip_path: Path
     index_html: Path
+    deliverable_html: Path
 
 
 def _iso_now() -> str:
@@ -691,7 +692,8 @@ def build_static_handoff(
     output (``filled-ui.html``) - the page the five-viewport matrix and the
     layout probe actually target (ADR-0034 §4). Everything is written under
     ``<run_root>/evidence/static-handoff/``: snapshots, the disclosure JSON,
-    the ZIP package, and a self-contained index page.
+    the ZIP package, a same-directory ``deliverable.html`` copy (the page's
+    relative link target, spec A5), and a self-contained index page.
     """
     run_root = Path(run_root)
     deliverable = Path(deliverable)
@@ -706,6 +708,14 @@ def build_static_handoff(
         capture_runner = capture_delivery_matrix
     if gate_runner is None:
         gate_runner = _run_gate_validation
+
+    # Read the deliverable source up front and fail fast: its bytes are the
+    # run identity (hash), the ZIP's prototype member, and the on-disk copy
+    # the delivery page links relatively (#107). A missing or undecodable
+    # source aborts before any capture launches or artifact is written, so a
+    # delivery page can never exist without its link target.
+    deliverable_bytes = deliverable.read_bytes()
+    deliverable_text = deliverable_bytes.decode("utf-8")
 
     # Sample conditional-gate preconditions BEFORE writing anything: this
     # builder's own output lives under evidence/, and a precondition sampled
@@ -769,7 +779,6 @@ def build_static_handoff(
     else:
         verdict = "Pending"
 
-    deliverable_bytes = deliverable.read_bytes()
     run_id = (
         f"static-handoff-{round_n}-{hashlib.sha256(deliverable_bytes).hexdigest()[:12]}"
     )
@@ -808,6 +817,13 @@ def build_static_handoff(
     json_path = out_dir / "disclosure-review.json"
     json_path.write_text(disclosure_json(payload), encoding="utf-8")
 
+    # The delivery page links "deliverable.html" as a same-directory relative
+    # anchor (spec A5: disk artifacts, same-directory relative links); the copy
+    # must exist beside index.html, byte-identical to the ZIP member, or the
+    # delivery surface ships a dead link (#107).
+    deliverable_copy = out_dir / "deliverable.html"
+    deliverable_copy.write_bytes(deliverable_bytes)
+
     artifacts: dict[str, str] = {}
     if snap_dir.is_dir():
         for vp in VIEWPORT_ORDER:
@@ -820,7 +836,7 @@ def build_static_handoff(
         artifact_files=artifacts,
         # spec §4.1: the handoff ships "snapshots and prototype code". PNGs
         # alone do not let the recipient rebuild the reviewed page.
-        text_members={"deliverable.html": deliverable_bytes.decode("utf-8")},
+        text_members={"deliverable.html": deliverable_text},
         zip_target=str(zip_path),
     )
 
@@ -835,4 +851,5 @@ def build_static_handoff(
         json_path=json_path,
         zip_path=zip_path,
         index_html=index_html,
+        deliverable_html=deliverable_copy,
     )

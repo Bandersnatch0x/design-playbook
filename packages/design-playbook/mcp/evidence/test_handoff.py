@@ -195,8 +195,16 @@ class BuildStaticHandoffTests(unittest.TestCase):
             result = self._build(tmp, run_root)
             base = run_root / "evidence" / "static-handoff"
             self.assertEqual(result.out_dir, base)
-            for path in (result.json_path, result.zip_path, result.index_html):
+            for path in (
+                result.json_path,
+                result.zip_path,
+                result.index_html,
+                result.deliverable_html,
+            ):
                 self.assertTrue(path.is_file(), path)
+            # #107: the page's relative "deliverable.html" anchor must resolve
+            # in the same directory as index.html (spec A5).
+            self.assertEqual(result.deliverable_html, base / "deliverable.html")
             self.assertTrue((base / "snapshots" / "viewport-1280x900.png").is_file())
             # nothing outside the run tree
             self.assertFalse((tmp / "output").exists())
@@ -390,6 +398,30 @@ class BuildStaticHandoffTests(unittest.TestCase):
             result = self._build(tmp, run_root)
             self.assertEqual(result.payload["profile"], "unknown")
 
+    def test_missing_deliverable_fails_before_any_artifact_is_written(self) -> None:
+        """#107 coherence: a delivery page must never exist without its link
+        target. A missing Stage 7 source aborts the build up front, so nothing
+        lands under evidence/static-handoff/ - no page, no dead link."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_s:
+            tmp = Path(tmp_s)
+            run_root = _make_run(tmp)
+            missing = tmp / "filled-ui.html"  # never written
+            with self.assertRaises(OSError):
+                handoff.build_static_handoff(
+                    run_root,
+                    missing,
+                    round_n=1,
+                    summary="s",
+                    capture_runner=_fake_capture_runner,
+                    gate_runner=_passing_gate_runner,
+                )
+            self.assertFalse(
+                (run_root / "evidence" / "static-handoff").exists(),
+                "missing source must fail before any artifact is written",
+            )
+
 
 class HandoffPageTests(unittest.TestCase):
     def test_page_template_is_own_content_with_no_cdn(self) -> None:
@@ -429,6 +461,38 @@ class HandoffPageTests(unittest.TestCase):
             self.assertEqual(embedded, result.payload)
             # No unsanitized injection from run-controlled text.
             self.assertNotIn("<script>", html[start:end])
+
+    def test_page_deliverable_link_target_exists_beside_the_page(self) -> None:
+        """#107: "Everything below sits next to it on disk" must be true.
+
+        The page links ``deliverable.html`` as a same-directory relative
+        anchor (spec A5), so the builder must write that copy beside
+        index.html, byte-identical to the ZIP member and the Stage 7 source.
+        """
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_s:
+            tmp = Path(tmp_s)
+            run_root = _make_run(tmp)
+            deliverable = tmp / "filled-ui.html"
+            deliverable.write_text(DELIVERABLE_HTML, encoding="utf-8")
+            result = handoff.build_static_handoff(
+                run_root, deliverable, round_n=1, summary="s",
+                capture_runner=_fake_capture_runner,
+                gate_runner=_passing_gate_runner,
+            )
+            html = result.index_html.read_text(encoding="utf-8")
+            self.assertIn('href="deliverable.html"', html)
+            on_disk = result.index_html.parent / "deliverable.html"
+            self.assertTrue(
+                on_disk.is_file(),
+                "the page's relative deliverable.html link must not dangle",
+            )
+            self.assertEqual(result.deliverable_html, on_disk)
+            with zipfile.ZipFile(result.zip_path) as zf:
+                member = zf.read("deliverable.html")
+            self.assertEqual(on_disk.read_bytes(), member)
+            self.assertEqual(on_disk.read_bytes(), deliverable.read_bytes())
 
 
 class GateNormalizationTests(unittest.TestCase):
