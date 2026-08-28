@@ -543,8 +543,10 @@ Success returns:
 }
 ```
 
-The excerpt is server-rendered, bounded, UTF-8 plain text with control
-characters removed and HTML escaped by the consumer. The anchor is selected by
+The excerpt is server-rendered, bounded, UTF-8 plain text. The server removes
+control characters (including ANSI escape sequences) and HTML-escapes the
+excerpt before responding; the consumer renders it strictly as text and never
+as markup. The anchor is selected by
 the authority adapter. The response does not include a path, URI, source-map
 offset, editor command, surrounding arbitrary file contents, or executable
 markup. Hash mismatch fails with `SOURCE_HASH_MISMATCH`; it never returns a
@@ -569,7 +571,9 @@ not broaden those processes' file access.
 
 1. Bind an ephemeral port to an IP-literal loopback address only (`127.0.0.1`
    or `[::1]`), never `0.0.0.0`, a LAN address, hostname wildcard, Unix socket
-   proxy, or remote tunnel.
+   proxy, or remote tunnel. The launcher MAY accept an explicit operator
+   `--port` override; the default remains an ephemeral port, and the
+   loopback-only binding rule is unconditional regardless of the chosen port.
 2. Generate at least 256 bits of cryptographically secure random session-token
    entropy for every server lifetime. Never reuse or persist the token.
 3. API requests carry `Authorization: Bearer <token>`. The token MUST NOT appear
@@ -609,6 +613,10 @@ action endpoint. Only the operations below may exist.
 
 - `GET /api/v1/snapshot` returns the current full snapshot or builds one if the
   session has none. It never returns an older snapshot after a failed rebuild.
+  This lazy in-memory build is the one sanctioned exception to the GET/HEAD
+  side-effect-freedom rule in section 11.2: it may replace only the
+  process-memory snapshot and still writes none of the durable state named
+  there.
 - `POST /api/v1/actions/refresh` accepts exactly `{ "schemaVersion": 1,
   "action": "refresh" }`. It performs a full rebuild and returns that snapshot.
   It does not write domain authority.
@@ -707,10 +715,11 @@ are safe and contain no path, token, source text, traceback, or credential.
 
 | HTTP | Code | Required behavior |
 | --- | --- | --- |
-| 400 | `MALFORMED_JSON` | Reject before action dispatch. |
-| 400 | `ACTION_PAYLOAD_INVALID` | Reject missing, mistyped, oversized, or unknown fields. |
+| 400 | `MALFORMED_JSON` | Reject a body that is not well-formed JSON before action dispatch. |
+| 400 | `ACTION_PAYLOAD_INVALID` | Reject well-formed JSON with missing, mistyped, oversized, or unknown fields. |
 | 401 | `SESSION_TOKEN_INVALID` | Return the same response for missing, malformed, expired, or wrong tokens. |
 | 403 | `ORIGIN_INVALID` | Reject Host/Origin policy failure. |
+| 404 | `ROUTE_NOT_FOUND` | Reject a request for a route outside the fixed v1 route set. |
 | 404 | `SOURCE_LOCATOR_INVALID` | Use the same response for unknown, expired, cross-run, escaped, or disallowed locators. |
 | 405 | `METHOD_NOT_ALLOWED` | Reject methods outside the exact route contract; include an accurate `Allow` header. |
 | 409 | `SNAPSHOT_HASH_MISMATCH` | Client action references a snapshot other than the current served snapshot. |
@@ -726,10 +735,13 @@ are safe and contain no path, token, source text, traceback, or credential.
 | 500 | `EXPORT_WRITE_FAILED` | Export transaction failed atomically; report no generated export. |
 | 500 | `SNAPSHOT_BUILD_FAILED` | Unexpected build failure; never serve the previous snapshot as current. |
 
-An assertion-local missing or malformed source normally produces a valid
+This code set is closed: a v1 server emits no code outside this table, and
+adding one requires a contract revision. An assertion-local missing or
+malformed source normally produces a valid
 degraded snapshot. A root containment failure, invalid selected run, internal
 contract bug, or inability to construct a coherent seven-section document is a
-request-level error instead.
+request-level error instead; a source capture or verification failure that
+prevents building a coherent snapshot surfaces as `SNAPSHOT_BUILD_FAILED`.
 
 ## 14. Contract invariants
 

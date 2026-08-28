@@ -48,9 +48,10 @@ __all__ = [
     "collect_review",
 ]
 
-# Stage 9 static-handoff disclosure contract (imported lazily inside the
-# /export-zip + /disclosure-review.json handlers so the stdio server does not
-# pay the import cost and tests can stub it).
+# Stage 9 static handoff is Evidence-owned (ADR-0034): the builder in
+# mcp/evidence/handoff.py writes its artifacts to disk under the run tree
+# (<run_root>/evidence/static-handoff/). This preview server serves only
+# the review page at "/" and hosts no delivery route.
 
 
 def _generate_decision_token() -> str:

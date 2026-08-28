@@ -17,7 +17,7 @@
 | OpenCode | 2 | `AGENTS.md` | prompt docs | `opencode.json` `mcp` | |
 | Windsurf | 2 | `.windsurf/rules/<name>.md` | `/workflow` files | none project-level — emit guide + snippet for `~/.codeium/windsurf/mcp_config.json` | never write user global config |
 | GitHub Copilot | 2 | `.github/copilot-instructions.md` + `.github/instructions/*.instructions.md` (`applyTo`) | none — prompt docs | `.mcp.json` (VS/solution) | |
-| Qoder, Kiro (IDE/CLI), Amp, Auggie, CodeBuddy, Forge, IBM Bob, Jules, Kilo Code, Pi, Qwen Code, Roo/Zoo Code, SHAI, Tabnine, Mistral Vibe, Kimi Code, iFlow, Junie, Antigravity, Trae, generic | 3 | generated `AGENTS.md` | inline prompt list in AGENTS.md | inline MCP install guide | one renderer for all; matrix rows may promote agents later |
+| Qoder, Kiro (IDE/CLI), Amp, Auggie, CodeBuddy, Forge, IBM Bob, Jules, Kilo Code, Pi, Qwen Code, Roo Code (one agent, `roo-code`), SHAI, Tabnine, Mistral Vibe, Kimi Code, iFlow, Junie, Antigravity, Trae, generic | 3 | generated `AGENTS.md` | inline prompt list in AGENTS.md | inline MCP install guide | one renderer for all; matrix rows may promote agents later |
 
 Matrix lives as data (`scripts/adapter_matrix.py` or YAML) — one row per
 agent with per-surface flags; renderers key off flags, not agent names.
@@ -33,9 +33,11 @@ npx design-playbook init <agent>          # npm bin shim, same behavior
 - `--dry-run` prints the file manifest + content hashes (drift gate input).
 - Output defaults to the consumer project root (except Tier-1 snapshots,
   which render into the repo package during CI/release).
-- Rendered artifacts carry a generated-by header with the playbook
-  version (lockstep via plugin.json, satisfying release.py badges rule
-  indirectly — no new hand-edited version site).
+- Rendered artifacts whose format can carry an in-band comment (the
+  markdown/`.mdc` targets) carry a generated-by header with the
+  playbook version; JSON targets cannot carry comments and are
+  excluded (lockstep via plugin.json, satisfying release.py badges
+  rule indirectly — no new hand-edited version site).
 
 ## 3. Slices (tracer bullets, sequential)
 

@@ -14,3 +14,11 @@ Implementation-ready vNext specification resolved by the Wayfinder map [#23](htt
 | `vnext-prototype.md` | Product surface, compatibility boundary, validation slices S1-S6 | #33 |
 
 Each source ticket carries a resolution comment with the confirmed decision list; per-decision rationale lives in these documents. External reference material informed the research phase only — it is neither a runtime dependency nor a rule authority, and no third-party names, local paths, or copied rule text appear here.
+
+Post-ship amendments: later ADRs revise these documents where noted inline.
+In particular, [ADR-0033](../../adr/0033-audit-acceptance-user-preferences.md)
+(audit and acceptance stages as user-selectable preferences) amends the
+audit-stage and exemption surface described in `loop-prototype.md` §6 and the
+review stages — read it alongside this directory. ADR-0028 (severity alias
+removal) and ADR-0029 (closed-loop final state) record the other governing
+post-ship revisions.

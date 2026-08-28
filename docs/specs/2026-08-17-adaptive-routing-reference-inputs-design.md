@@ -248,6 +248,10 @@ existing `kind` value set is deliberately unchanged.
   acquisition/provider metadata fail visibly.
 - Copies use a same-directory temporary file followed by atomic replacement so
   a failed copy cannot leave a partial reference asset.
+- A failed manifest write rolls back the asset that same call freshly created,
+  so no orphan asset survives without a manifest entry claiming it (issue
+  #74). A pre-existing same-digest asset is kept: a prior manifest entry still
+  claims it. The write failure itself still propagates visibly.
 - Reference assets remain prohibited as Fill sources.
 
 ## 3. Read-only component reuse handoff

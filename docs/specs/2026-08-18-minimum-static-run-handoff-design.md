@@ -8,6 +8,12 @@ version control per "Artifact layout" below — so a clean checkout carries the
 design, not the runnable acceptance. Re-run the acceptance from the reference
 set's own working copy; treat this document as the durable record.
 **Scope:** One fixed synthetic reference delivery, not a product interface
+**Revision chain:** Where this document disagrees with shipped behavior,
+[ADR-0034](../adr/0034-static-handoff-ownership-and-lifecycle.md) and the §0
+amendment record of the
+[2026-08-22 implementation plan](./2026-08-22-interactive-review-and-static-handoff-implementation-plan.md)
+are the governing revisions; artifact locations, delivery-route ownership, and
+capture targets changed there.
 
 ## Summary
 
@@ -111,7 +117,10 @@ The implementation creates this local reference set:
 Only `static-run-handoff.html` is the shareable delivery. `sources/`,
 and `acceptance/` are local implementation and verification material. Browser
 evidence is captured under `output/playwright/static-handoff/` according to the
-repository's Playwright artifact convention. The shared file must not depend on
+repository's Playwright artifact convention. (Amendment: the shipped capture
+location is `<run_root>/evidence/static-handoff/` inside the run tree; ADR-0034
+§5 retired the working-directory `output/` convention.) The shared file must
+not depend on
 any of them at runtime.
 
 The formal design and later implementation plan are durable tracked documents;

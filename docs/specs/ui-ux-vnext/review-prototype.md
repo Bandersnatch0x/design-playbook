@@ -36,7 +36,7 @@
 | 支持（supported） | `pass` | observed 证据满足 required proof（必备证据 + capture seed） | 证据存在、已绑定、且 evaluator 判定覆盖 Then 子句全部用户可见结果 |
 | 不支持（unsupported） | `fail` | 证据存在但与 Then 矛盾（截图可以证伪判据） | 证据绑定完整 + observation 与 required 不符 |
 | 无法验证（unverifiable） | `blocked` | 必备证据不可得（provider 缺席、状态不可达、capture 失败） | 不可得的 required proof 记 blocked，不跳过、不臆断 |
-| 不适用（not applicable） | `n/a` | 判据经确认不适用于本 run 范围 | **必须附理由**（D5 既有义务）；无理由的 n/a 是结构错误 |
+| 不适用（not applicable） | `n/a` | 判据经确认不适用于本 run 范围 | **必须附理由**——本模型自立的评审协议义务（无上游条文可引）；机器面按第 7 节冻结，无理由的 n/a 由评审协议面拒绝 |
 
 - **每条 L6 恰一行 ledger**（G2 既有机器面，原样保留）。判定的机器可查部分（行存在、字段非空、值域、Pass 全 pass、artifact 绑定）归门禁；「observed 是否真的满足 required」归 evaluator——两分法与现状一致。
 - **无对应契约的发现不在评审中现场发明产品要求**（#24 D4 既定）：评审只能引用已存在的 `l6.cN`/L1-L5/决策条目；发现落点无声明可指 → 回流 D1（见第 8 节路由 R1）。
@@ -144,7 +144,7 @@
 
 ### 4.1 severity：按用户可见后果分级（与 Q7 决策权表对齐）
 
-现有值域 `high (blocking)|high|med|low` 的括注把「严重度」与「处置」耦合成一个字段。决议 Q1：**分轴**——severity 与处置是两个独立字段；旧字段写法保留为兼容别名，机械换算与迁移归 #32：
+现有值域 `high (blocking)|high|med|low` 的括注把「严重度」与「处置」耦合成一个字段。决议 Q1：**分轴**——severity 与处置是两个独立字段；旧字段写法保留为兼容别名，机械换算与迁移归 #32（后续修订：别名期已由 ADR-0028〔vNext S5〕终结——自 v0.20.0 起旧写法是结构错误 `G2.finding_invalid_severity`，不再静默折算；下表「向后兼容映射」列仅存迁移历史语义）：
 
 | 级 | 名称 | 判据（后果） | 向后兼容映射 |
 | --- | --- | --- | --- |

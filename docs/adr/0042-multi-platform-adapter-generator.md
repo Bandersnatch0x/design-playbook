@@ -46,9 +46,13 @@ exist, so breadth requires explicit, honest degradation.
      installation guide. AGENTS.md is the fallback for any agent
      without a dedicated renderer.
 4. **Install-time absent→skip.** The runtime G5/G6 probe-and-skip
-   contract extends to install time: the generator emits MCP config
-   only where a project-level file exists (Windsurf's global-only MCP
-   is documented, never written into user global config).
+   contract extends to install time as a platform-capability gate: MCP
+   config is emitted only for platforms with a project-level config
+   location. For those platforms the generator creates the config file
+   when absent and merge-safely deep-merges into an existing one,
+   never removing user keys and failing loud on malformed JSON
+   (Windsurf's global-only MCP is documented, never written into user
+   global config).
 5. **`.codex-plugin/` becomes a generated, committed snapshot.**
    `validate.py` gains a drift gate: regenerate in dry-run and diff
    against committed Tier-1 snapshots; any mismatch fails the gate.

@@ -19,8 +19,10 @@ Two seams keep the contract builder pure and testable without a browser:
   It only normalizes caller-supplied facts into the §4.2 shape.
 
 ``build_handoff_zip()`` packages the disclosure credential plus any caller-
-supplied snapshot artifacts into a single ZIP for the local ``/export-zip``
-endpoint (Stage 9 delivery mount). It never reads outside the caller-provided
+supplied snapshot artifacts into a single ZIP. The Evidence-side builder
+(``handoff.py``) writes it to disk as ``static-handoff.zip`` next to the
+delivery page under ``<run_root>/evidence/static-handoff/`` (ADR-0034); no
+HTTP delivery endpoint exists. It never reads outside the caller-provided
 file list.
 """
 

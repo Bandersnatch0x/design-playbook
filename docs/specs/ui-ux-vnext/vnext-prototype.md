@@ -77,7 +77,7 @@
 | --- | --- | --- | --- |
 | 1 | `<project>/contract.json` | **沿用** | 零 schema 改动（#28 5.1 零破坏结论）；`contract_v1.py` 不动 |
 | 2 | `<project>/decisions.jsonl` | **沿用** | 零改动（append-only、supersedes 原样） |
-| 3 | `packages/design-playbook/skills/design-playbook/references/rules.md` | **新增**（产品级） | 20 字段条目块注册表：craft 八条（first-party/advisory）+ A11Y-01/RESP-01（first-party/advisory）+ I18N-01/PERF-01/SEC-01（placeholder/advisory）；头部含拆分条件（>30 条或 >3 家族）与 schemaVersion；G8 产品级校验 |
+| 3 | `packages/design-playbook/skills/design-playbook/references/rules.md` | **新增**（产品级） | 25 字段条目块注册表（按已交付条目实测）：craft 八条（first-party/advisory）+ A11Y-01/RESP-01（first-party/advisory）+ I18N-01/PERF-01/SEC-01（placeholder/advisory）；头部含拆分条件（>30 条或 >3 家族）与 schemaVersion；G8 产品级校验 |
 | 4 | `<project>/rules-governance.jsonl` | **新增**（项目级） | append-only 治理日志（事件 schema 首版只定义；只记用户决定性事件） |
 | 5 | `<project>/DESIGN.md` + `.scratch/<run>/design-baseline/state.json` | **沿用**（微扩） | design-baseline v1 语义不变；stale 复核记录行并入既有记录面 |
 | 6 | `.scratch/<run>/spec.md` | **扩展** | L2-L5 结构化字段（逐页职责表 / 路径表 / 逐页五态矩阵）；L1/L6 既有结构不动 |
@@ -222,7 +222,7 @@ Destination 原文五要件：交互式需求成形、工具无关设计决策�
 
 | Destination 要件 | 产品表面落点 | 自查 |
 | --- | --- | --- |
-| 交互式需求成形 | ux-spec S0-S6 会话 + shaping 工件 + CP-A~E + G9（S1） | ✓ D1 有会话状态机、批次确认、投影与老化升级；契约零破坏 |
+| 交互式需求成形 | ux-spec S0-S6 会话 + shaping 工件 + CP-A~E + G9（S1） | ✓ D1 有会话状态机、批次确认与投影；老化升级为协议定义、执行按 #24-Q6=B 延期；契约零破坏 |
 | 工具无关设计决策 | ui-picker R/C/E + DD 条目块 + provider 匿名数据契约 + 资产引用层 + G10（S2） | ✓ 协议不假设 named provider；预览/生成器均为可替换适配器 |
 | 双轨实现评审 | ui-evaluator 三轨 + 横切适用性矩阵 + severity×confidence×处置分轴 + 六块报告 + G11（S1/S3） | ✓ 判断类 S3 永不 blocking；主观维度默认 advisory |
 | 证据门禁 | G1-G12 全谱（既有 G1-G7 深化/沿用 + 新 G8-G12）+ manifest 方法语义 + 四层证据 | ✓ 机器面只证可证之事；implemented-UI pass 须绑定 rendered/interaction artifact |
