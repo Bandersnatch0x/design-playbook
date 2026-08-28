@@ -32,7 +32,7 @@ _PKG_DIR = _SCRIPTS_DIR.parent
 _TEMPLATES_DIR = _SCRIPTS_DIR / "adapter_templates"
 
 sys.path.insert(0, str(_SCRIPTS_DIR))
-from adapter_matrix import MATRIX, get_agent  # noqa: E402
+from adapter_matrix import MATRIX, AgentRow, get_agent  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -557,15 +557,12 @@ def _github_copilot_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
 
 
 # ---------------------------------------------------------------------------
-# Renderer dispatch
-# ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# Tier-3 generic renderer (AGENTS.md floor for all 22 tier-3 agents)
+# AGENTS.md floor renderer — shared fallback for every matrix agent without a
+# dedicated renderer (today: all Tier-3 rows)
 # ---------------------------------------------------------------------------
 
 
-def _tier3_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
+def _agents_md_floor_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     """One AGENTS.md with orchestrator contract, sub-skills, commands, and MCP guide."""
     skills = _read_skills()
     commands = _read_commands()
@@ -622,22 +619,30 @@ def _tier3_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
 # Renderer dispatch
 # ---------------------------------------------------------------------------
 
-_TIER3_RENDERER_AGENTS = (
-    "qoder", "kiro-ide", "kiro-cli", "amp", "auggie", "codebuddy", "forge",
-    "ibm-bob", "jules", "kilo-code", "pi", "qwen-code", "roo-code", "shai",
-    "tabnine", "mistral-vibe", "kimi-code", "iflow", "junie", "antigravity",
-    "trae", "generic",
-)
-
-_RENDERERS: dict[str, Renderer] = {
+# Dedicated renderers for agents whose platform surface rises above the
+# AGENTS.md floor (Tier 1/2 today).  Tier membership lives in the matrix, not
+# here: a matrix row absent from this map automatically falls back to the
+# floor renderer, so adding an agent = adding a matrix row (ADR-0042).
+_SPECIALIZED_RENDERERS: dict[str, Renderer] = {
     "codex": _codex_files,
     "cursor": _cursor_files,
     "gemini-cli": _gemini_cli_files,
     "opencode": _opencode_files,
     "windsurf": _windsurf_files,
     "github-copilot": _github_copilot_files,
-    **{agent: _tier3_files for agent in _TIER3_RENDERER_AGENTS},
 }
+
+
+def _renderer_for(row: AgentRow) -> Renderer | None:
+    """Resolve *row* to a renderer from matrix properties, not name lists.
+
+    Native rows (the host platform consumes the package directly) resolve to
+    None — the generator emits nothing for them.  Every other row uses its
+    dedicated renderer when one exists, else the shared AGENTS.md floor.
+    """
+    if row.native:
+        return None
+    return _SPECIALIZED_RENDERERS.get(row.agent, _agents_md_floor_files)
 
 
 def render(agent: str, out_dir: Path | None = None, *, dry_run: bool = False) -> dict:
@@ -652,10 +657,11 @@ def render(agent: str, out_dir: Path | None = None, *, dry_run: bool = False) ->
 
     version = _get_version()
 
-    renderer = _RENDERERS.get(agent)
+    renderer = _renderer_for(row)
     if renderer is None:
         raise NotImplementedError(
-            f"no renderer for {agent!r} (tier {row.tier})"
+            f"{agent!r} is native (tier {row.tier}): the host platform consumes "
+            "the package directly; the generator emits no output"
         )
 
     if out_dir is None:
@@ -688,7 +694,7 @@ def render(agent: str, out_dir: Path | None = None, *, dry_run: bool = False) ->
 
 def _list_agents() -> None:
     for row in MATRIX:
-        renderer_note = "(renderer ready)" if row.agent in _RENDERERS else ""
+        renderer_note = "(renderer ready)" if _renderer_for(row) is not None else ""
         print(f"  {row.agent:<20} tier={row.tier}  {renderer_note}".rstrip())
 
 

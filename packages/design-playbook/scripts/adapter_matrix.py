@@ -24,6 +24,9 @@ class AgentRow:
     hooks: bool
     skills: bool
     rules_target: str
+    # True when the host platform consumes the package directly (no generated
+    # adapter output).  The generator skips native rows entirely.
+    native: bool = False
 
     def __post_init__(self) -> None:
         if self.tier not in (1, 2, 3):
@@ -46,6 +49,7 @@ _TIER1: tuple[AgentRow, ...] = (
         hooks=True,
         skills=True,
         rules_target="native plugin (skills/)",
+        native=True,
     ),
     AgentRow(
         agent="codex",
@@ -157,9 +161,10 @@ _TIER3: tuple[AgentRow, ...] = tuple(
 MATRIX: tuple[AgentRow, ...] = _TIER1 + _TIER2 + _TIER3
 
 # Agents for which the generator produces committed snapshots verified by
-# the validate.py drift gate.
+# the validate.py drift gate.  Native rows are consumed directly by the host
+# platform and never get generated snapshots.
 TIER1_SNAPSHOT_AGENTS: tuple[str, ...] = tuple(
-    row.agent for row in MATRIX if row.tier == 1 and row.agent != "claude-code"
+    row.agent for row in MATRIX if row.tier == 1 and not row.native
 )
 
 
@@ -185,6 +190,8 @@ def validate_matrix(rows: tuple[AgentRow, ...] = MATRIX) -> list[str]:
             errors.append(str(exc))
         if row.tier == 1 and not row.rules:
             errors.append(f"{row.agent}: Tier-1 agent must have rules=True")
+        if row.native and row.tier != 1:
+            errors.append(f"{row.agent}: native rows must be Tier 1")
         if row.tier == 3 and (row.commands or row.mcp_project or row.hooks or row.skills):
             errors.append(
                 f"{row.agent}: Tier-3 agent must have commands/mcp_project/hooks/skills=False"

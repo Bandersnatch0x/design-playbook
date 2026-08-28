@@ -8,6 +8,8 @@ Tests:
   3. Dry-run manifest determinism — two consecutive dry-runs produce identical JSON.
   4. CLI --list smoke — spawn generate_adapter.py --list and check output.
   5. cli.js smoke — spawn lib/cli.js --list via node; skip visibly when node absent.
+  6. Renderer dispatch (issue #111) — matrix-driven: every non-native row renders
+     (dedicated renderer or AGENTS.md floor fallback); native rows emit nothing.
 """
 from __future__ import annotations
 
@@ -61,6 +63,13 @@ class MatrixSchemaTests(unittest.TestCase):
             self.assertIsInstance(row.skills, bool)
             self.assertIsInstance(row.rules_target, str)
             self.assertGreater(len(row.rules_target), 0)
+            self.assertIsInstance(row.native, bool)
+
+    def test_claude_code_is_the_only_native_row(self) -> None:
+        # native=True is the matrix marker for "host platform consumes the
+        # package directly; the generator emits nothing" (issue #111).
+        native = [row.agent for row in matrix_mod.MATRIX if row.native]
+        self.assertEqual(native, ["claude-code"])
 
     def test_no_duplicate_agents(self) -> None:
         names = [row.agent for row in matrix_mod.MATRIX]
@@ -767,6 +776,63 @@ class Tier3RendererTests(unittest.TestCase):
                 self.assertEqual(m["agent"], agent)
 
 
+class RendererDispatchTests(unittest.TestCase):
+    """Dispatch keys off the matrix row (issue #111): dedicated renderer or
+    AGENTS.md floor fallback for every non-native row; native rows emit nothing."""
+
+    def test_every_non_native_row_renders_without_not_implemented(self) -> None:
+        for row in matrix_mod.MATRIX:
+            if row.native:
+                continue
+            with tempfile.TemporaryDirectory() as tmp:
+                try:
+                    m = gen_mod.render(row.agent, out_dir=Path(tmp), dry_run=True)
+                except NotImplementedError as exc:
+                    self.fail(f"{row.agent}: non-native row must never hit NotImplementedError: {exc}")
+                self.assertEqual(m["agent"], row.agent)
+                self.assertGreater(len(m["files"]), 0, f"{row.agent}: expected at least one artifact")
+
+    def test_native_row_emits_nothing(self) -> None:
+        native_rows = [row for row in matrix_mod.MATRIX if row.native]
+        self.assertTrue(native_rows, "matrix must mark the native row")
+        for row in native_rows:
+            with tempfile.TemporaryDirectory() as tmp:
+                with self.assertRaises(NotImplementedError):
+                    gen_mod.render(row.agent, out_dir=Path(tmp), dry_run=False)
+                written = list(Path(tmp).rglob("*"))
+                self.assertEqual(written, [], f"{row.agent}: native row must not write files")
+
+    def test_native_skip_keys_off_matrix_flag_not_name(self) -> None:
+        # A hypothetical native row under any other name must be skipped too:
+        # the generator reads row.native, never the agent name.
+        row = matrix_mod.AgentRow(
+            agent="hypothetical-native-host", tier=1, rules=True, commands=True,
+            mcp_project=True, hooks=True, skills=True,
+            rules_target="native", native=True,
+        )
+        self.assertIsNone(gen_mod._renderer_for(row))
+
+    def test_row_without_dedicated_renderer_falls_back_to_floor(self) -> None:
+        # Adding an agent = adding a matrix row (ADR-0042): a row the generator
+        # has never heard of must resolve to the AGENTS.md floor renderer.
+        row = matrix_mod.AgentRow(
+            agent="brand-new-agent-not-in-generator", tier=3, rules=True,
+            commands=False, mcp_project=False, hooks=False, skills=False,
+            rules_target="AGENTS.md",
+        )
+        self.assertIs(gen_mod._renderer_for(row), gen_mod._agents_md_floor_files)
+
+    def test_specialized_renderer_keys_are_matrix_agents(self) -> None:
+        matrix_agents = {row.agent for row in matrix_mod.MATRIX}
+        stale = set(gen_mod._SPECIALIZED_RENDERERS) - matrix_agents
+        self.assertEqual(stale, set(), f"specialized renderers for agents not in the matrix: {stale}")
+
+    def test_no_duplicated_tier_membership_list_in_generator(self) -> None:
+        # Regression pin: tier membership lives in adapter_matrix.py only.
+        self.assertFalse(hasattr(gen_mod, "_TIER3_RENDERER_AGENTS"),
+                         "generator must not duplicate the matrix's tier-3 agent list")
+
+
 class Tier2ListTests(unittest.TestCase):
     """--list must show all Tier-2 renderers as (renderer ready)."""
 
@@ -798,6 +864,13 @@ class Tier2ListTests(unittest.TestCase):
         for agent in tier3_agents:
             line = next((ln for ln in out.splitlines() if agent in ln), "")
             self.assertIn("renderer ready", line, f"{agent} not shown as renderer ready")
+
+    def test_native_claude_code_listed_without_renderer_note(self) -> None:
+        out = self._list_output()
+        line = next((ln for ln in out.splitlines() if "claude-code" in ln), "")
+        self.assertTrue(line, "claude-code missing from --list output")
+        self.assertNotIn("renderer ready", line,
+                         "native claude-code row must not be shown as renderer ready")
 
 
 class Tier2DryRunTests(unittest.TestCase):
