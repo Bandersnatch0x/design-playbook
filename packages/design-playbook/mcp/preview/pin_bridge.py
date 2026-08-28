@@ -100,8 +100,9 @@ BRIDGE_SCRIPT = r"""<script>
     "100%{stroke-width:2.5px;filter:drop-shadow(0 0 0 rgba(244,96,42,0))}}" +
     // W5: honor reduced-motion inside the iframe too (host control.css only
     // covers the parent document).
-    "@media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;" +
-    "transition-duration:1ms!important;transition-delay:0ms!important}" +
+    "@media (prefers-reduced-motion:reduce){.dpb-pin-badge,.dpb-pin-badge::before,.dpb-pin-badge::after," +
+    ".dpb-pin-badge-note,#dpb-draw-layer,#dpb-draw-layer *,#dpb-ruler-layer,#dpb-ruler-layer *{" +
+    "scroll-behavior:auto!important;transition-duration:1ms!important;transition-delay:0ms!important}" +
     ".dpb-pin-badge.dpb-pin-drop,.dpb-pin-badge.dpb-active::after,.dpb-pin-flash,.dpb-draw-flash{animation:none!important}}";
   (document.head || document.documentElement).appendChild(style);
 
