@@ -21,6 +21,11 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Callable
+
+# A renderer maps (version, out_dir) to [(relative_path, content)] pairs
+# without writing anything; render() owns all filesystem writes.
+Renderer = Callable[[str, Path], "list[tuple[str, str]]"]
 
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 _PKG_DIR = _SCRIPTS_DIR.parent
@@ -117,6 +122,42 @@ def _strip_leading_h1(body: str) -> str:
 # ---------------------------------------------------------------------------
 # MCP server path helpers
 # ---------------------------------------------------------------------------
+
+
+def _digest_head(skills: list[dict]) -> list[str]:
+    """Shared AGENTS.md-style digest head: orchestrator body + sub-skill index.
+
+    Single source for the block that gemini-cli, opencode, github-copilot,
+    and the tier-3 renderer embed (the S3 duplicate-H1 bug had to be fixed
+    in four places; this is that seam).
+    """
+    orchestrator = next((s for s in skills if s["dirname"] == "design-playbook"), None)
+    sub_skills = [s for s in skills if s["dirname"] != "design-playbook"]
+    parts: list[str] = ["# design-playbook\n\n"]
+    if orchestrator:
+        parts.append(_strip_leading_h1(orchestrator["body"]))
+        parts.append("\n")
+    parts.append("## Sub-skills\n\n")
+    for sk in sub_skills:
+        parts.append(f"- **{sk['name']}**: {sk['description']}\n")
+    return parts
+
+
+def _existing_text(out_dir: Path, rel: str) -> str | None:
+    """Content of a pre-existing consumer file, or None — the single read
+    seam behind marker-block and merge-safe JSON emission."""
+    path = out_dir / rel
+    return path.read_text(encoding="utf-8") if path.is_file() else None
+
+
+def _marker_entry(out_dir: Path, rel: str, version: str, block: str) -> tuple[str, str]:
+    """(rel, content) for a shared markdown target, preserving user content."""
+    return (rel, apply_marker_block(_existing_text(out_dir, rel), version, block))
+
+
+def _merge_json_entry(out_dir: Path, rel: str, our_data: dict) -> tuple[str, str]:
+    """(rel, content) for a JSON config target, merge-safe and fail-loud."""
+    return (rel, merge_json_str(_existing_text(out_dir, rel), our_data))
 
 
 def _mcp_servers_abs() -> dict[str, dict]:
@@ -375,18 +416,8 @@ def _gemini_cli_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     commands = _read_commands()
 
     # GEMINI.md — marker-block (may pre-exist in consumer project)
-    orchestrator = next((s for s in skills if s["dirname"] == "design-playbook"), None)
-    sub_skills = [s for s in skills if s["dirname"] != "design-playbook"]
-    gemini_block_parts = ["# design-playbook\n\n"]
-    if orchestrator:
-        gemini_block_parts.append(_strip_leading_h1(orchestrator["body"]))
-        gemini_block_parts.append("\n")
-    gemini_block_parts.append("## Sub-skills\n\n")
-    for sk in sub_skills:
-        gemini_block_parts.append(f"- **{sk['name']}**: {sk['description']}\n")
-    gemini_md_path = out_dir / "GEMINI.md"
-    existing_gemini = gemini_md_path.read_text(encoding="utf-8") if gemini_md_path.is_file() else None
-    files.append(("GEMINI.md", apply_marker_block(existing_gemini, version, "".join(gemini_block_parts))))
+    gemini_block_parts = _digest_head(skills)
+    files.append(_marker_entry(out_dir, "GEMINI.md", version, "".join(gemini_block_parts)))
 
     # .gemini/commands/<name>.toml per command (our namespaced dir — whole-file)
     for cmd in commands:
@@ -424,15 +455,7 @@ def _opencode_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     commands = _read_commands()
 
     # AGENTS.md — marker-block (may pre-exist in consumer project)
-    orchestrator = next((s for s in skills if s["dirname"] == "design-playbook"), None)
-    sub_skills = [s for s in skills if s["dirname"] != "design-playbook"]
-    block_parts = ["# design-playbook\n\n"]
-    if orchestrator:
-        block_parts.append(_strip_leading_h1(orchestrator["body"]))
-        block_parts.append("\n")
-    block_parts.append("## Sub-skills\n\n")
-    for sk in sub_skills:
-        block_parts.append(f"- **{sk['name']}**: {sk['description']}\n")
+    block_parts = _digest_head(skills)
     block_parts.append("\n## Commands\n\n")
     block_parts.append(
         "Use `/init` to regenerate or `/share` to share context. "
@@ -440,9 +463,7 @@ def _opencode_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     )
     for cmd in commands:
         block_parts.append(f"### /{cmd['name']}\n\n{cmd['description']}\n\n{_strip_leading_h1(cmd['body'])}\n")
-    agents_md_path = out_dir / "AGENTS.md"
-    existing_agents = agents_md_path.read_text(encoding="utf-8") if agents_md_path.is_file() else None
-    files.append(("AGENTS.md", apply_marker_block(existing_agents, version, "".join(block_parts))))
+    files.append(_marker_entry(out_dir, "AGENTS.md", version, "".join(block_parts)))
 
     # opencode.json — merge-safe mcp key
     mcp_servers = _mcp_servers_abs()
@@ -452,9 +473,7 @@ def _opencode_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
         if "env" in srv:
             entry["env"] = srv["env"]
         opencode_mcp[name] = entry
-    existing_path = out_dir / "opencode.json"
-    existing_text = existing_path.read_text(encoding="utf-8") if existing_path.is_file() else None
-    files.append(("opencode.json", merge_json_str(existing_text, {"mcp": opencode_mcp})))
+    files.append(_merge_json_entry(out_dir, "opencode.json", {"mcp": opencode_mcp}))
 
     return files
 
@@ -506,15 +525,7 @@ def _github_copilot_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     header = f"<!-- generated-by design-playbook v{version} -->\n"
 
     # .github/copilot-instructions.md — marker-block (may pre-exist)
-    orchestrator = next((s for s in skills if s["dirname"] == "design-playbook"), None)
-    sub_skills = [s for s in skills if s["dirname"] != "design-playbook"]
-    instr_block_parts = ["# design-playbook\n\n"]
-    if orchestrator:
-        instr_block_parts.append(_strip_leading_h1(orchestrator["body"]))
-        instr_block_parts.append("\n")
-    instr_block_parts.append("## Sub-skills\n\n")
-    for sk in sub_skills:
-        instr_block_parts.append(f"- **{sk['name']}**: {sk['description']}\n")
+    instr_block_parts = _digest_head(skills)
     copilot_instr_path = out_dir / ".github" / "copilot-instructions.md"
     existing_instr = copilot_instr_path.read_text(encoding="utf-8") if copilot_instr_path.is_file() else None
     files.append((".github/copilot-instructions.md",
@@ -540,9 +551,7 @@ def _github_copilot_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
         if "env" in srv:
             entry["env"] = srv["env"]
         vs_servers[name] = entry
-    existing_path = out_dir / ".mcp.json"
-    existing_text = existing_path.read_text(encoding="utf-8") if existing_path.is_file() else None
-    files.append((".mcp.json", merge_json_str(existing_text, {"servers": vs_servers})))
+    files.append(_merge_json_entry(out_dir, ".mcp.json", {"servers": vs_servers}))
 
     return files
 
@@ -562,23 +571,10 @@ def _tier3_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     commands = _read_commands()
     mcp_servers = _mcp_servers_abs()
 
-    orchestrator = next((s for s in skills if s["dirname"] == "design-playbook"), None)
-    sub_skills = [s for s in skills if s["dirname"] != "design-playbook"]
-
     preview_path = mcp_servers["design-playbook-preview"]["args"][0]
     evidence_path = mcp_servers["design-playbook-evidence"]["args"][0]
 
-    block_parts: list[str] = ["# design-playbook\n\n"]
-
-    # Orchestrator contract
-    if orchestrator:
-        block_parts.append(_strip_leading_h1(orchestrator["body"]))
-        block_parts.append("\n")
-
-    # Sub-skill index
-    block_parts.append("## Sub-skills\n\n")
-    for sk in sub_skills:
-        block_parts.append(f"- **{sk['name']}**: {sk['description']}\n")
+    block_parts: list[str] = _digest_head(skills)
 
     # Commands as copy-paste prompt equivalents
     block_parts.append("\n## Commands\n\n")
@@ -619,9 +615,7 @@ def _tier3_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
         "`pip install playwright && playwright install chromium`.\n"
     )
 
-    agents_md_path = out_dir / "AGENTS.md"
-    existing = agents_md_path.read_text(encoding="utf-8") if agents_md_path.is_file() else None
-    return [("AGENTS.md", apply_marker_block(existing, version, "".join(block_parts)))]
+    return [_marker_entry(out_dir, "AGENTS.md", version, "".join(block_parts))]
 
 
 # ---------------------------------------------------------------------------
@@ -635,7 +629,7 @@ _TIER3_RENDERER_AGENTS = (
     "trae", "generic",
 )
 
-_RENDERERS: dict[str, object] = {
+_RENDERERS: dict[str, Renderer] = {
     "codex": _codex_files,
     "cursor": _cursor_files,
     "gemini-cli": _gemini_cli_files,
@@ -667,7 +661,7 @@ def render(agent: str, out_dir: Path | None = None, *, dry_run: bool = False) ->
     if out_dir is None:
         out_dir = _PKG_DIR if row.tier == 1 else Path.cwd()
 
-    files = renderer(version, out_dir)  # type: ignore[call-arg]
+    files = renderer(version, out_dir)
 
     manifest = {
         "agent": agent,
