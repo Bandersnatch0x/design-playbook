@@ -347,6 +347,33 @@ def _codex_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
 
 
 # ---------------------------------------------------------------------------
+# Frontmatter-aware generated-by placement (issue #115)
+# ---------------------------------------------------------------------------
+
+_FM_BLOCK_RE = re.compile(r"\A---\n.*?\n---\n", re.DOTALL)
+
+
+def _header_after_frontmatter(content: str, header: str) -> str:
+    """Insert the generated-by *header* immediately after the closing ``---``
+    of the frontmatter block that *content* starts with.
+
+    Frontmatter-bearing hosts (Cursor ``.mdc``, Copilot ``.instructions.md``)
+    require ``---`` on line 1; any prefix demotes the whole block to prose and
+    the rule metadata is silently dropped (issue #115).  The header therefore
+    becomes the first body line.  Artifacts without frontmatter keep their
+    top-of-file header and must not use this helper — it fails loudly when
+    *content* does not open with a frontmatter block.
+    """
+    m = _FM_BLOCK_RE.match(content)
+    if m is None:
+        raise ValueError(
+            "content does not start with a '---' frontmatter block; "
+            "keep the generated-by header at the top of the file instead"
+        )
+    return content[: m.end()] + header + content[m.end():]
+
+
+# ---------------------------------------------------------------------------
 # Cursor renderer (Tier 2)
 # ---------------------------------------------------------------------------
 
@@ -362,19 +389,19 @@ def _cursor_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     # One .mdc rule file per skill
     for skill in skills:
         always_apply = "true" if skill["dirname"] == "design-playbook" else "false"
-        content = (
-            f"{header}"
+        content = _header_after_frontmatter(
             f"---\n"
             f"description: {skill['description']}\n"
             f"alwaysApply: {always_apply}\n"
             f"---\n"
-            f"{skill['body']}"
+            f"{skill['body']}",
+            header,
         )
         files.append((f".cursor/rules/{skill['dirname']}.mdc", content))
 
     # Commands reference file (no native slash commands in Cursor)
     cmd_lines = [
-        f"{header}---\n"
+        "---\n"
         "description: design-playbook commands — use these as prompt templates\n"
         "alwaysApply: false\n"
         "---\n"
@@ -385,12 +412,15 @@ def _cursor_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     for cmd in commands:
         cmd_lines.append(f"## /{cmd['name']}\n\n{cmd['description']}\n\n")
         cmd_lines.append(f"{cmd['body']}\n")
-    files.append((".cursor/rules/design-playbook-commands.mdc", "".join(cmd_lines)))
+    files.append((".cursor/rules/design-playbook-commands.mdc",
+                  _header_after_frontmatter("".join(cmd_lines), header)))
 
     # MCP note (explanation; JSON can't carry comments). The template is
-    # version-free; the generated-by header is injected here at the write
-    # seam, matching every other rendered .mdc artifact above.
-    files.append((".cursor/rules/design-playbook-mcp.mdc", header + _tmpl("cursor-mcp-note.mdc")))
+    # version-free and opens with its own frontmatter; the generated-by header
+    # is injected here at the write seam — after the frontmatter block, matching
+    # every other rendered .mdc artifact above (issue #115).
+    files.append((".cursor/rules/design-playbook-mcp.mdc",
+                  _header_after_frontmatter(_tmpl("cursor-mcp-note.mdc"), header)))
 
     # Actual .cursor/mcp.json — merge-safe with any existing config
     mcp_servers = _mcp_servers_abs()
@@ -537,13 +567,13 @@ def _github_copilot_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
 
     # .github/instructions/<skill>.instructions.md per skill (our namespaced dir — whole-file)
     for skill in skills:
-        content = (
-            f"{header}"
+        content = _header_after_frontmatter(
             f"---\n"
             f"applyTo: \"**\"\n"
             f"---\n"
             f"# {skill['name']}\n\n"
-            f"{skill['body']}"
+            f"{skill['body']}",
+            header,
         )
         files.append((f".github/instructions/{skill['dirname']}.instructions.md", content))
 

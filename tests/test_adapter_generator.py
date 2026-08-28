@@ -10,12 +10,16 @@ Tests:
   5. cli.js smoke — spawn lib/cli.js --list via node; skip visibly when node absent.
   6. Renderer dispatch (issue #111) — matrix-driven: every non-native row renders
      (dedicated renderer or AGENTS.md floor fallback); native rows emit nothing.
+  7. Frontmatter header placement (issue #115) — matrix-driven: every rendered
+     artifact that opens with frontmatter has ``---`` as its literal first line
+     and the generated-by comment as the first line after the block.
 """
 from __future__ import annotations
 
 import hashlib
 import importlib.util
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -712,6 +716,59 @@ class GitHubCopilotRendererTests(unittest.TestCase):
             gen_mod.render("github-copilot", out_dir=t, dry_run=False)
             data = json.loads((t / ".mcp.json").read_text("utf-8"))
         self.assertIn("my-server", data["servers"], "pre-existing server preserved")
+
+
+class FrontmatterHeaderPlacementTests(unittest.TestCase):
+    """Frontmatter header placement (issue #115), matrix-driven.
+
+    Hosts that consume frontmatter-bearing artifacts require ``---`` on line 1;
+    anything before it demotes the whole block to prose and the rule metadata
+    (``alwaysApply``/``description``/``applyTo``) is silently dropped.  Every
+    rendered artifact of every non-native matrix agent is checked so future
+    emitters cannot regress."""
+
+    _GENERATED_BY_LINE = re.compile(r"^<!-- generated-by design-playbook v\S+ -->$")
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.rendered: list[tuple[str, str, str]] = []  # (agent, rel_path, text)
+        for row in matrix_mod.MATRIX:
+            if row.native:
+                continue
+            with tempfile.TemporaryDirectory() as tmp:
+                out = Path(tmp)
+                manifest = gen_mod.render(row.agent, out_dir=out, dry_run=False)
+                for entry in manifest["files"]:
+                    text = (out / entry["path"]).read_text(encoding="utf-8")
+                    cls.rendered.append((row.agent, entry["path"], text))
+
+    def test_frontmatter_artifacts_open_with_fence_then_generated_by(self) -> None:
+        fm_artifacts = 0
+        for agent, rel, text in self.rendered:
+            lines = text.split("\n")
+            # Regression guard — the exact #115 bug shape: generated-by comment
+            # on line 1 with the frontmatter opener demoted to line 2.
+            if lines[0].startswith("<!-- generated-by") and len(lines) > 1:
+                self.assertNotEqual(
+                    lines[1], "---",
+                    f"{agent}:{rel}: generated-by comment precedes the frontmatter opener")
+            if lines[0] != "---":
+                continue  # plain artifact (markdown guide, JSON, TOML, marker block)
+            fm_artifacts += 1
+            try:
+                close = lines.index("---", 1)
+            except ValueError:
+                self.fail(f"{agent}:{rel}: frontmatter opener without a closing '---'")
+            self.assertGreater(len(lines), close + 1,
+                               f"{agent}:{rel}: no body line after the frontmatter block")
+            self.assertRegex(
+                lines[close + 1], self._GENERATED_BY_LINE,
+                f"{agent}:{rel}: generated-by comment must be the first line after "
+                f"the frontmatter block, got {lines[close + 1]!r}")
+        # 10 cursor .mdc (8 skills + commands + mcp note) + 8 copilot .instructions.md
+        self.assertEqual(fm_artifacts, 18,
+                         f"expected 18 frontmatter-bearing artifacts across the matrix, "
+                         f"got {fm_artifacts}")
 
 
 class Tier3RendererTests(unittest.TestCase):
