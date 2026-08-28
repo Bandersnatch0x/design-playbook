@@ -540,11 +540,15 @@ registry_errors = rules_registry.validate_registry(registry_entries)
 expected_registry_ids = tuple(
     [f"CRAFT-{index:02d}" for index in range(1, 9)]
     + ["A11Y-01", "RESP-01", "I18N-01", "PERF-01", "SEC-01"]
+    # Issue #102 batch: copy family, keyboard focus, source-craft pair,
+    # decision hygiene — appended after SEC-01 in registration order.
+    + ["COPY-01", "COPY-02", "COPY-03", "A11Y-02", "CRAFT-09", "CRAFT-10",
+       "DECIDE-01"]
 )
 registry_ids = tuple(entry.id for entry in registry_entries)
 check(
-    registry_ids == expected_registry_ids and len(registry_entries) == 13,
-    f"G8 registry has the 13 expected entries in order (got {len(registry_entries)})",
+    registry_ids == expected_registry_ids and len(registry_entries) == 20,
+    f"G8 registry has the 20 expected entries in order (got {len(registry_entries)})",
 )
 for entry in registry_entries:
     entry_errors = [

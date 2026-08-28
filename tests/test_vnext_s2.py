@@ -416,6 +416,16 @@ class TierObligationTests(unittest.TestCase):
                 f"baseline: DESIGN.md sha256:{SHA}",
                 "baseline: DESIGN.md (old)"))))
 
+    def test_registry_batch_102_is_consumable(self) -> None:
+        # Issue #102: a DD entry pinning a batch-102 entry (COPY-01@1)
+        # cross-checks clean against the shipped registry — the new
+        # families are consumable, not just registered (G10 <-> G8 face).
+        text = _report(_e_block().replace(
+            "rules: [CRAFT-01@1]", "rules: [COPY-01@1]"))
+        entry = parse_dd_entries(text)[0]
+        self.assertEqual(entry.rules_refs, ("COPY-01@1",))
+        self.assertEqual(_rules(text), set())
+
     def test_duplicate_id_rejected(self) -> None:
         rules = _rules(_report(R_BLOCK, R_BLOCK))
         self.assertIn("G10.duplicate_id", rules)

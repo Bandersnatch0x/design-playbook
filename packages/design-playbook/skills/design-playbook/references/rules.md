@@ -396,3 +396,213 @@ fix: add confirmation or undo to dangerous operations; mask sensitive values; re
 related:
 history: 1 | 2026-08-14 | docs | initial registry registration, placeholder entry with explicit applicability predicate (never silently skipped)
 ```
+
+## COPY-01 — Active-voice control labels
+
+```yaml
+id: COPY-01
+version: 1
+title: Active-voice control labels
+statement: Control labels state the action in active voice with a verb that names the visible result ("Save changes", not a generic submit word), and one action keeps one name across the whole flow (observable); mechanism words and drifting action names force users to guess what a control will do before pressing it (user impact).
+capability-domain: D4
+executes-in: D4:cross-cutting
+authority: advisory-aesthetic
+applicability-applicable: run has Fill output and the surface contains labeled actions or controls
+applicability-not-applicable: planning-only run, or a display surface with no labeled control (observable reason required)
+applicability-blocked: rendered copy or source string evidence unavailable
+check-type: protocol-check
+check-inputs: rendered control labels across the flow; source string resources; script-aware casing check — sentence case is a Latin-script convention, while CJK labels carry no case and are judged on verb-led directness instead
+signals-rendered: labels naming a mechanism instead of the result (generic submit-style wording); the same action appearing under different names in different steps
+signals-source: string resources holding synonyms for one action; Latin-script label strings cased as headlines where sentence case is the convention
+evidence-layers: rendered>=1, source>=1
+evidence-method: expert-review
+severity-default: S2 / judgment
+exceptions: control names fixed by the host platform's own convention (the platform convention outranks label rewording)
+false-positives: a verified baseline brand voice that deliberately bends verb phrasing; record the baseline reference as the exception
+owner: craft -> R4
+provenance: benchmark-input-only
+status: advisory
+fix: rename each control to an active verb phrase stating its result, keep one name per action across the flow, and apply sentence case to Latin-script labels only (CJK labels stay verb-led without filler particles)
+related: COPY-02@1
+history: 1 | 2026-08-28 | docs | initial registry registration, benchmark-informed copy entry in first-party wording
+```
+
+## COPY-02 — User-side naming
+
+```yaml
+id: COPY-02
+version: 1
+title: User-side naming
+statement: Interface nouns name the objects users control and recognize, not the system's implementation of them (observable); implementation vocabulary makes users translate between their task and the interface on every read (user impact).
+capability-domain: D4
+executes-in: D4:cross-cutting
+authority: advisory-aesthetic
+applicability-applicable: run has Fill output and the surface names objects or operations users act on
+applicability-not-applicable: planning-only run, or a surface with no user-facing object naming (observable reason required)
+applicability-blocked: rendered copy or source string evidence unavailable
+check-type: protocol-check
+check-inputs: rendered nouns on controls, headings, empty states, and messages; source string resources; spec L1 terminology list when declared
+signals-rendered: storage or process vocabulary standing in for the user's object — a record, entity, or job where the user thinks in orders, photos, or reports
+signals-source: user-visible strings reusing internal model, table, or field names verbatim
+evidence-layers: rendered>=1, source>=1
+evidence-method: expert-review
+severity-default: S2 / judgment
+exceptions: expert tools whose declared user base demonstrably speaks the implementation vocabulary (spec L1 declaration required)
+false-positives: trade terms that look technical but are the user's own working language; verify against the declared user base before flagging
+owner: craft -> R4
+provenance: benchmark-input-only
+status: advisory
+fix: rename user-visible nouns to the objects users control (spec L1 word list when present) and keep implementation names inside code and logs
+related: COPY-01@1
+history: 1 | 2026-08-28 | docs | initial registry registration, benchmark-informed copy entry in first-party wording
+```
+
+## COPY-03 — Error-message tone
+
+```yaml
+id: COPY-03
+version: 1
+title: Error-message tone
+statement: Error messages state what happened and the concrete next action in an even, direct tone (observable); apologetic, blaming, or vague error copy strands users at exactly the moment they need a recovery path (user impact).
+capability-domain: D4
+executes-in: D4:cross-cutting
+authority: advisory-aesthetic
+applicability-applicable: run has Fill output and the audited scope declares or renders error states
+applicability-not-applicable: run has no error state in the audited scope (observable reason required)
+applicability-blocked: error states cannot be reached or captured with the available evidence surface
+check-type: protocol-check
+check-inputs: rendered error states per failure path; source error strings and their recovery bindings
+signals-rendered: error copy naming neither cause nor next action; apology or blame padding in place of the recovery step; one identical vague message across unrelated failures
+signals-source: a single generic error string bound to many distinct failure paths; error strings with no associated retry, undo, or exit action
+evidence-layers: rendered>=1, source>=1
+evidence-method: expert-review
+severity-default: S2 / judgment
+exceptions: security-sensitive failures where the cause is deliberately withheld — still state what the user can do next
+false-positives: terse diagnostics for a declared expert audience (spec L1); brevity is not vagueness when cause and action are both present
+owner: craft -> R4
+provenance: benchmark-input-only
+status: advisory
+fix: rewrite each error message to name the cause where safe and the next action always, drop apology and blame padding, and keep the tone even in Latin-script and CJK copy alike
+related: COPY-02@1
+history: 1 | 2026-08-28 | docs | initial registry registration, benchmark-informed copy entry in first-party wording
+```
+
+## A11Y-02 — Visible keyboard focus
+
+```yaml
+id: A11Y-02
+version: 1
+title: Visible keyboard focus
+statement: Every keyboard-focusable element shows a visible focus indicator at the declared viewport (observable); an invisible focus position strands sighted keyboard users, who cannot tell where the next keystroke will land (user impact).
+capability-domain: D4
+executes-in: D4:interaction
+authority: hard-constraint
+applicability-applicable: run has Fill output containing keyboard-focusable elements
+applicability-not-applicable: planning-only run, or a static surface with no focusable element (observable reason required)
+applicability-blocked: keyboard walkthrough or focused-state capture unavailable — an a11y tree alone cannot prove a visual property, so rendered or interaction evidence is required
+check-type: protocol-check
+check-inputs: keyboard traversal across the surface; focused-state captures per control archetype; source focus styling
+signals-rendered: focus landing with no visible change; an indicator that is clipped, offscreen, or below perceivable contrast against its surroundings
+signals-source: global focus outline suppression without an equivalent visible replacement
+evidence-layers: rendered>=1, interaction>=1
+evidence-method: runtime-observation
+severity-default: S2 / fact
+exceptions: elements intentionally removed from the tab order (the removal itself is judged under A11Y-01)
+false-positives: platform-default indicators that render differently per platform or browser; visibility is the bar, styling uniformity is not
+owner: template -> R4; craft -> R4
+provenance: benchmark-input-only
+status: advisory
+fix: give every focusable element a visible focus style with sufficient contrast, never suppress a default outline without a replacement, and verify by keyboard traversal with focused-state captures
+related: A11Y-01@1
+history: 1 | 2026-08-28 | docs | initial registry registration, benchmark-informed accessibility entry in first-party wording; rendered plus interaction evidence demanded because an a11y tree cannot prove a visual indicator
+```
+
+## CRAFT-09 — Selector-specificity conflicts
+
+```yaml
+id: CRAFT-09
+version: 1
+title: Selector-specificity conflicts
+statement: Style rules compose without fighting — no rule exists only to cancel or out-rank another, and adjacent blocks do not trade opposing spacing (observable); specificity duels and mutually cancelling padding or margin make every later edit unpredictable and leak visible seams to users (user impact).
+capability-domain: D4
+executes-in: D4:interaction
+authority: advisory-aesthetic
+applicability-applicable: run has Fill output and styling source is available for the audited surface
+applicability-not-applicable: planning-only run, or no styling source produced in the audited scope (observable reason required)
+applicability-blocked: styling source unavailable for review — a rendered capture alone cannot prove selector intent
+check-type: protocol-check
+check-inputs: source selector stacks and override chains; spacing declarations between adjacent regions
+signals-rendered: spacing or emphasis seams where adjacent blocks visibly disagree after overrides partially cancel
+signals-source: a type-level and a class-level selector driving the same property in opposite directions; sibling blocks whose padding and margin cancel each other; override chains that exist only to defeat an earlier rule — a source-defect signal even when the rendered result happens to look right
+evidence-layers: source>=1
+evidence-method: static-inspection
+severity-default: S2 / judgment
+exceptions: a reset or normalization layer that neutralizes platform defaults once at the base of the cascade
+false-positives: declared utility-class composition where high-frequency overrides are the intended model; judge the owning rule, not the override count
+owner: template -> R4; craft -> R4
+provenance: benchmark-input-only
+status: advisory
+fix: collapse each duel into one owning rule at one specificity level, and move spacing to the parent gap or to one side instead of opposing pairs
+related: CRAFT-03@1
+history: 1 | 2026-08-28 | docs | initial registry registration, benchmark-informed source-craft entry in first-party wording
+```
+
+## CRAFT-10 — Structure encodes content
+
+```yaml
+id: CRAFT-10
+version: 1
+title: Structure encodes content
+statement: Structural devices — numbered markers, eyebrow labels, dividers, tags — encode a true property of the content they decorate, and numbering appears only on real sequences (observable); structure that encodes nothing teaches users an order or grouping that does not exist (user impact).
+capability-domain: D4
+executes-in: D4:interaction
+authority: advisory-aesthetic
+applicability-applicable: run has Fill output and the surface uses structural devices such as numbering, eyebrow labels, dividers, or tags
+applicability-not-applicable: run has no structural device on the audited surface (observable reason required)
+applicability-blocked: rendered or source evidence surface unavailable
+check-type: protocol-check
+check-inputs: rendered structural devices compared against the content's actual order and grouping; source markup semantics behind each device
+signals-rendered: numbered markers on items with no meaningful order; eyebrow labels that repeat the heading or name no real category; dividers cutting through one continuous group; tags carrying no state or category
+signals-source: ordered or step markup wrapping unordered content; decorative label elements bound to no content property
+evidence-layers: rendered>=1, source>=1
+evidence-method: expert-review
+severity-default: S2 / judgment
+exceptions: purely decorative devices declared by the bound baseline as identity elements and kept out of the reading order
+false-positives: a sequence whose order is real but unfamiliar to the reviewer; verify the content's own order before flagging
+owner: craft -> R4; template -> R4
+provenance: benchmark-input-only
+status: advisory
+fix: number only true sequences, keep eyebrow labels for real categories, remove dividers inside one group, and let every tag carry an actual state or category
+related:
+history: 1 | 2026-08-28 | docs | initial registry registration, benchmark-informed structure-semantics entry in first-party wording
+```
+
+## DECIDE-01 — Anti-default direction check
+
+```yaml
+id: DECIDE-01
+version: 1
+title: Anti-default direction check
+statement: Every compare or explore tier direction selection answers the self-check "is this the direction I would produce for any similar brief?" with brief-specific evidence (observable); habit-default directions make unrelated products converge on one look and erase the identity the brief asked for (user impact).
+capability-domain: D4
+executes-in: D4:cross-cutting
+authority: advisory-aesthetic
+applicability-applicable: the run's decision report carries at least one compare or explore tier DD entry
+applicability-not-applicable: point-fix or record-only run whose decision report carries no compare or explore tier DD entry (observable reason required)
+applicability-blocked: decision report absent or unreadable, so the run's tier composition cannot be established
+check-type: protocol-check
+check-inputs: decision report DD entries at compare or explore tier; bound baseline identity declarations; the dated self-default direction observations recorded in this entry
+signals-rendered: the selected direction matches a dated self-default profile — as of 2026-08 (dogfood evidence, refreshable observations): a light slate background with white cards and a teal or blue accent on admin surfaces, or a dark ops console with muted blue or cyan accents — while the DD entry records no brief fact that demands it
+signals-source: selection rationale citing no spec item, baseline declaration, or brief fact — wording that would justify the same direction for any brief
+evidence-layers: rendered>=1
+evidence-method: expert-review
+severity-default: S2 / judgment
+exceptions: the brief or bound baseline explicitly declares one of the observed default directions as the wanted identity (the declaration outranks the anti-default heuristic)
+false-positives: a conventional direction that the comparison matrix justified against brief axes; the check targets unexamined defaults, not convention itself
+owner: design -> R3
+provenance: first-party
+status: advisory
+fix: answer the self-check inside the DD rationale with brief facts, add at least one candidate that breaks the default profile before selecting, and refresh the dated observations when dogfood evidence shows the defaults moved
+related:
+history: 1 | 2026-08-28 | docs | initial registry registration, first-party decision-hygiene entry; default-direction examples recorded as dated, refreshable observations (2026-08, dogfood evidence)
+```
