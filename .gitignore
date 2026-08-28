@@ -18,6 +18,12 @@ dist-ssr
 .scratch/
 .workbuddy/
 .workflow/
+# Tool caches and regenerated run artifacts (pytest/ruff self-ignore via
+# CACHEDIR.TAG, but the intent belongs here explicitly).
+.pytest_cache/
+.ruff_cache/
+.benchmarks/
+evidence/
 # .agents/plugins/ is a publish surface (ADR-0009 dual publish; validate.py
 # hard-gates on marketplace.json), so it must stay trackable. Ignoring
 # `.agents/` wholesale leaves already-tracked files working while silently
