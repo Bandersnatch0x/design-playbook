@@ -360,7 +360,7 @@ related: []
 
 ### 8.1 载体（决议 Q2=A：单文件 markdown 字段块，管线级共享声明位）
 
-- **单文件 markdown，条目 = 结构化字段块**：位置已定——`packages/design-playbook/skills/design-playbook/references/rules.md`（编排技能持有管线级共享声明，与 stage registry「一个家、一个漂移面」ADR-0021 哲学一致）；条目块沿用 `detectors.md` 六字段块 + `scripts/validate.py` 正则校验的既有模式（已验证可机器校验的 markdown 声明风格）。**增长触发拆分条件**（写入注册表头部说明）：条目数超过 30 或家族数超过 3 时，按家族拆分文件 + 索引；拆分时 G8 跨文件校验一并迁移。（后注：已交付注册表为 13 条 / 6 家族——家族数已越此线，但 Q2 与 #33 首切片的单文件裁定优先生效，现届**有意维持单文件**；家族触发器留作日后拆分时机的参考，不构成既成违例。）
+- **单文件 markdown，条目 = 结构化字段块**：位置已定——`packages/design-playbook/skills/design-playbook/references/rules.md`（编排技能持有管线级共享声明，与 stage registry「一个家、一个漂移面」ADR-0021 哲学一致）；条目块沿用 `detectors.md` 六字段块 + `scripts/validate.py` 正则校验的既有模式（已验证可机器校验的 markdown 声明风格）。**增长触发拆分条件**（写入注册表头部说明）：条目数超过 30 或家族数超过 3 时，按家族拆分文件 + 索引；拆分时 G8 跨文件校验一并迁移。（后注：已交付注册表为 20 条 / 8 家族（#101-#105 吸收批后）——家族数已越此线，但 Q2 与 #33 首切片的单文件裁定优先生效，现届**有意维持单文件**；家族触发器留作日后拆分时机的参考，不构成既成违例。）
 - **机器可查面 / 协议面边界**：机器可查面 = §1.1 全部 ◆ 字段（id/version/enums/owner 值域/引用链接/supersedes）；协议面 = statement/check 信号/exceptions/false-positives/fix/history 文本。G 门禁只校验前者；后者由评审技能与裁决者消费。
 - 注册表是**产品级声明工件**（随插件分发、read-only 于 run）：不进 `.scratch/<run>/`、不进 manifest、不被 run 写入；run 侧只产出引用它的审计行与 finding。
 
