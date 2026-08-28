@@ -7,6 +7,8 @@ Loading tiers belong in `SKILL.md` loading tiers; this file covers only failure 
 - Failure: reason + recoverable action (retry / dismiss / view log)
 - Insufficient permission: disabled + required permission description
 
+Copy quality is registry-owned: `COPY-01/02/03@1` (active voice, user-side naming, error tone) in [`../../design-playbook/references/rules.md`](../../design-playbook/references/rules.md) — pointer only, rule bodies live in the registry.
+
 ## Craft
 
 - Nested corner-radius and spacing are layered; avoid the same radius and shadow site-wide
