@@ -341,14 +341,71 @@ class MergeJsonHelperTests(unittest.TestCase):
         self.assertEqual(data["mcp"]["servers"]["a"], 1, "deep existing key preserved")
         self.assertTrue(data["mcp"]["extra"])
 
-    def test_malformed_existing_json_treated_as_empty(self) -> None:
-        result = gen_mod.merge_json_str("not json {{", {"k": "v"})
-        data = json.loads(result)
-        self.assertEqual(data["k"], "v")
+    def test_malformed_existing_json_raises_value_error(self) -> None:
+        with self.assertRaises(ValueError, msg="malformed JSON must raise ValueError, not silently rebuild"):
+            gen_mod.merge_json_str("not json {{", {"k": "v"})
 
-    def test_output_ends_with_newline(self) -> None:
-        result = gen_mod.merge_json_str(None, {"a": 1})
-        self.assertTrue(result.endswith("\n"))
+    def test_non_object_existing_json_raises_value_error(self) -> None:
+        with self.assertRaises(ValueError):
+            gen_mod.merge_json_str("[1, 2, 3]", {"k": "v"})
+
+    def test_none_existing_text_returns_our_data(self) -> None:
+        result = gen_mod.merge_json_str(None, {"k": "v"})
+        self.assertEqual(json.loads(result)["k"], "v")
+
+
+class ApplyMarkerBlockTests(unittest.TestCase):
+    """apply_marker_block: idempotent marker-block replace/append semantics."""
+
+    BEGIN = "<!-- design-playbook:begin -->"
+    END = "<!-- design-playbook:end -->"
+
+    def _apply(self, existing: str | None, content: str = "# dp\n\nbody") -> str:
+        return gen_mod.apply_marker_block(existing, "0.21.0", content)
+
+    def test_fresh_file_returns_just_block(self) -> None:
+        result = self._apply(None)
+        self.assertIn(self.BEGIN, result)
+        self.assertIn(self.END, result)
+        self.assertIn("generated-by design-playbook v0.21.0", result)
+        self.assertIn("# dp", result)
+
+    def test_append_when_no_existing_markers(self) -> None:
+        existing = "# My Project\n\nMy instructions.\n"
+        result = self._apply(existing)
+        self.assertTrue(result.startswith("# My Project"), "user content preserved at top")
+        self.assertIn(self.BEGIN, result)
+        self.assertIn("My instructions.", result)
+
+    def test_replace_existing_block_in_place(self) -> None:
+        first = self._apply(None, "old content")
+        # Simulate a second run with updated content
+        second = gen_mod.apply_marker_block(first, "0.21.0", "new content")
+        self.assertIn("new content", second)
+        self.assertNotIn("old content", second, "old block content must be replaced")
+        self.assertEqual(second.count(self.BEGIN), 1, "only one begin marker")
+        self.assertEqual(second.count(self.END), 1, "only one end marker")
+
+    def test_idempotent_fresh_file(self) -> None:
+        first = self._apply(None, "same content")
+        second = gen_mod.apply_marker_block(first, "0.21.0", "same content")
+        self.assertEqual(first, second, "running twice on fresh output must be idempotent")
+
+    def test_user_content_before_block_preserved_on_replace(self) -> None:
+        preamble = "# My Copilot Instructions\n\nMy rules here.\n\n"
+        initial = preamble + self._apply(None, "v1 content")
+        updated = gen_mod.apply_marker_block(initial, "0.21.0", "v2 content")
+        self.assertTrue(updated.startswith("# My Copilot Instructions"), "preamble preserved")
+        self.assertIn("My rules here.", updated)
+        self.assertIn("v2 content", updated)
+        self.assertNotIn("v1 content", updated)
+
+    def test_user_content_after_block_preserved_on_replace(self) -> None:
+        block = self._apply(None, "dp content")
+        doc = block + "\n\n## User section after block\n\nUser notes.\n"
+        updated = gen_mod.apply_marker_block(doc, "0.21.0", "dp content updated")
+        self.assertIn("User section after block", updated, "content after block preserved")
+        self.assertIn("dp content updated", updated)
 
 
 def _render_to_tmp(agent: str) -> tuple[dict, Path]:
@@ -486,7 +543,17 @@ class GeminiCLIRendererTests(unittest.TestCase):
         self.assertTrue(f.is_file())
         text = f.read_text(encoding="utf-8")
         self.assertIn("design-playbook", text)
-        self.assertIn("generated-by", text)
+        self.assertIn("<!-- design-playbook:begin -->", text)
+        self.assertIn("<!-- design-playbook:end -->", text)
+
+    def test_gemini_md_user_content_preserved_on_rerender(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            (t / "GEMINI.md").write_text("# My Project\n\nMy custom Gemini rules.\n", encoding="utf-8")
+            gen_mod.render("gemini-cli", out_dir=t, dry_run=False)
+            text = (t / "GEMINI.md").read_text(encoding="utf-8")
+        self.assertIn("My custom Gemini rules.", text, "pre-existing user content preserved")
+        self.assertIn("<!-- design-playbook:begin -->", text)
 
     def test_all_command_toml_files_written(self) -> None:
         toml_files = list((self.out / ".gemini" / "commands").glob("*.toml"))
@@ -539,7 +606,17 @@ class OpenCodeRendererTests(unittest.TestCase):
         self.assertTrue(f.is_file())
         text = f.read_text(encoding="utf-8")
         self.assertIn("design-playbook", text)
-        self.assertIn("generated-by", text)
+        self.assertIn("<!-- design-playbook:begin -->", text)
+        self.assertIn("<!-- design-playbook:end -->", text)
+
+    def test_agents_md_user_content_preserved_on_rerender(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            (t / "AGENTS.md").write_text("# Project AGENTS\n\nExisting team rules.\n", encoding="utf-8")
+            gen_mod.render("opencode", out_dir=t, dry_run=False)
+            text = (t / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("Existing team rules.", text, "pre-existing user content preserved")
+        self.assertIn("<!-- design-playbook:begin -->", text)
 
     def test_agents_md_contains_skills_and_commands(self) -> None:
         text = (self.out / "AGENTS.md").read_text(encoding="utf-8")
@@ -580,6 +657,20 @@ class GitHubCopilotRendererTests(unittest.TestCase):
         self.assertTrue(f.is_file())
         text = f.read_text(encoding="utf-8")
         self.assertIn("design-playbook", text)
+        self.assertIn("<!-- design-playbook:begin -->", text)
+        self.assertIn("<!-- design-playbook:end -->", text)
+
+    def test_copilot_instructions_user_content_preserved_on_rerender(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            (t / ".github").mkdir()
+            (t / ".github" / "copilot-instructions.md").write_text(
+                "# Org Copilot Rules\n\nAlways write tests.\n", encoding="utf-8"
+            )
+            gen_mod.render("github-copilot", out_dir=t, dry_run=False)
+            text = (t / ".github" / "copilot-instructions.md").read_text(encoding="utf-8")
+        self.assertIn("Always write tests.", text, "pre-existing org rules preserved")
+        self.assertIn("<!-- design-playbook:begin -->", text)
 
     def test_all_skill_instruction_files_written(self) -> None:
         inst_files = list((self.out / ".github" / "instructions").glob("*.instructions.md"))

@@ -146,16 +146,65 @@ def merge_json_str(existing_text: str | None, our_data: dict) -> str:
 
     Never removes keys present in existing_text that are absent from our_data.
     Stable ordering: existing keys first, then new keys from our_data.
+
+    Raises ValueError if existing_text is present but malformed or not a JSON object.
+    Callers that read from disk should catch this and surface it to the user — silent
+    rebuild from empty would silently destroy the user's existing configuration.
     """
     base: dict = {}
     if existing_text:
         try:
             parsed = json.loads(existing_text)
-            if isinstance(parsed, dict):
-                base = parsed
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"existing JSON is malformed and cannot be safely merged: {exc}. "
+                "Fix or remove the file before running the generator."
+            ) from exc
+        if not isinstance(parsed, dict):
+            raise ValueError(
+                f"existing JSON root must be an object, got {type(parsed).__name__}. "
+                "Fix or remove the file before running the generator."
+            )
+        base = parsed
     return json.dumps(_deep_merge(base, our_data), indent=2, ensure_ascii=False) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# Markdown marker-block helper (for files that may pre-exist in user projects)
+# ---------------------------------------------------------------------------
+
+_BLOCK_BEGIN = "<!-- design-playbook:begin -->"
+_BLOCK_END = "<!-- design-playbook:end -->"
+
+
+def apply_marker_block(existing_text: str | None, version: str, block_content: str) -> str:
+    """Return file content with our block inserted, replaced, or appended.
+
+    Rules (idempotent):
+    - existing_text is None (new file): return just the marker block.
+    - Marker pair already present: replace only the block in-place; user content
+      outside the markers is preserved exactly.
+    - File exists but no markers: append our block after a blank line.
+
+    The block_content must NOT include the marker tags themselves; they are
+    added here.  The generated-by comment is the first line inside the block.
+    """
+    block = (
+        f"{_BLOCK_BEGIN}\n"
+        f"<!-- generated-by design-playbook v{version} -->\n"
+        f"{block_content.rstrip()}\n"
+        f"{_BLOCK_END}"
+    )
+    if existing_text is None:
+        return block + "\n"
+
+    if _BLOCK_BEGIN in existing_text and _BLOCK_END in existing_text:
+        begin_idx = existing_text.index(_BLOCK_BEGIN)
+        end_idx = existing_text.index(_BLOCK_END, begin_idx) + len(_BLOCK_END)
+        return existing_text[:begin_idx] + block + existing_text[end_idx:]
+
+    # File exists but has no markers — append
+    return existing_text.rstrip("\n") + "\n\n" + block + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -311,23 +360,23 @@ def _gemini_cli_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     files: list[tuple[str, str]] = []
     skills = _read_skills()
     commands = _read_commands()
-    header_comment = f"<!-- generated-by design-playbook v{version} -->\n"
 
-    # GEMINI.md — orchestrator body + sub-skill index
+    # GEMINI.md — marker-block (may pre-exist in consumer project)
     orchestrator = next((s for s in skills if s["dirname"] == "design-playbook"), None)
     sub_skills = [s for s in skills if s["dirname"] != "design-playbook"]
-    gemini_parts = [header_comment, "# design-playbook\n\n"]
+    gemini_block_parts = ["# design-playbook\n\n"]
     if orchestrator:
-        gemini_parts.append(orchestrator["body"])
-        gemini_parts.append("\n")
-    gemini_parts.append("## Sub-skills\n\n")
+        gemini_block_parts.append(orchestrator["body"])
+        gemini_block_parts.append("\n")
+    gemini_block_parts.append("## Sub-skills\n\n")
     for sk in sub_skills:
-        gemini_parts.append(f"- **{sk['name']}**: {sk['description']}\n")
-    files.append(("GEMINI.md", "".join(gemini_parts)))
+        gemini_block_parts.append(f"- **{sk['name']}**: {sk['description']}\n")
+    gemini_md_path = out_dir / "GEMINI.md"
+    existing_gemini = gemini_md_path.read_text(encoding="utf-8") if gemini_md_path.is_file() else None
+    files.append(("GEMINI.md", apply_marker_block(existing_gemini, version, "".join(gemini_block_parts))))
 
-    # .gemini/commands/<name>.toml per command
+    # .gemini/commands/<name>.toml per command (our namespaced dir — whole-file)
     for cmd in commands:
-        # Replace $ARGUMENTS with {{args}} for Gemini CLI template syntax
         prompt_body = cmd["body"].replace("$ARGUMENTS", "{{args}}")
         content = (
             f"# generated-by design-playbook v{version}\n"
@@ -361,25 +410,26 @@ def _opencode_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     skills = _read_skills()
     commands = _read_commands()
 
-    # AGENTS.md — orchestrator body + sub-skill index + command list
+    # AGENTS.md — marker-block (may pre-exist in consumer project)
     orchestrator = next((s for s in skills if s["dirname"] == "design-playbook"), None)
     sub_skills = [s for s in skills if s["dirname"] != "design-playbook"]
-    parts = [
-        f"<!-- generated-by design-playbook v{version} -->\n",
-        "# design-playbook\n\n",
-    ]
+    block_parts = ["# design-playbook\n\n"]
     if orchestrator:
-        parts.append(orchestrator["body"])
-        parts.append("\n")
-    parts.append("## Sub-skills\n\n")
+        block_parts.append(orchestrator["body"])
+        block_parts.append("\n")
+    block_parts.append("## Sub-skills\n\n")
     for sk in sub_skills:
-        parts.append(f"- **{sk['name']}**: {sk['description']}\n")
-    parts.append("\n## Commands\n\n")
-    parts.append("Use `/init` to regenerate or `/share` to share context. "
-                 "The following design-playbook commands are available as prompt templates:\n\n")
+        block_parts.append(f"- **{sk['name']}**: {sk['description']}\n")
+    block_parts.append("\n## Commands\n\n")
+    block_parts.append(
+        "Use `/init` to regenerate or `/share` to share context. "
+        "The following design-playbook commands are available as prompt templates:\n\n"
+    )
     for cmd in commands:
-        parts.append(f"### /{cmd['name']}\n\n{cmd['description']}\n\n{cmd['body']}\n")
-    files.append(("AGENTS.md", "".join(parts)))
+        block_parts.append(f"### /{cmd['name']}\n\n{cmd['description']}\n\n{cmd['body']}\n")
+    agents_md_path = out_dir / "AGENTS.md"
+    existing_agents = agents_md_path.read_text(encoding="utf-8") if agents_md_path.is_file() else None
+    files.append(("AGENTS.md", apply_marker_block(existing_agents, version, "".join(block_parts))))
 
     # opencode.json — merge-safe mcp key
     mcp_servers = _mcp_servers_abs()
@@ -442,19 +492,22 @@ def _github_copilot_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     skills = _read_skills()
     header = f"<!-- generated-by design-playbook v{version} -->\n"
 
-    # .github/copilot-instructions.md — orchestrator section
+    # .github/copilot-instructions.md — marker-block (may pre-exist)
     orchestrator = next((s for s in skills if s["dirname"] == "design-playbook"), None)
     sub_skills = [s for s in skills if s["dirname"] != "design-playbook"]
-    instr_parts = [header, "# design-playbook\n\n"]
+    instr_block_parts = ["# design-playbook\n\n"]
     if orchestrator:
-        instr_parts.append(orchestrator["body"])
-        instr_parts.append("\n")
-    instr_parts.append("## Sub-skills\n\n")
+        instr_block_parts.append(orchestrator["body"])
+        instr_block_parts.append("\n")
+    instr_block_parts.append("## Sub-skills\n\n")
     for sk in sub_skills:
-        instr_parts.append(f"- **{sk['name']}**: {sk['description']}\n")
-    files.append((".github/copilot-instructions.md", "".join(instr_parts)))
+        instr_block_parts.append(f"- **{sk['name']}**: {sk['description']}\n")
+    copilot_instr_path = out_dir / ".github" / "copilot-instructions.md"
+    existing_instr = copilot_instr_path.read_text(encoding="utf-8") if copilot_instr_path.is_file() else None
+    files.append((".github/copilot-instructions.md",
+                  apply_marker_block(existing_instr, version, "".join(instr_block_parts))))
 
-    # .github/instructions/<skill>.instructions.md per skill
+    # .github/instructions/<skill>.instructions.md per skill (our namespaced dir — whole-file)
     for skill in skills:
         content = (
             f"{header}"
@@ -466,7 +519,7 @@ def _github_copilot_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
         )
         files.append((f".github/instructions/{skill['dirname']}.instructions.md", content))
 
-    # .mcp.json — solution-level MCP config (VS / Copilot format)
+    # .mcp.json — solution-level MCP config (VS / Copilot format), merge-safe
     mcp_servers = _mcp_servers_abs()
     vs_servers: dict = {}
     for name, srv in mcp_servers.items():
