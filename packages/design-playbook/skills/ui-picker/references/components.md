@@ -1,22 +1,22 @@
-# components（组件语义）
+# components (component semantics)
 
-## 登记四层
+## Four registration layers
 
-| 层 | 要声明 |
+| Layer | What to declare |
 | --- | --- |
-| 来源 | shadcn / 自有 / 业务定制 |
-| 语义角色 | 状态 / 分类 / 动作 / 容器 / 导航 / 反馈 |
-| 变体与状态 | size、variant、loading、disabled… |
-| 组合边界 | 允许/禁止嵌套与替代 |
+| Source | shadcn / in-house / custom for product |
+| Semantic role | state / category / action / container / navigation / feedback |
+| Variants and states | size, variant, loading, disabled… |
+| Composition boundary | allowed/prohibited nesting and substitution |
 
-## 易混
+## Easily confused
 
-| 对 | 差别 |
+| Pair | Difference |
 | --- | --- |
-| Badge / Tag | 状态·计数 vs 分类·可选·可移除 |
-| Modal / Dialog / Drawer | 打断程度、信息密度、退出方式 |
-| Tabs / Tabs-Switch | 同空间视图 vs 模式/口径 |
-| Dropdown / Menu / Command | 局部选择 / 动作集 / 搜索式操作 |
+| Badge / Tag | state·count vs category·selectable·removable |
+| Modal / Dialog / Drawer | interruption level, information density, dismiss method |
+| Tabs / Tabs-Switch | same-space view vs mode/scope switch |
+| Dropdown / Menu / Command | scoped selection / action set / search-driven operation |
 
 ## Illustrative mapping (agent-ops list row)
 

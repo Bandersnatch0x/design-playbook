@@ -1,29 +1,29 @@
-# craft 细则
+# craft rules
 
-## 状态反馈
+## State feedback
 
-等待分层归 `SKILL.md` loading tiers；此处只管失败与降级：
+Loading tiers belong in `SKILL.md` loading tiers; this file covers only failure and degraded states:
 
-- 失败：原因 + 可恢复动作（重试/忽略/查看日志）
-- 权限不足：禁用 + 需要的权限说明
+- Failure: reason + recoverable action (retry / dismiss / view log)
+- Insufficient permission: disabled + required permission description
 
-## 工艺
+## Craft
 
-- 嵌套圆角与间距分层，忌全站同一圆角同一阴影
-- 阴影档位少而稳；层级靠 surface 不靠彩虹边
-- 中英混排：中文行高与标点优先
+- Nested corner-radius and spacing are layered; avoid the same radius and shadow site-wide
+- Shadow steps are few and stable; hierarchy via surface, not rainbow borders
+- CJK+Latin mixed type: CJK line-height and punctuation take priority
 
-## 交互 affordance（L4 交互区，grill v0.3 Q3.4）
+## Interactive affordance (L4 interactive zones, grill v0.3 Q3.4)
 
-每个 L4 声明的交互区（行、卡片、按钮组、可点单元）须有有意的 motion/hover affordance，且在 craft review 里说明用途：
+Every L4-declared interactive zone (row, card, button group, clickable unit) must have intentional motion/hover affordance, with purpose stated in the craft review:
 
-- 默认 hover/active 有过渡（opacity / transform / background 之一，~120ms），用途写在 craft 报告（如「行可点 → 提示可进入详情」「行只读 → 不加 hover」）。
-- 静态 throwaway 也得体现 affordance 目标：要么给出 hover，要么显式声明「此区只读，无 hover」——不允许「交互区既无 hover 又无声明」的静默 PASS。
-- 数据表/list 的 ledger 行尤其易漏：扫描密集时 hover 是可扫描性 affordance，不是装饰。
+- Default hover/active has a transition (opacity / transform / background, ~120ms), purpose written in the craft report (e.g. example (zh): "行可点 → 提示可进入详情" meaning "row is clickable → hints it leads to detail"; example (zh): "行只读 → 不加 hover" meaning "row is read-only → no hover").
+- Static throwaway prototypes must still express the affordance intent: either provide hover or explicitly declare example (zh): "此区只读，无 hover" meaning "this zone is read-only, no hover" — silent PASS where "zone has neither hover nor declaration" is not allowed.
+- Ledger rows in data tables/lists are especially easy to miss: in dense scanning contexts hover is a scannability affordance, not decoration.
 
-**Done when：** 每个 L4 交互区都有 motion/hover purpose（给出或显式声明只读）；无静默漏 hover 的交互区。
+**Done when:** every L4 interactive zone has motion/hover purpose (provided or explicitly declared read-only); no zone silently missing hover.
 
-## 图表
+## Charts
 
-- 分类色稳定可复述；风险色回 `domain`
-- 容器与坐标可读，不为「炫」牺牲扫描
+- Category colors are stable and nameable; risk colors delegate to `domain`
+- Containers and axes are readable; do not sacrifice scannability for visual flair

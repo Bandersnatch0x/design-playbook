@@ -95,4 +95,4 @@ If template is underdetermined, offer 2–3 IA variants (same `spec`, different 
 ## Defaults that hold
 
 - Brand color as token/role, not a hex literal.  
-- Easy-mix pair semantics and shell 禁用 rules live in `references/components.md` and `references/template.md` — resolve against those tables, not from memory.
+- Easy-mix pair semantics and shell prohibition rules live in `references/components.md` and `references/template.md` — resolve against those tables, not from memory.

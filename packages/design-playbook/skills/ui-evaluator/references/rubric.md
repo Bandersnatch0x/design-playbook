@@ -1,39 +1,39 @@
 # evaluator rubric
 
-## 维度如何选
+## How to choose dimensions
 
-- **落地页**：设计质量 / 原创性 / 工艺 / 功能
-- **控制台**：设计质量 / 可用性 / 信息密度 / 工艺 / 一致性
+- **Landing page**: design quality / originality / craft / function
+- **Console**: design quality / usability / information density / craft / consistency
 
-维度从场景读出，引擎不写死；**判据必须能回到声明**。
+Dimensions are read from the scene; no hardcoded list. **Every criterion must point back to a declaration.**
 
-## 回流示例
+## Recirculate examples
 
-| 发现 | 表层说法 | 回指 |
+| Finding | Surface wording | Points back to |
 | --- | --- | --- |
-| 失败无重试 | 交互不完整 | `spec` 状态流 |
-| 高危灰标签 | 颜色不醒目 | `domain` + `components` |
-| 按钮硬编码 hex（如 `#4f46e5`） | 代码不规范 | `design` token |
-| 列表变卡片墙 | 版式不对 | `template` |
+| No retry on failure | Incomplete interaction | `spec` state flow |
+| High-risk grey label | Color not prominent | `domain` + `components` |
+| Button hardcodes hex (e.g. `#4f46e5`) | Code violates conventions | `design` token |
+| List degrades to card wall | Wrong layout | `template` |
 
-## 禁止
+## Prohibited
 
-- 「整体还可以优化」无指征
-- 只改 CSS 不回到声明
-- 用新审美词覆盖未写清的 L5
+- "Could be improved overall" with no specific pointer — not valid
+- Changing CSS only without pointing back to the declaration
+- Overwriting underspecified L5 with new aesthetic terminology
 
-## preview seam 健康（supporting，ADR-0008）
+## preview seam health (supporting, ADR-0008)
 
-若该 run 跑了 `preview*`（`.scratch/<run>/preview/log.md` + `confirm-round-*.json` 存在），把它列为 supporting finding：
+If this run produced `preview*` artifacts (`.scratch/<run>/preview/log.md` + `confirm-round-*.json` exist), list it as a supporting finding:
 
-- 读 `preview/log.md` + confirm json：反馈是否驱动了 revision，还是空/无关锚点滑过结构 floor。`decision-round-*.json` 仅用于审计/恢复，不是确认权威或第二份语义输入（ADR-0013）。
-- 结构 floor（adapter，G5）只挡空反馈/无注释锚点；**语义**问题（如「安师大」这种与被批注元素无关的合法字符串）floor 挡不住，靠这里兜。
-- `source` 归 `preview* seam`（orchestrator 的 preview 步骤契约），不是 UI source —— 当缺陷在 adapter loop 契约而非生成 UI 本身时用这个。
-- 过程缺口（seam 契约）与产品 findings（UI）分开记；不混在回流闭包 trail 里。
+- Read `preview/log.md` + confirm json: did feedback drive a revision, or did empty / unannotated anchors slide past the structural floor? `decision-round-*.json` is for audit / recovery only — it is not a confirmation authority or a second semantic input (ADR-0013).
+- The structural floor (adapter, G5) only blocks empty feedback / unannotated anchors; **semantic** problems — e.g. example (zh): 「安师大」, a valid CJK string unrelated to the annotated element — cannot be blocked by the structural floor; catch them here.
+- `source` is `preview* seam` (the orchestrator's preview-step contract), not UI source — use this when the defect is in the adapter loop contract rather than the generated UI itself.
+- Process gaps (seam contract) are recorded separately from product findings (UI); do not mix them into the recirculate closure trail.
 
-## observe* mirror surface（supporting）
+## observe* mirror surface (supporting)
 
-若 `evidence/manifest.jsonl` 任一条 capture 声明 **`surface: mirror`**（或等价 note），必须有 finding：
+If any capture in `evidence/manifest.jsonl` declares **`surface: mirror`** (or an equivalent note), there must be a finding:
 
 ```text
 issue:    observe used semantic mirror, not live Fill host

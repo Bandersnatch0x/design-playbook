@@ -1,21 +1,21 @@
-# design.md（视觉系统执行约束）
+# design.md (visual-system execution constraints)
 
-## 意图（默认）
+## Intent (defaults)
 
-- CJK-first；控制台密度优先；品牌色克制；中性色承层级。
+- CJK-first; console density priority; brand color restrained; neutral colors carry hierarchy.
 
-## 角色示例
+## Role examples
 
-- `--brand` 主 CTA
-- `--brand-surface` 选中行/软徽章
-- `--foreground-link` 正文链接
-- `--warning-high` 高风险
-- `--chart-1..12` 多系列图
+- `--brand`  primary CTA
+- `--brand-surface`  selected row / soft badge
+- `--foreground-link`  body text link
+- `--warning-high`  high risk
+- `--chart-1..12`  multi-series chart
 
-## 执行三律
+## Three execution rules
 
-1. 所有视觉值走 `var(--*)`
-2. hover/active/disabled/selected 从基础 token 派生
-3. 找不到 token：记 `gaps.log` + 合法 fallback 或拒生成该细节
+1. All visual values via `var(--*)`
+2. hover/active/disabled/selected derived from base tokens
+3. Token not found: log `gaps.log` + valid fallback, or refuse to generate that detail
 
-禁止裸写 hex、随意 px/ms/cubic-bezier 字面量绕过系统。
+Do not write bare hex, arbitrary px/ms/cubic-bezier literals that bypass the system.
