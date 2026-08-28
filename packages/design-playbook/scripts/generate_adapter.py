@@ -387,8 +387,10 @@ def _cursor_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
         cmd_lines.append(f"{cmd['body']}\n")
     files.append((".cursor/rules/design-playbook-commands.mdc", "".join(cmd_lines)))
 
-    # MCP note (explanation; JSON can't carry comments)
-    files.append((".cursor/rules/design-playbook-mcp.mdc", _tmpl("cursor-mcp-note.mdc")))
+    # MCP note (explanation; JSON can't carry comments). The template is
+    # version-free; the generated-by header is injected here at the write
+    # seam, matching every other rendered .mdc artifact above.
+    files.append((".cursor/rules/design-playbook-mcp.mdc", header + _tmpl("cursor-mcp-note.mdc")))
 
     # Actual .cursor/mcp.json — merge-safe with any existing config
     mcp_servers = _mcp_servers_abs()
@@ -508,8 +510,10 @@ def _windsurf_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
         )
         files.append((f".windsurf/workflows/design-playbook-{cmd['name']}.md", content))
 
-    # MCP setup guide (NEVER write the global config file itself — ADR-0042 §4)
-    files.append(("design-playbook-mcp-setup.md", _tmpl("windsurf-mcp-guide.md")))
+    # MCP setup guide (NEVER write the global config file itself — ADR-0042 §4).
+    # Template is version-free; the generated-by header is injected here at
+    # the write seam, matching the rule/workflow artifacts above.
+    files.append(("design-playbook-mcp-setup.md", header + _tmpl("windsurf-mcp-guide.md")))
 
     return files
 

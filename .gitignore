@@ -30,9 +30,6 @@ evidence/
 # swallowing any new file added there.
 .agents/*
 !.agents/plugins/
-# ADR-0034 §5: handoff artifacts belong under the run tree, not the process
-# cwd. This entry papers over that misplacement and retires with the move.
-output/
 
 # Stray debug screenshots at repo root (showcase/screenshots/ is tracked).
 /*.png

@@ -662,7 +662,7 @@ def matrix_viewport(name: str) -> dict[str, Any]:
 def capture_delivery_matrix(
     *,
     url: str,
-    out_dir: Path | None = None,
+    out_dir: Path,
     freeze: dict[str, Any] | None = None,
     browser_adapter: BrowserAdapter | None = None,
 ) -> dict[str, dict[str, Any]]:
@@ -674,19 +674,19 @@ def capture_delivery_matrix(
     can assemble the ``disclosure-review.json`` matrix and the ``/export-zip``
     package from one pass.
 
-    ``out_dir`` defaults to the spec's canonical delivery path
-    ``output/playwright/static-handoff/`` (spec §5). ``browser_adapter`` uses
-    the same ``BrowserAdapter`` seam as ``execute_capture_plan`` (real
-    Playwright by default, injected fake in tests). Production adapters should
-    expose ``capture_and_probe`` so the snapshot and metrics share one page;
-    adapters without that seam remain explicitly ``unmeasured``.
+    ``out_dir`` is required and carries no default: handoff artifacts live
+    under the run tree (``<run_root>/evidence/static-handoff/``, ADR-0034 §5),
+    never the process CWD, so the caller must pass the run-tree destination
+    explicitly. ``browser_adapter`` uses the same ``BrowserAdapter`` seam as
+    ``execute_capture_plan`` (real Playwright by default, injected fake in
+    tests). Production adapters should expose ``capture_and_probe`` so the
+    snapshot and metrics share one page; adapters without that seam remain
+    explicitly ``unmeasured``.
     """
     freeze = freeze or {"enabled": True, "waitFonts": True, "networkIdle": False}
     if browser_adapter is None:
         browser_adapter = PlaywrightBrowserAdapter()
 
-    if out_dir is None:
-        out_dir = Path("output/playwright/static-handoff")
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     results: dict[str, dict[str, Any]] = {}
