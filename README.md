@@ -164,7 +164,7 @@ orchestrator still **probes** and skips steps when a host has no MCP tools.
 
 Docs: [preview](./packages/design-playbook-preview/#install--mcp-config) · [evidence](./packages/design-playbook-evidence/#install--mcp-config)
 
-## Install on other agents
+## 🌐 Install on other agents
 
 ```bash
 npx design-playbook init <agent>

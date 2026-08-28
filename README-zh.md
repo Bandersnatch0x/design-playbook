@@ -163,7 +163,7 @@ Preview / Evidence MCP 运行时已放进主插件（`packages/design-playbook/m
 
 文档：[preview](./packages/design-playbook-preview/#install--mcp-config) · [evidence](./packages/design-playbook-evidence/#install--mcp-config)
 
-## 跨平台安装
+## 🌐 跨平台安装
 
 ```bash
 npx design-playbook init <agent>
