@@ -20,6 +20,9 @@
   "license": "MIT",
   "author": "Bandersnatch0x (https://github.com/Bandersnatch0x)",
   "main": "lib/index.js",
+  "bin": {
+    "design-playbook": "lib/cli.js"
+  },
   "homepage": "https://github.com/Bandersnatch0x/design-playbook",
   "repository": {
     "type": "git",
