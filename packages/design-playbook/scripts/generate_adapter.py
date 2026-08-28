@@ -538,6 +538,90 @@ def _github_copilot_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
 # Renderer dispatch
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Tier-3 generic renderer (AGENTS.md floor for all 22 tier-3 agents)
+# ---------------------------------------------------------------------------
+
+
+def _tier3_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
+    """One AGENTS.md with orchestrator contract, sub-skills, commands, and MCP guide."""
+    skills = _read_skills()
+    commands = _read_commands()
+    mcp_servers = _mcp_servers_abs()
+
+    orchestrator = next((s for s in skills if s["dirname"] == "design-playbook"), None)
+    sub_skills = [s for s in skills if s["dirname"] != "design-playbook"]
+
+    preview_path = mcp_servers["design-playbook-preview"]["args"][0]
+    evidence_path = mcp_servers["design-playbook-evidence"]["args"][0]
+
+    block_parts: list[str] = ["# design-playbook\n\n"]
+
+    # Orchestrator contract
+    if orchestrator:
+        block_parts.append(orchestrator["body"])
+        block_parts.append("\n")
+
+    # Sub-skill index
+    block_parts.append("## Sub-skills\n\n")
+    for sk in sub_skills:
+        block_parts.append(f"- **{sk['name']}**: {sk['description']}\n")
+
+    # Commands as copy-paste prompt equivalents
+    block_parts.append("\n## Commands\n\n")
+    block_parts.append(
+        "The following design-playbook commands are available as copy-paste "
+        "prompt templates. Invoke them directly in your agent chat.\n\n"
+    )
+    for cmd in commands:
+        block_parts.append(f"### /{cmd['name']}\n\n{cmd['description']}\n\n{cmd['body']}\n")
+
+    # Inline MCP install guide
+    block_parts.append(
+        "## MCP install guide\n\n"
+        "Two optional MCP servers enable preview (G5) and evidence (G6) gates.\n"
+        "Install the package as a **persistent dependency** (not ephemeral `npx`)\n"
+        "so the absolute paths below remain valid across sessions.\n\n"
+        "```bash\n"
+        "npm install --save-dev design-playbook   # or: pip install playwright\n"
+        "```\n\n"
+        "Add to your agent's MCP config (key names are `mcpServers` or `mcp`\n"
+        "depending on your platform — see platform docs):\n\n"
+        "```json\n"
+        "{\n"
+        '  "design-playbook-preview": {\n'
+        '    "command": "python",\n'
+        f'    "args": ["{preview_path}"]\n'
+        "  },\n"
+        '  "design-playbook-evidence": {\n'
+        '    "command": "python",\n'
+        f'    "args": ["{evidence_path}"],\n'
+        '    "env": { "DESIGN_PLAYBOOK_RUN_ROOT": "<your-project-root>" }\n'
+        "  }\n"
+        "}\n"
+        "```\n\n"
+        "Both servers implement the absent→skip contract: if a tool probe finds "
+        "them absent, the orchestrator skips the corresponding gate — no crash.\n"
+        "`design-playbook-evidence` requires "
+        "`pip install playwright && playwright install chromium`.\n"
+    )
+
+    agents_md_path = out_dir / "AGENTS.md"
+    existing = agents_md_path.read_text(encoding="utf-8") if agents_md_path.is_file() else None
+    return [("AGENTS.md", apply_marker_block(existing, version, "".join(block_parts)))]
+
+
+# ---------------------------------------------------------------------------
+# Renderer dispatch
+# ---------------------------------------------------------------------------
+
+_TIER3_RENDERER_AGENTS = (
+    "qoder", "kiro-ide", "kiro-cli", "amp", "auggie", "codebuddy", "forge",
+    "ibm-bob", "jules", "kilo-code", "pi", "qwen-code", "roo-code", "shai",
+    "tabnine", "mistral-vibe", "kimi-code", "iflow", "junie", "antigravity",
+    "trae", "generic",
+)
+
 _RENDERERS: dict[str, object] = {
     "codex": _codex_files,
     "cursor": _cursor_files,
@@ -545,6 +629,7 @@ _RENDERERS: dict[str, object] = {
     "opencode": _opencode_files,
     "windsurf": _windsurf_files,
     "github-copilot": _github_copilot_files,
+    **{agent: _tier3_files for agent in _TIER3_RENDERER_AGENTS},
 }
 
 
@@ -563,8 +648,7 @@ def render(agent: str, out_dir: Path | None = None, *, dry_run: bool = False) ->
     renderer = _RENDERERS.get(agent)
     if renderer is None:
         raise NotImplementedError(
-            f"no renderer for {agent!r} (tier {row.tier}); "
-            "S3 renderer not yet implemented"
+            f"no renderer for {agent!r} (tier {row.tier})"
         )
 
     if out_dir is None:

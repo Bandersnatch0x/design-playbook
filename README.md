@@ -164,6 +164,21 @@ orchestrator still **probes** and skips steps when a host has no MCP tools.
 
 Docs: [preview](./packages/design-playbook-preview/#install--mcp-config) · [evidence](./packages/design-playbook-evidence/#install--mcp-config)
 
+## Install on other agents
+
+```bash
+npx design-playbook init <agent>
+# or: python packages/design-playbook/scripts/generate_adapter.py <agent>
+```
+
+| Tier | Agents | What you get |
+| :--- | :--- | :--- |
+| **Tier 1** (native) | Claude Code, Codex | Full fidelity — skills, commands, MCP, drift-gated snapshots |
+| **Tier 2** (generated) | Cursor, Gemini CLI, OpenCode, Windsurf, GitHub Copilot | Skills as platform rules + project-level MCP config; commands degrade to prompt docs |
+| **Tier 3** (floor) | Kiro, Amp, Jules, Qwen Code, and 18 more — `npx design-playbook --list` | `AGENTS.md` with orchestrator contract + MCP install guide |
+
+Claude Code is the native surface. Tier-2/3 outputs are generated adapters with honest degradation. Full capability matrix: [docs/specs/2026-08-28-multi-platform-adapter.md](./docs/specs/2026-08-28-multi-platform-adapter.md).
+
 ## 🔗 Stack with ecosystem
 
 Not another style/palette pack — this plugin owns the **delivery pipeline, evidence semantics, and acceptance loop**, and composes with the rest:

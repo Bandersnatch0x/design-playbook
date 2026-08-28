@@ -163,6 +163,21 @@ Preview / Evidence MCP 运行时已放进主插件（`packages/design-playbook/m
 
 文档：[preview](./packages/design-playbook-preview/#install--mcp-config) · [evidence](./packages/design-playbook-evidence/#install--mcp-config)
 
+## 跨平台安装
+
+```bash
+npx design-playbook init <agent>
+# 或: python packages/design-playbook/scripts/generate_adapter.py <agent>
+```
+
+| 层级 | 平台 | 获得内容 |
+| :--- | :--- | :--- |
+| **Tier 1**（原生） | Claude Code、Codex | 完整保真——skills、commands、MCP、漂移检查快照 |
+| **Tier 2**（生成） | Cursor、Gemini CLI、OpenCode、Windsurf、GitHub Copilot | skills 以各平台 rules 格式输出 + 项目级 MCP 配置；commands 降级为提示文档 |
+| **Tier 3**（兜底） | Kiro、Amp、Jules、Qwen Code 等共 22 个——`npx design-playbook --list` | 含 orchestrator 合约 + MCP 安装指南的 `AGENTS.md` |
+
+Claude Code 为原生平台。Tier 2/3 为生成适配器，已诚实说明降级内容。完整能力矩阵：[docs/specs/2026-08-28-multi-platform-adapter.md](./docs/specs/2026-08-28-multi-platform-adapter.md)。
+
 ## 🔗 与生态组合
 
 不是又一套风格/色板库——本插件管**交付链路、证据语义与验收闭环**，与其余各就其位：
