@@ -1,0 +1,16 @@
+#!/bin/sh
+# design-playbook local gate: conventional-commit first line.
+first_line="$(head -n 1 "$1")"
+
+case "$first_line" in
+  Merge\ *|Revert\ *|fixup!\ *|squash!\ *) exit 0 ;;
+esac
+
+if printf '%s\n' "$first_line" | grep -Eq '^(build|chore|ci|docs|feat|fix|perf|refactor|release|style|test)(\([a-z0-9._/-]+\))?!?: .+'; then
+  exit 0
+fi
+
+echo "commit-msg: first line must be 'type(scope): subject' (scope optional)." >&2
+echo "  types: build chore ci docs feat fix perf refactor release style test" >&2
+echo "  got:   $first_line" >&2
+exit 1

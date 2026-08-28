@@ -1,0 +1,13 @@
+#!/bin/sh
+# design-playbook local gate: canonical commit identity.
+expected_name="Bandersnatch0x"
+expected_email="xihalele@gmail.com"
+actual_name="$(git config user.name)"
+actual_email="$(git config user.email)"
+if [ "$actual_name" != "$expected_name" ] || [ "$actual_email" != "$expected_email" ]; then
+  echo "pre-commit: identity gate failed." >&2
+  echo "  expected: $expected_name <$expected_email>" >&2
+  echo "  actual:   ${actual_name:-<unset>} <${actual_email:-<unset>}>" >&2
+  echo "  fix:      git config user.name \"$expected_name\" && git config user.email \"$expected_email\"" >&2
+  exit 1
+fi
