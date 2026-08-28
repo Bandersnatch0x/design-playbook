@@ -26,12 +26,17 @@ from .session import (
     RunConsoleSessionError,
 )
 
-# A code owned here (request_security.py is frozen outside this change):
+# Codes owned here (request_security.py is frozen outside this change):
 # a non-JSON content type on the one action route is a 415, not a 400.
 CONTENT_TYPE_UNSUPPORTED = "CONTENT_TYPE_UNSUPPORTED"
 CONTENT_TYPE_UNSUPPORTED_MESSAGE = (
     "The typed action requires an application/json request body."
 )
+# Spec section 13 keeps a body that does not decode as JSON at all
+# distinct from valid JSON with the wrong fields: MALFORMED_JSON is the
+# pre-dispatch decode rejection, ACTION_PAYLOAD_INVALID stays field-level.
+MALFORMED_JSON = "MALFORMED_JSON"
+MALFORMED_JSON_MESSAGE = "The request body is not well-formed JSON."
 
 JSON_CONTENT_TYPE = "application/json"
 ACTION_REFRESH = "refresh"
@@ -64,6 +69,21 @@ class ActionPayloadError(ValueError):
         self.code = ACTION_PAYLOAD_INVALID
 
 
+class MalformedJSONError(ValueError):
+    """A typed rejection of a body that does not decode as JSON at all.
+
+    A deliberate sibling of :class:`ActionPayloadError`, never a subclass:
+    spec section 13 keeps ``MALFORMED_JSON`` (rejected before action
+    dispatch) distinct from the field-level ``ACTION_PAYLOAD_INVALID``,
+    and a subclass would let one ``except ActionPayloadError`` fold the
+    two codes back together.
+    """
+
+    def __init__(self, message: str = MALFORMED_JSON_MESSAGE) -> None:
+        super().__init__(message)
+        self.code = MALFORMED_JSON
+
+
 def content_type_is_json(value: object) -> bool:
     """True only for an ``application/json`` Content-Type value.
 
@@ -78,13 +98,20 @@ def content_type_is_json(value: object) -> bool:
 
 
 def parse_json_action_body(raw: object) -> object:
-    """Decode one UTF-8 JSON request body or raise the typed rejection."""
+    """Decode one UTF-8 JSON request body or raise the typed rejection.
+
+    Every decode failure — a body that is not a byte sequence, not
+    UTF-8, or not one well-formed JSON document — is the pre-dispatch
+    ``MALFORMED_JSON`` rejection. Valid JSON that is not the closed
+    payload is judged later by :func:`validate_refresh_payload` and
+    keeps ``ACTION_PAYLOAD_INVALID``.
+    """
     if not isinstance(raw, (bytes, bytearray)):
-        raise ActionPayloadError() from None
+        raise MalformedJSONError() from None
     try:
         return json.loads(bytes(raw).decode("utf-8"))
     except (UnicodeDecodeError, ValueError):
-        raise ActionPayloadError() from None
+        raise MalformedJSONError() from None
 
 
 def validate_refresh_payload(payload: object) -> None:

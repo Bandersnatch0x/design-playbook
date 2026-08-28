@@ -38,9 +38,12 @@ from design_playbook.mcp.run_console.actions import (  # noqa: E402
     ACTION_REFRESH,
     CAPABILITIES,
     CONTENT_TYPE_UNSUPPORTED,
+    MALFORMED_JSON,
+    MALFORMED_JSON_MESSAGE,
     REFRESH_ALLOWED_METHODS,
     REFRESH_ROUTE,
     ActionPayloadError,
+    MalformedJSONError,
     capability_names,
     content_type_is_json,
     copy_command_is_eligible,
@@ -184,9 +187,29 @@ class RefreshPayloadTest(unittest.TestCase):
     def test_malformed_or_non_utf8_bodies_fail_to_parse(self) -> None:
         for raw in (b"", b"{", b'{"schemaVersion": 1,}', b"\x00", b"\xff\xfe{}", b"\x80"):
             with self.subTest(raw=raw):
-                with self.assertRaises(ActionPayloadError) as ctx:
+                with self.assertRaises(MalformedJSONError) as ctx:
                     parse_json_action_body(raw)
-                self.assertEqual(ctx.exception.code, ACTION_PAYLOAD_INVALID)
+                self.assertEqual(ctx.exception.code, MALFORMED_JSON)
+                self.assertEqual(str(ctx.exception), MALFORMED_JSON_MESSAGE)
+
+    def test_non_byte_bodies_are_the_same_decode_rejection(self) -> None:
+        for raw in (None, "{}", 1, ["{}"], {"schemaVersion": 1}):
+            with self.subTest(raw=raw):
+                with self.assertRaises(MalformedJSONError) as ctx:
+                    parse_json_action_body(raw)
+                self.assertEqual(ctx.exception.code, MALFORMED_JSON)
+
+    def test_decode_and_field_rejections_stay_distinct(self) -> None:
+        # Spec section 13 rows: MALFORMED_JSON is rejected before action
+        # dispatch and is never the field-level payload code, so neither
+        # exception may catch (or be) the other.
+        self.assertNotEqual(MALFORMED_JSON, ACTION_PAYLOAD_INVALID)
+        self.assertFalse(issubclass(MalformedJSONError, ActionPayloadError))
+        self.assertFalse(issubclass(ActionPayloadError, MalformedJSONError))
+        with self.assertRaises(MalformedJSONError):
+            parse_json_action_body(b"{")
+        with self.assertRaises(ActionPayloadError):
+            validate_refresh_payload(parse_json_action_body(b"{}"))
 
     def test_well_formed_json_that_is_not_the_closed_payload_is_rejected(self) -> None:
         bodies = (
@@ -497,10 +520,34 @@ class RefreshRouteTest(harness._ServerTestCase):
         status, _ = self._raw(request)
         self.assertEqual(status, 415)
 
-    def test_refresh_rejects_bodies_that_are_not_the_closed_payload(self) -> None:
+    def test_refresh_rejects_malformed_json_before_dispatch(self) -> None:
+        before_tree = harness._tree_digest(self.run_root)
+        _, _, cached = self._api("GET", "/api/v1/snapshot")
         bodies = (
             b"",
             b"{",
+            b'{"schemaVersion": 1,}',
+            b"\x00",
+            b"\xff\xfe{}",
+            b"\x80",
+            b"not json",
+        )
+        for body in bodies:
+            with self.subTest(body=body):
+                status, _, payload = self._refresh(body=body)
+                self.assertEqual(status, 400)
+                harness._assert_error(payload, MALFORMED_JSON)
+        # A POST with no body at all decodes to no JSON document either.
+        status, _, payload = self._refresh(body=None)
+        self.assertEqual(status, 400)
+        harness._assert_error(payload, MALFORMED_JSON)
+        # Rejected before dispatch: nothing was rebuilt, nothing written.
+        _, _, still = self._api("GET", "/api/v1/snapshot")
+        self.assertEqual(still, cached)
+        self.assertEqual(harness._tree_digest(self.run_root), before_tree)
+
+    def test_refresh_rejects_bodies_that_are_not_the_closed_payload(self) -> None:
+        bodies = (
             b"null",
             b"1",
             b'"refresh"',
@@ -519,14 +566,10 @@ class RefreshRouteTest(harness._ServerTestCase):
                 status, _, payload = self._refresh(body=body)
                 self.assertEqual(status, 400)
                 harness._assert_error(payload, ACTION_PAYLOAD_INVALID)
-        # A POST with no body at all is not the closed payload either.
-        status, _, payload = self._refresh(body=None)
-        self.assertEqual(status, 400)
-        harness._assert_error(payload, ACTION_PAYLOAD_INVALID)
 
     def test_refresh_rejects_a_body_without_a_content_length(self) -> None:
         # The route only ever reads a Content-Length-bounded body: bytes
-        # that arrive without one are not the closed action payload.
+        # that arrive without one decode to no JSON document at all.
         status, _, payload = self._api(
             "POST",
             REFRESH_ROUTE,
@@ -535,7 +578,7 @@ class RefreshRouteTest(harness._ServerTestCase):
             body=_CLOSED_BODY,
         )
         self.assertEqual(status, 400)
-        harness._assert_error(payload, ACTION_PAYLOAD_INVALID)
+        harness._assert_error(payload, MALFORMED_JSON)
 
     def test_refresh_rejects_unbounded_bodies_before_routing(self) -> None:
         oversized = (

@@ -26,9 +26,12 @@ from urllib.parse import parse_qsl, urlsplit
 from .actions import (
     CONTENT_TYPE_UNSUPPORTED,
     CONTENT_TYPE_UNSUPPORTED_MESSAGE,
+    MALFORMED_JSON,
+    MALFORMED_JSON_MESSAGE,
     REFRESH_ALLOWED_METHODS,
     REFRESH_ROUTE,
     ActionPayloadError,
+    MalformedJSONError,
     content_type_is_json,
     parse_json_action_body,
     perform_refresh,
@@ -91,6 +94,7 @@ _LOCATOR_PATTERN = re.compile(r"^src_[A-Za-z0-9_-]{16,}$")
 _DUPLICATED = object()
 
 _STATUS_BY_CODE = {
+    MALFORMED_JSON: 400,
     ACTION_PAYLOAD_INVALID: 400,
     SESSION_TOKEN_INVALID: 401,
     ORIGIN_INVALID: 403,
@@ -416,6 +420,12 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
             return
         try:
             payload = parse_json_action_body(body)
+        except MalformedJSONError:
+            # Not one well-formed JSON document: rejected before action
+            # dispatch, distinct from the field-level payload code (s13).
+            self._send_error(MALFORMED_JSON, message=MALFORMED_JSON_MESSAGE)
+            return
+        try:
             validate_refresh_payload(payload)
         except ActionPayloadError:
             self._send_error(ACTION_PAYLOAD_INVALID)
