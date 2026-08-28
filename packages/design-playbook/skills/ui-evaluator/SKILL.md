@@ -68,14 +68,16 @@ issue:    <observable>
 source:   <declaration>
 fix:      <next edit>
 severity: S3|S2|S1|S0
+track:    product|interaction|cross-cutting
 ```
 
 Severity is the **consequence axis** (S3 blocking-severity / S2 major / S1 minor / S0 positive or info), graded by user-visible impact and referencing the affected L6 / primary-path node. The legacy values `high (blocking)|high|med|low` are **no longer legal** (alias period ended, v0.20.0 breaking change): they are structural errors at G2 — write the axis values directly (`high (blocking)`→S3 + `disposition: blocking`, `high`→S2, `med`/`low`→S1).
 
+`track` is required: every finding declares which review track produced it — `product` (per-L6 acceptance), `interaction` (primary-path walkthrough dimensions), or `cross-cutting` (applicability-matrix families). The machine seam is unchanged (G2 validates the value only when the line is present), so an omitted track is a review defect to fix here, not a structural error.
+
 Additional field lines (machine-tolerated; validated when present) complete the review axis:
 
 ```text
-track:       product|interaction|cross-cutting
 confidence:  high|medium|low   (evidence layers x reproducibility x judging subject)
 disposition: blocking|advisory|info   (severity x fact/judgment class x confidence)
 evidence:    <artifact path or source ref — may repeat>
@@ -88,7 +90,7 @@ Severity and disposition are **two axes**: a judgment-class S3 (subjective / sem
 
 Order: **blocking** first (broken L5/L6, unsafe dangerous ops, removed focus rings), then polish.
 
-**Done when:** every finding has all four fields; no “generally improve the design” lines; additional fields use only their declared value sets.
+**Done when:** every finding has all five fields (track included); no “generally improve the design” lines; additional fields use only their declared value sets.
 
 ### 4. Verdict
 
@@ -110,7 +112,7 @@ The report artifact remains `point-back.md` (no new file). The machine face is u
 
 ```text
 ## Evidence ledger          (one row per L6; required rows may note assumed deps)
-## Findings                 (four fields + additional field lines)
+## Findings                 (five fields + additional field lines)
 ## Positive findings        (S0/info rows + pattern-level positives; AC-level
                              positives are the ledger pass rows themselves)
 ## Coverage statement       (exhaustive-review completion / sampling + reasons /
