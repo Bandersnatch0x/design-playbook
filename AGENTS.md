@@ -28,7 +28,7 @@ Guidance for coding agents (Claude Code / Codex / Qoder / …) working in this r
 
 ### Issue tracker
 
-GitHub Issues in `Bandersnatch0x/design-playbook`, operated with `gh`. See `docs/agents/issue-tracker.md`.
+GitHub Issues in `Bandersnatch0x/design-playbook` carry **bug tickets only**, operated with `gh`; specs, research, and non-bug work tickets live locally under `.agents/` (gitignored). See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
@@ -45,7 +45,7 @@ Commands live under `packages/design-playbook/commands/` (pipeline) and monorepo
 
 ### Dev workflow
 
-任务级流水线：路由 → 探路 → 拷问 → 成谱 → 成票 → 落码，外加两个横切机制（出方案时的检验追问、决策点的圆桌辩论）与三条粘性规则（点名即常驻、裁决批次、自研措辞）。驱动命令 `/dev-next`（`.claude/commands/`）。See `.agents/dev-workflow.md`（本地，不入库）.
+任务级流水线：路由 → 探路 → 拷问 → 成谱 → 成票 → 落码 → 验收，外加两个横切机制（出方案时的检验追问、决策点的圆桌辩论）与三条粘性规则（点名即常驻、裁决批次、自研措辞）。驱动命令 `/dev-next`（`.claude/commands/`）。See `.agents/dev-workflow.md`（本地，不入库）.
 
 ## 开发注意
 

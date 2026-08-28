@@ -1,17 +1,56 @@
-# Issue tracker: GitHub
+# Issue tracker: GitHub for bugs, local files for the rest
 
-Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
+GitHub Issues carry **bug tickets only** — defects in shipped behavior that anyone could report. Every other planning artifact (specs, research notes, non-bug work tickets, wayfinder maps) lives as local files under `.agents/` (gitignored, never pushed). Use the `gh` CLI for all GitHub operations.
 
-## Conventions
+## Routing
 
-- **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
-- **Read an issue**: `gh issue view <number> --comments`, also fetching labels.
-- **List issues**: `gh issue list --state open --json number,title,body,labels,comments` with appropriate `--label` and `--state` filters.
-- **Comment on an issue**: `gh issue comment <number> --body "..."`.
-- **Apply or remove labels**: `gh issue edit <number> --add-label "..."` or `--remove-label "..."`.
-- **Close an issue**: `gh issue close <number> --comment "..."`.
+| Artifact | Home | Reference in commits |
+| --- | --- | --- |
+| Bug ticket | GitHub issue (`gh issue create`) | `(#NNN)` |
+| Spec | `.agents/specs/YYYY-MM-DD-<slug>.md` | path |
+| Research note | `.agents/research/YYYY-MM-DD-<slug>.md` | path |
+| Work ticket (non-bug) | `.agents/tickets/T-NNN-<slug>.md` | `(T-NNN)` |
+| Wayfinder map | `.agents/tickets/M-NNN-<slug>.md` | `(M-NNN)` |
+
+- **When a skill says "publish to the issue tracker"**: route by the table above — only bugs become GitHub issues.
+- **When a skill says "fetch the relevant ticket"**: `gh issue view <number> --comments` for `#NNN`; read the file for `T-NNN` / `M-NNN`.
+
+## GitHub conventions (bug tickets)
+
+- **Create**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
+- **Read**: `gh issue view <number> --comments`, also fetching labels.
+- **List**: `gh issue list --state open --json number,title,body,labels,comments` with appropriate `--label` and `--state` filters.
+- **Comment / label / close**: `gh issue comment`, `gh issue edit --add-label` / `--remove-label`, `gh issue close --comment`.
+- Triage labels apply to GitHub bug tickets; see `triage-labels.md`.
 
 Infer the repository from `git remote -v`; `gh` does this automatically inside the clone.
+
+## Local tickets
+
+One file per ticket, front matter first:
+
+```yaml
+---
+id: T-014            # or M-NNN for a wayfinder map
+status: open         # open | in-progress | done | wontfix
+owner:               # empty = unclaimed
+blocked-by: []       # e.g. [T-012, T-013]
+part-of:             # map id, when the ticket belongs to a wayfinder map
+spec:                # optional path to the driving spec
+---
+```
+
+- **Numbering**: next integer after the highest existing `T-NNN` / `M-NNN` in `.agents/tickets/`.
+- Triage roles map onto `status` + `owner`: an open, unclaimed, unblocked ticket is ready to pick up.
+
+## Wayfinding operations
+
+Used by `/wayfinder`. The **map** is one `M-NNN` file holding Notes, Decisions-so-far, and Fog; children are ordinary `T-NNN` tickets carrying `part-of: M-NNN`.
+
+- **Blocking**: `blocked-by` front matter on the child.
+- **Frontier**: choose the first open child in map order that has no open blocker and no owner.
+- **Claim**: set `owner` in the child's front matter; this is the session's first write.
+- **Resolve**: append the answer to the child, set `status: done`, then append a gist to the map's Decisions-so-far.
 
 ## Pull requests as a triage surface
 
@@ -19,21 +58,6 @@ Infer the repository from `git remote -v`; `gh` does this automatically inside t
 
 GitHub shares one number space across issues and PRs. Resolve an ambiguous `#<number>` with `gh pr view <number>` and fall back to `gh issue view <number>`.
 
-## When a skill says "publish to the issue tracker"
+## Legacy
 
-Create a GitHub issue.
-
-## When a skill says "fetch the relevant ticket"
-
-Run `gh issue view <number> --comments`.
-
-## Wayfinding operations
-
-Used by `/wayfinder`. The **map** is one issue with child issues as tickets.
-
-- **Map**: an issue labelled `wayfinder:map`, holding Notes, Decisions-so-far, and Fog.
-- **Child ticket**: a GitHub sub-issue labelled `wayfinder:<type>` (`research`, `prototype`, `grilling`, or `task`). If sub-issues are unavailable, link it from a task list in the map and put `Part of #<map>` in the child body.
-- **Blocking**: use GitHub native issue dependencies. If unavailable, put `Blocked by: #<n>, #<n>` at the top of the child body.
-- **Frontier**: choose the first open child in map order that has no open blocker and no assignee.
-- **Claim**: `gh issue edit <number> --add-assignee @me`; this is the session's first write.
-- **Resolve**: comment with the answer, close the child, then append a gist and link to the map's Decisions-so-far.
+Issues ≤ #114 predate this policy and include specs and non-bug tickets: finish them where they are and close them — do not migrate.
