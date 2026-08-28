@@ -205,6 +205,8 @@ def _build_control(
         "abort_cancelled",
         "abort_popover_aria",
         "drawer_title",
+        "drawer_empty_title",
+        "drawer_empty_desc",
         "criteria_title",
         "criteria_count",
         "criteria_empty",

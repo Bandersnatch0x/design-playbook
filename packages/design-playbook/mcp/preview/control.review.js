@@ -18,7 +18,7 @@
       return true;
     });
   }
-  function render() {
+  function render(persistDraft) {
     listEl.innerHTML = "";
     var liveSelectors = {};
     anchors.forEach(function (a) { liveSelectors[a.selector] = true; });
@@ -26,11 +26,29 @@
       if (!liveSelectors[sel]) removeBubble(sel);
     });
     listEl.classList.toggle("has-items", anchors.length > 0);
+    if (!anchors.length) {
+      listEl.innerHTML = '<div class="dpb-anchor-empty">'
+        + '<svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v11M2.5 8h11"/><circle cx="8" cy="8" r="5.5"/></svg>'
+        + '<div class="dpb-anchor-empty-title">' + esc(tt("drawer_empty_title")) + '</div>'
+        + '<p class="dpb-anchor-empty-desc">' + esc(tt("drawer_empty_desc")) + '</p>'
+        + '</div>';
+      syncHidden();
+      updateCounts();
+      renderDrawStrokes();
+      renderFreePins();
+      syncAnchorsToFrame();
+      if (persistDraft !== false) scheduleDraft();
+      return;
+    }
+    var entered = [];
     anchors.forEach(function (a, idx) {
+      var isFresh = !!a.__fresh;
       var row = document.createElement("div");
       row.className = "dpb-anchor"
         + (idx === activeIdx ? " dpb-active" : "")
-        + (resolvedSet[a.selector] ? " dpb-resolved" : "");
+        + (resolvedSet[a.selector] ? " dpb-resolved" : "")
+        + (isFresh ? " dpb-anchor-enter" : "");
+      if (isFresh) entered.push(row);
       if (filter === "resolved" && !resolvedSet[a.selector]) row.style.display = "none";
       if (filter === "pending" && resolvedSet[a.selector]) row.style.display = "none";
       row.innerHTML =
@@ -61,7 +79,9 @@
     renderDrawStrokes();
     renderFreePins();
     syncAnchorsToFrame();
-    scheduleDraft();
+    entered.forEach(function (el) { clearEntranceClass(el, "dpb-anchor-enter"); });
+    anchors.forEach(function (a) { delete a.__fresh; });
+    if (persistDraft !== false) scheduleDraft();
   }
   function updateCounts() {
     var n = anchors.length;
@@ -167,7 +187,10 @@
       try { a.el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
     }
     postToFrame({ dpbPinLocate: { selector: a.selector } });
+    anchors.forEach(ensureBubble);
+    repositionAll();
     renderFreePins();
+    syncAnchorsToFrame();
   }
   function roam(dir) {
     if (!anchors.length) return;
@@ -206,12 +229,12 @@
     if (!val) return;
     noteSeq += 1;
     pushHistory();
-    anchors.push({
+    anchors.push(markFresh({
       selector: "@note-" + noteSeq,
       label: val.slice(0, 18),
       comment: val,
       tag: activeTag,
-    });
+    }));
     commentInput.value = "";
     render();
     activeIdx = anchors.length - 1;
@@ -512,6 +535,7 @@
   setTool("select", true);
   syncCriteriaHidden();
   loadDraft();
+  render(false);
   setReadiness();
   fitCanvas();
   syncPinToFrame();

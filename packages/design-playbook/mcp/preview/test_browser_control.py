@@ -347,10 +347,22 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                     self.assertNotIn("待整改", pane_text)
                     self.assertNotIn("通过", pane_text)
 
+                    toggle = page.locator("#dpb-criteria-toggle")
+                    self.assertEqual(toggle.get_attribute("aria-expanded"), "true")
+                    self.assertTrue(
+                        toggle.evaluate(
+                            "el => el.matches("
+                            "'#dpb-criteria-toggle[aria-expanded=\\\"true\\\"]')"
+                        )
+                    )
                     page.check('.dpb-criterion-check[data-criterion-id="L6.1"]')
                     self.assertEqual(
                         page.locator("#dpb-criteria-count").inner_text(),
                         "准则 1/2",
+                    )
+                    self.assertIn(
+                        "dpb-checked",
+                        page.locator(".dpb-spec-card").first.get_attribute("class") or "",
                     )
                     payload = page.evaluate(
                         "() => JSON.parse(document.getElementById('dpb-criteria-json').value)"
@@ -364,6 +376,13 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                     )
 
                     page.click("#dpb-criteria-toggle")
+                    self.assertEqual(toggle.get_attribute("aria-expanded"), "false")
+                    self.assertFalse(
+                        toggle.evaluate(
+                            "el => el.matches("
+                            "'#dpb-criteria-toggle[aria-expanded=\\\"true\\\"]')"
+                        )
+                    )
                     self.assertIn(
                         "dpb-collapsed",
                         page.locator("#dpb-spec-panel").get_attribute("class") or "",
@@ -402,6 +421,64 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                 finally:
                     browser.close()
 
+    def test_drawer_empty_state_disappears_after_adding_annotation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            file_url = _write_control_page(root, [])
+
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch(headless=True)
+                try:
+                    page = browser.new_page(viewport={"width": 1280, "height": 800})
+                    page.goto(file_url, wait_until="domcontentloaded")
+                    page.wait_for_selector("#dpb-root")
+                    dismiss_onboarding(page)
+
+                    empty = page.locator(".dpb-anchor-empty")
+                    self.assertTrue(empty.is_visible())
+                    self.assertIn("还没有批注", empty.inner_text())
+                    self.assertIn("按 B 框选区域，或按 D 圈画问题", empty.inner_text())
+
+                    page.fill("#dpb-comment-input", "empty state should disappear")
+                    page.keyboard.press("Enter")
+                    page.wait_for_selector("#dpb-anchors .dpb-anchor")
+                    self.assertEqual(page.locator(".dpb-anchor-empty").count(), 0)
+                finally:
+                    browser.close()
+
+    def test_reduced_motion_suppresses_new_entrance_animation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            file_url = _write_control_page(root, [])
+
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch(headless=True)
+                context = browser.new_context(
+                    reduced_motion="reduce",
+                    viewport={"width": 1280, "height": 800},
+                )
+                try:
+                    page = context.new_page()
+                    page.goto(file_url, wait_until="domcontentloaded")
+                    page.wait_for_selector("#dpb-root")
+                    dismiss_onboarding(page)
+
+                    page.fill("#dpb-comment-input", "reduced motion note")
+                    page.keyboard.press("Enter")
+                    card = page.locator("#dpb-anchors .dpb-anchor").first
+                    card.wait_for()
+                    self.assertIn(
+                        "dpb-anchor-enter",
+                        card.get_attribute("class") or "",
+                    )
+                    self.assertEqual(
+                        card.evaluate("el => getComputedStyle(el).animationName"),
+                        "none",
+                    )
+                finally:
+                    context.close()
+                    browser.close()
+
     def test_dark_toggle_flips_root_theme_and_persists_choice(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -422,12 +499,18 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                     stored = page.evaluate(
                         "() => localStorage.getItem('dpb.preview.theme')"
                     )
-                    icon = page.locator("#dpb-theme-icon").inner_text()
+                    self.assertEqual(page.locator("#dpb-theme-icon svg").count(), 1)
+                    self.assertEqual(
+                        page.locator("#dpb-theme-icon svg").get_attribute("viewBox"),
+                        "0 0 16 16",
+                    )
+                    self.assertEqual(
+                        page.locator("#dpb-theme-icon").inner_text().strip(), ""
+                    )
 
                     self.assertIn(before, ("light", "dark"))
                     self.assertEqual(after, "dark" if before == "light" else "light")
                     self.assertEqual(stored, after)
-                    self.assertEqual(icon, "☀" if after == "dark" else "☾")
                 finally:
                     browser.close()
 
