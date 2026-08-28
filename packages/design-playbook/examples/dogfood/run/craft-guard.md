@@ -17,3 +17,12 @@ Registry: `skills/design-playbook/references/rules.md`, full catalog (P3 run: �
 | I18N-01@1 | not-applicable | 单语控制台（zh-CN），无 i18n 声明（无 i18n.* 契约字段，L1 未声明多语言用户群） | - | - | - | 单语声明成立 | - |
 | PERF-01@1 | applicable | - | clear | 长运行有持续进度感（feed 条目级进度逐 tick 更新；全局暂停 busy 即时反馈） | evidence/L6.2-pause-trace.json 反馈序列 | 反馈相称性未承诺耗时阈值（契约无阈值声明） | - |
 | SEC-01@1 | not-applicable | 声明范围无敏感操作新增（敏感模拟参数默认脱敏沿用；全局暂停非敏感操作） | - | - | - | 无敏感面可查 | - |
+| COPY-01@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档（2026-08-14）；主动语态与动作命名一致性审查所需的全流程文案清单未采集 | - | - | - | - | - |
+| COPY-02@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；用户侧命名审查所需的界面名词与实现命名对照未采集 | - | - | - | - | - |
+| COPY-03@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；错误信息语气审查所需的错误态文案样本未采集 | - | - | - | - | - |
+| A11Y-02@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；可见键盘焦点判定所需的聚焦态截图与键盘走查未采集（a11y 树无法证明视觉属性） | - | - | - | - | - |
+| CRAFT-09@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；归档缺审计面样式源——filled-ui.md 为声明性产物索引不含样式源，candidates/preview 为一次性原型资产而非填充面源码 | - | - | - | - | - |
+| CRAFT-10@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；归档缺审计面源标记与结构装置的视觉捕捉——evidence 仅交互轨迹与 a11y 树 JSON，无填充面标记源归档 | - | - | - | - | - |
+| DECIDE-01@1 | applicable | - | clear | 选中方向为全局 run console 构成重组（candidates/console-region.html 草图 + preview round 1/2 用户确认），非未审视的默认外观收敛 | DD-0001 理由可回溯 l1.scenes（切页续读）与 PERF-01 比较轴及经用户确认的布局段突破；DD-0002 理由可回溯 l6.c4（跨视图状态闭环）与运行中心第一步方向——均引用 brief 具体事实 | 常规方向经比较矩阵沿 brief 轴证成，非未审视默认；无基线默认方向身份声明 | - |
+
+注：2026-08-28 注册批（COPY-01/02/03、A11Y-02、CRAFT-09/10、DECIDE-01）晚于本 run 存档；按三态谓词补记——blocked 行在理由列点名缺失的证据面；DECIDE-01 依归档内可读的决策报告求值为 applicable。
