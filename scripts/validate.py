@@ -184,6 +184,54 @@ if isinstance(amj, dict):
             check((ROOT / agents_path).is_dir(),
                   f".agents marketplace plugins[0].source.path exists: {agents_path}")
 
+print("== Adapter generator drift gate (ADR-0042) ==")
+# Tier-1 snapshot agents have committed artifacts that must exactly match what
+# the generator would produce. Run the generator in dry-run mode and compare
+# the content hashes from the manifest to the committed files. Any mismatch
+# means the snapshot is stale — run `python packages/design-playbook/scripts/
+# generate_adapter.py codex` and commit the updated files.
+_gen_script = PKG / "scripts" / "generate_adapter.py"
+check(_gen_script.is_file(), "adapter generator script present at scripts/generate_adapter.py")
+if _gen_script.is_file():
+    try:
+        import hashlib as _hashlib
+
+        _gen_result = subprocess.run(
+            [sys.executable, str(_gen_script), "codex", "--dry-run"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            cwd=PKG, timeout=30,
+        )
+        if _gen_result.returncode != 0:
+            check(False,
+                  f"adapter generator dry-run exited {_gen_result.returncode}: "
+                  f"{(_gen_result.stdout + _gen_result.stderr).strip()[-200:]}")
+        else:
+            _manifest = json.loads(_gen_result.stdout)
+            _gen_version = _manifest.get("version", "?")
+            _drift_ok = True
+            for _entry in _manifest.get("files", []):
+                _rel = _entry.get("path", "")
+                _expected_sha = _entry.get("sha256", "")
+                _committed = PKG / _rel
+                if not _committed.is_file():
+                    check(False, f"adapter snapshot missing: {_rel}")
+                    _drift_ok = False
+                    continue
+                _raw = _committed.read_bytes()
+                _normalized = _raw.replace(b"\r\n", b"\n")
+                _actual_sha = _hashlib.sha256(_normalized).hexdigest()
+                _match = _actual_sha == _expected_sha
+                if not _match:
+                    _drift_ok = False
+                check(
+                    _match,
+                    f"adapter snapshot matches generator (codex/{_rel}): "
+                    f"run `python packages/design-playbook/scripts/generate_adapter.py codex` to refresh",
+                )
+            check(_drift_ok, f"adapter generator v{_gen_version} codex snapshot clean")
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError, KeyError) as _gen_exc:
+        check(False, f"adapter generator drift gate failed: {_gen_exc}")
+
 print("== npm / pi publish manifest ==")
 # packages/design-playbook/package.json is the third publish surface: pi has
 # no marketplace, and the pi.dev gallery indexes npm for the `pi-package`
