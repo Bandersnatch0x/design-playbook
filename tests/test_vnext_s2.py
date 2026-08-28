@@ -422,8 +422,10 @@ class TierObligationTests(unittest.TestCase):
         # families are consumable, not just registered (G10 <-> G8 face).
         text = _report(_e_block().replace(
             "rules: [CRAFT-01@1]", "rules: [COPY-01@1]"))
-        entry = parse_dd_entries(text)[0]
-        self.assertEqual(entry.rules_refs, ("COPY-01@1",))
+        # Public-surface guard: the constructed DD source must carry the
+        # rewritten pin — a silently no-op replace() would otherwise keep
+        # CRAFT-01@1 and fake the batch-102 consumability check.
+        self.assertIn("COPY-01@1", text)
         self.assertEqual(_rules(text), set())
 
     def test_duplicate_id_rejected(self) -> None:

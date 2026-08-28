@@ -85,7 +85,9 @@ PROVENANCES = frozenset({
 })
 STATUSES = frozenset({"draft", "advisory", "machine-enforced", "deprecated"})
 CHECK_TYPES = frozenset({"machine-detector", "protocol-check"})
-EVIDENCE_LAYERS = frozenset({"source", "rendered", "interaction", "measurement"})
+EVIDENCE_LAYERS = frozenset({
+    "source", "rendered", "interaction", "measurement", "decision",
+})
 SEVERITY_PATTERN = re.compile(r"^(S[0-3])(?:\s*/\s*(fact|judgment))?$")
 # Owner first hop = recirculate-map artifact names + the bound-baseline path.
 OWNER_FIRST_HOPS = frozenset({
@@ -425,9 +427,10 @@ def validate_registry(
                 if name.strip() not in EVIDENCE_LAYERS:
                     errors.append(RegistryError(
                         f"{label}: evidence layer {name.strip()!r} not in "
-                        "source|rendered|interaction|measurement",
+                        "source|rendered|interaction|measurement|decision",
                         rule=label,
-                        expected="source|rendered|interaction|measurement",
+                        expected="source|rendered|interaction|measurement"
+                                 "|decision",
                         actual=name.strip(),
                         repair="Use a declared evidence layer name",
                     ))

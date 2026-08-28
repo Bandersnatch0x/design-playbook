@@ -594,7 +594,7 @@ check-type: protocol-check
 check-inputs: decision report DD entries at compare or explore tier; bound baseline identity declarations; the dated self-default direction observations recorded in this entry
 signals-rendered: the selected direction matches a dated self-default profile — as of 2026-08 (dogfood evidence, refreshable observations): a light slate background with white cards and a teal or blue accent on admin surfaces, or a dark ops console with muted blue or cyan accents — while the DD entry records no brief fact that demands it
 signals-source: selection rationale citing no spec item, baseline declaration, or brief fact — wording that would justify the same direction for any brief
-evidence-layers: rendered>=1
+evidence-layers: decision>=1
 evidence-method: expert-review
 severity-default: S2 / judgment
 exceptions: the brief or bound baseline explicitly declares one of the observed default directions as the wanted identity (the declaration outranks the anti-default heuristic)
