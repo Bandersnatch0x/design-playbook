@@ -24,7 +24,7 @@ Authority boundary (ADR-0011):
 - local screenshot / mock / design export path
 - URL of a live product or design
 - existing in-repo design artifact the user points at
-- explicit product or brand analogy ("like Linear", "参考飞书设置页")
+- explicit product or brand analogy ("like Linear", "reference Feishu settings page" — example (zh): "参考飞书设置页")
 
 **Skip** when the ask is text-only product requirements with no reference material. Narrate once: `-> reference-intake?: no reference materials, skipped`.
 

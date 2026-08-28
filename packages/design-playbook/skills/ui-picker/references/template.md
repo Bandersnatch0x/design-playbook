@@ -1,24 +1,24 @@
-# template（页面骨架声明）
+# template (page skeleton declaration)
 
-## 看板 / 调度（默认示例）
+## Dashboard / scheduler (default example)
 
-- **场景**：任务调度、运行监控、队列、批处理进度。
-- **骨架**：
-  - 顶：总览指标
-  - 主：任务列表或任务流
-  - 侧：趋势、队列压力、失败原因
-  - 操作：刷新、批量重试、暂停等
-- **密度**：控制台密度；总览只承载核心指标；图不抢主列表。
-- **禁用**：营销落地页、纯图表大屏、sample/playground 当生产。
+- **Scene**: task scheduling, run monitoring, queue, batch-processing progress.
+- **Skeleton**:
+  - top: overview metrics
+  - main: task list or task flow
+  - side: trend, queue pressure, failure reasons
+  - actions: refresh, batch retry, pause, etc.
+- **Density**: console density; overview carries only key metrics; charts do not compete with the main list.
+- **Prohibited uses**: marketing landing pages, pure chart big screens, sample/playground as production.
 
-## 列表页
+## List page
 
-- 筛 + 表 + 行操作 + 空/载/错；批量区与主表同级可见。
+- Filter + table + row actions + empty/loading/error; batch zone visible at same level as main table.
 
-## 详情页
+## Detail page
 
-- 标题元信息 + 主内容 + 次级 tabs/侧栏；危险操作有确认。
+- Title + meta + main content + secondary tabs/sidebar; dangerous operations require confirmation.
 
-## 设置页
+## Settings page
 
-- 分组表单 + 保存反馈；不把设置塞进随意 Modal 墙。
+- Grouped form + save feedback; do not stuff settings into arbitrary modals.

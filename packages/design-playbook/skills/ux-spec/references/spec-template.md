@@ -1,22 +1,22 @@
 <!-- spec-schema: 2 -->
 
-# [功能名] 交互设计 Spec
+# [Feature Name] Interaction Design Spec
 
 schema 2 adds the L2-L5 structured field blocks (per-page duty table, path table, per-page five-state matrix) consumed by the deepened G1 gate. Legacy schema-1 specs are not re-checked; new runs author against this template.
 
-## L1 定位与意图
-- 用户可见目标：
-- 目标用户：
-- 场景清单：
-- 非目标：
-- 行为边界：始终 / 询问后 / 永不
+## L1 Positioning and intent
+- User-visible goal:
+- Target user:
+- Scene list:
+- Non-goals:
+- Behavior boundary: always / ask first / never
 
-（成形会话投影义务：五个字段一一对应契约 `l1.goal / l1.target_user / l1.scenes / l1.non_goals / l1.boundaries`；假设值显式标注「假设」并指向契约字段路径。）
+(Shaping-session projection obligation: each of the five fields maps one-to-one to `l1.goal / l1.target_user / l1.scenes / l1.non_goals / l1.boundaries`; assumption values are explicitly annotated "Assumption" and point to the contract field path.)
 
-## L2 信息架构
-- 空间区域定义：
-- 区域边界规则：
-- 内容生长规则：
+## L2 Information architecture
+- Spatial region definitions:
+- Region boundary rules:
+- Content growth rules:
 
 ### Page duties
 
@@ -24,10 +24,10 @@ schema 2 adds the L2-L5 structured field blocks (per-page duty table, path table
 | --- | --- |
 | <page-id> | <one owner duty per page — what this page alone is for> |
 
-## L3 核心链路
-- 状态清单：
-- 主链路：
-- 分支链路：
+## L3 Core flow
+- State list:
+- Primary path:
+- Branch paths:
 
 ### Paths
 
@@ -35,16 +35,16 @@ schema 2 adds the L2-L5 structured field blocks (per-page duty table, path table
 | --- | --- |
 | P1 | <page/decision points in order — primary path; structural alternatives go through CP-B> |
 
-## L4 组件功能细节
-- 组件定位与功能清单
-- 默认 / 悬停 / 加载 / 禁用 / 错误 等状态
+## L4 Component behavior detail
+- Component role and function list
+- Default / hover / loading / disabled / error states
 - L4 declares control behavior only; reuse / no-internal-change constraints must name exceptions (for example, allow a minimal patch when they conflict with L5).
 
-## L5 边界条件
-- 空态：
-- 加载态：
-- 错误态：
-- 权限降级：
+## L5 Edge conditions
+- Empty state:
+- Loading state:
+- Error state:
+- Permission downgrade:
 
 ### Five-state matrix
 
@@ -52,11 +52,11 @@ schema 2 adds the L2-L5 structured field blocks (per-page duty table, path table
 | --- | --- | --- | --- | --- | --- |
 | <page-id> | <value or n/a (reason)> | <value> | <value> | <value> | <value> |
 
-## L6 验收标准
-- 每条验收是一个顶层列表项，按序显式包含 `Given` → `When` → `Then`（顺序固定），并写明该条的必备证据，且以 `(path: P<n>)` 引用 L3 路径表中一条可达路径
-  - 必备证据：规划声明覆盖 / 目标视口渲染 / 交互记录或自动化检查 / 相关 test、type、lint、build（按任务适用项选择）
-  - 证据为运行时状态时，命名 capture seed（要捕获的状态 + 捕获类型，如 "error-state screenshot"）；不写 selector/URL/actions
-- 设计完成定义：
+## L6 Acceptance criteria
+- Each acceptance criterion is a top-level list item, explicitly containing `Given` → `When` → `Then` in order (fixed order), with its required evidence stated, and citing a reachable path from the L3 path table as `(path: P<n>)`
+  - Required evidence: declaration coverage / target-viewport render / interaction record or automated check / applicable test, type, lint, build
+  - When evidence is a runtime state, name the capture seed (state to capture + capture type, e.g. "error-state screenshot"); do not write selector/URL/actions
+- Design done definition:
 
 ---
 

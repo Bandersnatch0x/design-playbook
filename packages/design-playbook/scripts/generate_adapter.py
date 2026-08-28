@@ -101,6 +101,19 @@ def _read_commands() -> list[dict]:
     return cmds
 
 
+def _strip_leading_h1(body: str) -> str:
+    """Remove the first line if it is an ATX H1 heading.
+
+    Skill bodies start with their own ``# name`` H1.  Renderers that add a
+    section heading before embedding the body must strip it first to avoid
+    a duplicate H1 in the generated file.
+    """
+    first, _, rest = body.partition("\n")
+    if first.startswith("# "):
+        return rest.lstrip("\n")
+    return body
+
+
 # ---------------------------------------------------------------------------
 # MCP server path helpers
 # ---------------------------------------------------------------------------
@@ -366,7 +379,7 @@ def _gemini_cli_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     sub_skills = [s for s in skills if s["dirname"] != "design-playbook"]
     gemini_block_parts = ["# design-playbook\n\n"]
     if orchestrator:
-        gemini_block_parts.append(orchestrator["body"])
+        gemini_block_parts.append(_strip_leading_h1(orchestrator["body"]))
         gemini_block_parts.append("\n")
     gemini_block_parts.append("## Sub-skills\n\n")
     for sk in sub_skills:
@@ -415,7 +428,7 @@ def _opencode_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     sub_skills = [s for s in skills if s["dirname"] != "design-playbook"]
     block_parts = ["# design-playbook\n\n"]
     if orchestrator:
-        block_parts.append(orchestrator["body"])
+        block_parts.append(_strip_leading_h1(orchestrator["body"]))
         block_parts.append("\n")
     block_parts.append("## Sub-skills\n\n")
     for sk in sub_skills:
@@ -426,7 +439,7 @@ def _opencode_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
         "The following design-playbook commands are available as prompt templates:\n\n"
     )
     for cmd in commands:
-        block_parts.append(f"### /{cmd['name']}\n\n{cmd['description']}\n\n{cmd['body']}\n")
+        block_parts.append(f"### /{cmd['name']}\n\n{cmd['description']}\n\n{_strip_leading_h1(cmd['body'])}\n")
     agents_md_path = out_dir / "AGENTS.md"
     existing_agents = agents_md_path.read_text(encoding="utf-8") if agents_md_path.is_file() else None
     files.append(("AGENTS.md", apply_marker_block(existing_agents, version, "".join(block_parts))))
@@ -497,7 +510,7 @@ def _github_copilot_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     sub_skills = [s for s in skills if s["dirname"] != "design-playbook"]
     instr_block_parts = ["# design-playbook\n\n"]
     if orchestrator:
-        instr_block_parts.append(orchestrator["body"])
+        instr_block_parts.append(_strip_leading_h1(orchestrator["body"]))
         instr_block_parts.append("\n")
     instr_block_parts.append("## Sub-skills\n\n")
     for sk in sub_skills:
@@ -559,7 +572,7 @@ def _tier3_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
 
     # Orchestrator contract
     if orchestrator:
-        block_parts.append(orchestrator["body"])
+        block_parts.append(_strip_leading_h1(orchestrator["body"]))
         block_parts.append("\n")
 
     # Sub-skill index
@@ -574,7 +587,7 @@ def _tier3_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
         "prompt templates. Invoke them directly in your agent chat.\n\n"
     )
     for cmd in commands:
-        block_parts.append(f"### /{cmd['name']}\n\n{cmd['description']}\n\n{cmd['body']}\n")
+        block_parts.append(f"### /{cmd['name']}\n\n{cmd['description']}\n\n{_strip_leading_h1(cmd['body'])}\n")
 
     # Inline MCP install guide
     block_parts.append(

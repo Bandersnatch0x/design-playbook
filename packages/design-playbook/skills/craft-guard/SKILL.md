@@ -61,7 +61,7 @@ The host model may have no vision (text-only input): renders stay **path-bound**
 | Weighted modules | Equal white card grid |
 | State-explaining motion | Bounce/elastic decoration |
 
-[`references/craft.md`](references/craft.md) — **required when the surface has L4 interactive zones** (per-zone hover/motion affordance, with its own Done when); also holds edge craft (failure/permission feedback, 圆角/阴影, charts).
+[`references/craft.md`](references/craft.md) — **required when the surface has L4 interactive zones** (per-zone hover/motion affordance, with its own Done when); also holds edge craft (failure/permission feedback, rounded-corners/shadows, charts).
 
 ## Completion
 

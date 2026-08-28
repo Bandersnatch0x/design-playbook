@@ -20,7 +20,7 @@ Scan user-side `.scratch/<run>/` (not monorepo `dogfood/*` globs). **Include** o
 Ledger row shape: **ui-evaluator** step 2 (do not restate).
 
 ```
-禁止:
+Prohibited:
 - no new run ledger
 - no prose lessons / narrative "learning"
 - no auto-writeback to baseline

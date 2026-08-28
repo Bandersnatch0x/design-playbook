@@ -730,7 +730,7 @@ PROSE_PHRASES: dict[str, list[str]] = {
         "smallest next decision",
     ],
     "ux-spec binds each success criterion to required evidence": [
-        "必备证据",
+        "Required evidence",
         "every L6 item",
         "says what evidence will prove it",
     ],

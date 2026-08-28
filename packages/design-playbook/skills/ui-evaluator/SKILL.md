@@ -36,7 +36,7 @@ Walk every applicable row (exhaustive for bound declarations):
 | Each L6 acceptance item | `spec` |
 | Required proof exists for each L6 item | `spec` |
 
-Dimension selection, 回流示例, the preview-seam health check (required when the run produced `preview/` artifacts), and the **observe\* mirror-surface** finding (required when any manifest capture notes `surface: mirror`): [`references/rubric.md`](references/rubric.md).
+Dimension selection, recirculate examples, the preview-seam health check (required when the run produced `preview/` artifacts), and the **observe\* mirror-surface** finding (required when any manifest capture notes `surface: mirror`): [`references/rubric.md`](references/rubric.md).
 
 When L6 proof includes an `a11y tree` artifact, interpret it with [`references/a11y-tree.md`](references/a11y-tree.md) (names, roles, states, keyboard path, focus, material omissions). Record accessibility evidence on the owning user-risk criterion; do not invent separate taste standards.
 

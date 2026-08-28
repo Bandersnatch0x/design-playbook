@@ -144,13 +144,13 @@ Write a light handoff at `.scratch/<run>/plan.md` (required on disk). It **must 
 
 When `.scratch/<run>/reference/contract.md` exists, the handoff must point to it (path only; do not paste the full contract) and fold its functional constraints into the description→spec map and its visual cues/exclusions into the ui-picker input pack. Minimum three blocks:
 
-1. **本次 run 范围** — pointers to L2 / scenes / non-goals (do not copy L1–L6 wholesale)
-2. **用户描述 → spec 映射** — which L1/L2/L6 this ask touches; unmapped items → conservative assumptions
-3. **ui-picker 输入包** — scene hints, constraints, explicit exclusions
+1. **This run's scope** — pointers to L2 / scenes / non-goals (do not copy L1–L6 wholesale)
+2. **User description → spec mapping** — which L1/L2/L6 this ask touches; unmapped items → conservative assumptions
+3. **ui-picker input pack** — scene hints, constraints, explicit exclusions
 
-**禁止:** paste the full spec; pre-write a decision report inside plan.
+**Prohibited:** paste the full spec; pre-write a decision report inside plan.
 
-**描述 × spec 分轨:**
+**Description × spec branching:**
 
 - **Structural conflict** (L1 outcome, L6 criteria, platform/permission/data contract, overturned non-goal) → stop; revise `ux-spec` or user Confirm of an exception recorded in plan
 - **Presentation preference** (scene density, region weight, component role preference without L6 change) → put in the ui-picker input pack; `ui-picker` decides
