@@ -19,8 +19,12 @@
 | GitHub Copilot | 2 | `.github/copilot-instructions.md` + `.github/instructions/*.instructions.md` (`applyTo`) | none — prompt docs | `.mcp.json` (VS/solution) | |
 | Qoder, Kiro (IDE/CLI), Amp, Auggie, CodeBuddy, Forge, IBM Bob, Jules, Kilo Code, Pi, Qwen Code, Roo Code (one agent, `roo-code`), SHAI, Tabnine, Mistral Vibe, Kimi Code, iFlow, Junie, Antigravity, Trae, generic | 3 | generated `AGENTS.md` | inline prompt list in AGENTS.md | inline MCP install guide | one renderer for all; matrix rows may promote agents later |
 
-Matrix lives as data (`scripts/adapter_matrix.py` or YAML) — one row per
-agent with per-surface flags; renderers key off flags, not agent names.
+Matrix lives as data (`scripts/adapter_matrix.py`) — one row per agent with
+per-surface flags. Tier membership, the AGENTS.md floor fallback, and the
+native skip all key off matrix rows — the generator keeps no duplicated agent
+lists; only above-floor agents register a dedicated renderer, keyed by agent
+id in a single map (wording aligned with the shipped dispatch, 2026-08-28
+audit).
 
 ## 2. Generator contract
 

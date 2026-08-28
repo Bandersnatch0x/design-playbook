@@ -14,6 +14,11 @@ amendment record of the
 [2026-08-22 implementation plan](./2026-08-22-interactive-review-and-static-handoff-implementation-plan.md)
 are the governing revisions; artifact locations, delivery-route ownership, and
 capture targets changed there.
+**Privacy boundary:** the productized handoff credential embeds run-scoped
+detail — absolute run-tree paths and, on capture failure, raw exception text
+(`mcp/evidence/handoff.py`). No automated scrubber gates these artifacts:
+share `evidence/static-handoff/` contents only where the run itself may be
+shared. (Recorded by the 2026-08-28 compliance audit, issue #114.)
 
 ## Summary
 
@@ -322,9 +327,11 @@ the file as shareable.
 - Criterion cards use `criterion / required / observed / result` field order.
 - The page has no competing verdict, Evidence claim, comparison variant, or
   invited-human-review capability.
-- Repeated checks of unchanged inputs require semantic and structural identity.
-  A SHA-256 of the HTML is recorded only as same-toolchain drift diagnostics;
-  hash equality is not the acceptance rule.
+- Repeated checks of unchanged inputs require semantic and structural identity
+  — operationally: every check in this section yields the same outcome (same
+  facts, sections, stable IDs, labels, counts, and ordering), not byte
+  equality. A SHA-256 of the HTML is recorded only as same-toolchain drift
+  diagnostics; hash equality is not the acceptance rule.
 
 ### Offline and security verification
 
