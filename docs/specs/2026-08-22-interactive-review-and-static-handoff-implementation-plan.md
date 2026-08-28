@@ -18,7 +18,7 @@
 | # | 计划原文 | 实际规范 | 依据 |
 | :-- | :--- | :--- | :--- |
 | A1 | §3.2 的 `confirm-round-n.json` 示例（`outcome` / `actor` / `annotations` / `viewportTested`） | **非规范**，仅示意。规范形状由 `transaction.py` 落盘：`round` / `report_ref` / `confirmed` / `floor_pass` / `selected_options` / `feedback` / `timestamp` / `prototype_path` / `prototype_html_hash` / `decision_id` | ADR-0013 · ADR-0008（反馈地板）· issue #90 |
-| A2 | §4.1「G1~G8 全项 `PASS`」、§7「G1~G8 全量通过 (All Passed)」 | 条件门禁的前置条件若从未发生，状态为 **`not-applicable`**，不计入 `gatesPassed`，也不判为 fail。交付判定看 `gatesResolved`（全部 `pass` 或 `not-applicable`），不看「8/8」 | ADR-0034 §7 · issue #89 |
+| A2 | §4.1「G1~G8 全项 `PASS`」、§7「G1~G8 全量通过 (All Passed)」 | 条件门禁的前置条件若从未发生，状态为 **`not-applicable`**，不计入 `gatesPassed`，也不判为 fail。交付判定看 `gatesResolved`（全部 `pass` 或 `not-applicable`；语义条件而非落盘字段，见 A12），不看「8/8」 | ADR-0034 §7 · issue #89 |
 | A3 | §4.2 `disclosure-review.json` 示例：`decisions[].id` 为 `DD-01`、viewport `metrics` 无测量状态 | 决策 id 带轮次前缀 `DD-R{n}-{seq}`；每个 viewport 的 `metrics` 必带 `measurementStatus`（`measured` / `blocked`），任一维度为 0 即 `blocked` 并阻断 verdict | ADR-0034 §5 · issue #93 |
 | A3b | §2 流程图把 Stage 8 标注为「craft-guard 工艺门禁扫描 **(G8)**」 | **G8 是 run-level registry 门禁**（`scripts/g8_run_registry.py`），不是 craft-guard 扫描本身；两者只是触发关系——run 根存在 `craft-guard.md` 时 G8 才求值。已去掉该错误标注 | `scripts/validate_run.py` 门禁清单 · issue #93 |
 | A4 | §5「Stage 9 截图驱动」输出至 `output/playwright/static-handoff/` | 全部产物落在 run 树内：`.scratch/<run>/evidence/static-handoff/`，生命周期与任何审查轮次无关 | ADR-0034 §2 · issue #86 |
@@ -26,6 +26,10 @@
 | A6 | §4.1 截图矩阵由审查会话驱动 | 截图目标是 **Stage 7 交付物本身**（`filled-ui.html`），不是审查外壳 | ADR-0034 §4 · issue #87 |
 | A7 | §5「Stage 10 门禁自校验 · 签署最终 `point-back.md`」隐含归档全部 Stage 9 产物 | Stage 10 只签署与指回，**不**复制或再归档 Stage 9 产物；产物的唯一权威副本留在 run 树内 `evidence/static-handoff/` | ADR-0034 §2（生命周期归属）· issue #92 |
 | A8 | v10 预览确认工作台引入 Spec Matrix 与签署 CTA | Spec Matrix 只展示由 `report_ref` 同级 `spec.md` 经 G1 owner parser 投影出的 L6 验收准则；复选框仅是评审员人工核验记录，**不是**机器门禁状态。G5 时不会展示 G1-G8 通过/待整改状态，G1-G8 chip row 有意省略 | ADR-0039（单一 L6 parser）· ADR-0008（确认/反馈地板不变） |
+| A9 | §4.1「4 种视图呈现模式 (Segmented View Modes)」（V/R/F/D，含红线标尺与 Token 探针）与 <kbd>C</kbd> 复制 / <kbd>E</kbd> 导出快捷键；§6 Sprint 3「从页面一键提取 Token、复制 JSON」。A5 仅改写传输方式（ZIP 落盘），保留了这些子项 | 交付页 `packages/design-playbook/mcp/evidence/static_handoff_page.html` **刻意为纯静态**、零行为 JS——无视图模式、无红线/Token 探针、无页面快捷键；上述交互能力**作废**，不再实现。产物获取一律走同目录磁盘相对链接：`static-handoff.zip` / `disclosure-review.json` / `deliverable.html`（该同目录副本由死链修复补齐，issue #107） | ADR-0034 §1/§6（Evidence 侧构建器归属 · 包内静态交付页）· issue #112 |
+| A10 | §5「Stage 6 模板集成」行「支持通过 WebSocket 双向推送批注与决策事件」 | 回传通道为**一次性 HTTP POST**（`/decide`，token + 轮次校验，仅首个有效提交生效）加 iframe **postMessage 桥**（`mcp/preview/review_session.py` / `pin_bridge.py`）；**不存在** WebSocket。批注与决策回传的能力本身成立，仅传输机制表述更正 | ADR-0013（信任边界）· issue #112 |
+| A11 | §4.1 快照矩阵「<kbd>5</kbd> `print` (Print Media 1280)」 | print 视口为 **960x650**，与 §4.2 示例及 `mcp/evidence/disclosure.py` 视口表一致；正文该处已更正 | `mcp/evidence/disclosure.py` 视口表 · issue #112 |
+| A12 | §0 A2 实际规范中的「交付判定看 `gatesResolved`」（易被误读为落盘字段） | `gatesResolved` 是**语义条件**——八项门禁全部为 `pass` 或 `not-applicable`——由 `mcp/evidence/handoff.py` 的 verdict 判定强制执行，**不是**任何落盘 JSON 字段；`disclosure-review.json` 携带的是 `gatesPassed` 计数与逐门 `gateStatuses` 状态，不存在 `gatesResolved` 字段 | ADR-0034 §7 · `mcp/evidence/handoff.py` · issue #112 |
 
 ---
 
@@ -130,8 +134,9 @@ flowchart TD
   - <kbd>2</kbd> `768x1024` (Tablet)
   - <kbd>3</kbd> `390x844` (Mobile Standard)
   - <kbd>4</kbd> `360x800` (Mobile Compact)
-  - <kbd>5</kbd> `print` (Print Media 1280)
+  - <kbd>5</kbd> `print` (Print Media 960x650)
 - **4 种视图呈现模式 (Segmented View Modes)**：
+  - **[A9 修订]** 本组视图模式已**作废**——交付页刻意为纯静态、零行为 JS，不提供任何视图切换与探针（见 §0 A9）：
   - <kbd>V</kbd> **纯净渲染 (Clean Render)**
   - <kbd>R</kbd> **红线标尺与 Token 探针 (Redline & CSS Probe)**
   - <kbd>F</kbd> **首屏折叠线检测 (Fold Baseline at 900px)**
@@ -141,6 +146,7 @@ flowchart TD
   - **[A2 修订]** 条件门禁（G5~G8）的前置条件若从未发生，状态为 `not-applicable`，不计入 `gatesPassed`，也不判为 fail；交付判定看「全部为 `pass` 或 `not-applicable`」，不看「8/8」。
 - **一键打包与披露 JSON 导出**：
   - **[A5 修订]** 交付页与 ZIP 均为磁盘产物，页面上的下载为同目录相对链接，无 HTTP 端点：
+  - **[A9 修订]** 下列 <kbd>C</kbd> / <kbd>E</kbd> 快捷键已**作废**——静态页零行为 JS，`disclosure-review.json` 与 ZIP 一律经同目录相对链接获取（见 §0 A9）：
   - <kbd>C</kbd> 快速复制 `disclosure-review.json`；
   - <kbd>E</kbd> 打开打包导出 ZIP 弹窗，一键下载全套快照与原型代码。
 
@@ -224,7 +230,7 @@ flowchart TD
 
 | 阶段 / 模块 | 涉及工程代码路径 | 落地方案与修改内容 |
 | :--- | :--- | :--- |
-| **Stage 6 模板集成** | `packages/design-playbook/mcp/preview/control.html`<br>`packages/design-playbook/mcp/preview/server.py` | • 将 `preview-confirm-v9.html` 集成为默认渲染模板（真实落点为 `control.html`，由 `control.py` 的 `_build_control()` 组装注入）<br/>• 支持通过 WebSocket 双向推送批注与决策事件 |
+| **Stage 6 模板集成** | `packages/design-playbook/mcp/preview/control.html`<br>`packages/design-playbook/mcp/preview/server.py` | • 将 `preview-confirm-v9.html` 集成为默认渲染模板（真实落点为 `control.html`，由 `control.py` 的 `_build_control()` 组装注入）<br/>• **[A10 修订]** 批注与决策事件的回传为一次性 HTTP POST（`/decide`，`review_session.py`）加 iframe postMessage 桥（`pin_bridge.py`），不使用原计划的 WebSocket 双向推送 |
 | **Stage 6 事务持久化** | `packages/design-playbook/mcp/preview/transaction.py`<br>`packages/design-playbook/mcp/preview/integrity.py` | • 校验决策轮次完整性（C1 准则）<br/>• 自动写入 `confirm-round-n.json` |
 | **Stage 9 截图驱动** | `packages/design-playbook/mcp/evidence/capture_runtime.py`<br>`packages/design-playbook/mcp/evidence/disclosure.py`<br>`packages/dsh-design-playbook/cordis.patch.yml` | • Playwright 驱动（`PlaywrightBrowserAdapter`）自动遍历 5 视口并截图（`capture_delivery_matrix`）<br/>• 注入 DOM 探针（`LAYOUT_PROBE_JS` / `probe_layout`）计算 `inFold` 与 `hOverflow`，并经 `build_disclosure` 输出 `disclosure-review.json`<br/>• **[A4/A6 修订]** 截图目标为 Stage 7 交付物 `filled-ui.html` 本身（非审查外壳）；产物落在 run 树 `.scratch/<run>/evidence/static-handoff/`，不再使用 `output/playwright/` |
 | **Stage 9 交付页挂载** | `packages/design-playbook/mcp/evidence/handoff.py`<br>`packages/design-playbook/mcp/evidence/static_handoff_page.html` | • **[A5 修订]** 交付页作为包内自有内容随包分发（零 CDN），不再引用 `.stitch/designs/static-handoff-v1.html`<br/>• ZIP 由 Evidence 侧构建器 `build_static_handoff` 直接落盘为 `static-handoff.zip`（`build_handoff_zip`），**不存在** `/export-zip` HTTP 端点 |
@@ -262,7 +268,7 @@ gantt
 
 ### 🔹 Sprint 3：静态交付工作台与打包服务
 - **[A5 修订]** 部署包内自有交付页 `mcp/evidence/static_handoff_page.html`（原计划的 `static-handoff-v1.html`）；
-- 支持从页面一键提取 Token、复制 JSON 以及生成 ZIP 交付归档包（构建期落盘，非 HTTP 端点）。
+- **[A9 修订]** 页面侧「一键提取 Token、复制 JSON」已作废（交付页纯静态、零行为 JS）；ZIP 交付归档包仍于构建期落盘（非 HTTP 端点），与披露 JSON 一同经同目录相对链接获取。
 
 ### 🔹 Sprint 4：CI 门禁与端到端 Dogfood 实测
 - 运行 `python scripts/validate.py` 确保 100% 测试通过；
