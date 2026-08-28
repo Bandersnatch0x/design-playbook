@@ -75,7 +75,7 @@ from vnext_live_dogfood import DEFAULT_ASK  # noqa: E402
 
 # Pack stage keys are validated against the packaged stage registry
 # (ADR-0022 import seam): a renamed STAGES key fails at import time, not
-# at nightly runtime with a confusing run-status mismatch.
+# at live-run time with a confusing run-status mismatch.
 if str(PKG) not in sys.path:
     sys.path.insert(0, str(PKG))
 from design_playbook.scripts.stages import STAGES_BY_KEY  # noqa: E402
@@ -147,7 +147,7 @@ class ScenarioPack:
     ``run_status_required_stages`` names stage keys the real run_status.py
     must report present on the temp run root after the validator passes;
     every key is validated against ``STAGES_BY_KEY`` at construction, so a
-    renamed registry key fails here, not as a nightly run-status mismatch.
+    renamed registry key fails here, not as a live-run run-status mismatch.
     All three default off, so pre-existing packs keep their exact shape.
     """
 

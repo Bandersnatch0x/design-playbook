@@ -6,7 +6,7 @@
 
 ### *Agent 交付的 UI 没人能验证。这个插件让它拿出证据。*
 
-[![Version](https://img.shields.io/badge/Version-0.21.0-2DD4BF?style=flat-square&logo=semver&logoColor=black)](https://www.npmjs.com/package/design-playbook)
+[![Version](https://img.shields.io/badge/Version-0.21.1-2DD4BF?style=flat-square&logo=semver&logoColor=black)](https://www.npmjs.com/package/design-playbook)
 [![License](https://img.shields.io/badge/License-MIT-2DD4BF?style=flat-square&logo=opensourceinitiative&logoColor=black)](./packages/design-playbook/LICENSE)
 [![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-2DD4BF?style=flat-square&logo=claude&logoColor=black)](#-试一把)
 [![Skills](https://img.shields.io/badge/Skills-8-2DD4BF?style=flat-square)](#-skills-与命令)
@@ -50,6 +50,8 @@ codex plugin add design-playbook@design-playbook
 ```text
 /design-playbook:design-io <你的 UI 需求>
 ```
+
+用 Cursor、Windsurf、Gemini CLI 等 29 个受支持的 agent？见 [🌐 跨平台安装](#-跨平台安装)。
 
 Codex 安装细节、marketplace 不可用时的 `[mcp_servers.*]` 直配 fallback、preview 前置条件：见 [`packages/design-playbook/codex/AGENTS.md`](./packages/design-playbook/codex/AGENTS.md)。
 

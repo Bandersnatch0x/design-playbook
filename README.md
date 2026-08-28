@@ -6,7 +6,7 @@
 
 ### *Agents ship UI nobody can verify. This plugin makes them prove it.*
 
-[![Version](https://img.shields.io/badge/Version-0.21.0-2DD4BF?style=flat-square&logo=semver&logoColor=black)](https://www.npmjs.com/package/design-playbook)
+[![Version](https://img.shields.io/badge/Version-0.21.1-2DD4BF?style=flat-square&logo=semver&logoColor=black)](https://www.npmjs.com/package/design-playbook)
 [![License](https://img.shields.io/badge/License-MIT-2DD4BF?style=flat-square&logo=opensourceinitiative&logoColor=black)](./packages/design-playbook/LICENSE)
 [![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-2DD4BF?style=flat-square&logo=claude&logoColor=black)](#-try-it)
 [![Skills](https://img.shields.io/badge/Skills-8-2DD4BF?style=flat-square)](#-skills--commands)
@@ -50,6 +50,8 @@ Then, namespaced (bare `/design-io` is a `--plugin-dir` dev alias only):
 ```text
 /design-playbook:design-io <your UI ask>
 ```
+
+On Cursor, Windsurf, Gemini CLI, or any of 29 supported agents: see [🌐 Install on other agents](#-install-on-other-agents).
 
 Codex install notes, the `[mcp_servers.*]` fallback when a marketplace is unavailable, and preview prerequisites: [`packages/design-playbook/codex/AGENTS.md`](./packages/design-playbook/codex/AGENTS.md).
 

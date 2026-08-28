@@ -814,7 +814,7 @@ class UiPickerRegistryTests(unittest.TestCase):
 
     def test_pack_stage_keys_must_exist_in_stages_registry(self) -> None:
         # A renamed STAGES key must fail at pack construction, not surface
-        # as a nightly run-status mismatch.
+        # as a live-run run-status mismatch.
         base = {
             field: getattr(runner.SCENARIOS[UI_SCENARIO], field)
             for field in (

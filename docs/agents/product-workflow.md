@@ -6,7 +6,9 @@
 
 一次 `/design-io`（编排序列 SSOT 见 `packages/design-playbook/skills/design-playbook/SKILL.md`）：
 
-`design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → (observe*) → ui-evaluator`
+`design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard† → (observe*†) → ui-evaluator†`
+
+（`†` = 用户可选审计阶段，ADR-0033：首次运行问一次，记入 `.design-playbook/preferences.yaml`）
 
 1. 已有产品做 UI build/fix 时先 `design-baseline?`：`prepare` → 确认/waiver → `verify`；门禁工件仅为 `design-baseline/state.json`；缺失或过期则从第一方 UI 生成草稿，确认或显式 waiver 后才能 Fill（ADR-0012）
 2. 有截图/URL/设计稿/产品类比时跑 `reference-intake?`（`.scratch/<run>/reference/`；非 gate，ADR-0011）
@@ -78,12 +80,12 @@
 
 见 [`release-checklist.md`](release-checklist.md)：五步门 + semver tag。静态部分由 CI（`.github/workflows/ci.yml` -> `scripts/validate.py`）自动跑；会话级步骤仍手动。`git init` + 公开 remote 是公开 claim 的硬前置（ADR-0006 / 票 06）。
 
-## Optional preview adapter
+## Bundled MCP adapters（G5 preview / G6 evidence）
 
-Sibling package `packages/design-playbook-preview/` (stdio MCP, tool `preview_prototype`). Independent install; design-playbook does not package-depend. Wire via repo-root `.mcp.json` or host MCP config. See package README.
-
-## Optional evidence provider
-
-`observe*` probes for an external MCP tool `execute_capture_plan` (e.g. Playwright MCP). When present, the orchestrator derives a capture plan from spec L6, a provider executes it producing an artifact, and the orchestrator binds it to the criterion in `.scratch/<run>/evidence/manifest.jsonl`. When absent, `ui-evaluator` ledger `observed` stays free-text (current behavior) and G6 does not trigger. design-playbook owns the binding (manifest) and the verdict (ledger), never the runtime.
+Preview 与 Evidence 的 MCP 运行时随主插件打包（`packages/design-playbook/mcp/` + 带 `${CLAUDE_PLUGIN_ROOT}` 的 `.mcp.json`）；marketplace 安装即注册 `preview_prototype` 与 `execute_capture_plan` 两个工具，无需第二个包。`packages/design-playbook-preview/`、`packages/design-playbook-evidence/` 仅是兼容 launcher + 文档。orchestrator 仍按存在性探测：`preview*` 确认后才进 Fill（G5）；`observe*` 依 spec L6 派生 capture plan，产物绑定进 `.scratch/<run>/evidence/manifest.jsonl`（G6）——binding 与 verdict 归 design-playbook，runtime 永远归 provider。
 
 适配器缺席不降级协议：缺席 = 显式 `blocked` / `not-applicable` 记录或既有通道回落，永不静默跳过、永不臆断 pass（vnext-prototype 第 4 节；预览缺席记 run-profile 跳过清单一行，取证缺席记 ledger `result: blocked` 回流 R5）。
+
+## 跨平台适配器（ADR-0042）
+
+`npx design-playbook init <agent>`（npm bin 壳 → `packages/design-playbook/scripts/generate_adapter.py`）从 canonical `skills/` / `commands/` / `mcp/` 渲染各平台产物，三层保真：Tier1 全保真（Claude Code、Codex——Codex 快照为生成后提交，`validate.py` / `doctor.py` 防漂移门禁校验）；Tier2 skills+MCP（Cursor、Gemini CLI、OpenCode、Windsurf、Copilot）；Tier3 AGENTS.md 地板（其余 22 agent）。生成产物禁止手改；**版本升级后必须重跑 `generate_adapter.py codex` 刷新快照**。能力矩阵：`docs/specs/2026-08-28-multi-platform-adapter.md`。

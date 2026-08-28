@@ -65,3 +65,4 @@ docs/research/
 # design sources, never runtime assets; none are tracked). The shipped
 # delivery page is mcp/evidence/static_handoff_page.html.
 .stitch/
+.qoder/
