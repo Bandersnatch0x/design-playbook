@@ -17,8 +17,11 @@ the bound source:
   (raw bytes for artifacts, normalized decoded text for text sources)
   and compared with the hash bound into the locator: a changed source is
   ``SOURCE_HASH_MISMATCH`` and never returns a newer excerpt;
-- the excerpt is HTML-escaped and hard-truncated, so source content can
-  never carry executable markup or an unbounded payload across the seam.
+- the excerpt is stripped of control characters and ANSI escape
+  sequences, HTML-escaped, and hard-truncated, so source content can
+  never carry executable markup, terminal control bytes, or an
+  unbounded payload across the seam (spec section 10: plain text with
+  control characters removed).
 
 The resolver writes nothing, opens no socket, and runs no process.
 """
@@ -26,6 +29,7 @@ from __future__ import annotations
 
 import hashlib
 import html
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -45,6 +49,16 @@ _ERROR_MESSAGES = {
 
 _DEFAULT_MAX_CHARS = 4000
 _MAX_CHARS_LIMIT = 8192
+
+# A complete ANSI CSI sequence: ESC ``[``, parameter bytes (0x30-0x3F),
+# intermediate bytes (0x20-0x2F), and one final byte (0x40-0x7E). The
+# final byte is optional so a sequence cut off at end-of-source is still
+# removed whole instead of leaving ``[31m``-style residue.
+_ANSI_CSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]?")
+# Control characters forbidden in a plain-text excerpt (spec section
+# 10): C0 except tab (0x09) and newline (0x0A), DEL (0x7F), and the C1
+# range (0x80-0x9F). Any ESC left after CSI removal is caught here.
+_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
 
 
 class SourceViewError(ValueError):
@@ -110,9 +124,11 @@ def resolve_source_excerpt(
     return SourceExcerpt(
         source_ref=binding.source_ref,
         content_hash=digest,
-        # Escape first, then hard-truncate: the output is always plain
-        # text and never longer than the requested bound.
-        text=html.escape(decoded, quote=False)[:limit],
+        # Reduce to plain text, then escape, then hard-truncate: the
+        # output is always plain text and never longer than the
+        # requested bound. Stripping runs after the hash check so the
+        # Snapshot hash parity above stays byte-exact.
+        text=html.escape(_plain_text(decoded), quote=False)[:limit],
     )
 
 
@@ -127,6 +143,20 @@ def _digest_bytes(data: bytes) -> str:
 def _normalize_newlines(text: str) -> str:
     """Reproduce the owner text reads' universal-newline translation."""
     return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _plain_text(text: str) -> str:
+    """Reduce decoded content to the spec section-10 excerpt plain text.
+
+    Newlines are normalized first (``\\r\\n``/``\\r`` to ``\\n``), then
+    complete ANSI CSI escape sequences are removed whole, and finally
+    every remaining control character other than tab and newline --
+    C0, DEL (0x7F), and C1 (0x80-0x9F), including any lone ESC -- is
+    removed.
+    """
+    text = _normalize_newlines(text)
+    text = _ANSI_CSI.sub("", text)
+    return _CONTROL_CHARS.sub("", text)
 
 
 def _read_bound_source(

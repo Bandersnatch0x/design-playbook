@@ -905,6 +905,90 @@ class LocatorResolverTest(_ParityTestCase):
         self.assertEqual(_tree_digest(self.base), before)
 
 
+class ExcerptPlainTextTest(_ParityTestCase):
+    """Spec section 10: excerpts are plain text with control chars removed."""
+
+    def _resolve(self, registry, locator, *, max_chars=4000):
+        return resolve_source_excerpt(
+            registry=registry,
+            package_root=_PKG_ROOT,
+            locator=locator,
+            now=_NOW,
+            max_chars=max_chars,
+        )
+
+    def _artifact_excerpt(self, payload: bytes, *, name: str, max_chars: int = 4000):
+        """Excerpt of an artifact holding exact hostile bytes, plus its record."""
+        root = _make_root(self.base, name, artifact=payload)
+        built = _build(root)
+        record = _source(
+            built.document, "source.evidence-artifact.l6-3-error-png"
+        )
+        excerpt = self._resolve(
+            built.registry, record["locator"], max_chars=max_chars
+        )
+        return excerpt, record
+
+    def test_nul_and_c0_c1_del_control_characters_are_removed(self) -> None:
+        payload = "a\x00b\x01c\x07d\x0be\x7ff\x85g\x9bh".encode("utf-8")
+        excerpt, record = self._artifact_excerpt(payload, name="run-ctrl")
+        self.assertEqual(excerpt.text, "abcdefgh")
+        # Stripping never feeds the hash: parity with the Snapshot holds.
+        self.assertEqual(excerpt.content_hash, record["observedHash"])
+        self.assertEqual(
+            excerpt.content_hash,
+            "sha256:" + hashlib.sha256(payload).hexdigest(),
+        )
+
+    def test_ansi_color_sequence_is_stripped_without_residue(self) -> None:
+        excerpt, _ = self._artifact_excerpt(
+            "\x1b[31mred\x1b[0m plain".encode("utf-8"), name="run-ansi"
+        )
+        self.assertEqual(excerpt.text, "red plain")
+        self.assertNotIn("[31m", excerpt.text)
+        self.assertNotIn("\x1b", excerpt.text)
+
+    def test_lone_escape_is_removed(self) -> None:
+        excerpt, _ = self._artifact_excerpt(b"a\x1bz", name="run-esc")
+        self.assertEqual(excerpt.text, "az")
+
+    def test_tab_newline_survive_and_crlf_normalizes(self) -> None:
+        excerpt, _ = self._artifact_excerpt(
+            b"col1\tcol2\r\nline2\rline3\nline4", name="run-ws"
+        )
+        self.assertEqual(excerpt.text, "col1\tcol2\nline2\nline3\nline4")
+
+    def test_truncation_still_applies_after_stripping(self) -> None:
+        payload = ("\x1b[31m" + "x" * 50 + "\x1b[0m").encode("utf-8")
+        excerpt, _ = self._artifact_excerpt(
+            payload, name="run-trunc", max_chars=10
+        )
+        # The stripped prefix never consumes the bound; the bound holds.
+        self.assertEqual(excerpt.text, "x" * 10)
+        self.assertLessEqual(len(excerpt.text), 10)
+
+    def test_text_source_excerpt_is_stripped_while_hash_parity_holds(self) -> None:
+        # The text-source branch (normalized-text hashing) must strip the
+        # same characters from its excerpt without breaking hash parity.
+        root = _make_root(self.base, "run-text-ctrl")
+        spec_path = root / "spec.md"
+        spec_path.write_text(
+            spec_path.read_text(encoding="utf-8")
+            + "\n\x1b[31mhostile\x1b[0m\x00\ttail\n",
+            encoding="utf-8",
+        )
+        built = _build(root)
+        record = _source(built.document, "source.specification")
+        excerpt = self._resolve(built.registry, record["locator"])
+        self.assertEqual(excerpt.source_ref, "source.specification")
+        self.assertEqual(excerpt.content_hash, record["observedHash"])
+        self.assertNotIn("\x00", excerpt.text)
+        self.assertNotIn("\x1b", excerpt.text)
+        self.assertNotIn("[31m", excerpt.text)
+        self.assertIn("hostile", excerpt.text)
+        self.assertIn("\ttail", excerpt.text)
+
+
 class BoundaryScanTest(unittest.TestCase):
     """Gate condition: no copied owner parser, no writes, no network/exec."""
 
