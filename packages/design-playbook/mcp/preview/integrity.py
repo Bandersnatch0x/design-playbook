@@ -308,18 +308,21 @@ def inspect_preview(preview_dir: Path) -> PreviewSnapshot:
     current_records: list[ConfirmRecord] = []
     for path, data, record_round in parsed:
         valid = _is_confirmed_valid(data)
-        if (
+        is_canonical = (
             current_round is not None
             and path == preview_dir / confirm_name(current_round)
-        ):
-            canonical_current_confirm = ConfirmRecord(
-                path=path,
-                data=data,
-                round=record_round,
-                valid=valid,
-                prototype_status="unchecked",
-            )
+        )
         if current_round is not None and record_round != current_round:
+            if is_canonical:
+                # The canonical filename exists but its JSON round disagrees,
+                # so no prototype check runs for it: status stays unchecked.
+                canonical_current_confirm = ConfirmRecord(
+                    path=path,
+                    data=data,
+                    round=record_round,
+                    valid=valid,
+                    prototype_status="unchecked",
+                )
             continue
         prototype_status = "unchecked"
         expected_digest = ""
@@ -375,17 +378,22 @@ def inspect_preview(preview_dir: Path) -> PreviewSnapshot:
                                 actual=actual_digest,
                             )
                         )
-        current_records.append(
-            ConfirmRecord(
-                path=path,
-                data=data,
-                round=record_round,
-                valid=valid,
-                prototype_status=prototype_status,
-                expected_digest=expected_digest,
-                actual_digest=actual_digest,
-            )
+        record = ConfirmRecord(
+            path=path,
+            data=data,
+            round=record_round,
+            valid=valid,
+            prototype_status=prototype_status,
+            expected_digest=expected_digest,
+            actual_digest=actual_digest,
         )
+        current_records.append(record)
+        if is_canonical:
+            # The canonical confirm carries the owner-computed prototype
+            # status (match/mismatch/missing_*): ``valid`` stays flags-only,
+            # but projections must never upgrade a hash mismatch to a
+            # confirmed state (ADR-0013; run-snapshot parity section 2).
+            canonical_current_confirm = record
 
     return PreviewSnapshot(
         preview_dir=preview_dir,

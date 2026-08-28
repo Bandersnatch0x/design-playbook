@@ -476,7 +476,14 @@ class _Builder:
                 and confirm.data.get("aborted") is True
             ):
                 preview_state = "aborted"
-            elif confirm is not None and confirm.valid:
+            elif (
+                confirm is not None
+                and confirm.valid
+                # Parity spec section 2 (execution.preview): a prototype
+                # hash mismatch reported by the integrity owner can never
+                # be upgraded to a confirmed state.
+                and confirm.prototype_status != "mismatch"
+            ):
                 preview_state = "confirmed"
             elif confirm is not None:
                 preview_state = "invalid"

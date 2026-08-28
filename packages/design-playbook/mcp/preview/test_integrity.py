@@ -126,6 +126,35 @@ class PreviewIntegritySnapshotTests(unittest.TestCase):
             self.assertEqual(snapshot.current_confirms[0].prototype_status, "mismatch")
             self.assertEqual([fact.code for fact in snapshot.facts], ["hash_mismatch"])
             self.assertNotIn("G5", snapshot.facts[0].detail)
+
+    def test_canonical_confirm_carries_owner_prototype_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            preview = Path(tmp)
+            (preview / "round-1.html").write_text("changed", encoding="utf-8")
+            (preview / "confirm-round-1.json").write_text(
+                json.dumps(
+                    {
+                        "round": 1,
+                        "confirmed": True,
+                        "floor_pass": True,
+                        "prototype_html_hash": prototype_html_digest(b"original"),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            snapshot = inspect_preview(preview)
+
+            canonical = snapshot.canonical_current_confirm
+            self.assertIsNotNone(canonical)
+            # ``valid`` stays flags-only (ADR-0008 confirm/floor flags); the
+            # integrity outcome surfaces as the owner-computed prototype
+            # status on the same canonical current-round record, so a
+            # projection can never upgrade a hash mismatch to confirmed.
+            self.assertTrue(canonical.valid)
+            self.assertEqual(canonical.prototype_status, "mismatch")
+            self.assertEqual(snapshot.current_confirms, (canonical,))
+
     def test_malformed_confirm_becomes_fact_without_aborting_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             preview = Path(tmp)

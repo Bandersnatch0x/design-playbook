@@ -29,6 +29,9 @@ _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
+from design_playbook.mcp.preview.integrity import (  # noqa: E402
+    prototype_html_digest,
+)
 from design_playbook.mcp.run_console.contract import (  # noqa: E402
     validate_snapshot,
 )
@@ -596,6 +599,121 @@ class DegradingBuildTest(_BuilderTestCase):
         criterion = _assertion(document, "evaluation.criteria.l6-3")
         self.assertEqual(criterion["availability"], "known")
         self.assertEqual(criterion["result"]["evidenceBindings"], [])
+
+
+class PreviewConfirmProjectionTest(_BuilderTestCase):
+    """execution.preview confirm mapping (parity spec section 2, issue #106).
+
+    A flags-valid current confirm projects ``confirmed`` only while the
+    Preview integrity owner reports no prototype hash mismatch; a mismatch
+    can never be upgraded to ``confirmed``. The fixture records follow the
+    confirm-round-*.json shape the Preview transaction writer produces.
+    """
+
+    _PROTOTYPE = "<html><body>round one</body></html>"
+
+    def setUp(self) -> None:
+        super().setUp()
+        _write(self.run_root, "preview/round-1.html", self._PROTOTYPE)
+
+    def _confirm_record(self, **overrides: object) -> dict:
+        record: dict = {
+            "round": 1,
+            "report_ref": "decision-report.md",
+            "confirmed": True,
+            "floor_pass": True,
+            "selected_options": ["确认通过"],
+            "feedback": "确认通过，无修改意见",
+            "timestamp": "2026-08-25T09:00:00+08:00",
+            "prototype_path": "preview/round-1.html",
+            "prototype_html_hash": prototype_html_digest(
+                self._PROTOTYPE.encode("utf-8")
+            ),
+            "decision_id": "d" * 32,
+        }
+        record.update(overrides)
+        return {key: value for key, value in record.items() if value is not None}
+
+    def _preview_result(self) -> dict:
+        document = self._rebuild()
+        self.assertEqual(validate_snapshot(document), document)
+        assertion = _assertion(document, "execution.preview")
+        self.assertEqual(assertion["availability"], "known")
+        return assertion["result"]
+
+    def test_confirmed_with_matching_prototype_hash_is_confirmed(self) -> None:
+        _write(
+            self.run_root,
+            "preview/confirm-round-1.json",
+            json.dumps(self._confirm_record(), ensure_ascii=False),
+        )
+        self.assertEqual(
+            self._preview_result(), {"state": "confirmed", "round": 1}
+        )
+
+    def test_prototype_hash_mismatch_is_never_upgraded_to_confirmed(self) -> None:
+        _write(
+            self.run_root,
+            "preview/confirm-round-1.json",
+            json.dumps(
+                self._confirm_record(
+                    prototype_html_hash=prototype_html_digest(
+                        b"<html><body>original, since altered</body></html>"
+                    )
+                ),
+                ensure_ascii=False,
+            ),
+        )
+        result = self._preview_result()
+        self.assertNotEqual(result["state"], "confirmed")
+        self.assertEqual(result, {"state": "invalid", "round": 1})
+
+    def test_confirmed_without_expected_digest_stays_confirmed(self) -> None:
+        # The owner has no stored digest to check against (pre-0.4.4 or
+        # hand-written record); the spec's non-upgradable set is only
+        # unreadable/malformed/hash mismatch.
+        _write(
+            self.run_root,
+            "preview/confirm-round-1.json",
+            json.dumps(
+                self._confirm_record(prototype_html_hash=None),
+                ensure_ascii=False,
+            ),
+        )
+        self.assertEqual(
+            self._preview_result(), {"state": "confirmed", "round": 1}
+        )
+
+    def test_aborted_confirm_projects_aborted(self) -> None:
+        _write(
+            self.run_root,
+            "preview/confirm-round-1.json",
+            json.dumps(self._confirm_record(aborted=True), ensure_ascii=False),
+        )
+        self.assertEqual(
+            self._preview_result(), {"state": "aborted", "round": 1}
+        )
+
+    def test_unconfirmed_record_projects_invalid(self) -> None:
+        _write(
+            self.run_root,
+            "preview/confirm-round-1.json",
+            json.dumps(
+                self._confirm_record(
+                    confirmed=False,
+                    floor_pass=False,
+                    feedback="",
+                    selected_options=["需要修改"],
+                ),
+                ensure_ascii=False,
+            ),
+        )
+        self.assertEqual(
+            self._preview_result(), {"state": "invalid", "round": 1}
+        )
+
+    def test_round_without_confirm_projects_open(self) -> None:
+        self.assertEqual(self._preview_result(), {"state": "open", "round": 1})
 
 
 class BuilderSafetyTest(_BuilderTestCase):
