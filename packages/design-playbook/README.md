@@ -101,6 +101,17 @@ pi install npm:pi-mcp-adapter
 
 `<pkg>` is the installed package root — `~/.pi/agent/npm/node_modules/design-playbook` for a user install, `.pi/npm/node_modules/design-playbook` for a project install. Evidence also needs `pip install playwright && playwright install chromium`.
 
+## Install on other agents
+
+Generate adapter files for Cursor, Gemini CLI, OpenCode, Windsurf, GitHub Copilot, or any of 22 Tier-3 agents:
+
+```bash
+npx design-playbook init <agent>   # e.g. cursor, gemini-cli, windsurf
+npx design-playbook --list         # all 29 agents, shows which have renderers
+```
+
+See the root [README](../../README.md#install-on-other-agents) for the tier table and capability notes.
+
 ## Stack with other skills
 
 | Package | Use for |
