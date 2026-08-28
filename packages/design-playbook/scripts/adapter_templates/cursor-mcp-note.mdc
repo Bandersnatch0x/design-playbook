@@ -1,0 +1,27 @@
+---
+description: design-playbook MCP server setup for Cursor
+alwaysApply: false
+---
+# design-playbook MCP Servers
+
+Two MCP servers are registered in `.cursor/mcp.json` in this directory. JSON does
+not support inline comments, so the paths and environment notes are explained here.
+
+**design-playbook-preview** — spawns the preview gate server (G5).  
+The `args[0]` path points to `mcp/preview/server.py` inside the installed package.  
+Requires a system Edge or Chrome browser; skipped silently when unavailable.
+
+**design-playbook-evidence** — spawns the evidence capture server (G6).  
+The `args[0]` path points to `mcp/evidence/server.py` inside the installed package.  
+Requires `pip install playwright && playwright install chromium`.  
+Set the `DESIGN_PLAYBOOK_RUN_ROOT` environment variable to the root directory where
+`.scratch/<run>/` evidence directories should be created (defaults to project root).
+
+Both servers implement the absent→skip contract: if a tool probe finds them absent,
+the orchestrator skips the corresponding gate and narrates the skip — no crash.
+
+To update the paths after moving or reinstalling the package, re-run:
+
+```
+npx design-playbook init cursor
+```

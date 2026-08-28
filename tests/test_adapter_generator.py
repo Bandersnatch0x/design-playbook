@@ -248,9 +248,9 @@ class GeneratorCLITests(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0)
 
-    def test_unimplemented_tier2_agent_exits_nonzero(self) -> None:
+    def test_unimplemented_tier3_agent_exits_nonzero(self) -> None:
         result = subprocess.run(
-            [sys.executable, str(GENERATOR), "cursor"],
+            [sys.executable, str(GENERATOR), "kiro-ide"],
             capture_output=True, text=True, encoding="utf-8",
             cwd=PKG, timeout=15,
         )
@@ -300,5 +300,471 @@ class NodeShimSmokeTests(unittest.TestCase):
                 self.fail(f"cli.js requires non-builtin module: {line.strip()}")
 
 
+# ---------------------------------------------------------------------------
+# S2 tests
+# ---------------------------------------------------------------------------
+
+
+class MergeJsonHelperTests(unittest.TestCase):
+    """merge_json_str: never-clobber, deep-merge, and stable-ordering contract."""
+
+    def test_fresh_install_returns_our_data(self) -> None:
+        result = gen_mod.merge_json_str(None, {"mcpServers": {"a": {"command": "x"}}})
+        data = json.loads(result)
+        self.assertIn("mcpServers", data)
+        self.assertIn("a", data["mcpServers"])
+
+    def test_existing_unknown_keys_preserved(self) -> None:
+        existing = json.dumps({"userKey": "should-survive", "mcpServers": {}})
+        result = gen_mod.merge_json_str(existing, {"mcpServers": {"dp": {"command": "y"}}})
+        data = json.loads(result)
+        self.assertEqual(data["userKey"], "should-survive")
+        self.assertIn("dp", data["mcpServers"])
+
+    def test_never_clobbers_existing_mcp_keys(self) -> None:
+        existing = json.dumps({"mcpServers": {"existing-server": {"command": "keep"}}})
+        result = gen_mod.merge_json_str(existing, {"mcpServers": {"new-server": {"command": "new"}}})
+        data = json.loads(result)
+        self.assertIn("existing-server", data["mcpServers"], "existing MCP key must not be removed")
+        self.assertIn("new-server", data["mcpServers"])
+
+    def test_our_keys_overwrite_existing_same_key(self) -> None:
+        existing = json.dumps({"mcpServers": {"dp-preview": {"command": "old"}}})
+        result = gen_mod.merge_json_str(existing, {"mcpServers": {"dp-preview": {"command": "new"}}})
+        data = json.loads(result)
+        self.assertEqual(data["mcpServers"]["dp-preview"]["command"], "new")
+
+    def test_deep_nested_merge(self) -> None:
+        existing = json.dumps({"mcp": {"servers": {"a": 1}}})
+        result = gen_mod.merge_json_str(existing, {"mcp": {"extra": True}})
+        data = json.loads(result)
+        self.assertEqual(data["mcp"]["servers"]["a"], 1, "deep existing key preserved")
+        self.assertTrue(data["mcp"]["extra"])
+
+    def test_malformed_existing_json_raises_value_error(self) -> None:
+        with self.assertRaises(ValueError, msg="malformed JSON must raise ValueError, not silently rebuild"):
+            gen_mod.merge_json_str("not json {{", {"k": "v"})
+
+    def test_non_object_existing_json_raises_value_error(self) -> None:
+        with self.assertRaises(ValueError):
+            gen_mod.merge_json_str("[1, 2, 3]", {"k": "v"})
+
+    def test_none_existing_text_returns_our_data(self) -> None:
+        result = gen_mod.merge_json_str(None, {"k": "v"})
+        self.assertEqual(json.loads(result)["k"], "v")
+
+
+class ApplyMarkerBlockTests(unittest.TestCase):
+    """apply_marker_block: idempotent marker-block replace/append semantics."""
+
+    BEGIN = "<!-- design-playbook:begin -->"
+    END = "<!-- design-playbook:end -->"
+
+    def _apply(self, existing: str | None, content: str = "# dp\n\nbody") -> str:
+        return gen_mod.apply_marker_block(existing, "0.21.0", content)
+
+    def test_fresh_file_returns_just_block(self) -> None:
+        result = self._apply(None)
+        self.assertIn(self.BEGIN, result)
+        self.assertIn(self.END, result)
+        self.assertIn("generated-by design-playbook v0.21.0", result)
+        self.assertIn("# dp", result)
+
+    def test_append_when_no_existing_markers(self) -> None:
+        existing = "# My Project\n\nMy instructions.\n"
+        result = self._apply(existing)
+        self.assertTrue(result.startswith("# My Project"), "user content preserved at top")
+        self.assertIn(self.BEGIN, result)
+        self.assertIn("My instructions.", result)
+
+    def test_replace_existing_block_in_place(self) -> None:
+        first = self._apply(None, "old content")
+        # Simulate a second run with updated content
+        second = gen_mod.apply_marker_block(first, "0.21.0", "new content")
+        self.assertIn("new content", second)
+        self.assertNotIn("old content", second, "old block content must be replaced")
+        self.assertEqual(second.count(self.BEGIN), 1, "only one begin marker")
+        self.assertEqual(second.count(self.END), 1, "only one end marker")
+
+    def test_idempotent_fresh_file(self) -> None:
+        first = self._apply(None, "same content")
+        second = gen_mod.apply_marker_block(first, "0.21.0", "same content")
+        self.assertEqual(first, second, "running twice on fresh output must be idempotent")
+
+    def test_user_content_before_block_preserved_on_replace(self) -> None:
+        preamble = "# My Copilot Instructions\n\nMy rules here.\n\n"
+        initial = preamble + self._apply(None, "v1 content")
+        updated = gen_mod.apply_marker_block(initial, "0.21.0", "v2 content")
+        self.assertTrue(updated.startswith("# My Copilot Instructions"), "preamble preserved")
+        self.assertIn("My rules here.", updated)
+        self.assertIn("v2 content", updated)
+        self.assertNotIn("v1 content", updated)
+
+    def test_user_content_after_block_preserved_on_replace(self) -> None:
+        block = self._apply(None, "dp content")
+        doc = block + "\n\n## User section after block\n\nUser notes.\n"
+        updated = gen_mod.apply_marker_block(doc, "0.21.0", "dp content updated")
+        self.assertIn("User section after block", updated, "content after block preserved")
+        self.assertIn("dp content updated", updated)
+
+
+def _render_to_tmp(agent: str) -> tuple[dict, Path]:
+    """Helper: render agent to a fresh tempdir, return (manifest, out_dir)."""
+    tmp = Path(tempfile.mkdtemp())
+    manifest = gen_mod.render(agent, out_dir=tmp, dry_run=False)
+    return manifest, tmp
+
+
+class CursorRendererTests(unittest.TestCase):
+    """Cursor renderer: golden structure assertions."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.manifest, cls.out = _render_to_tmp("cursor")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.out, ignore_errors=True)
+
+    def test_all_skill_mdc_files_written(self) -> None:
+        skill_mdcs = [f for f in self.out.rglob("*.mdc")
+                      if "commands" not in f.name and "mcp" not in f.name]
+        # 8 skills: craft-guard, design-baseline, design-playbook, native-craft,
+        #           reference-intake, ui-evaluator, ui-picker, ux-spec
+        self.assertEqual(len(skill_mdcs), 8, f"expected 8 skill .mdc files, got {[f.name for f in skill_mdcs]}")
+
+    def test_orchestrator_rule_has_always_apply_true(self) -> None:
+        f = self.out / ".cursor" / "rules" / "design-playbook.mdc"
+        self.assertTrue(f.is_file())
+        text = f.read_text(encoding="utf-8")
+        self.assertIn("alwaysApply: true", text)
+
+    def test_sub_skill_rule_has_always_apply_false(self) -> None:
+        f = self.out / ".cursor" / "rules" / "ui-picker.mdc"
+        self.assertTrue(f.is_file())
+        text = f.read_text(encoding="utf-8")
+        self.assertIn("alwaysApply: false", text)
+
+    def test_skill_rule_has_description_frontmatter(self) -> None:
+        f = self.out / ".cursor" / "rules" / "ui-evaluator.mdc"
+        text = f.read_text(encoding="utf-8")
+        self.assertIn("description:", text)
+
+    def test_commands_reference_file_written(self) -> None:
+        f = self.out / ".cursor" / "rules" / "design-playbook-commands.mdc"
+        self.assertTrue(f.is_file())
+        text = f.read_text(encoding="utf-8")
+        self.assertIn("design-io", text)
+        self.assertIn("doctor", text)
+
+    def test_mcp_note_written(self) -> None:
+        f = self.out / ".cursor" / "rules" / "design-playbook-mcp.mdc"
+        self.assertTrue(f.is_file())
+
+    def test_cursor_mcp_json_written(self) -> None:
+        f = self.out / ".cursor" / "mcp.json"
+        self.assertTrue(f.is_file())
+        data = json.loads(f.read_text(encoding="utf-8"))
+        self.assertIn("mcpServers", data)
+        self.assertIn("design-playbook-preview", data["mcpServers"])
+        self.assertIn("design-playbook-evidence", data["mcpServers"])
+
+    def test_cursor_mcp_json_has_stdio_type(self) -> None:
+        data = json.loads((self.out / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        for srv in data["mcpServers"].values():
+            self.assertEqual(srv.get("type"), "stdio")
+
+    def test_generated_by_comment_in_skill_rules(self) -> None:
+        f = self.out / ".cursor" / "rules" / "craft-guard.mdc"
+        text = f.read_text(encoding="utf-8")
+        self.assertIn("generated-by design-playbook", text)
+
+    def test_total_file_count(self) -> None:
+        paths = [e["path"] for e in self.manifest["files"]]
+        # 8 skills + 1 commands + 1 mcp note + 1 mcp.json = 11
+        self.assertEqual(len(paths), 11)
+
+
+class WindsurfRendererTests(unittest.TestCase):
+    """Windsurf renderer: golden structure assertions."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.manifest, cls.out = _render_to_tmp("windsurf")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.out, ignore_errors=True)
+
+    def test_all_skill_rule_files_written(self) -> None:
+        rules = list((self.out / ".windsurf" / "rules").glob("*.md"))
+        self.assertEqual(len(rules), 8, f"expected 8 skill rules, got {[f.name for f in rules]}")
+
+    def test_workflow_files_written(self) -> None:
+        workflows = list((self.out / ".windsurf" / "workflows").glob("*.md"))
+        # 6 commands → 6 workflow files
+        self.assertEqual(len(workflows), 6)
+
+    def test_workflow_file_naming(self) -> None:
+        names = {f.name for f in (self.out / ".windsurf" / "workflows").glob("*.md")}
+        self.assertIn("design-playbook-design-io.md", names)
+        self.assertIn("design-playbook-doctor.md", names)
+
+    def test_mcp_guide_written_not_global_config(self) -> None:
+        guide = self.out / "design-playbook-mcp-setup.md"
+        self.assertTrue(guide.is_file(), "MCP guide must be written")
+        # Verify the global config file is NOT written (ADR-0042 §4)
+        global_cfg = self.out / ".codeium" / "windsurf" / "mcp_config.json"
+        self.assertFalse(global_cfg.exists(), "global Windsurf MCP config must never be written")
+
+    def test_mcp_guide_has_snippet(self) -> None:
+        text = (self.out / "design-playbook-mcp-setup.md").read_text(encoding="utf-8")
+        self.assertIn("mcp_config.json", text)
+        self.assertIn("design-playbook-preview", text)
+
+    def test_total_file_count(self) -> None:
+        # 8 rules + 6 workflows + 1 mcp guide = 15
+        self.assertEqual(len(self.manifest["files"]), 15)
+
+
+class GeminiCLIRendererTests(unittest.TestCase):
+    """Gemini CLI renderer: structural assertions."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.manifest, cls.out = _render_to_tmp("gemini-cli")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.out, ignore_errors=True)
+
+    def test_gemini_md_written(self) -> None:
+        f = self.out / "GEMINI.md"
+        self.assertTrue(f.is_file())
+        text = f.read_text(encoding="utf-8")
+        self.assertIn("design-playbook", text)
+        self.assertIn("<!-- design-playbook:begin -->", text)
+        self.assertIn("<!-- design-playbook:end -->", text)
+
+    def test_gemini_md_user_content_preserved_on_rerender(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            (t / "GEMINI.md").write_text("# My Project\n\nMy custom Gemini rules.\n", encoding="utf-8")
+            gen_mod.render("gemini-cli", out_dir=t, dry_run=False)
+            text = (t / "GEMINI.md").read_text(encoding="utf-8")
+        self.assertIn("My custom Gemini rules.", text, "pre-existing user content preserved")
+        self.assertIn("<!-- design-playbook:begin -->", text)
+
+    def test_all_command_toml_files_written(self) -> None:
+        toml_files = list((self.out / ".gemini" / "commands").glob("*.toml"))
+        self.assertEqual(len(toml_files), 6)
+
+    def test_command_toml_has_args_placeholder(self) -> None:
+        f = self.out / ".gemini" / "commands" / "design-io.toml"
+        self.assertTrue(f.is_file())
+        text = f.read_text(encoding="utf-8")
+        self.assertIn("{{args}}", text)
+
+    def test_command_toml_has_description(self) -> None:
+        text = (self.out / ".gemini" / "commands" / "design-io.toml").read_text("utf-8")
+        self.assertIn("description", text)
+
+    def test_settings_json_has_mcp_servers(self) -> None:
+        f = self.out / ".gemini" / "settings.json"
+        self.assertTrue(f.is_file())
+        data = json.loads(f.read_text(encoding="utf-8"))
+        self.assertIn("mcpServers", data)
+        self.assertIn("design-playbook-preview", data["mcpServers"])
+
+    def test_settings_json_merge_preserves_existing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            existing = {"mcpServers": {"my-other-server": {"command": "other"}}, "theme": "dark"}
+            (t / ".gemini").mkdir()
+            (t / ".gemini" / "settings.json").write_text(
+                json.dumps(existing), encoding="utf-8"
+            )
+            gen_mod.render("gemini-cli", out_dir=t, dry_run=False)
+            data = json.loads((t / ".gemini" / "settings.json").read_text("utf-8"))
+        self.assertIn("my-other-server", data["mcpServers"], "pre-existing MCP server preserved")
+        self.assertEqual(data.get("theme"), "dark", "user theme setting preserved")
+
+
+class OpenCodeRendererTests(unittest.TestCase):
+    """OpenCode renderer: structural assertions."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.manifest, cls.out = _render_to_tmp("opencode")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.out, ignore_errors=True)
+
+    def test_agents_md_written(self) -> None:
+        f = self.out / "AGENTS.md"
+        self.assertTrue(f.is_file())
+        text = f.read_text(encoding="utf-8")
+        self.assertIn("design-playbook", text)
+        self.assertIn("<!-- design-playbook:begin -->", text)
+        self.assertIn("<!-- design-playbook:end -->", text)
+
+    def test_agents_md_user_content_preserved_on_rerender(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            (t / "AGENTS.md").write_text("# Project AGENTS\n\nExisting team rules.\n", encoding="utf-8")
+            gen_mod.render("opencode", out_dir=t, dry_run=False)
+            text = (t / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("Existing team rules.", text, "pre-existing user content preserved")
+        self.assertIn("<!-- design-playbook:begin -->", text)
+
+    def test_agents_md_contains_skills_and_commands(self) -> None:
+        text = (self.out / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("ui-evaluator", text)
+        self.assertIn("design-io", text)
+
+    def test_opencode_json_has_mcp_key(self) -> None:
+        f = self.out / "opencode.json"
+        self.assertTrue(f.is_file())
+        data = json.loads(f.read_text(encoding="utf-8"))
+        self.assertIn("mcp", data)
+        self.assertIn("design-playbook-preview", data["mcp"])
+
+    def test_opencode_json_merge_preserves_existing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            existing = {"provider": "anthropic", "mcp": {"user-server": {"command": "keep"}}}
+            (t / "opencode.json").write_text(json.dumps(existing), encoding="utf-8")
+            gen_mod.render("opencode", out_dir=t, dry_run=False)
+            data = json.loads((t / "opencode.json").read_text("utf-8"))
+        self.assertEqual(data.get("provider"), "anthropic", "existing config key preserved")
+        self.assertIn("user-server", data["mcp"], "pre-existing MCP server preserved")
+
+
+class GitHubCopilotRendererTests(unittest.TestCase):
+    """GitHub Copilot renderer: structural assertions."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.manifest, cls.out = _render_to_tmp("github-copilot")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.out, ignore_errors=True)
+
+    def test_copilot_instructions_written(self) -> None:
+        f = self.out / ".github" / "copilot-instructions.md"
+        self.assertTrue(f.is_file())
+        text = f.read_text(encoding="utf-8")
+        self.assertIn("design-playbook", text)
+        self.assertIn("<!-- design-playbook:begin -->", text)
+        self.assertIn("<!-- design-playbook:end -->", text)
+
+    def test_copilot_instructions_user_content_preserved_on_rerender(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            (t / ".github").mkdir()
+            (t / ".github" / "copilot-instructions.md").write_text(
+                "# Org Copilot Rules\n\nAlways write tests.\n", encoding="utf-8"
+            )
+            gen_mod.render("github-copilot", out_dir=t, dry_run=False)
+            text = (t / ".github" / "copilot-instructions.md").read_text(encoding="utf-8")
+        self.assertIn("Always write tests.", text, "pre-existing org rules preserved")
+        self.assertIn("<!-- design-playbook:begin -->", text)
+
+    def test_all_skill_instruction_files_written(self) -> None:
+        inst_files = list((self.out / ".github" / "instructions").glob("*.instructions.md"))
+        self.assertEqual(len(inst_files), 8)
+
+    def test_instruction_files_have_apply_to_frontmatter(self) -> None:
+        f = self.out / ".github" / "instructions" / "ui-picker.instructions.md"
+        self.assertTrue(f.is_file())
+        text = f.read_text(encoding="utf-8")
+        self.assertIn("applyTo:", text)
+        self.assertIn('**', text)  # applyTo: "**"
+
+    def test_mcp_json_written(self) -> None:
+        f = self.out / ".mcp.json"
+        self.assertTrue(f.is_file())
+        data = json.loads(f.read_text(encoding="utf-8"))
+        self.assertIn("servers", data)
+        self.assertIn("design-playbook-preview", data["servers"])
+
+    def test_mcp_json_uses_servers_not_mcp_servers(self) -> None:
+        data = json.loads((self.out / ".mcp.json").read_text(encoding="utf-8"))
+        self.assertIn("servers", data)
+        self.assertNotIn("mcpServers", data)
+
+    def test_mcp_json_merge_preserves_existing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            existing = {"servers": {"my-server": {"type": "stdio", "command": "keep"}}}
+            (t / ".mcp.json").write_text(json.dumps(existing), encoding="utf-8")
+            gen_mod.render("github-copilot", out_dir=t, dry_run=False)
+            data = json.loads((t / ".mcp.json").read_text("utf-8"))
+        self.assertIn("my-server", data["servers"], "pre-existing server preserved")
+
+
+class Tier2ListTests(unittest.TestCase):
+    """--list must show all Tier-2 renderers as (renderer ready)."""
+
+    def _list_output(self) -> str:
+        result = subprocess.run(
+            [sys.executable, str(GENERATOR), "--list"],
+            capture_output=True, text=True, encoding="utf-8",
+            cwd=PKG, timeout=15,
+        )
+        self.assertEqual(result.returncode, 0)
+        return result.stdout
+
+    def test_all_tier2_renderers_shown_as_ready(self) -> None:
+        out = self._list_output()
+        for agent in ("cursor", "gemini-cli", "opencode", "windsurf", "github-copilot"):
+            self.assertIn(f"{agent}", out, f"{agent} not in --list output")
+            # Find the line for this agent and check for renderer ready marker
+            line = next((ln for ln in out.splitlines() if agent in ln), "")
+            self.assertIn("renderer ready", line, f"{agent} not shown as renderer ready: {line!r}")
+
+    def test_codex_still_shown_as_ready(self) -> None:
+        out = self._list_output()
+        line = next((ln for ln in out.splitlines() if "codex" in ln), "")
+        self.assertIn("renderer ready", line)
+
+
+class Tier2DryRunTests(unittest.TestCase):
+    """Dry-run for all Tier-2 agents returns valid manifest and writes nothing."""
+
+    def _dry_run(self, agent: str) -> dict:
+        result = subprocess.run(
+            [sys.executable, str(GENERATOR), agent, "--dry-run", "--out", str(Path(tempfile.gettempdir()))],
+            capture_output=True, text=True, encoding="utf-8",
+            cwd=PKG, timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, f"{agent} dry-run failed: {result.stderr}")
+        return json.loads(result.stdout)
+
+    def test_cursor_dry_run(self) -> None:
+        m = self._dry_run("cursor")
+        self.assertEqual(m["agent"], "cursor")
+        self.assertGreater(len(m["files"]), 0)
+
+    def test_gemini_cli_dry_run(self) -> None:
+        m = self._dry_run("gemini-cli")
+        self.assertEqual(m["agent"], "gemini-cli")
+
+    def test_opencode_dry_run(self) -> None:
+        m = self._dry_run("opencode")
+        self.assertEqual(m["agent"], "opencode")
+
+    def test_windsurf_dry_run(self) -> None:
+        m = self._dry_run("windsurf")
+        self.assertEqual(m["agent"], "windsurf")
+
+    def test_github_copilot_dry_run(self) -> None:
+        m = self._dry_run("github-copilot")
+        self.assertEqual(m["agent"], "github-copilot")
+
+
 if __name__ == "__main__":
     unittest.main()
+
