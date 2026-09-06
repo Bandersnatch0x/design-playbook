@@ -113,6 +113,11 @@ class RunFacts:
         """Derived from the uniform craft_guard presence fact."""
         return self.artifact_state("craft_guard") != STATE_MISSING
 
+    @property
+    def plan_fill_declarations(self) -> tuple[str, ...]:
+        """All declared Fill tokens, including declarations whose files are missing."""
+        return _plan_fill_declarations(self.plan_text)
+
 
 @dataclass(frozen=True)
 class _OptionalRunFacts:
@@ -226,13 +231,8 @@ def _existing_paths(run_root: Path | None) -> frozenset[str]:
     return frozenset(paths)
 
 
-def _plan_fill_artifacts(
-    run_root: Path | None,
-    plan_text: str,
-) -> tuple[str, ...]:
-    """Capture existing fill declarations while the run snapshot is loaded."""
-    if run_root is None:
-        return ()
+def _plan_fill_declarations(plan_text: str) -> tuple[str, ...]:
+    """Capture every unfenced plan Fill token without checking filesystem state."""
     found: list[str] = []
     fenced = False
     for line in plan_text.splitlines():
@@ -242,14 +242,26 @@ def _plan_fill_artifacts(
         if fenced or not line.startswith("fill:"):
             continue
         declared = line[5:].strip().split()[0].rstrip(",") if line[5:].strip() else ""
-        if not declared:
-            continue
+        if declared and declared not in found:
+            found.append(declared)
+    return tuple(found)
+
+
+def _plan_fill_artifacts(
+    run_root: Path | None,
+    plan_text: str,
+) -> tuple[str, ...]:
+    """Capture existing fill declarations while the run snapshot is loaded."""
+    if run_root is None:
+        return ()
+    found: list[str] = []
+    for declared in _plan_fill_declarations(plan_text):
         candidate = Path(declared)
         bases = (
             [candidate] if candidate.is_absolute()
             else [run_root / candidate, Path.cwd() / candidate]
         )
-        if any(base.is_file() for base in bases) and declared not in found:
+        if any(base.is_file() for base in bases):
             found.append(declared)
     return tuple(found)
 

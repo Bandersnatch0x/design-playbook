@@ -154,7 +154,7 @@ def run_handoff(
     facts = capture_run_facts(run_root=run_root)
     # RunFacts captures the authoritative plan declaration once. Do not copy
     # that parser here: the handoff layer only selects among captured facts.
-    selected = _select_declared_fill(facts.plan_fill_artifacts, fill)
+    selected = _select_declared_fill(facts.plan_fill_declarations, fill)
     fill_path = _resolve_declared_fill(run_root, selected)
     if fill_path is None:
         raise RunHandoffError(
