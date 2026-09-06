@@ -60,26 +60,6 @@ class RunHandoffResult:
         return self.payload.get("confirmationSource")
 
 
-def _declared_fill_paths(plan_text: str) -> tuple[str, ...]:
-    """List plan ``fill:`` declarations using the run_facts syntax.
-
-    Existence is checked separately so a missing or ineligible declaration
-    can fail with repair guidance instead of disappearing from the list.
-    """
-    found: list[str] = []
-    fenced = False
-    for line in plan_text.splitlines():
-        if line.lstrip().startswith("```"):
-            fenced = not fenced
-            continue
-        if fenced or not line.startswith("fill:"):
-            continue
-        declared = line[5:].strip().split()[0].rstrip(",") if line[5:].strip() else ""
-        if declared and declared not in found:
-            found.append(declared)
-    return tuple(found)
-
-
 def _normalize_declared(value: str) -> str:
     return value.replace("\\", "/").rstrip("/")
 
@@ -172,7 +152,9 @@ def run_handoff(
         raise RunHandoffError(f"not a directory: {run_root}")
     run_root = run_root.resolve()
     facts = capture_run_facts(run_root=run_root)
-    selected = _select_declared_fill(_declared_fill_paths(facts.plan_text), fill)
+    # RunFacts captures the authoritative plan declaration once. Do not copy
+    # that parser here: the handoff layer only selects among captured facts.
+    selected = _select_declared_fill(facts.plan_fill_artifacts, fill)
     fill_path = _resolve_declared_fill(run_root, selected)
     if fill_path is None:
         raise RunHandoffError(
