@@ -9,7 +9,6 @@ from __future__ import annotations
 import os
 import re
 import shlex
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -190,8 +189,19 @@ def _canonical_run(run_root: Path) -> Path:
 
 
 def _shell_command(argv: tuple[str, ...]) -> str:
+    """One copyable line for the operator's shell; argv stays exact.
+
+    Windows targets PowerShell, not cmd: ``list2cmdline`` emits cmd-style
+    quoting that PowerShell reparses, so ``D:\\runs\\a;whoami`` would split
+    into two statements and ``$``-prefixed paths would interpolate. Every
+    argument therefore becomes a single-quoted literal (inner ``'`` doubled)
+    behind the ``&`` call operator — no splitting, interpolation, or
+    escaping survives. POSIX keeps ``shlex`` quoting.
+    """
     if os.name == "nt":
-        return subprocess.list2cmdline(list(argv))
+        return "& " + " ".join(
+            "'" + part.replace("'", "''") + "'" for part in argv
+        )
     return " ".join(shlex.quote(part) for part in argv)
 
 

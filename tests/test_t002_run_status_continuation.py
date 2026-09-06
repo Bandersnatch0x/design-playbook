@@ -1,10 +1,12 @@
 """Black-box tests for the additive run-status open-console continuation."""
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -21,6 +23,7 @@ if str(PKG) not in sys.path:
 from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
 from design_playbook.scripts import run_status as run_status_mod  # noqa: E402
 from design_playbook.scripts.run_continuation import (  # noqa: E402
+    _shell_command,
     continuation_for_run,
     inspect_console_inventory,
 )
@@ -458,6 +461,124 @@ class RunStatusContinuationTests(unittest.TestCase):
             )
             self.assertEqual(continuation.next_action["label"], owner.primary.label)
             self.assertNotIn("rm -rf", continuation.next_action["label"])
+
+
+class ShellCommandQuotingTests(unittest.TestCase):
+    """OS-independent shape of the emitted command (exact, not substring)."""
+
+    def test_windows_command_single_quotes_every_argument(self) -> None:
+        with patch("os.name", "nt"):
+            command = _shell_command(
+                (
+                    r"C:\Python\python.exe",
+                    r"D:\pkg\run_console.py",
+                    r"D:\runs\a;whoami",
+                )
+            )
+        self.assertEqual(
+            command,
+            "& 'C:\\Python\\python.exe' 'D:\\pkg\\run_console.py'"
+            " 'D:\\runs\\a;whoami'",
+        )
+
+    def test_windows_command_doubles_embedded_single_quotes(self) -> None:
+        with patch("os.name", "nt"):
+            command = _shell_command(("C:\\prog.exe", "O'Brien's run"))
+        self.assertEqual(command, "& 'C:\\prog.exe' 'O''Brien''s run'")
+
+    def test_posix_command_keeps_shlex_quoting(self) -> None:
+        with patch("os.name", "posix"):
+            command = _shell_command(("plain", "two words"))
+        self.assertEqual(command, "plain 'two words'")
+
+
+_POWERSHELL = shutil.which("powershell") if os.name == "nt" else None
+
+
+@unittest.skipIf(os.name != "nt", "PowerShell boundary exists on Windows only")
+@unittest.skipIf(_POWERSHELL is None, "powershell.exe is not on PATH")
+class ShellCommandPowerShellTests(unittest.TestCase):
+    """The Windows command must survive real PowerShell parsing.
+
+    list2cmdline emits cmd-style quoting; PowerShell reparses it, so
+    ``D:\\runs\\a;whoami`` used to split into two command ASTs and
+    ``$``-prefixed paths used to interpolate. These tests exercise the
+    actual parser/argv boundary rather than substrings.
+    """
+
+    HOSTILE_ARGS = (
+        r"D:\runs\a;whoami",
+        "run with spaces",
+        "O'Brien's run",
+        "$env:USERNAME",
+        "$(whoami)",
+        "tick`tock",
+        "a&b|c>d",
+    )
+
+    def test_command_parses_as_one_powershell_statement(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "parse_probe.ps1"
+            script.write_text(
+                "param([string]$CommandText)\n"
+                "$tokens = $null\n"
+                "$errors = $null\n"
+                "$ast = [System.Management.Automation.Language.Parser]"
+                "::ParseInput($CommandText, [ref]$tokens, [ref]$errors)\n"
+                "if ($errors.Count -gt 0) "
+                "{ Write-Output ('ERRORS:' + $errors.Count); exit 1 }\n"
+                "Write-Output ('STATEMENTS:' + $ast.EndBlock.Statements.Count)\n",
+                encoding="ascii",
+            )
+            argv = (
+                r"C:\Python\python.exe",
+                r"D:\pkg\run_console.py",
+                r"D:\runs\a;whoami",
+            )
+            result = subprocess.run(
+                [
+                    _POWERSHELL,
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(script),
+                    _shell_command(argv),
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+                timeout=60,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), "STATEMENTS:1")
+
+    def test_hostile_argv_round_trips_through_powershell(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            probe = Path(tmp) / "argv_probe.py"
+            probe.write_text(
+                "import json, sys\nprint(json.dumps(sys.argv))\n",
+                encoding="ascii",
+            )
+            argv = (sys.executable, str(probe), *self.HOSTILE_ARGS)
+            command = _shell_command(argv)
+            encoded = base64.b64encode(
+                command.encode("utf-16-le")
+            ).decode("ascii")
+            result = subprocess.run(
+                [_POWERSHELL, "-NoProfile", "-EncodedCommand", encoded],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+                timeout=60,
+                cwd=tmp,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), list(argv[1:]))
 
 
 if __name__ == "__main__":
