@@ -30,6 +30,7 @@ from design_playbook.mcp.run_console.repair_packet import (  # noqa: E402
     MSG_NO_COMMAND,
     MSG_NO_INVALIDATED,
     MSG_NO_RECAPTURE,
+    MSG_NO_RESUME_STAGE,
     NOT_PRODUCED,
     PACKET_KEYS,
     derive_repair_packet,
@@ -136,7 +137,10 @@ class RepairPacketProjectionTest(unittest.TestCase):
         self.assertEqual(packet["invalidatedEvidence"]["reason"]["message"], MSG_NO_INVALIDATED)
         self.assertEqual(packet["recaptureRequirement"]["reason"]["message"], MSG_NO_RECAPTURE)
         self.assertEqual(packet["nextCommand"]["reason"]["message"], MSG_NO_COMMAND)
-        self.assertEqual(packet["resumeStage"]["value"]["stageId"], "spec")
+        self.assertEqual(packet["resumeStage"]["availability"], "unknown")
+        self.assertIsNone(packet["resumeStage"]["value"])
+        self.assertEqual(packet["resumeStage"]["reason"]["code"], NOT_PRODUCED)
+        self.assertEqual(packet["resumeStage"]["reason"]["message"], MSG_NO_RESUME_STAGE)
         self.assertEqual(packet["nextOwner"]["value"]["actor"], "run-operator")
         self.assertNotIn(_COMMAND, packet["copyText"])
         self.assertIn("unavailable", packet["copyText"])
@@ -169,6 +173,20 @@ class RepairPacketProjectionTest(unittest.TestCase):
         self.assertEqual(packet["nextCommand"]["availability"], "known")
         self.assertEqual(packet["nextCommand"]["value"], _COMMAND)
         self.assertIn(_COMMAND, packet["copyText"])
+
+    def test_resume_stage_is_a_gap_not_inferred_from_progress_or_command(self) -> None:
+        """Spec rule 19: latest observed stage is not a resume target."""
+        document = _blocking_snapshot(command=_COMMAND)
+        progress = document["execution"]["progress"]  # type: ignore[index]
+        progress["result"]["latestObservedStage"] = "fill"  # type: ignore[index]
+        packet = derive_repair_packet(document)
+        self.assertEqual(packet["resumeStage"]["availability"], "unknown")
+        self.assertIsNone(packet["resumeStage"]["value"])
+        self.assertEqual(packet["resumeStage"]["reason"]["code"], NOT_PRODUCED)
+        self.assertEqual(packet["resumeStage"]["reason"]["message"], MSG_NO_RESUME_STAGE)
+        rendered = json.dumps(packet["resumeStage"])
+        self.assertNotIn("fill", rendered)
+        self.assertNotIn("--resume", rendered)
 
     def test_stale_intent_is_stale_context_not_current(self) -> None:
         document = _valid()
@@ -287,6 +305,11 @@ class RepairPacketRenderContractTest(unittest.TestCase):
         self.assertNotIn("/api/v1/actions/rerun", _JS)
         self.assertNotIn("executeRepair", _JS)
 
+    def test_resume_stage_is_a_static_gap_not_derived_from_progress(self) -> None:
+        self.assertIn("packetGap(PACKET_MSG_NO_RESUME_STAGE)", _JS)
+        self.assertIn("packet_not_produced_resume_stage", _JS)
+        self.assertNotIn("packetResumeStage", _JS)
+
     def test_ui_route_table_is_unchanged(self) -> None:
         resources = UIResources()
         self.assertIsNotNone(resources.lookup("/"))
@@ -329,7 +352,10 @@ class RepairPacketBrowserTest(browser_harness.BrowserTestCase):
                       self._field("nextCommand").inner_text())
         progress = self.console.snapshot()["execution"]["progress"]["result"]
         stage_id = progress["latestObservedStage"]
-        self.assertIn(str(stage_id), self._field("resumeStage").inner_text())
+        resume = self._field("resumeStage").inner_text()
+        self.assertIn("Unknown", resume)
+        self.assertIn("not project an explicit resume stage", resume)
+        self.assertNotIn(str(stage_id), resume)
         copy_cmd = self.page.get_by_role(
             "button", name="Copy next Agent command"
         )

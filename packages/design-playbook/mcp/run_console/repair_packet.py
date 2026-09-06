@@ -2,7 +2,7 @@
 
 The packet is a read-only projection of owner-projected Snapshot facts. It
 is not a schema, is not persisted, and is not a second finding, verdict,
-or repair authority. Missing owner, command, recapture, or
+or repair authority. Missing owner, command, resume-stage, recapture, or
 invalidated-evidence facts stay explicit evidence gaps; prose is never
 parsed to fill them. The projection writes nothing and executes nothing.
 """
@@ -23,6 +23,10 @@ MSG_NO_INVALIDATED = (
     "The snapshot does not project an invalidated-evidence set."
 )
 MSG_NO_RECAPTURE = "The snapshot does not project a recapture requirement."
+MSG_NO_RESUME_STAGE = (
+    "The snapshot does not project an explicit resume stage; "
+    "the latest observed stage is not a resume target."
+)
 MSG_NO_COMMAND = (
     "This action carries no copyable agent command in the snapshot."
 )
@@ -237,27 +241,6 @@ def _finding_fields(
     }
 
 
-def _resume_stage(progress: object) -> dict[str, Any]:
-    projected = _from_assertion(progress)
-    result = projected["value"] if isinstance(projected["value"], dict) else None
-    if result is None:
-        return projected
-    stage_id = result.get("latestObservedStage")
-    label = None
-    stages = result.get("observedStages")
-    if isinstance(stage_id, str) and isinstance(stages, list):
-        for stage in stages:
-            if isinstance(stage, dict) and stage.get("stageId") == stage_id:
-                label = stage.get("label")
-                break
-    return _fact(
-        availability=projected["availability"],
-        value={"stageId": stage_id, "label": label if isinstance(label, str) else None},
-        reason=projected["reason"],
-        source_id=projected["sourceId"],
-    )
-
-
 def _next_owner(primary: object) -> dict[str, Any]:
     projected = _from_assertion(primary)
     result = projected["value"] if isinstance(projected["value"], dict) else None
@@ -386,7 +369,9 @@ def derive_repair_packet(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         **finding_fields,
         "nextOwner": _next_owner(primary),
         "invalidatedEvidence": _gap(MSG_NO_INVALIDATED),
-        "resumeStage": _resume_stage(document["execution"]["progress"]),
+        # Snapshot v1 has no explicit resume-stage fact; the latest
+        # observed stage is progress, not a resume target (spec rule 19).
+        "resumeStage": _gap(MSG_NO_RESUME_STAGE),
         "nextCommand": _next_command(primary),
         "recaptureRequirement": _gap(MSG_NO_RECAPTURE),
     }

@@ -211,6 +211,7 @@
       packet_stale_note: "Shown as stale context only — this value must not be read as current.",
       packet_not_produced_invalidated: "The snapshot does not project an invalidated-evidence set.",
       packet_not_produced_recapture: "The snapshot does not project a recapture requirement.",
+      packet_not_produced_resume_stage: "The snapshot does not project an explicit resume stage; the latest observed stage is not a resume target.",
       packet_not_produced_command: "This action carries no copyable agent command in the snapshot.",
       packet_disposition_unknown: "A finding is present but its blocking disposition is not owner-known.",
       packet_blocking_count: "{n} blocking finding(s) in owner order; this packet uses the first.",
@@ -467,6 +468,7 @@
       packet_stale_note: "仅作为过期上下文展示 — 该值不可作为当前有效状态读取。",
       packet_not_produced_invalidated: "快照未投影失效证据集。",
       packet_not_produced_recapture: "快照未投影重采要求。",
+      packet_not_produced_resume_stage: "快照未投影明确的恢复阶段；最新观测阶段并非恢复目标。",
       packet_not_produced_command: "本次快照中该动作未携带可复制的智能体指令。",
       packet_disposition_unknown: "存在发现，但其是否阻塞并非责任方已知。",
       packet_blocking_count: "责任方顺序中有 {n} 条阻塞性发现；本包使用第一条。",
@@ -1677,6 +1679,9 @@
     "The snapshot does not project an invalidated-evidence set.";
   var PACKET_MSG_NO_RECAPTURE =
     "The snapshot does not project a recapture requirement.";
+  var PACKET_MSG_NO_RESUME_STAGE =
+    "The snapshot does not project an explicit resume stage; " +
+    "the latest observed stage is not a resume target.";
   var PACKET_MSG_NO_COMMAND =
     "This action carries no copyable agent command in the snapshot.";
 
@@ -1829,26 +1834,6 @@
     };
   }
 
-  function packetResumeStage(progress) {
-    var projected = packetFromAssertion(progress);
-    var result = projected.value && typeof projected.value === "object" ? projected.value : null;
-    if (!result) return projected;
-    var stageId = result.latestObservedStage;
-    var label = null;
-    var stages = result.observedStages;
-    if (typeof stageId === "string" && Array.isArray(stages)) {
-      stages.forEach(function (stage) {
-        if (label === null && stage && stage.stageId === stageId && typeof stage.label === "string") {
-          label = stage.label;
-        }
-      });
-    }
-    return packetFact(projected.availability, {
-      stageId: stageId === undefined ? null : stageId,
-      label: label,
-    }, projected.reason, projected.sourceId);
-  }
-
   function packetNextOwner(primary) {
     var projected = packetFromAssertion(primary);
     var result = projected.value && typeof projected.value === "object" ? projected.value : null;
@@ -1887,7 +1872,6 @@
     var selection = selectBlockingFinding(evaluation.findings);
     var findingFields = packetFindingFields(selection);
     var primary = snapshot.nextActions && snapshot.nextActions.primary;
-    var progress = snapshot.execution && snapshot.execution.progress;
     var intent = snapshot.intent && snapshot.intent.summary;
     return {
       intent: packetFromAssertion(intent),
@@ -1898,7 +1882,9 @@
       repairIntent: findingFields.repairIntent,
       nextOwner: packetNextOwner(primary),
       invalidatedEvidence: packetGap(PACKET_MSG_NO_INVALIDATED),
-      resumeStage: packetResumeStage(progress),
+      /* Snapshot v1 has no explicit resume-stage fact; the latest
+         observed stage is progress, not a resume target (spec rule 19). */
+      resumeStage: packetGap(PACKET_MSG_NO_RESUME_STAGE),
       nextCommand: packetNextCommand(primary),
       recaptureRequirement: packetGap(PACKET_MSG_NO_RECAPTURE),
     };
@@ -1981,6 +1967,7 @@
     var mapped = null;
     if (message === PACKET_MSG_NO_INVALIDATED) mapped = t("packet_not_produced_invalidated");
     else if (message === PACKET_MSG_NO_RECAPTURE) mapped = t("packet_not_produced_recapture");
+    else if (message === PACKET_MSG_NO_RESUME_STAGE) mapped = t("packet_not_produced_resume_stage");
     else if (message === PACKET_MSG_NO_COMMAND) mapped = t("packet_not_produced_command");
     else if (message === PACKET_MSG_NO_BLOCKING) mapped = t("packet_no_blocking");
     else if (message === PACKET_MSG_DISPOSITION_UNKNOWN) mapped = t("packet_disposition_unknown");
@@ -2090,10 +2077,7 @@
       return el("p", { class: "fact-value", text: packetValueText(value) });
     }));
     grid.appendChild(packetCard("resumeStage", t("packet_resume_stage"), packet.resumeStage, function (value) {
-      return kv(
-        "stageId", value.stageId == null ? t("packet_none") : String(value.stageId),
-        t("term_title"), value.label == null ? t("packet_none") : String(value.label)
-      );
+      return el("p", { class: "fact-value", text: packetValueText(value) });
     }));
     grid.appendChild(packetCard("nextCommand", t("packet_next_command"), packet.nextCommand, function (value) {
       return el("pre", { class: "packet-command", text: String(value) });
