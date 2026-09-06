@@ -27,11 +27,11 @@ PublicClaim = Literal[
 ]
 FallbackKind = Literal["safe-path", "evidence-gap"]
 
-_IMPLEMENTATION_VALUES = frozenset(("absent", "present"))
+_IMPLEMENTATION_VALUES = frozenset(("absent", "present", "unknown"))
 _VALIDATION_VALUES = frozenset(
-    ("untested", "tested", "dogfooded", "trial-observed")
+    ("untested", "tested", "dogfooded", "trial-observed", "unknown")
 )
-_AVAILABILITY_VALUES = frozenset(("local", "distributed", "unsupported"))
+_AVAILABILITY_VALUES = frozenset(("local", "distributed", "unsupported", "unknown"))
 _PUBLIC_CLAIM_VALUES = frozenset(
     ("stable", "experimental", "blocked-by-gate", "not-shipped")
 )
@@ -287,4 +287,5 @@ def build_capability_receipt(
         fallback=fallback,
         evidence_gap=evidence_gap,
     )
+
 

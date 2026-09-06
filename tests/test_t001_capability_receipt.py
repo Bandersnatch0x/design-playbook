@@ -109,6 +109,21 @@ class CapabilityReceiptTests(unittest.TestCase):
         self.assertEqual(receipt.fallback.kind, "evidence-gap")
         self.assertIn("unknown", receipt.evidence_gap)
 
+    def test_explicit_unknown_dimensions_remain_unknown(self) -> None:
+        receipt = build_capability_receipt(
+            CapabilitySourceFacts(
+                capability="unknown-capability",
+                implementation="unknown",
+                validation="unknown",
+                availability="unknown",
+            )
+        )
+
+        self.assertEqual(receipt.status.implementation, "unknown")
+        self.assertEqual(receipt.status.validation, "unknown")
+        self.assertEqual(receipt.status.availability, "unknown")
+        self.assertEqual(receipt.status.public_claim, "not-shipped")
+        self.assertIn("unknown readiness facts", receipt.evidence_gap)
     def test_unsupported_surface_can_name_safe_fallback(self) -> None:
         receipt = build_capability_receipt(
             CapabilitySourceFacts(
@@ -183,4 +198,5 @@ class CapabilityReceiptTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
 
