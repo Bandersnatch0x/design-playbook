@@ -26,6 +26,7 @@ from design_playbook.scripts.contract_v1 import (
     BIND_MALFORMED,
     BIND_PARTIAL_WRITE,
     BIND_UNREADABLE,
+    bind_resolution_lists,
     read_bind_snapshot,
 )
 from design_playbook.scripts.run_facts import RunFacts, capture_run_facts
@@ -42,6 +43,7 @@ CAPABILITY_NAME = "run-console"
 OPEN_CONSOLE_ACTION = "open-console"
 INTEGRITY_CURRENT = "current"
 INTEGRITY_UNKNOWN = "unknown"
+INTEGRITY_STALE = "stale"
 
 _CONSOLE_SCRIPT = ("scripts", "run_console.py")
 _RUNTIME_RELATIVE = (
@@ -257,6 +259,18 @@ def _integrity(run_root: Path, facts: RunFacts) -> IntegrityProjection:
         issues.append(("partial", bind.detail or "contract-bind is a partial write"))
     elif bind.state in {BIND_MALFORMED, BIND_UNREADABLE}:
         issues.append(("malformed", bind.detail or "contract-bind is unreadable"))
+    elif bind.complete and bind.data is not None:
+        # A complete read still owns stale facts: the resolution lists come
+        # from contract_v1, the bind snapshot's own owner projection. Stale
+        # fields stay explicitly stale — never silently current.
+        stale = sorted(set(bind_resolution_lists(bind.data)["stale_fields"]))
+        if stale:
+            issues.append(
+                (
+                    INTEGRITY_STALE,
+                    "contract-bind marks fields stale: " + ", ".join(stale),
+                )
+            )
     if not issues:
         return IntegrityProjection(state=INTEGRITY_CURRENT, reason=None)
     by_state = {state: reason for state, reason in issues}

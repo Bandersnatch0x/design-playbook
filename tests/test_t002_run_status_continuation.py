@@ -21,6 +21,7 @@ if str(PKG) not in sys.path:
     sys.path.insert(0, str(PKG))
 
 from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
+from design_playbook.scripts import contract_v1  # noqa: E402
 from design_playbook.scripts import run_status as run_status_mod  # noqa: E402
 from design_playbook.scripts.run_continuation import (  # noqa: E402
     _shell_command,
@@ -323,6 +324,60 @@ class RunStatusContinuationTests(unittest.TestCase):
                 continuation["next_action"]["label"],
                 payload["next"],
             )
+            self.assertTrue(continuation["open_console"]["eligible"])
+
+    def test_stale_bind_fields_stay_explicitly_stale(self) -> None:
+        """A complete bind read still owns its stale fields (msg_c5eac26a52d7).
+
+        The stale_fields fact belongs to contract_v1's resolution lists; a
+        complete read must keep it explicitly stale — never silently
+        current, and never masked by an earlier Pass.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = root / "project"
+            run_root = _write_run(root, "run-stale-bind", {"spec.md": "# L1\n"})
+            (run_root / "point-back.md").write_text(
+                "## Verdict\n\nPass\n", encoding="utf-8"
+            )
+            contract_v1.promote_fields(
+                {
+                    "nav.item-count": {
+                        "value": "8",
+                        "provenance": "observed",
+                        "resolution": "assumed",
+                        "source_hash": "sha-old",
+                    }
+                },
+                project_dir=project,
+                changelog_summary="seed",
+                at="2026-08-08T00:00:00Z",
+            )
+            contract_v1.append_decision(
+                project / contract_v1.DECISIONS_FILENAME,
+                {
+                    "id": "d1",
+                    "field": "nav.item-count",
+                    "decision": "8",
+                    "rationale": "user confirmed in chat",
+                    "confirmed_at": "2026-08-08T01:00:00Z",
+                },
+            )
+            bind = contract_v1.bind_first(
+                project,
+                run_root,
+                source_hashes={"nav.item-count": "sha-new"},
+            )
+            self.assertEqual(bind.stale_fields, ["nav.item-count"])
+            result = _run(str(run_root), "--json")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["verdict"], "Pass")
+            continuation = payload["continuation"]
+            self.assertEqual(continuation["integrity"]["state"], "stale")
+            self.assertIn("nav.item-count", continuation["integrity"]["reason"])
+            self.assertEqual(continuation["blocker"]["source"], "integrity")
+            self.assertEqual(continuation["blocker"]["state"], "stale")
             self.assertTrue(continuation["open_console"]["eligible"])
 
     def test_inconsistent_bind_is_not_replaced_by_success(self) -> None:
