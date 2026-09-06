@@ -31,12 +31,16 @@ from design_playbook.mcp.preview.integrity import inspect_preview  # noqa: E402
 from design_playbook.scripts.audit_preferences import parse_audit_marker  # noqa: E402
 from design_playbook.scripts.escalation_signals import effective_tier  # noqa: E402
 from design_playbook.scripts.run_facts import capture_run_facts  # noqa: E402
+from design_playbook.scripts.run_continuation import (  # noqa: E402
+    project_run_continuation,
+    text_lines as continuation_text_lines,
+)
 from design_playbook.scripts.status_projection import (  # noqa: E402
     _audit_disposition,
     discover_runs,
     inspect_run,
     inspect_vnext,
-    next_action,
+    project_next_action,
     verdict_of,
 )
 
@@ -68,7 +72,15 @@ def render(run_root: Path, *, as_json: bool) -> int:
         return 2
     snapshot = facts.preview or inspect_preview(run_root / "preview")
     states = inspect_run(run_root, snapshot, facts)
-    action = next_action(states, run_root, snapshot, facts)
+    projection = project_next_action(states, run_root, snapshot, facts)
+    action = projection.primary.label
+    continuation = project_run_continuation(
+        run_root=run_root,
+        package_root=_PKG_ROOT,
+        states=states,
+        facts=facts,
+        projection=projection,
+    )
     vnext = inspect_vnext(run_root, facts)
     audit_marker = parse_audit_marker(facts.pointback_text)
     audit_disposition = _audit_disposition(
@@ -126,6 +138,7 @@ def render(run_root: Path, *, as_json: bool) -> int:
                 for signal in vnext.repair.signals
             ],
         } if vnext.repair is not None else None,
+        "continuation": continuation.to_dict(),
     }
     if as_json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -182,6 +195,8 @@ def render(run_root: Path, *, as_json: bool) -> int:
     if payload["verdict"]:
         print(f"verdict: {payload['verdict']}")
     print(f"next: {action}")
+    for line in continuation_text_lines(continuation):
+        print(line)
     return 0
 
 
