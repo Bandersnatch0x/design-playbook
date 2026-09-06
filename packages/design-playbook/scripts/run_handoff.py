@@ -26,7 +26,10 @@ from design_playbook.mcp.evidence.handoff import (  # noqa: E402
     StaticHandoffResult,
     build_static_handoff,
 )
-from design_playbook.scripts.run_facts import capture_run_facts  # noqa: E402
+from design_playbook.scripts.run_facts import (  # noqa: E402
+    capture_run_facts,
+    resolve_declared_fill,
+)
 
 
 class RunHandoffError(ValueError):
@@ -89,25 +92,14 @@ def _select_declared_fill(declared: tuple[str, ...], fill: str | None) -> str:
     )
 
 
-def _resolve_declared_fill(run_root: Path, declared: str) -> Path | None:
-    """Resolve one declared token the same way run_facts does."""
-    candidate = Path(declared)
-    bases = (
-        [candidate] if candidate.is_absolute()
-        else [run_root / candidate, Path.cwd() / candidate]
-    )
-    for base in bases:
-        if base.is_file():
-            return base
-    return None
-
-
 def _is_ineligible_fill(run_root: Path, resolved: Path) -> bool:
     try:
         resolved_abs = resolved.resolve()
         root_abs = run_root.resolve()
-    except (OSError, RuntimeError):
-        return False
+    except (OSError, RuntimeError) as exc:
+        raise RunHandoffError(
+            f"Cannot verify Fill location {resolved} against the run root: {exc}"
+        ) from exc
     for name in ("preview", "reference"):
         try:
             resolved_abs.relative_to(root_abs / name)
@@ -123,13 +115,14 @@ def _wrap_builder_result(
     fill_path: Path,
     built: StaticHandoffResult,
 ) -> RunHandoffResult:
-    payload = built.payload if isinstance(built.payload, dict) else {}
+    # build_static_handoff is trusted internal code: its payload is always a
+    # dict, so a contract violation surfaces instead of reporting fake success.
     return RunHandoffResult(
         run_root=run_root,
         fill=selected,
         fill_path=fill_path,
         out_dir=built.out_dir,
-        payload=payload,
+        payload=built.payload,
         json_path=built.json_path,
         zip_path=built.zip_path,
         index_html=built.index_html,
@@ -155,7 +148,7 @@ def run_handoff(
     # RunFacts captures the authoritative plan declaration once. Do not copy
     # that parser here: the handoff layer only selects among captured facts.
     selected = _select_declared_fill(facts.plan_fill_declarations, fill)
-    fill_path = _resolve_declared_fill(run_root, selected)
+    fill_path = resolve_declared_fill(run_root, selected)
     if fill_path is None:
         raise RunHandoffError(
             f"Declared Fill {selected!r} is missing. Create that file or "

@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 PKG = ROOT / "packages" / "design-playbook"
@@ -15,6 +16,7 @@ if str(PKG) not in sys.path:
 from design_playbook.scripts.run_facts import (  # noqa: E402
     STATED_ARTIFACTS,
     capture_run_facts,
+    resolve_declared_fill,
 )
 
 
@@ -135,6 +137,60 @@ class RunFactsOptionalArtifactTests(unittest.TestCase):
             self.assertEqual(errors[0].code, "unreadable")
             self.assertIn("utf-8", errors[0].message.lower())
             self.assertNotEqual(errors[0].message, "invalid UTF-8")
+
+
+class DeclaredFillResolutionTests(unittest.TestCase):
+    """The single fill-resolution invariant: absolute as-is, else run-root before cwd."""
+
+    def test_run_root_precedes_cwd_for_relative_declarations(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            run_root = base / "run"
+            run_root.mkdir()
+            cwd_root = base / "cwd"
+            cwd_root.mkdir()
+            (run_root / "surface.html").write_text("run", encoding="utf-8")
+            (cwd_root / "surface.html").write_text("cwd", encoding="utf-8")
+            with patch.object(Path, "cwd", return_value=cwd_root):
+                resolved = resolve_declared_fill(run_root, "surface.html")
+            self.assertEqual(resolved, run_root / "surface.html")
+
+    def test_cwd_is_the_fallback_when_run_root_lacks_the_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            run_root = base / "run"
+            run_root.mkdir()
+            cwd_root = base / "cwd"
+            cwd_root.mkdir()
+            (cwd_root / "surface.html").write_text("cwd", encoding="utf-8")
+            with patch.object(Path, "cwd", return_value=cwd_root):
+                resolved = resolve_declared_fill(run_root, "surface.html")
+            self.assertEqual(resolved, cwd_root / "surface.html")
+
+    def test_absolute_declaration_resolves_as_is(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run"
+            run_root.mkdir()
+            absolute = run_root.parent / "elsewhere.html"
+            absolute.write_text("absolute", encoding="utf-8")
+            resolved = resolve_declared_fill(run_root, str(absolute))
+            self.assertEqual(resolved, absolute)
+
+    def test_missing_declaration_resolves_to_none(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp)
+            self.assertIsNone(resolve_declared_fill(run_root, "no-such-fill.html"))
+
+    def test_plan_fill_artifacts_keeps_existing_declarations_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "plan.md").write_text(
+                "fill: exists.html\nfill: gone.html\n", encoding="utf-8"
+            )
+            (root / "exists.html").write_text("fill", encoding="utf-8")
+            facts = capture_run_facts(run_root=root)
+            self.assertEqual(facts.plan_fill_artifacts, ("exists.html",))
+            self.assertEqual(facts.plan_fill_declarations, ("exists.html", "gone.html"))
 
 
 if __name__ == "__main__":

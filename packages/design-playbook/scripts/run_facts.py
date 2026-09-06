@@ -247,6 +247,19 @@ def _plan_fill_declarations(plan_text: str) -> tuple[str, ...]:
     return tuple(found)
 
 
+def resolve_declared_fill(run_root: Path, declared: str) -> Path | None:
+    """Resolve one declared Fill token: absolute as-is, else run-root first, then cwd."""
+    candidate = Path(declared)
+    bases = (
+        [candidate] if candidate.is_absolute()
+        else [run_root / candidate, Path.cwd() / candidate]
+    )
+    for base in bases:
+        if base.is_file():
+            return base
+    return None
+
+
 def _plan_fill_artifacts(
     run_root: Path | None,
     plan_text: str,
@@ -254,16 +267,11 @@ def _plan_fill_artifacts(
     """Capture existing fill declarations while the run snapshot is loaded."""
     if run_root is None:
         return ()
-    found: list[str] = []
-    for declared in _plan_fill_declarations(plan_text):
-        candidate = Path(declared)
-        bases = (
-            [candidate] if candidate.is_absolute()
-            else [run_root / candidate, Path.cwd() / candidate]
-        )
-        if any(base.is_file() for base in bases):
-            found.append(declared)
-    return tuple(found)
+    return tuple(
+        declared
+        for declared in _plan_fill_declarations(plan_text)
+        if resolve_declared_fill(run_root, declared) is not None
+    )
 
 
 def _read_optional_run_facts(run_root: Path | None) -> _OptionalRunFacts:

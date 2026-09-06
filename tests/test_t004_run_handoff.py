@@ -311,6 +311,93 @@ class RunHandoffDeclarationTests(unittest.TestCase):
             self.assertFalse((run_root / "evidence" / "static-handoff").exists())
 
 
+class RunHandoffResolutionAndFailureVisibilityTests(unittest.TestCase):
+    def test_run_root_fill_wins_over_same_named_cwd_file(self) -> None:
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp_s:
+            tmp = Path(tmp_s)
+            run_root = _make_run(tmp, fills=("surface.html",))
+            cwd_dir = tmp / "cwd"
+            cwd_dir.mkdir()
+            (cwd_dir / "surface.html").write_text(DELIVERABLE_HTML, encoding="utf-8")
+            with patch.object(Path, "cwd", return_value=cwd_dir):
+                result = _build(run_root)
+            self.assertEqual(result.fill_path, (run_root / "surface.html").resolve())
+            self.assertEqual(
+                result.deliverable_html.read_bytes(),
+                (run_root / "surface.html").read_bytes(),
+            )
+
+    def test_containment_check_fails_closed_on_resolution_error(self) -> None:
+        from unittest.mock import patch
+
+        from design_playbook.scripts.run_handoff import _is_ineligible_fill
+
+        with patch.object(Path, "resolve", side_effect=OSError("resolution failed")):
+            with self.assertRaises(RunHandoffError) as raised:
+                _is_ineligible_fill(Path("run"), Path("run") / "preview" / "x.html")
+        message = str(raised.exception)
+        self.assertIn("Cannot verify", message)
+        self.assertIn("resolution failed", message)
+
+    def test_builder_payload_is_passed_through_not_replaced(self) -> None:
+        from unittest.mock import patch
+
+        from design_playbook.mcp.evidence.handoff import StaticHandoffResult
+
+        with tempfile.TemporaryDirectory() as tmp_s:
+            tmp = Path(tmp_s)
+            run_root = _make_run(tmp, fills=("surface.html",))
+            out_dir = run_root / "evidence" / "static-handoff"
+            payload = {
+                "verdict": "Pending",
+                "authority": "pending-user",
+                "confirmationSource": "unsubstantiated",
+            }
+            with patch(
+                "design_playbook.scripts.run_handoff.build_static_handoff"
+            ) as builder:
+                builder.return_value = StaticHandoffResult(
+                    out_dir=out_dir,
+                    payload=payload,
+                    json_path=out_dir / "disclosure-review.json",
+                    zip_path=out_dir / "static-handoff.zip",
+                    index_html=out_dir / "index.html",
+                    deliverable_html=out_dir / "deliverable.html",
+                )
+                result = run_handoff(run_root)
+            self.assertIs(result.payload, payload)
+            self.assertEqual(result.verdict, "Pending")
+            self.assertEqual(result.confirmation_source, "unsubstantiated")
+
+    def test_non_dict_builder_payload_surfaces_instead_of_fake_success(self) -> None:
+        from unittest.mock import patch
+
+        from design_playbook.mcp.evidence.handoff import StaticHandoffResult
+
+        with tempfile.TemporaryDirectory() as tmp_s:
+            tmp = Path(tmp_s)
+            run_root = _make_run(tmp, fills=("surface.html",))
+            out_dir = run_root / "evidence" / "static-handoff"
+            with patch(
+                "design_playbook.scripts.run_handoff.build_static_handoff"
+            ) as builder:
+                builder.return_value = StaticHandoffResult(
+                    out_dir=out_dir,
+                    payload=None,
+                    json_path=out_dir / "disclosure-review.json",
+                    zip_path=out_dir / "static-handoff.zip",
+                    index_html=out_dir / "index.html",
+                    deliverable_html=out_dir / "deliverable.html",
+                )
+                result = run_handoff(run_root)
+            # A violated builder contract must surface, not report an
+            # empty-dict fake success.
+            with self.assertRaises(AttributeError):
+                _ = result.verdict
+
+
 class RunHandoffCliAndRunSelectionTests(unittest.TestCase):
     def test_cli_requires_an_explicit_run(self) -> None:
         result = _run()
