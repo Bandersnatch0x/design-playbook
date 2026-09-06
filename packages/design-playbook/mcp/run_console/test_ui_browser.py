@@ -197,9 +197,9 @@ class ComprehensionFactsTest(BrowserTestCase):
         self.assertIn(run_id, identity_text)
         self.assertIn("Built at", identity_text)
         for section_id in (
-            "section-identity", "section-intent", "section-execution",
-            "section-evaluation", "section-next-actions", "section-limitations",
-            "section-sources",
+            "section-repair-packet", "section-identity", "section-intent",
+            "section-execution", "section-evaluation", "section-next-actions",
+            "section-limitations", "section-sources",
         ):
             expect(self.page.locator(f"#{section_id}")).to_be_visible()
 
@@ -700,7 +700,9 @@ class SecurityTest(BrowserTestCase):
         self.page.goto(self.console.url(f"#token={self.console.token}"))
         expect(self.page.locator("#view-ready")).to_be_visible()
         self.page.get_by_role("button", name="Copy agent command (plain text)").click()
-        expect(self.page.locator(".copy-status")).to_contain_text("plain text")
+        expect(self.page.locator("#section-next-actions .copy-status")).to_contain_text(
+            "plain text"
+        )
         clip = self.page.evaluate("() => navigator.clipboard.readText()")
         self.assertEqual(clip, "qoder run --resume run_example --next ui-evaluator")
         self.assertEqual(self.dialogs, [])
@@ -772,6 +774,9 @@ class LanguageToggleTest(BrowserTestCase):
         self.assertIn("4. 下一动作", self.fact(4).inner_text())
 
         # Detail section headings in Chinese
+        self.assertEqual(
+            self.page.locator("#section-repair-packet h2").inner_text(), "修复包"
+        )
         self.assertEqual(
             self.page.locator("#section-identity h2").inner_text(), "身份标识"
         )
@@ -900,6 +905,7 @@ class RCV1R1LegibilityRemediationTest(BrowserTestCase):
         expect(nav).to_be_visible()
 
         expected_sections = [
+            "#section-repair-packet",
             "#section-identity",
             "#section-intent",
             "#section-execution",
@@ -909,7 +915,7 @@ class RCV1R1LegibilityRemediationTest(BrowserTestCase):
             "#section-sources",
         ]
         links = nav.locator("a.jump-link").all()
-        self.assertEqual(len(links), 7)
+        self.assertEqual(len(links), 8)
         for link, expected_href in zip(links, expected_sections):
             self.assertEqual(link.get_attribute("href"), expected_href)
             # Verify target section exists in DOM

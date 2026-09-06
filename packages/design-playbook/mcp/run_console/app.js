@@ -56,6 +56,7 @@
       popover_title_degraded: "Build state: degraded",
 
       jump_label: "Jump to:",
+      jump_repair_packet: "Repair Packet",
       jump_identity: "Identity",
       jump_intent: "Intent",
       jump_execution: "Execution",
@@ -186,6 +187,34 @@
       copy_failed: "Copy failed: the browser denied clipboard access.",
       copy_unavail_state: "Copy is unavailable: the next action itself is {state}. No command is synthesized from other values.",
       copy_unavail_no_cmd: "Copy is unavailable: this action carries no copyable agent command in the snapshot. No command is synthesized from its label.",
+      section_repair_packet: "Repair Packet",
+      repair_packet_hint: "Derived continuation view of existing snapshot facts. Missing owner facts stay unavailable; nothing here is inferred from prose.",
+      repair_packet_notice: "This packet is a derived view only. Copying is allowed. The console cannot execute a repair, rerun an agent, write acceptance, or call a provider.",
+      packet_intent: "Intent",
+      packet_verdict: "Verdict",
+      packet_finding: "Finding",
+      packet_blocker_source: "Blocker source",
+      packet_declaration_owner: "Declaration owner",
+      packet_repair_intent: "Repair intent",
+      packet_next_owner: "Next owner",
+      packet_invalidated_evidence: "Invalidated evidence",
+      packet_resume_stage: "Resume stage",
+      packet_next_command: "Next Agent command",
+      packet_recapture: "Recapture requirement",
+      packet_no_blocking: "No blocking finding is projected in this snapshot.",
+      packet_copy_summary: "Copy packet summary",
+      packet_copy_summary_plain: "Copy packet summary (plain text)",
+      packet_copy_command: "Copy next Agent command",
+      packet_copy_command_plain: "Copy next Agent command (plain text)",
+      packet_gap: "unavailable — evidence gap",
+      packet_none: "(none)",
+      packet_stale_note: "Shown as stale context only — this value must not be read as current.",
+      packet_not_produced_invalidated: "The snapshot does not project an invalidated-evidence set.",
+      packet_not_produced_recapture: "The snapshot does not project a recapture requirement.",
+      packet_not_produced_command: "This action carries no copyable agent command in the snapshot.",
+      packet_disposition_unknown: "A finding is present but its blocking disposition is not owner-known.",
+      packet_blocking_count: "{n} blocking finding(s) in owner order; this packet uses the first.",
+      packet_copy_heading: "Repair Packet (derived view; copy only; nothing is executed)",
       heading_unavail_controls: "Unavailable controls",
       attest_role: "Attest role",
       export_diagnostics: "Export diagnostics",
@@ -283,6 +312,7 @@
       popover_title_degraded: "构建状态: 降级 (degraded)",
 
       jump_label: "快速跳转:",
+      jump_repair_packet: "修复包",
       jump_identity: "身份标识",
       jump_intent: "意图",
       jump_execution: "执行",
@@ -413,6 +443,34 @@
       copy_failed: "复制失败：浏览器拒绝了剪贴板访问权限。",
       copy_unavail_state: "复制不可用：下一动作本身为 {state}。绝不通过其他值合成指令。",
       copy_unavail_no_cmd: "复制不可用：本次快照中该动作未携带可复制的智能体指令。绝不根据标签名称合成指令。",
+      section_repair_packet: "修复包",
+      repair_packet_hint: "由现有快照事实派生的续跑视图。缺失的责任方事实保持不可用；此处绝不从叙述推断。",
+      repair_packet_notice: "此包仅为派生视图。允许复制。控制台不能执行修复、重跑智能体、写入验收，或调用提供者。",
+      packet_intent: "意图",
+      packet_verdict: "结论",
+      packet_finding: "发现",
+      packet_blocker_source: "阻塞来源",
+      packet_declaration_owner: "声明责任方",
+      packet_repair_intent: "修复意图",
+      packet_next_owner: "下一责任方",
+      packet_invalidated_evidence: "失效证据",
+      packet_resume_stage: "恢复阶段",
+      packet_next_command: "下一智能体指令",
+      packet_recapture: "重采要求",
+      packet_no_blocking: "本次快照未投影任何阻塞性发现。",
+      packet_copy_summary: "复制修复包摘要",
+      packet_copy_summary_plain: "复制修复包摘要 (纯文本)",
+      packet_copy_command: "复制下一智能体指令",
+      packet_copy_command_plain: "复制下一智能体指令 (纯文本)",
+      packet_gap: "不可用 — 证据缺口",
+      packet_none: "(无)",
+      packet_stale_note: "仅作为过期上下文展示 — 该值不可作为当前有效状态读取。",
+      packet_not_produced_invalidated: "快照未投影失效证据集。",
+      packet_not_produced_recapture: "快照未投影重采要求。",
+      packet_not_produced_command: "本次快照中该动作未携带可复制的智能体指令。",
+      packet_disposition_unknown: "存在发现，但其是否阻塞并非责任方已知。",
+      packet_blocking_count: "责任方顺序中有 {n} 条阻塞性发现；本包使用第一条。",
+      packet_copy_heading: "修复包（派生视图；仅复制；绝不执行）",
       heading_unavail_controls: "不可用控件",
       attest_role: "认证角色",
       export_diagnostics: "导出诊断报告",
@@ -591,7 +649,7 @@
     if (chipBtn) chipBtn.setAttribute("title", d.chip_tooltip);
     var jumpNavLabel = document.getElementById("jump-nav-label");
     if (jumpNavLabel) jumpNavLabel.textContent = d.jump_label;
-    ["identity", "intent", "execution", "evaluation", "next_actions", "limitations", "sources"].forEach(function (k) {
+    ["repair_packet", "identity", "intent", "execution", "evaluation", "next_actions", "limitations", "sources"].forEach(function (k) {
       var node = document.getElementById("jump-" + k.replace(/_/g, "-"));
       if (node) node.textContent = d["jump_" + k];
     });
@@ -1358,7 +1416,12 @@
     }
   }
 
-  function copyControl(assertion) {
+  function copyControl(assertion, idSuffix, labels) {
+    var suffix = idSuffix ? "-" + idSuffix : "";
+    var reasonId = "copy-unavailable-reason" + suffix;
+    var names = labels || {};
+    var disabledLabel = names.disabled || t("copy_agent_command");
+    var enabledLabel = names.enabled || t("copy_agent_command_plain");
     var known = assertion && assertion.availability === "known" && assertion.result;
     var command = known ? assertion.result.copyableAgentCommand : null;
     var reason;
@@ -1369,26 +1432,26 @@
     }
     var reasonNode = el("span", {
       class: "unavailable-reason",
-      id: "copy-unavailable-reason",
+      id: reasonId,
       text: reason,
     });
     if (reason !== undefined) {
-      return el("div", null,
+      return el("div", { class: "copy-wrap" },
         el("button", {
           type: "button",
           class: "button",
           disabled: "disabled",
-          "aria-describedby": "copy-unavailable-reason",
-        }, t("copy_agent_command")),
+          "aria-describedby": reasonId,
+        }, disabledLabel),
         reasonNode);
     }
     var status = el("span", { class: "copy-status", role: "status", text: "" });
     var button = el("button", { type: "button", class: "button" },
-      t("copy_agent_command_plain"));
+      enabledLabel);
     button.addEventListener("click", function () {
       copyPlainText(command, status);
     });
-    return el("div", null, button, status);
+    return el("div", { class: "copy-wrap" }, button, status);
   }
 
   function limitationSummary(items, code) {
@@ -1602,6 +1665,476 @@
   }
 
   /* ---------------------------------------------------------------- */
+  /* Derived Repair Packet — display/copy only, no new authority.       */
+  /* ---------------------------------------------------------------- */
+
+  var PACKET_NOT_PRODUCED = "not-produced";
+  var PACKET_MSG_ABSENT = "This assertion is absent from the snapshot.";
+  var PACKET_MSG_NO_BLOCKING = "No blocking finding is projected in this snapshot.";
+  var PACKET_MSG_DISPOSITION_UNKNOWN =
+    "A finding is present but its blocking disposition is not owner-known.";
+  var PACKET_MSG_NO_INVALIDATED =
+    "The snapshot does not project an invalidated-evidence set.";
+  var PACKET_MSG_NO_RECAPTURE =
+    "The snapshot does not project a recapture requirement.";
+  var PACKET_MSG_NO_COMMAND =
+    "This action carries no copyable agent command in the snapshot.";
+
+  function packetReason(code, message) {
+    return { code: code, message: message };
+  }
+
+  function packetFact(availability, value, reason, sourceId) {
+    return {
+      availability: availability,
+      value: value,
+      reason: reason || null,
+      sourceId: sourceId || null,
+    };
+  }
+
+  function packetGap(message, sourceId) {
+    return packetFact("unknown", null, packetReason(PACKET_NOT_PRODUCED, message), sourceId);
+  }
+
+  function packetFromAssertion(assertion) {
+    if (!assertion || typeof assertion !== "object") {
+      return packetGap(PACKET_MSG_ABSENT);
+    }
+    var availability = assertion.availability;
+    if (availability !== "known" && availability !== "unknown" &&
+        availability !== "stale" && availability !== "inconsistent") {
+      availability = "unknown";
+    }
+    var sourceId = typeof assertion.id === "string" ? assertion.id : null;
+    var reason = assertion.reason && typeof assertion.reason === "object" ? assertion.reason : null;
+    if (availability === "known" || availability === "stale" || availability === "inconsistent") {
+      return packetFact(
+        availability,
+        assertion.result,
+        availability === "known" ? null : reason,
+        sourceId
+      );
+    }
+    return packetFact("unknown", null, reason, sourceId);
+  }
+
+  function packetDisposition(assertion) {
+    var result = assertion && assertion.result;
+    if (!result || typeof result !== "object") return null;
+    var disposition = result.disposition;
+    if (disposition === "blocking" || disposition === "advisory" || disposition === "info") {
+      return disposition;
+    }
+    return null;
+  }
+
+  function selectBlockingFinding(findings) {
+    var items = Array.isArray(findings) ? findings : [];
+    var subject = null;
+    var unreadable = null;
+    var blockingCount = 0;
+    items.forEach(function (item) {
+      if (!item || typeof item !== "object") return;
+      var disposition = packetDisposition(item);
+      if (disposition === "blocking") {
+        blockingCount += 1;
+        if (subject === null) subject = item;
+      } else if (disposition === null && unreadable === null) {
+        unreadable = item;
+      }
+    });
+    if (subject) return { kind: "present", assertion: subject, blockingCount: blockingCount };
+    if (unreadable) {
+      return { kind: "disposition-unknown", assertion: unreadable, blockingCount: 0 };
+    }
+    return { kind: "absent", assertion: null, blockingCount: 0 };
+  }
+
+  function packetOwnerValue(result) {
+    var owner = result && result.owner;
+    if (!owner || typeof owner !== "object") {
+      return { kind: null, domainId: null, sourceRef: null };
+    }
+    return {
+      kind: typeof owner.kind === "string" ? owner.kind : null,
+      domainId: owner.domainId === undefined ? null : owner.domainId,
+      sourceRef: owner.sourceRef === undefined ? null : owner.sourceRef,
+    };
+  }
+
+  function packetFindingFields(selection) {
+    var kind = selection.kind;
+    var assertion = selection.assertion;
+    if (kind === "absent") {
+      var absent = packetGap(PACKET_MSG_NO_BLOCKING);
+      return {
+        finding: absent,
+        blockerSource: absent,
+        declarationOwner: absent,
+        repairIntent: absent,
+      };
+    }
+    if (kind === "disposition-unknown") {
+      var base = packetFromAssertion(assertion);
+      var unknown = packetFact(
+        base.availability,
+        null,
+        base.reason || packetReason(PACKET_NOT_PRODUCED, PACKET_MSG_DISPOSITION_UNKNOWN),
+        base.sourceId
+      );
+      return {
+        finding: unknown,
+        blockerSource: unknown,
+        declarationOwner: unknown,
+        repairIntent: unknown,
+      };
+    }
+    var projected = packetFromAssertion(assertion);
+    var result = projected.value && typeof projected.value === "object" ? projected.value : null;
+    if (!result) {
+      var empty = packetFact(projected.availability, null, projected.reason, projected.sourceId);
+      return {
+        finding: empty,
+        blockerSource: empty,
+        declarationOwner: empty,
+        repairIntent: empty,
+      };
+    }
+    var owner = packetOwnerValue(result);
+    return {
+      finding: packetFact(projected.availability, {
+        findingId: result.findingId,
+        criterionIds: Array.isArray(result.criterionIds) ? result.criterionIds.slice() : [],
+        issue: result.issue,
+        severity: result.severity,
+        disposition: result.disposition,
+      }, projected.reason, projected.sourceId),
+      blockerSource: packetFact(projected.availability, {
+        issue: result.issue,
+        findingId: result.findingId,
+        sourceRef: owner.sourceRef,
+        domainId: owner.domainId,
+        blockingCount: selection.blockingCount,
+      }, projected.reason, projected.sourceId),
+      declarationOwner: packetFact(
+        projected.availability, owner, projected.reason, projected.sourceId
+      ),
+      repairIntent: packetFact(
+        projected.availability,
+        typeof result.repair === "string" ? result.repair : null,
+        projected.reason,
+        projected.sourceId
+      ),
+    };
+  }
+
+  function packetResumeStage(progress) {
+    var projected = packetFromAssertion(progress);
+    var result = projected.value && typeof projected.value === "object" ? projected.value : null;
+    if (!result) return projected;
+    var stageId = result.latestObservedStage;
+    var label = null;
+    var stages = result.observedStages;
+    if (typeof stageId === "string" && Array.isArray(stages)) {
+      stages.forEach(function (stage) {
+        if (label === null && stage && stage.stageId === stageId && typeof stage.label === "string") {
+          label = stage.label;
+        }
+      });
+    }
+    return packetFact(projected.availability, {
+      stageId: stageId === undefined ? null : stageId,
+      label: label,
+    }, projected.reason, projected.sourceId);
+  }
+
+  function packetNextOwner(primary) {
+    var projected = packetFromAssertion(primary);
+    var result = projected.value && typeof projected.value === "object" ? projected.value : null;
+    if (!result) return projected;
+    var owner = result.owner && typeof result.owner === "object" ? result.owner : {};
+    return packetFact(projected.availability, {
+      actor: owner.actor === undefined ? null : owner.actor,
+      role: owner.role === undefined ? null : owner.role,
+      kind: result.kind === undefined ? null : result.kind,
+      actionId: result.actionId === undefined ? null : result.actionId,
+      label: result.label === undefined ? null : result.label,
+    }, projected.reason, projected.sourceId);
+  }
+
+  function packetNextCommand(primary) {
+    var projected = packetFromAssertion(primary);
+    var result = projected.value && typeof projected.value === "object" ? projected.value : null;
+    if (!result) return projected;
+    var command = result.copyableAgentCommand;
+    if (typeof command === "string" && command.length) {
+      return packetFact(projected.availability, command, projected.reason, projected.sourceId);
+    }
+    if (projected.availability === "known") {
+      return packetGap(PACKET_MSG_NO_COMMAND, projected.sourceId);
+    }
+    return packetFact(
+      projected.availability,
+      null,
+      projected.reason || packetReason(PACKET_NOT_PRODUCED, PACKET_MSG_NO_COMMAND),
+      projected.sourceId
+    );
+  }
+
+  function deriveRepairPacket(snapshot) {
+    var evaluation = snapshot.evaluation || {};
+    var selection = selectBlockingFinding(evaluation.findings);
+    var findingFields = packetFindingFields(selection);
+    var primary = snapshot.nextActions && snapshot.nextActions.primary;
+    var progress = snapshot.execution && snapshot.execution.progress;
+    var intent = snapshot.intent && snapshot.intent.summary;
+    return {
+      intent: packetFromAssertion(intent),
+      verdict: packetFromAssertion(evaluation.verdict),
+      finding: findingFields.finding,
+      blockerSource: findingFields.blockerSource,
+      declarationOwner: findingFields.declarationOwner,
+      repairIntent: findingFields.repairIntent,
+      nextOwner: packetNextOwner(primary),
+      invalidatedEvidence: packetGap(PACKET_MSG_NO_INVALIDATED),
+      resumeStage: packetResumeStage(progress),
+      nextCommand: packetNextCommand(primary),
+      recaptureRequirement: packetGap(PACKET_MSG_NO_RECAPTURE),
+    };
+  }
+
+  function packetValueText(value) {
+    if (value === null || value === undefined || value === "") return t("packet_none");
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+    if (Array.isArray(value)) {
+      return value.length ? value.map(String).join(", ") : t("packet_none");
+    }
+    if (typeof value !== "object") return String(value);
+    var parts = [];
+    Object.keys(value).forEach(function (key) {
+      var item = value[key];
+      if (item === null || item === undefined || (Array.isArray(item) && !item.length)) {
+        parts.push(key + "=" + t("packet_none"));
+      } else if (Array.isArray(item)) {
+        parts.push(key + "=" + item.map(String).join(","));
+      } else {
+        parts.push(key + "=" + String(item));
+      }
+    });
+    return parts.length ? parts.join("; ") : t("packet_none");
+  }
+
+  function formatPacketCopyText(packet) {
+    var labels = {
+      intent: t("packet_intent"),
+      verdict: t("packet_verdict"),
+      finding: t("packet_finding"),
+      blockerSource: t("packet_blocker_source"),
+      declarationOwner: t("packet_declaration_owner"),
+      repairIntent: t("packet_repair_intent"),
+      nextOwner: t("packet_next_owner"),
+      invalidatedEvidence: t("packet_invalidated_evidence"),
+      resumeStage: t("packet_resume_stage"),
+      nextCommand: t("packet_next_command"),
+      recaptureRequirement: t("packet_recapture"),
+    };
+    var lines = [t("packet_copy_heading")];
+    Object.keys(labels).forEach(function (key) {
+      var fact = packet[key];
+      if (!fact) return;
+      var availability = String(fact.availability || "unknown");
+      var reason = packetLocalizedReason(
+        fact.reason && typeof fact.reason === "object" ? fact.reason : null
+      );
+      var reasonText = "";
+      if (reason && (reason.code || reason.message)) {
+        reasonText = " (" + String(reason.code || "") +
+          (reason.code && reason.message ? ": " : "") +
+          String(reason.message || "") + ")";
+      }
+      var readable = availability === "known" || availability === "stale" ||
+        availability === "inconsistent";
+      var empty = fact.value === null || fact.value === undefined || fact.value === "" ||
+        (Array.isArray(fact.value) && !fact.value.length);
+      if (!readable || empty) {
+        if (availability === "known" && empty) {
+          lines.push(labels[key] + " (known): " + t("packet_none"));
+        } else {
+          lines.push(labels[key] + " (" + availability + "): " + t("packet_gap") + reasonText);
+        }
+        return;
+      }
+      var stale = availability === "stale" || availability === "inconsistent"
+        ? " [" + t("packet_stale_note") + "]" : "";
+      lines.push(labels[key] + " (" + availability + "): " + packetValueText(fact.value) +
+        stale + reasonText);
+    });
+    return lines.join("\n");
+  }
+
+  function packetLocalizedReason(reason) {
+    if (!reason || typeof reason !== "object") return reason;
+    var message = String(reason.message || "");
+    var mapped = null;
+    if (message === PACKET_MSG_NO_INVALIDATED) mapped = t("packet_not_produced_invalidated");
+    else if (message === PACKET_MSG_NO_RECAPTURE) mapped = t("packet_not_produced_recapture");
+    else if (message === PACKET_MSG_NO_COMMAND) mapped = t("packet_not_produced_command");
+    else if (message === PACKET_MSG_NO_BLOCKING) mapped = t("packet_no_blocking");
+    else if (message === PACKET_MSG_DISPOSITION_UNKNOWN) mapped = t("packet_disposition_unknown");
+    else if (message === PACKET_MSG_ABSENT) mapped = t("assertion_absent");
+    if (!mapped) return reason;
+    return { code: reason.code, message: mapped };
+  }
+
+  function packetFieldNodes(fact, formatValue) {
+    var nodes = [];
+    if (!fact) {
+      nodes.push(el("p", { class: "empty-note", text: t("assertion_absent") }));
+      return nodes;
+    }
+    var availability = String(fact.availability || "unknown");
+    nodes.push(badge(availability));
+    if (availability === "known") {
+      if (fact.value === null || fact.value === undefined || fact.value === "") {
+        nodes.push(el("p", { class: "empty-note", text: t("known_no_value") }));
+      } else {
+        nodes.push(formatValue(fact.value));
+      }
+    } else if ((availability === "stale" || availability === "inconsistent") &&
+               fact.value !== null && fact.value !== undefined && fact.value !== "") {
+      var value = formatValue(fact.value);
+      if (value.classList) value.classList.add("stale-value");
+      nodes.push(value);
+      nodes.push(el("p", { class: "fact-meta", text: t("packet_stale_note") }));
+      if (fact.reason) nodes.push(reasonBlock(packetLocalizedReason(fact.reason)));
+    } else {
+      if (fact.reason) nodes.push(reasonBlock(packetLocalizedReason(fact.reason)));
+      else nodes.push(el("p", { class: "empty-note", text: t("packet_gap") }));
+    }
+    return nodes;
+  }
+
+  function packetCard(fieldKey, title, fact, formatValue) {
+    var card = el("article", { class: "packet-card", "data-packet-field": fieldKey });
+    card.appendChild(el("h3", null, title));
+    packetFieldNodes(fact, formatValue).forEach(function (node) { card.appendChild(node); });
+    return card;
+  }
+
+  function renderRepairPacket(details, snapshot) {
+    var packet = deriveRepairPacket(snapshot);
+    var children = [
+      el("p", { class: "section-hint", id: "repair-packet-hint", text: t("repair_packet_hint") }),
+      el("p", { class: "repair-packet-notice", text: t("repair_packet_notice") }),
+    ];
+    var grid = el("div", { class: "packet-grid", id: "repair-packet-grid" });
+
+    grid.appendChild(packetCard("intent", t("packet_intent"), packet.intent, function (value) {
+      return el("p", { class: "fact-value", text: String(value) });
+    }));
+    grid.appendChild(packetCard("verdict", t("packet_verdict"), packet.verdict, function (value) {
+      var text = String(value);
+      var extra = text === "Pass" ? " badge-verdict-pass" : " badge-verdict-recirculate";
+      var label = text === "Pass" ? t("verdict_pass")
+        : (text === "Recirculate" ? t("verdict_recirculate") : text);
+      return el("p", { class: "fact-value" }, el("span", { class: "badge" + extra, text: label }));
+    }));
+    grid.appendChild(packetCard("finding", t("packet_finding"), packet.finding, function (value) {
+      return kv(
+        t("term_finding"), value.findingId == null ? t("packet_none") : String(value.findingId),
+        t("term_issue"), value.issue == null ? t("packet_none") : String(value.issue),
+        t("term_severity"), value.severity == null ? t("packet_none") : String(value.severity),
+        t("term_disposition"), value.disposition == null ? t("packet_none") : String(value.disposition),
+        t("term_criterion"), Array.isArray(value.criterionIds) && value.criterionIds.length
+          ? value.criterionIds.join(", ") : t("packet_none")
+      );
+    }));
+    grid.appendChild(packetCard("blockerSource", t("packet_blocker_source"), packet.blockerSource, function (value) {
+      var wrap = el("div");
+      wrap.appendChild(kv(
+        t("term_issue"), value.issue == null ? t("packet_none") : String(value.issue),
+        t("term_finding"), value.findingId == null ? t("packet_none") : String(value.findingId),
+        "sourceRef", value.sourceRef == null ? t("packet_none") : String(value.sourceRef),
+        "domainId", value.domainId == null ? t("packet_none") : String(value.domainId)
+      ));
+      if (value.blockingCount) {
+        wrap.appendChild(el("p", {
+          class: "fact-meta",
+          text: t("packet_blocking_count", { n: value.blockingCount }),
+        }));
+      }
+      return wrap;
+    }));
+    grid.appendChild(packetCard("declarationOwner", t("packet_declaration_owner"), packet.declarationOwner, function (value) {
+      return kv(
+        t("term_owner"), value.kind == null ? t("packet_none") : String(value.kind),
+        "domainId", value.domainId == null ? t("packet_none") : String(value.domainId),
+        "sourceRef", value.sourceRef == null ? t("packet_none") : String(value.sourceRef)
+      );
+    }));
+    grid.appendChild(packetCard("repairIntent", t("packet_repair_intent"), packet.repairIntent, function (value) {
+      return el("p", { class: "fact-value", text: String(value) });
+    }));
+    grid.appendChild(packetCard("nextOwner", t("packet_next_owner"), packet.nextOwner, function (value) {
+      var ownerText = t("owner_prefix", { actor: String(value.actor || t("unspecified")) });
+      if (value.role) ownerText += t("role_suffix", { role: String(value.role) });
+      if (value.kind) ownerText += t("kind_prefix", { kind: String(value.kind) });
+      return el("div", null,
+        el("p", { class: "fact-value", text: ownerText }),
+        el("p", { class: "fact-meta", text: value.label == null ? t("packet_none") : String(value.label) }));
+    }));
+    grid.appendChild(packetCard("invalidatedEvidence", t("packet_invalidated_evidence"), packet.invalidatedEvidence, function (value) {
+      return el("p", { class: "fact-value", text: packetValueText(value) });
+    }));
+    grid.appendChild(packetCard("resumeStage", t("packet_resume_stage"), packet.resumeStage, function (value) {
+      return kv(
+        "stageId", value.stageId == null ? t("packet_none") : String(value.stageId),
+        t("term_title"), value.label == null ? t("packet_none") : String(value.label)
+      );
+    }));
+    grid.appendChild(packetCard("nextCommand", t("packet_next_command"), packet.nextCommand, function (value) {
+      return el("pre", { class: "packet-command", text: String(value) });
+    }));
+    grid.appendChild(packetCard("recaptureRequirement", t("packet_recapture"), packet.recaptureRequirement, function (value) {
+      return el("p", { class: "fact-value", text: packetValueText(value) });
+    }));
+    children.push(grid);
+
+    var copyRow = el("div", { class: "packet-copy-row" });
+    var summaryStatus = el("span", {
+      class: "copy-status",
+      id: "packet-copy-summary-status",
+      role: "status",
+      text: "",
+    });
+    var summaryButton = el("button", {
+      type: "button",
+      class: "button",
+      id: "packet-copy-summary",
+    }, t("packet_copy_summary_plain"));
+    summaryButton.addEventListener("click", function () {
+      copyPlainText(formatPacketCopyText(packet), summaryStatus);
+    });
+    copyRow.appendChild(el("div", { class: "copy-wrap" }, summaryButton, summaryStatus));
+    copyRow.appendChild(copyControl(
+      snapshot.nextActions && snapshot.nextActions.primary,
+      "packet",
+      {
+        disabled: t("packet_copy_command"),
+        enabled: t("packet_copy_command_plain"),
+      }
+    ));
+    children.push(copyRow);
+
+    var sectionNode = section("section-repair-packet", t("section_repair_packet"), children);
+    sectionNode.setAttribute("data-repair-packet", "derived");
+    details.appendChild(sectionNode);
+  }
+
+  /* ---------------------------------------------------------------- */
   /* Snapshot rendering entry point.                                    */
   /* ---------------------------------------------------------------- */
 
@@ -1620,6 +2153,7 @@
 
     var details = document.getElementById("detail-sections");
     clear(details);
+    renderRepairPacket(details, snapshot);
     renderIdentity(details, snapshot);
     renderIntent(details, snapshot);
     renderExecution(details, snapshot);
