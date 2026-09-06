@@ -8,11 +8,11 @@
  *    `skills/` directory. The plugin locates the directory via `__dirname`,
  *    so no `!!js` expression and no cwd-dependent resolution is involved.
  *
- * 2. Six slash commands (ctx.commands) — `design-io`, `doctor`,
- *    `run-review`, `run-status`, `ui-review`, `ux-spec` — that load the
- *    matching `commands/<name>.md` prompt, substitute `$ARGUMENTS` with the
- *    raw trailing input, and inject it as a user-role follow-up turn via
- *    `agent.followup()`.
+ * 2. Slash commands (ctx.commands) — `design-io`, `doctor`,
+ *    `run-handoff`, `run-review`, `run-status`, `ui-review`, `ux-spec` —
+ *    that load the matching `commands/<name>.md` prompt, substitute
+ *    `$ARGUMENTS` with the raw trailing input, and inject it as a
+ *    user-role follow-up turn via `agent.followup()`.
  *
  * The Cordis `!!js` evaluation scope provides no `require` (only Node globals
  * plus ctx-provided values like dshHomePath/loader), so pointing a
@@ -81,7 +81,7 @@ exports.parseSkillFile = parseSkillFile
 exports.createUserMessageFromPrompt = createUserMessageFromPrompt
 
 /**
- * The six slash commands this plugin registers. Each maps to a
+ * Slash commands this plugin registers. Each maps to a
  * `commands/<name>.md` prompt file; the file's frontmatter `description`
  * becomes the command's discovery metadata, and the body (with `$ARGUMENTS`
  * substituted) is injected as a user follow-up turn.
@@ -89,6 +89,7 @@ exports.createUserMessageFromPrompt = createUserMessageFromPrompt
 const COMMAND_NAMES = [
   'design-io',
   'doctor',
+  'run-handoff',
   'run-review',
   'run-status',
   'ui-review',
