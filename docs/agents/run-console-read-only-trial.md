@@ -4,10 +4,11 @@ Operational protocol for the fixed human comprehension check on the
 read-only Run Console. This document prepares a trial; it does **not**
 run one.
 
-> **Status: TRIAL_NOT_RUN.** No participant has been recruited,
-> contacted, timed, or observed. Nothing in this document or in the
-> rehearsal test below is participant evidence. The rehearsal asserts
-> readiness only.
+> **Program status: `G-RO-TRIAL-PASS` NOT SATISFIED.** One earlier
+> authorized participant missed the check (~120 s), and further participant
+> collection is deferred. No new participant has been recruited under this
+> remediated protocol. The companion rehearsal remains `TRIAL_NOT_RUN`;
+> it is readiness evidence only, never participant evidence.
 
 Companion deterministic rehearsal:
 `packages/design-playbook/mcp/run_console/test_read_only_trial.py`.
@@ -32,9 +33,10 @@ sequence authority: the [roadmap](../roadmap.md) delivery order
   "Unrelated external users can complete the fixed comprehension check
   without hidden telemetry or raw-file reconstruction; interventions
   are disclosed").
-- Until that separately authorized real evidence exists, the correct
-  state of this program is **TRIAL_NOT_RUN**, and typed actions
-  (RCV1-009+) remain locked.
+- Until that separately authorized real evidence satisfies the gate, the
+  program state remains **NOT SATISFIED**, and typed actions (RCV1-009+)
+  remain locked. The earlier miss is not erased and does not authorize
+  promotion.
 
 ## The fixed four comprehension questions
 
@@ -156,16 +158,18 @@ source-bound answers are present on the rendered page without
 raw-file navigation, stale values carry their stale labels, missing
 values render their availability and reason, and the read leaves no
 trace. Readiness is the only claim the rehearsal can make. The module
-ends with the explicit marker `TRIAL_STATUS = "TRIAL_NOT_RUN"`, and its
-final test asserts the rehearsal never flips it and never emits any
-satisfied `G-RO-TRIAL-PASS` record.
+ends with the explicit rehearsal marker `TRIAL_STATUS = "TRIAL_NOT_RUN"`
+(the rehearsal ran no participant), and its final test asserts the
+rehearsal never flips it and never emits any satisfied `G-RO-TRIAL-PASS`
+record.
 
 ## Explicit non-claims
 
-- No trial was run; no participant was recruited, contacted, timed,
-  observed, or identified.
-- No timing or answer data exists. The rehearsal measures
-  discoverability only and contains no participant-timing simulation.
+- No new trial is run by this document or rehearsal, and no new participant
+  is recruited, contacted, timed, observed, or identified.
+- No new timing or answer data exists. The rehearsal measures
+  discoverability only and contains no participant-timing simulation; it
+  neither repeats nor replaces the recorded earlier miss.
 - A green rehearsal is **not** trial evidence and does not satisfy
   `G-RO-TRIAL-PASS`.
 - Nothing here authorizes RCV1-009 (typed actions) or any later

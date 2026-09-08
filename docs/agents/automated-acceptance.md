@@ -26,10 +26,10 @@ into an extra project whose path contains spaces. It then exercises:
 2. Real `run_handoff.py`: output without confirmation remains **Pending**;
    simulated confirmation with a blocking review remains **Recirculate**.
 3. Real `run_status.py`, its exact emitted Console launcher argv, and browser
-   navigation. The Repair Packet keeps the blocker and owner, shows unproduced
-   invalidation-detail/resume facts as unknown, and copies the exact Agent command
-   through the real clipboard. Status reads and Console actions do not write
-   project files.
+   navigation. The Repair Packet keeps the blocker, owner, invalidated-evidence
+   set, resume stage, and recapture requirement, and copies the exact Agent
+   command through the real clipboard. Status reads and Console actions do not
+   write project files.
 4. A deterministic repair **outside** the Console, all three inbox user paths,
    fresh Provider captures, a replacement review fixture, and Console refresh.
 5. Strict run validation, an explicit **Pass** handoff, unchanged point-back

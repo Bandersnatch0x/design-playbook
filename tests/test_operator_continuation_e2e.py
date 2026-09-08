@@ -233,10 +233,10 @@ def test_extra_project_blocker_to_repaired_handoff(tmp_path: Path) -> None:
                 packet = console.locator("#section-repair-packet")
                 expect(packet).to_contain_text("clear all has no confirmation")
                 expect(packet).to_contain_text("L6.2")
-                # The owner exposes the flag, but no detailed set/resume target.
-                # The derived packet must report those gaps, not mine source prose.
-                expect(packet).to_contain_text("The snapshot does not project an invalidated-evidence set.")
-                expect(packet).to_contain_text("The snapshot does not project an explicit resume stage;")
+                # Owner-produced Recirculate facts: detailed set + resume + recapture.
+                expect(packet).to_contain_text("Invalidated evidence")
+                expect(packet).to_contain_text("ui-evaluator")
+                expect(packet).to_contain_text("Recapture only invalidated evidence")
                 packet.get_by_role("button", name=re.compile("Copy.*command", re.I)).click()
                 assert console.evaluate("navigator.clipboard.readText()") == \
                     continuation["next_action"]["copyable_agent_command"]

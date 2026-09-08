@@ -147,6 +147,11 @@ def _blocking_snapshot(*, command: str | None = None) -> dict[str, object]:
         label="Verdict is Recirculate — repair from point-back findings.",
         owner={"actor": "agent", "role": None},
         copyableAgentCommand=command,
+        invalidatedEvidence=["L6.3"],
+        resumeStage="ui-evaluator",
+        recaptureRequirement=(
+            "Recapture only invalidated evidence, then re-run ui-evaluator."
+        ),
     )
     return document
 
@@ -258,8 +263,13 @@ class RepairPacketProjectionTest(unittest.TestCase):
         self.assertEqual(packet["nextCommand"]["reason"]["code"], NOT_PRODUCED)
         label = "Verdict is Recirculate — repair from point-back findings."
         self.assertNotEqual(packet["nextCommand"]["value"], label)
-        self.assertEqual(packet["invalidatedEvidence"]["availability"], "unknown")
-        self.assertEqual(packet["recaptureRequirement"]["availability"], "unknown")
+        self.assertEqual(packet["invalidatedEvidence"]["availability"], "known")
+        self.assertEqual(packet["invalidatedEvidence"]["value"], ["L6.3"])
+        self.assertEqual(packet["recaptureRequirement"]["availability"], "known")
+        self.assertEqual(
+            packet["recaptureRequirement"]["value"],
+            "Recapture only invalidated evidence, then re-run ui-evaluator.",
+        )
 
     def test_owner_supplied_command_is_copied_verbatim(self) -> None:
         packet = derive_repair_packet(_blocking_snapshot(command=_COMMAND))
@@ -267,18 +277,17 @@ class RepairPacketProjectionTest(unittest.TestCase):
         self.assertEqual(packet["nextCommand"]["value"], _COMMAND)
         self.assertIn(_COMMAND, packet["copyText"])
 
-    def test_resume_stage_is_a_gap_not_inferred_from_progress_or_command(self) -> None:
+    def test_resume_stage_is_owner_explicit_and_not_inferred_from_progress(self) -> None:
         """Spec rule 19: latest observed stage is not a resume target."""
         document = _blocking_snapshot(command=_COMMAND)
         progress = document["execution"]["progress"]  # type: ignore[index]
         progress["result"]["latestObservedStage"] = "fill"  # type: ignore[index]
         packet = derive_repair_packet(document)
-        self.assertEqual(packet["resumeStage"]["availability"], "unknown")
-        self.assertIsNone(packet["resumeStage"]["value"])
-        self.assertEqual(packet["resumeStage"]["reason"]["code"], NOT_PRODUCED)
-        self.assertEqual(packet["resumeStage"]["reason"]["message"], MSG_NO_RESUME_STAGE)
+        self.assertEqual(packet["resumeStage"]["availability"], "known")
+        self.assertEqual(packet["resumeStage"]["value"], "ui-evaluator")
+        self.assertIsNone(packet["resumeStage"]["reason"])
         rendered = json.dumps(packet["resumeStage"])
-        self.assertNotIn("fill", rendered)
+        self.assertNotIn('"fill"', rendered)
         self.assertNotIn("--resume", rendered)
 
     def test_stale_intent_is_stale_context_not_current(self) -> None:
@@ -398,10 +407,16 @@ class RepairPacketRenderContractTest(unittest.TestCase):
         self.assertNotIn("/api/v1/actions/rerun", _JS)
         self.assertNotIn("executeRepair", _JS)
 
-    def test_resume_stage_is_a_static_gap_not_derived_from_progress(self) -> None:
-        self.assertIn("packetGap(PACKET_MSG_NO_RESUME_STAGE)", _JS)
+    def test_resume_stage_comes_from_owner_next_action_not_progress(self) -> None:
+        # Owner-produced resumeStage rides nextActions.primary; the JS
+        # helper keeps the gap message when the owner did not produce it.
+        # Never invent a packetResumeStage parser over progress.
+        self.assertIn("packetNextActionField(", _JS)
+        self.assertIn('"resumeStage"', _JS)
+        self.assertIn("PACKET_MSG_NO_RESUME_STAGE", _JS)
         self.assertIn("packet_not_produced_resume_stage", _JS)
         self.assertNotIn("packetResumeStage", _JS)
+        self.assertNotIn("execution.progress", _JS.split("function deriveRepairPacket")[1].split("function ")[0])
 
     def test_ui_route_table_is_unchanged(self) -> None:
         resources = UIResources()
@@ -468,8 +483,12 @@ class RepairPacketBrowserTest(browser_harness.BrowserTestCase):
         self.assertIn("add a consequence-confirmation dialog", packet)
         self.assertIn("declaration", self._field("declarationOwner").inner_text())
         self.assertIn("agent", self._field("nextOwner").inner_text())
-        self.assertIn("not project an invalidated-evidence set", packet)
-        self.assertIn("not project a recapture requirement", packet)
+        self.assertIn("L6.3", self._field("invalidatedEvidence").inner_text())
+        self.assertIn("ui-evaluator", self._field("resumeStage").inner_text())
+        self.assertIn(
+            "Recapture only invalidated evidence",
+            self._field("recaptureRequirement").inner_text(),
+        )
         self.assertNotIn("Pass", self._field("verdict").inner_text())
 
     def test_blocked_run_copy_advances_the_journey_with_owner_command(self) -> None:

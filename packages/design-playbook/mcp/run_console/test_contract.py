@@ -283,6 +283,34 @@ class SnapshotContractShapeTests(unittest.TestCase):
         self.assertEqual(validated, document)
         self.assertIsNot(validated, document)
 
+    def test_recirculate_action_requires_owner_continuation_fields(self) -> None:
+        def recirculate() -> dict[str, object]:
+            document = _valid_snapshot()
+            result = document["nextActions"]["primary"]["result"]  # type: ignore[index]
+            result.update(
+                actionId="action.repair-after-recirculate",
+                kind="agent-command",
+                label="Verdict is Recirculate — repair from point-back findings.",
+                invalidatedEvidence=["L6.3"],
+                resumeStage="ui-evaluator",
+                recaptureRequirement=(
+                    "Recapture only invalidated evidence, then re-run ui-evaluator."
+                ),
+            )
+            return document
+
+        self.assertEqual(validate_snapshot(recirculate()), recirculate())
+
+        missing = recirculate()
+        del missing["nextActions"]["primary"]["result"]["resumeStage"]  # type: ignore[index]
+        duplicated = recirculate()
+        duplicated["nextActions"]["primary"]["result"]["invalidatedEvidence"] = [  # type: ignore[index]
+            "L6.3", "L6.3"
+        ]
+        for document in (missing, duplicated):
+            with self.subTest(document=document):
+                _assert_contract_invalid(self, document)
+
     def test_s03_rejects_missing_and_unknown_fields_at_fixed_boundaries(self) -> None:
         cases: list[dict[str, object]] = []
         missing = _valid_snapshot()

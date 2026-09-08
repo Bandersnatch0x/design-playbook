@@ -219,7 +219,7 @@ def _shell_command(argv: tuple[str, ...]) -> str:
 
 
 def _action_dict(action: NextAction) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "action_id": action.action_id,
         "kind": action.kind.value,
         "label": action.label,
@@ -229,6 +229,13 @@ def _action_dict(action: NextAction) -> dict[str, object]:
         },
         "copyable_agent_command": action.copyable_agent_command,
     }
+    if action.invalidated_evidence is not None:
+        payload["invalidated_evidence"] = list(action.invalidated_evidence)
+    if action.resume_stage is not None:
+        payload["resume_stage"] = action.resume_stage
+    if action.recapture_requirement is not None:
+        payload["recapture_requirement"] = action.recapture_requirement
+    return payload
 
 
 def _phase(states: list[StageState]) -> dict[str, str] | None:
@@ -335,6 +342,7 @@ def _console_receipt(
         "local" if implementation == "present" else "unsupported"
     )
     gaps: list[str] = []
+    gate_state = "unknown" if inventory.trial_status is None else "not-satisfied"
     if not inventory.trial_record_present or inventory.trial_status is None:
         gaps.append("trial evidence is unknown")
     elif inventory.trial_status == _TRIAL_NOT_RUN:
@@ -358,9 +366,21 @@ def _console_receipt(
                 + ["/".join(relative) for relative in _RUNTIME_RELATIVE]
                 + ["selected-run"]
             ),
+            inputs=(
+                "package-inventory",
+                "console-test-presence",
+                "trial-record",
+            ),
             fallback=_SAFE_FALLBACK if inventory.missing else None,
             evidence_gap="; ".join(gaps) or None,
             public_claim="experimental",
+            gate_id="G-RO-TRIAL-PASS",
+            gate_state=gate_state,
+            gate_detail=(
+                "authorized external read-only trial evidence is not satisfied"
+                if gate_state == "not-satisfied"
+                else "trial gate outcome is unknown"
+            ),
         )
     )
 

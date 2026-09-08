@@ -28,6 +28,7 @@ class CapabilityReceiptTests(unittest.TestCase):
                 availability="local",
                 entrypoint="design-playbook run-status --open-console",
                 prerequisites=("selected-run", "loopback-runtime"),
+                inputs=("package-inventory", "console-test-presence"),
                 public_claim="experimental",
             )
         )
@@ -40,9 +41,11 @@ class CapabilityReceiptTests(unittest.TestCase):
                 "status",
                 "entrypoint",
                 "prerequisites",
+                "inputs",
                 "fallback",
                 "publicClaim",
                 "evidenceGap",
+                "gate",
             },
         )
         self.assertEqual(payload["capability"], "run-console")
@@ -63,9 +66,14 @@ class CapabilityReceiptTests(unittest.TestCase):
             "selected-run",
             "loopback-runtime",
         ])
+        self.assertEqual(payload["inputs"], [
+            "package-inventory",
+            "console-test-presence",
+        ])
         self.assertEqual(payload["publicClaim"], "experimental")
         self.assertIsNone(payload["fallback"])
         self.assertIsNone(payload["evidenceGap"])
+        self.assertIsNone(payload["gate"])
 
     def test_local_tested_capability_can_remain_experimental_or_gated(self) -> None:
         base = dict(

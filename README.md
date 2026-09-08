@@ -6,7 +6,7 @@
 
 ### *Agents ship UI nobody can verify. This plugin makes them prove it.*
 
-[![Version](https://img.shields.io/badge/Version-0.22.0-2DD4BF?style=flat-square&logo=semver&logoColor=black)](https://www.npmjs.com/package/design-playbook)
+[![Version](https://img.shields.io/badge/Version-0.22.1-2DD4BF?style=flat-square&logo=semver&logoColor=black)](https://www.npmjs.com/package/design-playbook)
 [![License](https://img.shields.io/badge/License-MIT-2DD4BF?style=flat-square&logo=opensourceinitiative&logoColor=black)](./packages/design-playbook/LICENSE)
 [![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-2DD4BF?style=flat-square&logo=claude&logoColor=black)](#-try-it)
 [![Skills](https://img.shields.io/badge/Skills-8-2DD4BF?style=flat-square)](#-skills--commands)
@@ -68,6 +68,10 @@ claude --plugin-dir <abs>/packages/design-playbook          # dev load, no insta
 codex plugin marketplace add <abs-to-repo-root>
 codex plugin add design-playbook@design-playbook
 ```
+
+Version SSOT: `packages/design-playbook/package.json` and
+`packages/design-playbook/.claude-plugin/plugin.json` stay version-locked; the
+sibling bundle, root catalog, README badges, and generated Codex snapshot follow them.
 
 </details>
 
@@ -179,7 +183,7 @@ npx design-playbook init <agent>
 | :--- | :--- | :--- |
 | **Tier 1** (native) | Claude Code, Codex | Full fidelity — skills, commands, MCP, drift-gated snapshots |
 | **Tier 2** (generated) | Cursor, Gemini CLI, OpenCode, Windsurf, GitHub Copilot | Skills as platform rules + project-level MCP config; commands degrade to prompt docs |
-| **Tier 3** (floor) | Kiro, Amp, Jules, Qwen Code, and 18 more — `npx design-playbook --list` | `AGENTS.md` with orchestrator contract + MCP install guide |
+| **Tier 3** (floor) | 22 total, including Kiro, Amp, Jules, Qwen Code — `npx design-playbook --list` | `AGENTS.md` with orchestrator contract + MCP install guide |
 
 Claude Code is the native surface. Tier-2/3 outputs are generated adapters with honest degradation. Full capability matrix: [docs/specs/2026-08-28-multi-platform-adapter.md](./docs/specs/2026-08-28-multi-platform-adapter.md).
 
@@ -198,6 +202,8 @@ Not another style/palette pack — this plugin owns the **delivery pipeline, evi
 
 - **Multimodality** — understanding screenshot content depends on the **host model's vision capability**. The plugin only *registers* images (locator + SHA-256 + metadata); a host without vision rides your text description instead.
 - **Run Console** — shipped and **experimental**: a local, single-run console projecting existing run artifacts so an operator can see intent, source verdict, blocker source, and next owner without opening raw files — including a derived Repair Packet and an explicit `open-console` continuation from `run-status`. It stays **local and trial-gated** (no external authorization yet), is not a cloud Workspace, and never becomes a second run-state authority.
+- **Packaging MCP config** — marketplace path includes package-local MCP runtime config; published registry packages may omit a root MCP config and need explicit host registration.
+- **Console loopback on Windows** — local Console open uses loopback transport; dogfood saw a transport abort there, so do not treat loopback as a fixed-platform guarantee.
 - **Proof vs. shape** — `scripts/validate_run.py` machine-checks the run-artifact *shape* and the closure trail; it does not claim every future run is automatically high-quality UI. Historical verdicts apply only to their recorded cases, not a current end-to-end run or a statistical guarantee.
 
 ## 📄 License

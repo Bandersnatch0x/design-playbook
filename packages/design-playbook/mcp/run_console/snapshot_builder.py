@@ -536,20 +536,29 @@ class _Builder:
             preview_snapshot=facts.preview,
             run_facts=facts,
         ).primary
+        action_result = {
+            "actionId": action.action_id,
+            "kind": action.kind.value,
+            "label": action.label,
+            "owner": {
+                "actor": action.owner.actor.value,
+                "role": action.owner.role,
+            },
+            "copyableAgentCommand": action.copyable_agent_command,
+        }
+        if action.action_id == "action.repair-after-recirculate":
+            action_result["invalidatedEvidence"] = (
+                list(action.invalidated_evidence)
+                if action.invalidated_evidence is not None
+                else None
+            )
+            action_result["resumeStage"] = action.resume_stage
+            action_result["recaptureRequirement"] = action.recapture_requirement
         self._draft(
             "next-actions.primary",
             (_REF_STATUS,),
             "known",
-            {
-                "actionId": action.action_id,
-                "kind": action.kind.value,
-                "label": action.label,
-                "owner": {
-                    "actor": action.owner.actor.value,
-                    "role": action.owner.role,
-                },
-                "copyableAgentCommand": action.copyable_agent_command,
-            },
+            action_result,
         )
         # The owner emits no alternatives; the empty list is owner-known.
 

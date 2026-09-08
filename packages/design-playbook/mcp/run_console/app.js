@@ -1867,6 +1867,29 @@
     );
   }
 
+  function packetNextActionField(primary, field, missingMessage) {
+    var projected = packetFromAssertion(primary);
+    var result = projected.value && typeof projected.value === "object" ? projected.value : null;
+    if (!result) return projected;
+    if (result[field] !== undefined && result[field] !== null) {
+      return packetFact(
+        projected.availability,
+        result[field],
+        projected.reason,
+        projected.sourceId
+      );
+    }
+    if (projected.availability === "known") {
+      return packetGap(missingMessage, projected.sourceId);
+    }
+    return packetFact(
+      projected.availability,
+      null,
+      projected.reason || packetReason(PACKET_NOT_PRODUCED, missingMessage),
+      projected.sourceId
+    );
+  }
+
   function deriveRepairPacket(snapshot) {
     var evaluation = snapshot.evaluation || {};
     var selection = selectBlockingFinding(evaluation.findings);
@@ -1881,12 +1904,16 @@
       declarationOwner: findingFields.declarationOwner,
       repairIntent: findingFields.repairIntent,
       nextOwner: packetNextOwner(primary),
-      invalidatedEvidence: packetGap(PACKET_MSG_NO_INVALIDATED),
-      /* Snapshot v1 has no explicit resume-stage fact; the latest
-         observed stage is progress, not a resume target (spec rule 19). */
-      resumeStage: packetGap(PACKET_MSG_NO_RESUME_STAGE),
+      invalidatedEvidence: packetNextActionField(
+        primary, "invalidatedEvidence", PACKET_MSG_NO_INVALIDATED
+      ),
+      resumeStage: packetNextActionField(
+        primary, "resumeStage", PACKET_MSG_NO_RESUME_STAGE
+      ),
       nextCommand: packetNextCommand(primary),
-      recaptureRequirement: packetGap(PACKET_MSG_NO_RECAPTURE),
+      recaptureRequirement: packetNextActionField(
+        primary, "recaptureRequirement", PACKET_MSG_NO_RECAPTURE
+      ),
     };
   }
 

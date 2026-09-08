@@ -506,7 +506,12 @@
         },
         "label": { "type": "string", "minLength": 1 },
         "owner": { "$ref": "#/$defs/nextActionOwner" },
-        "copyableAgentCommand": { "$ref": "#/$defs/nullableString" }
+        "copyableAgentCommand": { "$ref": "#/$defs/nullableString" },
+        "invalidatedEvidence": {
+          "anyOf": [{ "$ref": "#/$defs/stringArray" }, { "type": "null" }]
+        },
+        "resumeStage": { "$ref": "#/$defs/nullableString" },
+        "recaptureRequirement": { "$ref": "#/$defs/nullableString" }
       }
     },
     "limitationResult": {
