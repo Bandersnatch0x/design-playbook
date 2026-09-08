@@ -1,0 +1,41 @@
+{
+  "round": 1,
+  "report_ref": "spec.md",
+  "confirmed": true,
+  "floor_pass": true,
+  "selected_options": [
+    "确认签署决策"
+  ],
+  "feedback": "锚点批注 (2):\n1. [p p:nth-of-type(2)] 字体大一点 — body > p:nth-of-type(2)\n2. [已添加 Pin #2] 背景高太尉浅绿色 — @pin-1",
+  "timestamp": "2026-09-08T10:11:31+08:00",
+  "prototype_path": "preview/round-1.html",
+  "prototype_html_hash": "ca68ed550a7ed98f8d2d990575a0a052c86e7073d924c700235a3e4d92fe82be",
+  "decision_id": "da9272548f03496bbcc170024b036c9a",
+  "criteria_review": [
+    {
+      "id": "L6.1",
+      "title": "",
+      "checked": false
+    },
+    {
+      "id": "L6.2",
+      "title": "",
+      "checked": false
+    },
+    {
+      "id": "L6.3",
+      "title": "",
+      "checked": false
+    },
+    {
+      "id": "L6.4",
+      "title": "",
+      "checked": false
+    },
+    {
+      "id": "L6.5",
+      "title": "",
+      "checked": false
+    }
+  ]
+}

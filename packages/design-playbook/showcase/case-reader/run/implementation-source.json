@@ -1,0 +1,17 @@
+{
+  "captured_at": "2026-09-08T02:13:21.069922+00:00",
+  "version": "0.22.0",
+  "git_head": "ddb0e4fb6b562d619dc28e115f204e2ebc1fa07a",
+  "status": "local working-tree implementation; not a release or external user trial",
+  "runtime": "real bundled stdio MCP processes with run-local cwd and environment; no review/capture fixtures",
+  "files": {
+    "packages/design-playbook/scripts/run_profile.py": "b083970fac47d8ffd264278c61f57573f78977705844f7fea16029727f912d9b",
+    "packages/design-playbook/scripts/run_status.py": "a49f0ac057f8188e0436dc9180391660f71098a64e497162cfd4897a638c98b1",
+    "packages/design-playbook/scripts/run_handoff.py": "1ea4d641bcaf4be838b7d29b082b4c8da55721ed707ff1c76a09864261e34661",
+    "packages/design-playbook/scripts/validate_run.py": "e5504946fa3fd947ae8251105c070e064df264fb40315719a5c36052cf3e7a14",
+    "packages/design-playbook/mcp/preview/transaction.py": "e0ceac1d1bfd58296855b11989b90ee06f4672c312565334f9bcb0b925111ab5",
+    "packages/design-playbook/mcp/preview/review_session.py": "960c3040eafe339e50688954ccb13acb2722e733945e5d7a26520896e5a93ff6",
+    "packages/design-playbook/mcp/evidence/capture_runtime.py": "a8df37cd7f81d42b09fb7058ce8cf261e9e8f574d9303cd15436be5afe8d994a",
+    "packages/design-playbook/mcp/evidence/handoff.py": "09f478218e3cf0c5f9654ed5b3925eedc31673d1529a2d80970fb058fa849efd"
+  }
+}

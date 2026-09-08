@@ -1,0 +1,158 @@
+{
+  "run_root": "showcase\\case-reader\\run",
+  "stages": [
+    {
+      "key": "baseline",
+      "skill": "design-baseline",
+      "present": false,
+      "evidence": []
+    },
+    {
+      "key": "reference",
+      "skill": "reference-intake",
+      "present": false,
+      "evidence": []
+    },
+    {
+      "key": "spec",
+      "skill": "ux-spec",
+      "present": true,
+      "evidence": [
+        "spec.md"
+      ]
+    },
+    {
+      "key": "plan",
+      "skill": "plan",
+      "present": true,
+      "evidence": [
+        "plan.md"
+      ]
+    },
+    {
+      "key": "decision",
+      "skill": "ui-picker",
+      "present": true,
+      "evidence": [
+        "decision-report.md"
+      ]
+    },
+    {
+      "key": "preview",
+      "skill": "preview*",
+      "present": true,
+      "evidence": [
+        "preview/log.md",
+        "preview/decision-round-1.json",
+        "preview/round-1.html"
+      ]
+    },
+    {
+      "key": "fill",
+      "skill": "fill",
+      "present": false,
+      "evidence": []
+    },
+    {
+      "key": "craft",
+      "skill": "craft-guard",
+      "present": false,
+      "evidence": []
+    },
+    {
+      "key": "evidence",
+      "skill": "observe*",
+      "present": false,
+      "evidence": []
+    },
+    {
+      "key": "accept",
+      "skill": "ui-evaluator",
+      "present": false,
+      "evidence": []
+    }
+  ],
+  "next": "Preview confirmed and floor passed — resume at fill.",
+  "verdict": null,
+  "audited": null,
+  "audit_marker_state": "legacy",
+  "run_profile": {
+    "tier": "P2",
+    "effective_tier": "P2",
+    "confirmed_by": "user + 2026-09-08T10:11:31+08:00 (shaping/confirm-round-1.json)",
+    "skipped": [
+      {
+        "step": "design-baseline",
+        "reason": "new standalone UI, router requires_baseline=false; no existing baseline waived"
+      },
+      {
+        "step": "reference-intake",
+        "reason": "first-party source data only, router requires_reference_contract=false"
+      },
+      {
+        "step": "native-craft",
+        "reason": "browser surface, no native OS chrome"
+      }
+    ],
+    "upgrades": []
+  },
+  "shaping": "archived",
+  "six_block_report": false,
+  "invalidated_evidence": false,
+  "repair": null,
+  "continuation": {
+    "selected_run": "D:\\code_space\\design-playbook-fresh\\packages\\design-playbook\\showcase\\case-reader\\run",
+    "phase": {
+      "key": "preview",
+      "skill": "preview*"
+    },
+    "blocker": null,
+    "next_action": {
+      "action_id": "action.resume-after-preview",
+      "kind": "continue",
+      "label": "Preview confirmed and floor passed — resume at fill.",
+      "owner": {
+        "actor": "agent",
+        "role": null
+      },
+      "copyable_agent_command": null
+    },
+    "integrity": {
+      "state": "current",
+      "reason": null
+    },
+    "open_console": {
+      "eligible": true,
+      "action": "open-console",
+      "command": "& 'C:\\Users\\amsterdam\\AppData\\Local\\Programs\\Python\\Python313\\python.exe' 'D:\\code_space\\design-playbook-fresh\\packages\\design-playbook\\scripts\\run_console.py' 'D:\\code_space\\design-playbook-fresh\\packages\\design-playbook\\showcase\\case-reader\\run'",
+      "argv": [
+        "C:\\Users\\amsterdam\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+        "D:\\code_space\\design-playbook-fresh\\packages\\design-playbook\\scripts\\run_console.py",
+        "D:\\code_space\\design-playbook-fresh\\packages\\design-playbook\\showcase\\case-reader\\run"
+      ]
+    },
+    "capability": {
+      "capability": "run-console",
+      "status": {
+        "implementation": "present",
+        "validation": "tested",
+        "availability": "local",
+        "publicClaim": "experimental"
+      },
+      "entrypoint": "& 'C:\\Users\\amsterdam\\AppData\\Local\\Programs\\Python\\Python313\\python.exe' 'D:\\code_space\\design-playbook-fresh\\packages\\design-playbook\\scripts\\run_console.py' 'D:\\code_space\\design-playbook-fresh\\packages\\design-playbook\\showcase\\case-reader\\run'",
+      "prerequisites": [
+        "scripts/run_console.py",
+        "mcp/run_console/session.py",
+        "mcp/run_console/http_server.py",
+        "mcp/run_console/snapshot_builder.py",
+        "selected-run"
+      ],
+      "fallback": {
+        "kind": "evidence-gap",
+        "detail": "local Console remains experimental and trial-gated; G-RO-TRIAL-PASS is not satisfied"
+      },
+      "publicClaim": "experimental",
+      "evidenceGap": "local Console remains experimental and trial-gated; G-RO-TRIAL-PASS is not satisfied"
+    }
+  }
+}

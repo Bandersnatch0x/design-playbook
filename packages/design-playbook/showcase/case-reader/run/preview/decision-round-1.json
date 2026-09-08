@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "decision_id": "26c7de17705c4b6f8136a5b97dbcd67f",
+  "timestamp": "2026-09-08T10:26:07+08:00",
+  "prototype_mode": "path",
+  "prototype_path": "preview\\round-1.html",
+  "binding": {
+    "digest": "47c5feb05357aeb2a3fc7eda44ccd81f4b0d2009a21ab0bdc9dd9de3ae133e31",
+    "round": 1,
+    "prototype_html_hash": "f1926eb5cd55fd033c3b1b8055de2c2b11089743fb01027ae655e44af166eee0",
+    "report_ref": "decision-report.md",
+    "summary": "设计方向确认：按你的反馈放大至 18px 字号并使用浅绿色背景；单页目录+原文，案例归属和证据边界优先。请核对字号、背景及阅读结构，确认或提出修改。内容是明确标注的结构摘录，正式实现会独立编写并绑定真实原文；本次确认不代表功能验收。",
+    "options": [
+      "确认签署决策",
+      "需要修改"
+    ]
+  },
+  "outcome": {
+    "confirmed": true,
+    "user_confirmed": true,
+    "floor_pass": true,
+    "floor_failure": "",
+    "selected_options": [
+      "确认签署决策"
+    ],
+    "feedback": "锚点批注 (1):\n1. [#search] 修改字体 — #search",
+    "anchors": [
+      {
+        "selector": "#search",
+        "label": "#search",
+        "comment": "修改字体",
+        "tag": "input",
+        "node_id": "f9e56770",
+        "features": {
+          "tag": "input"
+        }
+      }
+    ],
+    "aborted": false,
+    "rejected": false,
+    "rejection": "",
+    "skipped": false,
+    "criteria_review": [
+      {
+        "id": "L6.1",
+        "title": "",
+        "checked": false
+      },
+      {
+        "id": "L6.2",
+        "title": "",
+        "checked": false
+      },
+      {
+        "id": "L6.3",
+        "title": "",
+        "checked": false
+      },
+      {
+        "id": "L6.4",
+        "title": "",
+        "checked": false
+      },
+      {
+        "id": "L6.5",
+        "title": "",
+        "checked": false
+      }
+    ]
+  }
+}

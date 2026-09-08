@@ -1,60 +1,78 @@
-# Showcase - design-playbook on SwarSight
+# Showcase — cases and journey coverage
 
-One **demonstrated** Design I/O run against SwarSight (swarm-intelligence foresight platform; React + Tailwind + shadcn workbench). The plugin was loaded from this package and driven against a one-line ask. Screenshots + artifacts below are the output of that single run — a demonstration of the declared contract, not a claim that real UI quality was machine-proven. `scripts/validate_run.py` checks only the run-artifact *shape*; `tests/test_validate_run.py` validates these showcase files directly (not by copying them into fixtures). That proves structure, not that every future run is machine-verified.
+These **three independent historical tasks** demonstrate parts of evidence-backed UI delivery. They are not one current end-to-end run. Start with the [user journey](#user-journey), then open the source material for [Case A](#case-a), [Case B](#case-b), or [Case C](#case-c).
 
-**Current orchestrator sequence** (skill SSOT): `design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?) → ui-picker → (preview*) → fill → craft-guard → (observe*) → ui-evaluator`. This showcase predates ADR-0012 and demonstrates the **declaration / decision / point-back** core (spec → decision report → point-back) from a live SwarSight pass; it does **not** include `design-baseline/`, `reference/` intake, a `plan.md` handoff, or `observe*` evidence artifacts. A separate **preview\* HITL** demonstration ([`04-preview-hitl.md`](04-preview-hitl.md)) — sourced from the v0.4 multi-step-form dogfood (007), a **different ask** than the main case — shows G5 (real `preview_prototype` confirm). `observe*` stays dogfood-only (体积 + 漂移负担，待稳定 fixture 化). `preview*`/`observe*` are optional (adapters must expose `preview_prototype` / `execute_capture_plan`); G5/G6 only apply when their artifacts occurred.
+The current workflow is defined by the [orchestration contract](../skills/design-playbook/SKILL.md). Historical records retain their original scope, conclusions, and limitations; they do not establish current release readiness.
 
-**Gate coverage honesty:** G1–G4 shape is validated against these showcase files by `tests/test_validate_run.py`; **G5 is additionally exercised on the showcase preview dir** (`showcase/preview-g5` test, artifacts in [`preview/`](preview/), sourced from dogfood 007). G6 remains covered by the **fixture matrix** under `tests/fixtures/` plus dogfood logs (not by expanding this product case — v0.3 decision: one deep showcase + recirculate trail). For a live run's next step without a second state file, monorepo developers can use the packaged helper `packages/design-playbook/scripts/run_status.py .scratch/<run>`.
-**Ask:** `在 SwarSight 加一个模拟运行队列监控页：看每个模拟任务的状态、失败重试、资源占用。`
+## User journey
 
-## Screenshots (every key step)
+| Your next question | Open the material | What is demonstrated here |
+| --- | --- | --- |
+| What does one complete current run look like? | [Case reader (live run)](case-reader/index.html) · [its run record](case-reader/run/point-back.md) | Current end-to-end run: real spec + preview confirmations, Fill, craft audit, captured evidence, six-block review, static handoff. |
+| What must the UI do, and what counts as complete? | [Requirements and acceptance conditions](01-spec.md) | Case A: scope, permissions, edge states, and Given / When / Then criteria. |
+| Can we agree on direction before implementation? | [Design decisions](02-decision-report.md) · [Human confirmation](04-preview-hitl.md) | Case A records decisions; Case B records human revisions and confirmation for a **different request**. |
+| How do we identify and close a delivery gap? | [Findings and repair closure](03-point-back.md) | Case A: declaration-linked findings and the recorded repair / re-evaluation trail. |
+| How does another engineer resume interrupted work? | [Status and continuation command](../commands/run-status.md) | **Command reference only**; no resume replay is packaged in these cases. |
+| What can the team inspect at handoff and retrospective? | [Static handoff command](../commands/run-handoff.md) · [Cross-run review command](../commands/run-review.md) | **Command references only**; no generated handoff or cross-run review report is packaged here. |
 
-### Step 0 · Install
-![Install](screenshots/00-install.png)
+## Case A
 
-### Step 1 · ux-spec → six-layer spec
-![Spec](screenshots/01-spec.png)
+**Queue requirements, design decisions, and review closure.** The original SwarSight task asked: `在 SwarSight 加一个模拟运行队列监控页：看每个模拟任务的状态、失败重试、资源占用。`
 
-### Step 2 · ui-picker → decision report (before code)
-![Decision report](screenshots/02-decision-report.png)
+1. [Specification](01-spec.md): six-layer requirements with permissions and acceptance criteria.
+2. [Decision report](02-decision-report.md): structure and component choices before implementation.
+3. [Point-back report](03-point-back.md): findings, repair closure, and the historical verdict. Its Positive findings and Limitations sections were later backfilled to the six-block report shape.
 
-### Step 3 · ui-evaluator → point-back + recirculate closure
-![Point-back](screenshots/03-point-back.png)
+**Boundary:** this task predates ADR-0012. It does not package a design-baseline intake, reference intake, `plan.md`, preview confirmation, or captured `observe*` evidence. The report describes a single-viewport inspection with no involved-user evidence. Its recorded Pass is not a new evaluation of the current version.
 
-### Result · six checks met in this run
-![Six gates](screenshots/04-gates.png)
+## Case B
 
-## Source artifacts
+**Human confirmation of a form design.** The v0.4 dogfood 007 enterprise onboarding form is independent of Case A.
 
-1. [`01-spec.md`](01-spec.md) - six-layer spec (ux-spec)
-2. [`02-decision-report.md`](02-decision-report.md) - shell + component decision (ui-picker)
-3. [`03-point-back.md`](03-point-back.md) - point-back findings + closure (ui-evaluator); backfilled to the full six-block report shape (Positive findings + Limitations statement added)
-4. [`04-preview-hitl.md`](04-preview-hitl.md) - **preview\* HITL 演示**（G5；sourced from dogfood 007，不同 ask）+ [`preview/`](preview/) artifacts
-5. [`queue-monitor.html`](queue-monitor.html) - **live dogfood Fill surface**（v0.20.0 `retry-confirm` run，另一 ask）：失败批量重试确认对话，五态渲染 + 轨迹断言 45/45 + 重开重置验证 8/8；含 ui-review 复评发现并修复的重开范围残留缺陷（openDialog 打开即重置为保守默认）
+- [Four-round account](04-preview-hitl.md) and [review log](preview/log.md) explain the actual feedback and revisions.
+- [Decision report](preview/decision-report.md), [first prototype](preview/round-1.html), [confirmed prototype](preview/round-4.html), and [confirmation record](preview/confirm-round-4.json) preserve the source artifacts.
 
-## Six checks met in this run
+**Boundary:** this demonstrates preview confirmation (G5), not acceptance of Case A's queue or of a production implementation. The selected prototypes are design artifacts; they do not run plugin commands.
 
-| Check | Met |
+## Case C
+
+**Batch-retry confirmation implementation.** The v0.20.0 `retry-confirm` task is another independent request.
+
+- Open [the queue interface](queue-monitor.html) locally alongside [its state module](queue-monitor-state.js) to inspect retry scope, error and empty states, and conservative defaults when reopening the dialog.
+- [State-transition checks](test_queue_monitor_state.js) exercise the local interaction logic.
+
+**Boundary:** this is a browser interface with **local mock data and no backend contract**. Clicking retry changes simulated queue state; it does not invoke design-playbook, execute a real job, or generate a run, evidence, or acceptance record. The historical task's complete run artifacts are not packaged beside this implementation.
+
+## Current coverage gaps
+
+The [case reader](case-reader/index.html) is one complete current run (spec → preview confirmation → Fill → craft audit → captured evidence → review → static handoff); its [point-back record](case-reader/run/point-back.md) is a single-agent declaration-driven review, not an independent expert audit. A second complete run (an ADR decision index, run locally under `.scratch/`) plus the cross-run review closed the retrospective gap: see [run-review 2026-09-08](run-review-2026-09-08.md) (2 runs with `point-back.md`, 0 repeat blockers, 0 rule-candidate qualifications). Command documentation in the journey table explains available entrypoints, not completed case evidence. Run Console remains local, experimental, and trial-gated.
+
+Keep missing or unverified steps explicit; do not borrow a confirmation or Pass from these historical tasks.
+
+To start a new case, follow the [installation instructions](../../../README.md) and current orchestration contract in the target project, then retain that run's actual outputs. This index does not supply missing historical artifacts or claim a new run has occurred.
+
+## Historical illustrations
+
+The `00-install` through `04-gates` images are **illustrated summaries rendered from curated HTML**, not raw browser captures of an executed workflow. Their archived labels and counts describe the old presentation, not the current package inventory. The six items in `04-gates` are the historical case checklist, **not the current G1–G6 gate matrix**.
+
+| Material | Archived illustration |
 | --- | --- |
-| L5/L6 before pretty UI | ✅ |
-| Decision report before code | ✅ |
-| Point-back evaluator findings | ✅ |
-| No skip of Done when | ✅ |
-| Generalizes (SwarSight domain) | ✅ |
-| Recirculate closure (blocking → fix → re-eval → 0) | ✅ |
+| Installation summary | [00-install](screenshots/00-install.png) |
+| Case A specification | [01-spec](screenshots/01-spec.png) |
+| Case A design decisions | [02-decision-report](screenshots/02-decision-report.png) |
+| Case A review and repair | [03-point-back](screenshots/03-point-back.png) |
+| Case A historical checklist | [04-gates](screenshots/04-gates.png) |
 
-> **G5 (preview\*)** is demonstrated separately in [`04-preview-hitl.md`](04-preview-hitl.md) (sourced from dogfood 007, a different ask); this main run predates that addition and had no preview step.
+## Maintainer checks
 
-## Regenerate screenshots
+[Run validation tests](../tests/test_validate_run.py) exercise these declaration / report fixtures directly and separately check the preview confirmation directory. A passing structural regression does not turn the independent cases into one observed run or establish runtime UI quality. G6 coverage lives in the test fixture matrix and local dogfood records, not in a captured-evidence case packaged here.
 
-```bash
-node scripts/screenshot-showcase.mjs   # repo-root script; needs playwright-core + chromium (see header)
-```
-
-## Reproduce in your session
+From the repository root:
 
 ```text
-/plugin marketplace add https://github.com/Bandersnatch0x/design-playbook.git
-/plugin install design-playbook@design-playbook
-/design-playbook:design-io 在 SwarSight 加一个模拟运行队列监控页
+python scripts/check_doc_links.py
+python packages/design-playbook/tests/test_validate_run.py
+node packages/design-playbook/showcase/test_queue_monitor_state.js
 ```
+
+To render updated **illustrations**, run `node scripts/screenshot-showcase.mjs` with `DPB_PLAYWRIGHT_PKG` and `DPB_CHROMIUM` as described in its header. Output goes to `.scratch/showcase-screenshots/`; archived images stay untouched. Rendering does not rerun or re-evaluate any case.

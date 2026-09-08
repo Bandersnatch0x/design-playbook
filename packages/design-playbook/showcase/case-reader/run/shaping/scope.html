@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>案例阅读器 · 确认本次范围</title>
+<style>
+:root{color-scheme:light;font-family:"Microsoft YaHei",system-ui,sans-serif;color:#1b2924;background:#f5f2e9}*{box-sizing:border-box}body{max-width:920px;margin:0 auto;padding:40px 28px;line-height:1.8}h1{font-size:36px;line-height:1.25}h2{font-size:21px;margin-top:32px}p,li{max-width:780px}.label{color:#426957;font-size:13px;letter-spacing:.06em}.boundary{border-left:4px solid #426957;padding:12px 20px;background:#e4ebdf}ol{padding-left:22px}li+li{margin-top:12px}strong{font-weight:700}.note{font-size:14px;color:#4b5852}code{overflow-wrap:anywhere}a{color:#245c48}a:focus-visible{outline:3px solid #245c48;outline-offset:3px}
+</style>
+<p class="label">DESIGN-PLAYBOOK / 同一次需求的完整本地运行 / 范围确认</p>
+<h1>读到真正的案例，<br>也读懂它能证明什么。</h1>
+<p>新建一个<strong>离线、只读的案例阅读入口</strong>。目录按需求、方向、验收、接续、交付组织；正文直接显示本仓原始材料和来源，不再跳到模拟队列操作。</p>
+<p class="boundary">这一步只确认需求范围。下一步会单独展示设计方向；实现后才会真实取证、评审和生成交付包。不会把你的范围确认当作实现通过。</p>
+<h2>CP-A · 目标与成功标准</h2>
+<ol><li><strong>目标：</strong>团队在一个入口按旅程查看真实案例原文，明确每份材料的证据边界。</li><li><strong>使用者：</strong>工程师、产品 / 设计协作者和评审者。</li><li><strong>成功标准：</strong>逐项原文一致；搜索与无结果恢复；链接直达 / 刷新 / 历史恢复；三种视口与键盘可用；离线交付仍可读且原文不会被执行。</li><li><strong>不做：</strong>不增加后端、账号、遥测、第三方依赖；不运行材料中的命令；不修改历史记录。</li></ol>
+<h2>CP-B · 主路径</h2>
+<p>采用<strong>单页目录 + 原文</strong>：选择材料 → 核对归属和边界 → 读原文；窄屏上下排列。相比新开多个 Markdown 页面，这条路径保留旅程上下文。</p>
+<h2>CP-C · 假设与执行档位</h2>
+<ul><li>场景假设：用于团队分享后的自助阅读，先覆盖现有材料。</li><li>权限边界：只读；新增依赖、对外发布或扩大范围需另行询问。</li><li>档位：路由器返回 <strong>P2 标准</strong>，完整执行规格、设计、实现与评审；不是省略流程的点修。</li><li>仅本次开启全部审计：<strong>工艺检查 + 真实运行取证 + 验收</strong>。</li></ul>
+<p class="note">请在外层反馈中确认上述 CP-A / CP-B / CP-C，或点明要修改的项目。若认可，可写“按以上范围执行”后确认；请不要确认尚未实现的功能已经通过。</p>
+</html>

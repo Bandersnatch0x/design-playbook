@@ -1,0 +1,41 @@
+{
+  "round": 1,
+  "report_ref": "decision-report.md",
+  "confirmed": true,
+  "floor_pass": true,
+  "selected_options": [
+    "确认签署决策"
+  ],
+  "feedback": "锚点批注 (1):\n1. [#search] 修改字体 — #search",
+  "timestamp": "2026-09-08T10:26:07+08:00",
+  "prototype_path": "preview/round-1.html",
+  "prototype_html_hash": "f1926eb5cd55fd033c3b1b8055de2c2b11089743fb01027ae655e44af166eee0",
+  "decision_id": "26c7de17705c4b6f8136a5b97dbcd67f",
+  "criteria_review": [
+    {
+      "id": "L6.1",
+      "title": "",
+      "checked": false
+    },
+    {
+      "id": "L6.2",
+      "title": "",
+      "checked": false
+    },
+    {
+      "id": "L6.3",
+      "title": "",
+      "checked": false
+    },
+    {
+      "id": "L6.4",
+      "title": "",
+      "checked": false
+    },
+    {
+      "id": "L6.5",
+      "title": "",
+      "checked": false
+    }
+  ]
+}

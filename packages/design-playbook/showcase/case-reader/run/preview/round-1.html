@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>案例阅读器 · 设计预览</title>
+<style>
+:root{--page:#e8f2e7;--surface:#fbfdf9;--ink:#183326;--muted:#4b6557;--accent:#23583e;--line:#bdd0bd;--selected:#d3e6cf;font:18px/1.75 "Microsoft YaHei","PingFang SC",system-ui,sans-serif;color:var(--ink);background:var(--page)}*{box-sizing:border-box}body{margin:0}a{color:inherit;text-underline-offset:4px}a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:3px}header{max-width:1280px;margin:auto;padding:36px 32px 24px;border-bottom:1px solid var(--line)}.eyebrow{font-size:13px;letter-spacing:.08em;color:var(--muted)}h1{font-size:34px;line-height:1.3;margin:10px 0}header p{margin:0;color:var(--muted)}main{max-width:1280px;margin:0 auto;padding:32px;display:grid;grid-template-columns:300px minmax(0,1fr);gap:32px}aside{min-width:0}label{font-size:15px;display:block;margin-bottom:8px}input{font:inherit;width:100%;padding:12px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}nav{display:grid;gap:4px;margin-top:24px}nav a{padding:12px 16px;display:block;text-decoration:none;border-radius:6px}nav a:hover{background:#deebdb}nav a[aria-current]{background:var(--selected);box-shadow:inset 3px 0 var(--accent);font-weight:650}small{display:block;font-size:13px;color:var(--muted);font-weight:400}article{min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:32px}h2{font-size:28px;line-height:1.4;margin:8px 0 16px}article p{margin:0 0 16px}.boundary{padding:16px;background:var(--page);border-left:3px solid var(--accent)}.source{font-size:14px;color:var(--muted);overflow-wrap:anywhere}pre{font:16px/1.8 "Cascadia Code",Consolas,"Microsoft YaHei",monospace;white-space:pre-wrap;overflow-wrap:anywhere;border-top:1px solid var(--line);padding-top:24px;margin-bottom:0}footer{max-width:1280px;margin:auto;padding:12px 32px 28px;font-size:14px;color:var(--muted)}@media(max-width:780px){main{grid-template-columns:1fr;padding:20px;gap:24px}header{padding:28px 20px}h1{font-size:28px}article{padding:20px}nav{grid-template-columns:1fr 1fr}nav a{font-size:16px}footer{padding-inline:20px}}
+</style>
+</head>
+<body>
+<header><div class="eyebrow">DESIGN-PLAYBOOK / CASE READER</div><h1>看案例，也看依据。</h1><p>按一次 UI 交付的关键问题，找到真实记录与使用说明。</p></header>
+<main><aside><label for="search">查找材料</label><input id="search" type="search" placeholder="规格、确认、接续…"><nav aria-label="用户旅程材料">
+<a href="#spec" aria-current="page">01 · 明确需求<small>历史案例 A / 六层规格</small></a>
+<a href="#decision">02 · 确认方向<small>历史案例 A / 设计决策</small></a>
+<a href="#confirm">人工确认记录<small>独立案例 B / 入驻表单</small></a>
+<a href="#review">03 · 验收与修复<small>历史案例 A / 回流闭环</small></a>
+<a href="#status">04 · 中断接续<small>命令说明 / 非实跑结果</small></a>
+<a href="#handoff">05 · 静态交付<small>命令说明 / 非实跑结果</small></a>
+</nav></aside>
+<article aria-labelledby="document-title"><small id="kind">历史案例 A · 需求声明</small><h2 id="document-title">运行队列：哪些条件必须成立？</h2><p class="boundary" id="boundary">这份规格来自历史队列任务。它不是当前项目的规格；独立表单的确认记录也不能替它背书。</p><p class="source" id="source">来源：showcase/01-spec.md<br>正式实现将显示源文件 SHA-256，并逐项验证原文。</p><pre id="excerpt">L5 / 边界与风险
+
+查看者没有重试或中止权限。
+批量重试必须先展示后果，再由用户确认。
+
+L6 / 验收条件
+
+Given 失败的运行，When 打开详情，Then 能看到原因、资源峰值及重试入口。
+
+这是用于确认阅读结构的语义摘录；正式实现读取并内嵌完整原文，不复制本原型的数据或源代码。</pre></article></main>
+<footer>设计预览 · 本轮只确认字号、浅绿色背景和阅读结构。搜索、历史恢复与离线校验在正式实现后实测。</footer>
+<script>
+const links=[...document.querySelectorAll('nav a')];
+const search=document.querySelector('#search');
+links.forEach(link=>link.addEventListener('click',()=>{links.forEach(item=>item.removeAttribute('aria-current'));link.setAttribute('aria-current','page');document.querySelector('#document-title').textContent=link.firstChild.textContent;document.querySelector('#kind').textContent=link.querySelector('small').textContent;document.querySelector('#excerpt').textContent='结构预览：在此阅读所选材料的完整原文。正式实现将从仓库文件内嵌内容、标明来源并验证一致性。';}));
+search.addEventListener('input',()=>links.forEach(link=>{link.hidden=!link.textContent.includes(search.value);}));
+</script>
+</body></html>

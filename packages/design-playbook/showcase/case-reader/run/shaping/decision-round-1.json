@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "decision_id": "da9272548f03496bbcc170024b036c9a",
+  "timestamp": "2026-09-08T10:11:31+08:00",
+  "prototype_mode": "path",
+  "prototype_path": "shaping\\scope.html",
+  "binding": {
+    "digest": "e8c17770e86df6dcc7b6654a38962a69100b6d5f0ae8043986a40d726b42b2e6",
+    "round": 1,
+    "prototype_html_hash": "ca68ed550a7ed98f8d2d990575a0a052c86e7073d924c700235a3e4d92fe82be",
+    "report_ref": "spec.md",
+    "summary": "范围确认，不是实现验收：CP-A 目标/用户/成功标准/非目标；CP-B 单页目录+原文；CP-C 场景与只读假设、P2 标准、仅本次全部审计开启。请实际确认或指出要改的项目；同意后才继续设计与实现。",
+    "options": [
+      "确认签署决策",
+      "需要修改"
+    ]
+  },
+  "outcome": {
+    "confirmed": true,
+    "user_confirmed": true,
+    "floor_pass": true,
+    "floor_failure": "",
+    "selected_options": [
+      "确认签署决策"
+    ],
+    "feedback": "锚点批注 (2):\n1. [p p:nth-of-type(2)] 字体大一点 — body > p:nth-of-type(2)\n2. [已添加 Pin #2] 背景高太尉浅绿色 — @pin-1",
+    "anchors": [
+      {
+        "selector": "body > p:nth-of-type(2)",
+        "label": "p p:nth-of-type(2)",
+        "comment": "字体大一点",
+        "tag": "p",
+        "node_id": "b8447278",
+        "features": {
+          "tag": "p"
+        }
+      },
+      {
+        "selector": "@pin-1",
+        "label": "已添加 Pin #2",
+        "comment": "背景高太尉浅绿色",
+        "tag": "pin",
+        "resolved": true,
+        "points": [
+          [
+            936.5901759413422,
+            -37.049190333632176
+          ]
+        ],
+        "node_id": "22eff69c",
+        "features": {
+          "tag": "pin"
+        }
+      }
+    ],
+    "aborted": false,
+    "rejected": false,
+    "rejection": "",
+    "skipped": false,
+    "criteria_review": [
+      {
+        "id": "L6.1",
+        "title": "",
+        "checked": false
+      },
+      {
+        "id": "L6.2",
+        "title": "",
+        "checked": false
+      },
+      {
+        "id": "L6.3",
+        "title": "",
+        "checked": false
+      },
+      {
+        "id": "L6.4",
+        "title": "",
+        "checked": false
+      },
+      {
+        "id": "L6.5",
+        "title": "",
+        "checked": false
+      }
+    ]
+  }
+}

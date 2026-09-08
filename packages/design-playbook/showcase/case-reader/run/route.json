@@ -1,0 +1,15 @@
+{
+  "criteria": [
+    "intent: build",
+    "consequence: feature",
+    "durable-artifacts: requested"
+  ],
+  "mode": "design-run",
+  "reasons": [
+    "request does not meet a P1 or P3 condition"
+  ],
+  "requires_baseline": false,
+  "requires_reference_contract": false,
+  "requires_spec": true,
+  "tier": "P2"
+}

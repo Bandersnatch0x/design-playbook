@@ -1,0 +1,18 @@
+{
+  "asked": true,
+  "invalid_files": [],
+  "stages": {
+    "craft_guard": {
+      "runs": true,
+      "source": "run"
+    },
+    "observe": {
+      "runs": true,
+      "source": "run"
+    },
+    "ui_evaluator": {
+      "runs": true,
+      "source": "run"
+    }
+  }
+}
