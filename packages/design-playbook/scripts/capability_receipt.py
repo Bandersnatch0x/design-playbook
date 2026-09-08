@@ -26,6 +26,7 @@ PublicClaim = Literal[
     "not-shipped",
 ]
 FallbackKind = Literal["safe-path", "evidence-gap"]
+GateState = Literal["not-satisfied", "satisfied", "unknown"]
 
 _IMPLEMENTATION_VALUES = frozenset(("absent", "present", "unknown"))
 _VALIDATION_VALUES = frozenset(
@@ -35,6 +36,7 @@ _AVAILABILITY_VALUES = frozenset(("local", "distributed", "unsupported", "unknow
 _PUBLIC_CLAIM_VALUES = frozenset(
     ("stable", "experimental", "blocked-by-gate", "not-shipped")
 )
+_GATE_STATE_VALUES = frozenset(("not-satisfied", "satisfied", "unknown"))
 
 
 class CapabilityReceiptError(ValueError):
@@ -56,10 +58,14 @@ class CapabilitySourceFacts:
     availability: AvailabilityState | None = None
     entrypoint: str | None = None
     prerequisites: tuple[str, ...] = ()
+    inputs: tuple[str, ...] = ()
     fallback: str | None = None
     evidence_gap: str | None = None
     public_claim: PublicClaim | None = None
     gate_blocked: bool = False
+    gate_id: str | None = None
+    gate_state: GateState | None = None
+    gate_detail: str | None = None
 
 
 @dataclass(frozen=True)
@@ -92,6 +98,18 @@ class FallbackProjection:
 
 
 @dataclass(frozen=True)
+class GateProjection:
+    """Named gate outcome supplied by an existing gate authority."""
+
+    id: str
+    state: GateState
+    detail: str | None
+
+    def to_dict(self) -> dict[str, str | None]:
+        return {"id": self.id, "state": self.state, "detail": self.detail}
+
+
+@dataclass(frozen=True)
 class CapabilityReceipt:
     """Immutable, read-time capability receipt."""
 
@@ -99,8 +117,10 @@ class CapabilityReceipt:
     status: CapabilityStatus
     entrypoint: str | None
     prerequisites: tuple[str, ...]
+    inputs: tuple[str, ...]
     fallback: FallbackProjection | None
     evidence_gap: str | None
+    gate: GateProjection | None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -108,9 +128,11 @@ class CapabilityReceipt:
             "status": self.status.to_dict(),
             "entrypoint": self.entrypoint,
             "prerequisites": list(self.prerequisites),
+            "inputs": list(self.inputs),
             "fallback": self.fallback.to_dict() if self.fallback else None,
             "publicClaim": self.status.public_claim,
             "evidenceGap": self.evidence_gap,
+            "gate": self.gate.to_dict() if self.gate else None,
         }
 
 
@@ -133,6 +155,16 @@ def _normalise_text(name: str, value: str | None) -> str | None:
     if not isinstance(value, str) or not value.strip():
         raise CapabilityReceiptError(f"{name}-invalid")
     return value.strip()
+
+
+def _normalise_gate(facts: CapabilitySourceFacts) -> GateProjection | None:
+    if facts.gate_id is None and facts.gate_state is None:
+        return None
+    gate_id = _normalise_text("gate-id", facts.gate_id)
+    if gate_id is None or facts.gate_state not in _GATE_STATE_VALUES:
+        raise CapabilityReceiptError("gate-invalid")
+    detail = _normalise_text("gate-detail", facts.gate_detail)
+    return GateProjection(id=gate_id, state=facts.gate_state, detail=detail)
 
 
 def _normalise_facts(facts: CapabilitySourceFacts) -> tuple[
@@ -159,6 +191,14 @@ def _normalise_facts(facts: CapabilitySourceFacts) -> tuple[
         if normalized is None:
             raise CapabilityReceiptError("prerequisite-invalid")
         prerequisites.append(normalized)
+    if not isinstance(facts.inputs, tuple):
+        raise CapabilityReceiptError("inputs-invalid")
+    inputs: list[str] = []
+    for source_input in facts.inputs:
+        normalized = _normalise_text("input", source_input)
+        if normalized is None:
+            raise CapabilityReceiptError("input-invalid")
+        inputs.append(normalized)
     public_claim = facts.public_claim
     if public_claim is not None and (
         not isinstance(public_claim, str)
@@ -180,6 +220,7 @@ def _normalise_facts(facts: CapabilitySourceFacts) -> tuple[
         ),
         _normalise_text("entrypoint", facts.entrypoint),
         tuple(prerequisites),
+        tuple(inputs),
         _normalise_text("fallback", facts.fallback),
         _normalise_text("evidence-gap", facts.evidence_gap),
         public_claim,
@@ -226,10 +267,12 @@ def build_capability_receipt(
         availability,
         entrypoint,
         prerequisites,
+        inputs,
         fallback_text,
         supplied_gap,
-        requested_claim,
+    requested_claim,
     ) = _normalise_facts(facts)
+    gate = _normalise_gate(facts)
     public_claim = _derive_public_claim(
         implementation=implementation,
         validation=validation,
@@ -262,6 +305,10 @@ def build_capability_receipt(
         gaps.append("surface is unsupported")
     if facts.gate_blocked or requested_claim == "blocked-by-gate":
         gaps.append("capability is blocked by gate")
+    if gate is not None and gate.state == "not-satisfied":
+        gaps.append(f"{gate.id} is not satisfied")
+        if gate.detail:
+            gaps.append(gate.detail)
     if requested_claim == "stable" and public_claim != "stable":
         gaps.append("stable public claim rejected by incomplete readiness evidence")
     if supplied_gap:
@@ -284,8 +331,8 @@ def build_capability_receipt(
         ),
         entrypoint=entrypoint,
         prerequisites=prerequisites,
+        inputs=inputs,
         fallback=fallback,
         evidence_gap=evidence_gap,
+        gate=gate,
     )
-
-

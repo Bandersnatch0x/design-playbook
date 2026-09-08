@@ -292,6 +292,39 @@ def _next_command(primary: object) -> dict[str, Any]:
     )
 
 
+def _next_action_field(
+    primary: object, field: str, missing_message: str
+) -> dict[str, Any]:
+    """Project one optional owner fact from the primary action."""
+    projected = _from_assertion(primary)
+    result = projected["value"] if isinstance(projected["value"], dict) else None
+    if result is None:
+        return projected
+    value = result.get(field)
+    if isinstance(value, (list, str)) and value:
+        return _fact(
+            availability=projected["availability"],
+            value=value,
+            reason=projected["reason"],
+            source_id=projected["sourceId"],
+        )
+    if isinstance(value, list):
+        return _fact(
+            availability=projected["availability"],
+            value=[],
+            reason=projected["reason"],
+            source_id=projected["sourceId"],
+        )
+    if projected["availability"] == "known":
+        return _gap(missing_message, source_id=projected["sourceId"])
+    return _fact(
+        availability=projected["availability"],
+        value=None,
+        reason=projected["reason"] or _reason(NOT_PRODUCED, missing_message),
+        source_id=projected["sourceId"],
+    )
+
+
 def _copy_line(label: str, fact: Mapping[str, Any]) -> str:
     availability = str(fact.get("availability") or "unknown")
     reason = fact.get("reason")
@@ -368,12 +401,16 @@ def derive_repair_packet(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         "verdict": _from_assertion(evaluation["verdict"]),
         **finding_fields,
         "nextOwner": _next_owner(primary),
-        "invalidatedEvidence": _gap(MSG_NO_INVALIDATED),
-        # Snapshot v1 has no explicit resume-stage fact; the latest
-        # observed stage is progress, not a resume target (spec rule 19).
-        "resumeStage": _gap(MSG_NO_RESUME_STAGE),
+        "invalidatedEvidence": _next_action_field(
+            primary, "invalidatedEvidence", MSG_NO_INVALIDATED
+        ),
+        "resumeStage": _next_action_field(
+            primary, "resumeStage", MSG_NO_RESUME_STAGE
+        ),
         "nextCommand": _next_command(primary),
-        "recaptureRequirement": _gap(MSG_NO_RECAPTURE),
+        "recaptureRequirement": _next_action_field(
+            primary, "recaptureRequirement", MSG_NO_RECAPTURE
+        ),
     }
     packet["copyText"] = format_packet_copy_text(packet)
     return packet

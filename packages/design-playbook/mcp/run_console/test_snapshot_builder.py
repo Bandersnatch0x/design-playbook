@@ -547,6 +547,13 @@ class DegradingBuildTest(_BuilderTestCase):
         verdict = _assertion(document, "evaluation.verdict")
         self.assertEqual(verdict["availability"], "known")
         self.assertEqual(verdict["result"], "Recirculate")
+        result = document["nextActions"]["primary"]["result"]
+        self.assertEqual(result["invalidatedEvidence"], ["L6.3"])
+        self.assertEqual(result["resumeStage"], "ui-evaluator")
+        self.assertEqual(
+            result["recaptureRequirement"],
+            "Recapture only invalidated evidence, then re-run ui-evaluator.",
+        )
 
     def test_truncated_contract_bind_is_partial_write(self) -> None:
         (self.run_root / "contract-bind.json").write_text(

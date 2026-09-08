@@ -61,6 +61,12 @@ _DYNAMIC_ASSERTION_PATHS = (
     ("nextActions", "alternatives"),
     ("limitations", "items"),
 )
+_RECIRCULATE_ACTION_ID = "action.repair-after-recirculate"
+_RECIRCULATE_ACTION_FIELDS = (
+    "invalidatedEvidence",
+    "resumeStage",
+    "recaptureRequirement",
+)
 
 
 class SnapshotContractError(ValueError):
@@ -393,6 +399,17 @@ def _validate_invariants(document: dict[str, Any]) -> None:
         _require_sorted_unique([item["id"] for item in _at(document, path)])
     for assertion in assertions:
         _validate_assertion(assertion, source_records)
+    primary = document["nextActions"]["primary"]
+    if (
+        primary["availability"] == "known"
+        and primary["result"]["actionId"] == _RECIRCULATE_ACTION_ID
+    ):
+        result = primary["result"]
+        if any(field not in result for field in _RECIRCULATE_ACTION_FIELDS):
+            raise _SchemaViolation
+        invalidated = result["invalidatedEvidence"]
+        if invalidated is not None and len(invalidated) != len(set(invalidated)):
+            raise _SchemaViolation
 
     source_set_hash = _source_set_hash(document["sources"]["items"])
     if document["sources"]["sourceSetHash"] != source_set_hash:

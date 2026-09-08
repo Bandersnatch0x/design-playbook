@@ -414,18 +414,29 @@ class PassParityTest(_ParityTestCase):
             )
 
         # nextActions: structured next-action owner, alternatives owner-known.
+        expected_primary = {
+            "actionId": primary.action_id,
+            "kind": primary.kind.value,
+            "label": primary.label,
+            "owner": {
+                "actor": primary.owner.actor.value,
+                "role": primary.owner.role,
+            },
+            "copyableAgentCommand": primary.copyable_agent_command,
+        }
+        if primary.invalidated_evidence is not None:
+            expected_primary["invalidatedEvidence"] = list(
+                primary.invalidated_evidence
+            )
+        if primary.resume_stage is not None:
+            expected_primary["resumeStage"] = primary.resume_stage
+        if primary.recapture_requirement is not None:
+            expected_primary["recaptureRequirement"] = (
+                primary.recapture_requirement
+            )
         self.assertEqual(
             document["nextActions"]["primary"]["result"],
-            {
-                "actionId": primary.action_id,
-                "kind": primary.kind.value,
-                "label": primary.label,
-                "owner": {
-                    "actor": primary.owner.actor.value,
-                    "role": primary.owner.role,
-                },
-                "copyableAgentCommand": primary.copyable_agent_command,
-            },
+            expected_primary,
         )
         self.assertEqual(document["nextActions"]["alternatives"], [])
 

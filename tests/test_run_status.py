@@ -23,7 +23,9 @@ from design_playbook.scripts.status_projection import (  # noqa: E402
     NextActionKind,
     NextActionOwner,
     NextActionProjection,
+    RECAPTURE_AFTER_RECIRCULATE_REQUIREMENT,
     REPAIR_AFTER_RECIRCULATE_COMMAND,
+    RESUME_AFTER_RECIRCULATE_STAGE,
     StageState,
     inspect_run,
     next_action,
@@ -103,7 +105,34 @@ class RunStatusTests(unittest.TestCase):
             self.assertNotIn(str(run_root), command)
             self.assertNotIn(run_root.name, command)
             self.assertNotEqual(command, projection.primary.label)
+            self.assertEqual(projection.primary.invalidated_evidence, ())
+            self.assertEqual(
+                projection.primary.resume_stage,
+                RESUME_AFTER_RECIRCULATE_STAGE,
+            )
+            self.assertEqual(
+                projection.primary.recapture_requirement,
+                RECAPTURE_AFTER_RECIRCULATE_REQUIREMENT,
+            )
             self.assertEqual(projection.alternatives, ())
+
+    def test_recirculate_invalidated_set_comes_from_owner_point_back(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-recirculate-invalidated"
+            run_root.mkdir()
+            (run_root / "point-back.md").write_text(
+                "## Verdict\n\nRecirculate\n\n"
+                "invalidated:\n"
+                "  - criterion: L6.3\n"
+                "    artifacts: [evidence/L6.3-error.png]\n"
+                "    reason: Fill repair changes the confirmation surface\n"
+                "  - criterion: L6.3\n",
+                encoding="utf-8",
+            )
+
+            projection = project_next_action(inspect_run(run_root), run_root)
+
+            self.assertEqual(projection.primary.invalidated_evidence, ("L6.3",))
 
     def test_recirculate_command_ignores_hostile_narration(self) -> None:
         # Snapshot v1 section 7.5: the command is owner-defined; hostile

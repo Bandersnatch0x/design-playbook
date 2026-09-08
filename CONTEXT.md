@@ -130,7 +130,8 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 ## Non-goals (v0)
 
 - Competing with third-party style-database products
-- Multi-agent-platform install CLI
+- A general multi-platform install CLI; the scoped `npx design-playbook init`
+  adapter renderer from ADR-0042 is supported
 - Figma MCP as a required delivery path
 - Treating demo-site visuals as the release artifact
 - Dedicated-hardware input surfaces; input/navigation ideas enter only as 2D declaration/evidence extensions (ADR-0010)
@@ -151,8 +152,8 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 
 ## Active effort
 
-- **v0.22.0 continuation acceptance boundary (2026-09-08):** Snapshot v1 lacks owner-produced invalidated-Evidence details, resume-stage facts, and re-capture requirements, so the Repair Packet keeps those fields `not-produced`. The operator outcomes that need those facts remain partial; the automated continuation replay does not complete them by inference or change the snapshot contract. The current production capability receipt covers Run Console only, using package inventory, test-file presence, and the existing trial record; test presence is not a passing gate result, and gate-outcome/adapter facts plus further capability consumers remain unwired. These limits do not authorize a broader claim or an external trial.
-- **v0.21.0 is the latest formal release (2026-08-27):** npm `latest` is `design-playbook@0.21.0` and `dsh-design-playbook@0.21.0`. `main` carries the unreleased 0.21.1 delta (v10 spec-matrix workbench ADR-0041; motion/state polish; multi-platform adapter generator ADR-0042 with `npx design-playbook init` over a 29-agent three-tier matrix; skills English conversion); the release transaction closes the gap.
+- **v0.22.1 continuation boundary (2026-09-08):** the Recirculate owner action now carries an invalidated-evidence criterion set, explicit `ui-evaluator` resume stage, and the minimum recapture requirement through Snapshot v1 into the read-only Repair Packet. Pass and non-owner paths still report explicit gaps rather than inferring those facts from progress or command prose. The Run Console is shipped as a local, experimental, trial-gated capability; `G-RO-TRIAL-PASS` is NOT SATISFIED, and implementation/tests do not authorize a stable public claim.
+- **v0.22.1 is the formal/latest version (2026-09-08):** `design-playbook`, `dsh-design-playbook`, the plugin manifest, README badges, and generated Codex snapshot are version-aligned at `0.22.1`; [`docs/releases/v0.22.1.md`](docs/releases/v0.22.1.md) records the release boundary. This working tree performs no publish, tag, or merge transaction.
 - **Nightly host scenarios removed (2026-08-28):** the scheduled CI workflow and its contract test are deleted by user decision; `scripts/host_scenario.py` stays as a human-triggered local tool.
 - **Adapter snapshot rule:** `.codex-plugin/` + `codex/AGENTS.md` are generated committed snapshots — after any version bump run `python packages/design-playbook/scripts/generate_adapter.py codex`, or the validate/doctor drift gate fails.
 - **Run Console v1 chain complete (2026-08-27):** RCV1-001..012 from `.scratch/run-console-v1/map.md` are all executed and merged; RCV1-R1 legibility remediation shipped after the first trial miss; RCV1-010/011 resolved `disabled-by-gate`; RCV1-012 audit verdict `NOT READY`.

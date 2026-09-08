@@ -19,6 +19,13 @@ disposition: blocking
 
 **Recirculate.** A Pass is not earned until the blocking finding is closed.
 
+## Invalidated evidence
+
+invalidated:
+  - criterion: L6.3
+    artifacts: [evidence/L6.3-error.png]
+    reason: Fill repair changes the destructive-action confirmation surface
+
 ## Evidence ledger
 
 ```text

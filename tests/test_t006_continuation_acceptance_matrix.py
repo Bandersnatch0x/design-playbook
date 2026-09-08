@@ -463,9 +463,15 @@ class MatrixBlockedJourneyTest(unittest.TestCase):
                 "add a consequence-confirmation dialog",
             )
             self.assertEqual(packet["nextOwner"]["value"]["actor"], "agent")
-            # Spec rule 19: resume stage is a gap, never inferred.
-            self.assertEqual(packet["resumeStage"]["availability"], "unknown")
-            self.assertIsNone(packet["resumeStage"]["value"])
+            # Spec rule 19: resume stage is owner-explicit, never inferred
+            # from progress. Recirculate owner now produces ui-evaluator.
+            self.assertEqual(packet["resumeStage"]["availability"], "known")
+            self.assertEqual(packet["resumeStage"]["value"], "ui-evaluator")
+            self.assertEqual(packet["invalidatedEvidence"]["availability"], "known")
+            self.assertIsInstance(packet["invalidatedEvidence"]["value"], list)
+            self.assertEqual(
+                packet["recaptureRequirement"]["availability"], "known"
+            )
             # T-008: the owner now emits the repair command, and the
             # snapshot/packet preserve it verbatim — neither synthesizes,
             # parses, executes, nor mutates anything. The command carries

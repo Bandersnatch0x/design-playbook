@@ -6,10 +6,12 @@ product
 
 ## Users
 
-Designers, product managers, and engineers using coding agents to define,
-implement, review, and hand off product UI work. They need to understand what
-was decided, what was observed, what remains blocked, and which source owns the
-next action without reconstructing an agent run from raw artifacts.
+The primary user is the **Run operator**: a frontend or product engineer using
+a coding agent to deliver a real UI change. Secondary users are **Semantic
+approvers** acting in named product, design, or engineering roles. Operators
+need to understand what was decided, what was observed, what remains blocked,
+and which source owns the next action without reconstructing an agent run from
+raw artifacts; operating a run does not transfer cross-role semantic approval.
 
 ## Product Purpose
 
