@@ -200,7 +200,17 @@ def _shell_command(argv: tuple[str, ...]) -> str:
     argument therefore becomes a single-quoted literal (inner ``'`` doubled)
     behind the ``&`` call operator — no splitting, interpolation, or
     escaping survives. POSIX keeps ``shlex`` quoting.
+
+    Empty argv elements are rejected, not quoted: PowerShell 5.1 drops
+    ``''`` and shifts every later argument one slot forward, so quoting
+    an empty element would misparse the whole line - worse than the
+    loud failure raised here.
     """
+    if not argv or any(part == "" for part in argv):
+        raise ValueError(
+            "shell command argv must be non-empty with no empty elements:"
+            f" {argv!r}"
+        )
     if os.name == "nt":
         return "& " + " ".join(
             "'" + part.replace("'", "''") + "'" for part in argv
@@ -274,10 +284,16 @@ def _integrity(run_root: Path, facts: RunFacts) -> IntegrityProjection:
             )
     if not issues:
         return IntegrityProjection(state=INTEGRITY_CURRENT, reason=None)
-    by_state = {state: reason for state, reason in issues}
+    # One state can carry several issues (preview malformed + bind
+    # malformed): keep every reason, joined, so no diagnosis is dropped.
+    by_state: dict[str, list[str]] = {}
+    for state, reason in issues:
+        by_state.setdefault(state, []).append(reason)
     for state in _INTEGRITY_PRIORITY:
         if state in by_state:
-            return IntegrityProjection(state=state, reason=by_state[state])
+            return IntegrityProjection(
+                state=state, reason="; ".join(by_state[state])
+            )
     state, reason = issues[0]
     return IntegrityProjection(state=state, reason=reason)
 

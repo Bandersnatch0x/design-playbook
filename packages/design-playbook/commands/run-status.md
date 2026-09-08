@@ -16,7 +16,7 @@ python <plugin>/scripts/run_status.py [.scratch/<run>] [--json] [--list] [--scra
 - `--json` emits machine-readable stages + `next` action, plus the continuation block: selected run, current phase, blocker, run integrity, and the Console capability receipt (`implementation` / `validation` / `availability` / `publicClaim`).
 - `--list` only lists discovered runs.
 
-For an eligible run the continuation names an explicit `open-console` command for the local, experimental, trial-gated Run Console — no authorized external trial or public release is claimed until the separately authorized read-only trial gate passes (ADR-0043). `run-status` never starts a server, daemon, or background process itself; an ineligible run reports the blocking reason and a safe fallback instead.
+For an eligible run the continuation names an explicit `open-console` command for the local, experimental, trial-gated Run Console — no authorized external trial or public release is claimed until the separately authorized read-only trial gate passes (ADR-0043). `run-status` never starts a server, daemon, or background process itself; an ineligible run reports the blocking reason and a safe fallback instead. On Windows the emitted command line is PowerShell syntax (single-quoted literals behind the `&` call operator) — paste it into PowerShell, not cmd.exe.
 
 ## Done when
 

@@ -556,6 +556,15 @@ class ShellCommandQuotingTests(unittest.TestCase):
             command = _shell_command(("plain", "two words"))
         self.assertEqual(command, "plain 'two words'")
 
+    def test_empty_argv_element_is_rejected_not_quoted(self) -> None:
+        """PowerShell 5.1 drops ``''`` and shifts later arguments one slot
+        forward, so quoting an empty element would silently misparse the
+        whole line. The seam rejects it loudly instead."""
+        with self.assertRaises(ValueError):
+            _shell_command(("C:\\prog.exe", "", "x"))
+        with self.assertRaises(ValueError):
+            _shell_command(())
+
 
 _POWERSHELL = shutil.which("powershell") if os.name == "nt" else None
 
