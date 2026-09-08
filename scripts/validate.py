@@ -380,6 +380,26 @@ _CONSOLE_PROMOTED_CLAIMS = re.compile(
     r"|\bpublic-ready\b|\bgenerally available\b|公测|正式发布|稳定",
     re.I,
 )
+# Negation exemption, symmetric across both directions: a line that
+# explicitly negates the claim it carries states the current interpretation
+# ("nothing is planned for the Console", "the Console must not be called
+# stable", "没有规划中的新能力，也不得称为稳定") and must not fail either
+# gate. Markers are whole phrases that never occur inside a claim phrase
+# above — bare "not"/"尚未" would self-exempt "not shipped"/"尚未发布" and
+# re-legalize stale claims, so they stay out. Fail-closed: affirmative
+# claims keep failing.
+_CONSOLE_NEGATED_CLAIMS = (
+    "nothing", "no longer", "must not", "should not", "shall not",
+    "cannot", "can't", "won't", "will not", "not yet",
+    "不再", "没有", "不得", "并非", "并无", "不会",
+)
+
+
+def _console_claim_is_negated(line: str) -> bool:
+    folded = line.lower()
+    return any(marker in folded for marker in _CONSOLE_NEGATED_CLAIMS)
+
+
 _claim_surfaces = [
     ROOT / "README.md",
     ROOT / "README-zh.md",
@@ -396,6 +416,7 @@ for surface in _claim_surfaces:
         for line in lines
         if "console" in line.lower()
         and any(phrase in line.lower() for phrase in _CONSOLE_STALE_CLAIMS)
+        and not _console_claim_is_negated(line)
     ]
     check(
         not stale,
@@ -405,7 +426,9 @@ for surface in _claim_surfaces:
     promoted = [
         line
         for line in lines
-        if "console" in line.lower() and _CONSOLE_PROMOTED_CLAIMS.search(line)
+        if "console" in line.lower()
+        and _CONSOLE_PROMOTED_CLAIMS.search(line)
+        and not _console_claim_is_negated(line)
     ]
     check(
         not promoted,

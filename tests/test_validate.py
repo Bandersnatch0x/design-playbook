@@ -186,6 +186,51 @@ class ValidateGateTests(unittest.TestCase):
                 )
                 self.assertIn(label, result.stdout)
 
+    def test_negated_console_claims_pass(self) -> None:
+        # Negation exemption (symmetric across both gates): a line that
+        # explicitly negates the Console claim it carries states the
+        # current interpretation and must not fail the stale or the
+        # promoted direction.
+        readme = self.root / "README.md"
+        readme.write_text(
+            readme.read_text(encoding="utf-8")
+            + "\nNothing further is planned for the Run Console until "
+            "the trial gate passes.\n"
+            + "The Run Console must not be called stable before the "
+            "separately authorized trial gate passes.\n",
+            encoding="utf-8",
+        )
+        readme_zh = self.root / "README-zh.md"
+        readme_zh.write_text(
+            readme_zh.read_text(encoding="utf-8")
+            + "\nRun Console 没有规划中的新能力，也不得称为稳定。\n",
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("VALIDATION PASSED", result.stdout)
+
+    def test_bare_not_does_not_self_exempt_stale_claim(self) -> None:
+        # Fail-closed guard for the negation markers: they are whole
+        # phrases, so a literal "not shipped" stale claim keeps failing
+        # even though the line contains "not".
+        readme = self.root / "README.md"
+        readme.write_text(
+            readme.read_text(encoding="utf-8")
+            + "\nThe Run Console is not shipped.\n",
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn(
+            "Run Console claim uses current maturity vocabulary", result.stdout
+        )
+        self.assertIn("not shipped", result.stdout)
+
     def test_historical_records_excluded_from_console_claim_gate(self) -> None:
         # req28: historical release/spec/adr records are preserved as
         # written, so the same stable/public-ready wording that fails on a
