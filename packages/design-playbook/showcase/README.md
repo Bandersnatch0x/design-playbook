@@ -73,6 +73,9 @@ From the repository root:
 python scripts/check_doc_links.py
 python packages/design-playbook/tests/test_validate_run.py
 node packages/design-playbook/showcase/test_queue_monitor_state.js
+python packages/design-playbook/showcase/case-reader/selfcheck.py
 ```
+
+The [case-reader self-check](case-reader/selfcheck.py) verifies the embedded delivery copy: every inlined document must equal its source bytes and sha256, the inlined `DOCS` literal must match `_gen_docs.js`, and the structural claims (error view, search input, noscript notice, no external network API, no external script tags) must hold. It needs only the Python standard library — no browser, Node, or package install — and paths resolve from the script location, so it runs from any working directory. Expected output on success: `OK: 4 embedded docs byte-identical, sha verified, structure checks pass` (exit 0).
 
 To render updated **illustrations**, run `node scripts/screenshot-showcase.mjs` with `DPB_PLAYWRIGHT_PKG` and `DPB_CHROMIUM` as described in its header. Output goes to `.scratch/showcase-screenshots/`; archived images stay untouched. Rendering does not rerun or re-evaluate any case.
