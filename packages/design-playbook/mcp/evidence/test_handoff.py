@@ -311,6 +311,57 @@ class BuildStaticHandoffTests(unittest.TestCase):
                         ["pass"] * 5 + ["not-applicable"] * 3,
                     )
 
+    def test_unaudited_marker_withholds_the_delivery_pass(self) -> None:
+        """The audit-marker fence is shared with run status (``verdict_of``):
+        an ``audited: false`` or duplicated marker withholds the point-back
+        verdict here too, so the handoff credential and run status can
+        never disagree on one run. Legacy point-backs without a marker and
+        a single ``audited: true`` stay readable."""
+        import tempfile
+
+        faces = (
+            (
+                "audited-false",
+                "# point-back\n\naudited: false\n\n## Verdict\n\n**Pass.**\n",
+            ),
+            (
+                "duplicated-marker",
+                "# point-back\n\naudited: true\naudited: false\n\n"
+                "## Verdict\n\n**Pass.**\n",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp_s:
+            tmp = Path(tmp_s)
+            for label, point_back in faces:
+                with self.subTest(face=label):
+                    run_root = _make_run(tmp, name=f"run-{label}")
+                    (run_root / "point-back.md").write_text(
+                        point_back, encoding="utf-8"
+                    )
+                    result = self._build(tmp, run_root)
+                    payload = result.payload
+                    # Confirmed round, complete capture, resolved gates -
+                    # still no Pass: the marker fence outranks the verdict
+                    # text.
+                    self.assertEqual(payload["verdict"], "Recirculate")
+                    self.assertEqual(payload["authority"], "confirmed-user")
+
+    def test_audited_marker_true_keeps_the_delivery_pass(self) -> None:
+        """A single well-formed ``audited: true`` marker does not withhold
+        the verdict - only false/ambiguous markers do (legacy runs carry
+        no marker at all and stay readable on both surfaces)."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_s:
+            tmp = Path(tmp_s)
+            run_root = _make_run(tmp)
+            (run_root / "point-back.md").write_text(
+                "# point-back\n\naudited: true\n\n## Verdict\n\n**Pass.**\n",
+                encoding="utf-8",
+            )
+            result = self._build(tmp, run_root)
+            self.assertEqual(result.payload["verdict"], "Pass")
+
     def test_floor_failing_record_is_never_confirmed(self) -> None:
         import tempfile
 

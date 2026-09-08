@@ -134,13 +134,21 @@ def _point_back_verdict(run_root: Path) -> str | None:
     decision 4). Reading goes through the single verdict-syntax parser
     (ADR-0025) that G3 and run status already share - never a second
     parser here. ``None`` (missing, malformed, ambiguous, or repeated
-    verdict text) is never a Pass.
+    verdict text) is never a Pass. An ``audited:`` marker that is
+    false or ambiguous withholds the verdict too - the same fence
+    ``verdict_of`` applies on the run-status surface, so the two
+    authorities can never disagree on one run. Legacy point-backs
+    without a marker stay readable on both surfaces.
     """
+    from design_playbook.scripts.audit_preferences import parse_audit_marker
     from design_playbook.scripts.verdict_syntax import parse_verdict
 
     try:
         text = (run_root / "point-back.md").read_text(encoding="utf-8")
     except (OSError, UnicodeError):
+        return None
+    marker = parse_audit_marker(text)
+    if marker.present and marker.audited is not True:
         return None
     return parse_verdict(text).canonical
 
