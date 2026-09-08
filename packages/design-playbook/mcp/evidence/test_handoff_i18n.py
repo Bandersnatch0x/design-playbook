@@ -95,6 +95,16 @@ def test_invalid_explicit_locale_fails_before_writing(tmp_path):
     assert list(tmp_path.iterdir()) == []
 
 
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_blank_explicit_locale_falls_back_like_unspecified(blank):
+    """A blank explicit locale encodes absence (form/MCP callers), not a
+    bad locale: it must follow the env policy, not raise."""
+    with patch.dict("os.environ", {"LANG": "en_US.UTF-8"}, clear=True):
+        assert resolve_ui_locale(blank) == "en"
+    with patch.dict("os.environ", {}, clear=True):
+        assert resolve_ui_locale(blank) == "zh-CN"
+
+
 def test_cli_exposes_explicit_locale(capsys):
     with pytest.raises(SystemExit) as exit_info:
         main(["--help"])
