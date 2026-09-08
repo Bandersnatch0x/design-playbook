@@ -105,7 +105,7 @@ class RunStatusTests(unittest.TestCase):
             self.assertNotIn(str(run_root), command)
             self.assertNotIn(run_root.name, command)
             self.assertNotEqual(command, projection.primary.label)
-            self.assertEqual(projection.primary.invalidated_evidence, ())
+            self.assertIsNone(projection.primary.invalidated_evidence)
             self.assertEqual(
                 projection.primary.resume_stage,
                 RESUME_AFTER_RECIRCULATE_STAGE,

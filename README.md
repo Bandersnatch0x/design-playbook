@@ -183,7 +183,7 @@ npx design-playbook init <agent>
 | :--- | :--- | :--- |
 | **Tier 1** (native) | Claude Code, Codex | Full fidelity — skills, commands, MCP, drift-gated snapshots |
 | **Tier 2** (generated) | Cursor, Gemini CLI, OpenCode, Windsurf, GitHub Copilot | Skills as platform rules + project-level MCP config; commands degrade to prompt docs |
-| **Tier 3** (floor) | Kiro, Amp, Jules, Qwen Code, and 22 more — `npx design-playbook --list` | `AGENTS.md` with orchestrator contract + MCP install guide |
+| **Tier 3** (floor) | 22 total, including Kiro, Amp, Jules, Qwen Code — `npx design-playbook --list` | `AGENTS.md` with orchestrator contract + MCP install guide |
 
 Claude Code is the native surface. Tier-2/3 outputs are generated adapters with honest degradation. Full capability matrix: [docs/specs/2026-08-28-multi-platform-adapter.md](./docs/specs/2026-08-28-multi-platform-adapter.md).
 

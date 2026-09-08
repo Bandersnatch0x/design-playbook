@@ -131,7 +131,8 @@ RECAPTURE_AFTER_RECIRCULATE_REQUIREMENT = (
 
 _INVALIDATED_BLOCK = re.compile(r"^invalidated:\s*$", re.M)
 _NEXT_HEADING = re.compile(r"^#+\s+", re.M)
-_INVALIDATED_CRITERION = re.compile(r"^\s*-\s*criterion:\s*(\S+)\s*$", re.M)
+_INVALIDATED_CRITERION = re.compile(r"[ \t]*-[ \t]*criterion:[ \t]*(\S+)[ \t]*")
+_INVALIDATED_METADATA = re.compile(r"[ \t]+(?:artifacts|reason):.*")
 
 
 _SAFE_CRITERION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -140,22 +141,29 @@ _SAFE_CRITERION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 def _invalidated_criteria(pointback_text: str) -> tuple[str, ...] | None:
     """Project safe criterion IDs from the owner-written invalidated block.
 
-    A malformed block returns ``None`` so the Snapshot reports a gap rather
-    than inventing a smaller known set. Criterion IDs are restricted before
-    they can cross the path-free Snapshot boundary.
+    A missing or malformed block returns ``None`` so the Snapshot reports a
+    gap rather than inventing a smaller known set. Criterion IDs are
+    restricted before they can cross the path-free Snapshot boundary.
     """
     marker = _INVALIDATED_BLOCK.search(pointback_text)
     if marker is None:
-        return ()
+        return None
     rest = pointback_text[marker.end():]
     heading = _NEXT_HEADING.search(rest)
     block = rest[:heading.start()] if heading else rest
-    criteria = _INVALIDATED_CRITERION.findall(block)
-    if not criteria or any(
-        _SAFE_CRITERION.fullmatch(criterion) is None for criterion in criteria
-    ):
-        return None
-    return tuple(dict.fromkeys(criteria))
+    criteria: list[str] = []
+    for line in block.splitlines():
+        if not line.strip():
+            continue
+        if line.strip() == "```":
+            break
+        if criteria and _INVALIDATED_METADATA.fullmatch(line):
+            continue
+        entry = _INVALIDATED_CRITERION.fullmatch(line)
+        if entry is None or _SAFE_CRITERION.fullmatch(entry.group(1)) is None:
+            return None
+        criteria.append(entry.group(1))
+    return tuple(dict.fromkeys(criteria)) if criteria else None
 
 
 def _next_action(

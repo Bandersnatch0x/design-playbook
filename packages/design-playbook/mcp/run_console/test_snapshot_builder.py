@@ -35,6 +35,9 @@ from design_playbook.mcp.preview.integrity import (  # noqa: E402
 from design_playbook.mcp.run_console.contract import (  # noqa: E402
     validate_snapshot,
 )
+from design_playbook.mcp.run_console.repair_packet import (  # noqa: E402
+    derive_repair_packet,
+)
 from design_playbook.mcp.run_console.snapshot_builder import (  # noqa: E402
     BuiltSnapshot,
     SnapshotBuildError,
@@ -554,6 +557,60 @@ class DegradingBuildTest(_BuilderTestCase):
             result["recaptureRequirement"],
             "Recapture only invalidated evidence, then re-run ui-evaluator.",
         )
+
+    def test_recirculate_missing_invalidation_stays_unknown_in_packet(self) -> None:
+        (self.run_root / "point-back.md").write_text(
+            _RECIRCULATE_POINTBACK.split("invalidated:", 1)[0], encoding="utf-8"
+        )
+
+        document = self._rebuild()
+        packet = derive_repair_packet(document)
+
+        self.assertIsNone(
+            document["nextActions"]["primary"]["result"]["invalidatedEvidence"]
+        )
+        self.assertEqual(packet["invalidatedEvidence"]["availability"], "unknown")
+        self.assertIsNone(packet["invalidatedEvidence"]["value"])
+        self.assertEqual(
+            packet["invalidatedEvidence"]["reason"]["code"], "not-produced"
+        )
+        self.assertEqual(packet["resumeStage"]["value"], "ui-evaluator")
+
+    def test_recirculate_malformed_invalidation_preserves_packet_gap(self) -> None:
+        malformed_entries = (
+            "  - criterion: L6.4 extra-token\n",
+            "  - criterion:\n",
+            "  - criterion L6.4\n",
+            "  - unknown: L6.4\n",
+            "  -\n",
+            "  - criterion: ../private\n",
+            "  criterion: L6.4\n",
+            "invalidated:\n",
+        )
+        for malformed_entry in malformed_entries:
+            with self.subTest(entry=malformed_entry):
+                (self.run_root / "point-back.md").write_text(
+                    _RECIRCULATE_POINTBACK.split("invalidated:", 1)[0]
+                    + "invalidated:\n  - criterion: L6.3\n"
+                    + malformed_entry
+                    + "  - criterion: L6.5\n",
+                    encoding="utf-8",
+                )
+
+                document = self._rebuild()
+                packet = derive_repair_packet(document)
+
+                self.assertIsNone(
+                    document["nextActions"]["primary"]["result"]["invalidatedEvidence"]
+                )
+                self.assertEqual(
+                    packet["invalidatedEvidence"]["availability"], "unknown"
+                )
+                self.assertIsNone(packet["invalidatedEvidence"]["value"])
+                self.assertEqual(
+                    packet["invalidatedEvidence"]["reason"]["code"], "not-produced"
+                )
+                self.assertEqual(packet["resumeStage"]["value"], "ui-evaluator")
 
     def test_truncated_contract_bind_is_partial_write(self) -> None:
         (self.run_root / "contract-bind.json").write_text(
