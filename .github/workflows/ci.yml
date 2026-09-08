@@ -229,6 +229,7 @@ jobs:
         # Real CLI, browser, clipboard, provider captures, strict validation,
         # and handoff archive. Simulated review inputs are not trial evidence.
         run: |
+          mkdir -p .scratch
           python3 -m pytest tests/test_operator_continuation_e2e.py -v \
             --basetemp=.scratch/operator-ci \
             --junitxml=.scratch/operator-ci-results.xml
