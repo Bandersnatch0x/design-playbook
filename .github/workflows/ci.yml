@@ -120,6 +120,7 @@ jobs:
             --ignore=packages/design-playbook/mcp/run_console/test_ui_browser.py \
             --ignore=packages/design-playbook/mcp/run_console/test_ui_actions.py \
             --ignore=packages/design-playbook/mcp/run_console/test_read_only_trial.py \
+            --ignore=packages/design-playbook/mcp/run_console/test_repair_packet.py \
             -v
 
       - name: Evidence MCP stdio — pure-path tests (required, no Playwright)
@@ -209,6 +210,7 @@ jobs:
             packages/design-playbook/mcp/run_console/test_ui_browser.py \
             packages/design-playbook/mcp/run_console/test_ui_actions.py \
             packages/design-playbook/mcp/run_console/test_read_only_trial.py \
+            packages/design-playbook/mcp/run_console/test_repair_packet.py \
             -v
 
       - name: Preview canvas version-control e2e (require chromium)
