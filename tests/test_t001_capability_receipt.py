@@ -172,6 +172,37 @@ class CapabilityReceiptTests(unittest.TestCase):
         self.assertIn("stable", receipt.evidence_gap)
         self.assertEqual(receipt.fallback.kind, "evidence-gap")
 
+    def test_fully_supported_stable_claim_survives_projection(self) -> None:
+        # Preservation is the other half of the never-upgrade promise: a
+        # stable public claim resting on complete evidence — implemented,
+        # dogfooded or trial-observed, distributed, with an entrypoint and
+        # no supplied gap — must survive its own read-time projection,
+        # never silently downgraded to experimental / not-shipped nor
+        # hedged with an invented gap or fallback.
+        for validation in ("dogfooded", "trial-observed"):
+            with self.subTest(validation=validation):
+                receipt = build_capability_receipt(
+                    CapabilitySourceFacts(
+                        capability="run-handoff",
+                        implementation="present",
+                        validation=validation,
+                        availability="distributed",
+                        entrypoint="design-playbook run-status --open-console",
+                        prerequisites=("selected-run",),
+                        public_claim="stable",
+                    )
+                )
+
+                payload = receipt.to_dict()
+
+                self.assertEqual(receipt.status.public_claim, "stable")
+                self.assertEqual(payload["publicClaim"], "stable")
+                self.assertEqual(payload["status"]["publicClaim"], "stable")
+                self.assertIsNone(receipt.evidence_gap)
+                self.assertIsNone(payload["evidenceGap"])
+                self.assertIsNone(receipt.fallback)
+                self.assertIsNone(payload["fallback"])
+
     def test_receipt_and_status_are_immutable(self) -> None:
         receipt = build_capability_receipt(
             CapabilitySourceFacts(

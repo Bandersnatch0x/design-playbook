@@ -41,6 +41,7 @@ import http.client
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -126,6 +127,40 @@ def _declare_fill(root: Path, fill: str = "surface.html") -> None:
         plan.read_text(encoding="utf-8") + f"\nfill: {fill}\n", encoding="utf-8"
     )
     (root / fill).write_text(DELIVERABLE_HTML, encoding="utf-8")
+
+
+def _strip_later_stages(root: Path) -> None:
+    """Remove the accept point-back and the evidence ledger — the two
+    latest stage markers — so the projection's stage-resume loop reaches
+    the earlier stage under test instead of the accept branch."""
+    (root / "point-back.md").unlink()
+    shutil.rmtree(root / "evidence")
+
+
+def _block_design_baseline(root: Path) -> None:
+    """A design-baseline gate waiting on the operator's confirmation."""
+    baseline = root / "design-baseline"
+    baseline.mkdir()
+    (baseline / "state.json").write_text(
+        json.dumps(
+            {"schema": "design-baseline/v1", "status": "needs_confirmation"}
+        ),
+        encoding="utf-8",
+    )
+
+
+def _escalate_point_back(root: Path) -> None:
+    """Narrate the two-round stop inside the Verdict section, turning the
+    fixture's open Recirculate into the waiting escalated-stop state."""
+    point_back = root / "point-back.md"
+    text = point_back.read_text(encoding="utf-8")
+    point_back.write_text(
+        text.replace(
+            "## Verdict\n\n**Recirculate.**",
+            "## Verdict\n\nclose_reason: escalated-stop\n\n**Recirculate.**",
+        ),
+        encoding="utf-8",
+    )
 
 
 def _bind_capture_contract(root: Path) -> None:
@@ -917,6 +952,144 @@ class MatrixCliJourneyTest(unittest.TestCase):
             check=False,
         )
         self.assertNotEqual(result.returncode, 0)
+
+
+class MatrixOwnerCommandAsymmetryTest(unittest.TestCase):
+    """Owner-command asymmetry: only Recirculate emits a copyable command.
+
+    The owner currently sanctions exactly one copyable agent command —
+    the Recirculate repair path (pinned by the blocked journey above).
+    The Stop, stage-resume, HITL, and start branches project
+    ``copyable_agent_command: None`` as deliberate temporary design: no
+    owner has defined their exact command strings yet. These tests pin
+    that asymmetry at the operator's real CLI JSON seam — a branch that
+    silently grows an owner command must turn the matrix red for review,
+    not ship unreviewed. Each fixture asserts the expected action_id so
+    a None from the *wrong* branch cannot satisfy the test.
+    """
+
+    def test_stop_branch_stop_after_pass_projects_no_owner_command(self) -> None:
+        # An earned Pass: the stop owns the run's end; nothing is copied.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _make_matrix_run(Path(tmp).resolve(), "run-owner-cmd-stop")
+            payload = _run_status_payload(root)
+            next_action = payload["continuation"]["next_action"]
+            self.assertEqual(next_action["action_id"], "action.stop-after-pass")
+            self.assertEqual(next_action["kind"], "stop")
+            self.assertIsNone(next_action["copyable_agent_command"])
+            # The stop owns no blocker either: nothing is copied or run.
+            self.assertIsNone(payload["continuation"]["blocker"])
+
+    def test_stage_resume_branch_after_plan_projects_no_owner_command(self) -> None:
+        # The run stopped mid-pipeline: resuming the next stage is agent
+        # narration the orchestrator already owns, not a copyable command.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _make_matrix_run(Path(tmp).resolve(), "run-owner-cmd-resume")
+            _strip_later_stages(root)
+            payload = _run_status_payload(root)
+            next_action = payload["continuation"]["next_action"]
+            self.assertEqual(next_action["action_id"], "action.resume-after-plan")
+            self.assertEqual(next_action["kind"], "continue")
+            self.assertEqual(next_action["owner"]["actor"], "agent")
+            self.assertIsNone(next_action["copyable_agent_command"])
+            self.assertIsNone(payload["continuation"]["blocker"])
+
+    def test_stage_resume_branch_after_preview_projects_no_owner_command(self) -> None:
+        # The preview-confirmed resume is the stage-resume loop's preview
+        # variant: same temporary design, no copyable owner command.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _make_matrix_run(
+                Path(tmp).resolve(), "run-owner-cmd-preview-resume"
+            )
+            _strip_later_stages(root)
+            _confirm_preview(root)
+            payload = _run_status_payload(root)
+            next_action = payload["continuation"]["next_action"]
+            self.assertEqual(next_action["action_id"], "action.resume-after-preview")
+            self.assertEqual(next_action["kind"], "continue")
+            self.assertEqual(next_action["owner"]["actor"], "agent")
+            self.assertIsNone(next_action["copyable_agent_command"])
+            self.assertIsNone(payload["continuation"]["blocker"])
+
+    def test_hitl_branch_design_baseline_projects_no_owner_command(self) -> None:
+        # The design-baseline gate is a human confirm/waive owner
+        # (ADR-0012); its blocked sub-state must not grow an agent command.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _make_matrix_run(
+                Path(tmp).resolve(), "run-owner-cmd-baseline"
+            )
+            _strip_later_stages(root)
+            _block_design_baseline(root)
+            payload = _run_status_payload(root)
+            next_action = payload["continuation"]["next_action"]
+            self.assertEqual(
+                next_action["action_id"], "action.resolve-design-baseline"
+            )
+            self.assertEqual(next_action["kind"], "human-decision")
+            self.assertIsNone(next_action["copyable_agent_command"])
+            # The HITL blocker repeats the action dict; it must stay
+            # command-free too.
+            self.assertIsNone(
+                payload["continuation"]["blocker"]["copyable_agent_command"]
+            )
+
+    def test_hitl_branch_escalated_stop_projects_no_owner_command(self) -> None:
+        # The two-round stop is a waiting state — the user disposition
+        # comes first; repairing again is exactly wrong, so no command.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _make_matrix_run(
+                Path(tmp).resolve(),
+                "run-owner-cmd-escalated",
+                point_back="point-back-recirculate.md",
+            )
+            _escalate_point_back(root)
+            payload = _run_status_payload(root)
+            next_action = payload["continuation"]["next_action"]
+            self.assertEqual(
+                next_action["action_id"], "action.disposition-escalated-stop"
+            )
+            self.assertEqual(next_action["kind"], "human-decision")
+            self.assertIsNone(next_action["copyable_agent_command"])
+            self.assertIsNone(
+                payload["continuation"]["blocker"]["copyable_agent_command"]
+            )
+
+    def test_hitl_branch_preview_finish_projects_no_owner_command(self) -> None:
+        # Preview artifacts without a confirm: finishing the preview* HITL
+        # (G5) belongs to the run operator, not to a copyable command.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _make_matrix_run(
+                Path(tmp).resolve(), "run-owner-cmd-preview-hitl"
+            )
+            _strip_later_stages(root)
+            (root / "preview" / "round-1.html").write_text(
+                DELIVERABLE_HTML, encoding="utf-8"
+            )
+            payload = _run_status_payload(root)
+            next_action = payload["continuation"]["next_action"]
+            self.assertEqual(
+                next_action["action_id"], "action.finish-preview-hitl"
+            )
+            self.assertEqual(next_action["kind"], "human-decision")
+            self.assertIsNone(next_action["copyable_agent_command"])
+            self.assertIsNone(
+                payload["continuation"]["blocker"]["copyable_agent_command"]
+            )
+
+    def test_start_branch_empty_run_projects_no_owner_command(self) -> None:
+        # No run artifacts at all: the start action points the operator
+        # at the orchestrator entry; it does not copy a command for them.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve() / "run-owner-cmd-start"
+            root.mkdir()
+            payload = _run_status_payload(root)
+            next_action = payload["continuation"]["next_action"]
+            self.assertEqual(next_action["action_id"], "action.start-run")
+            self.assertEqual(next_action["kind"], "continue")
+            self.assertEqual(next_action["owner"]["actor"], "run-operator")
+            self.assertIsNone(next_action["copyable_agent_command"])
+            self.assertIsNone(payload["continuation"]["blocker"])
+            self.assertIsNone(payload["continuation"]["phase"])
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ from __future__ import annotations
 from copy import deepcopy
 import hashlib
 import json
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -26,6 +27,8 @@ from design_playbook.mcp.run_console.contract import (  # noqa: E402
     validate_snapshot,
 )
 from design_playbook.mcp.run_console.repair_packet import (  # noqa: E402
+    MSG_ABSENT_ASSERTION,
+    MSG_DISPOSITION_UNKNOWN,
     MSG_NO_BLOCKING,
     MSG_NO_COMMAND,
     MSG_NO_INVALIDATED,
@@ -45,6 +48,33 @@ _JS = (_DIR / "app.js").read_text(encoding="utf-8")
 _HTML = (_DIR / "app.html").read_text(encoding="utf-8")
 _CSS = (_DIR / "app.css").read_text(encoding="utf-8")
 _COMMAND = "qoder run --resume run_example --next ui-evaluator"
+
+# Cross-implementation locks: app.js carries a second copy of the packet
+# derivation and copy renderer, including the seven shared gap messages.
+# The zh-CN strings pin the localized reason copy; the tuple pins every
+# shared message constant so a one-sided edit fails a gate.
+_ZH_NO_INVALIDATED = "快照未投影失效证据集。"
+_ZH_NO_RECAPTURE = "快照未投影重采要求。"
+_ZH_NO_RESUME_STAGE = "快照未投影明确的恢复阶段；最新观测阶段并非恢复目标。"
+_ZH_NO_COMMAND = "本次快照中该动作未携带可复制的智能体指令。"
+_ZH_NO_BLOCKING = "本次快照未投影任何阻塞性发现。"
+_ZH_DISPOSITION_UNKNOWN = "存在发现，但其是否阻塞并非责任方已知。"
+_ZH_ASSERTION_ABSENT = "此断言在快照中缺失。"
+_ZH_COPY_HEADING = "修复包（派生视图；仅复制；绝不执行）"
+
+_JS_MSG_TO_PY = (
+    ("PACKET_MSG_ABSENT", MSG_ABSENT_ASSERTION),
+    ("PACKET_MSG_NO_BLOCKING", MSG_NO_BLOCKING),
+    ("PACKET_MSG_DISPOSITION_UNKNOWN", MSG_DISPOSITION_UNKNOWN),
+    ("PACKET_MSG_NO_INVALIDATED", MSG_NO_INVALIDATED),
+    ("PACKET_MSG_NO_RECAPTURE", MSG_NO_RECAPTURE),
+    ("PACKET_MSG_NO_RESUME_STAGE", MSG_NO_RESUME_STAGE),
+    ("PACKET_MSG_NO_COMMAND", MSG_NO_COMMAND),
+)
+
+_COPY_LINE_SHAPE = re.compile(
+    r"^([^(]+) \((known|unknown|stale|inconsistent)\): (.*)$"
+)
 
 _PLAYWRIGHT = None
 _BROWSER = None
@@ -117,6 +147,69 @@ def _blocking_snapshot(*, command: str | None = None) -> dict[str, object]:
         label="Verdict is Recirculate — repair from point-back findings.",
         owner={"actor": "agent", "role": None},
         copyableAgentCommand=command,
+    )
+    return document
+
+
+def _js_packet_message_constants() -> dict[str, str]:
+    """Extract the PACKET_MSG_* constants from the shipped app.js source."""
+    pattern = re.compile(r'var (PACKET_MSG_\w+) =((?:\s*"[^"]*"(?:\s*\+)*)+\s*);')
+    return {
+        name: "".join(re.findall(r'"([^"]*)"', expression))
+        for name, expression in pattern.findall(_JS)
+    }
+
+
+def _stale_inconsistent_snapshot() -> dict[str, object]:
+    """Degraded snapshot: a stale intent plus an inconsistent verdict."""
+    document = _valid()
+    document["identity"]["snapshot"]["buildState"] = "degraded"  # type: ignore[index]
+    document["sources"]["items"][0].update(  # type: ignore[index]
+        verifiedHash=contract_fixtures._HASH_2, freshness="changed"
+    )
+    _bind_source_set_hash(document)
+    summary = document["intent"]["summary"]  # type: ignore[index]
+    summary.update(
+        availability="stale",
+        reason=_reason(
+            "source-changed-during-build",
+            ["source.common"],
+            observed_hashes=[contract_fixtures._HASH_1],
+            verified_hashes=[contract_fixtures._HASH_2],
+        ),
+    )
+    summary["source"].update(verifiedSetHash=contract_fixtures._HASH_2)  # type: ignore[union-attr]
+    verdict = document["evaluation"]["verdict"]  # type: ignore[index]
+    verdict.update(
+        availability="inconsistent",
+        result=None,
+        reason=_reason(
+            "conflicting-authorities",
+            ["source.common", "source.evaluator-report"],
+            observed_hashes=[contract_fixtures._HASH_1, contract_fixtures._HASH_3],
+            verified_hashes=[contract_fixtures._HASH_1, contract_fixtures._HASH_3],
+            conflicts=[
+                {
+                    "sourceRef": "source.evaluator-report",
+                    "hash": contract_fixtures._HASH_3,
+                    "summary": "verdict contradicts the findings ledger",
+                }
+            ],
+        ),
+    )
+    verdict["source"]["refs"] = ["source.common", "source.evaluator-report"]  # type: ignore[union-attr]
+    return document
+
+
+def _unreadable_finding_snapshot() -> dict[str, object]:
+    """Degraded snapshot: the only finding has an owner-unknown disposition."""
+    document = _valid()
+    document["identity"]["snapshot"]["buildState"] = "degraded"  # type: ignore[index]
+    finding = document["evaluation"]["findings"][0]  # type: ignore[index]
+    finding.update(
+        availability="unknown",
+        result=None,
+        reason=_reason("owner-unmapped", ["source.common"]),
     )
     return document
 
@@ -548,3 +641,181 @@ class RepairPacketBrowserTest(browser_harness.BrowserTestCase):
         expect(self._packet()).to_be_visible()
         width = self.page.evaluate("() => document.scrollingElement.scrollWidth")
         self.assertLessEqual(width, 320 + 2)
+
+
+class RepairPacketCrossImplementationTest(browser_harness.BrowserTestCase):
+    """JS and Python must derive and render the same packet.
+
+    app.js re-implements the projection and copy renderer from
+    repair_packet.py, including the seven shared gap messages. A silent
+    drift would flip the localized UI back to English reasons with no
+    failing gate, so every assertion here is a fail-direction lock: the
+    same snapshot is rendered through the real browser and its copied
+    summary is compared against the Python projection. Interface labels
+    may differ per locale, so the comparison splits each copy line into
+    label, availability, and reason parts instead of raw equality.
+    """
+
+    def _open_via_route(self, snapshot: dict[str, object]) -> None:
+        def fulfill(route):
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(snapshot),
+            )
+
+        # A repeated goto to the identical URL is a same-document no-op, so
+        # leave the document first: every variant must render from a clean
+        # page (fresh language state, single active route handler).
+        self.page.goto("about:blank")
+        self.page.unroute("**/api/v1/snapshot")
+        self.page.route("**/api/v1/snapshot", fulfill)
+        self.page.goto(self.console.url(f"#token={self.console.token}"))
+        expect(self.page.locator("#view-ready")).to_be_visible()
+
+    def _copy_summary(self, *, status_text: str = "plain text") -> str:
+        self.context.grant_permissions(["clipboard-read", "clipboard-write"])
+        self.page.locator("#packet-copy-summary").click()
+        expect(self.page.locator("#packet-copy-summary-status")).to_contain_text(
+            status_text
+        )
+        text = self.page.evaluate("() => navigator.clipboard.readText()")
+        # Chromium normalizes written LF to CRLF on the Windows clipboard.
+        return text.replace("\r\n", "\n").replace("\r", "\n")
+
+    def _assert_copy_summary_matches(self, packet, summary: str) -> None:
+        py_lines = packet["copyText"].split("\n")
+        js_lines = summary.split("\n")
+        self.assertEqual(len(js_lines), len(py_lines))
+        self.assertEqual(js_lines[0], py_lines[0])
+        for index, key in enumerate(PACKET_KEYS, start=1):
+            py_match = _COPY_LINE_SHAPE.match(py_lines[index])
+            js_match = _COPY_LINE_SHAPE.match(js_lines[index])
+            self.assertIsNotNone(py_match, py_lines[index])
+            self.assertIsNotNone(js_match, js_lines[index])
+            self.assertEqual(js_match.group(1), py_match.group(1), f"{key} label")
+            self.assertEqual(
+                js_match.group(2), py_match.group(2), f"{key} availability"
+            )
+            reason = packet[key]["reason"]
+            if not (
+                isinstance(reason, dict) and (reason.get("code") or reason.get("message"))
+            ):
+                # Known facts carry no reason, so the whole line must agree.
+                self.assertEqual(js_lines[index], py_lines[index], f"{key} line")
+                continue
+            code = reason.get("code") or ""
+            message = reason.get("message") or ""
+            separator = ": " if code and message else ""
+            expected_tail = f" ({code}{separator}{message})"
+            self.assertTrue(
+                js_match.group(3).endswith(expected_tail),
+                f"{key}: JS reason drifted from the Python projection: "
+                f"{js_lines[index]!r} does not end with {expected_tail!r}",
+            )
+
+    def _zh_reason(self, key: str) -> str:
+        return self.page.locator(
+            f'#repair-packet-grid [data-packet-field="{key}"] .reason-block'
+        ).inner_text()
+
+    def _switch_to_zh(self) -> None:
+        self.page.locator("#lang-toggle-button").click()
+        expect(self.page.locator("html")).to_have_attribute("lang", "zh-CN")
+
+    def _disposition_unknown_snapshot(self) -> dict[str, object]:
+        # Unknown assertions in valid snapshots always carry a reason, so
+        # the fallback message is only reachable through the browser copy.
+        snapshot = self.console.snapshot()
+        snapshot["evaluation"]["findings"] = [deepcopy(
+            contract_fixtures._valid_snapshot()["evaluation"]["findings"][0]
+        )]
+        finding = snapshot["evaluation"]["findings"][0]
+        finding["availability"] = "unknown"
+        finding["result"] = None
+        finding["reason"] = None
+        return snapshot
+
+    def _absent_summary_snapshot(self) -> dict[str, object]:
+        snapshot = self.console.snapshot()
+        snapshot["intent"]["summary"] = None
+        return snapshot
+
+    def test_js_and_python_gap_message_constants_are_identical(self) -> None:
+        js_constants = _js_packet_message_constants()
+        for js_name, py_message in _JS_MSG_TO_PY:
+            with self.subTest(constant=js_name):
+                self.assertIn(js_name, js_constants)
+                self.assertEqual(js_constants[js_name], py_message)
+
+    def test_real_server_copy_summary_matches_python_projection(self) -> None:
+        # Completed (Pass) and blocked (Recirculate with an owner command)
+        # snapshots both come from the real server, covering the known
+        # value lines and the no-blocking/no-command gap messages.
+        for point_back in ("point-back-pass-closed.md", "point-back-recirculate.md"):
+            with self.subTest(point_back=point_back):
+                self.console.close()
+                self.console = browser_harness.ConsoleHarness(point_back=point_back)
+                self.addCleanup(self.console.close)
+                self.open()
+                summary = self._copy_summary()
+                packet = derive_repair_packet(self.console.snapshot())
+                self._assert_copy_summary_matches(packet, summary)
+
+    def test_fulfilled_variants_copy_summary_match_python_projection(self) -> None:
+        # Degraded snapshots a real server never produces are injected by
+        # same-origin route interception, matching the harness convention.
+        for name, snapshot in (
+            ("stale-intent-and-inconsistent-verdict", _stale_inconsistent_snapshot()),
+            ("unreadable-finding-disposition", _unreadable_finding_snapshot()),
+        ):
+            with self.subTest(variant=name):
+                packet = derive_repair_packet(snapshot)
+                self._open_via_route(snapshot)
+                summary = self._copy_summary()
+                self._assert_copy_summary_matches(packet, summary)
+
+    def test_zh_ui_renders_localized_reasons_not_english_fallback(self) -> None:
+        self.open()
+        self._switch_to_zh()
+        for key, zh_message, en_message in (
+            ("invalidatedEvidence", _ZH_NO_INVALIDATED, MSG_NO_INVALIDATED),
+            ("recaptureRequirement", _ZH_NO_RECAPTURE, MSG_NO_RECAPTURE),
+            ("resumeStage", _ZH_NO_RESUME_STAGE, MSG_NO_RESUME_STAGE),
+            ("nextCommand", _ZH_NO_COMMAND, MSG_NO_COMMAND),
+            ("finding", _ZH_NO_BLOCKING, MSG_NO_BLOCKING),
+        ):
+            with self.subTest(field=key):
+                text = self._zh_reason(key)
+                self.assertIn(zh_message, text)
+                self.assertNotIn(en_message, text)
+        summary = self._copy_summary(status_text="纯文本")
+        self.assertIn(_ZH_COPY_HEADING, summary)
+        for zh_message, en_message in (
+            (_ZH_NO_INVALIDATED, MSG_NO_INVALIDATED),
+            (_ZH_NO_RECAPTURE, MSG_NO_RECAPTURE),
+            (_ZH_NO_RESUME_STAGE, MSG_NO_RESUME_STAGE),
+            (_ZH_NO_COMMAND, MSG_NO_COMMAND),
+            (_ZH_NO_BLOCKING, MSG_NO_BLOCKING),
+        ):
+            with self.subTest(copy=zh_message):
+                self.assertIn(zh_message, summary)
+                self.assertNotIn(en_message, summary)
+
+    def test_zh_ui_localizes_reasons_only_reachable_in_the_browser(self) -> None:
+        # The Python contract always demands a reason on unknown assertions,
+        # so these two fallback messages exist only on the browser side and
+        # cannot be cross-checked through a valid snapshot.
+        scenarios = (
+            ("disposition-unknown", self._disposition_unknown_snapshot(),
+             "finding", _ZH_DISPOSITION_UNKNOWN, MSG_DISPOSITION_UNKNOWN),
+            ("absent-summary", self._absent_summary_snapshot(),
+             "intent", _ZH_ASSERTION_ABSENT, MSG_ABSENT_ASSERTION),
+        )
+        for name, snapshot, key, zh_message, en_message in scenarios:
+            with self.subTest(scenario=name):
+                self._open_via_route(snapshot)
+                self._switch_to_zh()
+                text = self._zh_reason(key)
+                self.assertIn(zh_message, text)
+                self.assertNotIn(en_message, text)
