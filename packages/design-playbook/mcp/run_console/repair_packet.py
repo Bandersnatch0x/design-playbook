@@ -349,6 +349,8 @@ def _copy_line(label: str, fact: Mapping[str, Any]) -> str:
             else:
                 parts.append(f"{key}={item}")
         rendered = "; ".join(parts) if parts else "(none)"
+    elif isinstance(value, list):
+        rendered = ", ".join(str(entry) for entry in value)
     else:
         rendered = str(value)
     stale = ""
