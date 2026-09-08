@@ -246,3 +246,18 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
+
+  powershell-quoting:
+    # The ubuntu matrix runs every t002 test except the PowerShell
+    # round-trip class (skipIf os.name != "nt"): quoting regressions
+    # (statement splitting, interpolation, empty-argv shifts) are only
+    # caught by a real PowerShell parser. stdlib-only file - no installs.
+    name: PowerShell quoting regression (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run-status continuation tests against a real PowerShell
+        run: python tests/test_t002_run_status_continuation.py
