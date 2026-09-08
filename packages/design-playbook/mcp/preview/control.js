@@ -59,29 +59,46 @@
 
   // ---- i18n: active table + dual dict (v9 L toggle) ----
   var DUAL = window.DPB_I18N_DUAL || {};
-  var langState = (document.documentElement.getAttribute("lang") || "zh").indexOf("zh") === 0 ? "zh" : "en";
+  var langState = root.getAttribute("lang").indexOf("zh") === 0 ? "zh" : "en";
   var I18N = window.DPB_I18N || {};
   function tt(key) { return I18N[key] || (DUAL[key] && DUAL[key][langState]) || key; }
   function ttN(key, n) { return String(tt(key)).replace("{n}", String(n)); }
 
-  function applyLanguage() {
-    var dict = DUAL;
-    var nodes = document.querySelectorAll("[data-i18n]");
-    for (var i = 0; i < nodes.length; i++) {
-      var el = nodes[i];
-      var key = el.getAttribute("data-i18n");
-      var entry = dict[key];
-      if (entry && entry[langState]) {
-        el.style.opacity = "0";
-        (function (node, text) {
-          setTimeout(function () { node.textContent = text; node.style.opacity = "1"; }, 80);
-        })(el, entry[langState]);
+  function chromeLabels(surface, selector) {
+    var labels = [];
+    var walker = document.createTreeWalker(surface, NodeFilter.SHOW_ELEMENT, {
+      acceptNode: function (element) {
+        if (element.id === "dpb-artboard-inner") return NodeFilter.FILTER_REJECT;
+        return element.matches(selector) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
       }
+    });
+    while (walker.nextNode()) labels.push(walker.currentNode);
+    return labels;
+  }
+
+  function applyLanguage() {
+    var locale = langState === "zh" ? "zh-CN" : "en";
+    if (document.documentElement.hasAttribute("data-dpb-shell")) {
+      document.documentElement.lang = locale;
+      document.title = tt("app_title");
+      var shellFrame = document.querySelector("iframe.dpb-proto-frame");
+      if (shellFrame) shellFrame.title = tt("prototype_label");
     }
-    var ci = document.getElementById("dpb-comment-input");
-    if (ci) ci.placeholder = tt("comment_placeholder");
-    var fb = document.getElementById("dpb-feedback");
-    if (fb) fb.placeholder = tt("field_placeholder");
+    [root, floatRoot, toastsRoot].forEach(function (surface) {
+      if (!surface) return;
+      surface.setAttribute("lang", locale);
+      chromeLabels(surface, "[data-i18n]").forEach(function (el) {
+        var key = el.getAttribute("data-i18n");
+        el.textContent = key === "round_n" ? ttN(key, root.dataset.round) : tt(key);
+      });
+      ["title", "aria-label", "aria-description", "placeholder"].forEach(function (attribute) {
+        chromeLabels(surface, "[data-i18n-" + attribute + "]").forEach(function (el) {
+          var key = el.getAttribute("data-i18n-" + attribute);
+          var suffix = el.getAttribute("data-i18n-" + attribute + "-suffix") || "";
+          el.setAttribute(attribute, tt(key) + suffix);
+        });
+      });
+    });
     syncCriteriaHidden();
     syncRulerToFrame();
     updateStatus();
@@ -107,6 +124,7 @@
   var drawLayer = document.getElementById("dpb-draw-layer");
   var pinsLayer = document.getElementById("dpb-pins-layer");
   var inspector = document.getElementById("dpb-inspector");
+  var compactWorkspace = window.matchMedia("(max-width: 1100px)");
   var reopenTab = document.getElementById("dpb-reopen-tab");
   var zoomIndicator = document.getElementById("dpb-zoom-indicator");
   var announceEl = document.getElementById("dpb-announce");
@@ -183,7 +201,9 @@
   }
   function setSpecPanel(open) {
     if (!criteriaPanel) return;
+    if (open && compactWorkspace.matches) setDrawer(false, true);
     criteriaPanel.classList.toggle("dpb-collapsed", !open);
+    criteriaPanel.inert = !open;
     root.classList.toggle("dpb-spec-collapsed", !open);
     if (criteriaToggle) criteriaToggle.setAttribute("aria-expanded", open ? "true" : "false");
   }

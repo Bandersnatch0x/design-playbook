@@ -16,6 +16,9 @@ from design_playbook.mcp.preview import i18n  # noqa: E402
 
 
 class LabelSetTests(unittest.TestCase):
+    def test_all_locales_expose_the_same_translation_keys(self) -> None:
+        self.assertEqual(set(i18n._STRINGS[i18n.ZH]), set(i18n._STRINGS[i18n.EN]))
+
     def test_skip_labels_are_disjoint_from_confirm_labels(self) -> None:
         # A skip is an explicit non-confirm disposition (ADR-0008 amendment):
         # it must never be recognised as a confirm.

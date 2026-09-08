@@ -40,7 +40,7 @@
 
 ## 命令
 
-安装包内六命令（`packages/design-playbook/commands/`，签名 v0 起零改动；描述随 vNext 深化）：
+安装包内七命令（`packages/design-playbook/commands/`，v0.22 起 run-handoff 入列；既有六命令签名零改动）：
 
 | 命令 | 职责 | vNext 面 |
 | --- | --- | --- |
@@ -48,8 +48,9 @@
 | `ux-spec` | 只出 spec | 成形会话（问题/假设/确认批次）与会话工件；止于 spec.md |
 | `ui-review` | 只验收 | 双轨评审 + 六块 point-back 报告 |
 | `run-review` | 跨 run 复盘 | 规则候选队列（派生视图，只呈报不写回） |
-| `run-status` | run 状态读模型 | 识别 run-profile/成形会话/invalidated 重入叙述 |
-| `doctor` | 安装面健康诊断 | 零改动（rules.md 属包内工件由 validate.py 校验） |
+| `run-status` | run 状态读模型 | 识别 run-profile/成形会话/invalidated 重入叙述；显式 `open-console` 延续动作（不静默起服务；本地 Run Console 现行口径为 local · experimental · trial-gated，单独授权的只读试用门禁通过前不宣称 stable、不宣称已授权外部试用或公开发布，ADR-0043） |
+| `run-handoff` | 静态交付包入口 | 薄封装既有 handoff builder：唯一 `fill:` 声明自动选用，缺失即失败并给修复指引；`Pending` 保持诚实 |
+| `doctor` | 安装/运行时健康诊断（`ok`/`degraded`/`broken` 仅述安装与运行健康，非公开成熟度口径，也不新增健康/能力态权威） | 零改动（rules.md 属包内工件由 validate.py 校验） |
 
 维护者命令 `product-next / product-grill / product-dogfood` 在 monorepo `.claude/commands/`（不进安装包）。
 

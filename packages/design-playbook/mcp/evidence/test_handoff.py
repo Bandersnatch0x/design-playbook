@@ -106,12 +106,17 @@ def _passing_gate_runner(run_root: Path) -> dict[str, Any]:
     return {"available": True, "gates_passed": 8, "errors": []}
 
 
-def _make_run(tmp: Path, *, with_confirm: bool = True) -> Path:
+def _make_run(tmp: Path, *, with_confirm: bool = True, name: str = "run") -> Path:
     """Lay down a minimal but honest run directory."""
-    run_root = tmp / "run"
+    run_root = tmp / name
     run_root.mkdir(parents=True, exist_ok=True)
     (run_root / "spec.md").write_text("# spec\n", encoding="utf-8")
-    (run_root / "point-back.md").write_text("# point-back\n", encoding="utf-8")
+    # The point-back carries the owner verdict (continuation-pack decision
+    # 4): a completed fixture needs a real Pass verdict for the builder's
+    # delivery Pass.
+    (run_root / "point-back.md").write_text(
+        "# point-back\n\n## Verdict\n\n**Pass.**\n", encoding="utf-8"
+    )
     # Canonical run-profile shape (scripts/run_profile.py): an HTML marker,
     # then a fenced block with flat ``tier:`` / ``confirmed_by:`` lines.
     (run_root / "plan.md").write_text(
@@ -265,6 +270,46 @@ class BuildStaticHandoffTests(unittest.TestCase):
                 [d["id"] for d in payload["decisions"]],
                 ["DD-R1-01", "DD-R1-02"],
             )
+
+    def test_confirmed_non_pass_owner_verdict_never_becomes_pass(self) -> None:
+        """Continuation-pack decisions 4/25: point-back.md is the verdict
+        authority. A confirmed round with complete capture and a fully
+        resolved gate result still cannot convert a Recirculate owner
+        verdict (open blocking finding) - or a missing/ambiguous one - into
+        a delivery Pass."""
+        import tempfile
+
+        faces = (
+            (
+                "recirculate-with-open-finding",
+                "# point-back\n\n## Findings\n\n```text\n"
+                "issue: destructive action has no confirmation\n"
+                "source: spec L2\nfix: add a consequence-confirmation dialog\n"
+                "severity: S3\ndisposition: blocking\n```\n\n"
+                "## Verdict\n\n**Recirculate.**\n",
+            ),
+            ("missing-verdict", "# point-back\n"),
+        )
+        with tempfile.TemporaryDirectory() as tmp_s:
+            tmp = Path(tmp_s)
+            for label, point_back in faces:
+                with self.subTest(face=label):
+                    run_root = _make_run(tmp, name=f"run-{label}")
+                    (run_root / "point-back.md").write_text(
+                        point_back, encoding="utf-8"
+                    )
+                    result = self._build(tmp, run_root)
+                    payload = result.payload
+                    self.assertEqual(payload["verdict"], "Recirculate")
+                    self.assertEqual(payload["authority"], "confirmed-user")
+                    self.assertEqual(payload["confirmationSource"], "confirm-record")
+                    self.assertEqual(payload["gateStatus"], "pending")
+                    # gatesPassed keeps reporting gate evaluation only
+                    # (ADR-0034 §7 semantics unchanged by the verdict guard).
+                    self.assertEqual(
+                        payload["gateStatuses"],
+                        ["pass"] * 5 + ["not-applicable"] * 3,
+                    )
 
     def test_floor_failing_record_is_never_confirmed(self) -> None:
         import tempfile

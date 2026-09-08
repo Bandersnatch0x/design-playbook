@@ -1,19 +1,16 @@
-// Screenshot the design-playbook showcase into PNGs with playwright-core.
+// Render historical showcase illustrations into .scratch/showcase-screenshots.
 // Run: DPB_PLAYWRIGHT_PKG=<abs package.json of a project with playwright-core> \
 //      DPB_CHROMIUM=<abs chrome executable> node scripts/screenshot-showcase.mjs
 import { createRequire } from "node:module";
 const require = createRequire(process.env.DPB_PLAYWRIGHT_PKG ?? import.meta.url);
 const { chromium } = require("playwright-core");
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import path from "node:path";
 
 const EXE = process.env.DPB_CHROMIUM;
 if (!EXE) throw new Error("set DPB_CHROMIUM to a Chromium executable path");
-const OUT = path.resolve("packages/design-playbook/showcase/screenshots");
+const OUT = path.resolve(".scratch/showcase-screenshots");
 mkdirSync(OUT, { recursive: true });
-const VERSION = JSON.parse(
-  readFileSync("packages/design-playbook/.claude-plugin/plugin.json", "utf8")
-).version;
 
 const BASE = `
 *{box-sizing:border-box;margin:0;padding:0}
@@ -45,10 +42,10 @@ const pages = [
     name: "00-install",
     html: `<div class=wrap><div class=eyebrow>Step 0 · Install</div>
 <h1>Install design-playbook</h1><div class=sub>One marketplace add, one install. No clone, no build.</div>
-<pre>/plugin marketplace add &lt;owner&gt;/&lt;repo&gt;
+<pre>/plugin marketplace add https://github.com/Bandersnatch0x/design-playbook.git
 /plugin install design-playbook@design-playbook</pre>
 <div style="margin-top:18px">
-<span class=tag>6 skills</span><span class=tag>3 commands</span><span class=tag>MIT</span><span class=tag>Claude Code</span><span class=tag>Codex</span>
+<span class=tag>MIT</span><span class=tag>Claude Code</span><span class=tag>Codex</span>
 </div>
 <div class=card style="margin-top:20px"><h3>Then invoke namespaced</h3>
 <p><code>/design-playbook:design-io &lt;your UI ask&gt;</code></p></div>
@@ -108,10 +105,10 @@ tokens:
   },
   {
     name: "04-gates",
-    html: `<div class=wrap><div class=eyebrow>Result · Six gates</div>
-<h1>All six gates green</h1><div class=sub>One predictable Design I/O pass on a real third-party codebase.</div>
+    html: `<div class=wrap><div class=eyebrow>Historical queue case</div>
+<h1>Historical case checklist</h1><div class=sub>Six recorded observations from the original case, not the current gate matrix.</div>
 <table>
-<tr><th>Gate</th><th>Pass</th></tr>
+<tr><th>Historical check</th><th>Recorded</th></tr>
 <tr><td>L5/L6 present before pretty UI</td><td class=ok>✓</td></tr>
 <tr><td>Decision report before code</td><td class=ok>✓</td></tr>
 <tr><td>Point-back evaluator findings</td><td class=ok>✓</td></tr>
@@ -121,7 +118,7 @@ tokens:
 </table>
 <div class=card style="margin-top:18px"><h3>What ran</h3><p><code>/design-playbook:design-io 在 SwarSight 加一个模拟运行队列监控页</code></p>
 <p style="margin-top:8px">Skills invoked: <code>ux-spec</code> → <code>ui-picker</code> → fill → <code>craft-guard</code> → <code>ui-evaluator</code></p></div>
-<div class=foot>design-playbook v${VERSION} · Design I/O on SwarSight</div></div>`,
+<div class=foot>Historical SwarSight case · Illustrated summary, not runtime evidence</div></div>`,
   },
 ];
 

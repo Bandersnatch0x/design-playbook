@@ -56,6 +56,9 @@ After install, skills and commands are **namespaced** by the plugin name:
 | `/design-playbook:ux-spec` | Spec-only command |
 | `/design-playbook:ui-review` | Review command |
 | `/design-playbook:run-review` | Cross-run review command |
+| `/design-playbook:run-status` | Run phase, blocker, and resume/continuation narration |
+| `/design-playbook:run-handoff` | Static delivery package for one reviewed run |
+| `/design-playbook:doctor` | Install health diagnosis |
 
 Bare `/design-io` is **not** the installed name — always use the `design-playbook:` prefix.
 
@@ -73,7 +76,7 @@ pi has no plugin namespace — skills are `/skill:<name>`, commands are bare `/<
 | --- | --- |
 | `/skill:design-playbook` | Orchestrator skill (model-invoked) |
 | `/skill:ux-spec` … `/skill:ui-evaluator` | Same eight skills as above |
-| `/design-io` · `/ux-spec` · `/ui-review` · `/run-review` | Pipeline / spec-only / review / cross-run commands |
+| `/design-io` · `/ux-spec` · `/ui-review` · `/run-review` · `/run-status` · `/run-handoff` · `/doctor` | Pipeline / spec-only / review / cross-run / status / handoff / health commands |
 
 pi ships no built-in MCP, so `preview*` and `observe*` skip by default (ADR-0009 absent→skip; the pipeline still runs spec → picker → fill → craft → accept). To enable both gates, install an MCP adapter and register the bundled servers in your project `.mcp.json`:
 
@@ -128,7 +131,7 @@ See the root [README](../../README.md#install-on-other-agents) for the tier tabl
 .mcp.json              ← bundled MCP servers, launched via ${CLAUDE_PLUGIN_ROOT} (ADR-0009)
 mcp/{preview,evidence}/← MCP adapter runtimes (preview_prototype / execute_capture_plan)
 skills/<name>/SKILL.md ← model-invoked skills
-commands/<name>.md     ← slash commands (design-io, ux-spec, ui-review, run-review)
+commands/<name>.md     ← slash commands (design-io, ux-spec, ui-review, run-review, run-status, run-handoff, doctor)
 codex/AGENTS.md        ← Codex bridge notes
 examples/              ← self-authored onboarding samples
 LICENSE · NOTICE       ← authored-only scope
@@ -154,7 +157,15 @@ python <pkg>/scripts/run_status.py .scratch/<run> --json   # machine-readable
 python <pkg>/scripts/run_status.py --list                  # newest runs under .scratch/
 ```
 
-The status command reuses the packaged validator’s G5 confirm rules. It is part of the installed package — not monorepo-only tooling.
+The status command reuses the packaged validator’s G5 confirm rules. It is part of the installed package — not monorepo-only tooling. For an eligible run it also reports an explicit `open-console` continuation command for the local Run Console (it never starts a server itself), with the blocking reason and a safe fallback when the run or Console prerequisites are ineligible. The Console’s current claim is **local, experimental, and trial-gated** — `run-status --json` reports the same capability receipt (`publicClaim: experimental`) — and no authorized external trial or public release is claimed until the separately authorized read-only trial gate passes (ADR-0043).
+
+### Static handoff
+
+```text
+python <pkg>/scripts/run_handoff.py <run> [--fill <declared-path>] [--round N] [--json]
+```
+
+Builds the existing static delivery package for one explicit run from its declared `fill:` path. Multiple declarations need an explicit `--fill`; a missing declaration fails with repair guidance instead of guessing. `verdict` / `authority` / `confirmationSource` are reported verbatim — a `Pending` handoff stays `Pending` and never becomes acceptance.
 
 ### Doctor
 
@@ -163,7 +174,7 @@ python <pkg>/scripts/doctor.py
 python <pkg>/scripts/doctor.py --json
 ```
 
-One packaged diagnosis for interpreter, package surface, optional Playwright, and run-root configuration. Distinguishes `ok` / `degraded` / `broken` with repair actions.
+One packaged diagnosis for interpreter, package surface, optional Playwright, and run-root configuration. Distinguishes `ok` / `degraded` / `broken` with repair actions. Those three states describe **install and runtime health** of what is present locally — they are not a public capability-maturity verdict; maturity vocabulary (`stable` / `experimental` / `blocked-by-gate` / `not-shipped`) stays with the `run-status` capability receipt, and doctor reads existing facts rather than adding a new health or capability-state authority.
 
 **Bundled MCP (v0.3+):** Preview (`mcp/preview/`) and Evidence (`mcp/evidence/`) runtimes ship inside this package and are registered by `.mcp.json` (`${CLAUDE_PLUGIN_ROOT}`). Sibling monorepo dirs remain compatibility launchers/docs. The orchestrator still **probes** MCP `tools/list` and skips `preview*` / `observe*` when tools are absent. Evidence provider writes artifacts only — never the manifest. **`DESIGN_PLAYBOOK_RUN_ROOT`:** default `"."` in `.mcp.json` is the **MCP process cwd**, not the chat workspace — for a host-app dogfood, set an **absolute** path to `.scratch/<run>/` (see [`mcp/evidence/README.md`](mcp/evidence/README.md)). Capture responses include `written_path` (absolute) so mis-rooted writes are visible without a filesystem search.
 

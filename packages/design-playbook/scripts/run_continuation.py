@@ -55,8 +55,9 @@ _TRIAL_RECORD = ("mcp", "run_console", "test_read_only_trial.py")
 _TRIAL_STATUS_RE = re.compile(r"^TRIAL_STATUS\s*=\s*\"([^\"]+)\"", re.MULTILINE)
 _TRIAL_NOT_RUN = "TRIAL_NOT_RUN"
 
-# Owner-emitted continue actions that are themselves the current blocker.
-# Kinds are taken from status_projection; labels are never parsed.
+# Owner-emitted blocking actions that are themselves the current blocker.
+# Ids are taken from status_projection; kinds and labels are never parsed
+# (the recirculate repair action is an agent-command kind).
 _BLOCKING_CONTINUE_IDS = frozenset(
     {
         "action.repair-after-recirculate",

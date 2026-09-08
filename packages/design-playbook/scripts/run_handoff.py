@@ -138,6 +138,7 @@ def run_handoff(
     summary: str = "",
     capture_runner: Callable[..., Any] | None = None,
     gate_runner: Callable[..., Any] | None = None,
+    locale: str | None = None,
 ) -> RunHandoffResult:
     """Resolve a declared Fill and report the existing static handoff package."""
     run_root = Path(run_root)
@@ -168,6 +169,7 @@ def run_handoff(
             summary=summary,
             capture_runner=capture_runner,
             gate_runner=gate_runner,
+            locale=locale,
         )
     except (OSError, UnicodeError) as exc:
         raise RunHandoffError(f"static handoff builder failed: {exc}") from exc
@@ -222,6 +224,10 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="emit machine-readable JSON",
     )
+    parser.add_argument(
+        "--lang", choices=("zh-CN", "en"), default=None,
+        help="delivery page language (default: DPB_PREVIEW_LANG, LANG, then zh-CN)",
+    )
     args = parser.parse_args(argv)
     try:
         result = run_handoff(
@@ -229,6 +235,7 @@ def main(argv: list[str] | None = None) -> int:
             fill=args.fill,
             round_n=args.round,
             summary=args.summary,
+            locale=args.lang,
         )
     except RunHandoffError as exc:
         print(f"RUN HANDOFF ERROR: {exc}", file=sys.stderr)

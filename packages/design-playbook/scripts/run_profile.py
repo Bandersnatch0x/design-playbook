@@ -1,7 +1,8 @@
 """Run-profile block parsing (vNext S1, loop-prototype 1.4 / Q8=A).
 
 ``plan.md`` must open with a structured ``run-profile`` block — the block is
-mandatory for every run even when the rest of the plan body is skipped:
+mandatory for every run. Body-omission conditions belong to the orchestrator's
+plan step (``skills/design-playbook/SKILL.md``), not this structural validator:
 
     <!-- run-profile: v1 -->
 
@@ -248,8 +249,7 @@ def validate_run_profile(profile: RunProfile | None) -> list[str]:
     """Structural checks. Returns failure descriptions (empty = valid)."""
     if profile is None:
         return ["plan.md has no run-profile block (the block is mandatory; "
-                "skipping the rest of the plan body is legal, skipping the "
-                "profile block is not)"]
+                "body-omission conditions belong to the orchestrator's plan step)"]
     errors: list[str] = []
     if profile.version not in SUPPORTED_RUN_PROFILE_VERSIONS:
         errors.append(

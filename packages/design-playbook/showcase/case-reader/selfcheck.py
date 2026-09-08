@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Fill self-check: embedded text must equal source bytes; L6.1 structural claims."""
+import hashlib
+import json
+import re
+import sys
 from pathlib import Path
-import hashlib, json, re, sys
 
 root = Path(__file__).resolve().parents[2]
 case_dir = root / 'showcase/case-reader'
@@ -45,5 +48,8 @@ for name in ('run-status.md', 'run-handoff.md'):
         failures.append(f'commands/{name} missing')
 
 if failures:
-    print('FAIL:'); [print(' -', f) for f in failures]; sys.exit(1)
+    print("FAIL:")
+    for f in failures:
+        print(" -", f)
+    sys.exit(1)
 print(f'OK: {len(docs)} embedded docs byte-identical, sha verified, structure checks pass')

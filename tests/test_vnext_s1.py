@@ -240,6 +240,16 @@ upgrades: []
         self.assertIsNone(parse_run_profile("# plan\nbody only\n"))
         self.assertTrue(validate_run_profile(None))
 
+    def test_body_omission_stays_outside_profile_machine_validation(self) -> None:
+        reason = "body omitted; inputs: spec.md sections L1/L2/L6 and handoff.md sections 1-3"
+        text = self.PROFILE.replace("preview: adapter absent (G5 not triggered)", f"plan: {reason}")
+        for tier in ("P1", "P2", "P3"):
+            with self.subTest(tier=tier):
+                profile = parse_run_profile(text.replace("tier: P2", f"tier: {tier}"))
+                self.assertEqual(validate_run_profile(profile), [])
+                self.assertEqual(profile.skipped, (("plan", reason),))
+        self.assertIn("orchestrator's plan step", validate_run_profile(None)[0])
+
     def test_unversioned_marker_defaults_to_v1(self) -> None:
         profile = parse_run_profile(
             self.PROFILE.replace("run-profile: v1", "run-profile"))

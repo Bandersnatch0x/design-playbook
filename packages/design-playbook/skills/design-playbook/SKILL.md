@@ -33,7 +33,7 @@ Project the router's initial tier and criteria once, up front (LR1). Three tiers
 - **P2 standard** — full `ux-spec` shaping session (S0-S6, G9), R/C-tier design decisions, and standard evidence/review obligations.
 - **P3 full** — full declaration, alternative, interaction, and applicability coverage.
 
-The executable router proposes the initial grade and the user confirms it **once** (may fold into the request reply). **Upgrade is automatic** the moment a correction signal appears (R1 finding, structural R2, cross-layer blocking, E-tier judgment) — record the upgrade event in the run-profile block and walk the added steps; **downgrade requires the user** (over-compliance already performed is kept). Write the block into `plan.md` as a structured field block (`tier: P1|P2|P3`, grading checklist, `confirmed_by: user + <ts>`, skip list with one-line reasons, upgrade events). The profile block is mandatory for every run — skipping the rest of the plan body is legal, skipping the profile block is not. Every skipped step keeps the one-line skip narration rule below. Audit-preference tier waivers follow the SSOT section below.
+The executable router proposes the initial grade and the user confirms it **once** (may fold into the request reply). **Upgrade is automatic** the moment a correction signal appears (R1 finding, structural R2, cross-layer blocking, E-tier judgment) — record the upgrade event in the run-profile block and walk the added steps; **downgrade requires the user** (over-compliance already performed is kept). Write the block into `plan.md` as a structured field block (`tier: P1|P2|P3`, grading checklist, `confirmed_by: user + <ts>`, skip list with one-line reasons, upgrade events). The profile block is mandatory for every run; body-omission conditions and handoff completion are defined only in step **4. plan**. Every skipped step keeps the one-line skip narration rule below. Audit-preference tier waivers follow the SSOT section below.
 
 On a `design-run`, ask the smallest question only when the answer changes the goal, scope, platform, success criteria, or authority; otherwise record a conservative assumption in L1. Whether a request is `no-run` or `design-run` is only the router decision from step 1 — including durable review, diagnosis, or plan work.
 
@@ -140,13 +140,23 @@ Then continue to **4. plan**.
 
 Not a run-contract control beyond the **Tier** row and **not** a machine gate. Does not become Goal / Success / Evidence / Stop / Confirm SSOT.
 
-Write a light handoff at `.scratch/<run>/plan.md` (required on disk). It **must open with the `run-profile` structured block** (see *Run profile* above): `tier: P1|P2|P3`, the grading checklist, `confirmed_by: user + <ts>`, the skip list (step + one-line reason; silent skips are illegal), and upgrade events. Skipping the rest of the plan body is legal; skipping the profile block is not.
+Write a light handoff at `.scratch/<run>/plan.md` (required on disk). It **must open with the `run-profile` structured block** defined in *Run profile* above, even when the body is omitted.
 
-When `.scratch/<run>/reference/contract.md` exists, the handoff must point to it (path only; do not paste the full contract) and fold its functional constraints into the description→spec map and its visual cues/exclusions into the ui-picker input pack. Minimum three blocks:
+**Body omission (all conditions required):**
+
+- The current on-disk artifacts already supply all three handoff inputs below for this request and current spec, with concrete file and section pointers. Chat history alone is not a handoff.
+- The description × spec checks below leave no unresolved structural conflict, unmapped item, or presentation input left to record.
+- The run-profile skip list records `plan` with a one-line reason explicitly saying only the body is omitted, plus the input pointers. Narrate this skip using the Steps rule.
+
+Tier alone does not authorize omission. Recheck these conditions when scope, spec, reference constraints, or tier changes; if any condition no longer holds, write or update the full handoff. Keep an existing body rather than deleting work already performed.
+
+**Full handoff:** otherwise write these three body blocks:
 
 1. **This run's scope** — pointers to L2 / scenes / non-goals (do not copy L1–L6 wholesale)
 2. **User description → spec mapping** — which L1/L2/L6 this ask touches; unmapped items → conservative assumptions
 3. **ui-picker input pack** — scene hints, constraints, explicit exclusions
+
+**Reference handoff (both paths):** when `.scratch/<run>/reference/contract.md` exists, include its path in the body or omission skip entry (do not paste the full contract). Fold its functional constraints into the description→spec map and its visual cues/exclusions into the ui-picker input pack, whether those inputs are written here or reached through the omission pointers. An unconsumed reference contract does not qualify for body omission.
 
 **Prohibited:** paste the full spec; pre-write a decision report inside plan.
 
@@ -156,7 +166,12 @@ When `.scratch/<run>/reference/contract.md` exists, the handoff must point to it
 - **Presentation preference** (scene density, region weight, component role preference without L6 change) → put in the ui-picker input pack; `ui-picker` decides
 - **Unmapped description** → mapping table as conservative assumption; do not silently edit L1
 
-**Done when:** `plan.md` exists with the three blocks; ui-picker can consume the input pack without re-deriving scope from chat.
+**Done when:** `plan.md` exists with the required opening `run-profile` block, the reference handoff holds when applicable, and one of these paths is complete:
+
+- **Full handoff:** the three blocks are present and the description × spec branches have been handled as above.
+- **Profile-only handoff:** all body-omission conditions above hold, including the recorded reason and input pointers.
+
+In either path, ui-picker can consume the saved input pack without re-deriving scope from chat.
 
 ### 5. Shell → conditional `native-craft` → `ui-picker`
 

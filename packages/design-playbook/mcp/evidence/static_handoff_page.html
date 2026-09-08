@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="%LANG%">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Static Handoff - Design Playbook</title>
+<title>%TITLE% - Design Playbook</title>
 <style>
   :root{
     --primary:#2563EB; --bg:#F8FAFC; --surface:#FFFFFF; --border:#E2E8F0;
@@ -62,52 +62,55 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>Static Handoff</h1>
-    <div class="sub">Delivery credential &middot; run <code>%RUN_ID%</code> &middot; generated %TIMESTAMP%</div>
+    <h1>%TITLE%</h1>
+    <div class="sub">%CREDENTIAL% &middot; %RUN% <code>%RUN_ID%</code> &middot; %GENERATED% %TIMESTAMP%</div>
   </header>
 
   <div class="grid">
-    <div class="card"><div class="k">Verdict</div>
+    <div class="card"><div class="k">%VERDICT_LABEL%</div>
       <div class="v %VERDICT_LOWERCASE%">%VERDICT%</div></div>
-    <div class="card"><div class="k">Decision authority</div>
+    <div class="card"><div class="k">%AUTHORITY_LABEL%</div>
       <div class="v">%AUTHORITY%</div></div>
-    <div class="card"><div class="k">Run profile</div>
+    <div class="card"><div class="k">%PROFILE_LABEL%</div>
       <div class="v">%PROFILE%</div></div>
-    <div class="card"><div class="k">Gates passed</div>
+    <div class="card"><div class="k">%GATES_PASSED_LABEL%</div>
       <div class="v">%GATES_PASSED% / 8</div></div>
-    <div class="card"><div class="k">Capture</div>
+    <div class="card"><div class="k">%CAPTURE%</div>
       <div class="v">%CAPTURE_STATUS%</div></div>
   </div>
   <div class="note">%CONFIRMATION_NOTE%</div>
 
-  <h2>Gate matrix</h2>
+  <h2>%GATE_MATRIX%</h2>
   <table>
-    <thead><tr><th>Gate</th><th>Status</th></tr></thead>
+    <thead><tr><th>%GATE%</th><th>%STATUS%</th></tr></thead>
     <tbody>%GATE_ROWS%</tbody>
   </table>
 
-  <h2>Viewport disclosure</h2>
+  <h2>%VIEWPORTS%</h2>
+  <div style="overflow-x:auto">
   <table>
-    <thead><tr><th>Viewport</th><th>sw</th><th>innerH</th><th>hOverflow</th>
-      <th>inFold</th><th>Measurement</th></tr></thead>
+    <thead><tr><th>%VIEWPORT%</th><th>%WIDTH%</th><th>%HEIGHT%</th><th>%OVERFLOW%</th>
+      <th>%IN_FOLD%</th><th>%MEASUREMENT%</th></tr></thead>
     <tbody>%VIEWPORT_ROWS%</tbody>
   </table>
+  </div>
 
-  <h2>Decisions</h2>
+  <h2>%DECISIONS%</h2>
   <ul class="decisions">%DECISION_ITEMS%</ul>
 
-  <h2>Artifacts</h2>
-  <p>This page is the delivery surface. Everything below sits next to it on disk.</p>
+  <h2>%ARTIFACTS%</h2>
+  <p>%ARTIFACTS_NOTE%</p>
   <div class="dl">
-    <a href="static-handoff.zip">Download ZIP (credential + snapshots + code)</a>
-    <a class="secondary" href="disclosure-review.json">disclosure-review.json</a>
-    <a class="secondary" href="deliverable.html">deliverable.html</a>
+    <a href="static-handoff.zip">%DOWNLOAD%</a>
+    <a class="secondary" href="disclosure-review.json">%DISCLOSURE_LINK%</a>
+    <a class="secondary" href="deliverable.html">%DELIVERABLE_LINK%</a>
   </div>
   <div class="snaps">%SNAPSHOT_FIGURES%</div>
 
   <details>
-    <summary>Full disclosure payload (machine-readable)</summary>
-    <pre><script type="application/json">%PAYLOAD_JSON%</script></pre>
+    <summary>%PAYLOAD%</summary>
+    <pre>%PAYLOAD_TEXT%</pre>
+    <script type="application/json">%PAYLOAD_JSON%</script>
   </details>
 </div>
 </body>

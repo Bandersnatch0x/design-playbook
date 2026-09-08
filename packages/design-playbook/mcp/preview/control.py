@@ -120,7 +120,7 @@ def _build_control(
     )
     criteria_toggle_hidden = " hidden" if criteria_count == 0 else ""
 
-    def display_label(opt: str) -> str:
+    def label_key(opt: str) -> str | None:
         """Render known confirm/revise labels in the ACTIVE locale.
 
         The submitted value stays the raw option (CONFIRM/REVISE union sets
@@ -129,10 +129,14 @@ def _build_control(
         an otherwise locale-consistent control bar.
         """
         if opt in CONFIRM_LABELS or opt.casefold() in confirm_cf:
-            return t("confirm")
+            return "confirm"
         if opt in REVISE_LABELS or opt.casefold() in revise_cf:
-            return t("revise")
-        return opt
+            return "revise"
+        return None
+
+    def display_label(opt: str) -> str:
+        key = label_key(opt)
+        return t(key) if key else opt
 
     # Draft persistence key (wayfinder canvas-upgrade 07): per-run isolation so
     # one preview run's draft never leaks into another page/run.
@@ -150,10 +154,15 @@ def _build_control(
         is_revise = opt in REVISE_LABELS or opt.casefold() in revise_cf
         cls = "dpb-btn dpb-btn-primary" if primary else "dpb-btn dpb-btn-secondary"
         desc = confirm_desc if primary else (revise_desc if is_revise else "")
-        desc_attr = f' title="{desc}" aria-description="{desc}"' if desc else ""
+        key = label_key(opt)
+        desc_attr = (
+            f' title="{desc}" aria-description="{desc}"'
+            f' data-i18n-title="{key}_desc" data-i18n-aria-description="{key}_desc"'
+        ) if desc else ""
+        label_attr = f' data-i18n="{key}"' if key else ""
         bit = (
             f'<button type="submit" name="choice" value="{safe_val}" class="{cls}"'
-            f"{desc_attr}>{safe_label}</button>"
+            f"{desc_attr}{label_attr}>{safe_label}</button>"
         )
         (primary_bits if primary else secondary_bits).append(bit)
     secondary_html = "\n".join(secondary_bits)
@@ -167,76 +176,7 @@ def _build_control(
     # JS-side strings: inject via JSON script (not .format into JS literals).
     # Translations with quotes, braces, or "/{" must not break JS or raise KeyError.
     # HTML {t_xxx} placeholders stay on .format (html.escape-safe static chrome).
-    JS_KEYS = (
-        "app_title",
-        "locate",
-        "locate_anchor",
-        "skip",
-        "mode_preview",
-        "mode_annotate",
-        "draw_label",
-        "box_label",
-        "draw_on",
-        "ruler_size",
-        "ruler_distance",
-        "status_ready",
-        "status_not_ready",
-        "quick_approve",
-        "filter_all",
-        "filter_pending",
-        "filter_resolved",
-        "mark_resolved",
-        "reopen",
-        "tag_copy",
-        "tag_layout",
-        "tag_visual",
-        "comment_placeholder",
-        "field_label",
-        "field_placeholder",
-        "anchor_num_pre",
-        "anchor_num_post",
-        "anchor_placeholder",
-        "remove_num_pre",
-        "remove",
-        "duplicate_anchor",
-        "gate_hint",
-        "terminate_confirm",
-        "terminate_confirm_go",
-        "abort_cancelled",
-        "abort_popover_aria",
-        "drawer_title",
-        "drawer_empty_title",
-        "drawer_empty_desc",
-        "criteria_title",
-        "criteria_count",
-        "criteria_empty",
-        "criteria_toggle_title",
-        "theme_toggle",
-        "tool_select",
-        "tool_draw",
-        "tool_box",
-        "tool_ruler",
-        "tool_hand",
-        "toast_mode_preview",
-        "toast_mode_annotate",
-        "toast_pin_added",
-        "toast_loop_done",
-        "toast_note_added",
-        "toast_resolved",
-        "toast_reopened",
-        "toast_drawer_open",
-        "toast_drawer_closed",
-        "toast_lang",
-        "toast_undo",
-        "toast_focus",
-        "toast_vp",
-        "onboard_title",
-        "onboard_pick",
-        "onboard_write",
-        "onboard_submit",
-        "onboard_undo",
-        "onboard_close",
-    )
+    from design_playbook.mcp.preview.i18n import EN, ZH, _STRINGS, lang
     # json.dumps is JS-safe for quotes/backslashes; also neutralize </script>
     # and U+2028/2029 (pre-ES2019 JS string breaks) in case translations ever
     # carry them - defense, not a current risk.
@@ -248,18 +188,21 @@ def _build_control(
             .replace("\u2029", "\\u2029")
         )
 
-    i18n_json = _js_safe({k: t(k) for k in JS_KEYS})
+    i18n_json = _js_safe(_STRINGS[lang()])
     # Dual-locale dictionary for the live L toggle (v9): both tables ship so
     # the client can swap languages without a server round-trip.
-    from design_playbook.mcp.preview.i18n import EN, ZH, _STRINGS
-
     dual_json = _js_safe(
-        {k: {"zh": _STRINGS[ZH].get(k, ""), "en": _STRINGS[EN].get(k, "")}
-         for k in JS_KEYS}
+        {k: {"zh": _STRINGS[ZH][k], "en": _STRINGS[EN][k]}
+         for k in _STRINGS[ZH]}
     )
     html_tpl, css_tpl, js_tpl, _review_tpl = _load_resources()
     js_formatted = js_tpl
+    localized_copy = {f"t_{key}": html_lib.escape(t(key), quote=True) for key in _STRINGS[ZH]}
+    localized_copy["t_round"] = html_lib.escape(t("round_n", n=round_n))
     html_formatted = html_tpl.format(
+        locale=lang(),
+        round_n=round_n,
+        **localized_copy,
         summary_safe=summary_safe,
         criteria_html=_render_criteria_cards(criteria_items),
         criteria_hidden=criteria_hidden,
@@ -269,69 +212,8 @@ def _build_control(
         secondary_html=secondary_html,
         primary_val=primary_val,
         primary_label=primary_label,
+        primary_i18n=f' data-i18n="{label_key(primary_opt)}"' if label_key(primary_opt) else "",
         skip_val=html_lib.escape(t("skip"), quote=True),
-        t_app_title=html_lib.escape(t("app_title")),
-        t_round=html_lib.escape(t("round_n", n=round_n)),
-        t_vp_desktop=html_lib.escape(t("vp_desktop"), quote=True),
-        t_vp_tablet=html_lib.escape(t("vp_tablet"), quote=True),
-        t_vp_mobile=html_lib.escape(t("vp_mobile"), quote=True),
-        t_mode_preview=html_lib.escape(t("mode_preview")),
-        t_mode_annotate=html_lib.escape(t("mode_annotate")),
-        t_drawer_toggle=html_lib.escape(t("drawer_toggle"), quote=True),
-        t_shortcuts_open=html_lib.escape(t("shortcuts_open"), quote=True),
-        t_skip=html_lib.escape(t("skip")),
-        t_skip_desc=html_lib.escape(t("skip_desc"), quote=True),
-        t_terminate=html_lib.escape(t("terminate")),
-        t_terminate_desc=html_lib.escape(t("terminate_desc"), quote=True),
-        t_terminate_confirm=html_lib.escape(t("terminate_confirm")),
-        t_terminate_confirm_go=html_lib.escape(t("terminate_confirm_go")),
-        t_abort_popover_aria=html_lib.escape(t("abort_popover_aria"), quote=True),
-        t_cancel=html_lib.escape(t("cancel")),
-        t_confirm_desc=html_lib.escape(t("confirm_desc"), quote=True),
-        t_tool_select=html_lib.escape(t("tool_select"), quote=True),
-        t_tool_draw=html_lib.escape(t("tool_draw"), quote=True),
-        t_tool_box=html_lib.escape(t("tool_box"), quote=True),
-        t_tool_ruler=html_lib.escape(t("tool_ruler"), quote=True),
-        t_tool_hand=html_lib.escape(t("tool_hand"), quote=True),
-        t_undo_label=html_lib.escape(t("undo_label"), quote=True),
-        t_zoom_out_t=html_lib.escape(t("zoom_out_t"), quote=True),
-        t_zoom_in_t=html_lib.escape(t("zoom_in_t"), quote=True),
-        t_zoom_fit=html_lib.escape(t("zoom_fit"), quote=True),
-        t_draw_toggle=html_lib.escape(t("draw_toggle")),
-        t_status_not_ready=html_lib.escape(t("status_not_ready")),
-        t_quick_approve=html_lib.escape(t("quick_approve")),
-        t_drawer_title=html_lib.escape(t("drawer_title")),
-        t_criteria_title=html_lib.escape(t("criteria_title")),
-        t_criteria_empty=html_lib.escape(t("criteria_empty")),
-        t_criteria_toggle_title=html_lib.escape(t("criteria_toggle_title"), quote=True),
-        t_theme_toggle=html_lib.escape(t("theme_toggle"), quote=True),
-        t_roam_prev=html_lib.escape(t("roam_prev"), quote=True),
-        t_roam_next=html_lib.escape(t("roam_next"), quote=True),
-        t_roam_label=html_lib.escape(t("roam_label")),
-        t_filter_all=html_lib.escape(t("filter_all")),
-        t_filter_pending=html_lib.escape(t("filter_pending")),
-        t_filter_resolved=html_lib.escape(t("filter_resolved")),
-        t_tag_copy=html_lib.escape(t("tag_copy")),
-        t_tag_layout=html_lib.escape(t("tag_layout")),
-        t_tag_visual=html_lib.escape(t("tag_visual")),
-        t_enter_hint=html_lib.escape(t("enter_hint")),
-        t_comment_placeholder=html_lib.escape(t("comment_placeholder"), quote=True),
-        t_comment_send=html_lib.escape(t("comment_send"), quote=True),
-        t_field_label=html_lib.escape(t("field_label")),
-        t_field_placeholder=html_lib.escape(t("field_placeholder"), quote=True),
-        t_draft=html_lib.escape(t("draft")),
-        t_draft_desc=html_lib.escape(t("draft_desc"), quote=True),
-        t_lang_toggle=html_lib.escape(t("lang_toggle")),
-        t_shortcuts_title=html_lib.escape(t("shortcuts_title")),
-        t_group_global=html_lib.escape(t("group_global")),
-        t_group_tools=html_lib.escape(t("group_tools")),
-        t_got_it=html_lib.escape(t("got_it")),
-        t_onboard_title=html_lib.escape(t("onboard_title")),
-        t_onboard_pick=html_lib.escape(t("onboard_pick")),
-        t_onboard_write=html_lib.escape(t("onboard_write")),
-        t_onboard_submit=html_lib.escape(t("onboard_submit")),
-        t_onboard_undo=html_lib.escape(t("onboard_undo")),
-        t_onboard_close=html_lib.escape(t("onboard_close")),
     )
 
     # ADR-0008: SKIP_LABELS in i18n.py is the single label source. Ship the

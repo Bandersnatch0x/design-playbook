@@ -52,6 +52,10 @@ class ValidateGateTests(unittest.TestCase):
         # at ROOT/.agents/plugins/marketplace.json (ADR-0009 dual-publish).
         shutil.copytree(ROOT / ".claude-plugin", self.root / ".claude-plugin")
         shutil.copytree(ROOT / ".agents", self.root / ".agents")
+        # The capability-claim alignment gate (ADR-0043 / T-005) reads the
+        # root README badges and their Run Console maturity vocabulary.
+        shutil.copy2(ROOT / "README.md", self.root / "README.md")
+        shutil.copy2(ROOT / "README-zh.md", self.root / "README-zh.md")
 
     def tearDown(self) -> None:
         self.temp.cleanup()
@@ -67,6 +71,140 @@ class ValidateGateTests(unittest.TestCase):
         # pass the full static gate. If this fails, some other change
         # drifted the package out of spec and the FAIL cases below cannot
         # be trusted either.
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("VALIDATION PASSED", result.stdout)
+
+    def _rewrite_codex_prompt(self, old: str, new: str) -> None:
+        package = self.root / "packages" / "design-playbook"
+        for relative in ("scripts/adapter_templates/codex-agents.md", "codex/AGENTS.md"):
+            path = package / relative
+            text = path.read_text(encoding="utf-8")
+            self.assertIn(old, text)
+            path.write_text(text.replace(old, new), encoding="utf-8")
+
+    def test_codex_routing_pointer_drift_fails(self) -> None:
+        self._rewrite_codex_prompt("`run_profile.py route`", "a host-local guess")
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("FAIL  Codex adapter delegates routing to the orchestrator", result.stdout)
+
+    def test_codex_duplicate_stage_order_fails(self) -> None:
+        self._rewrite_codex_prompt(
+            "## Load order",
+            "## Load order\n\nNative desktop order: `ux-spec` → `native-craft` → "
+            "`ui-picker` → `fill` → `craft-guard` → `ui-evaluator`.",
+        )
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("FAIL  Codex adapter does not duplicate stage order", result.stdout)
+
+    def test_orchestrator_web_skip_guard_is_required(self) -> None:
+        path = self.root / "packages/design-playbook/skills/design-playbook/SKILL.md"
+        text = path.read_text(encoding="utf-8")
+        guard = "Web and mobile Web skip `native-craft`"
+        self.assertIn(guard, text)
+        path.write_text(text.replace(guard, "Web routing is unspecified"), encoding="utf-8")
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("FAIL  orchestrator skips native-craft for Web targets", result.stdout)
+
+    def test_stale_run_console_claim_fails(self) -> None:
+        # T-005: the Run Console ships locally, so a current public surface
+        # describing it as planned / not shipped is a stale capability claim.
+        readme = self.root / "README.md"
+        text = readme.read_text(encoding="utf-8")
+        self.assertIn("Run Console", text)
+        readme.write_text(
+            text.replace(
+                "Run Console", "Run Console — planned:", 1
+            ).replace(
+                " — shipped and **experimental**:", ":", 1
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("Run Console claim uses current maturity vocabulary", result.stdout)
+        self.assertIn("planned", result.stdout)
+
+    def test_command_badge_count_drift_fails(self) -> None:
+        # T-005: the public command-count badge must equal the shipped
+        # commands/ inventory (ADR-0015 stable main).
+        readme = self.root / "README.md"
+        text = readme.read_text(encoding="utf-8")
+        self.assertIn("badge/Commands-", text)
+        readme.write_text(
+            text.replace(
+                "badge/Commands-", "badge/Commands-99-", 1
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("Commands badge count 99 matches shipped inventory", result.stdout)
+
+    def test_run_console_promoted_claim_fails(self) -> None:
+        # T-005 / ADR-0043: the current Run Console claim is experimental
+        # and trial-gated. Promoting it to stable / public-ready on a
+        # current surface is a maturity disagreement the gate must reject
+        # even though the Console itself is implemented and shipped — the
+        # stale-claim check alone cannot see this direction of drift.
+        readme = self.root / "README.md"
+        text = readme.read_text(encoding="utf-8")
+        self.assertIn("shipped and **experimental**", text)
+        for label, promoted in (
+            ("stable", "shipped and **stable**"),
+            ("public-ready", "shipped, **public-ready**"),
+        ):
+            with self.subTest(promotion=label):
+                readme.write_text(
+                    text.replace(
+                        "shipped and **experimental**", promoted, 1
+                    ),
+                    encoding="utf-8",
+                )
+
+                result = self.validate()
+
+                self.assertEqual(
+                    result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn(
+                    "Run Console public claim stays experimental/trial-gated",
+                    result.stdout,
+                )
+                self.assertIn(label, result.stdout)
+
+    def test_historical_records_excluded_from_console_claim_gate(self) -> None:
+        # req28: historical release/spec/adr records are preserved as
+        # written, so the same stable/public-ready wording that fails on a
+        # current surface must not fail when an older record carries it.
+        historical = {
+            self.root / "docs" / "releases" / "v0.20.0.md":
+                "# v0.20.0\n\nThe Run Console is stable and generally "
+                "available.\n",
+            self.root / "docs" / "specs" / "old-console-spec.md":
+                "# Old console spec\n\nThe Run Console is stable and "
+                "generally available.\n",
+            self.root / "docs" / "adr" / "0001-old.md":
+                "# ADR-0001\n\nThe Run Console is stable and generally "
+                "available.\n",
+        }
+        for path, body in historical.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(body, encoding="utf-8")
+
         result = self.validate()
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -416,6 +554,34 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("from _checks import RUFF_VERSION", ci)
         self.assertIn('ruff==${RUFF_VERSION}', ci)
         self.assertNotIn(f"ruff=={_checks.RUFF_VERSION}", ci)
+
+
+class GitIgnoreBoundaryTests(unittest.TestCase):
+    def test_evidence_runtime_sources_are_trackable_without_run_artifacts(self) -> None:
+        sources = [
+            "packages/design-playbook/mcp/evidence/handoff_i18n.py",
+            "packages/design-playbook/mcp/evidence/test_handoff_i18n.py",
+        ]
+        artifacts = [
+            "evidence/screenshot.png",
+            ".scratch/run/evidence/screenshot.png",
+            "packages/design-playbook/mcp/evidence/__pycache__/handoff.pyc",
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            shutil.copy2(ROOT / ".gitignore", repo / ".gitignore")
+            subprocess.run(
+                ["git", "init", "--quiet"], cwd=repo, capture_output=True, check=True, timeout=10,
+            )
+            result = subprocess.run(
+                ["git", "check-ignore", "--no-index", "--", *sources, *artifacts],
+                cwd=repo,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines(), artifacts)
 
 
 class RuffPinTests(unittest.TestCase):

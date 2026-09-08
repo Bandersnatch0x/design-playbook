@@ -1,5 +1,5 @@
 <!-- v9 app shell: header / canvas workspace / left toolbar / right inspector -->
-<div id="dpb-root">
+<div id="dpb-root" lang="{locale}" data-round="{round_n}">
   <form method="POST" action="/decide" id="dpb-decide-form">
   <input type="hidden" name="anchors_json" id="dpb-anchors-json" value="[]" />
   <input type="hidden" name="criteria_json" id="dpb-criteria-json" value="{criteria_hidden}" />
@@ -12,64 +12,65 @@
       <span class="dpb-crumb-sep">/</span>
       <span class="dpb-crumb-screen" title="{summary_safe}">{summary_safe}</span>
       <span class="dpb-crumb-sep">/</span>
-      <span class="dpb-round-chip">{t_round}</span>
+      <span class="dpb-round-chip" data-i18n="round_n">{t_round}</span>
     </div>
 
     <div class="dpb-header-center">
-      <div class="dpb-seg" role="group" aria-label="viewport">
-        <button type="button" id="dpb-vp-desktop" title="{t_vp_desktop}" aria-pressed="true"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="8" rx="1"/><path d="M6 13h4M8 11v2"/></svg></button>
-        <button type="button" id="dpb-vp-tablet" title="{t_vp_tablet}" aria-pressed="false"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="2" width="10" height="12" rx="1.5"/><path d="M7.2 12.2h1.6"/></svg></button>
-        <button type="button" id="dpb-vp-mobile" title="{t_vp_mobile}" aria-pressed="false"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4.5" y="2" width="7" height="12" rx="1.5"/><path d="M7.4 12.4h1.2"/></svg></button>
+      <div class="dpb-seg" role="group" data-i18n-aria-label="viewport_group" aria-label="{t_viewport_group}">
+        <button type="button" id="dpb-vp-desktop" data-i18n-title="vp_desktop" title="{t_vp_desktop}" aria-pressed="true"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="8" rx="1"/><path d="M6 13h4M8 11v2"/></svg></button>
+        <button type="button" id="dpb-vp-tablet" data-i18n-title="vp_tablet" title="{t_vp_tablet}" aria-pressed="false"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="2" width="10" height="12" rx="1.5"/><path d="M7.2 12.2h1.6"/></svg></button>
+        <button type="button" id="dpb-vp-mobile" data-i18n-title="vp_mobile" title="{t_vp_mobile}" aria-pressed="false"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4.5" y="2" width="7" height="12" rx="1.5"/><path d="M7.4 12.4h1.2"/></svg></button>
       </div>
       <span class="dpb-header-div" aria-hidden="true"></span>
-      <div class="dpb-seg" role="group" aria-label="mode">
-        <button type="button" id="dpb-mode-preview" aria-pressed="false" title="{t_mode_preview} (V)">
+      <div class="dpb-seg" role="group" data-i18n-aria-label="mode_group" aria-label="{t_mode_group}">
+        <button type="button" id="dpb-mode-preview" aria-pressed="false" data-i18n-title="mode_preview" data-i18n-title-suffix=" (V)" title="{t_mode_preview} (V)">
           <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="2"/></svg>
           <span class="i18n" data-i18n="mode_preview">{t_mode_preview}</span><kbd>V</kbd>
         </button>
-        <button type="button" id="dpb-mode-annotate" aria-pressed="true" title="{t_mode_annotate} (D)">
+        <button type="button" id="dpb-mode-annotate" aria-pressed="true" data-i18n-title="mode_annotate" data-i18n-title-suffix=" (P)" title="{t_mode_annotate} (P)">
           <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 13.5l1-3.2 7-7 2.2 2.2-7 7-3.2 1Z"/><path d="M10 3.5 12.5 6"/></svg>
-          <span class="i18n" data-i18n="mode_annotate">{t_mode_annotate}</span><kbd>D</kbd>
+          <span class="i18n" data-i18n="mode_annotate">{t_mode_annotate}</span><kbd>P</kbd>
         </button>
       </div>
     </div>
 
     <div class="dpb-header-right">
-      <button type="button" id="dpb-criteria-toggle" title="{t_criteria_toggle_title}" aria-expanded="true" aria-controls="dpb-spec-panel" data-total="{criteria_count}"{criteria_toggle_hidden}>
+      <button type="button" id="dpb-criteria-toggle" data-i18n-title="criteria_toggle_title" title="{t_criteria_toggle_title}" aria-expanded="true" aria-controls="dpb-spec-panel" data-total="{criteria_count}"{criteria_toggle_hidden}>
         <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6.5 4h7M6.5 8h7M6.5 12h7"/><path d="M2.5 4.2 3.4 5l1.7-2M2.5 8.2 3.4 9l1.7-2M2.5 12.2 3.4 13l1.7-2"/></svg>
         <span id="dpb-criteria-count" data-i18n="criteria_count">{criteria_count_label}</span>
       </button>
-      <button type="button" id="dpb-theme-toggle" title="{t_theme_toggle}" aria-label="{t_theme_toggle}">
+      <button type="button" id="dpb-language-toggle" data-i18n-title="lang_toggle" title="{t_lang_toggle}" data-i18n="lang_switch">{t_lang_switch}</button>
+      <button type="button" id="dpb-theme-toggle" data-i18n-title="theme_toggle" title="{t_theme_toggle}" data-i18n-aria-label="theme_toggle" aria-label="{t_theme_toggle}">
         <span id="dpb-theme-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 10.6A5.6 5.6 0 0 1 5.4 2.8 6.1 6.1 0 1 0 13.2 10.6Z"/></svg></span>
       </button>
-      <button type="button" id="dpb-drawer-toggle" title="{t_drawer_toggle} [ [ ]">
+      <button type="button" id="dpb-drawer-toggle" data-i18n-title="drawer_toggle" data-i18n-title-suffix=" [ [ ]" title="{t_drawer_toggle} [ [ ]">
         <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M10 3v10"/></svg><kbd>[</kbd>
       </button>
-      <button type="button" id="dpb-shortcuts-btn" title="{t_shortcuts_open} [?]">
+      <button type="button" id="dpb-shortcuts-btn" data-i18n-title="shortcuts_open" data-i18n-title-suffix=" [?]" title="{t_shortcuts_open} [?]">
         <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="8" rx="1.5"/><path d="M4.5 7h.01M7 7h.01M9.5 7h.01M4.5 9.5h7"/></svg><kbd>?</kbd>
       </button>
       <span class="dpb-header-div" aria-hidden="true"></span>
-      <button type="submit" name="choice" value="{skip_val}" id="dpb-btn-skip" title="{t_skip_desc}">
-        <span class="i18n" data-i18n="skip">{t_skip}</span><kbd>Esc</kbd>
+      <button type="submit" name="choice" value="{skip_val}" id="dpb-btn-skip" data-i18n-title="skip_desc" title="{t_skip_desc}">
+        <span class="i18n" data-i18n="skip">{t_skip}</span><kbd>⇧Esc</kbd>
       </button>
       {secondary_html}
-      <button type="button" id="dpb-abort" title="{t_terminate_desc}" aria-haspopup="dialog" aria-expanded="false" aria-controls="dpb-abort-popover" class="dpb-abort-btn">
+      <button type="button" id="dpb-abort" data-i18n-title="terminate_desc" title="{t_terminate_desc}" aria-haspopup="dialog" aria-expanded="false" aria-controls="dpb-abort-popover" class="dpb-abort-btn">
         <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M5.5 5.5 10.5 10.5M10.5 5.5 5.5 10.5"/></svg>
         <span class="i18n" data-i18n="terminate">{t_terminate}</span><kbd>⇧Del</kbd>
       </button>
       <div class="dpb-abort-wrap">
-        <div class="dpb-popover" id="dpb-abort-popover" role="dialog" aria-label="{t_abort_popover_aria}" hidden>
-          <p class="dpb-popover-msg" id="dpb-abort-popover-msg">{t_terminate_confirm}</p>
+        <div class="dpb-popover" id="dpb-abort-popover" role="dialog" data-i18n-aria-label="abort_popover_aria" aria-label="{t_abort_popover_aria}" hidden>
+          <p class="dpb-popover-msg" id="dpb-abort-popover-msg" data-i18n="terminate_confirm">{t_terminate_confirm}</p>
           <div class="dpb-popover-actions">
-            <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-abort-cancel">{t_cancel}</button>
-            <button type="submit" name="choice" value="__abort__" class="dpb-btn dpb-btn-danger" id="dpb-abort-confirm">{t_terminate_confirm_go}</button>
+            <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-abort-cancel" data-i18n="cancel">{t_cancel}</button>
+            <button type="submit" name="choice" value="__abort__" class="dpb-btn dpb-btn-danger" id="dpb-abort-confirm" data-i18n="terminate_confirm_go">{t_terminate_confirm_go}</button>
           </div>
         </div>
       </div>
       <span class="dpb-sr-only" id="dpb-abort-status" role="alert"></span>
-      <button type="submit" name="choice" value="{primary_val}" id="dpb-btn-approve" class="dpb-approve-btn" title="{t_confirm_desc}">
+      <button type="submit" name="choice" value="{primary_val}" id="dpb-btn-approve" class="dpb-approve-btn" data-i18n-title="confirm_desc" title="{t_confirm_desc}">
         <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M5.2 8.2 7 10l3.8-4"/></svg>
-        <span>{primary_label}</span><kbd>⌘↵</kbd>
+        <span{primary_i18n}>{primary_label}</span><kbd>Ctrl/⌘↵</kbd>
       </button>
     </div>
   </header>
@@ -87,33 +88,33 @@
         {criteria_html}
       </div>
     </aside>
-    <nav class="dpb-toolbar" id="dpb-toolbar" aria-label="tools">
-      <button type="button" id="dpb-pin-toggle" aria-pressed="true" title="{t_tool_select} [V]">
+    <nav class="dpb-toolbar" id="dpb-toolbar" data-i18n-aria-label="tools_group" aria-label="{t_tools_group}">
+      <button type="button" id="dpb-pin-toggle" aria-pressed="true" data-i18n-title="tool_select" data-i18n-title-suffix=" [P]" title="{t_tool_select} [P]">
         <svg viewBox="0 0 16 16" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14 4.8 11.2M2 14l.7-2.6 6.9-6.9 1.9 1.9-6.9 6.9L2 14Z"/><path d="m10.5 3.5 2 2 1.6-1.6a1.42 1.42 0 0 0-2-2l-1.6 1.6Z"/></svg>
       </button>
-      <button type="button" id="dpb-draw-toggle" aria-pressed="false" title="{t_tool_draw} [D]">
+      <button type="button" id="dpb-draw-toggle" aria-pressed="false" data-i18n-title="tool_draw" data-i18n-title-suffix=" [D]" title="{t_tool_draw} [D]">
         <svg viewBox="0 0 16 16" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 13.5l1-3.2 7-7 2.2 2.2-7 7-3.2 1Z"/><path d="M10 3.5 12.5 6"/></svg>
       </button>
-      <button type="button" id="dpb-box-toggle" aria-pressed="false" title="{t_tool_box} [B]">
+      <button type="button" id="dpb-box-toggle" aria-pressed="false" data-i18n-title="tool_box" data-i18n-title-suffix=" [B]" title="{t_tool_box} [B]">
         <svg viewBox="0 0 16 16" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="10" height="10" rx="1.5"/><path d="M5 1.8v2.4M11 1.8v2.4M5 11.8v2.4M11 11.8v2.4M1.8 5h2.4M11.8 5h2.4M1.8 11h2.4M11.8 11h2.4"/></svg>
       </button>
-      <button type="button" id="dpb-ruler-toggle" aria-pressed="false" title="{t_tool_ruler} [R]">
+      <button type="button" id="dpb-ruler-toggle" aria-pressed="false" data-i18n-title="tool_ruler" data-i18n-title-suffix=" [R]" title="{t_tool_ruler} [R]">
         <svg viewBox="0 0 16 16" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 11.5 11.5 2.5l2 2-9 9-2-2Z"/><path d="M6 10 4.8 8.8M8 8 6.8 6.8M10 6 8.8 4.8"/></svg>
       </button>
-      <button type="button" id="dpb-hand-toggle" aria-pressed="false" title="{t_tool_hand} [H]">
+      <button type="button" id="dpb-hand-toggle" aria-pressed="false" data-i18n-title="tool_hand" data-i18n-title-suffix=" [H]" title="{t_tool_hand} [H]">
         <svg viewBox="0 0 16 16" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 8V3.2a1.1 1.1 0 0 1 2.2 0V7m0-2.4a1.1 1.1 0 0 1 2.2 0V7m0-1.6a1.1 1.1 0 0 1 2.2 0V9c0 2.8-1.8 5-4.6 5S4.4 12 3.4 9.6L2.6 7.4a1.05 1.05 0 0 1 1.9-.8L5 8.4"/></svg>
       </button>
-      <button type="button" id="dpb-undo-btn" title="{t_undo_label} [Ctrl+Z]">
+      <button type="button" id="dpb-undo-btn" data-i18n-title="undo_label" data-i18n-title-suffix=" [Ctrl+Z]" title="{t_undo_label} [Ctrl+Z]">
         <svg viewBox="0 0 16 16" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h6.5a3.5 3.5 0 0 1 0 7H6"/><path d="M3 7 6 4M3 7l3 3"/></svg>
       </button>
       <span class="dpb-toolbar-div"></span>
-      <button type="button" id="dpb-zoom-out" title="{t_zoom_out_t} [-]">
+      <button type="button" id="dpb-zoom-out" data-i18n-title="zoom_out_t" data-i18n-title-suffix=" [-]" title="{t_zoom_out_t} [-]">
         <svg viewBox="0 0 16 16" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><path d="M10.5 10.5 14 14M5 7h4"/></svg>
       </button>
-      <button type="button" id="dpb-zoom-in" title="{t_zoom_in_t} [+]">
+      <button type="button" id="dpb-zoom-in" data-i18n-title="zoom_in_t" data-i18n-title-suffix=" [+]" title="{t_zoom_in_t} [+]">
         <svg viewBox="0 0 16 16" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><path d="M10.5 10.5 14 14M5 7h4M7 5v4"/></svg>
       </button>
-      <button type="button" id="dpb-zoom-fit" title="{t_zoom_fit} [0]">
+      <button type="button" id="dpb-zoom-fit" data-i18n-title="zoom_fit" data-i18n-title-suffix=" [0]" title="{t_zoom_fit} [0]">
         <svg viewBox="0 0 16 16" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5V2h3M11 2h3v3M14 11v3h-3M5 14H2v-3"/></svg>
       </button>
       <span class="dpb-toolbar-div"></span>
@@ -145,14 +146,14 @@
         <span class="dpb-count-badge" id="dpb-count-badge">0</span>
       </div>
       <div class="dpb-inspector-nav">
-        <button type="button" id="dpb-roam-prev" title="{t_roam_prev} [K]">
+        <button type="button" id="dpb-roam-prev" data-i18n-title="roam_prev" data-i18n-title-suffix=" [K]" title="{t_roam_prev} [K]">
           <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 13V3M4 7l4-4 4 4"/></svg>
         </button>
-        <button type="button" id="dpb-roam-next" title="{t_roam_next} [J]">
+        <button type="button" id="dpb-roam-next" data-i18n-title="roam_next" data-i18n-title-suffix=" [J]" title="{t_roam_next} [J]">
           <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M4 9l4 4 4-4"/></svg>
         </button>
         <span class="dpb-header-div"></span>
-        <button type="button" id="dpb-inspector-close" title="{t_drawer_toggle} [ [ ]">
+        <button type="button" id="dpb-inspector-close" data-i18n-title="drawer_toggle" data-i18n-title-suffix=" [ [ ]" title="{t_drawer_toggle} [ [ ]">
           <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M10 3v10"/></svg>
         </button>
       </div>
@@ -166,34 +167,34 @@
     <div class="dpb-comment-form">
       <div class="dpb-comment-form-top">
         <div class="dpb-tags">
-          <button type="button" class="dpb-tag is-on" data-tag="copy">{t_tag_copy}</button>
-          <button type="button" class="dpb-tag" data-tag="layout">{t_tag_layout}</button>
-          <button type="button" class="dpb-tag" data-tag="visual">{t_tag_visual}</button>
+          <button type="button" class="dpb-tag is-on" data-tag="copy" data-i18n="tag_copy">{t_tag_copy}</button>
+          <button type="button" class="dpb-tag" data-tag="layout" data-i18n="tag_layout">{t_tag_layout}</button>
+          <button type="button" class="dpb-tag" data-tag="visual" data-i18n="tag_visual">{t_tag_visual}</button>
         </div>
-        <span class="dpb-enter-hint">{t_enter_hint}</span>
+        <span class="dpb-enter-hint" data-i18n="enter_hint">{t_enter_hint}</span>
       </div>
       <div class="dpb-comment-box">
-        <textarea id="dpb-comment-input" rows="3" placeholder="{t_comment_placeholder}"></textarea>
-        <button type="button" id="dpb-comment-send" title="{t_comment_send}">
+        <textarea id="dpb-comment-input" rows="3" data-i18n-aria-label="comment_label" aria-label="{t_comment_label}" data-i18n-placeholder="comment_placeholder" placeholder="{t_comment_placeholder}"></textarea>
+        <button type="button" id="dpb-comment-send" data-i18n-title="comment_send" title="{t_comment_send}">
           <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8 14 2.5 9.5 14 7.5 9Z"/><path d="M7.5 9 14 2.5"/></svg>
         </button>
       </div>
       <div class="dpb-field">
         <div class="dpb-label-row">
           <span class="dpb-label i18n" data-i18n="field_label">{t_field_label}</span>
-          <span class="dpb-hint" id="dpb-feedback-hint" role="alert"></span>
+          <span class="dpb-hint" id="dpb-feedback-hint" role="alert" data-i18n="field_hint">{t_field_hint}</span>
         </div>
-        <textarea name="feedback" id="dpb-feedback" rows="3" placeholder="{t_field_placeholder}"></textarea>
+        <textarea name="feedback" id="dpb-feedback" rows="3" data-i18n-aria-label="field_label" aria-label="{t_field_label}" data-i18n-placeholder="field_placeholder" placeholder="{t_field_placeholder}"></textarea>
       </div>
       <div class="dpb-foot-actions">
-        <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-draft" title="{t_draft_desc}">{t_draft}</button>
-        <button type="submit" name="choice" value="{primary_val}" class="dpb-btn dpb-btn-primary" title="{t_confirm_desc}">{primary_label}</button>
+        <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-draft" data-i18n-title="draft_desc" title="{t_draft_desc}" data-i18n="draft">{t_draft}</button>
+        <button type="submit" name="choice" value="{primary_val}" class="dpb-btn dpb-btn-primary" data-i18n-title="confirm_desc" title="{t_confirm_desc}"{primary_i18n}>{primary_label}</button>
       </div>
     </div>
   </aside>
   </div>
 
-  <button type="button" class="dpb-reopen-tab" id="dpb-reopen-tab" title="{t_drawer_toggle} [ [ ]" hidden>
+  <button type="button" class="dpb-reopen-tab" id="dpb-reopen-tab" data-i18n-title="drawer_toggle" data-i18n-title-suffix=" [ [ ]" title="{t_drawer_toggle} [ [ ]" hidden>
     <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M6 3v10"/></svg>
     <span class="dpb-reopen-label i18n" data-i18n="drawer_title">{t_drawer_title}</span>
     <span class="dpb-reopen-badge" id="dpb-reopen-badge">0</span>
@@ -202,37 +203,39 @@
 
   <!-- 4. Shortcut modal -->
   <div class="dpb-modal-scrim" id="dpb-shortcut-modal" hidden>
-    <div class="dpb-modal" role="dialog" aria-label="{t_shortcuts_title}">
+    <div class="dpb-modal" role="dialog" aria-modal="true" data-i18n-aria-label="shortcuts_title" aria-label="{t_shortcuts_title}">
       <div class="dpb-modal-head">
         <h3 class="i18n" data-i18n="shortcuts_title">{t_shortcuts_title}</h3>
-        <button type="button" id="dpb-shortcut-close">
+        <button type="button" id="dpb-shortcut-close" data-i18n-aria-label="close_dialog" aria-label="{t_close_dialog}">
           <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8"/></svg>
         </button>
       </div>
       <div class="dpb-modal-body">
         <p class="dpb-modal-group i18n" data-i18n="group_global">{t_group_global}</p>
         <div class="dpb-modal-grid">
-          <span>{primary_label}</span><kbd>Ctrl + ↵</kbd>
-          <span class="i18n" data-i18n="skip">{t_skip}</span><kbd>Esc</kbd>
+          <span{primary_i18n}>{primary_label}</span><kbd>Ctrl/⌘ + ↵</kbd>
+          <span class="i18n" data-i18n="skip">{t_skip}</span><kbd>⇧Esc</kbd>
+          <span data-i18n="cancel_tool">{t_cancel_tool}</span><kbd>Esc</kbd>
           <span class="i18n" data-i18n="terminate">{t_terminate}</span><kbd>⇧Del</kbd>
           <span class="i18n" data-i18n="lang_toggle">{t_lang_toggle}</span><kbd>L</kbd>
         </div>
         <p class="dpb-modal-group i18n" data-i18n="group_tools">{t_group_tools}</p>
         <div class="dpb-modal-grid">
           <span class="i18n" data-i18n="mode_preview">{t_mode_preview}</span><kbd>V</kbd>
+          <span data-i18n="tool_select">{t_tool_select}</span><kbd>P</kbd>
           <span class="i18n" data-i18n="draw_toggle">{t_draw_toggle}</span><kbd>D</kbd>
           <span class="i18n" data-i18n="tool_box">{t_tool_box}</span><kbd>B</kbd>
           <span class="i18n" data-i18n="tool_ruler">{t_tool_ruler}</span><kbd>R</kbd>
           <span class="i18n" data-i18n="roam_label">{t_roam_label}</span><kbd>J / K</kbd>
           <span class="i18n" data-i18n="undo_label">{t_undo_label}</span><kbd>Ctrl + Z</kbd>
           <span class="i18n" data-i18n="tool_hand">{t_tool_hand}</span><kbd>Space / H</kbd>
-          <span class="i18n" data-i18n="zoom_in_t">{t_zoom_in_t}</span><kbd>+ / - / 滚轮</kbd>
+          <span class="i18n" data-i18n="zoom_in_t">{t_zoom_in_t}</span><kbd data-i18n="zoom_keys">{t_zoom_keys}</kbd>
           <span class="i18n" data-i18n="zoom_fit">{t_zoom_fit}</span><kbd>0</kbd>
           <span class="i18n" data-i18n="drawer_toggle">{t_drawer_toggle}</span><kbd>[</kbd>
         </div>
       </div>
       <div class="dpb-modal-foot">
-        <button type="button" class="dpb-btn dpb-btn-primary" id="dpb-shortcut-ok">{t_got_it}</button>
+        <button type="button" class="dpb-btn dpb-btn-primary" id="dpb-shortcut-ok" data-i18n="got_it">{t_got_it}</button>
       </div>
     </div>
   </div>
@@ -242,7 +245,7 @@
     <div class="dpb-modal" role="dialog" aria-modal="true" aria-labelledby="dpb-onboarding-title">
       <div class="dpb-modal-head">
         <h3 class="i18n" id="dpb-onboarding-title" data-i18n="onboard_title">{t_onboard_title}</h3>
-        <button type="button" id="dpb-onboarding-close" title="{t_onboard_close}" aria-label="{t_onboard_close}">
+        <button type="button" id="dpb-onboarding-close" data-i18n-title="onboard_close" title="{t_onboard_close}" data-i18n-aria-label="onboard_close" aria-label="{t_onboard_close}">
           <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8"/></svg>
         </button>
       </div>
@@ -253,7 +256,7 @@
         <li><span class="dpb-onboarding-step">4</span><span class="i18n" data-i18n="onboard_undo">{t_onboard_undo}</span></li>
       </ol>
       <div class="dpb-modal-foot">
-        <button type="button" class="dpb-btn dpb-btn-primary" id="dpb-onboarding-dismiss">{t_onboard_close}</button>
+        <button type="button" class="dpb-btn dpb-btn-primary" id="dpb-onboarding-dismiss" data-i18n="onboard_close">{t_onboard_close}</button>
       </div>
     </div>
   </div>

@@ -36,12 +36,18 @@ jobs:
           python3 tests/test_release.py
           python3 tests/test_doctor.py
           python3 tests/test_run_status.py
+          python3 tests/test_t001_capability_receipt.py
+          python3 tests/test_t002_run_status_continuation.py
+          python3 tests/test_t004_run_handoff.py
+          python3 tests/test_t006_continuation_acceptance_matrix.py
           python3 tests/test_run_facts_snapshot.py
           python3 tests/test_stages_registry.py
           python3 tests/test_design_baseline.py
           python3 tests/test_reference_intake_fixtures.py
           python3 tests/test_reference_sources.py
           python3 tests/test_request_routing.py
+          python3 tests/test_codex_workflow_prompt.py
+          python3 tests/test_plan_handoff_prompt.py
           python3 tests/test_audit_preferences.py
           python3 tests/test_audit_preferences_prose.py
           python3 tests/test_audit_skeleton.py
@@ -100,6 +106,7 @@ jobs:
             packages/design-playbook/mcp/evidence/test_delivery_matrix.py \
             packages/design-playbook/mcp/evidence/test_containment.py \
             packages/design-playbook/mcp/evidence/test_handoff.py \
+            packages/design-playbook/mcp/evidence/test_handoff_i18n.py \
             -v
 
       - name: Run Console — pure-Python tests (required, no Playwright)
@@ -210,4 +217,29 @@ jobs:
           python3 -c "from playwright.sync_api import sync_playwright"
           python3 -m pytest \
             packages/design-playbook/tests/test_e2e_canvas_vc.py \
+            packages/design-playbook/mcp/preview/test_preview_usability.py \
             -v
+
+      - name: Operator continuation — extra-project journey (require chromium)
+        id: operator_journey
+        if: steps.pw_install.outcome == 'success'
+        timeout-minutes: 5
+        # Real CLI, browser, clipboard, provider captures, strict validation,
+        # and handoff archive. Simulated review inputs are not trial evidence.
+        run: |
+          python3 -m pytest tests/test_operator_continuation_e2e.py -v \
+            --basetemp=.scratch/operator-ci \
+            --junitxml=.scratch/operator-ci-results.xml
+
+      - name: Upload operator journey evidence
+        if: always() && (steps.operator_journey.outcome == 'success' || steps.operator_journey.outcome == 'failure')
+        uses: actions/upload-artifact@v4
+        with:
+          name: operator-continuation-evidence
+          path: |
+            .scratch/operator-ci
+            .scratch/operator-ci-results.xml
+          # Only synthetic disposable test data, including its nested run root.
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7

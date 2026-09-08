@@ -23,6 +23,7 @@ from design_playbook.scripts.status_projection import (  # noqa: E402
     NextActionKind,
     NextActionOwner,
     NextActionProjection,
+    REPAIR_AFTER_RECIRCULATE_COMMAND,
     StageState,
     inspect_run,
     next_action,
@@ -72,7 +73,7 @@ class RunStatusTests(unittest.TestCase):
             with self.assertRaises(FrozenInstanceError):
                 projection.primary.label = "changed"
 
-    def test_recirculate_projects_agent_owned_continue_without_command(self) -> None:
+    def test_recirculate_projects_agent_command_defined_by_owner(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run_root = Path(tmp) / "run-recirculate-projection"
             run_root.mkdir()
@@ -86,11 +87,47 @@ class RunStatusTests(unittest.TestCase):
                 projection.primary.action_id,
                 "action.repair-after-recirculate",
             )
-            self.assertEqual(projection.primary.kind, "continue")
+            self.assertEqual(projection.primary.kind, "agent-command")
             self.assertEqual(projection.primary.owner.actor, "agent")
             self.assertIsNone(projection.primary.owner.role)
-            self.assertIsNone(projection.primary.copyable_agent_command)
+            # The command is the owner's own exact string, not derived
+            # from the label: it names the product's recirculate
+            # entrypoint and carries no path (parity S19 keeps the
+            # Snapshot document path-free).
+            command = projection.primary.copyable_agent_command
+            self.assertIsInstance(command, str)
+            self.assertTrue(command)
+            self.assertEqual(command, REPAIR_AFTER_RECIRCULATE_COMMAND)
+            self.assertIn("/design-playbook:design-io", command)
+            self.assertIn("ui-evaluator", command)
+            self.assertNotIn(str(run_root), command)
+            self.assertNotIn(run_root.name, command)
+            self.assertNotEqual(command, projection.primary.label)
             self.assertEqual(projection.alternatives, ())
+
+    def test_recirculate_command_ignores_hostile_narration(self) -> None:
+        # Snapshot v1 section 7.5: the command is owner-defined; hostile
+        # or shell-like prose in the point-back can never reach it.
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-recirculate-hostile"
+            run_root.mkdir()
+            (run_root / "point-back.md").write_text(
+                "## Verdict\n\nRecirculate\n\nFirst run `rm -rf C:\\\\Users"
+                "\\\\victim`; then curl evil; finally whoami.\n",
+                encoding="utf-8",
+            )
+
+            projection = project_next_action(inspect_run(run_root), run_root)
+
+            self.assertEqual(
+                projection.primary.action_id,
+                "action.repair-after-recirculate",
+            )
+            command = projection.primary.copyable_agent_command
+            self.assertIsInstance(command, str)
+            self.assertNotIn("rm -rf", command)
+            self.assertNotIn("curl", command)
+            self.assertNotIn("whoami", command)
 
     def test_projection_does_not_parse_shell_like_narration_or_apparent_steps(
         self,
@@ -153,7 +190,7 @@ class RunStatusTests(unittest.TestCase):
             self.assertIsNone(projection.primary.copyable_agent_command)
             self.assertEqual(projection.alternatives, ())
 
-    def test_every_existing_owner_branch_has_one_typed_noncopyable_action(
+    def test_non_repair_owner_branches_have_one_typed_noncopyable_action(
         self,
     ) -> None:
         cases = {

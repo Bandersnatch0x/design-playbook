@@ -17,7 +17,7 @@ const { parseSkillFile, createUserMessageFromPrompt } = require('./index.js')
 const PLUGIN_DIR = __dirname
 const COMMANDS_DIR = path.join(PLUGIN_DIR, '..', 'commands')
 
-const COMMAND_NAMES = ['design-io', 'doctor', 'run-review', 'run-status', 'ui-review', 'ux-spec']
+const COMMAND_NAMES = ['design-io', 'doctor', 'run-handoff', 'run-review', 'run-status', 'ui-review', 'ux-spec']
 
 let failures = 0
 function check(cond, msg) {
@@ -50,7 +50,7 @@ if (designIoParsed) {
 }
 
 console.log('== commands without $ARGUMENTS load cleanly ==')
-for (const name of ['doctor', 'run-review', 'run-status', 'ui-review', 'ux-spec']) {
+for (const name of ['doctor', 'run-handoff', 'run-review', 'run-status', 'ui-review', 'ux-spec']) {
   const filePath = path.join(COMMANDS_DIR, `${name}.md`)
   const parsed = parseSkillFile(filePath)
   check(parsed !== null && parsed.content.length > 0, `${name} prompt is non-empty`)

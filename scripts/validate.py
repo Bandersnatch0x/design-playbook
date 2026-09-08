@@ -332,8 +332,89 @@ else:
         f"(ADR-0015); add an entry to COMMAND_INVENTORY in scripts/_checks.py",
     )
 
+print("== Capability claim alignment (ADR-0043 / T-005) ==")
+# Current public claim surfaces must agree with the shipped inventory and
+# the shared maturity vocabulary. Historical records (docs/releases,
+# docs/specs, docs/adr, CONTEXT.md dated entries, the phase table) are
+# deliberately NOT scanned: this gate polices current claims only and never
+# rewrites history.
+_skill_dirs = [d for d in (PKG / "skills").iterdir() if d.is_dir()]
+_command_files = list((PKG / "commands").glob("*.md"))
+for readme in (ROOT / "README.md", ROOT / "README-zh.md"):
+    rel = readme.relative_to(ROOT).as_posix()
+    if not readme.is_file():
+        check(False, f"{rel} present for capability-claim alignment")
+        continue
+    text = readme.read_text(encoding="utf-8")
+    for label, expected, pattern in (
+        ("Skills", len(_skill_dirs), r"badge/Skills-(\d+)-"),
+        ("Commands", len(_command_files), r"badge/Commands-(\d+)-"),
+    ):
+        badge = re.search(pattern, text)
+        if badge is None:
+            check(False, f"{rel}: no {label} count badge found")
+        else:
+            check(
+                int(badge.group(1)) == expected,
+                f"{rel}: {label} badge count {badge.group(1)} matches "
+                f"shipped inventory ({expected})",
+            )
+
+# The Run Console is implemented and ships with the package (v0.21.0+), so a
+# current public surface must not still describe it as planned or not
+# shipped. Its public claim stays local / experimental / trial-gated until
+# the separately authorized trial gate passes (ADR-0043).
+_CONSOLE_STALE_CLAIMS = ("planned", "not shipped", "尚未发布", "规划中")
+# Mirror contract (ADR-0043): the same surfaces must not promote the Run
+# Console past that claim either — replacing "experimental" with "stable" or
+# public-release wording is a maturity disagreement the stale-claim check
+# above cannot see. Word-boundary phrases only, so the receipt field name
+# `publicClaim` and ADR-0015 "stable main" wording on unrelated lines do not
+# trip it. Bare "public release" is deliberately absent: negated mentions
+# ("no public release until the trial gate passes") state the current
+# interpretation and must not fail; "publicly released" stays banned because
+# it only appears as an affirmative promotion. Historical records inherit
+# the same exclusion via _claim_surfaces.
+_CONSOLE_PROMOTED_CLAIMS = re.compile(
+    r"\bstable\b|\bpublic[ -]beta\b|\bpublicly released\b"
+    r"|\bpublic-ready\b|\bgenerally available\b|公测|正式发布|稳定",
+    re.I,
+)
+_claim_surfaces = [
+    ROOT / "README.md",
+    ROOT / "README-zh.md",
+    PKG / "README.md",
+    *_command_files,
+]
+for surface in _claim_surfaces:
+    if not surface.is_file():
+        continue
+    rel = surface.relative_to(ROOT).as_posix()
+    lines = surface.read_text(encoding="utf-8").splitlines()
+    stale = [
+        line
+        for line in lines
+        if "console" in line.lower()
+        and any(phrase in line.lower() for phrase in _CONSOLE_STALE_CLAIMS)
+    ]
+    check(
+        not stale,
+        f"{rel}: Run Console claim uses current maturity vocabulary"
+        + (f" (stale: {stale[0].strip()[:80]})" if stale else ""),
+    )
+    promoted = [
+        line
+        for line in lines
+        if "console" in line.lower() and _CONSOLE_PROMOTED_CLAIMS.search(line)
+    ]
+    check(
+        not promoted,
+        f"{rel}: Run Console public claim stays experimental/trial-gated (ADR-0043)"
+        + (f" (promoted: {promoted[0].strip()[:80]})" if promoted else ""),
+    )
+
 print("== design-playbook commands (P2 Cordis plugin registration) ==")
-# lib/index.js must register all six slash commands from commands/*.md.
+# lib/index.js must register every shipped slash command from commands/*.md.
 # A drift between COMMAND_NAMES and the shipped .md files would surface
 # only at DSH runtime — fail-fast here.
 lib_index = PKG / "lib" / "index.js"
@@ -505,14 +586,28 @@ def native_order(text: str) -> tuple[str, ...] | None:
 
 
 orchestrator_order = native_order(orchestrator)
-codex_order = native_order(codex)
 check(orchestrator_order == expected_order, "orchestrator owns conditional native route")
-check(codex_order == expected_order, "Codex adapter preserves conditional native route")
-check(orchestrator_order is not None and orchestrator_order == codex_order,
-      "orchestrator and Codex native routes match")
+codex_load_order = re.search(r"(?ms)^## Load order\n(.*?)(?=^## |\Z)", codex)
+check(
+    codex_load_order is not None
+    and all(
+        marker in codex_load_order.group(1)
+        for marker in (
+            "`skills/design-playbook/SKILL.md`",
+            "**Run profile**",
+            "**Steps**",
+            "sole authority",
+            "`run_profile.py route`",
+        )
+    ),
+    "Codex adapter delegates routing to the orchestrator",
+)
+check(
+    "Standard order:" not in codex and "Native desktop order:" not in codex,
+    "Codex adapter does not duplicate stage order",
+)
 web_skip = "Web and mobile Web skip `native-craft`"
-check(web_skip in orchestrator and web_skip in codex,
-      "orchestrator and Codex skip native-craft for Web targets")
+check(web_skip in orchestrator, "orchestrator skips native-craft for Web targets")
 
 # G8 content-ban face (advisory finding, R4): the registry lint used to
 # carry only the upstream vendor residue terms, so any third-party source

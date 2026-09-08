@@ -515,8 +515,8 @@ class WindsurfRendererTests(unittest.TestCase):
 
     def test_workflow_files_written(self) -> None:
         workflows = list((self.out / ".windsurf" / "workflows").glob("*.md"))
-        # 6 commands → 6 workflow files
-        self.assertEqual(len(workflows), 6)
+        # one workflow file per shipped command (7 as of 0.22)
+        self.assertEqual(len(workflows), 7)
 
     def test_workflow_file_naming(self) -> None:
         names = {f.name for f in (self.out / ".windsurf" / "workflows").glob("*.md")}
@@ -536,8 +536,8 @@ class WindsurfRendererTests(unittest.TestCase):
         self.assertIn("design-playbook-preview", text)
 
     def test_total_file_count(self) -> None:
-        # 8 rules + 6 workflows + 1 mcp guide = 15
-        self.assertEqual(len(self.manifest["files"]), 15)
+        # 8 rules + 7 workflows + 1 mcp guide = 16
+        self.assertEqual(len(self.manifest["files"]), 16)
 
 
 class GeminiCLIRendererTests(unittest.TestCase):
@@ -570,7 +570,7 @@ class GeminiCLIRendererTests(unittest.TestCase):
 
     def test_all_command_toml_files_written(self) -> None:
         toml_files = list((self.out / ".gemini" / "commands").glob("*.toml"))
-        self.assertEqual(len(toml_files), 6)
+        self.assertEqual(len(toml_files), 7)
 
     def test_command_toml_has_args_placeholder(self) -> None:
         f = self.out / ".gemini" / "commands" / "design-io.toml"

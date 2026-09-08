@@ -57,25 +57,23 @@ args = ["<abs>/packages/design-playbook/mcp/evidence/server.py"]
 Verify: `codex mcp list` should list both. `preview*` needs a system Edge/Chrome (the
 adapter spawns it via `--app=`); `observe*` needs Playwright + Chromium.
 
-> **`preview*` silently skips when `preview_prototype` is absent.** If preview does not
-> appear, the orchestrator probed `tools/list`, found no `preview_prototype`, and skipped
-> G5 - this is designed skip behaviour, not a crash. Confirm the tool is registered
+> **`preview*` skips when `preview_prototype` is absent; G5 is not triggered.**
+> Follow the orchestrator's skip narration to report the reason and enable path.
+> This is designed skip behaviour, not a crash. Confirm the tool is registered
 > (`codex mcp list`) before treating it as a preview failure. Codex end-to-end preview
 > smoke is not yet validated (v0.4.4 deferred the codex E2E smoke; only evidence/G6 was
 > server-level smoked).
 
 ## Load order
 
-1. `skills/design-playbook/SKILL.md`
-2. Standard order: `design-baseline?` → `ux-spec` → `ui-picker` → `fill` → `craft-guard` → `ui-evaluator`.
+Read `skills/design-playbook/SKILL.md` first. Its **Run profile** and **Steps**
+sections are the sole authority for stage order, conditional entry, and completion
+criteria. Consume the `run_profile.py route` result as directed there; this bridge
+does not define a second route or a host-specific sequence.
 
-Native desktop order: `ux-spec` → `native-craft` → `ui-picker` → `fill` → `craft-guard` → `ui-evaluator`.
-
-Conditional entry `design-baseline?` (ADR-0012) runs before `reference-intake?` when the router returns `requires_baseline`. Existing-product Fill requires a valid existing baseline, an accepted generated baseline, or an explicit user waiver.
-
-Conditional entry `reference-intake?` (screenshot/URL/design/product analogy, ADR-0011) runs **before** `ux-spec?` when the router returns `requires_reference_contract` — fixed orchestrator order, not reorderable. Run `native-craft` only for an explicit native-desktop/native-feel target. Web and mobile Web skip `native-craft`; if the platform is unclear, ask before choosing the order. The orchestrator owns the decision gate, render-surface seam handoff, and fail-closed behavior.
-
-Mirror the orchestrator's skip narration (SKILL.md Steps preamble): when a step is skipped, output one line — step name + reason + how to enable, with the gate label when one applies, e.g. `-> preview*: adapter absent, skipped (G5 not triggered; enable via packages/design-playbook/mcp/preview/ or host MCP)`.
+For optional adapters, follow the orchestrator's **Steps** preamble and
+`skills/design-playbook/references/load-map.md` pointers. Use its one-line skip
+narration when a stage does not run, including the reason and enable path.
 
 Audit preferences (ADR-0033) apply identically on Codex. Follow `skills/design-playbook/SKILL.md` § *Audit preferences* as sole authority; this bridge adds no host-specific preference rules.
 

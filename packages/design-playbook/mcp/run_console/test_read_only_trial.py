@@ -401,7 +401,9 @@ class RecirculateScenarioTest(RehearsalTestCase):
         action = self.fact(4).inner_text()
         self.assertIn(doc["nextActions"]["primary"]["result"]["label"], action)
         self.assertIn("Owner: agent", action)
-        self.assertIn("kind: continue", action)
+        # T-008: the owner emits the repair action as an agent-command
+        # kind — the one branch that carries a copyable command.
+        self.assertIn("kind: agent-command", action)
         expect(self.page.locator("#build-state-banner")).to_contain_text(
             "Build state: current."
         )

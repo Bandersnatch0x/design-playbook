@@ -379,6 +379,48 @@ class RepairPacketBrowserTest(browser_harness.BrowserTestCase):
         self.assertIn("not project a recapture requirement", packet)
         self.assertNotIn("Pass", self._field("verdict").inner_text())
 
+    def test_blocked_run_copy_advances_the_journey_with_owner_command(self) -> None:
+        # T-008: with the owner-emitted repair command, the primary journey
+        # advances past the copy step in the real UI — the controls are
+        # enabled, the clipboard receives the owner's exact command, and
+        # nothing is executed (no dialog, no action route, no mutation).
+        self.console.close()
+        self.console = browser_harness.ConsoleHarness(
+            point_back="point-back-recirculate.md"
+        )
+        self.addCleanup(self.console.close)
+        self.context.grant_permissions(["clipboard-read", "clipboard-write"])
+        self.open()
+        snapshot = self.console.snapshot()
+        owner_command = snapshot["nextActions"]["primary"]["result"][
+            "copyableAgentCommand"
+        ]
+        self.assertIsInstance(owner_command, str)
+        self.assertIn("/design-playbook:design-io", owner_command)
+        self.assertIn("ui-evaluator", owner_command)
+        self.assertIn(
+            owner_command, self._field("nextCommand").inner_text()
+        )
+        copy_cmd = self.page.get_by_role(
+            "button", name="Copy next Agent command (plain text)"
+        )
+        expect(copy_cmd).to_be_enabled()
+        copy_cmd.click()
+        clip = self.page.evaluate("() => navigator.clipboard.readText()")
+        self.assertEqual(clip, owner_command)
+        self.assertEqual(self.dialogs, [])
+        # Copying is the only effect: the run tree is untouched.
+        requests: list[str] = []
+
+        def record(route):
+            requests.append(route.request.url)
+            route.continue_()
+
+        self.context.route("**/*", record)
+        copy_cmd.click()
+        self.assertTrue(all(url.startswith(self.console.origin) for url in requests))
+        self.assertFalse(any("/api/v1/actions/" in url for url in requests))
+
     def test_stale_and_inconsistent_facts_stay_honest_in_the_packet(self) -> None:
         snapshot = self.console.snapshot()
         snapshot["intent"]["summary"]["availability"] = "stale"

@@ -393,19 +393,21 @@ def main():
         if not s20_ok:
             failures.append("S20: shortcut modal must open on ? and close on Esc")
 
-        # --- S21: Esc submits the skip channel when idle ---
+        # --- S21: Esc cancels; only Shift+Esc explicitly submits Skip ---
         fresh(page)
         page.evaluate(CAPTURE_SUBMITTER_JS)
         page.keyboard.press("Escape")
+        idle_choice = page.evaluate("() => window.__capturedSubmitter")
+        page.keyboard.press("Shift+Escape")
         page.wait_for_timeout(250)
         captured = page.evaluate("() => window.__capturedSubmitter")
         skip_val = page.evaluate(
             "() => document.getElementById('dpb-btn-skip').getAttribute('value')")
-        s21_ok = captured == skip_val
-        print(f"  S21 Esc skip: captured={captured!r} skip_val={skip_val!r} -> "
+        s21_ok = not idle_choice and captured == skip_val
+        print(f"  S21 Shift+Esc skip: captured={captured!r} skip_val={skip_val!r} -> "
               f"{'OK' if s21_ok else 'FAIL'}")
         if not s21_ok:
-            failures.append("S21: Esc must submit the skip choice when idle")
+            failures.append("S21: Esc must not submit; Shift+Esc must submit the skip choice")
 
         browser.close()
 

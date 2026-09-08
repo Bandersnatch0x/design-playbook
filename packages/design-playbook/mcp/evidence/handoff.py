@@ -10,6 +10,12 @@ ADR-0034 fixed three boundaries the first Stage 9 implementation crossed:
   ``confirm-round-*.json`` that ``transaction.py`` persists (ADR-0013), never
   re-derived. The ADR-0008 floor lives inside that record; re-deriving it here
   would be a second confirmation authority, which CONTEXT.md forbids.
+- **Verdict authority** - ``point-back.md`` owns the verdict (continuation
+  pack decision 4): a delivery Pass additionally requires the point-back's
+  own canonical Pass verdict, read through the single verdict-syntax parser
+  (ADR-0025) shared with G3 and run status. A confirmed round with resolved
+  gates can never convert a Recirculate/blocked - or missing/ambiguous -
+  owner verdict into Pass (decision 25).
 - **Capture target** - the five-viewport matrix and the layout probe run
   against the deliverable itself, not against any review chrome.
 
@@ -33,6 +39,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from design_playbook.mcp.ui_locale import resolve_ui_locale
+from design_playbook.mcp.evidence.handoff_i18n import STRINGS
 from design_playbook.mcp.evidence.disclosure import (
     VIEWPORT_ORDER,
     ViewportMetrics,
@@ -116,6 +124,25 @@ def _confirmation_from_record(
         detail = record.prototype_status or "record failed integrity checks"
         return False, f"confirm record not valid: {detail}"
     return True, ""
+
+
+def _point_back_verdict(run_root: Path) -> str | None:
+    """The canonical point-back verdict, or ``None`` when there is not
+    exactly one.
+
+    point-back.md is the finding/verdict authority (continuation pack
+    decision 4). Reading goes through the single verdict-syntax parser
+    (ADR-0025) that G3 and run status already share - never a second
+    parser here. ``None`` (missing, malformed, ambiguous, or repeated
+    verdict text) is never a Pass.
+    """
+    from design_playbook.scripts.verdict_syntax import parse_verdict
+
+    try:
+        text = (run_root / "point-back.md").read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return None
+    return parse_verdict(text).canonical
 
 
 def _run_gate_validation(run_root: Path) -> dict[str, Any]:
@@ -587,7 +614,7 @@ def _decision_records_from_run(
 
 
 def _render_index_html(
-    payload: dict[str, Any], matrix: Any, snap_dir: Path
+    payload: dict[str, Any], matrix: Any, snap_dir: Path, locale: str
 ) -> str:
     """Render the delivery page with the payload inlined.
 
@@ -605,13 +632,22 @@ def _render_index_html(
             .replace('"', "&quot;")
         )
 
+    strings = STRINGS[locale]
+
+    def _display(value: Any) -> str:
+        if value is None:
+            return "—"
+        if isinstance(value, bool):
+            return strings["yes" if value else "no"]
+        return strings.get(str(value), str(value))
+
     statuses = payload.get("gateStatuses")
     rows = ""
     if isinstance(statuses, list):
         for index, state in enumerate(statuses[:8], start=1):
             rows += (
                 f'<tr><td>G{index}</td><td class="st st-{_esc(state)}">'
-                f"{_esc(state)}</td></tr>"
+                f"{_esc(_display(state))}</td></tr>"
             )
     viewports = payload.get("viewports")
     vp_rows = ""
@@ -626,9 +662,9 @@ def _render_index_html(
                 f"<td>{_esc(vp.get('name'))}</td>"
                 f"<td>{_esc(metrics.get('sw'))}</td>"
                 f"<td>{_esc(metrics.get('innerH'))}</td>"
-                f"<td>{_esc(metrics.get('hOverflow'))}</td>"
-                f"<td>{_esc(disclosure.get('inFold'))}</td>"
-                f"<td>{_esc(metrics.get('measurementStatus'))}</td>"
+                f"<td>{_esc(_display(metrics.get('hOverflow')))}</td>"
+                f"<td>{_esc(_display(disclosure.get('inFold')))}</td>"
+                f"<td>{_esc(_display(metrics.get('measurementStatus')))}</td>"
                 "</tr>"
             )
     decisions = payload.get("decisions")
@@ -639,7 +675,7 @@ def _render_index_html(
                 decision_items += (
                     f"<li><code>{_esc(item.get('id'))}</code> "
                     f"{_esc(item.get('title'))} "
-                    f"<small>({_esc(item.get('authority'))})</small></li>"
+                    f"<small>({_esc(_display(item.get('authority')))})</small></li>"
                 )
     payload_json = json.dumps(payload, ensure_ascii=False, indent=2)
     # A literal "</script>" inside the payload would close the block early;
@@ -652,27 +688,44 @@ def _render_index_html(
             matrix.get(vp), vp, snap_dir
         ):
             snap_figures += (
-                f'<figure><img src="snapshots/viewport-{vp}.png" alt="{vp} snapshot" '
+                f'<figure><img src="snapshots/viewport-{vp}.png" '
+                f'alt="{_esc(strings["snapshot"].format(viewport=vp))}" '
                 f'loading="lazy"/><figcaption>viewport-{vp}.png</figcaption></figure>'
             )
 
-    return (
-        _page_template()
-        .replace("%VERDICT%", _esc(payload.get("verdict")))
-        .replace("%VERDICT_LOWERCASE%", _esc(str(payload.get("verdict")).lower()))
-        .replace("%RUN_ID%", _esc(payload.get("runId")))
-        .replace("%AUTHORITY%", _esc(payload.get("authority")))
-        .replace("%PROFILE%", _esc(payload.get("profile")))
-        .replace("%TIMESTAMP%", _esc(payload.get("timestamp")))
-        .replace("%GATES_PASSED%", _esc(payload.get("gatesPassed")))
-        .replace("%CAPTURE_STATUS%", _esc(payload.get("captureStatus")))
-        .replace("%CONFIRMATION_NOTE%", _esc(payload.get("confirmationNote") or "—"))
-        .replace("%GATE_ROWS%", rows)
-        .replace("%VIEWPORT_ROWS%", vp_rows)
-        .replace("%DECISION_ITEMS%", decision_items)
-        .replace("%SNAPSHOT_FIGURES%", snap_figures)
-        .replace("%PAYLOAD_JSON%", payload_json)
-    )
+    note_key = "confirmed_note" if payload.get("authority") == "confirmed-user" else "pending_note"
+    note = _esc(strings[note_key])
+    if payload.get("confirmationNote"):
+        # Runtime diagnostics remain verbatim, distinct from localized UI copy.
+        note += (
+            f'<details><summary>{_esc(strings["diagnostic"])}</summary>'
+            f'<pre>{_esc(payload["confirmationNote"])}</pre></details>'
+        )
+    values = {key.upper(): _esc(text) for key, text in strings.items()}
+    values.update({
+        "LANG": locale,
+        "VERDICT_LABEL": strings["verdict"],
+        "AUTHORITY_LABEL": strings["authority"],
+        "PROFILE_LABEL": strings["profile"],
+        "GATES_PASSED_LABEL": strings["gates_passed"],
+        "VERDICT": _esc(_display(payload.get("verdict"))),
+        "VERDICT_LOWERCASE": _esc(str(payload.get("verdict")).lower()),
+        "RUN_ID": _esc(payload.get("runId")),
+        "AUTHORITY": _esc(_display(payload.get("authority"))),
+        "PROFILE": _esc(_display(payload.get("profile"))),
+        "TIMESTAMP": _esc(payload.get("timestamp")),
+        "GATES_PASSED": _esc(payload.get("gatesPassed")),
+        "CAPTURE_STATUS": _esc(_display(payload.get("captureStatus"))),
+        "CONFIRMATION_NOTE": note,
+        "GATE_ROWS": rows,
+        "VIEWPORT_ROWS": vp_rows,
+        "DECISION_ITEMS": decision_items,
+        "SNAPSHOT_FIGURES": snap_figures,
+        "PAYLOAD_JSON": payload_json,
+        "PAYLOAD_TEXT": _esc(json.dumps(payload, ensure_ascii=False, indent=2)),
+    })
+    # One pass: user-authored text resembling a template marker stays literal.
+    return re.sub(r"%([A-Z_]+)%", lambda match: values[match[1]], _page_template())
 
 
 def build_static_handoff(
@@ -684,6 +737,7 @@ def build_static_handoff(
     capture_runner: Callable[..., Any] | None = None,
     gate_runner: Callable[..., Any] | None = None,
     out_dir: Path | None = None,
+    locale: str | None = None,
 ) -> StaticHandoffResult:
     """Build the Stage 9 static handoff from durable run artifacts.
 
@@ -695,6 +749,7 @@ def build_static_handoff(
     the ZIP package, a same-directory ``deliverable.html`` copy (the page's
     relative link target, spec A5), and a self-contained index page.
     """
+    locale = resolve_ui_locale(locale)
     run_root = Path(run_root)
     deliverable = Path(deliverable)
     out_dir = Path(out_dir) if out_dir is not None else run_root / "evidence" / "static-handoff"
@@ -772,7 +827,19 @@ def build_static_handoff(
     confirmed, confirmation_reason = _confirmation_from_record(run_root, round_n)
 
     capture_complete = capture_status == "captured"
-    if confirmed and capture_complete and gate.get("available") and gates_resolved:
+    # The point-back owner verdict gates a delivery Pass (decision 25): a
+    # confirmed round with resolved gates still cannot convert a
+    # Recirculate/blocked owner verdict - or a missing/ambiguous one - into
+    # Pass. Pending/Recirculate behaviour and gatesPassed semantics are
+    # unchanged.
+    owner_pass = _point_back_verdict(run_root) == "pass"
+    if (
+        confirmed
+        and owner_pass
+        and capture_complete
+        and gate.get("available")
+        and gates_resolved
+    ):
         verdict = "Pass"
     elif confirmed:
         verdict = "Recirculate"
@@ -842,7 +909,7 @@ def build_static_handoff(
 
     index_html = out_dir / "index.html"
     index_html.write_text(
-        _render_index_html(payload, matrix, snap_dir), encoding="utf-8"
+        _render_index_html(payload, matrix, snap_dir, locale), encoding="utf-8"
     )
 
     return StaticHandoffResult(

@@ -24,6 +24,8 @@ dist-ssr
 .ruff_cache/
 .benchmarks/
 evidence/
+# The Evidence runtime is source, not generated run evidence.
+!packages/design-playbook/mcp/evidence/
 # .agents/plugins/ is a publish surface (ADR-0009 dual publish; validate.py
 # hard-gates on marketplace.json), so it must stay trackable. Ignoring
 # `.agents/` wholesale leaves already-tracked files working while silently
@@ -69,3 +71,6 @@ docs/research/
 # delivery page is mcp/evidence/static_handoff_page.html.
 .stitch/
 .qoder/
+
+# Local Codex CLI MCP config (dev-session convenience; AGENTS.md rule 8 keeps root dot-dirs out of git)
+.codex/

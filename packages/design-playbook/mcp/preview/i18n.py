@@ -8,10 +8,7 @@ the active locale, and CONFIRM_LABELS is the union across locales so the
 backend still recognises a confirm regardless of UI language.
 """
 from __future__ import annotations
-import os
-
-ZH = "zh-CN"
-EN = "en"
+from design_playbook.mcp.ui_locale import EN, ZH, resolve_ui_locale
 
 _STRINGS: dict[str, dict[str, str]] = {
     ZH: {
@@ -72,7 +69,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "done_body": "窗口即将自动关闭。",
         "confirm": "确认签署决策",
         "skip": "跳过",
-        "skip_desc": "无问题跳过，直接通过（不需要修改）",
+        "skip_desc": "跳过本轮评审，不代表确认通过（Shift+Esc）",
         "zoom_fit": "自适应",
         "draw_toggle": "圈画标注",
         "draw_on": "圈画中 · 再点关闭",
@@ -96,6 +93,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "tag_copy": "文案 Copy",
         "tag_layout": "布局 Layout",
         "tag_visual": "视觉 Visual",
+        "tag_draw": "圈画",
+        "tag_box": "框选",
+        "tag_pin": "定位点",
+        "tag_note": "批注",
+        "tag_element": "元素",
         "comment_placeholder": "输入批注或改进建议（Enter 发送）…",
         "comment_send": "发送批注",
         "enter_hint": "Enter 发送",
@@ -106,6 +108,15 @@ _STRINGS: dict[str, dict[str, str]] = {
         "group_global": "全局决策流转",
         "group_tools": "画布与交互工具",
         "lang_toggle": "切换中英双语",
+        "lang_switch": "EN",
+        "viewport_group": "预览视口",
+        "mode_group": "评审模式",
+        "tools_group": "批注工具",
+        "close_dialog": "关闭对话框",
+        "zoom_keys": "+ / - / 滚轮",
+        "cancel_tool": "取消当前工具或关闭弹窗",
+        "comment_label": "批注内容",
+        "prototype_label": "待评审原型",
         "roam_prev": "上一个批注",
         "roam_next": "下一个批注",
         "roam_label": "上一处/下一处批注",
@@ -193,7 +204,6 @@ _STRINGS: dict[str, dict[str, str]] = {
         "draft_desc": "Close drawer and keep notes; do not submit a decision yet",
         "locate": "Locate this element",
         "locate_anchor": "Locate this element",
-        "anchor_aria": "Revision note for anchor \"{label}\"",
         "remove": "Remove",
         "selected_n": "{n} selected",
         "anchor_note_label": "Anchor notes ({n}):",
@@ -202,7 +212,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "done_body": "This window will close shortly.",
         "confirm": "Confirm & sign decision",
         "skip": "Skip",
-        "skip_desc": "Pass without changes (no issues)",
+        "skip_desc": "Skip this review without confirming approval (Shift+Esc)",
         "zoom_fit": "Fit",
         "draw_toggle": "Draw",
         "draw_on": "Drawing · click to stop",
@@ -226,6 +236,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "tag_copy": "Copy",
         "tag_layout": "Layout",
         "tag_visual": "Visual",
+        "tag_draw": "Draw",
+        "tag_box": "Box",
+        "tag_pin": "Pin",
+        "tag_note": "Note",
+        "tag_element": "Element",
         "comment_placeholder": "Add note or feedback (Enter to send)…",
         "comment_send": "Send note",
         "enter_hint": "Enter to send",
@@ -236,6 +251,15 @@ _STRINGS: dict[str, dict[str, str]] = {
         "group_global": "Global Actions",
         "group_tools": "Canvas & Tools",
         "lang_toggle": "Toggle ZH/EN",
+        "lang_switch": "中文",
+        "viewport_group": "Preview viewport",
+        "mode_group": "Review mode",
+        "tools_group": "Annotation tools",
+        "close_dialog": "Close dialog",
+        "zoom_keys": "+ / - / wheel",
+        "cancel_tool": "Cancel tool or close dialog",
+        "comment_label": "Annotation comment",
+        "prototype_label": "Prototype under review",
         "roam_prev": "Previous annotation",
         "roam_next": "Next annotation",
         "roam_label": "Next / Prev Annotation",
@@ -279,11 +303,7 @@ _STRINGS: dict[str, dict[str, str]] = {
 
 def lang() -> str:
     """Active locale (zh-CN or en). Env DPB_PREVIEW_LANG, then LANG, default zh-CN."""
-    raw = os.environ.get("DPB_PREVIEW_LANG") or os.environ.get("LANG") or ZH
-    low = raw.replace("_", "-").lower()
-    if low.startswith("en"):
-        return EN
-    return ZH
+    return resolve_ui_locale()
 
 
 def t(key: str, **kw: object) -> str:

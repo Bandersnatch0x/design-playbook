@@ -28,7 +28,10 @@ from design_playbook.scripts.run_continuation import (  # noqa: E402
     continuation_for_run,
     inspect_console_inventory,
 )
-from design_playbook.scripts.status_projection import project_next_action  # noqa: E402
+from design_playbook.scripts.status_projection import (  # noqa: E402
+    REPAIR_AFTER_RECIRCULATE_COMMAND,
+    project_next_action,
+)
 
 RUN_STATUS = PKG / "scripts" / "run_status.py"
 RUN_CONSOLE = PKG / "scripts" / "run_console.py"
@@ -268,6 +271,13 @@ class RunStatusContinuationTests(unittest.TestCase):
             self.assertEqual(
                 continuation["next_action"]["action_id"],
                 "action.repair-after-recirculate",
+            )
+            self.assertEqual(continuation["next_action"]["kind"], "agent-command")
+            # The continuation preserves the owner's exact command
+            # verbatim; it never re-synthesizes one from the label.
+            self.assertEqual(
+                continuation["next_action"]["copyable_agent_command"],
+                REPAIR_AFTER_RECIRCULATE_COMMAND,
             )
             self.assertEqual(continuation["blocker"]["source"], "owner")
             self.assertEqual(

@@ -357,10 +357,10 @@ def _build_parent_page(prototype_html: str, control_html: str) -> str:
     # String concatenation (not .format): the CSS braces are literal here, and
     # concatenation sidesteps the format()-on-HTML brace-escaping trap.
     return (
-        '<!DOCTYPE html><html lang="' + lang() + '"><head>'
+        '<!DOCTYPE html><html data-dpb-shell lang="' + lang() + '"><head>'
         '<meta charset="utf-8"/>'
         '<meta name="viewport" content="width=device-width, initial-scale=1"/>'
-        "<title>preview</title>"
+        "<title>" + html.escape(t("app_title")) + "</title>"
         "<style>"
         "html,body{margin:0;padding:0;height:100%;background:#0f1218;}"
         # v9 shell: the control script relocates the frame into the artboard
@@ -371,7 +371,7 @@ def _build_parent_page(prototype_html: str, control_html: str) -> str:
         + control_html
         + '<iframe class="dpb-proto-frame" sandbox="allow-scripts" srcdoc="'
         + srcdoc
-        + '" title="prototype"></iframe>'
+        + '" title="' + html.escape(t("prototype_label"), quote=True) + '"></iframe>'
         + "</body></html>"
     )
 

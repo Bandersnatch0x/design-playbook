@@ -3,13 +3,11 @@
   // control.py (_load_resources); both fragments share one IIFE scope.
 
   // ---- annotation list rendering (v9 cards) ----
-  function kindChip(a) {
-    if (a.tag === "draw") return "draw";
-    if (a.tag === "box") return "box";
-    if (a.tag === "pin") return "pin";
-    if (a.tag === "copy" || a.tag === "layout" || a.tag === "visual") return a.tag;
-    if (String(a.selector).charAt(0) === "@") return "note";
-    return "element";
+  function kindChip(anchor) {
+    if (["draw", "box", "pin", "copy", "layout", "visual"].indexOf(anchor.tag) >= 0) {
+      return tt("tag_" + anchor.tag);
+    }
+    return tt(String(anchor.selector).charAt(0) === "@" ? "tag_note" : "tag_element");
   }
   function visibleAnchors() {
     return anchors.map(function (a, i) { return { a: a, i: i }; }).filter(function (x) {
@@ -262,10 +260,19 @@
 
   // ---- drawer collapse ----
   function setDrawer(open, quiet) {
+    if (open && compactWorkspace.matches) setSpecPanel(false);
     inspector.classList.toggle("dpb-collapsed", !open);
+    inspector.inert = !open;
+    document.getElementById("dpb-drawer-toggle").setAttribute("aria-expanded", open ? "true" : "false");
     reopenTab.hidden = open;
     if (!quiet) toast(tt(open ? "toast_drawer_open" : "toast_drawer_closed"));
   }
+  function syncWorkspacePanels() {
+    if (compactWorkspace.matches && !inspector.classList.contains("dpb-collapsed")) setSpecPanel(false);
+  }
+  compactWorkspace.addEventListener("change", syncWorkspacePanels);
+  setDrawer(true, true);
+  syncWorkspacePanels();
   document.getElementById("dpb-drawer-toggle").addEventListener("click", function () { setDrawer(inspector.classList.contains("dpb-collapsed")); });
   document.getElementById("dpb-inspector-close").addEventListener("click", function () { setDrawer(false); });
   reopenTab.addEventListener("click", function () { setDrawer(true); });
@@ -296,7 +303,7 @@
       abortBtn.setAttribute("aria-expanded", "true");
       abortBtn.classList.add("is-armed");
     }
-    setTimeout(function () { if (abortConfirm) abortConfirm.focus(); }, 0);
+    if (abortCancel) abortCancel.focus();
   }
   function hideAbortPopover(announceCancel) {
     var wasOpen = abortPopoverOpen();
@@ -309,6 +316,7 @@
     if (abortStatus) {
       abortStatus.textContent = (announceCancel && wasOpen) ? tt("abort_cancelled") : "";
     }
+    if (wasOpen && abortPopover.contains(document.activeElement) && abortBtn) abortBtn.focus();
   }
   if (abortBtn) abortBtn.addEventListener("click", function (e) {
     e.preventDefault();
@@ -325,14 +333,53 @@
   });
   window.addEventListener("resize", function () { if (abortPopoverOpen()) positionAbortPopover(); });
 
+  // All modal review UI shares focus ownership and background isolation.
+  var activeReviewDialog = null;
+  var dialogReturnFocus = null;
+  function setReviewDialog(dialog, show, initialFocus) {
+    if (!dialog) return;
+    if (show) {
+      if (activeReviewDialog === dialog) return;
+      if (activeReviewDialog) setReviewDialog(activeReviewDialog, false);
+      hideAbortPopover(false);
+      dialogReturnFocus = document.activeElement;
+      activeReviewDialog = dialog;
+      dialog.hidden = false;
+      dialog.setAttribute("aria-hidden", "false");
+      form.inert = true;
+      if (initialFocus) initialFocus.focus();
+      return;
+    }
+    dialog.hidden = true;
+    dialog.setAttribute("aria-hidden", "true");
+    if (activeReviewDialog !== dialog) return;
+    activeReviewDialog = null;
+    form.inert = false;
+    var target = dialogReturnFocus;
+    dialogReturnFocus = null;
+    if (!target || target === document.body || !target.isConnected) {
+      target = document.getElementById("dpb-shortcuts-btn");
+    }
+    if (target) target.focus();
+  }
+
+  function trapDialogTab(e, dialog) {
+    var items = Array.from(dialog.querySelectorAll(
+      'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+    )).filter(function (el) { return el.getClientRects().length && !el.closest("[hidden], [inert]"); });
+    var first = items[0];
+    var last = items[items.length - 1];
+    if (!first) { e.preventDefault(); return; }
+    var outside = !dialog.contains(document.activeElement);
+    if (outside || (e.shiftKey && document.activeElement === first) || (!e.shiftKey && document.activeElement === last)) {
+      e.preventDefault();
+      (e.shiftKey ? last : first).focus();
+    }
+  }
+
   // ---- shortcut modal ----
   function toggleModal(show) {
-    if (!modal) return;
-    modal.hidden = !show;
-    if (show) {
-      var ok = document.getElementById("dpb-shortcut-ok");
-      if (ok) setTimeout(function () { ok.focus(); }, 0);
-    }
+    setReviewDialog(modal, show, document.getElementById("dpb-shortcut-close"));
   }
   document.getElementById("dpb-shortcuts-btn").addEventListener("click", function () { toggleModal(true); });
   document.getElementById("dpb-shortcut-close").addEventListener("click", function () { toggleModal(false); });
@@ -349,6 +396,7 @@
     render();
     toast(tt("toast_lang"));
   }
+  document.getElementById("dpb-language-toggle").addEventListener("click", toggleLanguage);
 
   // ---- submit: ADR-0008 advisory floor + skip pass-through ----
   function isSkipChoice(choice) {
@@ -398,7 +446,7 @@
       setTimeout(function () { field.focus(); }, 0);
     }
     setHintGate(true);
-    announce(tt("gate_hint"));
+    announce(tt("field_hint"));
     setDrawer(true, true);
   });
   if (statusApprove) statusApprove.addEventListener("click", function () {
@@ -413,7 +461,7 @@
         setTimeout(function () { field.focus(); }, 0);
       }
       setHintGate(true);
-      announce(tt("gate_hint"));
+      announce(tt("field_hint"));
     }
   });
   var draftBtn = document.getElementById("dpb-draft");
@@ -425,9 +473,26 @@
   // ---- keyboard map (v9) ----
   function isTextEditingTarget(el) {
     if (!el) return false;
-    return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable;
+    return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable;
   }
   document.addEventListener("keydown", function (e) {
+    // An IME's Enter commits composition, never a comment or review decision.
+    if (e.isComposing || e.keyCode === 229) return;
+    var dialog = activeReviewDialog || (abortPopoverOpen() ? abortPopover : null);
+    if (dialog) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (dialog === onboardingModal) toggleOnboarding(false);
+        else if (dialog === modal) toggleModal(false);
+        else hideAbortPopover(true);
+      } else if (e.key === "Tab") {
+        trapDialogTab(e, dialog);
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+      }
+      // Native button activation stays available, but background shortcuts do not.
+      return;
+    }
     var activeEl = document.activeElement;
     // Ctrl/Cmd+Enter is the global approve channel - it must fire even while
     // a textarea/input has focus (v9 keymap).
@@ -444,6 +509,7 @@
       return;
     }
     if (e.code === "Space" && !isSpaceDown) {
+      if (activeEl && activeEl.closest('button, a[href], summary, [role="button"]')) return;
       e.preventDefault();
       isSpaceDown = true;
       if (!isPanning) canvas.style.cursor = "grab";
@@ -454,19 +520,16 @@
       e.preventDefault(); toggleModal(true); return;
     }
     if (e.key === "Escape") {
-      if (modal && !modal.hidden) { e.preventDefault(); toggleModal(false); return; }
-      if (abortPopoverOpen()) { e.preventDefault(); hideAbortPopover(true); if (abortBtn) abortBtn.focus(); return; }
-      if (tool === "draw" || tool === "box" || tool === "ruler" || tool === "hand") { setTool("select"); return; }
-      // v9: Esc is the skip channel when no overlay/tool is active
-      var skipBtn = document.getElementById("dpb-btn-skip");
-      if (skipBtn) form.requestSubmit(skipBtn);
+      e.preventDefault();
+      if (e.shiftKey) {
+        var skipBtn = document.getElementById("dpb-btn-skip");
+        if (skipBtn) form.requestSubmit(skipBtn);
+      } else if (tool !== "select") {
+        setTool("select");
+      }
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-      e.preventDefault(); submitPrimary(); return;
-    }
     if ((e.ctrlKey || e.metaKey) && k === "z") {
-      if (isTextEditingTarget(activeEl)) return;
       e.preventDefault();
       if (e.shiftKey) redo(); else undo();
       return;
@@ -517,11 +580,8 @@
     catch (e) { /* private mode/quota: onboarding remains best-effort */ }
   }
   function toggleOnboarding(show) {
-    if (!onboardingModal) return;
-    onboardingModal.hidden = !show;
-    onboardingModal.setAttribute("aria-hidden", show ? "false" : "true");
+    setReviewDialog(onboardingModal, show, onboardingClose);
     if (!show) rememberOnboarding();
-    if (show && onboardingClose) setTimeout(function () { onboardingClose.focus(); }, 0);
   }
   if (onboardingClose) onboardingClose.addEventListener("click", function () { toggleOnboarding(false); });
   if (onboardingDismiss) onboardingDismiss.addEventListener("click", function () { toggleOnboarding(false); });

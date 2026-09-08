@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operator journey test inbox</title>
+<style>
+  body { font: 18px system-ui; margin: 24px; max-width: 48rem; }
+  button { font: inherit; padding: .5rem; margin: .25rem; }
+  li { margin-block: .5rem; }
+  [hidden] { display: none !important; }
+  :focus-visible { outline: 3px solid #164ac7; outline-offset: 2px; }
+</style>
+<main>
+  <h1>Learning inbox</h1>
+  <p>This page is an automated test fixture, not a reviewed product.</p>
+  <p id="summary" aria-live="polite"></p>
+  <ul id="tasks">
+    <li>Read notes <button data-complete>Complete first</button></li>
+    <li>Practice <button data-complete>Complete second</button></li>
+  </ul>
+  <button id="clear">Clear all</button>
+  <section id="confirmation" role="alert" hidden>
+    <p>Remove all tasks? This cannot be undone.</p>
+    <button id="cancel">Cancel</button>
+    <button id="confirm">Confirm clear</button>
+  </section>
+  <section id="empty" hidden>
+    <p>No tasks left.</p><button id="add">Add next task</button>
+  </section>
+  <button id="fail">Simulate sync failure</button>
+  <section id="error" role="alert" hidden>
+    <p>Sync failed.</p><button id="retry">Retry</button>
+  </section>
+</main>
+<script>
+  // The test repairs this deliberate fixture defect outside the Console.
+  const requireConfirmation = false;
+  const tasks = document.querySelector('#tasks');
+  const clear = document.querySelector('#clear');
+  const confirmation = document.querySelector('#confirmation');
+  const empty = document.querySelector('#empty');
+  const add = document.querySelector('#add');
+  const error = document.querySelector('#error');
+  function update() {
+    const all = tasks.querySelectorAll('button');
+    const done = tasks.querySelectorAll('button:disabled');
+    document.querySelector('#summary').textContent = `${all.length - done.length} pending, ${done.length} done`;
+    empty.hidden = all.length !== 0;
+    tasks.hidden = !empty.hidden;
+    clear.hidden = !empty.hidden || !confirmation.hidden;
+  }
+  tasks.addEventListener('click', event => {
+    const control = event.target.closest('[data-complete]');
+    if (!control) return;
+    control.disabled = true;
+    control.textContent = 'Done';
+    update();
+    (tasks.querySelector('button:enabled') || clear).focus();
+  });
+  function removeAll() {
+    tasks.replaceChildren();
+    confirmation.hidden = true;
+    update();
+    add.focus();
+  }
+  clear.addEventListener('click', () => {
+    if (!requireConfirmation) return removeAll();
+    confirmation.hidden = false;
+    update();
+    document.querySelector('#confirm').focus();
+  });
+  document.querySelector('#confirm').addEventListener('click', removeAll);
+  document.querySelector('#cancel').addEventListener('click', () => {
+    confirmation.hidden = true;
+    update();
+    clear.focus();
+  });
+  add.addEventListener('click', () => {
+    const item = document.createElement('li');
+    item.innerHTML = 'New task <button data-complete>Complete next</button>';
+    tasks.appendChild(item);
+    update();
+    item.querySelector('button').focus();
+  });
+  document.querySelector('#fail').addEventListener('click', () => { error.hidden = false; });
+  document.querySelector('#retry').addEventListener('click', () => { error.hidden = true; });
+  update();
+</script>
+</html>

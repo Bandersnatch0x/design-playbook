@@ -442,14 +442,22 @@ class AdaptiveRoutingSkillContractTests(unittest.TestCase):
         self.assertIn("**Done when:**", section)
         self.assertIn("run_profile.py route", section)
 
-    def test_codex_agents_intake_pointer_follows_router_flag(self) -> None:
-        text = CODEX_AGENTS.read_text(encoding="utf-8")
+    def test_codex_agents_delegates_router_flags_to_main_skill(self) -> None:
+        bridge = _heading_section(
+            CODEX_AGENTS.read_text(encoding="utf-8"), "## Load order",
+        )
+        routing = _heading_section(
+            MAIN_SKILL.read_text(encoding="utf-8"), "### 1. Entry routing",
+        )
 
-        self.assertIn("requires_reference_contract", text)
-        self.assertIn("requires_baseline", text)
-        self.assertNotIn("when reference materials are present", text)
-        baseline_at = text.index("requires_baseline")
-        intake_at = text.index("requires_reference_contract")
+        self.assertIn("skills/design-playbook/SKILL.md", bridge)
+        self.assertIn("run_profile.py route", bridge)
+        self.assertIn("sole authority", bridge)
+        self.assertNotIn("requires_reference_contract", bridge)
+        self.assertNotIn("requires_baseline", bridge)
+        self.assertNotIn("when reference materials are present", bridge)
+        baseline_at = routing.index("requires_baseline")
+        intake_at = routing.index("requires_reference_contract")
         self.assertLess(baseline_at, intake_at)
 
     def test_first_run_guide_skips_follow_router_flags(self) -> None:

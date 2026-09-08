@@ -6,11 +6,11 @@
 
 ### *Agents ship UI nobody can verify. This plugin makes them prove it.*
 
-[![Version](https://img.shields.io/badge/Version-0.21.2-2DD4BF?style=flat-square&logo=semver&logoColor=black)](https://www.npmjs.com/package/design-playbook)
+[![Version](https://img.shields.io/badge/Version-0.22.0-2DD4BF?style=flat-square&logo=semver&logoColor=black)](https://www.npmjs.com/package/design-playbook)
 [![License](https://img.shields.io/badge/License-MIT-2DD4BF?style=flat-square&logo=opensourceinitiative&logoColor=black)](./packages/design-playbook/LICENSE)
 [![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-2DD4BF?style=flat-square&logo=claude&logoColor=black)](#-try-it)
 [![Skills](https://img.shields.io/badge/Skills-8-2DD4BF?style=flat-square)](#-skills--commands)
-[![Commands](https://img.shields.io/badge/Commands-6-2DD4BF?style=flat-square)](#-skills--commands)
+[![Commands](https://img.shields.io/badge/Commands-7-2DD4BF?style=flat-square)](#-skills--commands)
 [![Codex](https://img.shields.io/badge/Codex-ready-2DD4BF?style=flat-square)](./packages/design-playbook/codex/AGENTS.md)
 
 </div>
@@ -79,20 +79,22 @@ The agent never quietly grades its own homework:
 - **Recirculate** — blocking findings flow back to the owning stage until they close; the closure trail is part of the run artifacts.
 - **No silent skip** — skip the audit and the result still carries the point-back skeleton, but marked `audited: false`, which strict validation refuses as a final result.
 
-A full pass against [SwarSight](./packages/design-playbook/showcase) — a real third-party workbench, one ask, every key artifact kept:
+[Historical cases and journey coverage](./packages/design-playbook/showcase/README.md#user-journey): three independent requests, plus one [complete current live run](./packages/design-playbook/showcase/case-reader/index.html) (case reader) that packages the whole chain — spec, real preview confirmations, Fill, craft audit, captured evidence, review, static handoff — with a [cross-run review report](./packages/design-playbook/showcase/run-review-2026-09-08.md). The SwarSight queue case retains its specification, design decisions, and review / repair record; it predates the current plan and capture requirements.
+
+The images below are illustrated summaries of that historical case, not raw execution captures:
 
 | | |
 | :---: | :---: |
 | **1 · ux-spec** — six-layer spec before any UI | **2 · ui-picker** — decision report before code |
 | ![Six-layer spec](packages/design-playbook/showcase/screenshots/01-spec.png) | ![Decision report](packages/design-playbook/showcase/screenshots/02-decision-report.png) |
-| **3 · ui-evaluator** — point-back + recirculate closure | **Result** — all six gates green |
-| ![Point-back findings](packages/design-playbook/showcase/screenshots/03-point-back.png) | ![All six gates green](packages/design-playbook/showcase/screenshots/04-gates.png) |
+| **3 · ui-evaluator** — point-back + recirculate closure | **Historical result** — six case checks, not the current gate matrix |
+| ![Point-back findings](packages/design-playbook/showcase/screenshots/03-point-back.png) | ![Historical case checklist](packages/design-playbook/showcase/screenshots/04-gates.png) |
 
-**Live human-confirm gate (`preview*`)** — the generated prototype renders inside a review workbench: the spec's acceptance criteria sit in a checklist beside it (your ticks are recorded with the decision), and you can click elements, drag highlight boxes, sketch, or measure spacing to anchor feedback — then sign off or send it back for another round:
+**Preview review workbench** — inspect a design, anchor feedback, then confirm or revise. The [packaged human-confirmation record](./packages/design-playbook/showcase/README.md#case-b) belongs to a separate onboarding-form task; it is not confirmation of the queue case or of production acceptance:
 
 ![Preview confirm workbench — annotate, then confirm or revise](packages/design-playbook/showcase/screenshots/05-preview-confirm.png)
 
-Full artifacts — spec, decision report, point-back critique, preview human-confirm demo, the live self-test surface: [`showcase/`](./packages/design-playbook/showcase).
+Browse [the three cases and their boundaries](./packages/design-playbook/showcase/README.md), or the [complete current run](./packages/design-playbook/showcase/case-reader/index.html) for an end-to-end record that includes a resume pause point and a generated static handoff. The retry interface is another task with local mock data, not a plugin execution.
 
 ## 🔁 The one-pass pipeline
 
@@ -133,7 +135,7 @@ Eight model-invoked skills (`/design-playbook:<name>`):
 | `native-craft` | 🖥️ Native-feel desktop declaration |
 | `ui-evaluator` | ✅ Acceptance — every finding points back to its declaration; blocking ones recirculate |
 
-**Commands:** `design-io` (full pipeline) · `ux-spec` (spec only) · `ui-review` (accept only) · `run-review` (cross-run) · `run-status` (phase + resume narration) · `doctor` (install health)
+**Commands:** `design-io` (full pipeline) · `ux-spec` (spec only) · `ui-review` (accept only) · `run-review` (cross-run) · `run-status` (phase + resume narration) · `run-handoff` (static delivery package for a reviewed run) · `doctor` (install health)
 
 ## 🎚️ Run profiles (P1/P2/P3)
 
@@ -195,14 +197,16 @@ Not another style/palette pack — this plugin owns the **delivery pipeline, evi
 ## 🪞 Honest limits
 
 - **Multimodality** — understanding screenshot content depends on the **host model's vision capability**. The plugin only *registers* images (locator + SHA-256 + metadata); a host without vision rides your text description instead.
-- **Run Console** — planned: a local, single-run console projecting existing run artifacts so an operator can see intent, source verdict, blocker source, and next owner without opening raw files. Not shipped yet, not a cloud Workspace, never a second run-state authority.
-- **Proof vs. shape** — `scripts/validate_run.py` machine-checks the run-artifact *shape* and the closure trail; it does not claim every future run is automatically high-quality UI. The showcase is a demonstrated pass, not a statistical guarantee.
+- **Run Console** — shipped and **experimental**: a local, single-run console projecting existing run artifacts so an operator can see intent, source verdict, blocker source, and next owner without opening raw files — including a derived Repair Packet and an explicit `open-console` continuation from `run-status`. It stays **local and trial-gated** (no external authorization yet), is not a cloud Workspace, and never becomes a second run-state authority.
+- **Proof vs. shape** — `scripts/validate_run.py` machine-checks the run-artifact *shape* and the closure trail; it does not claim every future run is automatically high-quality UI. Historical verdicts apply only to their recorded cases, not a current end-to-end run or a statistical guarantee.
 
 ## 📄 License
 
 MIT (authored content). See [`LICENSE`](./packages/design-playbook/LICENSE) + [`NOTICE`](./packages/design-playbook/NOTICE). No rights claimed over any third-party playbook corpus.
 
 Repo layout, maintainer scripts, and the engineering shell live behind the front door: [package README](./packages/design-playbook/README.md) · [docs/agents](./docs/agents).
+
+Maintainers: [automated acceptance](./docs/agents/automated-acceptance.md) covers the required matrix and an extra-project operator replay. Its simulated review inputs are regression fixtures, not external trial evidence.
 
 ---
 

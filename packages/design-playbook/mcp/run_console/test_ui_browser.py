@@ -215,7 +215,9 @@ class ComprehensionFactsTest(BrowserTestCase):
         action = self.fact(4).inner_text()
         self.assertIn("repair from point-back findings", action)
         self.assertIn("agent", action)
-        self.assertIn("kind: continue", action)
+        # T-008: the owner emits the repair action as an agent-command
+        # kind — the one branch that carries a copyable command.
+        self.assertIn("kind: agent-command", action)
 
     def test_degraded_build_with_missing_source_is_explicit(self) -> None:
         self.console.close()
@@ -607,8 +609,9 @@ class SecurityTest(BrowserTestCase):
         javascript_anchors = self.page.evaluate(
             "() => document.querySelectorAll('a[href^=\"javascript:\"]').length")
         self.assertEqual(javascript_anchors, 0)
-        # 1 skip link (#main) + 7 section jump links (#section-...) = 8 safe in-page anchor links
-        self.assertEqual(self.page.locator("a").count(), 8)
+        # 1 skip link (#main) + 8 section jump links (#section-..., incl.
+        # the derived Repair Packet entry) = 9 safe in-page anchor links
+        self.assertEqual(self.page.locator("a").count(), 9)
         anchors = self.page.locator("a").all()
         for a in anchors:
             href = a.get_attribute("href")

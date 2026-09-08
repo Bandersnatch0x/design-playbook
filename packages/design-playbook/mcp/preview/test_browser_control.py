@@ -27,6 +27,7 @@ import threading
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 from urllib.parse import urlencode
 
 # One import seam (ADR-0022): package root on sys.path once, then absolute
@@ -114,9 +115,11 @@ def _write_spec_fixture(root: Path) -> Path:
 
 
 def _write_control_page(root: Path, criteria: list[dict[str, str]]) -> str:
-    control = preview_control._build_control(
-        1, "Spec matrix workbench", ["确认通过", "需要修改"], criteria=criteria
-    )
+    # These fixture assertions are Chinese, independent of the test host's LANG.
+    with patch.dict("os.environ", {"DPB_PREVIEW_LANG": "zh-CN"}):
+        control = preview_control._build_control(
+            1, "Spec matrix workbench", ["确认通过", "需要修改"], criteria=criteria
+        )
     page_path = root / "workbench.html"
     page_path.write_text(
         "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"></head>"

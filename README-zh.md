@@ -6,11 +6,11 @@
 
 ### *Agent 交付的 UI 没人能验证。这个插件让它拿出证据。*
 
-[![Version](https://img.shields.io/badge/Version-0.21.2-2DD4BF?style=flat-square&logo=semver&logoColor=black)](https://www.npmjs.com/package/design-playbook)
+[![Version](https://img.shields.io/badge/Version-0.22.0-2DD4BF?style=flat-square&logo=semver&logoColor=black)](https://www.npmjs.com/package/design-playbook)
 [![License](https://img.shields.io/badge/License-MIT-2DD4BF?style=flat-square&logo=opensourceinitiative&logoColor=black)](./packages/design-playbook/LICENSE)
 [![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-2DD4BF?style=flat-square&logo=claude&logoColor=black)](#-试一把)
 [![Skills](https://img.shields.io/badge/Skills-8-2DD4BF?style=flat-square)](#-skills-与命令)
-[![Commands](https://img.shields.io/badge/Commands-6-2DD4BF?style=flat-square)](#-skills-与命令)
+[![Commands](https://img.shields.io/badge/Commands-7-2DD4BF?style=flat-square)](#-skills-与命令)
 [![Codex](https://img.shields.io/badge/Codex-ready-2DD4BF?style=flat-square)](./packages/design-playbook/codex/AGENTS.md)
 
 </div>
@@ -79,20 +79,22 @@ Agent 永远不能悄悄给自己的作业打分：
 - **回流（recirculate）**——blocking 发现回流到 owning 阶段直到闭环；闭环轨迹本身就是 run 产物的一部分。
 - **不能静默跳过**——跳过审计仍会产出 point-back 骨架，但标记 `audited: false`，strict 校验不把它当已审计结果放行。
 
-对 [SwarSight](./packages/design-playbook/showcase) 的一次完整实跑——真实第三方工作台，一行需求，每个关键产物都留了底：
+[历史案例与用户旅程](./packages/design-playbook/showcase/README.md#user-journey)：三次独立任务，外加一个[完整的当前实跑](./packages/design-playbook/showcase/case-reader/index.html)（案例阅读器）——规格、真实预览确认、Fill、工艺审计、运行取证、评审、静态交付全程打包，并附[跨 run 回顾报告](./packages/design-playbook/showcase/run-review-2026-09-08.md)。SwarSight 队列案例保留了规格、设计决策与评审修复记录，早于当前计划交接和运行取证要求。
+
+下列图片是该历史案例的内容说明图，不是工作流执行的原始截屏：
 
 | | |
 | :---: | :---: |
 | **1 · ux-spec**——写 UI 之前的六层 spec | **2 · ui-picker**——写代码之前的决策报告 |
 | ![六层 spec](packages/design-playbook/showcase/screenshots/01-spec.png) | ![决策报告](packages/design-playbook/showcase/screenshots/02-decision-report.png) |
-| **3 · ui-evaluator**——point-back + 回流闭环 | **结果**——六项检查全绿 |
-| ![Point-back 发现](packages/design-playbook/showcase/screenshots/03-point-back.png) | ![六项检查全绿](packages/design-playbook/showcase/screenshots/04-gates.png) |
+| **3 · ui-evaluator**——point-back + 回流闭环 | **历史结果**——六项案例检查，不是当前门禁矩阵 |
+| ![Point-back 发现](packages/design-playbook/showcase/screenshots/03-point-back.png) | ![历史案例检查摘要](packages/design-playbook/showcase/screenshots/04-gates.png) |
 
-**人工确认门实况（`preview*`）**——生成的原型直接渲染在评审工作台里：spec 的验收准则以清单形式列在旁边（你的核对勾选随决策一并记录），可点选元素、拖拽高亮框、圈画、测量间距来锚定意见——然后签署放行或打回重做：
+**预览评审工作台**——检查设计、定位反馈，再确认或要求修改。[已收录的人工确认记录](./packages/design-playbook/showcase/README.md#case-b) 来自独立的入驻表单任务，不是队列案例的确认，也不代表产品实现已通过验收：
 
 ![Preview 确认工作台——批注后确认或打回](packages/design-playbook/showcase/screenshots/05-preview-confirm.png)
 
-完整产物——spec、决策报告、point-back 评审、preview 人工确认演示、对本插件自身实测的运行界面：[`showcase/`](./packages/design-playbook/showcase)。
+查看[三类案例及各自的证据边界](./packages/design-playbook/showcase/README.md)，或打开[完整的当前实跑](./packages/design-playbook/showcase/case-reader/index.html)——其中包含接续暂停点与生成的静态交付包。重试界面来自另一任务，使用本地模拟数据，不执行插件。
 
 ## 🔁 一条链路跑到底
 
@@ -133,7 +135,7 @@ design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?
 | `native-craft` | 🖥️ 桌面原生手感声明 |
 | `ui-evaluator` | ✅ 验收——每个发现都指回它违反的声明，blocking 发现回流重修 |
 
-**命令**：`design-io`（全链路）· `ux-spec`（只出 spec）· `ui-review`（只验收）· `run-review`（跨 run 复盘）· `run-status`（阶段与恢复叙述）· `doctor`（安装面健康）
+**命令**：`design-io`（全链路）· `ux-spec`（只出 spec）· `ui-review`（只验收）· `run-review`（跨 run 复盘）· `run-status`（阶段与恢复叙述）· `run-handoff`（为已评审 run 出静态交付包）· `doctor`（安装面健康）
 
 ## 🎚️ Run 档位（P1/P2/P3）
 
@@ -194,14 +196,16 @@ Claude Code 为原生平台。Tier 2/3 为生成适配器，已诚实说明降�
 ## 🪞 边界与实话
 
 - **多模态**——截图内容理解依赖**宿主模型的视觉能力**。插件本身只做图片登记（locator + SHA-256 + metadata）；无视觉宿主改骑你给的文字说明。
-- **Run Console**——规划中：本地单 run 控制台，把已有 run 产物投影成运营者可直接读的意图、来源判定、阻塞来源与下一 owner。尚未发布、不是云端 Workspace、永远不会成为第二运行态权威。
-- **证明 vs 形态**——`scripts/validate_run.py` 机检的是 run 产物的*形态*与闭环轨迹；不宣称每个未来 run 自动就是高质量 UI。showcase 是一次被演示的通过，不是统计保证。
+- **Run Console**——已交付、状态 **experimental（实验性）**：本地单 run 控制台，把已有 run 产物投影成运营者可直接读的意图、来源判定、阻塞来源与下一 owner（含派生 Repair Packet，以及 `run-status` 发出的显式 `open-console` 延续动作）。保持**本地、受试用门禁约束**（尚未获得外部授权）、不是云端 Workspace、永远不会成为第二运行态权威。
+- **证明 vs 形态**——`scripts/validate_run.py` 机检的是 run 产物的*形态*与闭环轨迹；不宣称每个未来 run 自动就是高质量 UI。历史结论仅适用于各自记录的案例，不代表当前完整链路通过，也不是统计保证。
 
 ## 📄 许可
 
 MIT（原创内容）。见 [`LICENSE`](./packages/design-playbook/LICENSE) + [`NOTICE`](./packages/design-playbook/NOTICE)。不主张任何第三方 playbook 内容的权利。
 
 仓库结构、维护脚本与工程壳在门面之后：[package README](./packages/design-playbook/README.md) · [docs/agents](./docs/agents)。
+
+维护者：[自动化验收](./docs/agents/automated-acceptance.md) 说明完整矩阵与独立项目操作流程回放。模拟审查输入只是回归夹具，不是外部试用证据。
 
 ---
 

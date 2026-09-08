@@ -67,13 +67,13 @@ class NextActionKind(str, Enum):
     """Closed Snapshot v1 kinds for owner-emitted next actions.
 
     Only kinds an existing owner branch actually emits are members;
-    ``agent-command`` and ``source-review`` stay absent until an owner
-    emits them.
+    ``source-review`` stays absent until an owner emits it.
     """
 
     STOP = "stop"
     CONTINUE = "continue"
     HUMAN_DECISION = "human-decision"
+    AGENT_COMMAND = "agent-command"
 
 
 class NextActionActor(str, Enum):
@@ -110,24 +110,37 @@ class NextActionProjection:
     alternatives: tuple[NextAction, ...]
 
 
+# One exact owner-defined repair command for the Recirculate path. The
+# string is defined by the owner branch itself — never parsed from the
+# action label or any point-back narration (Snapshot v1 section 7.5) —
+# and carries no path or run name: the Snapshot document must stay free
+# of path forms (parity S19), and the Console session is single-run, so
+# the command needs no run qualifier. Copying it never executes anything.
+REPAIR_AFTER_RECIRCULATE_COMMAND = (
+    "/design-playbook:design-io repair the blocking point-back "
+    "findings (Recirculate), then re-run ui-evaluator"
+)
+
+
 def _next_action(
     action_id: str,
     kind: NextActionKind,
     actor: NextActionActor,
     label: str,
+    command: str | None = None,
 ) -> NextAction:
     """Build one owner-emitted action.
 
-    ``copyable_agent_command`` stays ``None`` until an existing owner
-    emits one exact command; converting narration is forbidden
-    (Snapshot v1 section 7.5).
+    ``copyable_agent_command`` is non-null only where this owner branch
+    itself defines one exact command string; converting narration is
+    forbidden (Snapshot v1 section 7.5).
     """
     return NextAction(
         action_id=action_id,
         kind=kind,
         label=label,
         owner=NextActionOwner(actor=actor, role=None),
-        copyable_agent_command=None,
+        copyable_agent_command=command,
     )
 
 
@@ -532,10 +545,11 @@ def project_next_action(
         if verdict == "Recirculate":
             return _action_projection(_next_action(
                 "action.repair-after-recirculate",
-                NextActionKind.CONTINUE,
+                NextActionKind.AGENT_COMMAND,
                 NextActionActor.AGENT,
                 "Verdict is Recirculate — repair from point-back "
                 "findings, then re-run ui-evaluator.",
+                command=REPAIR_AFTER_RECIRCULATE_COMMAND,
             ))
         return _action_projection(_next_action(
             "action.confirm-verdict",

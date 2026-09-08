@@ -86,6 +86,19 @@ COMMAND_INVENTORY: dict[tuple[int, int], frozenset[str]] = {
         "run-status",
         "doctor",
     }),
+    # 0.22 adds the seventh command `run-handoff` (Run Operator Continuation
+    # Pack, ADR-0043): a thin entrypoint over the existing static handoff
+    # builder. Inventory key must match the product minor so the command
+    # never ships under a released 0.21 version.
+    (0, 22): frozenset({
+        "design-io",
+        "ux-spec",
+        "ui-review",
+        "run-review",
+        "run-status",
+        "run-handoff",
+        "doctor",
+    }),
 }
 STABLE_SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 
