@@ -81,6 +81,9 @@ class RunFacts:
     shaping_events: tuple[dict[str, Any], ...] | None = None
     shaping_error: str | None = None
     _artifact_states: tuple[tuple[str, str], ...] = ()
+    # fill: lines inside fenced blocks are ignored by declaration parsing;
+    # kept as a fact so run-status can name them instead of hiding the skip.
+    fenced_fill_declarations: tuple[str, ...] = ()
 
     @property
     def manifest_entries(self) -> tuple[dict[str, Any], ...]:
@@ -231,20 +234,36 @@ def _existing_paths(run_root: Path | None) -> frozenset[str]:
     return frozenset(paths)
 
 
-def _plan_fill_declarations(plan_text: str) -> tuple[str, ...]:
-    """Capture every unfenced plan Fill token without checking filesystem state."""
+def _scan_fill_declarations(
+    plan_text: str,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Split column-0 ``fill:`` lines into (declared, ignored-inside-fences).
+
+    Declarations inside fenced blocks are a misdeclaration the plan author
+    must fix, not a silent skip: the second tuple feeds the run-status
+    diagnostic that names them and states the column-0 unfenced rule.
+    """
     found: list[str] = []
+    ignored: list[str] = []
     fenced = False
     for line in plan_text.splitlines():
         if line.lstrip().startswith("```"):
             fenced = not fenced
             continue
-        if fenced or not line.startswith("fill:"):
+        if not line.startswith("fill:"):
             continue
         declared = line[5:].strip().split()[0].rstrip(",") if line[5:].strip() else ""
-        if declared and declared not in found:
-            found.append(declared)
-    return tuple(found)
+        if not declared:
+            continue
+        target = ignored if fenced else found
+        if declared not in target:
+            target.append(declared)
+    return tuple(found), tuple(ignored)
+
+
+def _plan_fill_declarations(plan_text: str) -> tuple[str, ...]:
+    """Capture every unfenced plan Fill token without checking filesystem state."""
+    return _scan_fill_declarations(plan_text)[0]
 
 
 def resolve_declared_fill(run_root: Path, declared: str) -> Path | None:
@@ -262,15 +281,15 @@ def resolve_declared_fill(run_root: Path, declared: str) -> Path | None:
 
 def _plan_fill_artifacts(
     run_root: Path | None,
-    plan_text: str,
+    declared: tuple[str, ...],
 ) -> tuple[str, ...]:
     """Capture existing fill declarations while the run snapshot is loaded."""
     if run_root is None:
         return ()
     return tuple(
-        declared
-        for declared in _plan_fill_declarations(plan_text)
-        if resolve_declared_fill(run_root, declared) is not None
+        token
+        for token in declared
+        if resolve_declared_fill(run_root, token) is not None
     )
 
 
@@ -436,6 +455,7 @@ def capture_run_facts(
     manifest_lines, manifest_errors, manifest_state = _read_manifest(evidence_dir)
     preview = inspect_preview(preview_dir) if preview_dir is not None else None
     optional = _read_optional_run_facts(run_root)
+    plan_declared, plan_fenced = _scan_fill_declarations(optional.plan_text)
     return RunFacts(
         run_root=run_root,
         spec_path=spec_path,
@@ -445,7 +465,8 @@ def capture_run_facts(
         spec_text=spec_text,
         pointback_text=pointback_text,
         plan_text=optional.plan_text,
-        plan_fill_artifacts=_plan_fill_artifacts(run_root, optional.plan_text),
+        plan_fill_artifacts=_plan_fill_artifacts(run_root, plan_declared),
+        fenced_fill_declarations=plan_fenced,
         craft_guard_text=optional.craft_guard_text,
         ledger=parse_ledger(pointback_text),
         verdict=parse_verdict(pointback_text),

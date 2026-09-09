@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import tempfile
@@ -228,7 +230,107 @@ class DesignBaselineInterfaceTests(unittest.TestCase):
 
             self.assertEqual(outcome["status"], "ready")
             self.assertEqual(outcome["decision"]["kind"], "existing")
+            self.assertNotIn("baseline_rejection", outcome)
             self.assertEqual(verified["baseline"]["path"], "DESIGN.md")
+
+    def test_prepare_records_rejection_reason_for_invalid_existing_baseline(self) -> None:
+        """A rejected hand-written DESIGN.md keeps its reason in the draft state."""
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "product"
+            _existing_frontend(project)
+            handwritten = "# 手写设计权威\n\n无 YAML frontmatter、无 provenance 记录。\n"
+            (project / "DESIGN.md").write_text(handwritten, encoding="utf-8")
+
+            outcome = design_baseline.prepare(project, project / ".scratch" / "run-rejected")
+
+            self.assertEqual(outcome["status"], "needs_confirmation")
+            rejection = outcome["baseline_rejection"]
+            self.assertEqual(rejection["path"], "DESIGN.md")
+            self.assertIn("frontmatter", rejection["reason"])
+            # The rejected authority stays untouched until an explicit accept.
+            self.assertEqual(
+                (project / "DESIGN.md").read_text(encoding="utf-8"), handwritten
+            )
+
+    def test_prepare_without_existing_baseline_reports_no_rejection(self) -> None:
+        """needs_confirmation without a prior candidate carries a null rejection."""
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "product"
+            run = project / ".scratch" / "run-greenfield"
+            _existing_frontend(project)
+
+            outcome = design_baseline.prepare(project, run)
+
+            self.assertEqual(outcome["status"], "needs_confirmation")
+            self.assertIsNone(outcome["baseline_rejection"])
+
+    def test_confirm_accept_backs_up_replaced_design_md(self) -> None:
+        """Accept over a differing existing DESIGN.md keeps a byte-exact backup."""
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "product"
+            run = project / ".scratch" / "run-replace"
+            _existing_frontend(project)
+            handwritten = (
+                "# 手写设计权威\n\n"
+                "## Source Evidence & Confidence\n\n"
+                "- 未带 provenance 哈希\n"
+            )
+            (project / "DESIGN.md").write_text(handwritten, encoding="utf-8")
+            design_baseline.prepare(project, run)
+
+            binding = design_baseline.confirm(project, run, decision="accept")
+            verified = design_baseline.verify(project, run)
+
+            self.assertEqual(binding["status"], "ready")
+            replaced = binding["replaced_baseline"]
+            self.assertEqual(replaced["path"], "DESIGN.md")
+            backup = run / replaced["backup"]
+            self.assertEqual(
+                backup, run / "design-baseline" / "previous-DESIGN.md"
+            )
+            self.assertEqual(backup.read_text(encoding="utf-8"), handwritten)
+            self.assertEqual(replaced["sha256"], design_baseline._sha256(backup))
+            self.assertNotEqual(
+                (project / "DESIGN.md").read_text(encoding="utf-8"), handwritten
+            )
+            self.assertEqual(verified["baseline"]["origin"], "generated")
+
+    def test_confirm_accept_without_existing_canonical_keeps_no_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "product"
+            run = project / ".scratch" / "run-fresh"
+            _existing_frontend(project)
+            design_baseline.prepare(project, run)
+
+            binding = design_baseline.confirm(project, run, decision="accept")
+
+            self.assertEqual(binding["status"], "ready")
+            self.assertNotIn("replaced_baseline", binding)
+            self.assertFalse(
+                (run / "design-baseline" / "previous-DESIGN.md").exists()
+            )
+
+    def test_confirm_cli_warns_when_accept_replaces_existing_design_md(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "product"
+            run = project / ".scratch" / "run-replace-cli"
+            _existing_frontend(project)
+            (project / "DESIGN.md").write_text(
+                "# 手写设计权威\n\n## Source Evidence & Confidence\n\n- 无哈希\n",
+                encoding="utf-8",
+            )
+            design_baseline.prepare(project, run)
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
+                code = design_baseline.main(
+                    ["confirm", str(project), str(run), "--decision", "accept"]
+                )
+
+            self.assertEqual(code, 0)
+            self.assertIn("WARNING", stderr.getvalue())
+            self.assertIn("previous-DESIGN.md", stderr.getvalue())
+
 
     def test_safe_relative_file_rejects_control_characters(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -101,6 +101,9 @@ def render(run_root: Path, *, as_json: bool) -> int:
             }
             for s in states
         ],
+        # fill: lines inside fenced blocks are ignored by declaration
+        # parsing; surfaced so a silently unmarked fill stage is explainable.
+        "fenced_fill_declarations": list(facts.fenced_fill_declarations),
         "next": action,
         "verdict": verdict_of(run_root, facts),
         # Fail closed: malformed/ambiguous markers project False, while
@@ -150,6 +153,12 @@ def render(run_root: Path, *, as_json: bool) -> int:
         mark = "x" if s.present else " "
         detail = f" ({', '.join(s.evidence)})" if s.evidence else ""
         print(f"  [{mark}] {s.key:10} {s.skill}{detail}")
+    if facts.fenced_fill_declarations:
+        listed = ", ".join(facts.fenced_fill_declarations)
+        print(
+            f"fill: declarations ignored (inside fenced blocks): {listed}; "
+            "declare Fill as column-0 unfenced `fill: <path>` lines in plan.md"
+        )
     if vnext.tier is not None:
         confirmed = "confirmed by user" if (
             vnext.confirmed_by or "").casefold().startswith("user") else (

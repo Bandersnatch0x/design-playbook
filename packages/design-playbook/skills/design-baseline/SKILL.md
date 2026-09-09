@@ -45,7 +45,7 @@ State is a cache, not authority. Every public call resolves paths against the su
 | `status` | Meaning |
 | --- | --- |
 | `ready` | Bound baseline (`decision.kind` = `existing` or `accepted`) |
-| `needs_confirmation` | Provenance-backed draft awaits accept/waive |
+| `needs_confirmation` | Provenance-backed draft awaits accept/waive; `baseline_rejection` records why an existing candidate was not bound (`null` when none existed) |
 | `waived` | Explicit user waiver with non-empty reason |
 | `ambiguous` | Conflicting candidates; human choice required |
 
@@ -70,7 +70,7 @@ Agent work after prepare:
 
 - if `status` is `ready` → cite path + sha256 and continue;
 - if `ambiguous` → stop for the smallest user decision; never invent a third authority;
-- if `needs_confirmation` → review the draft; optionally enrich only material claims with `[inferred confidence=…]` **in the draft file**, then re-run prepare if structure/sources changed (do not hand-edit hashes).
+- if `needs_confirmation` → review the draft; optionally enrich only material claims with `[inferred confidence=…]` **in the draft file**, then re-run prepare if structure/sources changed (do not hand-edit hashes). When `baseline_rejection` is set, an existing `DESIGN.md` was rejected for the stated reason — accepting the draft **replaces** it (a backup is kept; see Confirm).
 
 Never write or overwrite project `DESIGN.md` in this step.
 
@@ -80,7 +80,7 @@ Never write or overwrite project `DESIGN.md` in this step.
 
 Show a compact summary: atmosphere, core tokens, typography, layout, primitives, conflicting evidence, inferred claims. Ask before the durable write.
 
-- **Accept:** `confirm(..., decision="accept")` atomically writes canonical `<project-root>/DESIGN.md` from the bound draft and returns a `ready` state.
+- **Accept:** `confirm(..., decision="accept")` atomically writes canonical `<project-root>/DESIGN.md` from the bound draft and returns a `ready` state. If a differing `DESIGN.md` already exists, the previous content is backed up byte-exact first and the state records it as `replaced_baseline` (`path`, `sha256`, `backup`); the CLI prints an overwrite warning with the backup path.
 - **Waive:** `confirm(..., decision="waive", reason=<user reason>)` does not write `DESIGN.md`. Existing-product Fill may continue only after this explicit waiver.
 - **Revise:** edit only the draft (or fix sources), then `prepare` again.
 
@@ -118,6 +118,7 @@ Third-party or sample `DESIGN.md` files remain `reference-intake` inputs. They n
 .scratch/<run>/design-baseline/state.json           # gate cache (schema design-baseline/v1)
 .scratch/<run>/design-baseline/evidence.json        # extraction evidence (when drafted)
 .scratch/<run>/design-baseline/DESIGN.draft.md      # proposal; never authority by itself
+.scratch/<run>/design-baseline/previous-DESIGN.md   # backup of a replaced DESIGN.md (when overwritten)
 ```
 
 The deep module `prepare`/`confirm`/`verify` is the sole gate surface. An adopted existing `DESIGN.md` only needs to carry verifiable source provenance (path + SHA-256 under `## Source Evidence & Confidence`) to be bound; the other section names in [`references/design-template.md`](references/design-template.md) are draft guidance, not a structural contract imposed on hand-written baselines.

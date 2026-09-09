@@ -192,6 +192,34 @@ class DeclaredFillResolutionTests(unittest.TestCase):
             self.assertEqual(facts.plan_fill_artifacts, ("exists.html",))
             self.assertEqual(facts.plan_fill_declarations, ("exists.html", "gone.html"))
 
+    def test_fenced_fill_declarations_are_captured_as_ignored(self) -> None:
+        """A fill: line inside a fenced block is a fact, not a silent skip."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "plan.md").write_text(
+                "fill: real.html\n"
+                "```yaml\n"
+                "fill: fenced.html\n"
+                "fill: fenced.html\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            facts = capture_run_facts(run_root=root)
+            self.assertEqual(facts.plan_fill_declarations, ("real.html",))
+            self.assertEqual(facts.fenced_fill_declarations, ("fenced.html",))
+            self.assertEqual(facts.plan_fill_artifacts, ())
+
+    def test_unfenced_plan_has_no_ignored_fill_declarations(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "plan.md").write_text(
+                "fill: exists.html\n", encoding="utf-8"
+            )
+            (root / "exists.html").write_text("fill", encoding="utf-8")
+            facts = capture_run_facts(run_root=root)
+            self.assertEqual(facts.fenced_fill_declarations, ())
+            self.assertEqual(facts.plan_fill_artifacts, ("exists.html",))
+
 
 if __name__ == "__main__":
     unittest.main()

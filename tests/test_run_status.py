@@ -553,6 +553,33 @@ class RunStatusTests(unittest.TestCase):
             self.assertIn("baseline", payload["next"].lower())
             self.assertIn("before fill", payload["next"].lower())
 
+    def test_pending_design_baseline_names_existing_rejection(self) -> None:
+        # A rejected existing DESIGN.md is named in the blocker so the
+        # accept/waive choice is made knowing the draft replaces it.
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-baseline-rejected"
+            baseline = run_root / "design-baseline"
+            baseline.mkdir(parents=True)
+            (baseline / "state.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "design-baseline/v1",
+                        "status": "needs_confirmation",
+                        "baseline_rejection": {
+                            "path": "DESIGN.md",
+                            "reason": "baseline is missing YAML frontmatter",
+                        },
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            result = _run(str(run_root), "--json")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertIn("missing YAML frontmatter", payload["next"])
+            self.assertIn("DESIGN.md", payload["next"])
+
     def test_design_baseline_draft_without_state_does_not_mark_stage(self) -> None:
         # Sole gate artifact is state.json (ADR-0012). Orphan draft/evidence
         # must not flip baseline.present or invent a baseline resume hint.
@@ -671,6 +698,49 @@ class RunStatusTests(unittest.TestCase):
             payload = json.loads(result.stdout)
             self.assertEqual(payload["verdict"], "Pass")
             self.assertIn("complete", payload["next"].lower())
+
+    def test_fenced_fill_declarations_get_a_diagnostic_line(self) -> None:
+        # A fill: line inside a fenced block leaves the fill stage unmarked;
+        # run-status must say so instead of failing silently (issue C).
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-fenced-fill"
+            run_root.mkdir()
+            (run_root / "plan.md").write_text(
+                "# plan\n\n```yaml\nfill: surface.html\n```\n",
+                encoding="utf-8",
+            )
+            result = _run(str(run_root))
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("surface.html", result.stdout)
+            self.assertIn("fenced", result.stdout)
+            self.assertIn("column-0", result.stdout)
+
+    def test_fenced_fill_declarations_surface_in_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-fenced-fill-json"
+            run_root.mkdir()
+            (run_root / "plan.md").write_text(
+                "fill: real.html\n```yaml\nfill: surface.html\n```\n",
+                encoding="utf-8",
+            )
+            result = _run(str(run_root), "--json")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["fenced_fill_declarations"], ["surface.html"])
+            by_key = {s["key"]: s for s in payload["stages"]}
+            self.assertFalse(by_key["fill"]["present"])
+
+    def test_unfenced_fill_declarations_add_no_diagnostic(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_root = Path(tmp) / "run-clean-fill"
+            run_root.mkdir()
+            (run_root / "plan.md").write_text(
+                "fill: surface.html\n", encoding="utf-8"
+            )
+            (run_root / "surface.html").write_text("<html></html>", encoding="utf-8")
+            result = _run(str(run_root))
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertNotIn("fenced blocks", result.stdout)
 
 
 def _write_preview(run_root: Path, files: dict[str, str]) -> None:

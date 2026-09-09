@@ -412,8 +412,19 @@ def _baseline_next_action(facts: RunFacts) -> str | None:
     decision = state.get("decision") if isinstance(state.get("decision"), dict) else {}
 
     if status == "needs_confirmation":
-        return ("Design-baseline draft needs confirmation — "
-                "accept/waive via design-baseline confirm before Fill.")
+        # Surface why a draft exists at all: an existing candidate that was
+        # rejected (accepting the draft replaces it) vs. no baseline found.
+        rejection = state.get("baseline_rejection")
+        detail = ""
+        if isinstance(rejection, dict):
+            path = rejection.get("path")
+            reason = rejection.get("reason")
+            if isinstance(path, str) and isinstance(reason, str) and reason.strip():
+                detail = f" (existing {path} was rejected: {reason.strip()})"
+        return (
+            "Design-baseline draft needs confirmation — "
+            f"accept/waive via design-baseline confirm before Fill.{detail}"
+        )
     if status == "ambiguous":
         return ("Design-baseline candidates are ambiguous — "
                 "resolve DESIGN.md vs .stitch/DESIGN.md before Fill.")

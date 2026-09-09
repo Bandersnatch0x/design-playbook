@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -24,6 +25,7 @@ SCHEMA = "design-baseline/v1"
 STATE_RELATIVE = Path("design-baseline/state.json")
 EVIDENCE_RELATIVE = Path("design-baseline/evidence.json")
 DRAFT_RELATIVE = Path("design-baseline/DESIGN.draft.md")
+PREVIOUS_RELATIVE = Path("design-baseline/previous-DESIGN.md")
 CANDIDATES = (Path("DESIGN.md"), Path(".stitch/DESIGN.md"))
 # Provenance-minimal gate: an existing project DESIGN.md only has to carry
 # verifiable source provenance (path + SHA-256) to be bound. The other
@@ -155,6 +157,21 @@ def _atomic_write_text(path: Path, content: str) -> None:
 
 def _atomic_write_json(path: Path, value: dict[str, Any]) -> None:
     _atomic_write_text(path, json.dumps(value, indent=2, ensure_ascii=False) + "\n")
+
+
+def _atomic_copy(source: Path, target: Path) -> None:
+    # Byte-exact copy via atomic replace: the backup of an overwritten
+    # authority must survive a crash mid-write with its content intact.
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
+    os.close(descriptor)
+    temporary = Path(temporary_name)
+    try:
+        shutil.copyfile(source, temporary)
+        os.replace(temporary, target)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
 
 
 def _candidate_files(project: Path) -> list[Path]:
@@ -548,12 +565,18 @@ def prepare(project_root: Path | str, run_root: Path | str) -> dict[str, Any]:
     # Existing candidates are validated by the same strict parser used by
     # verify().  An incomplete candidate remains untouched while a replacement
     # proposal is generated in the run directory.
+    rejected: dict[str, str] | None = None
     if candidates:
         selected = project / CANDIDATES[0] if (project / CANDIDATES[0]) in candidates else candidates[0]
         try:
             sources = _validate_baseline_document(selected, project)
-        except BaselineError:
+        except BaselineError as error:
+            # Keep the rejection reason visible: the draft generated below is
+            # a *replacement* proposal for this rejected candidate, and
+            # consumers must be able to distinguish an invalid existing
+            # baseline from no baseline at all.
             sources = None
+            rejected = {"path": _relative(selected, project), "reason": str(error)}
         if sources is not None:
             state = {
                 "schema": SCHEMA,
@@ -589,6 +612,10 @@ def prepare(project_root: Path | str, run_root: Path | str) -> dict[str, Any]:
             "decision": None,
             "candidates": candidate_names,
             "candidate_sha256": _candidate_snapshot(project, candidates),
+            # Why a prepared draft exists at all: ``null`` means no existing
+            # candidate was found; a record means one existed but was rejected
+            # for that stated reason (the draft proposes replacing it).
+            "baseline_rejection": rejected,
         },
     )
 
@@ -669,6 +696,26 @@ def confirm(
     if canonical.is_symlink():
         raise BaselineError("canonical DESIGN.md must not be a symlink")
     draft_text = _read_text_capped(draft_path, "baseline draft")
+    # Overwrite protection: accept may legitimately replace an invalid
+    # existing baseline, but the previous authority is never silently lost —
+    # differing content is backed up (byte-exact) and recorded in the state
+    # so the overwrite is explicit and reversible.
+    replaced: dict[str, str] | None = None
+    if canonical.is_file():
+        try:
+            existing_hash = _sha256(canonical)
+        except OSError as error:
+            raise BaselineError(
+                "cannot hash existing canonical DESIGN.md; "
+                f"refusing to overwrite it without a backup: {error}"
+            ) from error
+        if existing_hash != expected_draft_hash:
+            _atomic_copy(canonical, run / PREVIOUS_RELATIVE)
+            replaced = {
+                "path": CANDIDATES[0].as_posix(),
+                "sha256": existing_hash,
+                "backup": PREVIOUS_RELATIVE.as_posix(),
+            }
     _atomic_write_text(canonical, draft_text)
     # Post-write TOCTOU hardening (issue M1): between the pre-write symlink
     # check and os.replace, a concurrent writer could swap DESIGN.md for a
@@ -688,6 +735,8 @@ def confirm(
     state["sources"] = sources
     state["decision"] = {"kind": "accepted", "confirmed_at": _utc_now()}
     state["candidate_sha256"] = _candidate_snapshot(project, _candidate_files(project))
+    if replaced is not None:
+        state["replaced_baseline"] = replaced
     _write_state(run, state)
     return verify(project, run)
 
@@ -773,6 +822,14 @@ def main(argv: list[str] | None = None) -> int:
     except BaselineError as error:
         print(json.dumps({"error": str(error)}, ensure_ascii=False), file=sys.stderr)
         return 2
+    replaced = result.get("replaced_baseline")
+    if isinstance(replaced, dict) and replaced.get("backup"):
+        # The overwrite is explicit in the output, not just in the state.
+        print(
+            f"WARNING: accept replaced the existing {replaced.get('path')}; "
+            f"the previous content is backed up at {replaced['backup']}",
+            file=sys.stderr,
+        )
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
 
