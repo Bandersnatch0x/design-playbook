@@ -261,8 +261,8 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         for step in verifies:
             with self.subTest(step=step["name"]):
                 self.assertIn("release_transaction.py verify-provenance", step["run"])
-                self.assertIn("--attempts 3", step["run"])
-                self.assertIn("--interval 20", step["run"])
+                self.assertIn("--attempts 20", step["run"])
+                self.assertIn("--interval 30", step["run"])
 
     def test_both_publishers_pin_python_and_inspect_their_npm_artifacts(self) -> None:
         self.assertEqual(

@@ -169,8 +169,8 @@ jobs:
           python3 scripts/release_transaction.py verify-provenance
           --package "${{ steps.release.outputs.package_name }}"
           --version "${{ steps.release.outputs.version }}"
-          --attempts 3
-          --interval 20
+          --attempts 20
+          --interval 30
 
       - name: npm publish summary
         shell: bash

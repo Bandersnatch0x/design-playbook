@@ -272,8 +272,8 @@ def _parser() -> argparse.ArgumentParser:
     provenance = subs.add_parser("verify-provenance")
     provenance.add_argument("--package", required=True)
     provenance.add_argument("--version", required=True)
-    provenance.add_argument("--attempts", type=int, default=3)
-    provenance.add_argument("--interval", type=int, default=20)
+    provenance.add_argument("--attempts", type=int, default=20)
+    provenance.add_argument("--interval", type=int, default=30)
     return parser
 
 
