@@ -189,3 +189,78 @@ def queue_state(events: list[dict[str, Any]]) -> str:
         elif event.get("event") == "superseded_by":
             return "superseded"
     return "suspended" if saw_suspended else "open"
+
+
+def append_event(log_path: Path, event_type: str, **kwargs: Any) -> None:
+    """Append one event to shaping-log.jsonl.
+
+    Args:
+        log_path: Path to shaping-log.jsonl (must exist or be creatable)
+        event_type: One of the closed SHAPING_EVENTS enum
+        **kwargs: Event-specific fields (e.g., question, impact, item, reason)
+
+    Raises:
+        ShapingLogError: If event_type is not in SHAPING_EVENTS
+    """
+    if event_type not in SHAPING_EVENTS:
+        raise ShapingLogError(
+            f"Unknown event type '{event_type}'. "
+            f"Valid types: {', '.join(sorted(SHAPING_EVENTS))}"
+        )
+
+    event = {"event": event_type, **kwargs}
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with log_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) < 2:
+        print("Usage: python shaping_log.py append <log-path> --type <event> [--key value ...]")
+        print(f"Valid event types: {', '.join(sorted(SHAPING_EVENTS))}")
+        sys.exit(1)
+
+    command = sys.argv[1]
+
+    if command == "append":
+        if len(sys.argv) < 4:
+            print("Usage: python shaping_log.py append <log-path> --type <event> [--key value ...]")
+            sys.exit(1)
+
+        log_path = Path(sys.argv[2])
+        args = sys.argv[3:]
+
+        # Parse --key value pairs
+        event_data = {}
+        i = 0
+        while i < len(args):
+            if args[i].startswith("--"):
+                key = args[i][2:]
+                if i + 1 < len(args) and not args[i + 1].startswith("--"):
+                    event_data[key] = args[i + 1]
+                    i += 2
+                else:
+                    print(f"Error: --{key} requires a value")
+                    sys.exit(1)
+            else:
+                i += 1
+
+        if "type" not in event_data:
+            print("Error: --type <event> is required")
+            sys.exit(1)
+
+        event_type = event_data.pop("type")
+
+        try:
+            append_event(log_path, event_type, **event_data)
+            print(f"Appended {event_type} event to {log_path}")
+        except ShapingLogError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        print(f"Unknown command: {command}")
+        print("Available commands: append")
+        sys.exit(1)

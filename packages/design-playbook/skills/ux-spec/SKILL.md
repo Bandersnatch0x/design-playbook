@@ -14,6 +14,8 @@ Shaping runs as a session state machine (S0-S6) with append-only artifacts under
 
 Events (closed enum): `asked / answered / assumption_staged / confirm_presented / item_confirmed / item_rejected / item_revised / projected / suspended / resumed / superseded_by / archived`.
 
+**Terminology:** In Chinese responses, use「成形（会话）」for "shaping (session)" — see `CONTEXT.md` glossary.
+
 ## Steps
 
 ### 0. Bind project contract — S0 intake assembly
@@ -23,6 +25,10 @@ When the host project has a persistent contract v1 (`contract.json` + optional `
 S0 assembles the session inputs: persistent contract + decision log (bind semantics pre-check), project design baseline state, existing spec, reference contracts — and records the request **verbatim** as the first shaping-log event. Any state may `suspended`/`resumed`; on resume, rebuild `queue.json` from the log and re-ask only `asked`-without-`answered` items — already-`item_confirmed` values are never re-asked (revise only via `supersedes`). Resume is not queue replay alone: first re-run `bind_first` and diff the contract SHA against the first-bind snapshot. When the contract drifted while suspended, diff the affected fields — items grounded on a changed field lose their standing: affected unconfirmed items are voided and reopened in the queue, and a confirmed item on a drifted field loses its confirmed status (revise via `supersedes`); confirmations on unaffected fields are preserved (the append-only decision log loses nothing).
 
 **Done when:** either no project contract exists, or bind-first recorded contract/decision-log SHAs and every unresolved or stale field was surfaced before authoring; the session log exists with the request recorded verbatim.
+
+**Event append tool:** Use `python scripts/shaping_log.py append <log-path> --type <event> [--key value ...]` to append events to `shaping-log.jsonl`. Valid event types: `asked`, `answered`, `assumption_staged`, `confirm_presented`, `item_confirmed`, `item_rejected`, `item_revised`, `projected`, `suspended`, `resumed`, `superseded_by`, `archived`. Do not write temporary helper scripts — the official CLI handles all append operations.
+
+**Output note:** When no project contract exists, S0 is a silent no-op (result records in shaping-log only). Do not narrate internal implementation details ("contract_v1", "模块级 API", "bind-first 空操作") to the user.
 
 ### 1. Shape requirements — S1-S6 session state machine
 
