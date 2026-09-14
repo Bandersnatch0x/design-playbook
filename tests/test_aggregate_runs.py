@@ -19,6 +19,12 @@ BLOCKED_OBSERVED = "Prototype has filter controls but no live filtering implemen
 BLOCKED_OBSERVED_VARIANT = "  prototype HAS filter controls but NO live filtering implemented  "
 OTHER_BLOCKED = "empty class defined but no demo markup"
 
+# T-014: run ids are repo-relative paths (basenames collide across efforts).
+EFFORT_DIR = ".scratch/aggregate-test-effort/dogfood"
+ID_PASS = f"{EFFORT_DIR}/2026-01-01-001-pass"
+ID_BLOCK = f"{EFFORT_DIR}/2026-01-02-002-block"
+ID_BLOCK_2 = f"{EFFORT_DIR}/2026-01-03-003-block"
+
 
 def run_aggregate(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
@@ -85,11 +91,11 @@ class AggregateRunsTest(unittest.TestCase):
         self.assertEqual(payload["runs_total"], 3)
         by_id = {r["id"]: r for r in payload["runs"]}
         self.assertEqual(
-            by_id["2026-01-01-001-pass"]["gate"],
+            by_id[ID_PASS]["gate"],
             {"status": "ok", "detail": "RUN OK"},
         )
         self.assertEqual(
-            by_id["2026-01-02-002-block"]["gate"],
+            by_id[ID_BLOCK]["gate"],
             {
                 "status": "fail",
                 "detail": (
@@ -98,10 +104,10 @@ class AggregateRunsTest(unittest.TestCase):
                 ),
             },
         )
-        self.assertEqual(by_id["2026-01-01-001-pass"]["date"], "2026-01-01")
-        self.assertEqual(by_id["2026-01-01-001-pass"]["effort"], "aggregate-test-effort")
-        self.assertFalse(by_id["2026-01-03-003-block"]["artifacts"]["plan"])
-        self.assertTrue(by_id["2026-01-01-001-pass"]["artifacts"]["spec"])
+        self.assertEqual(by_id[ID_PASS]["date"], "2026-01-01")
+        self.assertEqual(by_id[ID_PASS]["effort"], "aggregate-test-effort")
+        self.assertFalse(by_id[ID_BLOCK_2]["artifacts"]["plan"])
+        self.assertTrue(by_id[ID_PASS]["artifacts"]["spec"])
 
     def test_validator_io_failure_keeps_historical_gate_projection(self) -> None:
         run_dir = self.cwd / "io-error-run"
@@ -121,7 +127,7 @@ class AggregateRunsTest(unittest.TestCase):
         self.assertTrue(blockers)
         top = max(blockers, key=lambda b: b["count"])
         self.assertEqual(top["count"], 2)
-        self.assertEqual(set(top["runs"]), {"2026-01-02-002-block", "2026-01-03-003-block"})
+        self.assertEqual(set(top["runs"]), {ID_BLOCK, ID_BLOCK_2})
 
     def test_single_run_duplicate_observed_is_not_repeat(self) -> None:
         """A repeat blocker requires the same normalized observed ACROSS runs.
@@ -145,7 +151,7 @@ class AggregateRunsTest(unittest.TestCase):
         run_a = self.cwd / ".scratch" / "aggregate-test-effort" / "dogfood" / "2026-01-01-001-pass"
         payload = self._payload("--runs", str(run_a))
         self.assertEqual(payload["runs_total"], 1)
-        self.assertEqual(payload["runs"][0]["id"], "2026-01-01-001-pass")
+        self.assertEqual(payload["runs"][0]["id"], ID_PASS)
 
     def test_markdown_view(self) -> None:
         proc = run_aggregate("--md", cwd=self.cwd)
@@ -183,11 +189,11 @@ class AggregateUnauditedTest(unittest.TestCase):
         payload = self._payload()
         self.assertEqual(payload["runs_total"], 2)
         by_id = {r["id"]: r for r in payload["runs"]}
-        self.assertIn("2026-01-04-004-skeleton", by_id)
-        self.assertFalse(by_id["2026-01-04-004-skeleton"]["audited"])
-        self.assertTrue(by_id["2026-01-01-001-pass"]["audited"])
+        self.assertIn(f"{EFFORT_DIR}/2026-01-04-004-skeleton", by_id)
+        self.assertFalse(by_id[f"{EFFORT_DIR}/2026-01-04-004-skeleton"]["audited"])
+        self.assertTrue(by_id[ID_PASS]["audited"])
         # Per-run detail keeps the ledger rows for presentation.
-        self.assertTrue(by_id["2026-01-04-004-skeleton"]["ledger"])
+        self.assertTrue(by_id[f"{EFFORT_DIR}/2026-01-04-004-skeleton"]["ledger"])
 
     def test_verdict_statistics_exclude_skeleton_runs(self) -> None:
         payload = self._payload()
@@ -215,8 +221,8 @@ class AggregateUnauditedTest(unittest.TestCase):
         self.assertTrue(all_cands, "mixed corpus should derive candidates")
         for cand in all_cands:
             runs = {occ["run"] for occ in cand.get("occurrences", [])}
-            self.assertNotIn("2026-01-04-004-skeleton", runs)
-            self.assertNotIn("2026-01-05-005-skeleton", runs)
+            self.assertNotIn(f"{EFFORT_DIR}/2026-01-04-004-skeleton", runs)
+            self.assertNotIn(f"{EFFORT_DIR}/2026-01-05-005-skeleton", runs)
 
     def test_ambiguous_marker_is_fail_closed_out_of_statistics(self) -> None:
         scratch = self.cwd / ".scratch" / "aggregate-test-effort" / "dogfood"
@@ -229,7 +235,7 @@ class AggregateUnauditedTest(unittest.TestCase):
         )
         payload = self._payload()
         by_id = {r["id"]: r for r in payload["runs"]}
-        self.assertFalse(by_id[run_dir.name]["audited"])
+        self.assertFalse(by_id[f"{EFFORT_DIR}/{run_dir.name}"]["audited"])
         self.assertEqual(payload["rollup"]["unaudited_runs"], 2)
         self.assertNotIn("n/a", payload["rollup"]["by_result"])
 
@@ -238,6 +244,57 @@ class AggregateUnauditedTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("| run | date | effort |", proc.stdout)
         self.assertIn("not audited", proc.stdout)
+
+
+class AggregateIdUniquenessTest(unittest.TestCase):
+    """T-014: two runs with the SAME basename in different efforts are two
+    runs. The old basename id silently overwrote one of them in the
+    pointbacks map, hiding cross-run signals from every derivation."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cwd = Path(self.tmp.name)
+        finding = (
+            "# pb\n\n## Findings\n\n```text\n"
+            "issue:    shared signal text\n"
+            "source:   components\n"
+            "fix:      f\n"
+            "severity: S2\n"
+            "```\n"
+        )
+        for effort in ("effort-one", "effort-two"):
+            run_dir = (
+                self.cwd / ".scratch" / effort / "dogfood" / "run")
+            run_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(FIXTURE_PASS / "spec.md", run_dir / "spec.md")
+            pb = (FIXTURE_PASS / "point-back.md").read_text(encoding="utf-8")
+            (run_dir / "point-back.md").write_text(
+                pb.rstrip() + "\n\n" + finding, encoding="utf-8")
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def _payload(self, *args: str) -> dict:
+        proc = run_aggregate(*args, cwd=self.cwd)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_same_basename_runs_stay_distinct_in_derivation(self) -> None:
+        payload = self._payload()
+        self.assertEqual(payload["runs_total"], 2)
+        ids = sorted(r["id"] for r in payload["runs"])
+        self.assertEqual(ids, [
+            ".scratch/effort-one/dogfood/run",
+            ".scratch/effort-two/dogfood/run",
+        ])
+        view = payload["learning_candidates"]
+        cands = view["qualifying"] + view["below_threshold"]
+        self.assertTrue(cands, "the shared signal must be derived")
+        target = next(
+            c for c in cands if "shared signal text" in c["signal_key"])
+        self.assertEqual(target["distinct_runs"], 2)
+        self.assertEqual(
+            {occ["run"] for occ in target["occurrences"]}, set(ids))
 
 
 if __name__ == "__main__":

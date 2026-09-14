@@ -12,6 +12,13 @@ Candidate threshold (rules-prototype Q5=A):
     distinct runs >= 3  AND  distinct task contexts >= 2  AND
     unexplained false positives == 0
 
+Frozen-corpus compatibility (spec D3, 2026-09-15): pre-v0.20 history
+legally carried the legacy severity spellings; on the derivation side
+they fold mechanically onto the axis (the review-prototype Q1 table) and
+the folded occurrence count is reported per candidate. The finding
+grammar itself is unchanged — G2 still rejects legacy spellings on new
+findings, and values outside the table stay fail-closed out of the queue.
+
 Signal = a *context-carrying repeated finding*: occurrences group by the
 normalized issue text (casefold + whitespace collapse, the aggregate-runs
 normalization), but repeats with different contexts are never merged —
@@ -39,6 +46,14 @@ MAX_UNEXPLAINED_FALSE_POSITIVES = 0
 # Candidate derivation fails closed: only defect severities enter history.
 # S0 is a positive observation; blank, legacy, and unknown values are invalid.
 CANDIDATE_SEVERITIES = frozenset({"S3", "S2", "S1"})
+# Mechanical fold for frozen pre-v0.20 history (review-prototype Q1 table);
+# derivation-side counting only — never a license to write legacy spellings.
+LEGACY_SEVERITY_FOLD = {
+    "high (blocking)": "S3",
+    "high": "S2",
+    "med": "S1",
+    "low": "S1",
+}
 
 UNSPECIFIED_CONTEXT = "(unspecified)"
 
@@ -74,6 +89,7 @@ class Candidate:
     distinct_runs: int = 0
     distinct_task_contexts: int = 0
     unexplained_false_positives: int = 0
+    legacy_severity_folded: int = 0
     qualifies: bool = False
     gaps: list[str] = field(default_factory=list)
     false_positive_notes: list[str] = field(default_factory=list)
@@ -99,6 +115,7 @@ class Candidate:
             "distinct_runs": self.distinct_runs,
             "distinct_task_contexts": self.distinct_task_contexts,
             "unexplained_false_positives": self.unexplained_false_positives,
+            "legacy_severity_folded": self.legacy_severity_folded,
             "false_positive_notes": self.false_positive_notes,
             "status": "candidate",
             "qualifies": self.qualifies,
@@ -134,7 +151,9 @@ def derive_candidates(
     """
     groups: dict[str, list[Occurrence]] = {}
     for occurrence in occurrences:
-        if occurrence.severity.strip() not in CANDIDATE_SEVERITIES:
+        raw = occurrence.severity.strip()
+        severity = raw if raw in CANDIDATE_SEVERITIES else LEGACY_SEVERITY_FOLD.get(raw)
+        if severity is None:
             continue
         key = normalize(occurrence.issue)
         if key:
@@ -176,6 +195,9 @@ def derive_candidates(
             distinct_runs=distinct_runs,
             distinct_task_contexts=len(contexts),
             unexplained_false_positives=len(unexplained),
+            legacy_severity_folded=sum(
+                1 for occurrence in group
+                if occurrence.severity.strip() not in CANDIDATE_SEVERITIES),
             qualifies=not gaps,
             gaps=gaps,
             false_positive_notes=[
@@ -233,6 +255,14 @@ def candidate_view(occurrences: list[Occurrence], *, include_below: bool = True,
             "distinct_runs": MIN_DISTINCT_RUNS,
             "distinct_task_contexts": MIN_DISTINCT_CONTEXTS,
             "unexplained_false_positives": MAX_UNEXPLAINED_FALSE_POSITIVES,
+        },
+        # Context-supply visibility (spec D4): the queue reports how much of
+        # the corpus carries a task context instead of failing silently.
+        "context_coverage": {
+            "with_context": sum(
+                1 for occurrence in occurrences if occurrence.task_context.strip()),
+            "without_context": sum(
+                1 for occurrence in occurrences if not occurrence.task_context.strip()),
         },
         "qualifying": [
             candidate.view() for candidate in candidates if candidate.qualifies

@@ -137,7 +137,8 @@ class CandidateDerivationTests(unittest.TestCase):
         ] + [
             _occurrence(f"run-invalid-{index}", "c", severity=severity)
             for index, severity in enumerate(
-                ("S0", "", " ", "high", "med", "low", "unknown"), 1
+                ("S0", "", " ", "unknown",
+                 "med (non-blocking for prototype)"), 1
             )
         ]
         candidates = lc.derive_candidates(history)
@@ -216,10 +217,32 @@ class OccurrenceLoaderTests(unittest.TestCase):
 
     def test_loader_preserves_raw_invalid_severity_for_fail_closed_derivation(self) -> None:
         occurrences = lc.occurrences_from_pointbacks({
-            "run-a": self._pointback(SIGNAL, severity="high"),
+            "run-a": self._pointback(SIGNAL, severity="unknown"),
         })
-        self.assertEqual(occurrences[0].severity, "high")
+        self.assertEqual(occurrences[0].severity, "unknown")
         self.assertEqual(lc.derive_candidates(occurrences), [])
+
+    def test_legacy_spellings_fold_into_the_axis(self) -> None:
+        # spec D3: frozen pre-v0.20 history legally carried the legacy
+        # spellings; the derivation folds them mechanically (the
+        # review-prototype Q1 table) and reports the folded count. The
+        # grammar side stays strict — new findings with these spellings are
+        # still structural errors (severity_axis maps axis values only).
+        history = [
+            _occurrence("run-a", "a", severity="high (blocking)"),
+            _occurrence("run-b", "b", severity="high"),
+            _occurrence("run-c", "a", severity="med"),
+            _occurrence("run-d", "b", severity="low"),
+        ]
+        for spelling in ("high (blocking)", "high", "med", "low"):
+            self.assertIsNone(severity_axis(spelling))
+        candidates = lc.derive_candidates(history)
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+        self.assertTrue(candidate.qualifies)
+        self.assertEqual(candidate.distinct_runs, 4)
+        self.assertEqual(candidate.legacy_severity_folded, 4)
+        self.assertEqual(candidate.view()["legacy_severity_folded"], 4)
 
 
 class GovernanceLogTests(unittest.TestCase):
@@ -500,6 +523,9 @@ class AggregateCandidatesTests(unittest.TestCase):
         view = payload["learning_candidates"]
         self.assertIn("threshold", view)
         self.assertEqual(view["threshold"]["distinct_runs"], 3)
+        self.assertEqual(
+            set(view["context_coverage"]),
+            {"with_context", "without_context"})
 
     def test_qualifying_candidate_end_to_end(self) -> None:
         finding = f"issue: {SIGNAL}\nsource: components\nfix: f\nseverity: S2\n"
@@ -514,11 +540,12 @@ class AggregateCandidatesTests(unittest.TestCase):
             for candidate in below))
 
         # with the context map (contract/spec/manifest provenance): qualifies
+        # (T-014: keys are the path-form run ids)
         contexts = self.cwd / "contexts.json"
         contexts.write_text(json.dumps({
-            "2026-01-01-001": "data-export",
-            "2026-01-02-002": "data-export",
-            "2026-01-03-003": "batch-delete",
+            ".scratch/s5-effort/dogfood/2026-01-01-001": "data-export",
+            ".scratch/s5-effort/dogfood/2026-01-02-002": "data-export",
+            ".scratch/s5-effort/dogfood/2026-01-03-003": "batch-delete",
         }), encoding="utf-8")
         payload = self._aggregate("--candidate-contexts", str(contexts))
         qualifying = payload["learning_candidates"]["qualifying"]
@@ -539,9 +566,9 @@ class AggregateCandidatesTests(unittest.TestCase):
             self._make_run(name, finding)
         contexts = self.cwd / "contexts.json"
         contexts.write_text(json.dumps({
-            "2026-01-01-001": "data-export",
-            "2026-01-02-002": "batch-delete",
-            "2026-01-03-003": "settings-import",
+            ".scratch/s5-effort/dogfood/2026-01-01-001": "data-export",
+            ".scratch/s5-effort/dogfood/2026-01-02-002": "batch-delete",
+            ".scratch/s5-effort/dogfood/2026-01-03-003": "settings-import",
         }), encoding="utf-8")
         env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
         proc = subprocess.run(
