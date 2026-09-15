@@ -42,8 +42,12 @@ Event schema (v1)::
                         rationale, supersedes?}
 
 ``decision``: promote | reject | merge | defer. ``target_status``:
-advisory | machine-enforced. Promoting to machine-enforced requires the
-six promotion-criteria records (rules-prototype 5.2); promoting to
+advisory | machine-enforced — required for ``promote`` only. Other
+decisions may omit it; a value carried on reject/merge/defer is
+tolerated-but-ignored (append-only compatibility: one early reject
+recorded a placeholder before this rule) and still validated against
+the enum. Promoting to machine-enforced requires
+the six promotion-criteria records (rules-prototype 5.2); promoting to
 advisory requires the weaker panel (authority / risk / fp_cost).
 """
 from __future__ import annotations
@@ -184,7 +188,12 @@ def validate_governance_events(events: list[dict]) -> list[str]:
                 errors.append(
                     f"{label}: decision {decision!r} not in "
                     f"{{{'|'.join(sorted(DECISIONS))}}}")
-            target_status = _require(errors, event, "target_status")
+            # target_status is promote-only (governance topic, 2026-09-15):
+            # required for promote, tolerated-but-ignored elsewhere so the
+            # append-only log never needs a rewrite.
+            target_status = event.get("target_status")
+            if decision == "promote":
+                target_status = _require(errors, event, "target_status")
             if (isinstance(target_status, str)
                     and target_status not in TARGET_STATUSES):
                 errors.append(

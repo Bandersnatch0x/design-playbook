@@ -53,7 +53,7 @@ result:    pass|fail|blocked|N/A
 
 `observed` is either an **artifact path** (relative to the run root, e.g. `evidence/L6.3-error.png`) when a runtime capture was bound by a manifest, or **free-text** describing a manual observation. Both are legitimate; the machine seam (G6) only validates artifact-path references. When using an artifact path, keep the path as the **leading token** of the line (e.g. `observed: evidence/L6.3-error.png`); trailing commentary is tolerated by G6 — it reads the leading token, breaking on whitespace, `(` / `（`, or `,` / `，` / `:` / `：`. Other punctuation (em dash, slashes, etc.) will be treated as part of the path, so put elaboration on a separate `note:` line for clarity when unsure.
 
-Evidence is captured, not judged. A manifest entry records that an artifact was collected at a state — it does not say the criterion passed. `pass`/`fail` is this evaluator's verdict against `required` vs `observed`; a screenshot can prove a criterion false. Three ledgers, each one authority: `spec` L6 names **what to prove**; the manifest records **what happened**; this ledger decides **what it means**. Providers produce artifacts; the manifest binds them to criteria; the evaluator decides.
+Evidence is captured, not judged. A manifest entry records that an artifact was collected at a state — it does not say the criterion passed. `pass`/`fail` is this evaluator's verdict against `required` vs `observed`; a screenshot can prove a criterion false. Three ledgers, each one authority: `spec` L6 names **what to prove**; the manifest records **what happened**; this ledger decides **what it means**. Providers produce artifacts; the manifest binds them to criteria; the evaluator decides. For a `page-probe/v1` sidecar, read `layout.measurement_status`, `defects.measurement_status`, and `console.measurement_status` **before** interpreting `leaks` / `tapFails` / `consoleErrors`; `blocked` or `unmeasured` is ledger `blocked`, never a clean pass. Those arrays are candidate observations, not automatic blocking. A fail or blocked L6×viewport pair is not rescued by another viewport's pass. `captured`/`ok` is not proof the declared target page was reached.
 
 For implemented UI, visible-state proof is a rendered inspection at the declared target viewport; behavior proof is an interaction trace or automated check; code-health proof is the relevant available test, type/lint, or affected build result. Planning-only proof is declaration coverage and must not claim a render or test occurred. Non-L6 declaration checks may be supporting observations or findings; they do not enter the machine ledger.
 
@@ -84,6 +84,8 @@ evidence:    <artifact path or source ref — may repeat>
 assumes:     <assumed contract field paths the finding depends on, if any>
 rule:        <registry ID@version refs, when a registry rule is involved>
 dd:          <decision-report entry ref, when a design decision is challenged — never on positive (S0) findings>
+id:          <run-unique token; optional; G4 may close by this id>
+status:      open|resolved|new|regression  (optional; omit = no re-review annotation, not a second closure authority)
 ```
 
 Severity and disposition are **two axes**: a judgment-class S3 (subjective / semantic / representativeness) is never directly blocking — list it in the Limitations "pending user adjudication" sub-block with the three options (change declaration / accept risk / promote to the rule-registry queue). Only fact-class S3 (reproducible, evidence-bound) takes `disposition: blocking` and enters G4 closure.
@@ -98,10 +100,10 @@ Order: **blocking** first (broken L5/L6, unsafe dangerous ops, removed focus rin
 - **Pass:** zero blocking; every L6 criterion has exactly one evidence row; every required evidence row passes (every evidence result is `pass`); token gaps are logged or fixed.
 - **Recirculate:** each blocking `source` names the step/declaration to reopen in design-playbook; `fail` or `blocked` evidence remains visible.
 
-For a repaired blocker, record exactly one closure line whose issue text is identical to the finding:
+For a repaired blocker, record exactly one closure line whose target is the finding `id` when present, otherwise the issue text (same normalisation as G4):
 
 ```text
-- closes: <exact issue value> -> recirculate -> fix -> re-eval -> 0 blocking
+- closes: <id or exact issue value> -> recirculate -> fix -> re-eval -> 0 blocking
 ```
 
 **Done when:** the explicit verdict is structurally unique; blocking sources are non-empty; every blocking finding has exactly one matching closure before `Pass`. A blocking finding cannot be waived inside a Pass artifact. Without a user in the loop, blocking findings remain in recirculate and the run requests a decision; only after an explicit user decision that updates the owning declaration or severity — recorded against the user's statement or decision record — may the evaluator re-evaluate; the final Pass artifact contains no blocking severity.
@@ -124,6 +126,8 @@ The report artifact remains `point-back.md` (no new file). The machine face is u
                              sub-block)
 ## Verdict                  (exactly one Pass|Recirculate + closure lines)
 ```
+
+An empty Findings block is a fact, not an omission: keep the `## Findings` heading and write the single literal marker line `findings: none` inside it. Never transcribe a placeholder ('none blocking', 'n/a') into finding field values — a placeholder is not a finding, and cross-run derivation groups field values verbatim.
 
 Coverage levels: **exhaustive** (primary path + required rare paths + per-page five-state matrix — no exceptions), **sampled** (edge cases by five-state x page matrix, reasons recorded), **explicit unreviewed** (everything else — never defaults to pass). Unreviewed is not pass: it produces no pass contribution.
 

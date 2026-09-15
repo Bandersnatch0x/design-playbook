@@ -460,6 +460,162 @@ class EvidenceCaptureTests(unittest.TestCase):
                 capture_runtime.PlaywrightBrowserAdapter(),
             )
 
+    def test_screenshot_sidecar_recalls_planted_defects(self) -> None:
+        planted = Path(__file__).with_name("fixtures") / "planted-defects.html"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "evidence").mkdir()
+            payload = self._capture(
+                root,
+                _v1_capture_args(
+                    url=planted.resolve().as_uri(),
+                    state="ok",
+                    artifact_path="evidence/planted.png",
+                ),
+            )
+            self.assertEqual(payload["result"], "captured", payload)
+            sidecar_path = root / "evidence" / "planted.probe.json"
+            self.assertTrue(sidecar_path.is_file(), payload)
+            sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            self.assertGreater(sidecar["layout"]["hOverflow"], 0)
+            self.assertEqual(sidecar["layout"]["measurement_status"], "measured")
+            self.assertEqual(sidecar["defects"]["measurement_status"], "measured")
+            self.assertEqual(sidecar["console"]["measurement_status"], "measured")
+            kinds = {row["kind"] for row in sidecar["leaks"]}
+            self.assertEqual(
+                kinds,
+                {"undefined", "NaN", "[object Object]", "lorem ipsum"},
+            )
+            self.assertFalse(
+                any(row["kind"] == "NaN" and "banana" in row["text"]
+                    for row in sidecar["leaks"])
+            )
+            self.assertTrue(sidecar["tapFails"])
+            self.assertTrue(
+                any("planted-console" in err for err in sidecar["consoleErrors"]),
+                sidecar["consoleErrors"],
+            )
+            self.assertEqual(sidecar["layout"]["measurement_error"], "")
+            self.assertEqual(sidecar["defects"]["measurement_error"], "")
+            self.assertEqual(sidecar["console"]["measurement_error"], "")
+            self.assertEqual(
+                set(sidecar["defects"]),
+                {"measurement_status", "measurement_error"},
+            )
+            self.assertEqual(
+                set(sidecar["console"]),
+                {"measurement_status", "measurement_error"},
+            )
+
+    def test_screenshot_sidecar_clean_page_is_measured_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            html = root / "clean.html"
+            html.write_text(
+                "<!doctype html><html><body data-state='ok'><p>ok</p></body></html>",
+                encoding="utf-8",
+            )
+            (root / "evidence").mkdir()
+            payload = self._capture(
+                root,
+                _v1_capture_args(
+                    url=html.resolve().as_uri(),
+                    state="ok",
+                    artifact_path="evidence/clean.png",
+                ),
+            )
+            self.assertEqual(payload["result"], "captured", payload)
+            sidecar = json.loads(
+                (root / "evidence" / "clean.probe.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(sidecar["layout"]["measurement_status"], "measured")
+            self.assertEqual(sidecar["defects"]["measurement_status"], "measured")
+            self.assertEqual(sidecar["defects"]["measurement_error"], "")
+            self.assertEqual(sidecar["leaks"], [])
+            self.assertEqual(sidecar["tapFails"], [])
+            self.assertEqual(sidecar["console"]["measurement_status"], "measured")
+            self.assertEqual(sidecar["layout"]["measurement_error"], "")
+            self.assertEqual(sidecar["console"]["measurement_error"], "")
+
+    def test_screenshot_sidecar_legal_undefined_is_candidate_not_failure(self) -> None:
+        page = Path(__file__).with_name("fixtures") / "legal-undefined.html"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "evidence").mkdir()
+            payload = self._capture(
+                root,
+                _v1_capture_args(
+                    url=page.resolve().as_uri(),
+                    state="ok",
+                    artifact_path="evidence/legal.png",
+                ),
+            )
+            self.assertEqual(payload["result"], "captured", payload)
+            sidecar = json.loads(
+                (root / "evidence" / "legal.probe.json").read_text(encoding="utf-8")
+            )
+            kinds = {row["kind"] for row in sidecar["leaks"]}
+            self.assertIn("undefined", kinds)
+            self.assertEqual(sidecar["defects"]["measurement_status"], "measured")
+
+    def test_async_init_wait_for_state_reaches_ok(self) -> None:
+        page = Path(__file__).with_name("fixtures") / "async-init.html"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "evidence").mkdir()
+            payload = self._capture(
+                root,
+                _v1_capture_args(
+                    url=page.resolve().as_uri(),
+                    state="ok",
+                    actions=[{"do": "wait_for_state", "state": "ok"}],
+                    artifact_path="evidence/async.png",
+                ),
+            )
+            self.assertEqual(payload["result"], "captured", payload)
+            self.assertEqual(payload["observed_state"], "ok")
+
+    def test_wrong_page_selector_fails_closed(self) -> None:
+        page = Path(__file__).with_name("fixtures") / "login-wrong-page.html"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "evidence").mkdir()
+            payload = self._capture(
+                root,
+                _v1_capture_args(
+                    url=page.resolve().as_uri(),
+                    state="ok",
+                    actions=[{"do": "wait_for_selector", "selector": "#app"}],
+                    artifact_path="evidence/login.png",
+                ),
+            )
+            self.assertEqual(payload["result"], "failed", payload)
+            self.assertTrue(payload["error"])
+
+    def test_synthetic_storage_state_loads_without_copying_session(self) -> None:
+        page = Path(__file__).with_name("fixtures") / "legal-undefined.html"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "evidence").mkdir()
+            (root / "session.json").write_text(
+                json.dumps({"cookies": [], "origins": []}),
+                encoding="utf-8",
+            )
+            payload = self._capture(
+                root,
+                _v1_capture_args(
+                    url=page.resolve().as_uri(),
+                    state="ok",
+                    artifact_path="evidence/sessioned.png",
+                    storage_state="session.json",
+                ),
+            )
+            self.assertEqual(payload["result"], "captured", payload)
+            dumped = json.dumps(payload)
+            self.assertNotIn("cookies", dumped)
+            self.assertNotIn("origins", dumped)
+            self.assertNotIn("storage_state", payload.get("request", {}))
+
     def test_screenshot_capture_writes_artifact_never_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -67,6 +67,7 @@ jobs:
           python3 tests/test_vnext_s4.py
           python3 tests/test_vnext_s5.py
           python3 tests/test_vnext_s6.py
+          python3 tests/test_operator_evidence_hardening.py
       - name: Queue monitor dialog state tests
         run: node packages/design-playbook/showcase/test_queue_monitor_state.js
 
@@ -107,6 +108,8 @@ jobs:
             packages/design-playbook/mcp/evidence/test_containment.py \
             packages/design-playbook/mcp/evidence/test_handoff.py \
             packages/design-playbook/mcp/evidence/test_handoff_i18n.py \
+            packages/design-playbook/mcp/evidence/test_evidence_preflight.py \
+            packages/design-playbook/mcp/evidence/test_page_defects.py \
             -v
 
       - name: Run Console — pure-Python tests (required, no Playwright)

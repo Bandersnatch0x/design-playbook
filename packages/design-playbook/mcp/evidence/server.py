@@ -44,7 +44,12 @@ def _tool_schema() -> dict[str, Any]:
                 },
                 "type": {
                     "type": "string",
-                    "description": 'v1: "screenshot" | "a11y tree" | "interaction trace".',
+                    "description": (
+                        'v1: "screenshot" | "a11y tree" | "interaction trace". '
+                        "A screenshot capture also writes a sibling "
+                        ".probe.json page-probe artifact (facts, not a "
+                        "judgment) when the adapter can probe."
+                    ),
                     "enum": ["screenshot", "a11y tree", "interaction trace"],
                 },
                 "state": {
@@ -80,6 +85,14 @@ def _tool_schema() -> dict[str, Any]:
                         "false: an existing file is refused (G6 write boundary)."
                     ),
                     "default": False,
+                },
+                "storage_state": {
+                    "type": "string",
+                    "description": (
+                        "Optional run-root-relative Playwright storage-state "
+                        "JSON (cookies/localStorage). Loaded into the browser "
+                        "context; missing or escaping paths fail the capture."
+                    ),
                 },
                 **contract["properties"],
             },

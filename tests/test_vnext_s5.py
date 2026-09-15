@@ -335,6 +335,54 @@ class GovernanceLogTests(unittest.TestCase):
         errors = rg.validate_governance_events(events)
         self.assertTrue(any("authority/risk/fp_cost" in error for error in errors))
 
+    def test_reject_without_target_status_is_valid(self) -> None:
+        # governance topic (2026-09-15): target_status is promote-only.
+        events = json.loads(json.dumps(self.EVENTS))
+        events.append({
+            "id": "RG-0005", "event": "adjudicated",
+            "candidate_id": "CAND-2026-36-01", "rule_id": "ST-01",
+            "decision": "reject", "decided_by": "user",
+            "confirmed_at": "2026-09-15T00:00:00Z",
+            "rationale": "placeholder text is not a finding",
+        })
+        errors = rg.validate_governance_events(events)
+        self.assertEqual(errors, [])
+
+    def test_reject_with_placeholder_target_status_stays_valid(self) -> None:
+        # append-only compatibility: an early reject carried a required-field
+        # placeholder; tolerated-but-ignored, still enum-validated.
+        events = json.loads(json.dumps(self.EVENTS))
+        events.append({
+            "id": "RG-0005", "event": "adjudicated",
+            "candidate_id": "CAND-2026-36-01", "rule_id": "ST-01",
+            "decision": "reject", "decided_by": "user",
+            "confirmed_at": "2026-09-15T00:00:00Z",
+            "rationale": "placeholder text is not a finding",
+            "target_status": "advisory",
+        })
+        self.assertEqual(rg.validate_governance_events(events), [])
+        self.assertEqual(rg.promote_adjudications(events).get("ST-01", {}).get(
+            "decision"), "promote")  # the reject never promotes
+
+    def test_reject_with_bad_target_status_enum_rejected(self) -> None:
+        events = json.loads(json.dumps(self.EVENTS))
+        events.append({
+            "id": "RG-0005", "event": "adjudicated",
+            "candidate_id": "CAND-2026-36-01", "rule_id": "ST-01",
+            "decision": "reject", "decided_by": "user",
+            "confirmed_at": "2026-09-15T00:00:00Z",
+            "rationale": "placeholder text is not a finding",
+            "target_status": "someday",
+        })
+        errors = rg.validate_governance_events(events)
+        self.assertTrue(any("target_status" in error for error in errors))
+
+    def test_promote_without_target_status_rejected(self) -> None:
+        events = json.loads(json.dumps(self.EVENTS))
+        del events[2]["target_status"]  # advisory promote
+        errors = rg.validate_governance_events(events)
+        self.assertTrue(any("target_status" in error for error in errors))
+
     def test_exemption_requires_rule_version_and_risk(self) -> None:
         event = {
             "id": "RG-0005", "event": "exemption_granted", "rule_id": "ST-01",

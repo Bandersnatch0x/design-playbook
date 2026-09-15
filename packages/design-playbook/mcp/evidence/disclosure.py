@@ -56,6 +56,11 @@ VIEWPORT_ORDER: tuple[str, ...] = (
     "print",
 )
 
+# Observe* screenshot seed (P2/P3): delivery viewports minus print.
+WEB_VIEWPORTS: tuple[str, ...] = tuple(
+    name for name in VIEWPORT_ORDER if VIEWPORTS[name].get("kind") != "print"
+)
+
 # Fold baseline used by the probe for the desktop/tablet fold check. The
 # design's first-fold line sits at 900 CSS px on desktop; narrower viewports
 # fall back to their own inner height so the fold metric stays honest.
