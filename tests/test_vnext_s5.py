@@ -364,6 +364,28 @@ class GovernanceLogTests(unittest.TestCase):
         self.assertEqual(rg.promote_adjudications(events).get("ST-01", {}).get(
             "decision"), "promote")  # the reject never promotes
 
+    def test_reject_with_explicit_null_target_status_rejected(self) -> None:
+        events = json.loads(json.dumps(self.EVENTS))
+        events.append({
+            "id": "RG-0005", "event": "adjudicated",
+            "candidate_id": "CAND-2026-36-01", "rule_id": "ST-01",
+            "decision": "reject", "decided_by": "user",
+            "confirmed_at": "2026-09-15T00:00:00Z",
+            "rationale": "explicit null is not omit",
+            "target_status": None,
+        })
+        errors = rg.validate_governance_events(events)
+        self.assertTrue(any("target_status" in error for error in errors))
+        omitted = json.loads(json.dumps(self.EVENTS))
+        omitted.append({
+            "id": "RG-0006", "event": "adjudicated",
+            "candidate_id": "CAND-2026-36-01", "rule_id": "ST-01",
+            "decision": "reject", "decided_by": "user",
+            "confirmed_at": "2026-09-15T00:00:00Z",
+            "rationale": "omit remains legal",
+        })
+        self.assertEqual(rg.validate_governance_events(omitted), [])
+
     def test_reject_with_bad_target_status_enum_rejected(self) -> None:
         events = json.loads(json.dumps(self.EVENTS))
         events.append({

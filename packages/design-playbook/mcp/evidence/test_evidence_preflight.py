@@ -99,10 +99,10 @@ class PreflightPlanTests(unittest.TestCase):
     def test_action_parameter_requirements(self) -> None:
         facts = ep.preflight_entry(_entry(actions=[
             {"do": "click"},
-            {"do": "fill", "selector": "#a"},
+            {"do": "fill", "selector": "#a", "value": 1},
             {"do": "select_option", "selector": "#s"},
             {"do": "press", "key": "Enter"},
-            {"do": "wait", "ms": 0},
+            {"do": "wait", "ms": "soon"},
             {"do": "hover", "selector": "#x"},
         ]), 1)
         self.assertEqual(
@@ -111,8 +111,50 @@ class PreflightPlanTests(unittest.TestCase):
         details = " | ".join(fact.detail for fact in facts)
         self.assertIn("click", details)
         self.assertIn("value", details)
-        self.assertIn("value|label", details)
+        self.assertIn("select_option", details)
         self.assertIn("ms", details)
+
+    def test_empty_fill_type_select_and_zero_wait_are_legal(self) -> None:
+        facts = ep.preflight_entry(_entry(actions=[
+            {"do": "fill", "selector": "#a", "value": ""},
+            {"do": "type", "selector": "#a", "text": ""},
+            {"do": "select_option", "selector": "#s", "value": ""},
+            {"do": "wait", "ms": 0},
+        ]), 1)
+        self.assertEqual(_errors(facts), [])
+
+    def test_lexical_alias_artifact_paths_collide(self) -> None:
+        plan = [
+            _entry(artifact_path="evidence/shared.json"),
+            _entry(state="loading", artifact_path="evidence/./shared.json"),
+        ]
+        facts = ep.preflight_plan(plan)
+        self.assertIn("artifact_collision", _codes(facts))
+        self.assertEqual(facts[-1].actual, "evidence/./shared.json")
+        plan[1]["overwrite"] = True
+        facts = ep.preflight_plan(plan)
+        self.assertEqual(_errors(facts), [])
+        self.assertEqual(
+            [f.code for f in facts if f.severity == "advisory"],
+            ["artifact_overwrite"],
+        )
+
+    def test_storage_state_trim_matches_runtime_absolute_reject(self) -> None:
+        facts = ep.preflight_plan([_entry(storage_state=" C:/secrets/session.json")])
+        self.assertIn("bad_storage_state", _codes(facts))
+
+    def test_local_html_file_url_is_mirror_advisory_only(self) -> None:
+        html = (
+            Path(__file__).resolve().parent / "fixtures" / "planted-defects.html"
+        )
+        facts = ep.preflight_plan([_entry(url=html.resolve().as_uri())])
+        self.assertEqual(_errors(facts), [])
+        self.assertEqual(
+            [f.code for f in facts if f.severity == "advisory"],
+            ["mirror_surface"],
+        )
+        source = MODULE.read_text(encoding="utf-8")
+        self.assertNotIn("execute_capture_plan(", source)
 
     def test_storage_state_shape_errors(self) -> None:
         facts = ep.preflight_plan([

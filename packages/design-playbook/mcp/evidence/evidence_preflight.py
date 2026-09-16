@@ -28,32 +28,27 @@ from dataclasses import dataclass
 from typing import Any
 
 try:
+    from design_playbook.mcp.evidence.action_params import (  # noqa: E402
+        KNOWN_DOS,
+        action_param_errors,
+    )
     from design_playbook.mcp.evidence.capture_contract import (  # noqa: E402
         parse_capture_contract,
+    )
+    from design_playbook.mcp.evidence.path_syntax import (  # noqa: E402
+        lexical_posix_key,
+        trimmed_relpath,
     )
 except ImportError:  # standalone execution: same-dir seam (rules_registry pattern)
     import os  # noqa: E402
 
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from action_params import KNOWN_DOS, action_param_errors  # noqa: E402
     from capture_contract import parse_capture_contract  # noqa: E402
+    from path_syntax import lexical_posix_key, trimmed_relpath  # noqa: E402
 
 ENTRY_TYPES = frozenset({"screenshot", "a11y tree", "interaction trace"})
 URL_SCHEMES = ("http://", "https://", "file://")
-
-# Per-do required parameter keys (mirror the provider tool schema text).
-ACTION_REQUIREMENTS: dict[str, tuple[str, ...]] = {
-    "click": ("selector",),
-    "fill": ("selector", "value"),
-    "type": ("selector", "value"),
-    "press": ("key",),
-    "select_option": ("selector",),
-    "wait_for_selector": ("selector",),
-    "wait_for_state": ("state",),
-    "wait": ("ms",),
-}
-ACTION_ANY_OF: dict[str, tuple[str, ...]] = {
-    "select_option": ("value", "label"),
-}
 
 ARTIFACT_PREFIX = "evidence/"
 DRIVE_RE = re.compile(r"^[A-Za-z]:")
@@ -146,7 +141,7 @@ def preflight_entry(request: object, entry: int) -> list[PreflightFact]:
                 "storage_state must be a run-root-relative JSON path",
                 entry, expected="relative path", actual=type(storage_state).__name__))
         else:
-            bad = _bad_storage_state_path(storage_state)
+            bad = _bad_storage_state_path(trimmed_relpath(storage_state))
             if bad is not None:
                 facts.append(_error(
                     "bad_storage_state", bad, entry,
@@ -180,6 +175,7 @@ def _bad_storage_state_path(path: str) -> str | None:
 def _bad_artifact_path(artifact: str) -> str | None:
     """First artifact-path violation, or None (mirrors the provider's
     ``_resolve_artifact_path`` boundary: relative, evidence/ subtree)."""
+    artifact = trimmed_relpath(artifact)
     if "\x00" in artifact:
         return "artifact_path must not contain null bytes"
     if artifact.startswith(("/", "~")) or DRIVE_RE.match(artifact):
@@ -201,30 +197,18 @@ def _bad_action(action: object, entry: int, index: int) -> list[PreflightFact]:
         return [_error("bad_action", f"{label} must be an object", entry,
                        expected="object", actual=type(action).__name__)]
     do = action.get("do")
-    if not isinstance(do, str) or do not in ACTION_REQUIREMENTS:
+    if not isinstance(do, str) or do not in KNOWN_DOS:
         return [_error(
             "bad_action_do", f"{label}.do must be one of the v1 actions",
-            entry, expected="|".join(sorted(ACTION_REQUIREMENTS)),
+            entry, expected="|".join(sorted(KNOWN_DOS)),
             actual=repr(do))]
     facts: list[PreflightFact] = []
-    for key in ACTION_REQUIREMENTS[do]:
-        value = action.get(key)
-        ok = isinstance(value, str) and bool(value.strip()) if not \
-            (do == "wait" and key == "ms") else (
-                isinstance(value, (int, float))
-                and not isinstance(value, bool) and value > 0)
-        if not ok:
-            facts.append(_error(
-                "bad_action_param", f"{label} ({do}) requires {key}", entry,
-                expected=key, actual=repr(value)))
-    alternatives = ACTION_ANY_OF.get(do)
-    if alternatives and not any(
-            isinstance(action.get(key), str) and action.get(key).strip()
-            for key in alternatives):
+    for detail in action_param_errors(action, index):
+        if detail.endswith("must be one of the v1 actions"):
+            continue
         facts.append(_error(
-            "bad_action_param",
-            f"{label} ({do}) requires one of {'|'.join(alternatives)}", entry,
-            expected="|".join(alternatives), actual="missing"))
+            "bad_action_param", detail, entry,
+            expected="provider action contract", actual=repr(action.get("do"))))
     return facts
 
 
@@ -242,8 +226,9 @@ def preflight_plan(plan: object) -> list[PreflightFact]:
         entry_facts = preflight_entry(request, index)
         facts.extend(entry_facts)
         artifact = request.get("artifact_path") if isinstance(request, dict) else None
-        if isinstance(artifact, str) and artifact:
-            first = seen.get(artifact)
+        if isinstance(artifact, str) and artifact and _bad_artifact_path(artifact) is None:
+            key = lexical_posix_key(artifact)
+            first = seen.get(key)
             if first is not None:
                 overwrite = isinstance(request.get("overwrite"), bool) \
                     and request["overwrite"]
@@ -261,7 +246,7 @@ def preflight_plan(plan: object) -> list[PreflightFact]:
                         expected="unique artifact_path or overwrite=true",
                         actual=artifact))
             else:
-                seen[artifact] = index
+                seen[key] = index
     return facts
 
 

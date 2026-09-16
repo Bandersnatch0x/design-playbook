@@ -333,8 +333,26 @@ def _check_pointback_facts(
                        "confidence; judgment-class S3 is never blocking",
             ))
         status_values = pb_finding.get("status") or []
+        if len(status_values) > 1:
+            errs.append(finding(
+                "G2.finding_repeated_field",
+                f"G2 point-back: finding {i} repeats status:",
+                owner=f"point-back.md#finding.{i}",
+                expected="single status or omit the field",
+                actual=f"{len(status_values)} values",
+                repair=f"Keep one status on finding {i}",
+            ))
         status = status_values[0] if status_values else ""
-        if status and status.casefold() not in VALID_FINDING_STATUSES:
+        if status_values and not status.strip():
+            errs.append(finding(
+                "G2.finding_empty_status",
+                f"G2 point-back: finding {i} has empty status",
+                owner=f"point-back.md#finding.{i}",
+                expected="open|resolved|new|regression or omit the field",
+                actual="empty",
+                repair="Give a status value or drop status:",
+            ))
+        elif status and status.casefold() not in VALID_FINDING_STATUSES:
             errs.append(finding(
                 "G2.finding_invalid_status",
                 f"G2 point-back: finding {i} status '{status}' not in "
@@ -345,6 +363,15 @@ def _check_pointback_facts(
                 repair="Use a re-review status or omit the field",
             ))
         id_values = pb_finding.get("id") or []
+        if len(id_values) > 1:
+            errs.append(finding(
+                "G2.finding_repeated_field",
+                f"G2 point-back: finding {i} repeats id:",
+                owner=f"point-back.md#finding.{i}",
+                expected="single id or omit the field",
+                actual=f"{len(id_values)} values",
+                repair=f"Keep one id on finding {i}",
+            ))
         finding_id = id_values[0].strip() if id_values else ""
         if id_values and not finding_id:
             errs.append(finding(

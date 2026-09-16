@@ -194,6 +194,10 @@ def validate_governance_events(events: list[dict]) -> list[str]:
             target_status = event.get("target_status")
             if decision == "promote":
                 target_status = _require(errors, event, "target_status")
+            elif "target_status" in event:
+                # Explicit null/empty is not omit: same non-empty check as
+                # _require, then the original enum domain.
+                target_status = _require(errors, event, "target_status")
             if (isinstance(target_status, str)
                     and target_status not in TARGET_STATUSES):
                 errors.append(

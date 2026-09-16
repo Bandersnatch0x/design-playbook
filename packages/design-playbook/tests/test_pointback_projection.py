@@ -384,6 +384,79 @@ result: n/a
             ),
         )
 
+    def test_explicit_id_survives_issue_rewrite(self) -> None:
+        def report(issue: str) -> str:
+            return f"""# Point-back
+
+audited: true
+
+## Findings
+
+issue: {issue}
+source: spec
+fix: constrain width
+severity: S3
+disposition: blocking
+id: F-1
+
+## Coverage statement
+
+exhaustive: complete
+unreviewed: none
+
+## Verdict
+
+Recirculate
+
+## Evidence ledger
+
+criterion: L6.1
+required: no overflow
+observed: evidence/x.probe.json
+result: fail
+"""
+
+        before = project_pointback(report("overflow before patch"), ("L6.1",))
+        after = project_pointback(report("overflow after patch"), ("L6.1",))
+        self.assertEqual(before.findings[0].finding_id, after.findings[0].finding_id)
+        self.assertTrue(str(before.findings[0].finding_id).startswith("finding-"))
+
+    def test_distinct_ids_with_same_issue_are_distinct_projections(self) -> None:
+        def report(finding_id: str) -> str:
+            return f"""# Point-back
+
+audited: true
+
+## Findings
+
+issue: overflow
+source: spec
+fix: constrain width
+severity: S3
+disposition: blocking
+id: {finding_id}
+
+## Coverage statement
+
+exhaustive: complete
+unreviewed: none
+
+## Verdict
+
+Recirculate
+
+## Evidence ledger
+
+criterion: L6.1
+required: no overflow
+observed: evidence/x.probe.json
+result: fail
+"""
+
+        first = project_pointback(report("F-1"), ("L6.1",))
+        second = project_pointback(report("F-2"), ("L6.1",))
+        self.assertNotEqual(first.findings[0].finding_id, second.findings[0].finding_id)
+
 
 if __name__ == "__main__":
     unittest.main()

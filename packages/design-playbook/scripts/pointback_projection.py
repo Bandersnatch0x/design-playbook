@@ -128,6 +128,22 @@ def _finding_id(source: str, issue: str) -> str:
     return f"finding-{digest}"
 
 
+def _finding_id_from_fields(fields: dict[str, list[str]]) -> str:
+    """Prefer a present explicit id; otherwise the historical source+issue hash."""
+    id_values = fields.get("id") or []
+    explicit = id_values[0].strip() if id_values else ""
+    if explicit:
+        digest = hashlib.sha256(
+            ("pointback-finding-id-v1\0" + _normalise_identity_part(explicit)).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        return f"finding-{digest}"
+    source = fields["source"][0] if fields.get("source") else ""
+    issue = fields["issue"][0] if fields.get("issue") else ""
+    return _finding_id(source, issue)
+
+
 def _validate_criterion_ids(criterion_ids: tuple[str, ...]) -> None:
     expected = tuple(f"L6.{number}" for number in range(1, len(criterion_ids) + 1))
     if not criterion_ids or criterion_ids != expected:
@@ -222,7 +238,7 @@ def project_pointback(
     finding_ids: set[str] = set()
     for fields in pointback_findings:
         source = fields["source"][0]
-        finding_id = _finding_id(source, fields["issue"][0])
+        finding_id = _finding_id_from_fields(fields)
         if finding_id in finding_ids:
             raise PointBackProjectionError("finding-duplicate")
         finding_ids.add(finding_id)

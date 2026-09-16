@@ -24,6 +24,15 @@ Routing is two hops (first hop above; second hop picks the repair target). Repai
 | R4 | implementation (Fill) | Implementation deviates from the confirmed model: action missing, wrong state, token scatter, component misuse | Fix the implementation; resume from the step consuming the declaration |
 | R5 | evidence plan (observe* seam) | Method cannot answer the criterion (capture seed mismatch); provider absent; sample/environment mismatch; evidence insufficient while implementation is right | Fix the capture plan / provider / recapture; implementation and declarations untouched |
 
+Session `storage_state` blocked (next owner is always the operator, never an auto-login):
+
+| Blocked class | Operator action | Resume |
+| --- | --- | --- |
+| path (escape, absolute, bad shape) | Correct the run-root-relative `.json` path | Recapture the same Then |
+| file (missing, unreadable, non-object JSON) | Provide a readable Playwright storage_state object | Recapture |
+| expired / wrong page (`observed_state` is login or `#app` missing) | Refresh the authorized local session | Recapture with target selector |
+| unsupported mechanism | Choose a supported local session file; do not invent login | Recapture or mark blocked |
+
 ## Evidence freshness
 
 - Fill changes that can affect a bound criterion **invalidate** prior evidence for that criterion.

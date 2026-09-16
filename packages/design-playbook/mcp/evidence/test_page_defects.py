@@ -63,6 +63,20 @@ class ProbeDefectsTests(unittest.TestCase):
         self.assertEqual(facts.leaks, ())
         self.assertEqual(facts.tap_fails, ())
 
+    def test_missing_or_null_arrays_are_blocked_not_clean(self) -> None:
+        missing = probe_defects(lambda _js: {})
+        self.assertEqual(missing.measurement_status, "blocked")
+        self.assertIn("leaks", missing.measurement_error)
+        self.assertIn("tapFails", missing.measurement_error)
+        nulls = probe_defects(lambda _js: {"leaks": None, "tapFails": None})
+        self.assertEqual(nulls.measurement_status, "blocked")
+        self.assertIn("null", nulls.measurement_error)
+        clean = probe_defects(lambda _js: {"leaks": [], "tapFails": []})
+        self.assertEqual(clean.measurement_status, "measured")
+        self.assertEqual(clean.measurement_error, "")
+        self.assertEqual(clean.leaks, ())
+        self.assertEqual(clean.tap_fails, ())
+
     def test_evaluate_error_fails_closed(self) -> None:
         def boom(_js: str) -> object:
             raise RuntimeError("evaluate failed")

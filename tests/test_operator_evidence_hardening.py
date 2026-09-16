@@ -17,6 +17,9 @@ from design_playbook.mcp.evidence import (  # noqa: E402
     capture_runtime,
     evidence_preflight as ep,
 )
+from design_playbook.mcp.evidence.capture_snapshot import (  # noqa: E402
+    capture_call_snapshot,
+)
 from design_playbook.mcp.evidence.capture_contract import (  # noqa: E402
     parse_capture_contract,
 )
@@ -151,6 +154,17 @@ class FindingIdentityTests(unittest.TestCase):
             "## Verdict\n\n**Recirculate.**\n"
         )
         self.assertIn("G2.finding_duplicate_id", _rules(check_pointback(dup, 1)))
+
+    def test_two_id_lines_on_one_finding_are_repeated_field(self) -> None:
+        text = (
+            "# pb\n\n## Evidence ledger\n\n"
+            "criterion: L6.1\nrequired: x\nobserved: evidence/x.png\n"
+            "result: fail\n\n## Findings\n\n"
+            "issue: a\nsource: spec\nfix: x\nseverity: S3\n"
+            "disposition: blocking\nid: F-1\nid: F-2\n\n"
+            "## Verdict\n\n**Recirculate.**\n"
+        )
+        self.assertIn("G2.finding_repeated_field", _rules(check_pointback(text, 1)))
 
     def test_empty_id_is_structural(self) -> None:
         text = _pointback(extra_finding="id:   ", verdict="**Recirculate.**")
@@ -295,6 +309,22 @@ class FindingIdentityTests(unittest.TestCase):
 
 
 class ProbeSidecarTests(unittest.TestCase):
+    def test_sidecar_resolve_refuses_reserved_manifest_name(self) -> None:
+        fake = _ProbingFake()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with mock.patch.object(capture_runtime, "_run_root", return_value=root):
+                with mock.patch.object(
+                    capture_runtime,
+                    "probe_sidecar_rel",
+                    return_value="evidence/manifest.jsonl",
+                ):
+                    payload = capture_runtime.execute_capture_plan(_v1(), fake)
+            self.assertEqual(payload["result"], "failed")
+            self.assertIn("manifest.jsonl", payload["error"])
+            self.assertEqual(fake.calls, [])
+            self.assertFalse((root / "evidence" / "manifest.jsonl").exists())
+
     def test_capture_only_adapter_skips_sidecar(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -637,6 +667,79 @@ class StorageStateTests(unittest.TestCase):
             self.assertIn("storage_state", payload["error"])
             self.assertEqual(fake.calls, [])
 
+    def test_runtime_rejects_nonstandard_json_constants(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "session.json").write_text(
+                '{"cookies": [], "origins": [], "flag": NaN}',
+                encoding="utf-8",
+            )
+            fake = _CaptureOnlyFake()
+            with mock.patch.object(capture_runtime, "_run_root", return_value=root):
+                payload = capture_runtime.execute_capture_plan(
+                    _v1(storage_state="session.json"), fake
+                )
+            self.assertEqual(payload["result"], "failed")
+            self.assertIn("nonstandard", payload["error"])
+            self.assertNotIn("NaN", json.dumps(payload))
+            self.assertNotIn("cookies", payload["error"])
+            self.assertEqual(fake.calls, [])
+
+    def test_runtime_rejects_overflowing_storage_state_integer(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "session.json").write_text(
+                '{"cookies": [], "origins": [], "n": 9007199254740993}',
+                encoding="utf-8",
+            )
+            fake = _CaptureOnlyFake()
+            with mock.patch.object(capture_runtime, "_run_root", return_value=root):
+                payload = capture_runtime.execute_capture_plan(
+                    _v1(storage_state="session.json"), fake
+                )
+            self.assertEqual(payload["result"], "failed")
+            self.assertIn("overflow", payload["error"])
+            self.assertEqual(fake.calls, [])
+
+    def test_capture_failure_diagnostic_omits_session_secrets(self) -> None:
+        secret = "SECRET_TOKEN_DO_NOT_LEAK"
+
+        class _Boom(_CaptureOnlyFake):
+            def capture(self, **request):
+                raise RuntimeError(f"timeout Call log: input.value={secret}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "session.json").write_text(
+                json.dumps({
+                    "cookies": [{
+                        "name": "session",
+                        "value": secret,
+                        "domain": "127.0.0.1",
+                        "path": "/",
+                    }],
+                    "origins": [],
+                }),
+                encoding="utf-8",
+            )
+            fake = _Boom()
+            with mock.patch.object(capture_runtime, "_run_root", return_value=root):
+                payload = capture_runtime.execute_capture_plan(
+                    _v1(storage_state="session.json"), fake
+                )
+            dumped = json.dumps(payload)
+            self.assertEqual(payload["result"], "failed")
+            self.assertNotIn(secret, dumped)
+            self.assertIn("RuntimeError", payload["error"])
+            self.assertIn("operator", payload["error"])
+
+    def test_capture_snapshot_keeps_session_path_not_bytes(self) -> None:
+        request = _v1(storage_state="sessions/valid.json")
+        snap = capture_call_snapshot(request)
+        self.assertEqual(snap["storage_state"], "sessions/valid.json")
+        self.assertEqual(snap["url"], request["url"])
+        self.assertNotIn("cookies", json.dumps(snap))
+
     def test_runtime_rejects_non_object_storage_state_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -890,6 +993,7 @@ class SkillLockstepTests(unittest.TestCase):
         self.assertIn("Dark / 压力包 are not default seeds", text)
         self.assertIn("run-handoff", text)
         self.assertIn("not covered by another viewport's pass", text)
+        self.assertIn("capture.storage_state", text)
 
     def test_evaluator_names_id_and_status(self) -> None:
         text = EVALUATOR.read_text(encoding="utf-8")
@@ -898,6 +1002,8 @@ class SkillLockstepTests(unittest.TestCase):
         self.assertIn("measurement_status", text)
         self.assertNotIn("omit = open", text)
         self.assertIn("not a second closure authority", text)
+        self.assertIn("history:", text)
+        self.assertIn("seen, omitted", text)
 
 
 if __name__ == "__main__":

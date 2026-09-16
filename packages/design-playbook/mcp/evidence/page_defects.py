@@ -105,8 +105,16 @@ def probe_defects(evaluate: Callable[[str], Any]) -> DefectFacts:
             measurement_error="defect probe output is not an object",
         )
     errors: list[str] = []
-    leaks = _string_pairs(raw.get("leaks"), "leaks", errors)
-    taps = _tap_rows(raw.get("tapFails"), errors)
+    if "leaks" not in raw:
+        errors.append("leaks is missing")
+        leaks: tuple[dict[str, str], ...] = ()
+    else:
+        leaks = _string_pairs(raw.get("leaks"), "leaks", errors)
+    if "tapFails" not in raw:
+        errors.append("tapFails is missing")
+        taps: tuple[dict[str, Any], ...] = ()
+    else:
+        taps = _tap_rows(raw.get("tapFails"), errors)
     status = "blocked" if errors else "measured"
     return DefectFacts(
         leaks=leaks,
@@ -120,6 +128,7 @@ def _string_pairs(
     value: object, name: str, errors: list[str]
 ) -> tuple[dict[str, str], ...]:
     if value is None:
+        errors.append(f"{name} is null")
         return ()
     if not isinstance(value, list):
         errors.append(f"{name} is not a list")
@@ -140,6 +149,7 @@ def _string_pairs(
 
 def _tap_rows(value: object, errors: list[str]) -> tuple[dict[str, Any], ...]:
     if value is None:
+        errors.append("tapFails is null")
         return ()
     if not isinstance(value, list):
         errors.append("tapFails is not a list")

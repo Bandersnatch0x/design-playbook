@@ -9,12 +9,15 @@ misconfig is visible to the orchestrator.
 from __future__ import annotations
 
 import json
+import math
 import os
 from pathlib import Path
 from typing import Any, Protocol
 
 from design_playbook.mcp.evidence import containment
+from design_playbook.mcp.evidence.action_params import action_param_errors
 from design_playbook.mcp.evidence.capture_contract import parse_capture_contract
+from design_playbook.mcp.evidence.path_syntax import trimmed_relpath
 from design_playbook.mcp.evidence.disclosure import (
     LAYOUT_PROBE_JS,
     VIEWPORTS,
@@ -313,8 +316,64 @@ def _resolve_artifact_path(artifact_path: str) -> Path:
     result = containment.write_target(artifact_path, _run_root())
     if result.ok:
         assert result.path is not None  # ok implies path is set
+        _refuse_reserved_write(result.path)
         return result.path
     raise ValueError(_reason_message(result.reason))
+
+
+def _refuse_reserved_write(path: Path) -> None:
+    """Provider never writes the manifest SSOT, including via sidecar aliases."""
+    if path.name.casefold() == "manifest.jsonl":
+        raise ValueError("provider never writes manifest.jsonl")
+
+
+_JS_MAX_SAFE_INTEGER = 2**53
+
+
+def _load_storage_state_object(text: str) -> dict[str, Any]:
+    """Parse Playwright storage_state JSON without nonstandard constants."""
+
+    def reject_constant(name: str) -> object:
+        del name
+        raise ValueError("storage_state JSON contains a nonstandard constant")
+
+    def parse_int(raw: str) -> int:
+        value = int(raw)
+        if abs(value) > _JS_MAX_SAFE_INTEGER:
+            raise ValueError("storage_state JSON contains an overflowing integer")
+        return value
+
+    def parse_float(raw: str) -> float:
+        value = float(raw)
+        if not math.isfinite(value):
+            raise ValueError("storage_state JSON contains a non-finite number")
+        return value
+
+    try:
+        session = json.loads(
+            text,
+            parse_constant=reject_constant,
+            parse_int=parse_int,
+            parse_float=parse_float,
+        )
+    except json.JSONDecodeError as exc:
+        raise ValueError("storage_state is not readable JSON") from exc
+    if not isinstance(session, dict):
+        raise ValueError("storage_state must be a JSON object")
+    return session
+
+
+def _safe_capture_failure(
+    exc: BaseException, *, operation: str, session: dict[str, Any] | None
+) -> str:
+    """Log/return one diagnostic. Session context never echoes exception text."""
+    if session is None:
+        return str(exc)
+    kind = type(exc).__name__
+    return (
+        f"{operation} failed ({kind}); operator: update the authorized "
+        "session or choose a supported path, then recapture"
+    )
 
 
 def _reason_message(reason: str) -> str:
@@ -453,6 +512,11 @@ def _run_actions(page: Any, actions: list[dict[str, Any]]) -> None:
         handler = _ACTION_HANDLERS.get(do)
         if handler is None:
             raise ValueError(f"actions[{i}]: unsupported do={do!r}")
+        checked = dict(action)
+        checked["do"] = do
+        param_errors = action_param_errors(checked, i)
+        if param_errors:
+            raise ValueError(param_errors[0])
         handler(page, action, i, do)
 
 
@@ -730,8 +794,10 @@ def execute_capture_plan(
     except ValueError as exc:
         return _failed(rel, str(exc), request=request)
     storage_state_path = ""
+    session_obj: dict[str, Any] | None = None
     if storage_state_rel:
-        resolved = containment.read_under(_run_root(), storage_state_rel.strip())
+        session_rel = trimmed_relpath(storage_state_rel)
+        resolved = containment.read_under(_run_root(), session_rel)
         if not resolved.ok or resolved.path is None:
             return _failed(
                 rel,
@@ -739,26 +805,18 @@ def execute_capture_plan(
                 request=request,
             )
         try:
-            session = json.loads(resolved.path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError):
+            raw_session = resolved.path.read_text(encoding="utf-8")
+            session_obj = _load_storage_state_object(raw_session)
+        except (OSError, UnicodeError):
             return _failed(
                 rel,
                 "storage_state is not readable JSON",
                 request=request,
             )
-        if not isinstance(session, dict):
-            return _failed(
-                rel,
-                "storage_state must be a JSON object",
-                request=request,
-            )
+        except ValueError as exc:
+            return _failed(rel, str(exc), request=request)
         storage_state_path = str(resolved.path)
     abs_written = str(out_path)
-    # Refuse every case variant of the manifest execution-record SSOT.
-    if out_path.name.casefold() == "manifest.jsonl":
-        return _failed(
-            rel, "provider never writes manifest.jsonl", abs_written, request=request
-        )
     # G6 write boundary: refuse to overwrite an existing artifact unless the
     # caller explicitly opts in via overwrite=true. Checked before any
     # Playwright launch so a misconfigured re-run cannot clobber prior evidence.
@@ -823,8 +881,11 @@ def execute_capture_plan(
         else:
             observed = browser_adapter.capture(**capture_kwargs)
     except Exception as exc:  # noqa: BLE001 — surface as capture failure
-        _log(f"capture failed: {exc}")
-        return _failed(rel, str(exc), abs_written, request=request)
+        safe = _safe_capture_failure(
+            exc, operation="capture", session=session_obj
+        )
+        _log(safe)
+        return _failed(rel, safe, abs_written, request=request)
 
     if not out_path.is_file():
         return _failed(

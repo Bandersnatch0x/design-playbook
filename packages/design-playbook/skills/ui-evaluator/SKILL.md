@@ -84,9 +84,15 @@ evidence:    <artifact path or source ref — may repeat>
 assumes:     <assumed contract field paths the finding depends on, if any>
 rule:        <registry ID@version refs, when a registry rule is involved>
 dd:          <decision-report entry ref, when a design decision is challenged — never on positive (S0) findings>
-id:          <run-unique token; optional; G4 may close by this id>
+id:          <run-unique token>
 status:      open|resolved|new|regression  (optional; omit = no re-review annotation, not a second closure authority)
 ```
+
+On a **new P2/P3 observe\*** blocking finding, assign a non-empty run-unique `id` on first write and **reuse it** when the issue text is rewritten. Older reports without `id` stay legal; G2 does not backfill them. `status` never overrides a current `- closes:` line.
+
+When a previously closed blocker **regresses**: keep the same `id`, move the old `- closes:` line into `history:` (must not match `CLOSURE_LINE`), put the stale artifact on `invalidated:`, recapture new evidence, and write **exactly one** current `- closes:` against that new artifact before Pass.
+
+Probe arrays may contain secrets (cookie/token/session text in `leaks` or `consoleErrors`). In point-back and any shareable summary write `seen, omitted` — do not copy the secret string. The sidecar file stays the fact store.
 
 Severity and disposition are **two axes**: a judgment-class S3 (subjective / semantic / representativeness) is never directly blocking — list it in the Limitations "pending user adjudication" sub-block with the three options (change declaration / accept risk / promote to the rule-registry queue). Only fact-class S3 (reproducible, evidence-bound) takes `disposition: blocking` and enters G4 closure.
 
