@@ -3,6 +3,15 @@
 Mirrors execute_capture_plan handler contracts: empty fill/type/select values
 and wait ms=0 are legal; missing required keys and wrong types are not.
 No Playwright and no filesystem I/O.
+
+Action verb dialect is owned HERE, not duplicated by the callers: ``do`` is
+canonicalized via :func:`normalize_action_do` (strip + lower) so ``"Click"``,
+``" click "`` and ``"FILL"`` resolve to the same handler as ``"click"``. Both
+preflight and runtime feed the raw action through this one normalizer before
+checking ``KNOWN_DOS`` or parameter rules — no second dialect (FIX-03).
+
+The ``index`` argument is 0-based everywhere (``actions[0]``); preflight and
+runtime emit identical labels for the same position (FIX-03).
 """
 from __future__ import annotations
 
@@ -23,14 +32,33 @@ KNOWN_DOS = frozenset(
 )
 
 
+def normalize_action_do(do: object) -> str:
+    """Canonical action verb: strip surrounding whitespace and lowercase.
+
+    Shared by preflight and runtime so ``"Click"``, ``" click "`` and
+    ``"FILL"`` all hit the same handler as ``"click"``. Returns ``""`` for a
+    non-string or blank value so callers can detect the missing/empty-do case
+    through one falsy check instead of re-implementing strip/lower.
+    """
+    if not isinstance(do, str):
+        return ""
+    return do.strip().lower()
+
+
 def _is_number(value: object) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def action_param_errors(action: dict[str, Any], index: int) -> list[str]:
-    """Human details for parameter violations. Empty list = would run."""
-    do = action.get("do")
-    if not isinstance(do, str) or do not in KNOWN_DOS:
+    """Human details for parameter violations. Empty list = would run.
+
+    ``index`` is 0-based (``actions[0]``) and matches the runtime's
+    ``_run_actions`` labeling so preflight and provider messages align for the
+    same position. ``do`` is normalized internally — callers pass the raw
+    action object.
+    """
+    do = normalize_action_do(action.get("do"))
+    if not do or do not in KNOWN_DOS:
         return [f"actions[{index}].do must be one of the v1 actions"]
     label = f"actions[{index}]"
     errors: list[str] = []

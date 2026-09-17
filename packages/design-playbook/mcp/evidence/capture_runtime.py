@@ -15,7 +15,10 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from design_playbook.mcp.evidence import containment
-from design_playbook.mcp.evidence.action_params import action_param_errors
+from design_playbook.mcp.evidence.action_params import (
+    action_param_errors,
+    normalize_action_do,
+)
 from design_playbook.mcp.evidence.capture_contract import parse_capture_contract
 from design_playbook.mcp.evidence.path_syntax import trimmed_relpath
 from design_playbook.mcp.evidence.disclosure import (
@@ -366,13 +369,22 @@ def _load_storage_state_object(text: str) -> dict[str, Any]:
 def _safe_capture_failure(
     exc: BaseException, *, operation: str, session: dict[str, Any] | None
 ) -> str:
-    """Log/return one diagnostic. Session context never echoes exception text."""
+    """Log/return one diagnostic. Session context never echoes exception text.
+
+    When a session was loaded we suppress the raw exception string (it may
+    contain ``Call log`` or other operator-sensitive detail). The diagnostic
+    keeps the failure type and the operation, plus a neutral recovery cue that
+    does NOT assume the failure is a session problem — a navigation
+    ``TimeoutError`` after a valid session load is not an auth failure
+    (A4-007), so we point at the run log and a supported path rather than
+    telling the operator to refresh credentials.
+    """
     if session is None:
         return str(exc)
     kind = type(exc).__name__
     return (
-        f"{operation} failed ({kind}); operator: update the authorized "
-        "session or choose a supported path, then recapture"
+        f"{operation} failed ({kind}); operator: check the run log or retry "
+        "with a supported path, then recapture"
     )
 
 
@@ -505,10 +517,10 @@ def _run_actions(page: Any, actions: list[dict[str, Any]]) -> None:
     for i, action in enumerate(actions):
         if not isinstance(action, dict):
             raise ValueError(f"actions[{i}] must be an object")
-        do = action.get("do")
-        if not isinstance(do, str) or not do.strip():
+        raw_do = action.get("do")
+        do = normalize_action_do(raw_do)
+        if not do:
             raise ValueError(f"actions[{i}].do is required")
-        do = do.strip().lower()
         handler = _ACTION_HANDLERS.get(do)
         if handler is None:
             raise ValueError(f"actions[{i}]: unsupported do={do!r}")
@@ -904,12 +916,26 @@ def execute_capture_plan(
                 abs_written,
                 request=request,
             )
+        # OSError (disk full / permission / path-is-a-directory) must reach the
+        # orchestrator via the same {result:"failed"} channel as the main
+        # capture — escaping to MCP isError loses the structured echo (A3-002).
+        # ValueError stays for containment/path-shape sidecar rejection and
+        # keeps its full message (debug info, not raw exception text). We do
+        # NOT write a clean sidecar; the failure carries written_path (the
+        # non-secret absolute artifact path).
         try:
             wrote_probe = _write_probe_sidecar(probe_rel, probe_payload)
         except ValueError as exc:
             return _failed(
                 rel,
                 f"probe sidecar path rejected: {exc}",
+                abs_written,
+                request=request,
+            )
+        except OSError as exc:
+            return _failed(
+                rel,
+                f"probe sidecar write failed: {type(exc).__name__}",
                 abs_written,
                 request=request,
             )

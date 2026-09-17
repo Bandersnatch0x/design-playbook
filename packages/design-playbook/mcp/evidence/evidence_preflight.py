@@ -31,6 +31,7 @@ try:
     from design_playbook.mcp.evidence.action_params import (  # noqa: E402
         KNOWN_DOS,
         action_param_errors,
+        normalize_action_do,
     )
     from design_playbook.mcp.evidence.capture_contract import (  # noqa: E402
         parse_capture_contract,
@@ -43,7 +44,11 @@ except ImportError:  # standalone execution: same-dir seam (rules_registry patte
     import os  # noqa: E402
 
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from action_params import KNOWN_DOS, action_param_errors  # noqa: E402
+    from action_params import (  # noqa: E402
+        KNOWN_DOS,
+        action_param_errors,
+        normalize_action_do,
+    )
     from capture_contract import parse_capture_contract  # noqa: E402
     from path_syntax import lexical_posix_key, trimmed_relpath  # noqa: E402
 
@@ -130,7 +135,7 @@ def preflight_entry(request: object, entry: int) -> list[PreflightFact]:
             facts.append(_error("bad_actions", "actions must be a list", entry,
                                 expected="list", actual=type(actions).__name__))
         else:
-            for index, action in enumerate(actions, 1):
+            for index, action in enumerate(actions):
                 facts.extend(_bad_action(action, entry, index))
 
     storage_state = request.get("storage_state")
@@ -192,18 +197,27 @@ def _bad_artifact_path(artifact: str) -> str | None:
 
 
 def _bad_action(action: object, entry: int, index: int) -> list[PreflightFact]:
+    # 0-based label matches the runtime's `_run_actions` so preflight and
+    # provider report the same position for the same action (FIX-03).
     label = f"actions[{index}]"
     if not isinstance(action, dict):
         return [_error("bad_action", f"{label} must be an object", entry,
                        expected="object", actual=type(action).__name__)]
-    do = action.get("do")
-    if not isinstance(do, str) or do not in KNOWN_DOS:
+    # Canonicalize the verb through the SAME normalizer the runtime uses so
+    # "Click" / " click " / "FILL" preflight as cleanly as they execute
+    # (FIX-03 shared action dialect; do not ban case by doc).
+    do = normalize_action_do(action.get("do"))
+    if not do or do not in KNOWN_DOS:
         return [_error(
             "bad_action_do", f"{label}.do must be one of the v1 actions",
             entry, expected="|".join(sorted(KNOWN_DOS)),
-            actual=repr(do))]
+            actual=repr(action.get("do")))]
     facts: list[PreflightFact] = []
-    for detail in action_param_errors(action, index):
+    # Feed a normalized copy so action_param_errors sees the canonical verb
+    # exactly as the runtime's _run_actions passes it.
+    normalized = dict(action)
+    normalized["do"] = do
+    for detail in action_param_errors(normalized, index):
         if detail.endswith("must be one of the v1 actions"):
             continue
         facts.append(_error(
