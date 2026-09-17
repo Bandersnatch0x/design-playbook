@@ -20,7 +20,10 @@ from design_playbook.mcp.evidence.action_params import (
     normalize_action_do,
 )
 from design_playbook.mcp.evidence.capture_contract import parse_capture_contract
-from design_playbook.mcp.evidence.path_syntax import trimmed_relpath
+from design_playbook.mcp.evidence.path_syntax import (
+    probe_sidecar_rel,
+    trimmed_relpath,
+)
 from design_playbook.mcp.evidence.disclosure import (
     LAYOUT_PROBE_JS,
     VIEWPORTS,
@@ -138,13 +141,6 @@ def _captured(
     if probe_artifact:
         payload["probe_artifact"] = probe_artifact
     return payload
-
-
-def probe_sidecar_rel(artifact_rel: str) -> str:
-    """Sibling ``.probe.json`` path for a screenshot artifact path."""
-    if "." in artifact_rel.rsplit("/", 1)[-1]:
-        return artifact_rel.rsplit(".", 1)[0] + ".probe.json"
-    return artifact_rel + ".probe.json"
 
 
 _MEASUREMENT_STATUSES = frozenset({"measured", "blocked", "unmeasured"})

@@ -569,6 +569,44 @@ class ProbeSidecarTests(unittest.TestCase):
             self.assertTrue(fake.calls)
             self.assertNotEqual(payload.get("probe_artifact", ""), "evidence/x.probe.json")
 
+    def test_sidecar_write_oserror_uses_failed_payload_not_mcp_error(self) -> None:
+        # A3-002 / R2-S3: a sidecar write failure (disk full, permission,
+        # path-is-a-directory) must reach the orchestrator through the same
+        # {result:"failed"} channel as the main capture — escaping to MCP
+        # isError loses the structured echo. Guards the except OSError arm.
+        fake = _ProbingFake()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with mock.patch.object(capture_runtime, "_run_root", return_value=root):
+                with mock.patch.object(
+                    Path,
+                    "write_text",
+                    side_effect=OSError(28, "No space left on device"),
+                ):
+                    payload = capture_runtime.execute_capture_plan(_v1(), fake)
+            self.assertEqual(payload["result"], "failed")
+            self.assertIn("sidecar", payload["error"].casefold())
+            self.assertIn("OSError", payload["error"])
+            self.assertIn("request", payload)
+            self.assertNotIn("probe_artifact", payload)
+            self.assertFalse((root / "evidence" / "x.probe.json").exists())
+
+    def test_sidecar_write_permission_error_uses_failed_payload(self) -> None:
+        # Same channel for the OSError subclass raised when the sidecar path
+        # already exists as a directory.
+        fake = _ProbingFake()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "evidence").mkdir()
+            (root / "evidence" / "x.probe.json").mkdir()
+            with mock.patch.object(capture_runtime, "_run_root", return_value=root):
+                payload = capture_runtime.execute_capture_plan(
+                    _v1(overwrite=True), fake
+                )
+            self.assertEqual(payload["result"], "failed")
+            self.assertIn("PermissionError", payload["error"])
+            self.assertIn("request", payload)
+
     def test_capture_only_still_skips_sidecar_when_probe_path_would_fail(self) -> None:
         fake = _CaptureOnlyFake()
         real_resolve = capture_runtime._resolve_artifact_path

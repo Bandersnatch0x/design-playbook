@@ -12,8 +12,8 @@ and the write-side parser cannot drift.
 
 Entry shape = the ``execute_capture_plan`` inputSchema (mcp/evidence/server.py):
 url, type, state, actions?, artifact_path, overwrite?, schemaVersion,
-viewport, freeze?. A capture plan is a list of such entries (one per
-required proof).
+viewport, freeze?, storage_state?. A capture plan is a list of such entries
+(one per required proof).
 
 CLI (dev convenience, not a verdict):
     python mcp/evidence/evidence_preflight.py <plan.json>|- [--md]
@@ -38,6 +38,7 @@ try:
     )
     from design_playbook.mcp.evidence.path_syntax import (  # noqa: E402
         lexical_posix_key,
+        probe_sidecar_rel,
         trimmed_relpath,
     )
 except ImportError:  # standalone execution: same-dir seam (rules_registry pattern)
@@ -50,7 +51,11 @@ except ImportError:  # standalone execution: same-dir seam (rules_registry patte
         normalize_action_do,
     )
     from capture_contract import parse_capture_contract  # noqa: E402
-    from path_syntax import lexical_posix_key, trimmed_relpath  # noqa: E402
+    from path_syntax import (  # noqa: E402
+        lexical_posix_key,
+        probe_sidecar_rel,
+        trimmed_relpath,
+    )
 
 ENTRY_TYPES = frozenset({"screenshot", "a11y tree", "interaction trace"})
 URL_SCHEMES = ("http://", "https://", "file://")
@@ -214,12 +219,12 @@ def _bad_action(action: object, entry: int, index: int) -> list[PreflightFact]:
             actual=repr(action.get("do")))]
     facts: list[PreflightFact] = []
     # Feed a normalized copy so action_param_errors sees the canonical verb
-    # exactly as the runtime's _run_actions passes it.
+    # exactly as the runtime's _run_actions passes it. The verb is already
+    # known-good here (the KNOWN_DOS check above returned otherwise), so the
+    # helper's own do-check cannot fire — no de-duplication filter needed.
     normalized = dict(action)
     normalized["do"] = do
     for detail in action_param_errors(normalized, index):
-        if detail.endswith("must be one of the v1 actions"):
-            continue
         facts.append(_error(
             "bad_action_param", detail, entry,
             expected="provider action contract", actual=repr(action.get("do"))))
@@ -236,17 +241,18 @@ def preflight_plan(plan: object) -> list[PreflightFact]:
                        actual=type(plan).__name__)]
     facts: list[PreflightFact] = []
     seen: dict[str, int] = {}
+    seen_sidecars: dict[str, int] = {}
     for index, request in enumerate(plan, 1):
         entry_facts = preflight_entry(request, index)
         facts.extend(entry_facts)
         artifact = request.get("artifact_path") if isinstance(request, dict) else None
         if isinstance(artifact, str) and artifact and _bad_artifact_path(artifact) is None:
             key = lexical_posix_key(artifact)
+            overwrite_opt_in = isinstance(request.get("overwrite"), bool) \
+                and request["overwrite"]
             first = seen.get(key)
             if first is not None:
-                overwrite = isinstance(request.get("overwrite"), bool) \
-                    and request["overwrite"]
-                if overwrite:
+                if overwrite_opt_in:
                     facts.append(PreflightFact(
                         "advisory", "artifact_overwrite",
                         f"entry {index} overwrites the artifact first written "
@@ -261,6 +267,26 @@ def preflight_plan(plan: object) -> list[PreflightFact]:
                         actual=artifact))
             else:
                 seen[key] = index
+            # A screenshot also writes the derived sibling sidecar, so two
+            # distinct artifacts sharing a stem (x.png / x.jpg / x, or two
+            # dotfiles) collide on ONE sidecar path even though their own
+            # artifact_paths differ. Report it statically instead of letting
+            # the second capture fail at run time. overwrite=true is the same
+            # opt-in that makes reusing an artifact path legal, so it clears
+            # this too — the runtime's probe_path guard is skipped under it.
+            if request.get("type") == "screenshot" and not overwrite_opt_in:
+                sidecar = lexical_posix_key(probe_sidecar_rel(artifact))
+                sidecar_first = seen_sidecars.get(sidecar)
+                if sidecar_first is not None:
+                    facts.append(_error(
+                        "sidecar_collision",
+                        f"entry {index} derives sidecar {sidecar!r} already "
+                        f"written by entry {sidecar_first}; two artifacts "
+                        "sharing a stem share one probe sidecar", index,
+                        expected="distinct artifact stems or overwrite=true",
+                        actual=artifact))
+                else:
+                    seen_sidecars[sidecar] = index
     return facts
 
 

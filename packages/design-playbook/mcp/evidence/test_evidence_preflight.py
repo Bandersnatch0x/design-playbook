@@ -114,6 +114,25 @@ class PreflightPlanTests(unittest.TestCase):
         self.assertIn("select_option", details)
         self.assertIn("ms", details)
 
+    def test_action_verb_case_and_whitespace_are_canonicalized(self) -> None:
+        # FIX-03 / R2-S1: preflight and runtime share one verb dialect, so a
+        # capitalized or padded verb must not be an error fact — the provider
+        # would execute it. Guards normalize_action_do against removal.
+        facts = ep.preflight_entry(_entry(actions=[
+            {"do": "Click", "selector": "#x"},
+            {"do": " click ", "selector": "#x"},
+            {"do": "FILL", "selector": "#a", "value": "v"},
+            {"do": "WAIT_FOR_STATE", "state": "ok"},
+        ]), 1)
+        self.assertEqual(_errors(facts), [])
+
+    def test_action_index_label_is_zero_based_on_both_sides(self) -> None:
+        # FIX-03 / R2-S2: the shared param helper is 0-based everywhere; the
+        # same violation must carry the same label in preflight and runtime.
+        facts = ep.preflight_entry(_entry(actions=[{"do": "click"}]), 1)
+        self.assertIn("actions[0].selector required for click",
+                      " | ".join(f.detail for f in facts))
+
     def test_empty_fill_type_select_and_zero_wait_are_legal(self) -> None:
         facts = ep.preflight_entry(_entry(actions=[
             {"do": "fill", "selector": "#a", "value": ""},
@@ -125,12 +144,13 @@ class PreflightPlanTests(unittest.TestCase):
 
     def test_lexical_alias_artifact_paths_collide(self) -> None:
         plan = [
-            _entry(artifact_path="evidence/shared.json"),
-            _entry(state="loading", artifact_path="evidence/./shared.json"),
+            _entry(artifact_path="evidence/shared.png"),
+            _entry(state="loading", artifact_path="evidence/./shared.png"),
         ]
         facts = ep.preflight_plan(plan)
         self.assertIn("artifact_collision", _codes(facts))
-        self.assertEqual(facts[-1].actual, "evidence/./shared.json")
+        collision = next(f for f in facts if f.code == "artifact_collision")
+        self.assertEqual(collision.actual, "evidence/./shared.png")
         plan[1]["overwrite"] = True
         facts = ep.preflight_plan(plan)
         self.assertEqual(_errors(facts), [])
@@ -138,6 +158,29 @@ class PreflightPlanTests(unittest.TestCase):
             [f.code for f in facts if f.severity == "advisory"],
             ["artifact_overwrite"],
         )
+
+    def test_same_stem_artifacts_collide_on_the_derived_sidecar(self) -> None:
+        # A screenshot writes <stem>.probe.json, so two distinct artifacts
+        # sharing a stem (x.png / x.jpg) collide on ONE sidecar path even
+        # though their artifact_paths differ. Caught statically, not at run
+        # time as "artifact already exists".
+        plan = [
+            _entry(artifact_path="evidence/x.png"),
+            _entry(artifact_path="evidence/x.jpg"),
+        ]
+        self.assertIn("sidecar_collision", _codes(ep.preflight_plan(plan)))
+        # Distinct stems stay clean.
+        ok = [
+            _entry(artifact_path="evidence/a.png"),
+            _entry(artifact_path="evidence/b.png"),
+        ]
+        self.assertEqual(_errors(ep.preflight_plan(ok)), [])
+        # Non-screenshot types write no sidecar, so they cannot collide.
+        traces = [
+            _entry(type="interaction trace", artifact_path="evidence/x.zip"),
+            _entry(type="interaction trace", artifact_path="evidence/x.trace"),
+        ]
+        self.assertNotIn("sidecar_collision", _codes(ep.preflight_plan(traces)))
 
     def test_storage_state_trim_matches_runtime_absolute_reject(self) -> None:
         facts = ep.preflight_plan([_entry(storage_state=" C:/secrets/session.json")])
@@ -186,7 +229,10 @@ class PreflightPlanTests(unittest.TestCase):
         plan = [_entry(), _entry(state="loading",
                                  artifact_path="evidence/settings-ok.png")]
         facts = ep.preflight_plan(plan)
-        self.assertEqual(_codes(facts), {"artifact_collision"})
+        # Same artifact_path collides on the artifact AND on its derived
+        # sidecar (a screenshot writes <stem>.probe.json).
+        self.assertEqual(
+            _codes(facts), {"artifact_collision", "sidecar_collision"})
         plan[1]["overwrite"] = True
         facts = ep.preflight_plan(plan)
         self.assertEqual(_errors(facts), [])

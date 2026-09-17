@@ -19,3 +19,15 @@ def lexical_posix_key(path: str) -> str:
     """
     parts = [part for part in trimmed_relpath(path).split("/") if part not in ("", ".")]
     return "/".join(parts)
+
+
+def probe_sidecar_rel(artifact_rel: str) -> str:
+    """Sibling ``.probe.json`` path for a screenshot artifact path.
+
+    Shared by the capture runtime (which writes it) and the static preflight
+    (which must predict it to detect same-stem collisions). One definition so
+    the two surfaces cannot drift.
+    """
+    if "." in artifact_rel.rsplit("/", 1)[-1]:
+        return artifact_rel.rsplit(".", 1)[0] + ".probe.json"
+    return artifact_rel + ".probe.json"

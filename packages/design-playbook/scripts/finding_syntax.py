@@ -7,7 +7,7 @@ status, routing, or projection policy:
 
 * the field-line grammar — the four required fields plus every additive
   annotation (track / confidence / disposition / evidence / assumes / rule /
-  dd / dimension / face / basis / route / rounds);
+  dd / dimension / face / basis / route / rounds / id / status);
 * finding-paragraph segmentation — a blank-line separated block counts as a
   finding only when at least one required field is present, so an
   annotation-only block outside a finding never becomes one;
