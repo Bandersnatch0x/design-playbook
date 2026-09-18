@@ -1,4 +1,4 @@
-<!-- generated-by design-playbook v0.22.2 -->
+<!-- generated-by design-playbook v0.23.0 -->
 # design-playbook for Codex
 
 ## Install (path of record)

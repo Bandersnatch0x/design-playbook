@@ -99,6 +99,18 @@ COMMAND_INVENTORY: dict[tuple[int, int], frozenset[str]] = {
         "run-handoff",
         "doctor",
     }),
+    # 0.23 keeps the 0.22 command surface (cross-run learning activation +
+    # operator evidence hardening minor: no new commands, additive MCP
+    # evidence contracts and governance events only).
+    (0, 23): frozenset({
+        "design-io",
+        "ux-spec",
+        "ui-review",
+        "run-review",
+        "run-status",
+        "run-handoff",
+        "doctor",
+    }),
 }
 STABLE_SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 
