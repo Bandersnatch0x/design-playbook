@@ -591,7 +591,7 @@ class ProbeSidecarTests(unittest.TestCase):
             self.assertNotIn("probe_artifact", payload)
             self.assertFalse((root / "evidence" / "x.probe.json").exists())
 
-    def test_sidecar_write_permission_error_uses_failed_payload(self) -> None:
+    def test_sidecar_write_directory_conflict_uses_failed_payload(self) -> None:
         # Same channel for the OSError subclass raised when the sidecar path
         # already exists as a directory.
         fake = _ProbingFake()
@@ -604,7 +604,7 @@ class ProbeSidecarTests(unittest.TestCase):
                     _v1(overwrite=True), fake
                 )
             self.assertEqual(payload["result"], "failed")
-            self.assertIn("PermissionError", payload["error"])
+            self.assertIn("probe sidecar write failed", payload["error"])
             self.assertIn("request", payload)
 
     def test_capture_only_still_skips_sidecar_when_probe_path_would_fail(self) -> None:
