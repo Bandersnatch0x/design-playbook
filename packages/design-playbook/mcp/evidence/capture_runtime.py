@@ -9,18 +9,31 @@ misconfig is visible to the orchestrator.
 from __future__ import annotations
 
 import json
+import math
 import os
 from pathlib import Path
 from typing import Any, Protocol
 
 from design_playbook.mcp.evidence import containment
+from design_playbook.mcp.evidence.action_params import (
+    action_param_errors,
+    normalize_action_do,
+)
 from design_playbook.mcp.evidence.capture_contract import parse_capture_contract
+from design_playbook.mcp.evidence.path_syntax import (
+    probe_sidecar_rel,
+    trimmed_relpath,
+)
 from design_playbook.mcp.evidence.disclosure import (
     LAYOUT_PROBE_JS,
     VIEWPORTS,
     ViewportMetrics,
     metric_payload,
     probe_layout,
+)
+from design_playbook.mcp.evidence.page_defects import (
+    PROBE_SCHEMA,
+    probe_defects,
 )
 from design_playbook.mcp.util import log as _log
 
@@ -36,6 +49,7 @@ ALLOWED_ARGUMENTS = frozenset(
         "overwrite",
         "viewport",
         "freeze",
+        "storage_state",
     }
 )
 RUN_ROOT_ENV = "DESIGN_PLAYBOOK_RUN_ROOT"
@@ -104,6 +118,8 @@ def _captured(
     observed_state: str,
     written_path: str,
     request: dict[str, Any],
+    *,
+    probe_artifact: str = "",
 ) -> dict[str, Any]:
     """Successful capture payload.
 
@@ -111,8 +127,10 @@ def _captured(
     (resolved under DESIGN_PLAYBOOK_RUN_ROOT or process cwd). Relative
     ``artifact`` stays the run-root-relative path for manifest binding.
     ``request`` echoes the normalized capture contract for manifest embedding.
+    ``probe_artifact`` is the sibling page-probe JSON when a screenshot
+    capture produced one (empty otherwise). Facts, not a judgment.
     """
-    return {
+    payload = {
         "artifact": artifact,
         "observed_state": observed_state,
         "result": "captured",
@@ -120,6 +138,115 @@ def _captured(
         "written_path": written_path,
         "request": request,
     }
+    if probe_artifact:
+        payload["probe_artifact"] = probe_artifact
+    return payload
+
+
+_MEASUREMENT_STATUSES = frozenset({"measured", "blocked", "unmeasured"})
+
+
+def _measurement_meta(
+    status: object, error: object, *, missing: str
+) -> dict[str, str]:
+    """Coerce one measurement face. measured → empty error; other states keep a reason."""
+    text_status = str(status) if status else "unmeasured"
+    if text_status not in _MEASUREMENT_STATUSES:
+        text_status = "unmeasured"
+    text_error = str(error or "")
+    if text_status == "measured":
+        return {"measurement_status": "measured", "measurement_error": ""}
+    if not text_error:
+        text_error = (
+            missing if text_status == "unmeasured" else "probe measurement blocked"
+        )
+    return {
+        "measurement_status": text_status,
+        "measurement_error": text_error,
+    }
+
+
+def _console_face(probed: dict[str, Any]) -> tuple[list[str], dict[str, str]]:
+    """Map capture_and_probe console_errors to rows + measurement meta.
+
+    Missing key → unmeasured. None → unmeasured. Non-list → blocked.
+    A list (including empty) → measured. Never coerce None/bad shape to a
+    clean zero-hit.
+    """
+    missing = "console probe not returned"
+    if "console_errors" not in probed:
+        return [], _measurement_meta(None, None, missing=missing)
+    raw = probed.get("console_errors")
+    if raw is None:
+        return [], _measurement_meta(
+            "unmeasured", "console probe returned no list", missing=missing
+        )
+    if not isinstance(raw, (list, tuple)):
+        return [], _measurement_meta(
+            "blocked",
+            "console probe output is not a list",
+            missing=missing,
+        )
+    rows = [str(item) for item in raw if item]
+    return rows, _measurement_meta("measured", "", missing=missing)
+
+
+def _write_probe_sidecar(probe_rel: str, probed: dict[str, Any]) -> str:
+    """Write page-probe/v1 JSON next to a screenshot.
+
+    Path containment failures raise ValueError so a probing capture cannot
+    report success without a sidecar.
+    """
+    out_path = _resolve_artifact_path(probe_rel)
+    metrics = probed.get("metrics")
+    defects = probed.get("defects")
+    layout: dict[str, Any] = {
+        "sw": 0,
+        "innerH": 0,
+        "hOverflow": 0,
+        "inFold": False,
+        **_measurement_meta(None, None, missing="layout probe not returned"),
+    }
+    if metrics is not None:
+        layout = {
+            "sw": getattr(metrics, "sw", 0),
+            "innerH": getattr(metrics, "innerH", 0),
+            "hOverflow": getattr(metrics, "hOverflow", 0),
+            "inFold": getattr(metrics, "inFold", False),
+            **_measurement_meta(
+                getattr(metrics, "measurement_status", "unmeasured"),
+                getattr(metrics, "measurement_error", ""),
+                missing="layout probe not returned",
+            ),
+        }
+    leak_rows = list(getattr(defects, "leaks", ()) or ()) if defects is not None else []
+    tap_rows = list(getattr(defects, "tap_fails", ()) or ()) if defects is not None else []
+    if defects is None:
+        defects_meta = _measurement_meta(
+            None, None, missing="defect probe not returned"
+        )
+    else:
+        defects_meta = _measurement_meta(
+            getattr(defects, "measurement_status", "unmeasured"),
+            getattr(defects, "measurement_error", ""),
+            missing="defect probe not returned",
+        )
+    console_rows, console_meta = _console_face(probed)
+    payload = {
+        "schema": PROBE_SCHEMA,
+        "layout": layout,
+        "leaks": leak_rows,
+        "tapFails": tap_rows,
+        "consoleErrors": console_rows,
+        "defects": defects_meta,
+        "console": console_meta,
+    }
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return probe_rel
 
 
 def _apply_freeze(page: Any, freeze: dict[str, Any]) -> None:
@@ -188,8 +315,73 @@ def _resolve_artifact_path(artifact_path: str) -> Path:
     result = containment.write_target(artifact_path, _run_root())
     if result.ok:
         assert result.path is not None  # ok implies path is set
+        _refuse_reserved_write(result.path)
         return result.path
     raise ValueError(_reason_message(result.reason))
+
+
+def _refuse_reserved_write(path: Path) -> None:
+    """Provider never writes the manifest SSOT, including via sidecar aliases."""
+    if path.name.casefold() == "manifest.jsonl":
+        raise ValueError("provider never writes manifest.jsonl")
+
+
+_JS_MAX_SAFE_INTEGER = 2**53
+
+
+def _load_storage_state_object(text: str) -> dict[str, Any]:
+    """Parse Playwright storage_state JSON without nonstandard constants."""
+
+    def reject_constant(name: str) -> object:
+        del name
+        raise ValueError("storage_state JSON contains a nonstandard constant")
+
+    def parse_int(raw: str) -> int:
+        value = int(raw)
+        if abs(value) > _JS_MAX_SAFE_INTEGER:
+            raise ValueError("storage_state JSON contains an overflowing integer")
+        return value
+
+    def parse_float(raw: str) -> float:
+        value = float(raw)
+        if not math.isfinite(value):
+            raise ValueError("storage_state JSON contains a non-finite number")
+        return value
+
+    try:
+        session = json.loads(
+            text,
+            parse_constant=reject_constant,
+            parse_int=parse_int,
+            parse_float=parse_float,
+        )
+    except json.JSONDecodeError as exc:
+        raise ValueError("storage_state is not readable JSON") from exc
+    if not isinstance(session, dict):
+        raise ValueError("storage_state must be a JSON object")
+    return session
+
+
+def _safe_capture_failure(
+    exc: BaseException, *, operation: str, session: dict[str, Any] | None
+) -> str:
+    """Log/return one diagnostic. Session context never echoes exception text.
+
+    When a session was loaded we suppress the raw exception string (it may
+    contain ``Call log`` or other operator-sensitive detail). The diagnostic
+    keeps the failure type and the operation, plus a neutral recovery cue that
+    does NOT assume the failure is a session problem — a navigation
+    ``TimeoutError`` after a valid session load is not an auth failure
+    (A4-007), so we point at the run log and a supported path rather than
+    telling the operator to refresh credentials.
+    """
+    if session is None:
+        return str(exc)
+    kind = type(exc).__name__
+    return (
+        f"{operation} failed ({kind}); operator: check the run log or retry "
+        "with a supported path, then recapture"
+    )
 
 
 def _reason_message(reason: str) -> str:
@@ -321,13 +513,18 @@ def _run_actions(page: Any, actions: list[dict[str, Any]]) -> None:
     for i, action in enumerate(actions):
         if not isinstance(action, dict):
             raise ValueError(f"actions[{i}] must be an object")
-        do = action.get("do")
-        if not isinstance(do, str) or not do.strip():
+        raw_do = action.get("do")
+        do = normalize_action_do(raw_do)
+        if not do:
             raise ValueError(f"actions[{i}].do is required")
-        do = do.strip().lower()
         handler = _ACTION_HANDLERS.get(do)
         if handler is None:
             raise ValueError(f"actions[{i}]: unsupported do={do!r}")
+        checked = dict(action)
+        checked["do"] = do
+        param_errors = action_param_errors(checked, i)
+        if param_errors:
+            raise ValueError(param_errors[0])
         handler(page, action, i, do)
 
 
@@ -417,26 +614,41 @@ class PlaywrightBrowserAdapter:
         viewport: dict[str, Any],
         freeze: dict[str, Any],
         probe: bool,
-    ) -> tuple[str, ViewportMetrics | None]:
+        storage_state: str | None = None,
+    ) -> dict[str, Any]:
         """Single Playwright capture path shared by the two adapter seams.
 
         ``probe=False`` stops after the observed state (the plain
         :class:`BrowserAdapter` contract); ``probe=True`` additionally
-        evaluates the layout probe on the same page before teardown so the
-        screenshot and its metrics share one browser pass.
+        evaluates layout and defect probes on the same page before teardown
+        so the screenshot and its sidecar share one browser pass.
         """
         with self._sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
             try:
-                context = browser.new_context(
-                    viewport={
+                context_kwargs: dict[str, Any] = {
+                    "viewport": {
                         "width": viewport["width"],
                         "height": viewport["height"],
                     },
-                    device_scale_factor=viewport["devicePixelRatio"],
-                    color_scheme=viewport["colorScheme"],
-                )
+                    "device_scale_factor": viewport["devicePixelRatio"],
+                    "color_scheme": viewport["colorScheme"],
+                }
+                if storage_state:
+                    context_kwargs["storage_state"] = storage_state
+                context = browser.new_context(**context_kwargs)
                 page = context.new_page()
+                console_errors: list[str] = []
+                page.on(
+                    "console",
+                    lambda msg: console_errors.append(msg.text)
+                    if msg.type == "error" and msg.text
+                    else None,
+                )
+                page.on(
+                    "pageerror",
+                    lambda exc: console_errors.append(str(exc)),
+                )
                 if viewport.get("media"):
                     page.emulate_media(media=viewport["media"])
                 wait_until = (
@@ -458,10 +670,16 @@ class PlaywrightBrowserAdapter:
 
                 observed = _read_observed_state(page)
                 if not probe:
-                    return observed, None
+                    return {"observed_state": observed}
                 raw = page.evaluate(LAYOUT_PROBE_JS)
                 metrics = probe_layout(lambda _js: raw)
-                return observed, metrics
+                defects = probe_defects(page.evaluate)
+                return {
+                    "observed_state": observed,
+                    "metrics": metrics,
+                    "defects": defects,
+                    "console_errors": console_errors,
+                }
             finally:
                 browser.close()
 
@@ -474,8 +692,9 @@ class PlaywrightBrowserAdapter:
         out_path: Path,
         viewport: dict[str, Any],
         freeze: dict[str, Any],
+        storage_state: str | None = None,
     ) -> str:
-        observed, _metrics = self._capture_page(
+        result = self._capture_page(
             url=url,
             capture_type=capture_type,
             actions=actions,
@@ -483,8 +702,9 @@ class PlaywrightBrowserAdapter:
             viewport=viewport,
             freeze=freeze,
             probe=False,
+            storage_state=storage_state,
         )
-        return observed
+        return str(result["observed_state"])
 
     def capture_and_probe(
         self,
@@ -495,9 +715,10 @@ class PlaywrightBrowserAdapter:
         out_path: Path,
         viewport: dict[str, Any],
         freeze: dict[str, Any],
+        storage_state: str | None = None,
     ) -> dict[str, Any]:
         """Capture and probe the same page before closing its browser."""
-        observed, metrics = self._capture_page(
+        return self._capture_page(
             url=url,
             capture_type=capture_type,
             actions=actions,
@@ -505,8 +726,8 @@ class PlaywrightBrowserAdapter:
             viewport=viewport,
             freeze=freeze,
             probe=True,
+            storage_state=storage_state,
         )
-        return {"observed_state": observed, "metrics": metrics}
 
 
 def _validate_runtime_object(
@@ -564,30 +785,75 @@ def execute_capture_plan(
     url, cap_type, state, actions = _validate_runtime_object(args)
     artifact_path = args.get("artifact_path")
     overwrite = args.get("overwrite", False)
+    storage_state_rel = args.get("storage_state")
 
     if not isinstance(artifact_path, str) or not artifact_path.strip():
         raise ValueError("artifact_path is required")
     if not isinstance(overwrite, bool):
         raise ValueError("overwrite must be a boolean")
+    if storage_state_rel is None:
+        storage_state_rel = ""
+    if storage_state_rel != "" and not isinstance(storage_state_rel, str):
+        raise ValueError("storage_state must be a string path when provided")
 
     rel = artifact_path.strip()
     try:
         out_path = _resolve_artifact_path(rel)
     except ValueError as exc:
         return _failed(rel, str(exc), request=request)
+    storage_state_path = ""
+    session_obj: dict[str, Any] | None = None
+    if storage_state_rel:
+        session_rel = trimmed_relpath(storage_state_rel)
+        resolved = containment.read_under(_run_root(), session_rel)
+        if not resolved.ok or resolved.path is None:
+            return _failed(
+                rel,
+                f"storage_state was rejected ({resolved.reason or 'unreadable'})",
+                request=request,
+            )
+        try:
+            raw_session = resolved.path.read_text(encoding="utf-8")
+            session_obj = _load_storage_state_object(raw_session)
+        except (OSError, UnicodeError):
+            return _failed(
+                rel,
+                "storage_state is not readable JSON",
+                request=request,
+            )
+        except ValueError as exc:
+            return _failed(rel, str(exc), request=request)
+        storage_state_path = str(resolved.path)
     abs_written = str(out_path)
-    # Refuse every case variant of the manifest execution-record SSOT.
-    if out_path.name.casefold() == "manifest.jsonl":
-        return _failed(
-            rel, "provider never writes manifest.jsonl", abs_written, request=request
-        )
     # G6 write boundary: refuse to overwrite an existing artifact unless the
     # caller explicitly opts in via overwrite=true. Checked before any
     # Playwright launch so a misconfigured re-run cannot clobber prior evidence.
+    will_probe = cap_type == "screenshot" and (
+        browser_adapter is None
+        or callable(getattr(browser_adapter, "capture_and_probe", None))
+    )
+    probe_rel = probe_sidecar_rel(rel) if will_probe else ""
+    probe_path = None
+    if probe_rel:
+        try:
+            probe_path = _resolve_artifact_path(probe_rel)
+        except ValueError as exc:
+            return _failed(
+                rel,
+                f"probe sidecar path rejected: {exc}",
+                request=request,
+            )
     if out_path.exists() and not overwrite:
         return _failed(
             rel,
             f"artifact already exists: {out_path} (pass overwrite=true to replace)",
+            abs_written,
+            request=request,
+        )
+    if probe_path is not None and probe_path.exists() and not overwrite:
+        return _failed(
+            rel,
+            f"artifact already exists: {probe_path} (pass overwrite=true to replace)",
             abs_written,
             request=request,
         )
@@ -604,18 +870,30 @@ def execute_capture_plan(
                 abs_written,
                 request=request,
             )
+    capture_kwargs: dict[str, Any] = {
+        "url": url.strip(),
+        "capture_type": cap_type,
+        "actions": actions,
+        "out_path": out_path,
+        "viewport": viewport,
+        "freeze": freeze,
+    }
+    if storage_state_path:
+        capture_kwargs["storage_state"] = storage_state_path
+    probe_payload: dict[str, Any] | None = None
     try:
-        observed = browser_adapter.capture(
-            url=url.strip(),
-            capture_type=cap_type,
-            actions=actions,
-            out_path=out_path,
-            viewport=viewport,
-            freeze=freeze,
-        )
+        probe_fn = getattr(browser_adapter, "capture_and_probe", None)
+        if cap_type == "screenshot" and callable(probe_fn):
+            probe_payload = probe_fn(**capture_kwargs)
+            observed = str(probe_payload.get("observed_state") or "unknown")
+        else:
+            observed = browser_adapter.capture(**capture_kwargs)
     except Exception as exc:  # noqa: BLE001 — surface as capture failure
-        _log(f"capture failed: {exc}")
-        return _failed(rel, str(exc), abs_written, request=request)
+        safe = _safe_capture_failure(
+            exc, operation="capture", session=session_obj
+        )
+        _log(safe)
+        return _failed(rel, safe, abs_written, request=request)
 
     if not out_path.is_file():
         return _failed(
@@ -625,7 +903,48 @@ def execute_capture_plan(
             request=request,
         )
 
-    return _captured(rel, observed, abs_written, request)
+    wrote_probe = ""
+    if probe_payload is not None:
+        if not probe_rel:
+            return _failed(
+                rel,
+                "probe sidecar path rejected: missing sidecar path",
+                abs_written,
+                request=request,
+            )
+        # OSError (disk full / permission / path-is-a-directory) must reach the
+        # orchestrator via the same {result:"failed"} channel as the main
+        # capture — escaping to MCP isError loses the structured echo (A3-002).
+        # ValueError stays for containment/path-shape sidecar rejection and
+        # keeps its full message (debug info, not raw exception text). We do
+        # NOT write a clean sidecar; the failure carries written_path (the
+        # non-secret absolute artifact path).
+        try:
+            wrote_probe = _write_probe_sidecar(probe_rel, probe_payload)
+        except ValueError as exc:
+            return _failed(
+                rel,
+                f"probe sidecar path rejected: {exc}",
+                abs_written,
+                request=request,
+            )
+        except OSError as exc:
+            return _failed(
+                rel,
+                f"probe sidecar write failed: {type(exc).__name__}",
+                abs_written,
+                request=request,
+            )
+        if not wrote_probe:
+            return _failed(
+                rel,
+                "probe sidecar was not written",
+                abs_written,
+                request=request,
+            )
+    return _captured(
+        rel, observed, abs_written, request, probe_artifact=wrote_probe
+    )
 
 
 # --------------------------------------------------------------------------- #

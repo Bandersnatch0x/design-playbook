@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>planted defects</title></head>
+<body data-state="ok">
+  <div id="wide" style="width:2000px">wide row forcing overflow</div>
+  <p id="leak-undefined">undefined</p>
+  <p id="leak-nan">NaN</p>
+  <p id="leak-object">[object Object]</p>
+  <p id="leak-lorem">lorem ipsum</p>
+  <p id="banana">banana</p>
+  <button id="tiny" type="button" style="width:10px;height:10px;padding:0">x</button>
+  <script>console.error("planted-console");</script>
+</body>
+</html>

@@ -34,8 +34,11 @@ from design_playbook.scripts.finding_syntax import (
     SEVERITY_NEW,
     VALID_CONFIDENCE,
     VALID_DISPOSITIONS,
+    VALID_FINDING_STATUSES,
     VALID_TRACKS,
     closure_targets,
+    finding_current_close_count,
+    finding_identities,
     normalise_issue,
     parse_findings,
     severity_axis,
@@ -227,7 +230,8 @@ def _check_pointback_facts(
             ))
         return errs
 
-    blocking: list[tuple[int, str]] = []
+    blocking: list[tuple[int, str, tuple[str, ...]]] = []
+    seen_ids: dict[str, int] = {}
     for i, pb_finding in enumerate(pb_findings, 1):
         for field in FINDING_FIELDS:
             values = pb_finding[field]
@@ -328,6 +332,71 @@ def _check_pointback_facts(
                 repair="Derive disposition from severity x class x "
                        "confidence; judgment-class S3 is never blocking",
             ))
+        status_values = pb_finding.get("status") or []
+        if len(status_values) > 1:
+            errs.append(finding(
+                "G2.finding_repeated_field",
+                f"G2 point-back: finding {i} repeats status:",
+                owner=f"point-back.md#finding.{i}",
+                expected="single status or omit the field",
+                actual=f"{len(status_values)} values",
+                repair=f"Keep one status on finding {i}",
+            ))
+        status = status_values[0] if status_values else ""
+        if status_values and not status.strip():
+            errs.append(finding(
+                "G2.finding_empty_status",
+                f"G2 point-back: finding {i} has empty status",
+                owner=f"point-back.md#finding.{i}",
+                expected="open|resolved|new|regression or omit the field",
+                actual="empty",
+                repair="Give a status value or drop status:",
+            ))
+        elif status and status.casefold() not in VALID_FINDING_STATUSES:
+            errs.append(finding(
+                "G2.finding_invalid_status",
+                f"G2 point-back: finding {i} status '{status}' not in "
+                "open|resolved|new|regression",
+                owner=f"point-back.md#finding.{i}",
+                expected="open|resolved|new|regression",
+                actual=status,
+                repair="Use a re-review status or omit the field",
+            ))
+        id_values = pb_finding.get("id") or []
+        if len(id_values) > 1:
+            errs.append(finding(
+                "G2.finding_repeated_field",
+                f"G2 point-back: finding {i} repeats id:",
+                owner=f"point-back.md#finding.{i}",
+                expected="single id or omit the field",
+                actual=f"{len(id_values)} values",
+                repair=f"Keep one id on finding {i}",
+            ))
+        finding_id = id_values[0].strip() if id_values else ""
+        if id_values and not finding_id:
+            errs.append(finding(
+                "G2.finding_empty_id",
+                f"G2 point-back: finding {i} has empty id",
+                owner=f"point-back.md#finding.{i}",
+                expected="non-empty id or omit the field",
+                actual="empty",
+                repair="Give the finding a non-empty id or drop id:",
+            ))
+        if finding_id:
+            key = normalise_issue(finding_id)
+            prior = seen_ids.get(key)
+            if prior is not None:
+                errs.append(finding(
+                    "G2.finding_duplicate_id",
+                    f"G2 point-back: finding {i} reuses id '{finding_id}' "
+                    f"from finding {prior}",
+                    owner=f"point-back.md#finding.{i}",
+                    expected="unique id per run",
+                    actual=finding_id,
+                    repair="Give each finding a distinct id",
+                ))
+            else:
+                seen_ids[key] = i
         # New-axis S3 (exact spelling) requires the disposition field; there
         # is no legacy spelling carrying blocking meaning any more.
         if severity.strip() in SEVERITY_NEW and severity_axis(severity) == "S3" \
@@ -348,7 +417,7 @@ def _check_pointback_facts(
         # without disposition).
         if disposition.casefold() == "blocking":
             issue = pb_finding["issue"][0] if pb_finding["issue"] else ""
-            blocking.append((i, issue))
+            blocking.append((i, issue, pb_finding))
 
     if is_pass and blocking:
         targets = closure_targets(text)
@@ -362,10 +431,11 @@ def _check_pointback_facts(
                 repair="Record a 0-blocking closure for each blocking finding",
             ))
         else:
-            known_targets = {normalise_issue(issue) for _, issue in blocking}
-            for i, issue in blocking:
-                target = normalise_issue(issue)
-                matches = targets.count(target)
+            known_targets: set[str] = set()
+            for _i, _issue, parsed in blocking:
+                known_targets.update(finding_identities(parsed))
+            for i, issue, parsed in blocking:
+                matches = finding_current_close_count(parsed, targets)
                 if matches == 0:
                     errs.append(finding(
                         "G4.unmatched_closure",

@@ -7,7 +7,7 @@ status, routing, or projection policy:
 
 * the field-line grammar — the four required fields plus every additive
   annotation (track / confidence / disposition / evidence / assumes / rule /
-  dd / dimension / face / basis / route / rounds);
+  dd / dimension / face / basis / route / rounds / id / status);
 * finding-paragraph segmentation — a blank-line separated block counts as a
   finding only when at least one required field is present, so an
   annotation-only block outside a finding never becomes one;
@@ -40,10 +40,13 @@ EXTRA_FINDING_FIELDS = (
     # re-evaluate). Validated by repair_rounds.py / escalation_signals.py /
     # g12_tier_boundary.py; parsed here so every consumer sees one field set.
     "route", "rounds",
+    # Operator evidence hardening: stable finding identity and re-review
+    # status. Additive; absence stays legal. G4 may close by id or issue.
+    "id", "status",
 )
 FIELD_LINE = re.compile(
     r"^(issue|source|fix|severity|track|confidence|disposition|evidence|"
-    r"assumes|rule|dd|dimension|face|basis|route|rounds):[ \t]*(.*)$",
+    r"assumes|rule|dd|dimension|face|basis|route|rounds|id|status):[ \t]*(.*)$",
     re.I | re.M)
 CLOSURE_LINE = re.compile(
     r"^\s*[-*]\s*closes:[ \t]*(.*?)[ \t]*->[^\n]*\b0 blocking\b",
@@ -58,6 +61,7 @@ SEVERITY_LEGACY = frozenset({"high (blocking)", "high", "med", "low"})
 VALID_TRACKS = frozenset({"product", "interaction", "cross-cutting"})
 VALID_CONFIDENCE = frozenset({"high", "medium", "low"})
 VALID_DISPOSITIONS = frozenset({"blocking", "advisory", "info"})
+VALID_FINDING_STATUSES = frozenset({"open", "resolved", "new", "regression"})
 
 
 def severity_axis(value: str) -> str | None:
@@ -103,3 +107,46 @@ def normalise_issue(value: str) -> str:
 def closure_targets(text: str) -> list[str]:
     """Normalised issue targets of every ``0 blocking`` closure trail line."""
     return [normalise_issue(target) for target in CLOSURE_LINE.findall(text)]
+
+
+def finding_identities(parsed: dict[str, list[str]]) -> tuple[str, ...]:
+    """Normalised identities a current ``closes:`` line may match.
+
+    Issue text is always an identity when present. A non-empty ``id:`` is an
+    additional identity. Empty ``id:`` values are ignored here; G2 reports
+    them separately.
+    """
+    identities: list[str] = []
+    issue_values = parsed.get("issue") or []
+    if issue_values and issue_values[0].strip():
+        identities.append(normalise_issue(issue_values[0]))
+    id_values = parsed.get("id") or []
+    if id_values and id_values[0].strip():
+        ident = normalise_issue(id_values[0])
+        if ident not in identities:
+            identities.append(ident)
+    return tuple(identities)
+
+
+def finding_current_close_count(
+    parsed: dict[str, list[str]], closed_targets: list[str] | tuple[str, ...]
+) -> int:
+    """How many current CLOSURE_LINE targets match this finding.
+
+    Walks ``closed_targets`` in source order and **does not** uniquify first.
+    Two ``closes: F-1`` lines, or one ``closes: F-1`` plus one ``closes:`` of
+    the issue text, count as two matches. Pass requires exactly one.
+    """
+    identities = finding_identities(parsed)
+    if not identities:
+        return 0
+    identity_set = set(identities)
+    return sum(1 for target in closed_targets if target in identity_set)
+
+
+def finding_is_currently_closed(
+    parsed: dict[str, list[str]],
+    closed_targets: list[str] | tuple[str, ...],
+) -> bool:
+    """True when exactly one current CLOSURE_LINE matches this finding."""
+    return finding_current_close_count(parsed, closed_targets) == 1

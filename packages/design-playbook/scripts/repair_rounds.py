@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from design_playbook.scripts._diagnostics import Finding, finding
 from design_playbook.scripts.finding_syntax import (
     closure_targets,
-    normalise_issue,
+    finding_is_currently_closed,
     parse_findings,
 )
 from design_playbook.scripts.verdict_syntax import VerdictFacts, parse_verdict
@@ -193,7 +193,7 @@ def check_rounds(
 
     # Two-round stop: an unclosed blocking finding at rounds >= 2 must be
     # narrated as escalated-stop (the stop then waits on the user).
-    closed = set(closure_targets(text))
+    closed = closure_targets(text)
     stopping: list[str] = []
     for parsed in parse_findings(text):
         values = parsed.get("rounds", [])
@@ -206,8 +206,8 @@ def check_rounds(
         if count < TWO_ROUND_STOP:
             continue
         issue = parsed["issue"][0] if parsed["issue"] else ""
-        if normalise_issue(issue) in closed:
-            continue  # closed on a later round: the normal chain, no stop
+        if finding_is_currently_closed(parsed, closed):
+            continue  # current CLOSURE_LINE matches id or issue
         stopping.append(issue)
     if stopping and facts.close_reason != "escalated-stop":
         first = stopping[0]

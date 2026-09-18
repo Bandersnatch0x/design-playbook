@@ -82,8 +82,21 @@ def run_meta(run_dir: Path, root: Path) -> dict[str, str | None]:
         effort = rel.parts[0] if rel.parts else None
     except ValueError:
         pass
+    # T-014: basenames collide (e.g. two PR trees both carrying dogfood/run);
+    # the id is the repo-relative path so cross-run derivations never merge
+    # distinct runs. The resolve() retry absorbs prefix-form drift (Windows
+    # temp short-names, resolved roots); junction scan paths keep their
+    # unresolved in-repo form, and out-of-root overrides fall back to the
+    # basename.
+    try:
+        run_id = run_dir.relative_to(root).as_posix()
+    except ValueError:
+        try:
+            run_id = run_dir.resolve().relative_to(root).as_posix()
+        except (ValueError, OSError):
+            run_id = name
     return {
-        "id": name,
+        "id": run_id,
         "date": m.group(1) if m else None,
         "effort": effort,
     }
@@ -272,6 +285,13 @@ def markdown_view(payload: dict) -> str:
                 f"| {blk['count']} | {', '.join(blk['runs'][:5])} | {blk['text'][:80]} |")
     lines += ["", "## Rule candidates (derived, vNext S5)", ""]
     view = payload.get("learning_candidates") or {}
+    coverage = view.get("context_coverage") or {}
+    if coverage:
+        lines.append(
+            f"task contexts supplied: {coverage.get('with_context', 0)}/"
+            f"{coverage.get('with_context', 0) + coverage.get('without_context', 0)} "
+            "occurrences")
+        lines.append("")
     qualifying = view.get("qualifying", [])
     below = view.get("below_threshold", [])
     if not qualifying and not below:

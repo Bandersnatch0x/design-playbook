@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>async init</title></head>
+<body>
+  <p id="label">loading</p>
+  <script>
+    setTimeout(() => {
+      document.body.dataset.state = "ok";
+      document.getElementById("label").textContent = "ready";
+    }, 200);
+  </script>
+</body>
+</html>
