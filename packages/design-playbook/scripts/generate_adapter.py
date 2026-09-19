@@ -679,17 +679,18 @@ def _renderer_for(row: AgentRow) -> Renderer | None:
     return _SPECIALIZED_RENDERERS.get(row.agent, _agents_md_floor_files)
 
 
-def render(agent: str, out_dir: Path | None = None, *, dry_run: bool = False) -> dict:
-    """Render adapter artifacts for *agent*. Returns the manifest dict.
+def render_entries(
+    agent: str, out_dir: Path | None = None
+) -> tuple[str, Path, list[tuple[str, str]]]:
+    """Read-only seam: ``(version, out_dir, [(rel, content)])`` for *agent*.
 
-    When *dry_run* is True, no files are written.
-    Tier-1 agents default out_dir to PKG; Tier-2/3 default to cwd.
+    Resolves the identical renderer path as render() but never touches the
+    filesystem — the single read seam behind the doctor adapter-lifecycle
+    check (CONTEXT.md "Adapter lifecycle check", 2026-09-19).
     """
     row = get_agent(agent)
     if row is None:
         raise ValueError(f"unknown agent: {agent!r}")
-
-    version = _get_version()
 
     renderer = _renderer_for(row)
     if renderer is None:
@@ -701,7 +702,17 @@ def render(agent: str, out_dir: Path | None = None, *, dry_run: bool = False) ->
     if out_dir is None:
         out_dir = _PKG_DIR if row.tier == 1 else Path.cwd()
 
-    files = renderer(version, out_dir)
+    version = _get_version()
+    return version, out_dir, renderer(version, out_dir)
+
+
+def render(agent: str, out_dir: Path | None = None, *, dry_run: bool = False) -> dict:
+    """Render adapter artifacts for *agent*. Returns the manifest dict.
+
+    When *dry_run* is True, no files are written.
+    Tier-1 agents default out_dir to PKG; Tier-2/3 default to cwd.
+    """
+    version, out_dir, files = render_entries(agent, out_dir)
 
     manifest = {
         "agent": agent,
