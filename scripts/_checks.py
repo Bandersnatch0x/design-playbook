@@ -111,6 +111,17 @@ COMMAND_INVENTORY: dict[tuple[int, int], frozenset[str]] = {
         "run-handoff",
         "doctor",
     }),
+    # 0.24 keeps the 0.23 command surface (adapter lifecycle check minor:
+    # packaged-doctor report + generator read-only seam, no new commands).
+    (0, 24): frozenset({
+        "design-io",
+        "ux-spec",
+        "ui-review",
+        "run-review",
+        "run-status",
+        "run-handoff",
+        "doctor",
+    }),
 }
 STABLE_SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 
