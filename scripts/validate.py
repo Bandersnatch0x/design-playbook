@@ -662,6 +662,9 @@ expected_registry_ids = tuple(
     # decision hygiene — appended after SEC-01 in registration order.
     + ["COPY-01", "COPY-02", "COPY-03", "A11Y-02", "CRAFT-09", "CRAFT-10",
        "DECIDE-01"]
+    # 2026-09-19 batch: state-completeness family (pending / zero-data /
+    # failure feedback) — appended in registration order.
+    + ["STATE-01", "STATE-02", "STATE-03"]
 )
 registry_ids = tuple(entry.id for entry in registry_entries)
 check(

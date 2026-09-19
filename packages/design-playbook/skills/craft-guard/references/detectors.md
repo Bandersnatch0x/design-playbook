@@ -1,6 +1,6 @@
 # Craft audit protocol (registry reference layer)
 
-The craft detectors live in the first-party rule registry: [`../../design-playbook/references/rules.md`](../../design-playbook/references/rules.md) (`CRAFT-01` … `CRAFT-08`, all `advisory` / `first-party`, plus the cross-cutting `A11Y-01`, `RESP-01`, and the placeholder `I18N-01`, `PERF-01`, `SEC-01` entries). This file is the thin execution reference: how to evaluate an entry's applicability predicate and how to write its audit row. The registry is the single authority for detector definitions — do not duplicate entry text here.
+The craft detectors live in the first-party rule registry: [`../../design-playbook/references/rules.md`](../../design-playbook/references/rules.md). The registry is the single authority for entry definitions — this file never enumerates or summarizes entries (enumerations here have drifted before; read the registry for the current set, families, statuses, and provenance). This file is the thin execution reference: how to evaluate an entry's applicability predicate and how to write its audit row.
 
 Run every registry craft entry whose applicability predicate evaluates to `applicable` for implemented UI. Inspect rendered UI at declared target viewports and relevant source. Generic registry outcomes never override a verified project baseline; safety, usability, and explicit declarations still do.
 
