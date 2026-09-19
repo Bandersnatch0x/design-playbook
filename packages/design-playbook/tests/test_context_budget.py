@@ -1,11 +1,9 @@
 """Context budget tool — report-only semantics (spec 2026-09-19)."""
 from __future__ import annotations
 
-import io
 import json
 import subprocess
 import sys
-from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
