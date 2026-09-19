@@ -39,11 +39,14 @@ from design_playbook.scripts.dd_entries import (
     parse_dd_entries,
     positive_dd_refs,
 )
+from design_playbook.scripts.rules_registry import RULES_PATH_PARTS, parse_registry
 
-# rules.md ships inside the package (read-only protocol consumption, the
-# same file the product-level G8 gate validates); referenced lazily so the
-# gate still runs when the skill payload is not installed.
-_REGISTRY_PARTS = ("skills", "design-playbook", "references", "rules.md")
+# Registry id/version facts come from the shared parser (T-041): one answer
+# to "what is a legal entry" — the same one behind the G8 gates.
+# rules.md ships inside the package (read-only protocol consumption); the
+# bundled file is referenced lazily so the gate still runs when the skill
+# payload is not installed.
+_REGISTRY_PARTS = RULES_PATH_PARTS
 RULE_REF = re.compile(r"^([A-Z][A-Z0-9]*-[0-9]{2})@([0-9]+)$")
 
 
@@ -56,22 +59,9 @@ def default_registry_text() -> str | None:
         return None
 
 
-def _blocks(text: str) -> list[tuple[str, str]]:
-    matches = list(re.finditer(r"^## ([A-Z][A-Z0-9]*-[0-9]{2})\b.*$", text, re.M))
-    blocks: list[tuple[str, str]] = []
-    for index, match in enumerate(matches):
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
-        blocks.append((match.group(1), text[match.start():end]))
-    return blocks
-
-
 def _registry_ids(text: str) -> dict[str, int]:
-    """Map registry id -> version via the entry headings + version fields."""
-    ids: dict[str, int] = {}
-    for entry_id, body in _blocks(text):
-        version_match = re.search(r"^version:[ \t]*([0-9]+)$", body, re.M)
-        ids[entry_id] = int(version_match.group(1)) if version_match else 0
-    return ids
+    """Map registry id -> version via the shared parser's entries."""
+    return {entry.id: entry.version for entry in parse_registry(text)}
 
 
 def _fmt(owner: str) -> str:

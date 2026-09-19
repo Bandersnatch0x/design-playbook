@@ -648,13 +648,19 @@ check(registry_path.is_file(), f"registry present: {registry_path.relative_to(RO
 registry_text = registry_path.read_text(encoding="utf-8") if registry_path.exists() else ""
 registry_entries = rules_registry.parse_registry(registry_text)
 registry_errors = rules_registry.validate_registry(registry_entries)
+# CRAFT ids derive from the registry (T-041) — adding CRAFT-11 extends
+# the fixture gates automatically instead of silently sitting outside them.
+_registry_craft_ids = tuple(
+    entry.id for entry in registry_entries if entry.id.startswith("CRAFT-")
+)
 expected_registry_ids = tuple(
-    [f"CRAFT-{index:02d}" for index in range(1, 9)]
+    list(_registry_craft_ids[:8])
     + ["A11Y-01", "RESP-01", "I18N-01", "PERF-01", "SEC-01"]
     # Issue #102 batch: copy family, keyboard focus, source-craft pair,
     # decision hygiene — appended after SEC-01 in registration order.
-    + ["COPY-01", "COPY-02", "COPY-03", "A11Y-02", "CRAFT-09", "CRAFT-10",
-       "DECIDE-01"]
+    + ["COPY-01", "COPY-02", "COPY-03", "A11Y-02"]
+    + list(_registry_craft_ids[8:])
+    + ["DECIDE-01"]
     # 2026-09-19 batch: state-completeness family (pending / zero-data /
     # failure feedback) — appended in registration order.
     + ["STATE-01", "STATE-02", "STATE-03"]
@@ -684,6 +690,31 @@ check(
     "G8 registry content lint (no external product names or third-party rule text)",
 )
 
+# Skill-surface version pins must match the registry (T-041): any
+# "ID@ver" pin outside rules.md is a claim about the registry's current
+# version, and the registry's history discipline forces bumps — so every
+# pin is re-checked here instead of drifting in agent-facing prose.
+_skill_pin_re = re.compile(r"([A-Z]+-[0-9]{2}(?:/[0-9]{2})*)@([0-9]+)")
+_registry_versions = {entry.id: entry.version for entry in registry_entries}
+for _surf in sorted((PKG / "skills").rglob("*.md")):
+    if _surf.resolve() == registry_path.resolve():
+        continue
+    _text = _surf.read_text(encoding="utf-8")
+    for _pin_m in _skill_pin_re.finditer(_text):
+        _pin_group, _pin_ver = _pin_m.group(1), int(_pin_m.group(2))
+        for _pin_id in _pin_group.split("/"):
+            _line_no = _text.count(chr(10), 0, _pin_m.start()) + 1
+            _rel = _surf.relative_to(ROOT).as_posix()
+            if _pin_id not in _registry_versions:
+                check(False, f"{_rel}:{_line_no}: pin {_pin_id}@{_pin_ver} "
+                             "references an unknown registry id")
+            else:
+                check(
+                    _registry_versions[_pin_id] == _pin_ver,
+                    f"{_rel}:{_line_no}: pin {_pin_id}@{_pin_ver} matches "
+                    f"registry version ({_registry_versions[_pin_id]})",
+                )
+
 # Thin reference layer: the eight detector six-field blocks moved to the
 # registry; detectors.md now only carries the execution protocol.
 detector_catalog = PKG / "skills" / "craft-guard" / "references" / "detectors.md"
@@ -707,7 +738,21 @@ check(
     "craft-guard skill consumes the registry and the seven-column row format",
 )
 
-detector_ids = tuple(f"CRAFT-{index:02d}" for index in range(1, 9))
+# The example fixtures audit the CRAFT family; the covered set derives
+# from the registry, so CRAFT-09/10 must either appear in the fixtures or
+# be explicitly recorded as not covered below (they are: the fixtures
+# predate the family's extension and the registry gates their validity;
+# recorded in T-041).
+detector_ids = tuple(
+    entry.id for entry in registry_entries if entry.id.startswith("CRAFT-")
+)[:8]
+check(
+    tuple(
+        entry.id for entry in registry_entries if entry.id.startswith("CRAFT-")
+    )[8:] == ("CRAFT-09", "CRAFT-10"),
+    "CRAFT fixtures cover CRAFT-01..08; CRAFT-09/10 recorded as "
+    "registry-gated without example-fixture coverage",
+)
 
 saas_fixture = PKG / "examples" / "craft-detectors" / "saas-dashboard.md"
 saas_text = saas_fixture.read_text(encoding="utf-8") if saas_fixture.exists() else ""
