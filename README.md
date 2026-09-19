@@ -51,7 +51,7 @@ Then, namespaced (bare `/design-io` is a `--plugin-dir` dev alias only):
 /design-playbook:design-io <your UI ask>
 ```
 
-On Cursor, Windsurf, Gemini CLI, or any of 29 supported agents: see [🌐 Install on other agents](#-install-on-other-agents).
+On Cursor, Windsurf, Gemini CLI, Zed, or any of 30 supported agents: see [🌐 Install on other agents](#-install-on-other-agents).
 
 Codex install notes, the `[mcp_servers.*]` fallback when a marketplace is unavailable, and preview prerequisites: [`packages/design-playbook/codex/AGENTS.md`](./packages/design-playbook/codex/AGENTS.md).
 
@@ -182,7 +182,7 @@ npx design-playbook init <agent>
 | Tier | Agents | What you get |
 | :--- | :--- | :--- |
 | **Tier 1** (native) | Claude Code, Codex | Full fidelity — skills, commands, MCP, drift-gated snapshots |
-| **Tier 2** (generated) | Cursor, Gemini CLI, OpenCode, Windsurf, GitHub Copilot | Skills as platform rules + project-level MCP config; commands degrade to prompt docs |
+| **Tier 2** (generated) | Cursor, Gemini CLI, OpenCode, Windsurf, GitHub Copilot, Zed | Skills as platform rules + project-level MCP config; commands degrade to prompt docs. Zed: `.rules` (first-match aware — skipped if a competing rules file exists without one) + `.zed/settings.json` context_servers |
 | **Tier 3** (floor) | 22 total, including Kiro, Amp, Jules, Qwen Code — `npx design-playbook --list` | `AGENTS.md` with orchestrator contract + MCP install guide |
 
 Claude Code is the native surface. Tier-2/3 outputs are generated adapters with honest degradation. Full capability matrix: [docs/specs/2026-08-28-multi-platform-adapter.md](./docs/specs/2026-08-28-multi-platform-adapter.md).

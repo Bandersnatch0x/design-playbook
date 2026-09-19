@@ -650,6 +650,60 @@ def _agents_md_floor_files(version: str, out_dir: Path) -> list[tuple[str, str]]
 
 
 # ---------------------------------------------------------------------------
+# Zed renderer (Tier 2)
+# ---------------------------------------------------------------------------
+
+# Zed reads project-root rules via a first-match priority list with `.rules`
+# on top, then `.cursorrules`, `.windsurfrules`, `.clinerules`,
+# `.github/copilot-instructions.md`, `CLAUDE.md`, `AGENTS.md`, … (zed.dev
+# agent rules docs, fetched 2026-09-19).  Creating `.rules` when a
+# lower-priority competitor exists would silently shadow the user's own
+# rules, so the renderer refuses to introduce one into that state.
+_ZED_RULES_COMPETITORS = (
+    ".cursorrules",
+    ".windsurfrules",
+    ".clinerules",
+    "CLAUDE.md",
+    ".github/copilot-instructions.md",
+)
+
+
+def _zed_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
+    files: list[tuple[str, str]] = []
+    skills = _read_skills()
+
+    # `.rules` — marker-block (may pre-exist).  Skip creating a *new* `.rules`
+    # while a documented lower-priority competitor is present; an existing
+    # `.rules` (ours or the user's) takes refresh/append semantics instead,
+    # since Zed already reads that exact file.
+    rules_existing = _existing_text(out_dir, ".rules")
+    if rules_existing is not None or not any(
+        (out_dir / c).exists() for c in _ZED_RULES_COMPETITORS
+    ):
+        block_parts = _digest_head(skills)
+        files.append(_marker_entry(out_dir, ".rules", version, "".join(block_parts)))
+
+    # .zed/settings.json — merge-safe context_servers (project-level MCP).
+    # Official docs (fetched 2026-09-19) document the stdio entry as
+    # {"command": "…", "args": […], "env": {…}}; community examples also show
+    # an object form ({"command": {"path": …, "args": […]}}) — the string
+    # form is pinned here per the official page, and the merge keeps any
+    # user-managed entries verbatim.
+    mcp_servers = _mcp_servers_abs()
+    zed_servers: dict = {}
+    for name, srv in mcp_servers.items():
+        entry: dict = {"command": srv["command"], "args": srv["args"]}
+        if "env" in srv and any(v for v in srv["env"].values()):
+            entry["env"] = srv["env"]
+        zed_servers[name] = entry
+    files.append(
+        _merge_json_entry(out_dir, ".zed/settings.json", {"context_servers": zed_servers})
+    )
+
+    return files
+
+
+# ---------------------------------------------------------------------------
 # Renderer dispatch
 # ---------------------------------------------------------------------------
 
@@ -664,6 +718,7 @@ _SPECIALIZED_RENDERERS: dict[str, Renderer] = {
     "opencode": _opencode_files,
     "windsurf": _windsurf_files,
     "github-copilot": _github_copilot_files,
+    "zed": _zed_files,
 }
 
 

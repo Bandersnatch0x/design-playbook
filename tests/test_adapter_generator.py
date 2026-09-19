@@ -108,7 +108,7 @@ class MatrixSchemaTests(unittest.TestCase):
         self.assertIn("codex", matrix_mod.TIER1_SNAPSHOT_AGENTS)
 
     def test_matrix_has_all_spec_tier2_agents(self) -> None:
-        spec_tier2 = {"cursor", "gemini-cli", "opencode", "windsurf", "github-copilot"}
+        spec_tier2 = {"cursor", "gemini-cli", "opencode", "windsurf", "github-copilot", "zed"}
         tier2 = {row.agent for row in matrix_mod.MATRIX if row.tier == 2}
         self.assertEqual(tier2, spec_tier2)
 
@@ -904,7 +904,7 @@ class Tier2ListTests(unittest.TestCase):
 
     def test_all_tier2_renderers_shown_as_ready(self) -> None:
         out = self._list_output()
-        for agent in ("cursor", "gemini-cli", "opencode", "windsurf", "github-copilot"):
+        for agent in ("cursor", "gemini-cli", "opencode", "windsurf", "github-copilot", "zed"):
             self.assertIn(f"{agent}", out, f"{agent} not in --list output")
             # Find the line for this agent and check for renderer ready marker
             line = next((ln for ln in out.splitlines() if agent in ln), "")
@@ -962,6 +962,91 @@ class Tier2DryRunTests(unittest.TestCase):
     def test_github_copilot_dry_run(self) -> None:
         m = self._dry_run("github-copilot")
         self.assertEqual(m["agent"], "github-copilot")
+
+    def test_zed_dry_run(self) -> None:
+        m = self._dry_run("zed")
+        self.assertEqual(m["agent"], "zed")
+
+
+class ZedRendererTests(unittest.TestCase):
+    """zed tier-2 renderer: `.rules` marker-block, first-match conflict
+    avoidance, and merge-safe context_servers (spec 2026-09-19-zed-adapter)."""
+
+    def _write(self, tmp: str) -> Path:
+        gen_mod.render("zed", out_dir=Path(tmp), dry_run=False)
+        return Path(tmp)
+
+    def test_fresh_init_creates_rules_and_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._write(tmp)
+            rules = (root / ".rules").read_text(encoding="utf-8")
+            self.assertIn("<!-- design-playbook:begin -->", rules)
+            self.assertIn("<!-- generated-by design-playbook v", rules)
+            settings = json.loads(
+                (root / ".zed" / "settings.json").read_text(encoding="utf-8")
+            )
+            servers = settings["context_servers"]
+            self.assertIn("design-playbook-preview", servers)
+            self.assertIn("design-playbook-evidence", servers)
+            self.assertEqual(servers["design-playbook-preview"]["command"], "python")
+            self.assertTrue(
+                servers["design-playbook-preview"]["args"][-1].endswith("server.py")
+            )
+
+    def test_competitor_rules_file_blocks_new_rules(self) -> None:
+        # Zed's first-match puts `.rules` above every competitor: creating one
+        # while the user relies on e.g. CLAUDE.md would silently shadow it.
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "CLAUDE.md").write_text("# user rules\n", encoding="utf-8")
+            m = gen_mod.render("zed", out_dir=Path(tmp), dry_run=True)
+            paths = [f["path"] for f in m["files"]]
+            self.assertNotIn(".rules", paths)
+            self.assertIn(".zed/settings.json", paths)
+
+    def test_existing_rules_file_is_refreshed_even_with_competitor(self) -> None:
+        # An existing `.rules` is the file Zed already reads; refresh wins.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "CLAUDE.md").write_text("# user rules\n", encoding="utf-8")
+            (root / ".rules").write_text(
+                "<!-- design-playbook:begin -->\n"
+                "<!-- generated-by design-playbook v0.0.1 -->\n"
+                "old\n"
+                "<!-- design-playbook:end -->\n",
+                encoding="utf-8",
+            )
+            m = gen_mod.render("zed", out_dir=root, dry_run=True)
+            self.assertIn(".rules", [f["path"] for f in m["files"]])
+
+    def test_user_rules_file_gets_block_appended(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".rules").write_text("# my own rules\n", encoding="utf-8")
+            self._write(tmp)
+            rules = (root / ".rules").read_text(encoding="utf-8")
+            self.assertTrue(rules.startswith("# my own rules"))
+            self.assertIn("<!-- design-playbook:begin -->", rules)
+
+    def test_settings_merge_preserves_user_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".zed").mkdir()
+            (root / ".zed" / "settings.json").write_text(
+                json.dumps({"theme": "night"}), encoding="utf-8"
+            )
+            self._write(tmp)
+            settings = json.loads(
+                (root / ".zed" / "settings.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(settings["theme"], "night")
+            self.assertIn("context_servers", settings)
+
+    def test_idempotent_reinit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(tmp)
+            first = (Path(tmp) / ".rules").read_text(encoding="utf-8")
+            gen_mod.render("zed", out_dir=Path(tmp), dry_run=False)
+            self.assertEqual((Path(tmp) / ".rules").read_text(encoding="utf-8"), first)
 
 
 if __name__ == "__main__":

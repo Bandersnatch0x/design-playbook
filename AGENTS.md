@@ -15,7 +15,7 @@ Guidance for coding agents (Claude Code / Codex / Qoder / …) working in this r
 | MCP / Console runtimes | `packages/design-playbook/mcp/{preview,evidence,run_console}/` + 包根 `.mcp.json`（ADR-0009；run console ADR-0037；sibling 包为兼容启动器） |
 | Cordis 插件 | `packages/design-playbook/lib/index.js`（DSH skill provider + commands 注册；ADR-0003） |
 | DSH MCP 桥接包 | `packages/dsh-design-playbook/`（薄 bundle，桥接 preview/evidence MCP；ADR-0009；CI workflow `.github/workflows/release-dsh-bundle.yml`，与 main 同 `v*` tag 模式） |
-| 多平台 adapters | `packages/design-playbook/scripts/generate_adapter.py` + `adapter_matrix.py` + `adapter_templates/`（ADR-0042；`npx design-playbook init`，29-agent 三层矩阵） |
+| 多平台 adapters | `packages/design-playbook/scripts/generate_adapter.py` + `adapter_matrix.py` + `adapter_templates/`（ADR-0042；`npx design-playbook init`，30-agent 三层矩阵） |
 | npm / pi | `packages/design-playbook/package.json`（`pi` manifest + `pi-package` keyword → pi.dev gallery） |
 | 自有示例 | `packages/design-playbook/examples/` |
 | 产品 workflow | `docs/agents/product-workflow.md` |

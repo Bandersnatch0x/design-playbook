@@ -59,6 +59,7 @@ _ORPHAN_SCAN_DIRS: dict[str, tuple[str, ...]] = {
     "gemini-cli": (".gemini/commands",),
     "windsurf": (".windsurf/rules", ".windsurf/workflows"),
     "github-copilot": (".github/instructions",),
+    "zed": (".zed",),
 }
 # Whole-file candidates carrying the generated-by marker outside namespaced
 # dirs (marker-block targets are always re-rendered in place, so they are
@@ -68,6 +69,7 @@ _WHOLE_FILE_CANDIDATES = (
     "GEMINI.md",
     ".github/copilot-instructions.md",
     "design-playbook-mcp-setup.md",
+    ".rules",
 )
 
 _LIMITATIONS = (

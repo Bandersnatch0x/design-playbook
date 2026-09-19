@@ -115,6 +115,16 @@ _TIER2: tuple[AgentRow, ...] = (
         skills=False,
         rules_target=".github/copilot-instructions.md",
     ),
+    AgentRow(
+        agent="zed",
+        tier=2,
+        rules=True,
+        commands=False,
+        mcp_project=True,
+        hooks=False,
+        skills=False,
+        rules_target=".rules + .zed/settings.json",
+    ),
 )
 
 # Tier 3 — rules floor (generated AGENTS.md + inline MCP guide).
