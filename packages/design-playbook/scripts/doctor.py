@@ -13,9 +13,10 @@ import argparse
 import importlib.util
 import json
 import os
-import re
 import sys
+import tempfile
 from pathlib import Path
+from uuid import uuid4
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 if str(PACKAGE_ROOT) not in sys.path:
@@ -25,6 +26,7 @@ from design_playbook.scripts.audit_preferences import (  # noqa: E402
     effective_plan,
     resolve_preferences,
 )
+from design_playbook.scripts import adapter_markers as markers  # noqa: E402
 from design_playbook.scripts.adapter_matrix import MATRIX  # noqa: E402
 from design_playbook.scripts.generate_adapter import render_entries  # noqa: E402
 
@@ -47,35 +49,54 @@ def _check(name: str, ok: bool, repair: str, *, required: bool = True) -> dict:
 # the installed package would change the file. Never writes; never blocks.
 # ---------------------------------------------------------------------------
 
-_MARKER_RE = re.compile(r"generated-by design-playbook v(\d[^\s\"']*)")
-_MARKER_NORM_RE = re.compile(r"generated-by design-playbook v\d[^\s\"']*")
-
-# Namespaced output roots that can hold orphaned generated files, per agent.
-# Kept honest by tests/test_adapter_lifecycle.py: every non-native agent's
-# fresh init must be discovered through this map plus _WHOLE_FILE_CANDIDATES.
-_ORPHAN_SCAN_DIRS: dict[str, tuple[str, ...]] = {
-    "codex": (".codex-plugin", "codex"),
-    "cursor": (".cursor/rules",),
-    "gemini-cli": (".gemini/commands",),
-    "windsurf": (".windsurf/rules", ".windsurf/workflows"),
-    "github-copilot": (".github/instructions",),
-    "zed": (".zed",),
-}
-# Whole-file candidates carrying the generated-by marker outside namespaced
-# dirs (marker-block targets are always re-rendered in place, so they are
-# discovered here rather than via orphan scanning).
-_WHOLE_FILE_CANDIDATES = (
-    "AGENTS.md",
-    "GEMINI.md",
-    ".github/copilot-instructions.md",
-    "design-playbook-mcp-setup.md",
-    ".rules",
-)
+# Marker protocol (T-039): owned by adapter_markers; these aliases keep the
+# historic in-module names used by the tests.
+_MARKER_RE = markers.MARKER_RE
+_MARKER_NORM_RE = markers.MARKER_NORM_RE
 
 _LIMITATIONS = (
     "marker-less JSON merge targets (.mcp.json, opencode.json, "
     "settings.json) are never attributed; re-init may still merge into them"
 )
+
+
+def _fresh_layout() -> dict[str, tuple[set[str], set[str]]]:
+    """Per-agent fresh-init layout, derived from ``render_entries`` — never
+    hand-maintained. For every non-native agent this is ``(namespaced dirs,
+    marker-carrying root-level rel paths)`` a fresh ``init <agent>`` would
+    produce, so adding an agent or changing its output layout updates
+    discovery and orphan scanning through the generator seam alone
+    (ADR-0042: adding an agent = adding a matrix row).
+
+    The probe out_dir does not exist and is never created: renderers only
+    probe it for pre-existing content (``is_file`` / ``exists``), so every
+    probe misses and the render is the pure fresh-init shape. Read-only.
+    """
+    global _FRESH_LAYOUT_CACHE
+    if _FRESH_LAYOUT_CACHE is not None:
+        return _FRESH_LAYOUT_CACHE
+    probe = Path(tempfile.gettempdir()) / f"dp-doctor-fresh-probe-{uuid4().hex}"
+    layout: dict[str, tuple[set[str], set[str]]] = {}
+    for row in MATRIX:
+        if row.native:
+            continue
+        try:
+            _version, _out_dir, entries = render_entries(row.agent, probe)
+        except (ValueError, OSError):
+            # Package-level failure; the package:* checks already report it.
+            continue
+        dirs = {rel.rsplit("/", 1)[0] for rel, _content in entries if "/" in rel}
+        roots = {
+            rel
+            for rel, content in entries
+            if "/" not in rel and _MARKER_RE.search(content)
+        }
+        layout[row.agent] = (dirs, roots)
+    _FRESH_LAYOUT_CACHE = layout
+    return layout
+
+
+_FRESH_LAYOUT_CACHE: dict[str, tuple[set[str], set[str]]] | None = None
 
 
 def _read_text_safe(path: Path) -> str | None:
@@ -87,17 +108,16 @@ def _read_text_safe(path: Path) -> str | None:
 
 def _normalize_generation(text: str) -> str:
     """Marker-version and CRLF normalization for byte comparison."""
-    return _MARKER_NORM_RE.sub(
-        "generated-by design-playbook vNORM", text.replace("\r\n", "\n")
-    )
+    return markers.normalize_generation(text)
 
 
 def _iter_orphan_candidates(repo_root: Path):
-    """Yield (agent, path, rel) for every file under a namespaced output
-    root — the single walk behind both the discovery gate and the orphan
-    scan, so _ORPHAN_SCAN_DIRS has exactly one interpretation."""
-    for agent, dirs in _ORPHAN_SCAN_DIRS.items():
-        for d in dirs:
+    """Yield (agent, path, rel) for every file under any fresh-layout
+    namespaced output root — the single walk behind both the discovery gate
+    and the orphan scan, so the derived layout has exactly one
+    interpretation."""
+    for agent, (dirs, _roots) in _fresh_layout().items():
+        for d in sorted(dirs):
             base = repo_root / d
             if not base.is_dir():
                 continue
@@ -143,14 +163,20 @@ def _lifecycle_findings(repo_root: Path, package_version: str | None) -> dict:
             })
 
     # Discovery gate: without any generated-by marker anywhere there is
-    # nothing to attribute — skip the per-agent renders entirely. One walk
-    # over the namespaced roots feeds both this gate and the orphan scan.
+    # nothing to attribute — skip the per-agent repo renders entirely.
+    # Candidate locations are the derived fresh layout (marker'd root files
+    # + one walk over the namespaced roots, which also feeds the orphan
+    # scan).
+    layout = _fresh_layout()
     orphan_candidates = list(_iter_orphan_candidates(repo_root))
     discovered = False
-    for rel in _WHOLE_FILE_CANDIDATES:
-        text = _read_text_safe(repo_root / rel)
-        if text is not None and _MARKER_RE.search(text):
-            discovered = True
+    for _agent, (_dirs, roots) in layout.items():
+        for rel in sorted(roots):
+            text = _read_text_safe(repo_root / rel)
+            if text is not None and _MARKER_RE.search(text):
+                discovered = True
+                break
+        if discovered:
             break
     if not discovered:
         for _agent, path, _rel in orphan_candidates:

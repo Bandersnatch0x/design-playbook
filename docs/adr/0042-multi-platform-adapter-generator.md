@@ -74,3 +74,17 @@ exist, so breadth requires explicit, honest degradation.
 - The npm package must keep working when consumers lack Python: the
   shim fails with a clear message; the plugin surfaces for Claude Code
   remain usable without ever running the generator.
+
+## Amendment (2026-09-20, T-040): capability flags retired
+
+The matrix's per-surface flags (rules / commands / mcp_project / hooks /
+skills / rules_target) had no production consumer — no renderer, gate, or
+CLI ever read them; dispatch is the name-keyed renderer map plus the
+AGENTS.md floor fallback. They are removed from `AgentRow`; the tier
+encodes the capability class and each renderer documents its own output
+surface. The "flag-driven rendering" wording above is superseded by
+name/tier/native dispatch. Published agent counts (README ×2, AGENTS.md,
+package README) are now derived from the matrix and enforced by a
+validate.py gate, closing the hand-bump drift the Zed adapter row
+demonstrated (commit 903f6c6 missed the zh README). Decision recorded in
+`.agents/specs/2026-09-20-arch-deepening-round6.md` D6.

@@ -106,11 +106,11 @@ pi install npm:pi-mcp-adapter
 
 ## Install on other agents
 
-Generate adapter files for Cursor, Gemini CLI, OpenCode, Windsurf, GitHub Copilot, or any of 22 Tier-3 agents:
+Generate adapter files for Cursor, Gemini CLI, OpenCode, Windsurf, GitHub Copilot, Zed, or any of 22 Tier-3 agents:
 
 ```bash
 npx design-playbook init <agent>   # e.g. cursor, gemini-cli, windsurf
-npx design-playbook --list         # all 29 agents, shows which have renderers
+npx design-playbook --list         # all 30 agents, shows which have renderers
 ```
 
 See the root [README](../../README.md#install-on-other-agents) for the tier table and capability notes.

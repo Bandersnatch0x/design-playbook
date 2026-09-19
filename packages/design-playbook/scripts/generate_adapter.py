@@ -32,6 +32,7 @@ _PKG_DIR = _SCRIPTS_DIR.parent
 _TEMPLATES_DIR = _SCRIPTS_DIR / "adapter_templates"
 
 sys.path.insert(0, str(_SCRIPTS_DIR))
+import adapter_markers as markers  # noqa: E402
 from adapter_matrix import MATRIX, AgentRow, get_agent  # noqa: E402
 
 
@@ -150,6 +151,34 @@ def _existing_text(out_dir: Path, rel: str) -> str | None:
     return path.read_text(encoding="utf-8") if path.is_file() else None
 
 
+def _mcp_entry(
+    srv: dict, *, stdio_type: bool, env_policy: str
+) -> dict:
+    """MCP config entry shaped for one consumer platform (T-039: the
+    per-renderer loops collapsed into this mapper; key order is
+    type/command/args/env so JSON bytes stay stable).
+
+    The policies preserve each platform's historical byte output verbatim:
+    - stdio_type: cursor and github-copilot carry an explicit
+      ``"type": "stdio"``; gemini-cli / opencode / zed do not.
+    - env_policy: cursor and zed omit an all-empty env dict
+      (``omit_when_empty``); gemini-cli / opencode / github-copilot write
+      it verbatim (``keep``). Unifying the policies would change what
+      re-init writes into user configs — a behavior change deliberately
+      deferred to a product round, not a refactor.
+    """
+    entry: dict = {"command": srv["command"], "args": srv["args"]}
+    if stdio_type:
+        entry = {"type": "stdio", **entry}
+    env = srv.get("env")
+    if env_policy == "omit_when_empty":
+        if env and any(env.values()):
+            entry["env"] = env
+    elif env is not None:
+        entry["env"] = env
+    return entry
+
+
 def _marker_entry(out_dir: Path, rel: str, version: str, block: str) -> tuple[str, str]:
     """(rel, content) for a shared markdown target, preserving user content."""
     return (rel, apply_marker_block(_existing_text(out_dir, rel), version, block))
@@ -227,8 +256,8 @@ def merge_json_str(existing_text: str | None, our_data: dict) -> str:
 # Markdown marker-block helper (for files that may pre-exist in user projects)
 # ---------------------------------------------------------------------------
 
-_BLOCK_BEGIN = "<!-- design-playbook:begin -->"
-_BLOCK_END = "<!-- design-playbook:end -->"
+_BLOCK_BEGIN = markers.BLOCK_BEGIN
+_BLOCK_END = markers.BLOCK_END
 
 
 def apply_marker_block(existing_text: str | None, version: str, block_content: str) -> str:
@@ -245,7 +274,7 @@ def apply_marker_block(existing_text: str | None, version: str, block_content: s
     """
     block = (
         f"{_BLOCK_BEGIN}\n"
-        f"<!-- generated-by design-playbook v{version} -->\n"
+        f"{markers.generated_by_html(version)}"
         f"{block_content.rstrip()}\n"
         f"{_BLOCK_END}"
     )
@@ -335,7 +364,7 @@ def _render_codex_mcp_json() -> str:
 
 def _render_codex_agents_md(version: str) -> str:
     body = _tmpl("codex-agents.md")
-    return f"<!-- generated-by design-playbook v{version} -->\n{body}"
+    return f"{markers.generated_by_html(version)}{body}"
 
 
 def _codex_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
@@ -377,14 +406,11 @@ def _header_after_frontmatter(content: str, header: str) -> str:
 # Cursor renderer (Tier 2)
 # ---------------------------------------------------------------------------
 
-_GENERATED_BY_MDC = "<!-- generated-by design-playbook v{version} -->\n"
-
-
 def _cursor_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     files: list[tuple[str, str]] = []
     skills = _read_skills()
     commands = _read_commands()
-    header = _GENERATED_BY_MDC.format(version=version)
+    header = markers.generated_by_html(version)
 
     # One .mdc rule file per skill
     for skill in skills:
@@ -424,15 +450,14 @@ def _cursor_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
 
     # Actual .cursor/mcp.json — merge-safe with any existing config
     mcp_servers = _mcp_servers_abs()
-    cursor_servers = {}
-    for name, srv in mcp_servers.items():
-        entry: dict = {"type": "stdio", "command": srv["command"], "args": srv["args"]}
-        if "env" in srv and any(v for v in srv["env"].values()):
-            entry["env"] = srv["env"]
-        cursor_servers[name] = entry
-    existing_mcp_path = out_dir / ".cursor" / "mcp.json"
-    existing_text = existing_mcp_path.read_text(encoding="utf-8") if existing_mcp_path.is_file() else None
-    files.append((".cursor/mcp.json", merge_json_str(existing_text, {"mcpServers": cursor_servers})))
+    cursor_servers = {
+        name: _mcp_entry(srv, stdio_type=True, env_policy="omit_when_empty")
+        for name, srv in mcp_servers.items()
+    }
+    files.append((
+        ".cursor/mcp.json",
+        merge_json_str(_existing_text(out_dir, ".cursor/mcp.json"), {"mcpServers": cursor_servers}),
+    ))
 
     return files
 
@@ -455,7 +480,7 @@ def _gemini_cli_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     for cmd in commands:
         prompt_body = cmd["body"].replace("$ARGUMENTS", "{{args}}")
         content = (
-            f"# generated-by design-playbook v{version}\n"
+            f"{markers.generated_by_toml(version)}"
             f'description = "{cmd["description"]}"\n\n'
             f"prompt = '''\n{prompt_body}\n'''\n"
         )
@@ -463,15 +488,14 @@ def _gemini_cli_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
 
     # .gemini/settings.json — merge-safe mcpServers
     mcp_servers = _mcp_servers_abs()
-    gemini_servers: dict = {}
-    for name, srv in mcp_servers.items():
-        entry: dict = {"command": srv["command"], "args": srv["args"]}
-        if "env" in srv:
-            entry["env"] = srv["env"]
-        gemini_servers[name] = entry
-    existing_path = out_dir / ".gemini" / "settings.json"
-    existing_text = existing_path.read_text(encoding="utf-8") if existing_path.is_file() else None
-    files.append((".gemini/settings.json", merge_json_str(existing_text, {"mcpServers": gemini_servers})))
+    gemini_servers = {
+        name: _mcp_entry(srv, stdio_type=False, env_policy="keep")
+        for name, srv in mcp_servers.items()
+    }
+    files.append((
+        ".gemini/settings.json",
+        merge_json_str(_existing_text(out_dir, ".gemini/settings.json"), {"mcpServers": gemini_servers}),
+    ))
 
     return files
 
@@ -499,12 +523,10 @@ def _opencode_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
 
     # opencode.json — merge-safe mcp key
     mcp_servers = _mcp_servers_abs()
-    opencode_mcp: dict = {}
-    for name, srv in mcp_servers.items():
-        entry: dict = {"command": srv["command"], "args": srv["args"]}
-        if "env" in srv:
-            entry["env"] = srv["env"]
-        opencode_mcp[name] = entry
+    opencode_mcp = {
+        name: _mcp_entry(srv, stdio_type=False, env_policy="keep")
+        for name, srv in mcp_servers.items()
+    }
     files.append(_merge_json_entry(out_dir, "opencode.json", {"mcp": opencode_mcp}))
 
     return files
@@ -519,7 +541,7 @@ def _windsurf_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     files: list[tuple[str, str]] = []
     skills = _read_skills()
     commands = _read_commands()
-    header = f"<!-- generated-by design-playbook v{version} -->\n"
+    header = markers.generated_by_html(version)
 
     # One .md rule file per skill
     for skill in skills:
@@ -556,14 +578,17 @@ def _windsurf_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
 def _github_copilot_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     files: list[tuple[str, str]] = []
     skills = _read_skills()
-    header = f"<!-- generated-by design-playbook v{version} -->\n"
+    header = markers.generated_by_html(version)
 
     # .github/copilot-instructions.md — marker-block (may pre-exist)
     instr_block_parts = _digest_head(skills)
-    copilot_instr_path = out_dir / ".github" / "copilot-instructions.md"
-    existing_instr = copilot_instr_path.read_text(encoding="utf-8") if copilot_instr_path.is_file() else None
-    files.append((".github/copilot-instructions.md",
-                  apply_marker_block(existing_instr, version, "".join(instr_block_parts))))
+    files.append((
+        ".github/copilot-instructions.md",
+        apply_marker_block(
+            _existing_text(out_dir, ".github/copilot-instructions.md"),
+            version, "".join(instr_block_parts),
+        ),
+    ))
 
     # .github/instructions/<skill>.instructions.md per skill (our namespaced dir — whole-file)
     for skill in skills:
@@ -579,12 +604,10 @@ def _github_copilot_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
 
     # .mcp.json — solution-level MCP config (VS / Copilot format), merge-safe
     mcp_servers = _mcp_servers_abs()
-    vs_servers: dict = {}
-    for name, srv in mcp_servers.items():
-        entry: dict = {"type": "stdio", "command": srv["command"], "args": srv["args"]}
-        if "env" in srv:
-            entry["env"] = srv["env"]
-        vs_servers[name] = entry
+    vs_servers = {
+        name: _mcp_entry(srv, stdio_type=True, env_policy="keep")
+        for name, srv in mcp_servers.items()
+    }
     files.append(_merge_json_entry(out_dir, ".mcp.json", {"servers": vs_servers}))
 
     return files
@@ -690,12 +713,10 @@ def _zed_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     # form is pinned here per the official page, and the merge keeps any
     # user-managed entries verbatim.
     mcp_servers = _mcp_servers_abs()
-    zed_servers: dict = {}
-    for name, srv in mcp_servers.items():
-        entry: dict = {"command": srv["command"], "args": srv["args"]}
-        if "env" in srv and any(v for v in srv["env"].values()):
-            entry["env"] = srv["env"]
-        zed_servers[name] = entry
+    zed_servers = {
+        name: _mcp_entry(srv, stdio_type=False, env_policy="omit_when_empty")
+        for name, srv in mcp_servers.items()
+    }
     files.append(
         _merge_json_entry(out_dir, ".zed/settings.json", {"context_servers": zed_servers})
     )

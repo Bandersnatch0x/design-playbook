@@ -7,7 +7,6 @@ judged; the check is read-only and report-only.
 from __future__ import annotations
 
 import hashlib
-import re
 import sys
 from pathlib import Path
 
@@ -17,9 +16,11 @@ PACKAGE = Path(__file__).resolve().parent.parent
 if str(PACKAGE) not in sys.path:
     sys.path.insert(0, str(PACKAGE))
 
+from design_playbook.scripts import adapter_markers as markers  # noqa: E402
 from design_playbook.scripts.adapter_matrix import MATRIX  # noqa: E402
 from design_playbook.scripts.doctor import (  # noqa: E402
     _adapter_lifecycle_check,
+    _fresh_layout,
     _lifecycle_findings,
     _normalize_generation,
     run_checks,
@@ -27,8 +28,6 @@ from design_playbook.scripts.doctor import (  # noqa: E402
 from design_playbook.scripts.generate_adapter import render, render_entries  # noqa: E402
 
 NON_NATIVE = [row.agent for row in MATRIX if not row.native]
-
-_MARKER_SUB = re.compile(r"generated-by design-playbook v\d[^\s\"']*")
 
 
 def _init(tmp_path: Path, agent: str) -> None:
@@ -44,7 +43,7 @@ def _strip_marker_lines(root: Path, rel: str) -> None:
     kept = [
         line + "\n"
         for line in path.read_text(encoding="utf-8").splitlines()
-        if "generated-by design-playbook" not in line
+        if markers.MARKER_TEXT not in line
     ]
     path.write_text("".join(kept), encoding="utf-8", newline="\n")
 
@@ -54,9 +53,11 @@ def _retag_version(root: Path, version: str) -> None:
         if not path.is_file():
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
-        if "generated-by design-playbook" in text:
+        if markers.MARKER_TEXT in text:
             path.write_text(
-                _MARKER_SUB.sub(f"generated-by design-playbook v{version}", text),
+                markers.MARKER_NORM_RE.sub(
+                    f"{markers.MARKER_TEXT} v{version}", text
+                ),
                 encoding="utf-8",
                 newline="\n",
             )
@@ -300,6 +301,42 @@ class TestMatrixZeroFalsePositive:
         assert check["detail"]["counts"]["drifted"] == 0, agent
         assert check["detail"]["counts"]["orphaned"] == 0, agent
         assert check["detail"]["counts"]["clean"] > 0, agent
+
+
+class TestDerivedLayout:
+    def test_fresh_layout_is_render_derived(self, tmp_path: Path) -> None:
+        # The layout map must equal what a fresh render produces — it is a
+        # derivation, not a hand-maintained shadow copy.
+        for agent in NON_NATIVE:
+            fresh_dir = tmp_path / agent
+            fresh_dir.mkdir()
+            _version, _out, entries = render_entries(agent, fresh_dir)
+            dirs = {rel.rsplit("/", 1)[0] for rel, _c in entries if "/" in rel}
+            roots = {
+                rel
+                for rel, content in entries
+                if "/" not in rel and markers.MARKER_TEXT in content
+            }
+            assert _fresh_layout()[agent] == (dirs, roots), agent
+
+    def test_discovery_via_namespaced_walk_copilot(self, tmp_path: Path) -> None:
+        # A repo holding only copilot-instructions.md (in a dir that has no
+        # dedicated rule subdir) is still discovered — the candidate walk
+        # comes from the render-derived layout, not a fixed list.
+        _init(tmp_path, "github-copilot")
+        for f in (tmp_path / ".github" / "instructions").iterdir():
+            f.unlink()
+        check = _check(tmp_path)
+        assert check["detail"]["status"] == "scanned"
+        assert check["ok"] is True
+
+    def test_only_markerless_config_is_not_initialized(self, tmp_path: Path) -> None:
+        # JSON merge targets carry no marker and are never attributed (spec
+        # D3 honest limitation): a repo holding only one is not-initialized.
+        (tmp_path / ".cursor").mkdir()
+        (tmp_path / ".cursor" / "mcp.json").write_text("{}", encoding="utf-8")
+        check = _check(tmp_path)
+        assert check["detail"]["status"] == "not-initialized"
 
 
 class TestNormalization:

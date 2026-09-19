@@ -34,6 +34,8 @@ CLI_JS = PKG / "lib" / "cli.js"
 
 sys.path.insert(0, str(PKG / "scripts"))
 
+import adapter_markers as markers  # noqa: E402
+
 
 def _load_module(path: Path, name: str):
     spec = importlib.util.spec_from_file_location(name, path)
@@ -56,17 +58,11 @@ class MatrixSchemaTests(unittest.TestCase):
         self.assertEqual(errors, [], f"Matrix validation errors: {errors}")
 
     def test_all_required_fields_present(self) -> None:
+        # T-040: the capability flags were retired — a row is agent/tier/native.
         for row in matrix_mod.MATRIX:
             self.assertIsInstance(row.agent, str)
             self.assertGreater(len(row.agent), 0)
             self.assertIn(row.tier, (1, 2, 3))
-            self.assertIsInstance(row.rules, bool)
-            self.assertIsInstance(row.commands, bool)
-            self.assertIsInstance(row.mcp_project, bool)
-            self.assertIsInstance(row.hooks, bool)
-            self.assertIsInstance(row.skills, bool)
-            self.assertIsInstance(row.rules_target, str)
-            self.assertGreater(len(row.rules_target), 0)
             self.assertIsInstance(row.native, bool)
 
     def test_claude_code_is_the_only_native_row(self) -> None:
@@ -85,13 +81,11 @@ class MatrixSchemaTests(unittest.TestCase):
         self.assertIn("claude-code", tier1)
         self.assertIn("codex", tier1)
 
-    def test_tier3_agents_have_no_advanced_capabilities(self) -> None:
-        for row in matrix_mod.MATRIX:
-            if row.tier == 3:
-                self.assertFalse(row.commands, f"{row.agent}: tier-3 must have commands=False")
-                self.assertFalse(row.mcp_project, f"{row.agent}: tier-3 must have mcp_project=False")
-                self.assertFalse(row.hooks, f"{row.agent}: tier-3 must have hooks=False")
-                self.assertFalse(row.skills, f"{row.agent}: tier-3 must have skills=False")
+    def test_tier_counts_match_published_claims(self) -> None:
+        # T-040: README/AGENTS counts are derived from the matrix and gated
+        # by validate.py; this pins the derivation itself.
+        self.assertEqual(len(matrix_mod.MATRIX), 30)
+        self.assertEqual(len(matrix_mod.TIER1_SNAPSHOT_AGENTS), 1)
 
     def test_get_agent_returns_row(self) -> None:
         row = matrix_mod.get_agent("codex")
@@ -112,17 +106,8 @@ class MatrixSchemaTests(unittest.TestCase):
         tier2 = {row.agent for row in matrix_mod.MATRIX if row.tier == 2}
         self.assertEqual(tier2, spec_tier2)
 
-    def test_windsurf_mcp_is_not_project_level(self) -> None:
-        row = matrix_mod.get_agent("windsurf")
-        self.assertIsNotNone(row)
-        self.assertFalse(row.mcp_project, "Windsurf MCP is global-only, not project-level")
-
     def test_validate_matrix_catches_duplicates(self) -> None:
-        dup_row = matrix_mod.AgentRow(
-            agent="codex", tier=1, rules=True, commands=True,
-            mcp_project=True, hooks=False, skills=True,
-            rules_target=".codex-plugin/ + codex/AGENTS.md",
-        )
+        dup_row = matrix_mod.AgentRow(agent="codex", tier=1)
         errors = matrix_mod.validate_matrix(matrix_mod.MATRIX + (dup_row,))
         self.assertTrue(any("duplicate" in e for e in errors), errors)
 
@@ -180,7 +165,7 @@ class CodexRendererGoldenTests(unittest.TestCase):
 
     def test_codex_agents_md_has_generated_by_comment(self) -> None:
         text = (PKG / "codex" / "AGENTS.md").read_text(encoding="utf-8")
-        self.assertTrue(text.startswith("<!-- generated-by design-playbook v"),
+        self.assertTrue(text.startswith(f"<!-- {markers.MARKER_TEXT} v"),
                         "codex/AGENTS.md must start with generated-by comment")
 
     def test_codex_mcp_json_has_both_servers(self) -> None:
@@ -370,8 +355,8 @@ class MergeJsonHelperTests(unittest.TestCase):
 class ApplyMarkerBlockTests(unittest.TestCase):
     """apply_marker_block: idempotent marker-block replace/append semantics."""
 
-    BEGIN = "<!-- design-playbook:begin -->"
-    END = "<!-- design-playbook:end -->"
+    BEGIN = markers.BLOCK_BEGIN
+    END = markers.BLOCK_END
 
     def _apply(self, existing: str | None, content: str = "# dp\n\nbody") -> str:
         return gen_mod.apply_marker_block(existing, "0.21.0", content)
@@ -380,7 +365,7 @@ class ApplyMarkerBlockTests(unittest.TestCase):
         result = self._apply(None)
         self.assertIn(self.BEGIN, result)
         self.assertIn(self.END, result)
-        self.assertIn("generated-by design-playbook v0.21.0", result)
+        self.assertIn(f"<!-- {markers.MARKER_TEXT} v0.21.0 -->", result)
         self.assertIn("# dp", result)
 
     def test_append_when_no_existing_markers(self) -> None:
@@ -490,7 +475,7 @@ class CursorRendererTests(unittest.TestCase):
     def test_generated_by_comment_in_skill_rules(self) -> None:
         f = self.out / ".cursor" / "rules" / "craft-guard.mdc"
         text = f.read_text(encoding="utf-8")
-        self.assertIn("generated-by design-playbook", text)
+        self.assertIn(markers.MARKER_TEXT, text)
 
     def test_total_file_count(self) -> None:
         paths = [e["path"] for e in self.manifest["files"]]
@@ -727,7 +712,7 @@ class FrontmatterHeaderPlacementTests(unittest.TestCase):
     rendered artifact of every non-native matrix agent is checked so future
     emitters cannot regress."""
 
-    _GENERATED_BY_LINE = re.compile(r"^<!-- generated-by design-playbook v\S+ -->$")
+    _GENERATED_BY_LINE = re.compile(rf"^<!-- {markers.MARKER_TEXT} v\S+ -->$")
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -862,21 +847,13 @@ class RendererDispatchTests(unittest.TestCase):
     def test_native_skip_keys_off_matrix_flag_not_name(self) -> None:
         # A hypothetical native row under any other name must be skipped too:
         # the generator reads row.native, never the agent name.
-        row = matrix_mod.AgentRow(
-            agent="hypothetical-native-host", tier=1, rules=True, commands=True,
-            mcp_project=True, hooks=True, skills=True,
-            rules_target="native", native=True,
-        )
+        row = matrix_mod.AgentRow(agent="hypothetical-native-host", tier=1, native=True)
         self.assertIsNone(gen_mod._renderer_for(row))
 
     def test_row_without_dedicated_renderer_falls_back_to_floor(self) -> None:
         # Adding an agent = adding a matrix row (ADR-0042): a row the generator
         # has never heard of must resolve to the AGENTS.md floor renderer.
-        row = matrix_mod.AgentRow(
-            agent="brand-new-agent-not-in-generator", tier=3, rules=True,
-            commands=False, mcp_project=False, hooks=False, skills=False,
-            rules_target="AGENTS.md",
-        )
+        row = matrix_mod.AgentRow(agent="brand-new-agent-not-in-generator", tier=3)
         self.assertIs(gen_mod._renderer_for(row), gen_mod._agents_md_floor_files)
 
     def test_specialized_renderer_keys_are_matrix_agents(self) -> None:
@@ -981,7 +958,7 @@ class ZedRendererTests(unittest.TestCase):
             root = self._write(tmp)
             rules = (root / ".rules").read_text(encoding="utf-8")
             self.assertIn("<!-- design-playbook:begin -->", rules)
-            self.assertIn("<!-- generated-by design-playbook v", rules)
+            self.assertIn(f"<!-- {markers.MARKER_TEXT} v", rules)
             settings = json.loads(
                 (root / ".zed" / "settings.json").read_text(encoding="utf-8")
             )

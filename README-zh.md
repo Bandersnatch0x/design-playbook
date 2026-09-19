@@ -51,7 +51,7 @@ codex plugin add design-playbook@design-playbook
 /design-playbook:design-io <你的 UI 需求>
 ```
 
-用 Cursor、Windsurf、Gemini CLI 等 29 个受支持的 agent？见 [🌐 跨平台安装](#-跨平台安装)。
+用 Cursor、Windsurf、Gemini CLI 等 30 个受支持的 agent？见 [🌐 跨平台安装](#-跨平台安装)。
 
 Codex 安装细节、marketplace 不可用时的 `[mcp_servers.*]` 直配 fallback、preview 前置条件：见 [`packages/design-playbook/codex/AGENTS.md`](./packages/design-playbook/codex/AGENTS.md)。
 
@@ -177,7 +177,7 @@ npx design-playbook init <agent>
 | 层级 | 平台 | 获得内容 |
 | :--- | :--- | :--- |
 | **Tier 1**（原生） | Claude Code、Codex | 完整保真——skills、commands、MCP、漂移检查快照 |
-| **Tier 2**（生成） | Cursor、Gemini CLI、OpenCode、Windsurf、GitHub Copilot | skills 以各平台 rules 格式输出 + 项目级 MCP 配置；commands 降级为提示文档 |
+| **Tier 2**（生成） | Cursor、Gemini CLI、OpenCode、Windsurf、GitHub Copilot、Zed | skills 以各平台 rules 格式输出 + 项目级 MCP 配置；commands 降级为提示文档 |
 | **Tier 3**（兜底） | Kiro、Amp、Jules、Qwen Code 等共 22 个——`npx design-playbook --list` | 含 orchestrator 合约 + MCP 安装指南的 `AGENTS.md` |
 
 Claude Code 为原生平台。Tier 2/3 为生成适配器，已诚实说明降级内容。完整能力矩阵：[docs/specs/2026-08-28-multi-platform-adapter.md](./docs/specs/2026-08-28-multi-platform-adapter.md)。

@@ -25,6 +25,10 @@ import _checks
 
 ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "packages" / "design-playbook"
+
+# Shared snapshot drift compare with the shipped package (T-038).
+sys.path.insert(0, str(PKG / "scripts"))
+import adapter_drift  # noqa: E402
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 
 # Gate 1 structural expectations. Skills count is doctor-local (validate.py
@@ -331,13 +335,12 @@ def check_floor_self_check(*, skip: bool) -> None:
         print(result.stderr[-400:])
 
 
-# Mirrors validate.py adapter generator drift gate (ADR-0042). Doctor is
-# read-only so it reports drift rather than blocking; the authoritative gate
-# lives in validate.py / release.py. Keep in sync when the generator contract
-# or snapshot agents change.
+# Shared snapshot drift compare (T-038): the algorithm lives in the
+# packaged adapter_drift module, one implementation behind the blocking
+# validate.py gate and this read-only report. Doctor never blocks; it only
+# restates the shared rows in report form.
 def check_adapter_generator() -> None:
     print("== adapter generator (ADR-0042) ==")
-    import hashlib as _hashlib
     gen_script = PKG / "scripts" / "generate_adapter.py"
     if not gen_script.is_file():
         fail("generate_adapter.py missing")
@@ -355,37 +358,21 @@ def check_adapter_generator() -> None:
         fail(f"generator --list failed (exit {list_result.returncode})")
         return
 
-    # 2) Drift check: codex dry-run vs committed snapshots
-    dry_result = subprocess.run(
-        [sys.executable, str(gen_script), "codex", "--dry-run"],
-        capture_output=True, text=True, check=False, cwd=PKG,
-    )
-    if dry_result.returncode != 0:
-        fail(f"generator codex --dry-run failed (exit {dry_result.returncode})")
-        return
-    try:
-        import json as _json
-        manifest = _json.loads(dry_result.stdout)
-        drift = False
-        for entry in manifest.get("files", []):
-            rel = entry.get("path", "")
-            expected = entry.get("sha256", "")
-            committed = PKG / rel
-            if not committed.is_file():
-                fail(f"snapshot missing: {rel}")
-                drift = True
-                continue
-            raw = committed.read_bytes().replace(b"\r\n", b"\n")
-            actual = _hashlib.sha256(raw).hexdigest()
-            if actual != expected:
-                fail(f"snapshot drift: {rel} — re-run generate_adapter.py codex")
-                drift = True
+    # 2) Drift check: committed snapshots vs a fresh render, via the shared
+    # packaged compare (same implementation as the validate.py gate).
+    for row in adapter_drift.compare_snapshots(PKG):
+        if row["status"] == "clean":
+            if row["path"] is not None:
+                ok(f"snapshot clean: {row['path']}")
             else:
-                ok(f"snapshot clean: {rel}")
-        if not drift:
-            ok(f"codex snapshot clean (v{manifest.get('version', '?')})")
-    except Exception as exc:
-        fail(f"drift check parse error: {exc}")
+                ok(f"{row['agent']} snapshot clean (v{row['version']})")
+        elif row["status"] == "error":
+            fail(row["message"])
+        else:
+            fail(
+                f"snapshot {row['status']}: {row['path']}"
+                f" — re-run generate_adapter.py {row['agent']}"
+            )
 
 
 # Issue 64: declarative reminder only. Host vision capability is

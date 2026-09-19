@@ -27,6 +27,8 @@ import _checks
 ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "packages" / "design-playbook"
 sys.path.insert(0, str(PKG / "scripts"))
+import adapter_drift  # noqa: E402
+import adapter_matrix  # noqa: E402
 import rules_registry  # noqa: E402
 
 failures: list[str] = []
@@ -185,52 +187,21 @@ if isinstance(amj, dict):
                   f".agents marketplace plugins[0].source.path exists: {agents_path}")
 
 print("== Adapter generator drift gate (ADR-0042) ==")
-# Tier-1 snapshot agents have committed artifacts that must exactly match what
-# the generator would produce. Run the generator in dry-run mode and compare
-# the content hashes from the manifest to the committed files. Any mismatch
-# means the snapshot is stale — run `python packages/design-playbook/scripts/
-# generate_adapter.py codex` and commit the updated files.
+# Tier-1 snapshot agents have committed artifacts that must exactly match
+# what the generator would produce. The compare algorithm lives in the
+# packaged adapter_drift module — one implementation shared with the
+# read-only doctor report; this gate keeps only its blocking semantics
+# (T-038). Any mismatch means the snapshot is stale — run the repair
+# command below and commit the updated files.
 _gen_script = PKG / "scripts" / "generate_adapter.py"
 check(_gen_script.is_file(), "adapter generator script present at scripts/generate_adapter.py")
 if _gen_script.is_file():
-    try:
-        import hashlib as _hashlib
-
-        _gen_result = subprocess.run(
-            [sys.executable, str(_gen_script), "codex", "--dry-run"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            cwd=PKG, timeout=30,
-        )
-        if _gen_result.returncode != 0:
-            check(False,
-                  f"adapter generator dry-run exited {_gen_result.returncode}: "
-                  f"{(_gen_result.stdout + _gen_result.stderr).strip()[-200:]}")
-        else:
-            _manifest = json.loads(_gen_result.stdout)
-            _gen_version = _manifest.get("version", "?")
-            _drift_ok = True
-            for _entry in _manifest.get("files", []):
-                _rel = _entry.get("path", "")
-                _expected_sha = _entry.get("sha256", "")
-                _committed = PKG / _rel
-                if not _committed.is_file():
-                    check(False, f"adapter snapshot missing: {_rel}")
-                    _drift_ok = False
-                    continue
-                _raw = _committed.read_bytes()
-                _normalized = _raw.replace(b"\r\n", b"\n")
-                _actual_sha = _hashlib.sha256(_normalized).hexdigest()
-                _match = _actual_sha == _expected_sha
-                if not _match:
-                    _drift_ok = False
-                check(
-                    _match,
-                    f"adapter snapshot matches generator (codex/{_rel}): "
-                    f"run `python packages/design-playbook/scripts/generate_adapter.py codex` to refresh",
-                )
-            check(_drift_ok, f"adapter generator v{_gen_version} codex snapshot clean")
-    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError, KeyError) as _gen_exc:
-        check(False, f"adapter generator drift gate failed: {_gen_exc}")
+    for _row in adapter_drift.compare_snapshots(PKG):
+        _ok = _row["status"] == "clean"
+        _text = _row["message"]
+        if not _ok and _row["repair"]:
+            _text += f": run `{_row['repair']}` to refresh"
+        check(_ok, _text)
 
 print("== npm / pi publish manifest ==")
 # packages/design-playbook/package.json is the third publish surface: pi has
@@ -359,6 +330,28 @@ for readme in (ROOT / "README.md", ROOT / "README-zh.md"):
                 f"{rel}: {label} badge count {badge.group(1)} matches "
                 f"shipped inventory ({expected})",
             )
+
+# Adapter agent counts in published docs are derived from the capability
+# matrix, not hand-bumped (T-040; same pattern as the badge counts above).
+_agent_total = len(adapter_matrix.MATRIX)
+for _surf, _pat, _label in (
+    (ROOT / "README.md", r"(\d+) supported agents", "root README agent count"),
+    (ROOT / "README-zh.md", r"(\d+) 个受支持的 agent", "zh README agent count"),
+    (ROOT / "AGENTS.md", r"(\d+)-agent 三层矩阵", "AGENTS.md agent count"),
+    (PKG / "README.md", r"all (\d+) agents", "package README --list count"),
+):
+    _rel = _surf.relative_to(ROOT).as_posix()
+    if not _surf.is_file():
+        check(False, f"{_rel}: present for agent-count alignment")
+        continue
+    _m = re.search(_pat, _surf.read_text(encoding="utf-8"))
+    if _m is None:
+        check(False, f"{_rel}: no agent-count claim found ({_label})")
+    else:
+        check(
+            int(_m.group(1)) == _agent_total,
+            f"{_rel}: agent count {_m.group(1)} matches capability matrix ({_agent_total})",
+        )
 
 # The Run Console is implemented and ships with the package (v0.21.0+), so a
 # current public surface must not still describe it as planned or not
