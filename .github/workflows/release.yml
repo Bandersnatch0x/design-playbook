@@ -170,8 +170,8 @@ jobs:
           python3 scripts/release_transaction.py wait-registry
           --package "${{ steps.release.outputs.package_name }}"
           --version "${{ steps.release.outputs.version }}"
-          --attempts 18
-          --interval 5
+          --attempts 20
+          --interval 30
 
       - name: Verify npm provenance
         run: >-
