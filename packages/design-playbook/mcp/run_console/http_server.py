@@ -139,6 +139,29 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         """Never log: no URL, token, or locator may reach any log."""
 
+    def finish(self) -> None:
+        """Graceful teardown: half-close, drain, then close.
+
+        A client body left unread in the receive buffer (e.g. a POST whose
+        Content-Length is absent: the stray bytes parse as garbage request
+        lines and the connection must die) turns a plain close() into a TCP
+        reset on Windows — the client gets WinError 10053 mid-read instead
+        of the response it was sent.  Flush the response, half-close (FIN),
+        drain the peer's remaining bytes, then close, so teardown is never
+        a reset.
+        """
+        super().finish()
+        try:
+            self.connection.shutdown(socket.SHUT_WR)
+        except OSError:
+            pass
+        try:
+            self.connection.settimeout(0.2)
+            while self.connection.recv(65536):
+                pass
+        except OSError:
+            pass
+
     # -- dispatch ------------------------------------------------------
 
     def do_GET(self) -> None:  # noqa: N802
