@@ -26,3 +26,6 @@ Registry: `skills/design-playbook/references/rules.md`. Seven-column rows; after
 | DECIDE-01@1 | not-applicable | 决策报告仅含 record 档 DD-0101，无 compare/explore 档方向决策条目 | - | - | - | - | - |
 
 注：2026-08-28 注册批（COPY-01/02/03、A11Y-02、CRAFT-09/10、DECIDE-01）晚于本 run 存档；按三态谓词补记，blocked 行在理由列记缺失证据面。
+| STATE-01@1 | applicable | - | clear | 导出触发钮 busy/disabled 守卫（自前次 run 保留） | Fill 声明 busy/disabled guard 保留 | 单帧完成例外不成立 | - |
+| STATE-02@1 | applicable | - | clear | 空数据集预检：数据集为空时触发钮禁用 + toast「无可选行」（指名原因） | Fill 声明 empty-blocked pre-check（R4 修复） | 例外不成立——空数据呈现明确指名原因与出口 | - |
+| STATE-03@1 | applicable | - | clear | cap 上限 toast（自前次 run 保留，role=alert） | Fill 声明 cap-limit toast 保留 | - | - |

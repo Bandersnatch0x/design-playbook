@@ -26,3 +26,6 @@ Registry: `skills/design-playbook/references/rules.md`, full catalog (P3 run: �
 | DECIDE-01@1 | applicable | - | clear | 选中方向为启用既有 status region 收纳导出任务（candidates/B.html 草图 + preview round 1/2 用户确认），非未审视的默认外观收敛 | DD-0003 理由可回溯 l1.scenes（导出中切页全局可查）与 PERF-01 比较轴；DD-0004 理由可回溯 l6.c2（跨视图状态闭环）与基线 status region 惯例声明——均引用 brief 具体事实 | 常规方向经比较矩阵沿 brief 轴证成，非未审视默认；基线声明的是 status region 惯例而非默认外观身份 | - |
 
 注：2026-08-28 注册批（COPY-01/02/03、A11Y-02、CRAFT-09/10、DECIDE-01）晚于本 run 存档；按三态谓词补记——blocked 行在理由列点名缺失的证据面；DECIDE-01 依归档内可读的决策报告求值为 applicable。
+| STATE-01@1 | applicable | - | clear | 长导出条目级进度持续更新（30s 窗口 5 次采样） | evidence/L6.1-status-trace.json 进度采样序列 | - | - |
+| STATE-02@1 | blocked | 候选页为静态导出面，无数据供给集合面，空态不可达 | - | 无空态分支呈现 | 无数据源 | - | 接入数据面后补评 |
+| STATE-03@1 | not-applicable | 本 run 升档面未声明异步失败路径（进度轨迹为唯一运行时面） | - | - | 候选页无可触发失败分支 | - | - |

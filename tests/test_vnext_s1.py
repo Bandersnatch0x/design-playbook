@@ -54,7 +54,7 @@ def _write(path: Path, text: str) -> None:
 
 
 class RegistryTests(unittest.TestCase):
-    def test_registry_parses_twenty_entries(self) -> None:
+    def test_registry_parses_all_entries_in_order(self) -> None:
         entries = rules_registry.parse_registry(REGISTRY_TEXT)
         self.assertEqual(
             [entry.id for entry in entries],
@@ -62,7 +62,9 @@ class RegistryTests(unittest.TestCase):
             + ["A11Y-01", "RESP-01", "I18N-01", "PERF-01", "SEC-01",
                # Issue #102 batch, appended in registration order.
                "COPY-01", "COPY-02", "COPY-03", "A11Y-02", "CRAFT-09",
-               "CRAFT-10", "DECIDE-01"],
+               "CRAFT-10", "DECIDE-01",
+               # 2026-09-19 batch: state-completeness family.
+               "STATE-01", "STATE-02", "STATE-03"],
         )
         self.assertEqual(
             rules_registry.validate_registry(entries), [])

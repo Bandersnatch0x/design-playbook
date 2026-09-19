@@ -26,3 +26,6 @@ Registry: `skills/design-playbook/references/rules.md`, full catalog (P2 run). S
 | DECIDE-01@1 | applicable | - | clear | 选中方向为按周命名模式（compare 档轻量比较），不落入 2026-08 记录的自默认外观样貌；DD-0001 为 record 档，不在本规则范围 | DD-0002 理由可回溯 l1.target_user 比较轴（周频归档场景下检索是主任务）——引用 brief 具体事实而非通用措辞 | 常规方向经比较矩阵沿 brief 轴证成，非未审视默认；无基线默认方向身份声明 | - |
 
 注：2026-08-28 注册批（COPY-01/02/03、A11Y-02、CRAFT-09/10、DECIDE-01）晚于本 run 存档；按三态谓词补记——blocked 行在理由列点名缺失的证据面；DECIDE-01 依归档内可读的决策报告求值为 applicable。
+| STATE-01@1 | applicable | - | clear | 批量导出触发钮 busy/disabled 守卫（控件自身标签即操作名，pending 区域限于触发钮） | Fill 声明 busy state while exporting + busy/disabled guard | 单帧完成例外不成立（批量导出为长操作） | - |
+| STATE-02@1 | blocked | 静态夹具无数据源，首载空/筛选空均不可达 | - | 表格列表区声明在场，空态分支缺席 | 无数据源可供触发空态 | - | 接入数据面后补评首载空与筛选空呈现 |
+| STATE-03@1 | applicable | - | clear | cap 上限 toast（role=alert + 可读名称含上限值） | Fill 声明 toast 承载上限拒绝 | 上限拒绝为失败路径的可恢复呈现（出口=调整范围后再导出） | - |
