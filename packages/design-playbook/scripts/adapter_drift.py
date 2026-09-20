@@ -14,6 +14,9 @@ module owns only the comparison and its refresh repair text.
 
 Snapshot agents come from ``adapter_matrix.TIER1_SNAPSHOT_AGENTS``, so a
 second tier-1 snapshot agent is covered by both gates without editing either.
+The compare runs in-process over ``render_entries`` (no subprocess, hence no
+timeout indirection); every failure surfaces as an ``error`` row instead of
+an exception so neither consumer can crash on a bad snapshot file.
 """
 from __future__ import annotations
 
@@ -68,8 +71,19 @@ def compare_snapshots(pkg_root: Path) -> list[dict]:
                 })
                 continue
             expected = hashlib.sha256(content.encode("utf-8")).hexdigest()
+            try:
+                committed_bytes = committed.read_bytes()
+            except OSError as exc:
+                agent_ok = False
+                rows.append({
+                    "agent": agent, "path": rel, "status": "error",
+                    "version": version,
+                    "message": f"adapter snapshot unreadable: {rel}: {exc}",
+                    "repair": _REFRESH_CMD.format(agent=agent),
+                })
+                continue
             actual = hashlib.sha256(
-                committed.read_bytes().replace(b"\r\n", b"\n")
+                committed_bytes.replace(b"\r\n", b"\n")
             ).hexdigest()
             if actual == expected:
                 rows.append({

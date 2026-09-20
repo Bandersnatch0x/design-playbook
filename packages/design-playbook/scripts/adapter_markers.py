@@ -4,9 +4,11 @@
 
 One module owns the generated-by convention: the marker-block tags, the
 per-syntax comment forms, and the detection/normalization regexes. The
-generator, the packaged doctor, and the tests import from here instead of
-re-typing string literals and regexes — changing the marker format (see
-issue #115 for the last one) now touches this module alone.
+generator and the packaged doctor import from here instead of re-typing
+string literals and regexes — changing the marker format (see issue #115
+for the last one) now touches this module alone. Tests import the regexes
+and marker text; fixture strings that simulate historical generated files
+stay literal by design.
 """
 from __future__ import annotations
 

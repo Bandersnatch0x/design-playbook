@@ -694,7 +694,7 @@ check(
 # "ID@ver" pin outside rules.md is a claim about the registry's current
 # version, and the registry's history discipline forces bumps — so every
 # pin is re-checked here instead of drifting in agent-facing prose.
-_skill_pin_re = re.compile(r"([A-Z]+-[0-9]{2}(?:/[0-9]{2})*)@([0-9]+)")
+_skill_pin_re = re.compile(r"\b([A-Z]+-[0-9]{2}(?:/[0-9]{2})*)@([0-9]+)\b")
 _registry_versions = {entry.id: entry.version for entry in registry_entries}
 for _surf in sorted((PKG / "skills").rglob("*.md")):
     if _surf.resolve() == registry_path.resolve():
@@ -702,7 +702,15 @@ for _surf in sorted((PKG / "skills").rglob("*.md")):
     _text = _surf.read_text(encoding="utf-8")
     for _pin_m in _skill_pin_re.finditer(_text):
         _pin_group, _pin_ver = _pin_m.group(1), int(_pin_m.group(2))
-        for _pin_id in _pin_group.split("/"):
+        # Slash shorthand (COPY-01/02/03@1): bare segments inherit the
+        # family prefix of the first segment.
+        _pin_parts = _pin_group.split("/")
+        _pin_family = _pin_parts[0].rsplit("-", 1)[0]
+        _pin_ids = [
+            part if "-" in part else f"{_pin_family}-{part}"
+            for part in _pin_parts
+        ]
+        for _pin_id in _pin_ids:
             _line_no = _text.count(chr(10), 0, _pin_m.start()) + 1
             _rel = _surf.relative_to(ROOT).as_posix()
             if _pin_id not in _registry_versions:
@@ -743,13 +751,9 @@ check(
 # be explicitly recorded as not covered below (they are: the fixtures
 # predate the family's extension and the registry gates their validity;
 # recorded in T-041).
-detector_ids = tuple(
-    entry.id for entry in registry_entries if entry.id.startswith("CRAFT-")
-)[:8]
+detector_ids = _registry_craft_ids[:8]
 check(
-    tuple(
-        entry.id for entry in registry_entries if entry.id.startswith("CRAFT-")
-    )[8:] == ("CRAFT-09", "CRAFT-10"),
+    _registry_craft_ids[8:] == ("CRAFT-09", "CRAFT-10"),
     "CRAFT fixtures cover CRAFT-01..08; CRAFT-09/10 recorded as "
     "registry-gated without example-fixture coverage",
 )

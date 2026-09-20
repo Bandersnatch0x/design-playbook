@@ -21,7 +21,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Literal
 
 # A renderer maps (version, out_dir) to [(relative_path, content)] pairs
 # without writing anything; render() owns all filesystem writes.
@@ -152,7 +152,7 @@ def _existing_text(out_dir: Path, rel: str) -> str | None:
 
 
 def _mcp_entry(
-    srv: dict, *, stdio_type: bool, env_policy: str
+    srv: dict, *, stdio_type: bool, env_policy: Literal["keep", "omit_when_empty"]
 ) -> dict:
     """MCP config entry shaped for one consumer platform (T-039: the
     per-renderer loops collapsed into this mapper; key order is

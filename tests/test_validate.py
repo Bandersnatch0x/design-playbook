@@ -87,6 +87,25 @@ class ValidateGateTests(unittest.TestCase):
             self.assertIn(old, text)
             path.write_text(text.replace(old, new), encoding="utf-8")
 
+    def test_skill_pin_version_drift_fails(self) -> None:
+        # T-041 pin gate: a skill-surface ID@ver pin that no longer matches
+        # the registry's current version fails the gate (the registry's
+        # history discipline forces bumps; prose must follow).
+        craft = (
+            self.root / "packages" / "design-playbook" / "skills"
+            / "craft-guard" / "references" / "craft.md"
+        )
+        text = craft.read_text(encoding="utf-8")
+        self.assertIn("COPY-01/02/03@1", text)
+        craft.write_text(
+            text.replace("COPY-01/02/03@1", "COPY-01/02/03@2"), encoding="utf-8"
+        )
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("pin COPY-02@2", result.stdout)
+
     def test_codex_routing_pointer_drift_fails(self) -> None:
         self._rewrite_codex_prompt("`run_profile.py route`", "a host-local guess")
 

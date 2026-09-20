@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -304,18 +304,25 @@ class TestMatrixZeroFalsePositive:
 
 
 class TestDerivedLayout:
-    def test_fresh_layout_is_render_derived(self, tmp_path: Path) -> None:
+    def test_fresh_layout_matches_fresh_render(self, tmp_path: Path) -> None:
         # The layout map must equal what a fresh render produces — it is a
-        # derivation, not a hand-maintained shadow copy.
+        # derivation, not a hand-maintained shadow copy. The expected shape
+        # is computed independently (PurePosixPath, not the implementation's
+        # string split) so a wrong formula cannot duplicate itself here.
         for agent in NON_NATIVE:
             fresh_dir = tmp_path / agent
             fresh_dir.mkdir()
             _version, _out, entries = render_entries(agent, fresh_dir)
-            dirs = {rel.rsplit("/", 1)[0] for rel, _c in entries if "/" in rel}
+            dirs = {
+                PurePosixPath(rel).parent.as_posix()
+                for rel, _c in entries
+                if PurePosixPath(rel).parent != PurePosixPath(".")
+            }
             roots = {
                 rel
                 for rel, content in entries
-                if "/" not in rel and markers.MARKER_TEXT in content
+                if PurePosixPath(rel).parent == PurePosixPath(".")
+                and markers.MARKER_TEXT in content
             }
             assert _fresh_layout()[agent] == (dirs, roots), agent
 

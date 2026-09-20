@@ -7,6 +7,7 @@ thin consumers. These tests pin the compare semantics directly.
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -42,8 +43,10 @@ class CompareSnapshotTests(unittest.TestCase):
         agents = {r["agent"] for r in adapter_drift.compare_snapshots(PKG)}
         self.assertEqual(agents, set(adapter_matrix.TIER1_SNAPSHOT_AGENTS))
 
-    def test_missing_snapshot(self, ) -> None:
-        rows = adapter_drift.compare_snapshots(Path(self.id()))  # nonexistent root
+    def test_missing_snapshot(self) -> None:
+        # A nonexistent root: every committed snapshot reads as missing.
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = adapter_drift.compare_snapshots(Path(tmp) / "no-such-root")
         missing = {r["path"] for r in rows if r["status"] == "missing"}
         self.assertIn(".codex-plugin/plugin.json", missing)
         aggregate = next(r for r in rows if r["path"] is None)

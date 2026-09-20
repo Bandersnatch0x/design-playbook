@@ -374,8 +374,9 @@ def check_adapter_generator() -> None:
         elif row["status"] == "error":
             fail(row["message"])
         else:
+            subject = row["path"] or f"{row['agent']} aggregate"
             fail(
-                f"snapshot {row['status']}: {row['path']}"
+                f"snapshot {row['status']}: {subject}"
                 f" — re-run generate_adapter.py {row['agent']}"
             )
 

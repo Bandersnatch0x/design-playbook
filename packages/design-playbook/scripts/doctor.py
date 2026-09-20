@@ -53,8 +53,8 @@ def _check(name: str, ok: bool, repair: str, *, required: bool = True) -> dict:
 # the installed package would change the file. Never writes; never blocks.
 # ---------------------------------------------------------------------------
 
-# Marker protocol (T-039): owned by adapter_markers; these aliases keep the
-# historic in-module names used by the tests.
+# Marker protocol (T-039): owned by adapter_markers; this module consumes
+# markers.* and never re-derives the regexes.
 _MARKER_RE = markers.MARKER_RE
 _MARKER_NORM_RE = markers.MARKER_NORM_RE
 

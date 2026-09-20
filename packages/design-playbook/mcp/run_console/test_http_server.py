@@ -1029,12 +1029,11 @@ class GracefulTeardownTest(_ServerTestCase):
         # The declared response body is complete: the framing length the
         # server sent is fully received before EOF.
         header, _, body = raw.partition(b"\r\n\r\n")
-        declared = next(
-            int(value.strip())
-            for line in header.split(b"\r\n")
-            if line.lower().startswith(b"content-length:")
-            for value in [line.split(b":", 1)[1]]
-        )
+        declared = None
+        for line in header.split(b"\r\n"):
+            if line.lower().startswith(b"content-length:"):
+                declared = int(line.split(b":", 1)[1].strip())
+        self.assertIsNotNone(declared, f"no Content-Length in: {header!r}")
         self.assertEqual(len(body), declared)
 
 
