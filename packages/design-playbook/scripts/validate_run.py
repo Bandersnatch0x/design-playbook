@@ -428,10 +428,18 @@ def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
     dr_g10 = dr if dr is not None else (
         rr / "decision-report.md" if rr is not None else None
     )
-    report_text = facts.decision_report_text if dr is None else ""
-    if dr is not None and dr.is_file():
+    if dr is None:
+        # Standard path: the report already rides the RunFacts capture.
+        report_text = facts.decision_report_text
+    elif rr is not None and dr.resolve() == (rr / "decision-report.md").resolve():
+        # An explicit path naming the captured standard file: use the
+        # captured text (one read, no re-read race window).
+        report_text = facts.decision_report_text
+    else:
+        # Explicit path may point outside the captured run root (same
+        # justification as the explicit --shaping-dir re-read above).
         try:
-            report_text = dr.read_text(encoding="utf-8")
+            report_text = dr.read_text(encoding="utf-8") if dr.is_file() else ""
         except (OSError, UnicodeError):
             report_text = ""
     if report_text and DD_HEADING.search(report_text):

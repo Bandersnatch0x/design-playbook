@@ -48,11 +48,20 @@ class PackageIdentity:
 
 @dataclass(frozen=True)
 class PackageMetadataProjection:
-    """Package identity or an explicit typed non-known result."""
+    """Package identity or an explicit typed non-known result.
+
+    ``read_state``/``raw_text`` carry the owner's captured file read
+    (T-042, spec D8): the file-read state and the exact text as read, so
+    consumers hash what the owner read instead of re-reading the manifest
+    through a second parser. ``raw_text`` is set whenever the file was
+    read, even when the payload fails identity validation.
+    """
 
     availability: Availability
     value: PackageIdentity | None
     reason: MetadataReason | None
+    read_state: Literal["missing", "complete", "unreadable"] = "missing"
+    raw_text: str | None = None
 
 
 @dataclass(frozen=True)
@@ -98,6 +107,7 @@ def project_package_metadata(package_root: Path) -> PackageMetadataProjection:
             availability="unknown",
             value=None,
             reason="source-missing",
+            read_state="missing",
         )
     try:
         manifest_text = manifest.read_text(encoding="utf-8")
@@ -106,6 +116,7 @@ def project_package_metadata(package_root: Path) -> PackageMetadataProjection:
             availability="unknown",
             value=None,
             reason="source-unreadable",
+            read_state="unreadable",
         )
     try:
         payload = json.loads(manifest_text)
@@ -114,12 +125,16 @@ def project_package_metadata(package_root: Path) -> PackageMetadataProjection:
             availability="unknown",
             value=None,
             reason="source-malformed",
+            read_state="complete",
+            raw_text=manifest_text,
         )
     if not isinstance(payload, dict):
         return PackageMetadataProjection(
             availability="unknown",
             value=None,
             reason="source-malformed",
+            read_state="complete",
+            raw_text=manifest_text,
         )
     name = payload.get("name")
     version = payload.get("version")
@@ -130,6 +145,8 @@ def project_package_metadata(package_root: Path) -> PackageMetadataProjection:
             availability="unknown",
             value=None,
             reason="source-malformed",
+            read_state="complete",
+            raw_text=manifest_text,
         )
     return PackageMetadataProjection(
         availability="known",
@@ -138,6 +155,8 @@ def project_package_metadata(package_root: Path) -> PackageMetadataProjection:
             version=version,
         ),
         reason=None,
+        read_state="complete",
+        raw_text=manifest_text,
     )
 
 

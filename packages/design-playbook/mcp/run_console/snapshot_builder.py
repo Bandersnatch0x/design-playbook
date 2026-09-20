@@ -59,6 +59,7 @@ from design_playbook.scripts.pointback_projection import (
 )
 from design_playbook.scripts.run_facts import RunFacts, capture_run_facts
 from design_playbook.scripts.run_metadata import (
+    PackageMetadataProjection,
     project_limitations,
     project_package_metadata,
 )
@@ -156,15 +157,44 @@ class BuiltSnapshot:
 
 @dataclass(frozen=True)
 class _Capture:
-    """One full capture of every parser input the build consumes."""
+    """One full capture of every parser input the build consumes.
+
+    The manifest and package texts ride their owner captures (T-042,
+    spec D8): ``facts.manifest_raw_text`` from the RunFacts read and
+    ``product.read_state``/``product.raw_text`` from the run-metadata
+    projection — the builder never re-reads those files through a second
+    parser.
+    """
 
     facts: RunFacts
     contract_text: str | None
     contract_state: str
-    manifest_text: str | None
-    manifest_state: str
-    package_text: str | None
-    package_state: str
+    product: PackageMetadataProjection
+
+
+@dataclass(frozen=True)
+class _Projection:
+    """Values produced by projection and consumed at assembly (T-042):
+
+    the phase-bridge fields the builder used to carry as mutable
+    ``self._manifest_degraded`` / ``self._limitations`` state now flow
+    explicitly from ``_project`` to ``_assemble``.
+    """
+
+    manifest_degraded: bool = False
+    limitations: tuple[Any, ...] = ()
+    limitations_digest: str = ""
+
+
+class _ProjectionAcc:
+    """Mutable accumulator scoped to one ``_project`` pass (T-042): the
+    phase-bridge fields it collects flow to assembly as a ``_Projection``
+    value instead of ``self``-carried state."""
+
+    def __init__(self) -> None:
+        self.manifest_degraded = False
+        self.limitations: tuple[Any, ...] = ()
+        self.limitations_digest = ""
 
 
 @dataclass(frozen=True)
@@ -236,6 +266,61 @@ def _slug(value: str) -> str:
     return value.strip().lower().replace(".", "-")
 
 
+def _canonical(value: Any) -> Any:
+    """JSON-stable shape of an owner-read value (T-043): sets/tuples become
+    ordered lists so digests are deterministic across processes, and
+    non-JSON objects fall back to their (dataclass-stable) repr."""
+    if isinstance(value, (set, frozenset)):
+        return sorted(str(item) for item in value)
+    if isinstance(value, (list, tuple)):
+        return [_canonical(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            str(key): _canonical(item)
+            for key, item in sorted(value.items(), key=lambda kv: str(kv[0]))
+        }
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    try:
+        json.dumps(value)
+    except (TypeError, ValueError):
+        return repr(value)
+    return value
+
+
+class _ObservedFacts:
+    """Read-logging wrapper around ``RunFacts`` (T-043, spec D9).
+
+    Every attribute access is recorded with a canonical digest of the
+    returned value; callables are wrapped so the *call result* is logged
+    instead of the method object. Observation digests derive from this
+    log, so an owner reading a new input extends its digest without a
+    hand-maintained list.
+    """
+
+    def __init__(self, facts: RunFacts) -> None:
+        object.__setattr__(self, "_facts", facts)
+        object.__setattr__(self, "reads", [])
+
+    def __getattribute__(self, name: str) -> Any:
+        if name in ("_facts", "reads"):
+            return object.__getattribute__(self, name)
+        value = getattr(object.__getattribute__(self, "_facts"), name)
+        reads = object.__getattribute__(self, "reads")
+        if callable(value):
+            def _logged(*args: Any, **kwargs: Any) -> Any:
+                result = value(*args, **kwargs)
+                reads.append((
+                    f"{name}()",
+                    _digest_json(_canonical(args)),
+                    _digest_json(_canonical(result)),
+                ))
+                return result
+            return _logged
+        reads.append((name, _digest_json(_canonical(value))))
+        return value
+
+
 class _Builder:
     """One snapshot build over one selected run root."""
 
@@ -253,18 +338,15 @@ class _Builder:
         }
         self._records: dict[str, dict[str, Any]] = {}
         self._drafts: list[_DraftAssertion] = []
-        self._manifest_degraded = False
         self._artifact_sources: dict[str, RegisteredSource] = {}
         self._artifact_hashes_observed: dict[str, str | None] = {}
         self._artifact_hashes_verified: dict[str, str | None] = {}
-        self._limitations: tuple[Any, ...] = ()
-        self._limitations_digest = ""
 
     # -- orchestration ------------------------------------------------
 
     def build(self, mid_build_hook: Callable[[], None] | None) -> dict[str, Any]:
         capture = self._capture()
-        self._project(capture)
+        projection = self._project(capture)
         if mid_build_hook is not None:
             mid_build_hook()
         verify = self._capture()
@@ -272,7 +354,7 @@ class _Builder:
             relpath: self._read_artifact_hash(relpath)
             for relpath in self._artifact_sources
         }
-        document = self._assemble(capture, verify)
+        document = self._assemble(capture, verify, projection)
         # The build is atomic: it returns only a contract-valid document.
         validate_snapshot(document)
         return document
@@ -284,20 +366,12 @@ class _Builder:
         contract_text, contract_state = self._read_optional_text(
             self._run_root / "contract-bind.json"
         )
-        manifest_text, manifest_state = self._read_optional_text(
-            self._run_root / "evidence" / "manifest.jsonl"
-        )
-        package_text, package_state = self._read_optional_text(
-            self._package_root / ".claude-plugin" / "plugin.json"
-        )
+        product = project_package_metadata(self._package_root)
         return _Capture(
             facts=facts,
             contract_text=contract_text,
             contract_state=contract_state,
-            manifest_text=manifest_text,
-            manifest_state=manifest_state,
-            package_text=package_text,
-            package_state=package_state,
+            product=product,
         )
 
     def _read_optional_text(self, path: Path) -> tuple[str | None, str]:
@@ -320,8 +394,8 @@ class _Builder:
 
     # -- read states --------------------------------------------------
 
-    def _manifest_state(self, facts: RunFacts, capture: _Capture) -> str:
-        if self._manifest_degraded:
+    def _manifest_state(self, facts: RunFacts, projection: _Projection) -> str:
+        if projection.manifest_degraded:
             # The Manifest was read, but a declared binding cannot be
             # established (missing or escaping artifact, rejected artifact
             # name, unreadable artifact bytes): the manifest record maps to a
@@ -330,12 +404,13 @@ class _Builder:
         for error in facts.read_errors:
             if error.artifact == "manifest":
                 return "unreadable" if error.code == "unreadable" else "malformed"
-        return capture.manifest_state
+        return facts.artifact_state("manifest")
 
     # -- projection (owner seams over captured inputs) -----------------
 
-    def _project(self, capture: _Capture) -> None:
+    def _project(self, capture: _Capture) -> _Projection:
         facts = capture.facts
+        acc = _ProjectionAcc()
 
         # identity.run: the selected-session fact from the registry.
         self._draft(
@@ -345,8 +420,9 @@ class _Builder:
             {"runId": self._registry.run_id, "label": None},
         )
 
-        # identity.product: package metadata owner.
-        product = project_package_metadata(self._package_root)
+        # identity.product: package metadata owner (read during capture —
+        # the owner's captured text also feeds the observation hash).
+        product = capture.product
         if product.availability == "known" and product.value is not None:
             self._draft(
                 "identity.product",
@@ -527,7 +603,7 @@ class _Builder:
             )
 
         # evaluation: point-back owner over the captured point-back text.
-        self._project_evaluation(facts, pointback_state, spec_criteria)
+        self._project_evaluation(facts, pointback_state, spec_criteria, acc)
 
         # nextActions: next-action owner over the same captured facts.
         action = project_next_action(
@@ -561,6 +637,11 @@ class _Builder:
             action_result,
         )
         # The owner emits no alternatives; the empty list is owner-known.
+        return _Projection(
+            manifest_degraded=acc.manifest_degraded,
+            limitations=acc.limitations,
+            limitations_digest=acc.limitations_digest,
+        )
 
     def _project_contract(self, capture: _Capture) -> None:
         if capture.contract_state == "missing":
@@ -632,6 +713,7 @@ class _Builder:
         facts: RunFacts,
         pointback_state: str,
         spec_criteria: tuple[Any, ...],
+        acc: _ProjectionAcc,
     ) -> None:
         criteria_ids = tuple(c.criterion_id for c in spec_criteria)
         verdict_result: str | None = None
@@ -668,7 +750,7 @@ class _Builder:
                     "complete": pointback.coverage.complete,
                 }
                 for evaluation in pointback.criteria:
-                    bindings = self._evidence_bindings(facts, criteria_ids, evaluation)
+                    bindings = self._evidence_bindings(facts, criteria_ids, evaluation, acc)
                     evaluated.append((evaluation, bindings))
                 findings = list(pointback.findings)
 
@@ -730,20 +812,20 @@ class _Builder:
             )
 
         # limitations: run-metadata owner (never caller-authored prose).
-        self._limitations = project_limitations(
+        acc.limitations = project_limitations(
             owner_unmapped_assertion_ids=tuple(sorted(unmapped_ids))
         )
-        self._limitations_digest = _digest_json(
+        acc.limitations_digest = _digest_json(
             [
                 {
                     "code": item.code,
                     "summary": item.summary,
                     "affectsAssertionIds": list(item.affects_assertion_ids),
                 }
-                for item in self._limitations
+                for item in acc.limitations
             ]
         )
-        for limitation in self._limitations:
+        for limitation in acc.limitations:
             self._draft(
                 f"limitations.items.{_slug(limitation.code)}",
                 (_REF_LIMITATIONS,),
@@ -756,7 +838,11 @@ class _Builder:
             )
 
     def _evidence_bindings(
-        self, facts: RunFacts, criteria_ids: tuple[str, ...], evaluation: Any
+        self,
+        facts: RunFacts,
+        criteria_ids: tuple[str, ...],
+        evaluation: Any,
+        acc: _ProjectionAcc,
     ) -> list[dict[str, Any]]:
         """Project the Manifest evidence binding for one ledger row.
 
@@ -777,18 +863,18 @@ class _Builder:
         )
         if any(finding.rule_id in _UNBINDABLE_RULES for finding in g6_findings):
             if any(finding.rule_id in _DEGRADING_RULES for finding in g6_findings):
-                self._manifest_degraded = True
+                acc.manifest_degraded = True
             return []
         leaf = token[len("evidence/"):]
         try:
             source = self._registry.derive_evidence_artifact_source(leaf)
         except SourceRegistryError:
-            self._manifest_degraded = True
+            acc.manifest_degraded = True
             return []
         relpath = source.capture_targets[0]
         artifact_hash = self._read_artifact_hash(relpath)
         if artifact_hash is None:
-            self._manifest_degraded = True
+            acc.manifest_degraded = True
             return []
         self._artifact_sources[relpath] = source
         self._sources[source.source_ref] = source
@@ -865,8 +951,37 @@ class _Builder:
             "facts": [fact.code for fact in snapshot.facts],
         }
 
+    def _owner_read_digest(self, capture: _Capture, *, chain: str) -> str:
+        """Digest what the projection owner actually read (T-043, spec D9).
+
+        The owner is re-invoked over a read-logging wrapper of the captured
+        facts; the log (accessed attribute + canonical digest of each value,
+        plus the preview input passed by argument) is the observation
+        digest. Extending an owner with a new input extends its digest with
+        no hand-maintained input list to forget.
+        """
+        facts = capture.facts
+        proxy = _ObservedFacts(facts)
+        proxy.reads.append(
+            ("preview_snapshot", _digest_json(self._preview_digest(facts.preview)))
+        )
+        states = inspect_run(
+            self._run_root, preview_snapshot=facts.preview, run_facts=proxy
+        )
+        if chain == "next-action":
+            project_next_action(
+                states,
+                self._run_root,
+                preview_snapshot=facts.preview,
+                run_facts=proxy,
+            )
+        return _digest_json(proxy.reads)
+
     def _observations(
-        self, capture: _Capture, artifact_hashes: dict[str, str | None]
+        self,
+        capture: _Capture,
+        artifact_hashes: dict[str, str | None],
+        projection: _Projection,
     ) -> dict[str, _Observation]:
         facts = capture.facts
         observations: dict[str, _Observation] = {}
@@ -888,9 +1003,9 @@ class _Builder:
         )
         add(
             self._registry.source("package.metadata"),
-            capture.package_state,
-            _digest_text(capture.package_text)
-            if capture.package_text is not None
+            capture.product.read_state,
+            _digest_text(capture.product.raw_text)
+            if capture.product.raw_text is not None
             else None,
         )
         plan_state = facts.artifact_state("plan")
@@ -915,7 +1030,7 @@ class _Builder:
         add(
             self._registry.source("execution.stage-registry"),
             "complete",
-            _digest_json(sorted(facts.existing_paths)),
+            self._owner_read_digest(capture, chain="stage-registry"),
         )
         add(
             self._registry.source("execution.preview"),
@@ -931,29 +1046,23 @@ class _Builder:
                 if pointback_state == "complete"
                 else None,
             )
-        manifest_state = self._manifest_state(facts, capture)
+        manifest_state = self._manifest_state(facts, projection)
         add(
             self._registry.source("evaluation.manifest"),
             manifest_state,
-            _digest_text(capture.manifest_text)
+            _digest_text(facts.manifest_raw_text)
             if manifest_state == "complete"
             else None,
         )
         add(
             self._registry.source("run.next-action"),
             "complete",
-            _digest_json(
-                [
-                    sorted(facts.existing_paths),
-                    facts.pointback_text,
-                    self._preview_digest(facts.preview),
-                ]
-            ),
+            self._owner_read_digest(capture, chain="next-action"),
         )
         add(
             self._registry.source("run.limitations"),
             "complete",
-            self._limitations_digest,
+            projection.limitations_digest,
         )
         for relpath, source in self._artifact_sources.items():
             hash_value = artifact_hashes.get(relpath)
@@ -1083,9 +1192,15 @@ class _Builder:
         finalized.sort(key=lambda assertion: assertion["id"])
         return finalized
 
-    def _assemble(self, capture: _Capture, verify: _Capture) -> dict[str, Any]:
-        observed = self._observations(capture, self._artifact_hashes_observed)
-        verified = self._observations(verify, self._artifact_hashes_verified)
+    def _assemble(
+        self, capture: _Capture, verify: _Capture, projection: _Projection
+    ) -> dict[str, Any]:
+        observed = self._observations(
+            capture, self._artifact_hashes_observed, projection
+        )
+        verified = self._observations(
+            verify, self._artifact_hashes_verified, projection
+        )
         self._finalize_records(observed, verified)
         assertions = self._finalize_assertions()
         items = [self._records[ref] for ref in sorted(self._records)]

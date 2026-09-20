@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Packaged install/runtime doctor for design-playbook (vNext ticket 10).
 
+NOTE: this is the shipped user-repo doctor. The repo-internal doctor is a
+different file with the same name: scripts/doctor.py at the monorepo root
+(gate mirrors and diagnostics over this repository).
+
 Runs against the installed plugin package root (this file's grandparents),
 not the monorepo. Reports capability level and concrete repairs.
 

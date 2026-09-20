@@ -985,5 +985,58 @@ class ConsoleCLITest(unittest.TestCase):
         self.assertNotIn(str(self.base), err.getvalue())
 
 
+class GracefulTeardownTest(_ServerTestCase):
+    """T-044 (spec D10a): the flush → half-close → drain → close teardown
+    must deliver the full response and a clean close even when a POST
+    leaves body bytes unread in the receive buffer. This is the Windows
+    TCP-reset defect (client WinError 10053 mid-read) that commit 9065784
+    fixed — this test pins it so it cannot regress silently."""
+
+    def test_post_with_unread_body_gets_full_response_and_clean_eof(self) -> None:
+        # No Content-Length: the handler reads an empty body and responds;
+        # the stray bytes stay in the receive buffer past the response.
+        request = (
+            f"POST /api/v1/snapshot HTTP/1.1\r\n"
+            f"Host: {self.server.authority}\r\n"
+            f"Origin: {self.server.origin}\r\n"
+            f"Authorization: Bearer {self.token}\r\n"
+            f"Connection: close\r\n\r\n"
+        ).encode() + b"stray-body-bytes-that-are-never-declared"
+        with socket.create_connection(
+            (self.server.bind_host, self.server.port), timeout=5
+        ) as sock:
+            sock.sendall(request)
+            # Let the server respond and tear down before the client reads:
+            # with a reset-style teardown the RST poisons the socket while
+            # the client is idle, and the first read dies with it; with the
+            # graceful teardown the client gets the response and clean EOF.
+            time.sleep(0.3)
+            chunks = []
+            while True:
+                try:
+                    chunk = sock.recv(65536)
+                except socket.timeout:
+                    self.fail("server never closed the connection")
+                except OSError as exc:  # includes ConnectionResetError / 10053
+                    self.fail(f"connection reset mid-read (teardown regression): {exc!r}")
+                if not chunk:
+                    break
+                chunks.append(chunk)
+        raw = b"".join(chunks)
+        self.assertTrue(raw.startswith(b"HTTP/1.1 "), raw[:40])
+        status = int(raw.split(b" ", 2)[1])
+        self.assertTrue(400 <= status < 500, raw[:120])  # bounded 4xx rejection
+        # The declared response body is complete: the framing length the
+        # server sent is fully received before EOF.
+        header, _, body = raw.partition(b"\r\n\r\n")
+        declared = next(
+            int(value.strip())
+            for line in header.split(b"\r\n")
+            if line.lower().startswith(b"content-length:")
+            for value in [line.split(b":", 1)[1]]
+        )
+        self.assertEqual(len(body), declared)
+
+
 if __name__ == "__main__":
     unittest.main()

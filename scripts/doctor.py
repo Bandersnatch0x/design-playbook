@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Install / runtime health check for design-playbook.
 
+NOTE: this is the repo-internal doctor. The shipped user-repo doctor is a
+different file with the same name:
+packages/design-playbook/scripts/doctor.py (report-only checks for a
+consumer repository, including the adapter lifecycle check).
+
 Read-only: reports whether the redistributable plugin surface is present,
 versions agree, bundled MCP adapters are reachable, and optional local
 adapter floor self-check can run. Does not mutate the tree or create tags.

@@ -56,6 +56,9 @@ class ValidateGateTests(unittest.TestCase):
         # root README badges and their Run Console maturity vocabulary.
         shutil.copy2(ROOT / "README.md", self.root / "README.md")
         shutil.copy2(ROOT / "README-zh.md", self.root / "README-zh.md")
+        # The agent-count gate (T-040) derives published counts from the
+        # capability matrix and checks AGENTS.md's matrix claim too.
+        shutil.copy2(ROOT / "AGENTS.md", self.root / "AGENTS.md")
 
     def tearDown(self) -> None:
         self.temp.cleanup()

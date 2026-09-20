@@ -1059,5 +1059,71 @@ class BoundaryScanTest(unittest.TestCase):
             self.assertEqual(hits, [], f"{name} contains forbidden calls")
 
 
+class TestOwnerReadSetDigests(unittest.TestCase):
+    """T-043 (spec D9): observation digests derive from what the owner
+    actually read. A source the owner consumes but the retired hand-maintained
+    digest lists ignored must now turn dependent assertions stale."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.base = Path(self._tmp.name)
+        self.run_root = _make_root(self.base, "run-readset")
+
+    def _build(self, hook=None):
+        return _build(self.run_root, mid_build_hook=hook)
+
+    def test_no_mutation_builds_current(self) -> None:
+        # The read-log digests must be deterministic across the two capture
+        # passes: no mutation, no false "changed".
+        document = self._build().document
+        self.assertEqual(validate_snapshot(document), document)
+        self.assertEqual(document["identity"]["snapshot"]["buildState"], "current")
+
+    def test_mid_build_baseline_content_change_stales_next_action(self) -> None:
+        # design-baseline/state.json content is a next-action owner input
+        # that the retired digest list never hashed (the staleness hole).
+        _write(
+            self.run_root,
+            "design-baseline/state.json",
+            json.dumps({"status": "ready"}),
+        )
+
+        def mutate() -> None:
+            _write(
+                self.run_root,
+                "design-baseline/state.json",
+                json.dumps({"status": "needs_confirmation"}),
+            )
+
+        document = self._build(hook=mutate).document
+        self.assertEqual(validate_snapshot(document), document)
+        record = _source(document, "source.run-status")
+        self.assertEqual(record["freshness"], "changed")
+        action = _assertion(document, "next-actions.primary")
+        self.assertEqual(action["availability"], "stale")
+        self.assertEqual(action["reason"]["code"], "source-changed-during-build")
+        self.assertEqual(document["identity"]["snapshot"]["buildState"], "degraded")
+
+    def test_mid_build_external_fill_appearance_stales_stage_registry(self) -> None:
+        # A fill artifact outside the run root is stage-registry input that
+        # the retired digest (existing_paths only) never covered.
+        external_path = self.base / "_ext-fill.md"
+        self.assertFalse(external_path.exists())
+        plan_text = (self.run_root / "plan.md").read_text(encoding="utf-8")
+        _write(self.run_root, "plan.md", plan_text + "\nfill: ../_ext-fill.md\n")
+
+        def hook() -> None:
+            external_path.write_text("fill body\n", encoding="utf-8")
+
+        document = self._build(hook=hook).document
+        self.assertEqual(validate_snapshot(document), document)
+        record = _source(document, "source.run-facts")
+        self.assertEqual(record["freshness"], "changed")
+        progress = _assertion(document, "execution.progress")
+        self.assertEqual(progress["availability"], "stale")
+        self.assertEqual(document["identity"]["snapshot"]["buildState"], "degraded")
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

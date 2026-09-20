@@ -84,6 +84,9 @@ class RunFacts:
     # fill: lines inside fenced blocks are ignored by declaration parsing;
     # kept as a fact so run-status can name them instead of hiding the skip.
     fenced_fill_declarations: tuple[str, ...] = ()
+    # The manifest file exactly as captured (T-042, spec D8): hashed by the
+    # snapshot builder from this owner capture instead of a parallel re-read.
+    manifest_raw_text: str = ""
 
     @property
     def manifest_entries(self) -> tuple[dict[str, Any], ...]:
@@ -136,12 +139,17 @@ class _OptionalRunFacts:
 
 def _read_manifest(
     evidence_dir: Path | None,
-) -> tuple[tuple[str, ...], tuple[ArtifactReadFact, ...], str]:
+) -> tuple[tuple[str, ...], tuple[ArtifactReadFact, ...], str, str]:
+    """(entries, errors, state, raw captured text) for evidence/manifest.jsonl.
+
+    The raw text rides the owner capture (T-042): consumers hash what the
+    owner read instead of re-reading the file through a second parser.
+    """
     if evidence_dir is None:
-        return (), (), STATE_MISSING
+        return (), (), STATE_MISSING, ""
     path = evidence_dir / "manifest.jsonl"
     if not path.is_file():
-        return (), (), STATE_MISSING
+        return (), (), STATE_MISSING, ""
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
@@ -149,6 +157,7 @@ def _read_manifest(
             (),
             (ArtifactReadFact("manifest", path, "unreadable", str(exc)),),
             STATE_UNREADABLE,
+            "",
         )
     entries: list[str] = []
     errors: list[ArtifactReadFact] = []
@@ -180,7 +189,7 @@ def _read_manifest(
             )
             continue
         entries.append(line)
-    return tuple(entries), tuple(errors), STATE_COMPLETE
+    return tuple(entries), tuple(errors), STATE_COMPLETE, text
 
 
 def _read_baseline(run_root: Path | None) -> tuple[str | None, str | None]:
@@ -452,7 +461,7 @@ def capture_run_facts(
         fallback_encoding=pointback_fallback_encoding,
     )
     baseline_text, baseline_error = _read_baseline(run_root)
-    manifest_lines, manifest_errors, manifest_state = _read_manifest(evidence_dir)
+    manifest_lines, manifest_errors, manifest_state, manifest_raw = _read_manifest(evidence_dir)
     preview = inspect_preview(preview_dir) if preview_dir is not None else None
     optional = _read_optional_run_facts(run_root)
     plan_declared, plan_fenced = _scan_fill_declarations(optional.plan_text)
@@ -467,6 +476,7 @@ def capture_run_facts(
         plan_text=optional.plan_text,
         plan_fill_artifacts=_plan_fill_artifacts(run_root, plan_declared),
         fenced_fill_declarations=plan_fenced,
+        manifest_raw_text=manifest_raw,
         craft_guard_text=optional.craft_guard_text,
         ledger=parse_ledger(pointback_text),
         verdict=parse_verdict(pointback_text),
