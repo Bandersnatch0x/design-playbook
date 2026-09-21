@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RELEASE = ROOT / "scripts" / "release.py"
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from _checks import release_group_errors  # noqa: E402
+from _checks import dsh_compatibility_errors, release_group_errors  # noqa: E402
 
 
 def _current_version() -> str:
@@ -72,6 +72,41 @@ class ReleaseGroupPolicyTests(unittest.TestCase):
                 )
 
         self.assertEqual(release_group_errors(main, dsh), ())
+
+
+class DshCompatibilityPolicyTests(unittest.TestCase):
+    def test_compatibility_block_contract(self) -> None:
+        valid = {
+            "dsh": {
+                "compatibility": {
+                    "dshReleases": {
+                        "0.1.5-rc.2": "compatible",
+                        "0.1.6-alpha.1": "unknown",
+                    }
+                }
+            }
+        }
+        self.assertEqual(dsh_compatibility_errors(valid), ())
+
+        invalid_cases = (
+            ({}, "dsh.compatibility.dshReleases must map exact DSH versions"),
+            (
+                {"dsh": {"compatibility": {"dshReleases": {}}}},
+                "dsh.compatibility.dshReleases must map exact DSH versions",
+            ),
+            (
+                {"dsh": {"compatibility": {"dshReleases": {"^0.1.5": "compatible"}}}},
+                "dshReleases key '^0.1.5' must be an exact DSH version, not a range",
+            ),
+            (
+                {"dsh": {"compatibility": {"dshReleases": {"0.1.5-rc.2": "probably"}}}},
+                "dshReleases['0.1.5-rc.2'] verdict 'probably' must be one of "
+                "('compatible', 'incompatible', 'unknown')",
+            ),
+        )
+        for manifest, expected in invalid_cases:
+            with self.subTest(expected=expected):
+                self.assertIn(expected, dsh_compatibility_errors(manifest))
 
 
 class ReleaseGateTests(unittest.TestCase):

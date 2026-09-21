@@ -1,6 +1,6 @@
 {
   "name": "design-playbook",
-  "version": "0.24.3",
+  "version": "0.24.4",
   "description": "Design I/O for coding agents: controllable UI generation via declarations (spec/domain/craft/design/components/template) and contracts (skill/evaluator). Use for product UI—console, dashboard, agent-ops, CJK-first apps.",
   "keywords": [
     "pi-package",
@@ -38,6 +38,7 @@
     "design_playbook.py",
     "examples",
     "codex",
+    "cordis.patch.yml",
     "NOTICE",
     "!**/__pycache__",
     "!lib/test_commands.js"
@@ -54,6 +55,13 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "compatibility": {
+      "dshReleases": {
+        "0.1.5-rc.2": "compatible",
+        "0.1.6-alpha.1": "unknown",
+        "0.1.6-alpha.2": "compatible"
+      }
     }
   }
 }

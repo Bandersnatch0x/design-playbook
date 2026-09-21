@@ -260,6 +260,40 @@ def release_group_errors(
     return tuple(errors)
 
 
+DSH_COMPATIBILITY_VERDICTS = ("compatible", "incompatible", "unknown")
+# DSH STORE matches releases by exact full version; a range is not installable
+# evidence, so reject anything carrying range or wildcard syntax.
+_DSH_RANGE_CHARS = re.compile(r"[\^~><=*| ]")
+
+
+def dsh_compatibility_errors(manifest: object) -> tuple[str, ...]:
+    """Return errors in a DSH package's dsh.compatibility.dshReleases block."""
+    if not isinstance(manifest, dict):
+        return ("package.json must contain a JSON object",)
+    dsh = manifest.get("dsh")
+    compatibility = dsh.get("compatibility") if isinstance(dsh, dict) else None
+    releases = (
+        compatibility.get("dshReleases")
+        if isinstance(compatibility, dict)
+        else None
+    )
+    if not isinstance(releases, dict) or not releases:
+        return ("dsh.compatibility.dshReleases must map exact DSH versions",)
+    errors: list[str] = []
+    for version, verdict in releases.items():
+        if not isinstance(version, str) or _DSH_RANGE_CHARS.search(version):
+            errors.append(
+                f"dshReleases key {version!r} must be an exact DSH version, "
+                f"not a range"
+            )
+        if verdict not in DSH_COMPATIBILITY_VERDICTS:
+            errors.append(
+                f"dshReleases[{version!r}] verdict {verdict!r} must be one of "
+                f"{DSH_COMPATIBILITY_VERDICTS}"
+            )
+    return tuple(errors)
+
+
 @dataclass(frozen=True, order=True)
 class PackageReference:
     """A public package surface and the package-relative path it names."""

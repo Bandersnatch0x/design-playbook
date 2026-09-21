@@ -253,6 +253,33 @@ if isinstance(npmj, dict) and npmj:
         "package.json files[] ships design_playbook.py",
     )
 
+    # dsh reads the overlay by path inside the installed package, so a patch
+    # that is declared but not published kills profile composition outright
+    # (`failed to read overlay ... cordis.patch.yml: ENOENT`) with no install
+    # time symptom. The bundle is not named by any shipped Markdown, so
+    # discover_package_references cannot see it — check it explicitly.
+    dsh_bundle = npmj.get("dsh", {})
+    dsh_bundle = dsh_bundle if isinstance(dsh_bundle, dict) else {}
+    dsh_patch = dsh_bundle.get("bundle", {})
+    dsh_patch = dsh_patch.get("patch") if isinstance(dsh_patch, dict) else None
+    check(dsh_patch == "./cordis.patch.yml",
+          f"package.json declares dsh.bundle.patch (got {dsh_patch!r})")
+    if isinstance(dsh_patch, str):
+        target = dsh_patch.lstrip("./")
+        check(
+            _checks.package_file_is_published(target, files_field),
+            f"package.json files[] ships the declared dsh bundle patch: {target}",
+        )
+
+    # DSH STORE derives installability from this block alone. Dropping it while
+    # editing package.json has no local symptom — the catalog entry just flips
+    # to `unlisted` — so the shape is gated here.
+    compat_errors = _checks.dsh_compatibility_errors(npmj)
+    for message in compat_errors:
+        check(False, message)
+    if not compat_errors:
+        check(True, "package.json declares dsh.compatibility.dshReleases")
+
     for reference in _checks.discover_package_references(PKG):
         target = PKG / reference.target
         label = f"{reference.surface} -> {reference.target}"
@@ -483,6 +510,22 @@ if isinstance(bundle_pkg, dict) and bundle_pkg:
           f"dsh-design-playbook declares dsh.bundle.patch (got {patch_rel!r})")
     bundle_patch_file = BUNDLE / "cordis.patch.yml"
     check(bundle_patch_file.is_file(), "dsh-design-playbook cordis.patch.yml present")
+    # Same failure mode as the main package's dsh gate: dsh reads the overlay
+    # by path inside the installed package, so a declared-but-unpublished
+    # patch kills profile composition at install time.
+    bundle_files = bundle_pkg.get("files", [])
+    bundle_files = bundle_files if isinstance(bundle_files, list) else []
+    check(
+        _checks.package_file_is_published("cordis.patch.yml", bundle_files),
+        "dsh-design-playbook files[] ships cordis.patch.yml",
+    )
+    # Same catalog contract as the main package: this manifest is listed
+    # separately, so it needs its own declaration.
+    bundle_compat_errors = _checks.dsh_compatibility_errors(bundle_pkg)
+    for message in bundle_compat_errors:
+        check(False, message)
+    if not bundle_compat_errors:
+        check(True, "dsh-design-playbook declares dsh.compatibility.dshReleases")
     if bundle_patch_file.is_file():
         patch_text = bundle_patch_file.read_text(encoding="utf-8")
         # The patch must bridge both MCP servers, not the skills provider
