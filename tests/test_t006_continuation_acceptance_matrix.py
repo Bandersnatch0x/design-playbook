@@ -53,9 +53,8 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 PKG = ROOT / "packages" / "design-playbook"
 sys.path.insert(0, str(PKG))
-sys.path.insert(0, str(PKG / "mcp"))
 
-from mcp.run_console import test_http_server as console_harness  # noqa: E402
+from tests.run_console import test_http_server as console_harness  # noqa: E402
 from design_playbook.mcp.run_console.actions import (  # noqa: E402
     capability_names,
     copy_command_is_eligible,

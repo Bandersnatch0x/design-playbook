@@ -51,7 +51,11 @@ _RUNTIME_RELATIVE = (
     ("mcp", "run_console", "http_server.py"),
     ("mcp", "run_console", "snapshot_builder.py"),
 )
-_TRIAL_RECORD = ("mcp", "run_console", "test_read_only_trial.py")
+# The Console suite lives under tests/run_console/; mcp/run_console/ is kept
+# as a fallback for trees published before the suite left the runtime dir.
+_CONSOLE_SUITE_DIR = ("tests", "run_console")
+_CONSOLE_LEGACY_SUITE_DIR = ("mcp", "run_console")
+_TRIAL_RECORD_NAME = "test_read_only_trial.py"
 _TRIAL_STATUS_RE = re.compile(r"^TRIAL_STATUS\s*=\s*\"([^\"]+)\"", re.MULTILINE)
 _TRIAL_NOT_RUN = "TRIAL_NOT_RUN"
 
@@ -162,9 +166,22 @@ def inspect_console_inventory(package_root: Path) -> ConsoleInventory:
     for relative in _RUNTIME_RELATIVE:
         if not package_root.joinpath(*relative).is_file():
             missing.append("/".join(relative))
-    runtime_dir = package_root / "mcp" / "run_console"
-    tests_present = runtime_dir.is_dir() and any(runtime_dir.glob("test_*.py"))
-    trial_path = package_root.joinpath(*_TRIAL_RECORD)
+    suite_dirs = (
+        package_root.joinpath(*_CONSOLE_SUITE_DIR),
+        package_root.joinpath(*_CONSOLE_LEGACY_SUITE_DIR),
+    )
+    tests_present = any(
+        directory.is_dir() and any(directory.glob("test_*.py"))
+        for directory in suite_dirs
+    )
+    trial_path = next(
+        (
+            directory / _TRIAL_RECORD_NAME
+            for directory in suite_dirs
+            if (directory / _TRIAL_RECORD_NAME).is_file()
+        ),
+        suite_dirs[0] / _TRIAL_RECORD_NAME,
+    )
     trial_record_present = trial_path.is_file()
     trial_status: str | None = None
     if trial_record_present:

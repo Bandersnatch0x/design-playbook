@@ -26,6 +26,7 @@ dist-ssr
 evidence/
 # The Evidence runtime is source, not generated run evidence.
 !packages/design-playbook/mcp/evidence/
+!packages/design-playbook/tests/evidence/
 # .agents/plugins/ is a publish surface (ADR-0009 dual publish; validate.py
 # hard-gates on marketplace.json), so it must stay trackable. Ignoring
 # `.agents/` wholesale leaves already-tracked files working while silently

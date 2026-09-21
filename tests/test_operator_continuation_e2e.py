@@ -27,7 +27,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "operator-project"
 sys.path.insert(0, str(PKG))
 
 from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
-from mcp.run_console.test_http_server import _make_root, _tree_digest  # noqa: E402
+from tests.run_console.test_http_server import _make_root, _tree_digest  # noqa: E402
 
 COMMAND_TIMEOUT = 90  # Handoff includes five real browser captures.
 STAMP = "2026-09-07T00:00:00Z"
