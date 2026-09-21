@@ -32,7 +32,10 @@ _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
-from mcp.run_console import test_http_server as harness  # noqa: E402
+# The MCP runtime stays at mcp/run_console/; the suite lives under tests/run_console/.
+_COMPONENT_DIR = _PKG_ROOT / "mcp" / "run_console"
+
+from tests.run_console import test_http_server as harness  # noqa: E402
 
 from design_playbook.mcp.run_console.actions import (  # noqa: E402
     ACTION_REFRESH,
@@ -116,7 +119,7 @@ class ClosedCapabilityRegistryTest(unittest.TestCase):
                 self.assertNotIn(name, CAPABILITIES)
 
     def test_actions_module_has_no_outbound_network_or_exec_primitive(self) -> None:
-        path = Path(__file__).resolve().parent / "actions.py"
+        path = _COMPONENT_DIR / "actions.py"
         self.assertTrue(path.exists(), str(path))
         source = path.read_text(encoding="utf-8")
         for token in (

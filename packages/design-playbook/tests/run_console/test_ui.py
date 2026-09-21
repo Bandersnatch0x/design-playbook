@@ -30,6 +30,8 @@ from pathlib import Path
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
+# The MCP runtime stays at mcp/run_console/; the suite lives under tests/run_console/.
+_COMPONENT_DIR = _PKG_ROOT / "mcp" / "run_console"
 
 from design_playbook.mcp.run_console.http_server import (  # noqa: E402
     RunConsoleHTTPServer,
@@ -46,7 +48,7 @@ from design_playbook.mcp.run_console.ui import (  # noqa: E402
     UIResources,
 )
 
-_DIR = Path(__file__).resolve().parent
+_DIR = _COMPONENT_DIR
 _HTML = (_DIR / "app.html").read_text(encoding="utf-8")
 _CSS = (_DIR / "app.css").read_text(encoding="utf-8")
 _JS = (_DIR / "app.js").read_text(encoding="utf-8")
@@ -213,7 +215,7 @@ class StaticRouteTest(unittest.TestCase):
     """One real server per test; token-less requests hit the UI routes."""
 
     def setUp(self) -> None:
-        from mcp.run_console import test_http_server as harness
+        from tests.run_console import test_http_server as harness
 
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)

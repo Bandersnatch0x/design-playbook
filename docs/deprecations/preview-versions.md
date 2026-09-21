@@ -26,7 +26,7 @@ the current cycle and is targeted for v1.0.0.
 - **behavior** - the public function surface is locked.
 
 A regression guard,
-`packages/design-playbook/mcp/preview/test_versions_freeze.py`, locks the
+`packages/design-playbook/tests/preview/test_versions_freeze.py`, locks the
 frozen surface and fails if a new authoring caller, authoring function, or
 schema constant appears.
 
@@ -107,5 +107,5 @@ the artifact migration obligation outlive SemVer permission.
 - `packages/design-playbook/mcp/preview/versions.py` - frozen module
 - `packages/design-playbook/mcp/preview/compatibility.py` - long-lived owner
 - `packages/design-playbook/mcp/preview/transaction.py` - decision authority
-- `packages/design-playbook/mcp/preview/test_versions_freeze.py` - freeze guard
+- `packages/design-playbook/tests/preview/test_versions_freeze.py` - freeze guard
 - `docs/research/architecture-deepening-issues/05-versions.md` - US-5

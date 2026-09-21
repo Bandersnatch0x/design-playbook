@@ -12,7 +12,7 @@ _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
-from design_playbook.mcp.preview.test_browser_control import _write_control_page  # noqa: E402
+from tests.preview.test_browser_control import _write_control_page  # noqa: E402
 from design_playbook.mcp.preview.control import _build_control  # noqa: E402
 from design_playbook.mcp.preview.review_session import _build_parent_page  # noqa: E402
 

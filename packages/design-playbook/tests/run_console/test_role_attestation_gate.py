@@ -66,7 +66,10 @@ _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
-from mcp.run_console import test_http_server as harness  # noqa: E402
+# The MCP runtime stays at mcp/run_console/; the suite lives under tests/run_console/.
+_COMPONENT_DIR = _PKG_ROOT / "mcp" / "run_console"
+
+from tests.run_console import test_http_server as harness  # noqa: E402
 
 from design_playbook.mcp.run_console.actions import (  # noqa: E402
     CAPABILITIES,
@@ -744,7 +747,7 @@ class DisabledActionSurfaceTest(harness._ServerTestCase):
         # Any future mention — even a comment — must force this gate
         # test to be re-derived consciously, mirroring the boundary
         # scans in test_actions.py.
-        source = (Path(__file__).resolve().parent / "http_server.py").read_text(
+        source = (_COMPONENT_DIR / "http_server.py").read_text(
             encoding="utf-8"
         )
         self.assertNotIn("attest", source.lower())
@@ -882,7 +885,7 @@ class DisabledSnapshotLimitationTest(_BuiltSnapshotTestCase):
         # The limitation is visible in the rendered Console: the attest
         # control exists only as a disabled button described by the
         # role-attestation limitation reason, in both locales.
-        source = (Path(__file__).resolve().parent / "app.js").read_text(
+        source = (_COMPONENT_DIR / "app.js").read_text(
             encoding="utf-8"
         )
         for token in (

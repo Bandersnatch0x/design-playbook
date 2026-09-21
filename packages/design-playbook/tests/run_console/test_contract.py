@@ -11,6 +11,8 @@ from pathlib import Path
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
+# The MCP runtime stays at mcp/run_console/; the suite lives under tests/run_console/.
+_COMPONENT_DIR = _PKG_ROOT / "mcp" / "run_console"
 
 from design_playbook.mcp.run_console.contract import (  # noqa: E402
     SNAPSHOT_CONTRACT_INVALID,
@@ -632,7 +634,7 @@ class SnapshotContractInvariantTests(unittest.TestCase):
 
     def test_schema_artifact_freezes_version_sections_and_closed_objects(self) -> None:
         schema = json.loads(
-            Path(__file__).with_name("snapshot_v1.schema.json").read_text(
+            (_COMPONENT_DIR / "snapshot_v1.schema.json").read_text(
                 encoding="utf-8"
             )
         )

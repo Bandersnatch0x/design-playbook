@@ -37,7 +37,10 @@ _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
-from mcp.run_console import test_http_server as harness  # noqa: E402
+# The MCP runtime stays at mcp/run_console/; the suite lives under tests/run_console/.
+_COMPONENT_DIR = _PKG_ROOT / "mcp" / "run_console"
+
+from tests.run_console import test_http_server as harness  # noqa: E402
 from design_playbook.mcp.run_console.http_server import serve_run_console  # noqa: E402
 from design_playbook.mcp.run_console.session import RunConsoleSession  # noqa: E402
 from design_playbook.mcp.run_console.snapshot_builder import SnapshotBuildError  # noqa: E402
@@ -90,7 +93,7 @@ class ConsoleHarness:
         self.run_root = harness._make_root(self.base)
         if point_back is not None:
             (self.run_root / "point-back.md").write_text(
-                (Path(__file__).parent / "fixtures" / point_back).read_text(
+                (_COMPONENT_DIR / "fixtures" / point_back).read_text(
                     encoding="utf-8"
                 ),
                 encoding="utf-8",
@@ -567,7 +570,7 @@ class AccessibilityTest(BrowserTestCase):
         self.assertEqual(cls, 0)
 
     def test_cjk_long_and_control_characters_wrap_without_breaking_layout(self) -> None:
-        fixture = (Path(__file__).parent / "fixtures" /
+        fixture = (_COMPONENT_DIR / "fixtures" /
                    "spec-script-summary.md").read_text(encoding="utf-8")
         spec = fixture.replace(
             "- 一句话定义：<script>alert(1)</script> 查看所有模拟运行的队列监控页。",

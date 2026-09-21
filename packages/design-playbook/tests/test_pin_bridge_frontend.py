@@ -32,7 +32,7 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 
 # Same directory; pytest's prepend import mode and direct `python <file>` runs
 # both put this directory on sys.path.
-from preview_e2e_helpers import dismiss_onboarding  # noqa: E402
+from tests.preview_e2e_helpers import dismiss_onboarding  # noqa: E402
 
 ROUND_N = 1
 SUMMARY = "pin bridge e2e - sandbox iframe"

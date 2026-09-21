@@ -22,7 +22,7 @@ from design_playbook.mcp.ui_locale import resolve_ui_locale  # noqa: E402
 from design_playbook.mcp.preview.i18n import lang  # noqa: E402
 from design_playbook.mcp.preview.integrity import decision_name  # noqa: E402
 from design_playbook.scripts.run_handoff import main, run_handoff  # noqa: E402
-from design_playbook.mcp.evidence.test_handoff import (  # noqa: E402
+from tests.evidence.test_handoff import (  # noqa: E402
     DELIVERABLE_HTML, _fake_capture_runner, _make_run, _passing_gate_runner,
 )
 

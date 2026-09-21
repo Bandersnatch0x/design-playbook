@@ -42,7 +42,7 @@ except ModuleNotFoundError:  # pragma: no cover - environment marker
 
 # Same directory; pytest's prepend import mode and direct `python <file>` runs
 # both put this directory on sys.path.
-from preview_e2e_helpers import dismiss_onboarding as _dismiss_onboarding  # noqa: E402
+from tests.preview_e2e_helpers import dismiss_onboarding as _dismiss_onboarding  # noqa: E402
 
 SUMMARY = "e2e full flow"
 ROUND_N = 1

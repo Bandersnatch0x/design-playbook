@@ -62,7 +62,10 @@ _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
-from mcp.run_console import test_http_server as harness  # noqa: E402
+# The MCP runtime stays at mcp/run_console/; the suite lives under tests/run_console/.
+_COMPONENT_DIR = _PKG_ROOT / "mcp" / "run_console"
+
+from tests.run_console import test_http_server as harness  # noqa: E402
 from design_playbook.mcp.run_console import session as session_module  # noqa: E402
 from design_playbook.mcp.run_console.http_server import serve_run_console  # noqa: E402
 from design_playbook.mcp.run_console.session import RunConsoleSession  # noqa: E402
@@ -72,7 +75,7 @@ GATE = "G-RO-TRIAL-PASS"
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _PROTOCOL = _REPO_ROOT / "docs" / "agents" / "run-console-read-only-trial.md"
-_FIXTURES = Path(__file__).resolve().parent / "fixtures"
+_FIXTURES = _COMPONENT_DIR / "fixtures"
 _NOW = "2026-08-25T10:00:00Z"
 _SCENARIOS = ("pass", "recirculate", "stale", "missing", "inconsistent")
 _FORBIDDEN_NAME_FRAGMENTS = ("participant", "timing", "elapsed", "trial-export")

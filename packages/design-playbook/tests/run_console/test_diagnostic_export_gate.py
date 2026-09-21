@@ -79,7 +79,10 @@ _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
-from mcp.run_console import test_http_server as harness  # noqa: E402
+# The MCP runtime stays at mcp/run_console/; the suite lives under tests/run_console/.
+_COMPONENT_DIR = _PKG_ROOT / "mcp" / "run_console"
+
+from tests.run_console import test_http_server as harness  # noqa: E402
 
 from design_playbook.mcp.run_console.actions import (  # noqa: E402
     CAPABILITIES,
@@ -1100,7 +1103,7 @@ class DisabledActionSurfaceTest(harness._ServerTestCase):
         # literals the server may declare: any new spelling — even in a
         # comment — must force this gate test to be re-derived
         # consciously, mirroring the boundary scans in test_actions.py.
-        source = (Path(__file__).resolve().parent / "http_server.py").read_text(
+        source = (_COMPONENT_DIR / "http_server.py").read_text(
             encoding="utf-8"
         )
         route_literals = set(re.findall(r'"(/api/v1/[^"]*export[^"]*)"', source))
@@ -1199,7 +1202,7 @@ class DisabledActionSurfaceTest(harness._ServerTestCase):
         modules = [
             path
             for path in sorted(
-                (Path(__file__).resolve().parent).glob("*.py")
+                _COMPONENT_DIR.glob("*.py")
             )
             if not path.name.startswith("test_")
         ]
@@ -1403,7 +1406,7 @@ class DisabledSnapshotLimitationTest(_BuiltSnapshotTestCase):
         # The limitation is visible in the rendered Console: the export
         # control exists only as a disabled button described by the
         # diagnostic-export limitation reason, in both locales.
-        source = (Path(__file__).resolve().parent / "app.js").read_text(
+        source = (_COMPONENT_DIR / "app.js").read_text(
             encoding="utf-8"
         )
         for token in (

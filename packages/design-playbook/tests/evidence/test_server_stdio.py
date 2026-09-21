@@ -24,10 +24,12 @@ from unittest import mock
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
+# The MCP runtime stays at mcp/evidence/; the suite lives under tests/evidence/.
+_COMPONENT_DIR = _PKG_ROOT / "mcp" / "evidence"
 
 from design_playbook.mcp.evidence import capture_runtime  # noqa: E402
 
-SERVER = Path(__file__).resolve().with_name("server.py")
+SERVER = _COMPONENT_DIR / "server.py"
 FIXTURE_HTML = """<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>evidence-fixture</title></head>
@@ -461,7 +463,7 @@ class EvidenceCaptureTests(unittest.TestCase):
             )
 
     def test_screenshot_sidecar_recalls_planted_defects(self) -> None:
-        planted = Path(__file__).with_name("fixtures") / "planted-defects.html"
+        planted = _COMPONENT_DIR / "fixtures" / "planted-defects.html"
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "evidence").mkdir()
@@ -538,7 +540,7 @@ class EvidenceCaptureTests(unittest.TestCase):
             self.assertEqual(sidecar["console"]["measurement_error"], "")
 
     def test_screenshot_sidecar_legal_undefined_is_candidate_not_failure(self) -> None:
-        page = Path(__file__).with_name("fixtures") / "legal-undefined.html"
+        page = _COMPONENT_DIR / "fixtures" / "legal-undefined.html"
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "evidence").mkdir()
@@ -559,7 +561,7 @@ class EvidenceCaptureTests(unittest.TestCase):
             self.assertEqual(sidecar["defects"]["measurement_status"], "measured")
 
     def test_async_init_wait_for_state_reaches_ok(self) -> None:
-        page = Path(__file__).with_name("fixtures") / "async-init.html"
+        page = _COMPONENT_DIR / "fixtures" / "async-init.html"
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "evidence").mkdir()
@@ -576,7 +578,7 @@ class EvidenceCaptureTests(unittest.TestCase):
             self.assertEqual(payload["observed_state"], "ok")
 
     def test_wrong_page_selector_fails_closed(self) -> None:
-        page = Path(__file__).with_name("fixtures") / "login-wrong-page.html"
+        page = _COMPONENT_DIR / "fixtures" / "login-wrong-page.html"
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "evidence").mkdir()
@@ -593,7 +595,7 @@ class EvidenceCaptureTests(unittest.TestCase):
             self.assertTrue(payload["error"])
 
     def test_synthetic_storage_state_loads_without_copying_session(self) -> None:
-        page = Path(__file__).with_name("fixtures") / "legal-undefined.html"
+        page = _COMPONENT_DIR / "fixtures" / "legal-undefined.html"
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "evidence").mkdir()

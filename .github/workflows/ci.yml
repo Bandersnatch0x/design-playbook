@@ -97,19 +97,19 @@ jobs:
         run: |
           python3 -m pytest \
             packages/design-playbook/mcp/test_transport.py \
-            packages/design-playbook/mcp/preview/test_integrity.py \
-            packages/design-playbook/mcp/preview/test_transaction.py \
-            packages/design-playbook/mcp/preview/test_versions.py \
-            packages/design-playbook/mcp/preview/test_server_stdio.py \
-            packages/design-playbook/mcp/preview/test_i18n_labels.py \
-            packages/design-playbook/mcp/evidence/test_capture_contract.py \
-            packages/design-playbook/mcp/evidence/test_disclosure.py \
-            packages/design-playbook/mcp/evidence/test_delivery_matrix.py \
-            packages/design-playbook/mcp/evidence/test_containment.py \
-            packages/design-playbook/mcp/evidence/test_handoff.py \
-            packages/design-playbook/mcp/evidence/test_handoff_i18n.py \
-            packages/design-playbook/mcp/evidence/test_evidence_preflight.py \
-            packages/design-playbook/mcp/evidence/test_page_defects.py \
+            packages/design-playbook/tests/preview/test_integrity.py \
+            packages/design-playbook/tests/preview/test_transaction.py \
+            packages/design-playbook/tests/preview/test_versions.py \
+            packages/design-playbook/tests/preview/test_server_stdio.py \
+            packages/design-playbook/tests/preview/test_i18n_labels.py \
+            packages/design-playbook/tests/evidence/test_capture_contract.py \
+            packages/design-playbook/tests/evidence/test_disclosure.py \
+            packages/design-playbook/tests/evidence/test_delivery_matrix.py \
+            packages/design-playbook/tests/evidence/test_containment.py \
+            packages/design-playbook/tests/evidence/test_handoff.py \
+            packages/design-playbook/tests/evidence/test_handoff_i18n.py \
+            packages/design-playbook/tests/evidence/test_evidence_preflight.py \
+            packages/design-playbook/tests/evidence/test_page_defects.py \
             -v
 
       - name: Run Console — pure-Python tests (required, no Playwright)
@@ -119,11 +119,11 @@ jobs:
         # install cannot skip this group (same split as Evidence
         # PurePathTests / CaptureTests).
         run: |
-          python3 -m pytest packages/design-playbook/mcp/run_console \
-            --ignore=packages/design-playbook/mcp/run_console/test_ui_browser.py \
-            --ignore=packages/design-playbook/mcp/run_console/test_ui_actions.py \
-            --ignore=packages/design-playbook/mcp/run_console/test_read_only_trial.py \
-            --ignore=packages/design-playbook/mcp/run_console/test_repair_packet.py \
+          python3 -m pytest packages/design-playbook/tests/run_console \
+            --ignore=packages/design-playbook/tests/run_console/test_ui_browser.py \
+            --ignore=packages/design-playbook/tests/run_console/test_ui_actions.py \
+            --ignore=packages/design-playbook/tests/run_console/test_read_only_trial.py \
+            --ignore=packages/design-playbook/tests/run_console/test_repair_packet.py \
             -v
 
       - name: Evidence MCP stdio — pure-path tests (required, no Playwright)
@@ -143,7 +143,7 @@ jobs:
         # test whose method name contains "capture"; filtering on the full
         # class-name suffix keeps the two groups disjoint.
         run: |
-          python3 -m pytest packages/design-playbook/mcp/evidence/test_server_stdio.py -v \
+          python3 -m pytest packages/design-playbook/tests/evidence/test_server_stdio.py -v \
             -k PurePathTests
 
       - name: Install Playwright + chromium (ticket 06 default path)
@@ -164,7 +164,7 @@ jobs:
         # Playwright + chromium install step above to have succeeded.
         # Selection by class name (review item M3): EvidenceCaptureTests.
         run: |
-          python3 -m pytest packages/design-playbook/mcp/evidence/test_server_stdio.py -v \
+          python3 -m pytest packages/design-playbook/tests/evidence/test_server_stdio.py -v \
             -k CaptureTests
 
       - name: Playwright missing — skip-with-reason, mark gate red
@@ -210,10 +210,10 @@ jobs:
         if: steps.pw_install.outcome == 'success'
         run: |
           python3 -m pytest \
-            packages/design-playbook/mcp/run_console/test_ui_browser.py \
-            packages/design-playbook/mcp/run_console/test_ui_actions.py \
-            packages/design-playbook/mcp/run_console/test_read_only_trial.py \
-            packages/design-playbook/mcp/run_console/test_repair_packet.py \
+            packages/design-playbook/tests/run_console/test_ui_browser.py \
+            packages/design-playbook/tests/run_console/test_ui_actions.py \
+            packages/design-playbook/tests/run_console/test_read_only_trial.py \
+            packages/design-playbook/tests/run_console/test_repair_packet.py \
             -v
 
       - name: Preview canvas version-control e2e (require chromium)
@@ -222,7 +222,7 @@ jobs:
           python3 -c "from playwright.sync_api import sync_playwright"
           python3 -m pytest \
             packages/design-playbook/tests/test_e2e_canvas_vc.py \
-            packages/design-playbook/mcp/preview/test_preview_usability.py \
+            packages/design-playbook/tests/preview/test_preview_usability.py \
             -v
 
       - name: Operator continuation — extra-project journey (require chromium)

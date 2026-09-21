@@ -28,6 +28,8 @@ from pathlib import Path
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
+# The MCP runtime stays at mcp/evidence/; the suite lives under tests/evidence/.
+_COMPONENT_DIR = _PKG_ROOT / "mcp" / "evidence"
 
 from design_playbook.mcp.evidence import evidence_preflight as ep  # noqa: E402
 
@@ -188,7 +190,7 @@ class PreflightPlanTests(unittest.TestCase):
 
     def test_local_html_file_url_is_mirror_advisory_only(self) -> None:
         html = (
-            Path(__file__).resolve().parent / "fixtures" / "planted-defects.html"
+            _COMPONENT_DIR / "fixtures" / "planted-defects.html"
         )
         facts = ep.preflight_plan([_entry(url=html.resolve().as_uri())])
         self.assertEqual(_errors(facts), [])

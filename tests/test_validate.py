@@ -627,7 +627,7 @@ class GitIgnoreBoundaryTests(unittest.TestCase):
     def test_evidence_runtime_sources_are_trackable_without_run_artifacts(self) -> None:
         sources = [
             "packages/design-playbook/mcp/evidence/handoff_i18n.py",
-            "packages/design-playbook/mcp/evidence/test_handoff_i18n.py",
+            "packages/design-playbook/tests/evidence/test_handoff_i18n.py",
         ]
         artifacts = [
             "evidence/screenshot.png",

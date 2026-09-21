@@ -34,6 +34,8 @@ from pathlib import Path
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
+# The MCP runtime stays at mcp/run_console/; the suite lives under tests/run_console/.
+_COMPONENT_DIR = _PKG_ROOT / "mcp" / "run_console"
 
 from design_playbook.mcp.run_console.contract import (  # noqa: E402
     validate_snapshot,
@@ -67,7 +69,7 @@ from design_playbook.scripts.status_projection import (  # noqa: E402
     project_next_action,
 )
 
-_FIXTURES = Path(__file__).resolve().parent / "fixtures"
+_FIXTURES = _COMPONENT_DIR / "fixtures"
 _PASS_FIXTURES = _PKG_ROOT / "tests" / "fixtures" / "pass"
 _SESSION_SECRET = b"parity-test-session-secret-005"
 _OTHER_SECRET = b"parity-test-other-secret-005"
@@ -1003,7 +1005,7 @@ class ExcerptPlainTextTest(_ParityTestCase):
 class BoundaryScanTest(unittest.TestCase):
     """Gate condition: no copied owner parser, no writes, no network/exec."""
 
-    _RUN_CONSOLE = Path(__file__).resolve().parent
+    _RUN_CONSOLE = _COMPONENT_DIR
     _OWNER_SCRIPTS = _PKG_ROOT / "scripts"
 
     def test_no_owner_parser_regex_is_copied(self) -> None:

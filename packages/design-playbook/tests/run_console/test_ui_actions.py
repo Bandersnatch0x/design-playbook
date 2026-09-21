@@ -30,7 +30,10 @@ _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
-from mcp.run_console import test_ui_browser as browser_harness  # noqa: E402
+# The MCP runtime stays at mcp/run_console/; the suite lives under tests/run_console/.
+_COMPONENT_DIR = _PKG_ROOT / "mcp" / "run_console"
+
+from tests.run_console import test_ui_browser as browser_harness  # noqa: E402
 from design_playbook.mcp.run_console.snapshot_builder import SnapshotBuildError  # noqa: E402
 
 _PLAYWRIGHT = None
@@ -61,7 +64,7 @@ _LATER_STILL = "2026-08-25T12:00:00Z"
 def _swap_to_recirculate(console) -> None:
     """Change a run source after the initial (cached) snapshot load."""
     (console.run_root / "point-back.md").write_text(
-        (Path(__file__).parent / "fixtures" / "point-back-recirculate.md").read_text(
+        (_COMPONENT_DIR / "fixtures" / "point-back-recirculate.md").read_text(
             encoding="utf-8"
         ),
         encoding="utf-8",

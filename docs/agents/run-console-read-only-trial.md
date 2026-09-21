@@ -11,7 +11,7 @@ run one.
 > it is readiness evidence only, never participant evidence.
 
 Companion deterministic rehearsal:
-`packages/design-playbook/mcp/run_console/test_read_only_trial.py`.
+`packages/design-playbook/tests/run_console/test_read_only_trial.py`.
 Decisions that bound this protocol:
 [ADR-0036](../adr/0036-invited-trial-data-and-role-boundary.md),
 [ADR-0037](../adr/0037-local-single-run-console-lifecycle.md),
@@ -129,7 +129,7 @@ review exactly:
 Run from the repository root:
 
 ```text
-python -m pytest -q packages/design-playbook/mcp/run_console/test_read_only_trial.py
+python -m pytest -q packages/design-playbook/tests/run_console/test_read_only_trial.py
 ```
 
 The rehearsal starts a real session and loopback HTTP server on an

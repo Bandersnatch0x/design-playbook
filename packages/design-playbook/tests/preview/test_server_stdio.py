@@ -17,13 +17,15 @@ from unittest import mock
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
+# The MCP runtime stays at mcp/preview/; the suite lives under tests/preview/.
+_COMPONENT_DIR = _PKG_ROOT / "mcp" / "preview"
 # Browser behavior is tested through its owning adapter, not server re-exports.
 from design_playbook.mcp.preview import review_session  # noqa: E402
 from design_playbook.mcp.preview import transaction  # noqa: E402
 from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
 
 
-SERVER = Path(__file__).with_name("server.py")
+SERVER = _COMPONENT_DIR / "server.py"
 
 
 # G5: the parent page embeds a one-time dpb_token + dpb_round as hidden fields.

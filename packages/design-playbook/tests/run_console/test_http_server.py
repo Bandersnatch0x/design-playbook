@@ -30,6 +30,8 @@ from unittest import mock
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
+# The MCP runtime stays at mcp/run_console/; the suite lives under tests/run_console/.
+_COMPONENT_DIR = _PKG_ROOT / "mcp" / "run_console"
 
 from design_playbook.mcp.run_console.contract import validate_snapshot  # noqa: E402
 from design_playbook.mcp.run_console.http_server import (  # noqa: E402
@@ -61,7 +63,7 @@ from design_playbook.mcp.run_console.snapshot_builder import (  # noqa: E402
 )
 from design_playbook.scripts import run_console as run_console_cli  # noqa: E402
 
-_FIXTURES = Path(__file__).resolve().parent / "fixtures"
+_FIXTURES = _COMPONENT_DIR / "fixtures"
 _NOW = "2026-08-25T10:00:00Z"
 _LATER = "2026-08-25T10:20:00Z"
 _REQUEST_ID = re.compile(r"^req_[A-Za-z0-9_-]{4,64}$")
@@ -880,7 +882,7 @@ class BoundaryScanTest(unittest.TestCase):
     """S40: no outbound-network, exec, or persistence primitive."""
 
     def test_no_outbound_network_or_exec_primitives(self) -> None:
-        run_console_dir = Path(__file__).resolve().parent
+        run_console_dir = _COMPONENT_DIR
         modules = [
             run_console_dir / "session.py",
             run_console_dir / "request_security.py",
