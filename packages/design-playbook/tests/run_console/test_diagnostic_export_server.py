@@ -24,7 +24,6 @@ if str(_PKG_ROOT) not in sys.path:
 
 from tests.run_console import test_http_server as harness  # noqa: E402
 from design_playbook.mcp.run_console import (  # noqa: E402
-    diagnostic_export,
     export_transaction,
 )
 from design_playbook.mcp.run_console.diagnostic_export import (  # noqa: E402
