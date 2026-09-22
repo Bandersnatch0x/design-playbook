@@ -7,10 +7,18 @@ this module owns G5 diagnostics, never integrity rules.
 """
 from __future__ import annotations
 
+import argparse
+import sys
 from pathlib import Path
 
-from design_playbook.scripts._diagnostics import Finding, finding
-from design_playbook.mcp.preview.integrity import (
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parent.parent
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+
+from design_playbook.scripts._diagnostics import Finding, finding  # noqa: E402
+from design_playbook.mcp.preview.integrity import (  # noqa: E402
     ConfirmRecord,
     PreviewSnapshot,
     confirm_name,
@@ -264,3 +272,51 @@ def check_preview(
         actual="unresolved report_ref",
         repair="Fix report_ref or restore the decision report file",
     )]
+
+
+def main(argv: list[str]) -> int:
+    """Single-gate CLI (left-shifted validation, spec 2026-09-22 D3)."""
+    parser = argparse.ArgumentParser(
+        prog="g5_preview.py",
+        description="G5 preview-integrity gate: the latest preview round has "
+                    "a confirmed record matching the current decision report "
+                    "and prototype hash.",
+    )
+    parser.add_argument(
+        "preview_dir",
+        help="path to the run's preview directory "
+             "`.scratch/<run>/preview/` (the one with confirm-round-*.json)",
+    )
+    parser.add_argument(
+        "--decision-report",
+        default=None,
+        help="path to decision-report.md (default: sibling of preview/)",
+    )
+    args = parser.parse_args(argv[1:])
+    preview_dir = Path(args.preview_dir)
+    if not preview_dir.is_dir():
+        print(
+            f"G5 INVALID: {preview_dir} is not a directory — pass the run's "
+            f"preview directory `.scratch/<run>/preview/`",
+            file=sys.stderr,
+        )
+        return 2
+    report = (
+        Path(args.decision_report)
+        if args.decision_report
+        else preview_dir.parent / "decision-report.md"
+    )
+    findings = check_preview(
+        preview_dir, report if report.is_file() else None
+    )
+    if not findings:
+        print("G5 OK: preview confirmation satisfies the integrity gate")
+        return 0
+    print("G5 INVALID:")
+    for item in findings:
+        print(f"  FAIL  {item.message}")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

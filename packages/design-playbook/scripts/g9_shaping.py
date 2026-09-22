@@ -17,11 +17,19 @@ same orchestrator already runs.
 """
 from __future__ import annotations
 
+import argparse
 import json
+import sys
 from pathlib import Path
 
-from design_playbook.scripts._diagnostics import Finding, finding
-from design_playbook.scripts.shaping_log import (
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parent.parent
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+
+from design_playbook.scripts._diagnostics import Finding, finding  # noqa: E402
+from design_playbook.scripts.shaping_log import (  # noqa: E402
     SHAPING_LOG,
     SHAPING_QUEUE,
     derive_queue,
@@ -217,18 +225,43 @@ def check_g9(
 
 
 def main(argv: list[str]) -> int:
-    import sys
-
-    if len(argv) not in (2, 4):
+    parser = argparse.ArgumentParser(
+        prog="g9_shaping.py",
+        description="G9 shaping-exit gate: checks a shaping session's log/queue "
+                    "consistency and (optionally) contract exit conditions.",
+    )
+    parser.add_argument(
+        "shaping_dir",
+        help="path to the SHAPING directory `.scratch/<run>/shaping/` "
+             "(the one containing shaping-log.jsonl) — not the run root",
+    )
+    parser.add_argument(
+        "project_dir",
+        nargs="?",
+        default=None,
+        help="optional project dir containing contract.json (exit conditions)",
+    )
+    parser.add_argument(
+        "run_dir",
+        nargs="?",
+        default=None,
+        help="optional run root `.scratch/<run>/` (required with project_dir)",
+    )
+    args = parser.parse_args(argv[1:])
+    if (args.project_dir is None) != (args.run_dir is None):
+        parser.error("project_dir and run_dir must be given together")
+    shaping_dir = Path(args.shaping_dir)
+    if not (shaping_dir / "shaping-log.jsonl").is_file():
         print(
-            "Usage: g9_shaping.py <shaping_dir> [project_dir run_dir]",
+            f"G9 INVALID: {shaping_dir} has no shaping-log.jsonl — pass the "
+            f"shaping directory `.scratch/<run>/shaping/`, not the run root.",
             file=sys.stderr,
         )
         return 2
     findings = check_g9(
-        Path(argv[1]),
-        project_dir=Path(argv[2]) if len(argv) == 4 else None,
-        run_dir=Path(argv[3]) if len(argv) == 4 else None,
+        shaping_dir,
+        project_dir=Path(args.project_dir) if args.project_dir else None,
+        run_dir=Path(args.run_dir) if args.run_dir else None,
     )
     if not findings:
         print("G9 OK: shaping session satisfies the exit gate")
@@ -240,6 +273,4 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    import sys
-
     sys.exit(main(sys.argv))

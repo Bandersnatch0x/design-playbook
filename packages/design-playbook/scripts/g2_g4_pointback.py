@@ -24,11 +24,20 @@ axes.
 """
 from __future__ import annotations
 
+import argparse
 import re
+import sys
+from pathlib import Path
 
-from design_playbook.scripts._diagnostics import Finding, finding
-from design_playbook.mcp.evidence.ledger_syntax import EVIDENCE_FIELDS, LedgerFacts, parse_ledger
-from design_playbook.scripts.finding_syntax import (
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parent.parent
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+
+from design_playbook.scripts._diagnostics import Finding, finding  # noqa: E402
+from design_playbook.mcp.evidence.ledger_syntax import EVIDENCE_FIELDS, LedgerFacts, parse_ledger  # noqa: E402
+from design_playbook.scripts.finding_syntax import (  # noqa: E402
     FINDING_FIELDS,
     SEVERITY_LEGACY,
     SEVERITY_NEW,
@@ -43,7 +52,7 @@ from design_playbook.scripts.finding_syntax import (
     parse_findings,
     severity_axis,
 )
-from design_playbook.scripts.verdict_syntax import VerdictFacts, parse_verdict
+from design_playbook.scripts.verdict_syntax import VerdictFacts, parse_verdict  # noqa: E402
 
 VALID_RESULTS = {"pass", "fail", "blocked", "n/a"}
 
@@ -481,3 +490,58 @@ def check_pointback(
         ledger_facts=ledger_facts or parse_ledger(text),
         verdict_facts=verdict_facts or parse_verdict(text),
     )
+
+
+def main(argv: list[str]) -> int:
+    """Single-gate CLI (left-shifted validation, spec 2026-09-22 D3)."""
+    from design_playbook.scripts.g1_spec import _l6_items
+
+    parser = argparse.ArgumentParser(
+        prog="g2_g4_pointback.py",
+        description="G2/G4 point-back gate: the six-block report's ledger, "
+                    "findings, and verdict satisfy the syntax and closure "
+                    "rules (including round-based escalated-stop counting).",
+    )
+    parser.add_argument(
+        "point_back",
+        help="path to the run's point-back.md "
+             "(`.scratch/<run>/point-back.md`)",
+    )
+    parser.add_argument(
+        "--spec",
+        default=None,
+        help="path to spec.md for the expected L6 count "
+             "(default: sibling of point-back.md)",
+    )
+    args = parser.parse_args(argv[1:])
+    point_back = Path(args.point_back)
+    if not point_back.is_file():
+        print(
+            f"G2/G4 INVALID: {point_back} is not a file — pass the run's "
+            f"point-back.md (`.scratch/<run>/point-back.md`)",
+            file=sys.stderr,
+        )
+        return 2
+    spec = Path(args.spec) if args.spec else point_back.parent / "spec.md"
+    if not spec.is_file():
+        print(
+            f"G2/G4 INVALID: {spec} not found — the gate needs the spec to "
+            f"size L6.<n>; pass --spec <path to spec.md>",
+            file=sys.stderr,
+        )
+        return 2
+    findings = check_pointback(
+        point_back.read_text(encoding="utf-8"),
+        len(_l6_items(spec.read_text(encoding="utf-8"))),
+    )
+    if not findings:
+        print("G2/G4 OK: point-back satisfies the gate")
+        return 0
+    print("G2/G4 INVALID:")
+    for item in findings:
+        print(f"  FAIL  {item.message}")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

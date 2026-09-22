@@ -139,7 +139,7 @@ Coverage levels: **exhaustive** (primary path + required rare paths + per-page f
 
 Positive findings are the acceptance-evidence face, not decoration: every L6 `pass` on implemented UI requires at least one bound rendered or interaction artifact (measurement/source corroborate but never carry a pass alone); planning-only passes rest on declaration coverage and must not claim a render or test occurred. Missing evidence is `blocked` (unverifiable), never `fail` — "not tested" and "tested and failed" are different facts.
 
-**Done when:** all six blocks are present; the Coverage statement names the exhaustive completion status and the explicit unreviewed list (G11); every pass row cites bound evidence; limitations name the judgment-class dimensions and assumed dependencies.
+**Done when:** all six blocks are present; the Coverage statement names the exhaustive completion status and the explicit unreviewed list (G11); every pass row cites bound evidence; limitations name the judgment-class dimensions and assumed dependencies. Machine check right after writing point-back.md: `python scripts/g2_g4_pointback.py .scratch/<run>/point-back.md` — do not wait for the end-of-run `validate_run.py` sweep.
 
 After Recirculate, use [`references/repair.md`](references/repair.md) for the smallest owning declaration, the R1-R5 second-hop route, and which evidence to invalidate.
 

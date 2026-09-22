@@ -56,7 +56,8 @@ schema 2 adds the L2-L5 structured field blocks (per-page duty table, path table
 - Each acceptance criterion is a top-level list item, explicitly containing `Given` → `When` → `Then` in order (fixed order), with its required evidence stated, and citing a reachable path from the L3 path table as `(path: P<n>)`
   - Required evidence: declaration coverage / target-viewport render / interaction record or automated check / applicable test, type, lint, build
   - When evidence is a runtime state, name the capture seed (state to capture + capture type, e.g. "error-state screenshot"); do not write selector/URL/actions
-- Design done definition:
+
+Design done definition: <plain paragraph — not a list item; every top-level bullet in this section is machine-counted as a criterion>
 
 ---
 

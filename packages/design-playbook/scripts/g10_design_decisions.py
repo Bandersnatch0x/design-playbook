@@ -17,13 +17,21 @@ deviations) stay protocol-side. P1 runs carry no DD entries by definition
 """
 from __future__ import annotations
 
+import argparse
 import json
 import re
+import sys
 from pathlib import Path
 
-from design_playbook.mcp.preview.integrity import confirm_name
-from design_playbook.scripts._diagnostics import Finding, finding
-from design_playbook.scripts.dd_entries import (
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parent.parent
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+
+from design_playbook.mcp.preview.integrity import confirm_name  # noqa: E402
+from design_playbook.scripts._diagnostics import Finding, finding  # noqa: E402
+from design_playbook.scripts.dd_entries import (  # noqa: E402
     ADAPTER_HANDLE,
     CANDIDATE_SOURCES,
     CONFIRM_KINDS,
@@ -39,7 +47,7 @@ from design_playbook.scripts.dd_entries import (
     parse_dd_entries,
     positive_dd_refs,
 )
-from design_playbook.scripts.rules_registry import RULES_PATH_PARTS, parse_registry
+from design_playbook.scripts.rules_registry import RULES_PATH_PARTS, parse_registry  # noqa: E402
 
 # Registry id/version facts come from the shared parser (T-041): one answer
 # to "what is a legal entry" — the same one behind the G8 gates.
@@ -998,13 +1006,17 @@ def check_g10(
 
 
 def main(argv: list[str]) -> int:
-    import sys
-
-    if len(argv) != 2:
-        print("Usage: g10_design_decisions.py <decision-report.md>",
-              file=sys.stderr)
-        return 2
-    path = Path(argv[1])
+    parser = argparse.ArgumentParser(
+        prog="g10_design_decisions.py",
+        description="G10 design-decision gate: machine-checks DD entry blocks "
+                    "in a decision report.",
+    )
+    parser.add_argument(
+        "report",
+        help="path to the decision report `.scratch/<run>/decision-report.md`",
+    )
+    args = parser.parse_args(argv[1:])
+    path = Path(args.report)
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
@@ -1034,6 +1046,4 @@ def _sibling_text(path: Path) -> str:
 
 
 if __name__ == "__main__":
-    import sys
-
     sys.exit(main(sys.argv))

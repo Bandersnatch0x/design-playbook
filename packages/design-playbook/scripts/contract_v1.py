@@ -550,3 +550,8 @@ def validate_decision_ids(ids: Iterable[str]) -> None:
     for decision_id in ids:
         if not _DECISION_ID_RE.match(decision_id):
             raise ContractError(f"invalid decision id: {decision_id!r}")
+
+
+if __name__ == "__main__":
+    print("scripts/contract_v1.py is a module-level API, not a CLI — import it "
+          "(see module docstring); no command-line interface exists.")

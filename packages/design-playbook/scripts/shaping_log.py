@@ -262,5 +262,6 @@ if __name__ == "__main__":
             sys.exit(1)
     else:
         print(f"Unknown command: {command}")
-        print("Available commands: append")
+        print("Usage: python shaping_log.py append <log-path> --type <event> [--key value ...]")
+        print(f"Valid event types: {', '.join(sorted(SHAPING_EVENTS))}")
         sys.exit(1)

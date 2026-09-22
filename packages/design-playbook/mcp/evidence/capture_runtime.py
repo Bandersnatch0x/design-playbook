@@ -138,6 +138,15 @@ def _captured(
         "written_path": written_path,
         "request": request,
     }
+    if _run_root_misrooted():
+        # The stderr warning fires once per process and may never reach the
+        # model; the payload is what the orchestrator actually reads.
+        payload["warnings"] = [
+            "run root resolved to a markerless cwd (DESIGN_PLAYBOOK_RUN_ROOT "
+            "unset or '.'); written_path is outside the run tree — set "
+            "DESIGN_PLAYBOOK_RUN_ROOT to the run root (.scratch/<run>/) "
+            "before binding this artifact"
+        ]
     if probe_artifact:
         payload["probe_artifact"] = probe_artifact
     return payload
@@ -271,19 +280,30 @@ _RUN_MARKERS = ("plan.md", "point-back.md")
 _warned_run_root = False
 
 
+def _run_root_misrooted() -> bool:
+    """True when the run root fell back to a markerless cwd.
+
+    The shipped .mcp.json default (DESIGN_PLAYBOOK_RUN_ROOT=".") makes the
+    server resolve artifacts under its process cwd; in a host workspace that
+    cwd is the repo root, so captures silently land outside the run tree.
+    """
+    configured = os.environ.get(RUN_ROOT_ENV)
+    if configured and configured != ".":
+        return False
+    root = Path.cwd().resolve()
+    return not any((root / marker).is_file() for marker in _RUN_MARKERS)
+
+
 def _run_root() -> Path:
     configured = os.environ.get(RUN_ROOT_ENV)
     if not configured or configured == ".":
-        # cwd-relative default silently mis-roots multi-run workspaces (the
-        # root .mcp.json ships DESIGN_PLAYBOOK_RUN_ROOT="."). Warn only when
-        # cwd does not look like a run dir (no run marker file) — the shipped
-        # default resolving to a real run dir is correct usage, not a
-        # misconfig — and only once per process to avoid per-capture spam.
+        # Warn only when cwd does not look like a run dir (no run marker
+        # file) — the shipped default resolving to a real run dir is correct
+        # usage, not a misconfig — and only once per process to avoid
+        # per-capture spam.
         root = Path.cwd().resolve()
         global _warned_run_root
-        if not _warned_run_root and not any(
-            (root / marker).is_file() for marker in _RUN_MARKERS
-        ):
+        if not _warned_run_root and _run_root_misrooted():
             _warned_run_root = True
             _log(
                 "WARNING: DESIGN_PLAYBOOK_RUN_ROOT is unset or '.' "
