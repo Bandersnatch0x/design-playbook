@@ -219,8 +219,11 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 2:
-        print("Usage: python shaping_log.py append <log-path> --type <event> [--key value ...]")
+        print("Usage: python shaping_log.py append <log-path> --type <event> [--key value ...] [--mapping-json '<json array>']")
         print(f"Valid event types: {', '.join(sorted(SHAPING_EVENTS))}")
+        print("Note: --mapping-json takes a JSON array of "
+              '{"decision","field","spec_section"} objects — required for a '
+              "G9-passing `projected` event (plain --key values stay strings).")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -247,6 +250,38 @@ if __name__ == "__main__":
                     sys.exit(1)
             else:
                 i += 1
+
+        # D-2 (2026-09-22 rerun): G9 requires projected.mappings as a real
+        # JSON list[dict], which string-only --key pairs cannot express.
+        mapping_json = event_data.pop("mapping-json", None)
+        if mapping_json is not None:
+            import json as _json
+            try:
+                mappings = _json.loads(mapping_json)
+            except ValueError as exc:
+                print(f"Error: --mapping-json is not valid JSON ({exc}) — "
+                      "pass a JSON array like "
+                      '\'[{"decision":"D-1","field":"l2.x","spec_section":"L2"}]\'')
+                sys.exit(1)
+            if (
+                not isinstance(mappings, list)
+                or not mappings
+                or any(
+                    not isinstance(row, dict)
+                    or not isinstance(row.get("decision"), str)
+                    or not row.get("decision")
+                    or not isinstance(row.get("field"), str)
+                    or not row.get("field")
+                    or not isinstance(row.get("spec_section"), str)
+                    or not row.get("spec_section")
+                    for row in mappings
+                )
+            ):
+                print("Error: --mapping-json must be a non-empty JSON array "
+                      "of {\"decision\": str, \"field\": str, "
+                      "\"spec_section\": str} objects (G9's expected shape)")
+                sys.exit(1)
+            event_data["mappings"] = mappings
 
         if "type" not in event_data:
             print("Error: --type <event> is required")

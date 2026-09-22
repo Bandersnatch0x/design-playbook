@@ -127,6 +127,41 @@ class EvidenceManifestTests(unittest.TestCase):
         ])
         self.assertEqual(code, 0)
 
+    def test_method_semantics_keys_written(self) -> None:
+        code = main([
+            "evidence_manifest.py", "append", str(self.run),
+            "--criterion", "L6.1", "--artifact", "shot.png",
+            "--request", json.dumps(REQ),
+            "--method", "runtime-observation",
+            "--observation", "six columns render",
+            "--interpretation", "L6.1 holds",
+            "--scope", "this run",
+        ])
+        self.assertEqual(code, 0)
+        entry = manifest_entries(self.run / "evidence")[0]
+        self.assertEqual(entry["method"], "runtime-observation")
+        self.assertEqual(entry["scope"], "this run")
+        # G6 read side does not read the keys: row still passes.
+        findings = check_evidence(
+            "",
+            1,
+            self.run / "evidence",
+            self.run,
+            observed_rows=[("L6.1", "evidence/shot.png")],
+        )
+        self.assertEqual(findings, [])
+
+    def test_method_semantics_invalid_rejected(self) -> None:
+        # method declared but observation missing -> structural error.
+        code = main([
+            "evidence_manifest.py", "append", str(self.run),
+            "--criterion", "L6.1", "--artifact", "shot.png",
+            "--request", json.dumps(REQ),
+            "--method", "runtime-observation",
+        ])
+        self.assertEqual(code, 2)
+        self.assertFalse((self.run / "evidence" / "manifest.jsonl").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

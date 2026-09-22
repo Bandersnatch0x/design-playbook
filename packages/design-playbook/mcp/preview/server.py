@@ -29,7 +29,12 @@ if str(_PKG_ROOT) not in sys.path:
 from design_playbook.mcp._transport import ToolError, serve_stdio  # noqa: E402
 
 from design_playbook.mcp.preview import review_session  # noqa: E402
-from design_playbook.mcp.preview.i18n import default_options  # noqa: E402
+from design_playbook.mcp.preview.i18n import (  # noqa: E402
+    CONFIRM_LABELS,
+    ZH,
+    _STRINGS,
+    default_options,
+)
 from design_playbook.mcp.preview.transaction import (  # noqa: E402
     PreviewTransactionError,
     run_preview_transaction,
@@ -76,7 +81,11 @@ def _tool_schema() -> dict[str, Any]:
                     "description": (
                         "Confirm/revise labels. Omit to use the adapter locale's "
                         "defaults; known confirm/revise labels are rendered in "
-                        "the adapter locale either way."
+                        "the adapter locale either way. A custom list MUST "
+                        "contain at least one known confirm label (e.g. "
+                        f"'{_STRINGS[ZH]['confirm']}') — a list without one "
+                        "renders but can never register a confirmation, so it "
+                        "is rejected at call time."
                     ),
                 },
             },
@@ -98,7 +107,8 @@ def _validate_preview_args(args: dict[str, Any]) -> tuple[str | None, str | None
     summary = args.get("summary")
     round_n = args.get("round")
     report_ref = args.get("report_ref")
-    options = args.get("options") or default_options()
+    custom_options = args.get("options")
+    options = custom_options or default_options()
 
     if not isinstance(summary, str) or not summary.strip():
         raise ValueError("summary is required")
@@ -112,6 +122,18 @@ def _validate_preview_args(args: dict[str, Any]) -> tuple[str | None, str | None
         raise ValueError("html must be a string")
     if not isinstance(options, list) or not all(isinstance(o, str) for o in options):
         raise ValueError("options must be string[]")
+    if custom_options is not None:
+        # D-1 (2026-09-22 rerun): a custom list with no known confirm label
+        # renders fine but `user_confirmed` (transaction.py) can never be
+        # true, silently burning every preview round — fail at call time.
+        confirm_cf = {label.casefold() for label in CONFIRM_LABELS}
+        if not any(o.casefold() in confirm_cf for o in options):
+            known = " / ".join(sorted(CONFIRM_LABELS))
+            raise ValueError(
+                "custom options must include at least one known confirm "
+                f"label ({known}) — labels outside the set render but never "
+                "register a confirmation"
+            )
     return path_arg, html, summary, round_n, report_ref, options
 
 

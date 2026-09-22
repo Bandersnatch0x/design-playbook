@@ -376,6 +376,21 @@ def _build_parent_page(prototype_html: str, control_html: str) -> str:
     )
 
 
+def _bind_preview_server(handler: type) -> HTTPServer:
+    """Bind the preview HTTP server (fixed default port, ephemeral fallback).
+
+    A fixed default keeps the control shell on one origin across rounds, so
+    localStorage (onboarding seen-flag, drafts) persists between preview
+    rounds; fall back to an ephemeral port when it is taken (concurrent
+    previews). DESIGN_PLAYBOOK_PREVIEW_PORT overrides; 0 forces ephemeral.
+    """
+    port = int(os.environ.get("DESIGN_PLAYBOOK_PREVIEW_PORT", "4619"))
+    try:
+        return HTTPServer(("127.0.0.1", port), handler)
+    except OSError:
+        return HTTPServer(("127.0.0.1", 0), handler)
+
+
 def collect_review(
     prototype: Path,
     summary: str,
@@ -517,8 +532,7 @@ def collect_review(
             if validated:
                 done.set()
 
-    _preview_port = int(os.environ.get("DESIGN_PLAYBOOK_PREVIEW_PORT", "0"))
-    server = HTTPServer(("127.0.0.1", _preview_port), Handler)
+    server = _bind_preview_server(Handler)
     port = server.server_address[1]
     thread = threading.Thread(
         target=server.serve_forever, name="dpb-preview-http", daemon=True

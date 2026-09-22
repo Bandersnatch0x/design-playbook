@@ -143,11 +143,20 @@ def _build_control(
     import hashlib
     draft_key = "dpb.draft." + hashlib.sha256(
         f"{round_n}|{summary}".encode("utf-8")).hexdigest()[:16]
+    # The promoted primary renders via the header/drawer slots below; keep it
+    # out of the option loop so a custom label (unknown to CONFIRM_LABELS)
+    # does not appear twice (2026-09-22 rerun UI-1).
+    primary_opt = next(
+        (o for o in options if o in CONFIRM_LABELS or o.casefold() in confirm_cf),
+        options[0] if options else t("confirm"),
+    )
     primary_bits: list[str] = []
     secondary_bits: list[str] = []
     confirm_desc = html_lib.escape(t("confirm_desc"), quote=True)
     revise_desc = html_lib.escape(t("revise_desc"), quote=True)
     for opt in options:
+        if opt == primary_opt:
+            continue
         safe_val = html_lib.escape(opt, quote=True)
         safe_label = html_lib.escape(display_label(opt))
         primary = opt in CONFIRM_LABELS or opt.casefold() in confirm_cf
@@ -167,10 +176,6 @@ def _build_control(
         (primary_bits if primary else secondary_bits).append(bit)
     secondary_html = "\n".join(secondary_bits)
     summary_safe = html_lib.escape(summary)
-    primary_opt = next(
-        (o for o in options if o in CONFIRM_LABELS or o.casefold() in confirm_cf),
-        options[0] if options else t("confirm"),
-    )
     primary_val = html_lib.escape(primary_opt, quote=True)
     primary_label = html_lib.escape(display_label(primary_opt))
     # JS-side strings: inject via JSON script (not .format into JS literals).

@@ -43,6 +43,9 @@ from design_playbook.mcp.evidence import containment  # noqa: E402
 from design_playbook.mcp.evidence.capture_contract import (  # noqa: E402
     validate_capture_snapshot,
 )
+from design_playbook.scripts.method_semantics import (  # noqa: E402
+    entry_errors,
+)
 
 _MANIFEST = "manifest.jsonl"
 
@@ -77,15 +80,23 @@ def append_entry(
     *,
     source: str | None = None,
     capture: dict | None = None,
+    method: str | None = None,
+    observation: str | None = None,
+    interpretation: str | None = None,
+    scope: str | None = None,
 ) -> dict:
     """Append one binding line to ``<run_dir>/evidence/manifest.jsonl``.
 
     ``request`` is the Provider contract echo (capture contract v1), stored
     verbatim — G6's read side requires it. ``capture`` optionally holds the
     original provider call; ``source`` is a free-text provenance note.
+    ``method``/``observation``/``interpretation``/``scope`` carry the
+    method-semantics keys the orchestrator is required to write at bind time
+    (SKILL step 9); when any is present the entry is validated against
+    ``method_semantics.entry_errors`` before writing.
     Returns the appended entry. Raises ManifestAppendError on a non-bare
-    artifact name, an escape-class path, a missing artifact file, or a
-    request snapshot that would fail G6.
+    artifact name, an escape-class path, a missing artifact file, a
+    request snapshot that would fail G6, or invalid method semantics.
     """
     _check_bare_filename(artifact)
     if not isinstance(request, dict):
@@ -124,6 +135,22 @@ def append_entry(
         entry["capture"] = capture
     if source:
         entry["source"] = source
+    semantics = {
+        "method": method,
+        "observation": observation,
+        "interpretation": interpretation,
+        "scope": scope,
+    }
+    for key, value in semantics.items():
+        if value:
+            entry[key] = value
+    semantic_errors = entry_errors(entry)
+    if semantic_errors:
+        raise ManifestAppendError(
+            f"method-semantics keys invalid ({semantic_errors[0]}) — "
+            f"see scripts/method_semantics.py for the key rules (method enum "
+            f"+ observation + scope; interpretation needs observation)"
+        )
     # No mkdir: read_artifact above already required the artifact (and hence
     # the evidence/ directory) to exist.
     manifest = run_dir / "evidence" / _MANIFEST
@@ -179,6 +206,32 @@ def main(argv: list[str]) -> int:
         help="optional free-text provenance note (stored in the `source` "
              "field, e.g. the decision id)",
     )
+    app.add_argument(
+        "--method",
+        default=None,
+        help="method-semantics key (SKILL step 9): nine-value enum, e.g. "
+             "runtime-observation | static-inspection; once present, "
+             "--observation is required and --scope is required for all "
+             "methods except static-inspection",
+    )
+    app.add_argument(
+        "--observation",
+        default=None,
+        help="method-semantics key: the observed fact (required once "
+             "--method is given)",
+    )
+    app.add_argument(
+        "--interpretation",
+        default=None,
+        help="method-semantics key: the reading of the fact (requires "
+             "--observation)",
+    )
+    app.add_argument(
+        "--scope",
+        default=None,
+        help="method-semantics key: generalization bounds (required unless "
+             "--method is static-inspection)",
+    )
     args = parser.parse_args(argv[1:])
     try:
         request = json.loads(args.request)
@@ -199,6 +252,10 @@ def main(argv: list[str]) -> int:
             request,
             source=args.source,
             capture=capture,
+            method=args.method,
+            observation=args.observation,
+            interpretation=args.interpretation,
+            scope=args.scope,
         )
     except ManifestAppendError as exc:
         print(f"INVALID: {exc}", file=sys.stderr)

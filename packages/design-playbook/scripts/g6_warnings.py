@@ -21,7 +21,10 @@ def check_manifest_ts_warnings(
     Not a hard gate — root fix is orchestrator per-capture append (SKILL step 8).
     Printed as WARN; does not fail the run. Fires only when ≥2 entries exist and
     every non-empty ``ts`` value is identical (including when some rows omit ts
-    only if at least two share the same non-empty value and no other ts exists).
+    only if at least two share the same non-empty value and no other ts exists)
+    AND at least one criterion carries multiple rows — a shared ts only weakens
+    latest-by-ts when a criterion actually has competing entries (2026-09-22
+    rerun D-4: one row per criterion is zero real ambiguity, so stay quiet).
     """
     if evidence_dir is None or not evidence_dir.is_dir():
         return []
@@ -34,19 +37,26 @@ def check_manifest_ts_warnings(
     ]
     if len(ts_vals) < 2:
         return []
-    if len(set(ts_vals)) == 1:
-        return [finding(
-            "G6.batch_ts",
-            "G6 evidence: all manifest entries share one ts "
-            f"({ts_vals[0]}); prefer per-capture append "
-            "(batch bind weakens multi-entry latest-by-ts)",
-            owner="evidence/manifest.jsonl",
-            expected="distinct per-capture timestamps",
-            actual=ts_vals[0],
-            repair="Append manifest entries at capture time, not in batch",
-            severity="warning",
-        )]
-    return []
+    if len(set(ts_vals)) != 1:
+        return []
+    criterion_counts: dict[str, int] = {}
+    for entry in entries:
+        criterion = entry.get("criterion")
+        if isinstance(criterion, str) and criterion:
+            criterion_counts[criterion] = criterion_counts.get(criterion, 0) + 1
+    if not any(count > 1 for count in criterion_counts.values()):
+        return []
+    return [finding(
+        "G6.batch_ts",
+        "G6 evidence: all manifest entries share one ts "
+        f"({ts_vals[0]}) with multiple rows on the same criterion; prefer "
+        "per-capture append (batch bind weakens multi-entry latest-by-ts)",
+        owner="evidence/manifest.jsonl",
+        expected="distinct per-capture timestamps",
+        actual=ts_vals[0],
+        repair="Append manifest entries at capture time, not in batch",
+        severity="warning",
+    )]
 
 
 def check_superseded_ledger_warnings(
