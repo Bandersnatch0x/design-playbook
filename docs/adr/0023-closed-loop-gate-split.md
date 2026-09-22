@@ -6,6 +6,15 @@ Accepted (C6, 2026-08-09). Evidence ledger and Verdict parsing ownership is
 superseded by ADR-0025; the gate split, policy ownership, diagnostics, and
 orchestration order remain in force.
 
+Amended 2026-09-22 (M-002 D3, spec 2026-09-22-design-io-friction): gate
+modules gained official single-gate CLI entry points (`main()` + `__main__`)
+so skills can invoke one gate at artifact-write time (validation left-shift;
+the end-of-run `validate_run.py` sweep remains the confirmatory re-run). The
+"not entry points" sentence below is thereby retired; the import discipline
+it guarded is unchanged — the orchestrator imports gates, gates never import
+the orchestrator, and `validate_run.py` remains the only end-of-run
+aggregation surface.
+
 ## Context
 
 `scripts/validate_run.py` grew into a ~1260-line monolith holding every

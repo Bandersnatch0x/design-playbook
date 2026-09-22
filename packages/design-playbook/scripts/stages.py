@@ -90,3 +90,8 @@ STAGES: tuple[StageSpec, ...] = (
 )
 
 STAGES_BY_KEY = {stage.key: stage for stage in STAGES}
+
+
+if __name__ == "__main__":
+    print("scripts/stages.py is a module-level API, not a CLI — import it "
+          "(see module docstring); no command-line interface exists.")

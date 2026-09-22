@@ -644,6 +644,15 @@ def main(argv: list[str]) -> int:
         print(render_json(errs, warns), end="")
     else:
         print(render_text(errs, warns), end="")
+        if errs:
+            print(
+            "NOTE: gates can run left-shifted at authoring time — each "
+            "skill's Done-when names the single-gate script to run right "
+            "after writing its artifact (g1_spec / g9_shaping / "
+            "g10_design_decisions / g5_preview / g6_evidence / "
+            "g8_run_registry / g2_g4_pointback). This end-of-run sweep "
+            "should find zero."
+        )
     return 1 if errs else 0
 
 

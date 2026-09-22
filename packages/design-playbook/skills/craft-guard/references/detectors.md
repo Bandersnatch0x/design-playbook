@@ -14,4 +14,5 @@ Record exactly one seven-column row per registry craft entry whose applicability
 - `not-applicable` requires an observable reason in the reason column (blank is invalid); it is never a silent skip.
 - `blocked` names the missing proof in the reason column (for example motion source absent from review input).
 - `Result` is `clear|hit` only when applicable; otherwise `-`. `Positive fix` is required on hit rows.
+- On `applicable` rows the Rendered and Source columns must both be non-empty and not `-`; if either proof is missing the row is `blocked` instead (machine-checked, G8).
 - Rows are advisory: do not assign declaration source, severity, or verdict. `ui-evaluator` owns those decisions.

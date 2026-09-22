@@ -305,6 +305,32 @@ class EvidencePurePathTests(unittest.TestCase):
                 capture_runtime.execute_capture_plan(args, _FakeBrowserAdapter())
             self.assertNotIn("DESIGN_PLAYBOOK_RUN_ROOT is unset", stderr.getvalue())
 
+    def test_captured_payload_flags_misrooted_run_root(self) -> None:
+        env = {key: value for key, value in os.environ.items()
+               if key != capture_runtime.RUN_ROOT_ENV}
+        request = {"schemaVersion": 1}
+        with tempfile.TemporaryDirectory() as tmp:
+            bare = Path(tmp)
+            with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(
+                capture_runtime.Path, "cwd", return_value=bare.resolve()
+            ):
+                payload = capture_runtime._captured(
+                    "evidence/x.png", "ok", str(bare / "evidence" / "x.png"), request
+                )
+            self.assertIn("warnings", payload)
+            self.assertIn("DESIGN_PLAYBOOK_RUN_ROOT", payload["warnings"][0])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            (run_dir / "plan.md").write_text("# plan", encoding="utf-8")
+            with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(
+                capture_runtime.Path, "cwd", return_value=run_dir.resolve()
+            ):
+                payload = capture_runtime._captured(
+                    "evidence/x.png", "ok", str(run_dir / "evidence" / "x.png"), request
+                )
+            self.assertNotIn("warnings", payload)
+
     def test_runtime_rejects_non_evidence_subtree_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

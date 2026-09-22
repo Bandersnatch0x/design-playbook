@@ -17,14 +17,22 @@ owns only G6 binding policy and diagnostics.
 """
 from __future__ import annotations
 
+import argparse
+import sys
 from pathlib import Path
 
-from design_playbook.scripts._diagnostics import Finding, finding
-from design_playbook.scripts.g6_records import ledger_observed, manifest_entries
-from design_playbook.scripts.run_facts import ArtifactReadFact
-from design_playbook.scripts.stages import EVIDENCE_PREFIX
-from design_playbook.mcp.evidence.capture_contract import validate_capture_snapshot
-from design_playbook.mcp.evidence import containment
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parent.parent
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+
+from design_playbook.scripts._diagnostics import Finding, finding  # noqa: E402
+from design_playbook.scripts.g6_records import ledger_observed, manifest_entries  # noqa: E402
+from design_playbook.scripts.run_facts import ArtifactReadFact  # noqa: E402
+from design_playbook.scripts.stages import EVIDENCE_PREFIX  # noqa: E402
+from design_playbook.mcp.evidence.capture_contract import validate_capture_snapshot  # noqa: E402
+from design_playbook.mcp.evidence import containment  # noqa: E402
 
 
 def manifest_read_findings(
@@ -250,3 +258,71 @@ def check_evidence(
         # artifact exists + bound + capture contract v1 -> valid; result is
         # the evaluator's call, not G6's.
     return errs
+
+
+def main(argv: list[str]) -> int:
+    """Single-gate CLI (left-shifted validation, spec 2026-09-22 D3)."""
+    from design_playbook.scripts.g1_spec import _l6_items
+
+    parser = argparse.ArgumentParser(
+        prog="g6_evidence.py",
+        description="G6 evidence-binding gate: every point-back ledger "
+                    "`observed: evidence/…` row has the artifact on disk and "
+                    "a manifest.jsonl line binding it to the same L6.<n>.",
+    )
+    parser.add_argument(
+        "point_back",
+        help="path to the run's point-back.md "
+             "(`.scratch/<run>/point-back.md`)",
+    )
+    parser.add_argument(
+        "--spec",
+        default=None,
+        help="path to spec.md for the expected L6 count "
+             "(default: sibling of point-back.md)",
+    )
+    parser.add_argument(
+        "--evidence-dir",
+        default=None,
+        help="path to the run's evidence/ directory "
+             "(default: sibling of point-back.md)",
+    )
+    args = parser.parse_args(argv[1:])
+    point_back = Path(args.point_back)
+    if not point_back.is_file():
+        print(
+            f"G6 INVALID: {point_back} is not a file — pass the run's "
+            f"point-back.md (`.scratch/<run>/point-back.md`)",
+            file=sys.stderr,
+        )
+        return 2
+    spec = Path(args.spec) if args.spec else point_back.parent / "spec.md"
+    if not spec.is_file():
+        print(
+            f"G6 INVALID: {spec} not found — G6 needs the spec to size "
+            f"L6.<n>; pass --spec <path to spec.md>",
+            file=sys.stderr,
+        )
+        return 2
+    evidence_dir = (
+        Path(args.evidence_dir)
+        if args.evidence_dir
+        else point_back.parent / "evidence"
+    )
+    findings = check_evidence(
+        point_back.read_text(encoding="utf-8"),
+        len(_l6_items(spec.read_text(encoding="utf-8"))),
+        evidence_dir if evidence_dir.is_dir() else None,
+        evidence_dir.parent,
+    )
+    if not findings:
+        print("G6 OK: evidence bindings satisfy the gate")
+        return 0
+    print("G6 INVALID:")
+    for item in findings:
+        print(f"  FAIL  {item.message}")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

@@ -201,7 +201,7 @@ After the decision report exists, probe MCP `tools/list` for **`preview_prototyp
 
 **Re-Fill signal (preview after Fill already exists):** if a Fill surface (code under the host tree or `filled-ui.*`) already exists and a later preview round **revises the decision report** (new round, structural/component change absorbed into `decision-report.md`), you **must re-Fill** (or explicitly record user acceptance that the existing Fill already matches the new report) **before** observe* / ui-evaluator. Do not run observe against a Fill that predates the current confirmed report. Log the re-Fill (or acceptance) once in `preview/log.md`.
 
-**Done when:** either preview was skipped (no adapter), or a `confirm-round-*.json` with `confirmed: true` **and `floor_pass: true`** matches the current decision report (G5 when `validate_run.py` is given `--preview-dir` / `--decision-report`). A confirmed record without `floor_pass` fails G5 — empty/garbage feedback is a silent false-pass that must not reach Fill. When Fill already existed, the re-Fill signal above is satisfied.
+**Done when:** either preview was skipped (no adapter), or a `confirm-round-*.json` with `confirmed: true` **and `floor_pass: true`** matches the current decision report (G5 when `validate_run.py` is given `--preview-dir` / `--decision-report`; single gate right after the confirm record lands: `python scripts/g5_preview.py .scratch/<run>/preview/`). A confirmed record without `floor_pass` fails G5 — empty/garbage feedback is a silent false-pass that must not reach Fill. When Fill already existed, the re-Fill signal above is satisfied.
 
 ### 7. Fill
 
@@ -268,7 +268,7 @@ After craft, probe MCP `tools/list` for **`execute_capture_plan`**.
 
 Evidence is captured, not judged — copy provider returns verbatim here; `pass`/`fail` authority is the evaluator's (step 9 / `ui-evaluator`). Full authority model (three ledgers: spec names what to prove, manifest what happened, evaluator what it means): SSOT `ui-evaluator` step 2.
 
-**Done when:** either observe was skipped (no provider, ledger `observed` free-text), or each runtime-proven criterion has a manifest entry whose artifact exists (G6 when `validate_run.py` is given `--evidence-dir`); and if any capture used a mirror surface, the point-back includes the required mirror finding.
+**Done when:** either observe was skipped (no provider, ledger `observed` free-text), or each runtime-proven criterion has a manifest entry whose artifact exists (G6 when `validate_run.py` is given `--evidence-dir`; single gate right after manifest binding: `python scripts/g6_evidence.py .scratch/<run>/point-back.md`); and if any capture used a mirror surface, the point-back includes the required mirror finding.
 
 ### 10. Accept → `ui-evaluator`
 

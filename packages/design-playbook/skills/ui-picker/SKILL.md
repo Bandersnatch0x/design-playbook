@@ -74,7 +74,7 @@ risks: …
 
 `baseline-changes: none` tolerates a trailing same-line note (the machine face reads the `none` value token); substantive commentary goes on its own line instead.
 
-**Done when:** the report exists, records the bound baseline or explicit waiver, and coding has not started without it.
+**Done when:** the report exists, records the bound baseline or explicit waiver, and coding has not started without it. Machine check right after writing the report: `python scripts/g10_design_decisions.py .scratch/<run>/decision-report.md` — do not wait for the end-of-run `validate_run.py` sweep.
 
 #### DD entry blocks (append after the top block)
 

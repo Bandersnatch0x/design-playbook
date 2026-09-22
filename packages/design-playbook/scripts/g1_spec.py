@@ -14,10 +14,19 @@ the legacy shape (compatibility contract: no retroactive re-checking).
 """
 from __future__ import annotations
 
+import argparse
 import re
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 
-from design_playbook.scripts._diagnostics import Finding, finding
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+_PKG_ROOT = Path(__file__).resolve().parent.parent
+if str(_PKG_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PKG_ROOT))
+
+from design_playbook.scripts._diagnostics import Finding, finding  # noqa: E402
 
 SPEC_LAYERS = ["L1", "L2", "L3", "L4", "L5", "L6"]
 
@@ -391,3 +400,35 @@ def check_spec(text: str) -> list[Finding]:
     if SPEC_SCHEMA_2.search(text):
         errs += _deepened_findings(text)
     return errs
+
+
+def main(argv: list[str]) -> int:
+    """Single-gate CLI (left-shifted validation, spec 2026-09-22 D3)."""
+    parser = argparse.ArgumentParser(
+        prog="g1_spec.py",
+        description="G1 spec-shape gate: spec.md has L1-L6 layers and every "
+                    "top-level L6 item is Given -> When -> Then in order "
+                    "(plus spec-schema:2 structural blocks when declared).",
+    )
+    parser.add_argument("spec", help="path to the run's spec.md")
+    args = parser.parse_args(argv[1:])
+    path = Path(args.spec)
+    if not path.is_file():
+        print(
+            f"G1 INVALID: {path} is not a file — pass the run's spec.md "
+            f"(`.scratch/<run>/spec.md`)",
+            file=sys.stderr,
+        )
+        return 2
+    findings = check_spec(path.read_text(encoding="utf-8"))
+    if not findings:
+        print("G1 OK: spec satisfies the shape gate")
+        return 0
+    print("G1 INVALID:")
+    for item in findings:
+        print(f"  FAIL  {item.message}")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
