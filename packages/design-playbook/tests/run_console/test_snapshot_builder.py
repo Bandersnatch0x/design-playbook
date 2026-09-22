@@ -255,7 +255,8 @@ class PassBuildTest(_BuilderTestCase):
         self.assertEqual(
             [item["result"]["code"] for item in self.document["limitations"]["items"]],
             [
-                "diagnostic-export-contract-unavailable",
+                # ADR-0044: the diagnostic-export gate is accepted, so the
+                # one remaining disabled capability is role attestation.
                 "role-attestation-owner-unmapped",
             ],
         )

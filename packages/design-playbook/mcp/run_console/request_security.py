@@ -25,6 +25,11 @@ ACTION_PAYLOAD_INVALID = "ACTION_PAYLOAD_INVALID"
 ACTION_UNAVAILABLE = "ACTION_UNAVAILABLE"
 ROUTE_NOT_FOUND = "ROUTE_NOT_FOUND"
 SNAPSHOT_BUILD_FAILED = "SNAPSHOT_BUILD_FAILED"
+# Diagnostic export transaction (ADR-0044): a write whose preview binding no
+# longer matches (source set changed, or the reviewed hash does not), and a
+# transaction failure after preview (no partial pair survives).
+EXPORT_PREVIEW_MISMATCH = "EXPORT_PREVIEW_MISMATCH"
+EXPORT_WRITE_FAILED = "EXPORT_WRITE_FAILED"
 
 ERROR_MESSAGES: dict[str, str] = {
     SESSION_TOKEN_INVALID: "The session token is missing or invalid.",
@@ -35,10 +40,22 @@ ERROR_MESSAGES: dict[str, str] = {
     ACTION_UNAVAILABLE: "The requested action is not currently available.",
     ROUTE_NOT_FOUND: "The requested resource does not exist.",
     SNAPSHOT_BUILD_FAILED: "The run snapshot could not be built.",
+    EXPORT_PREVIEW_MISMATCH: (
+        "The export preview no longer matches the current snapshot; preview again."
+    ),
+    EXPORT_WRITE_FAILED: (
+        "The export transaction failed atomically; report no generated export."
+    ),
 }
 
-#: The one error code a consumer may safely retry after a refresh.
-RETRYABLE_CODES = frozenset({"SOURCE_HASH_MISMATCH"})
+#: The error codes a consumer may safely retry. A preview mismatch is
+#: retried by previewing again; a failed export transaction is NOT
+#: retryable blind — the transaction's own recovery is a fresh preview
+#: with rebound hashes, and content-addressed targets never overwrite.
+RETRYABLE_CODES = frozenset({
+    "SOURCE_HASH_MISMATCH",
+    EXPORT_PREVIEW_MISMATCH,
+})
 
 _AUTHORIZATION_SCHEME = "Bearer"
 # secrets.token_urlsafe(32) is 43 characters of this alphabet.

@@ -795,9 +795,12 @@ class MatrixSafetyTest(unittest.TestCase):
     """Journey-level safety: nothing runs, repairs, or writes by itself."""
 
     def test_console_action_allowlist_stays_closed(self) -> None:
+        # ADR-0044: the accepted diagnostic-export capability joins the
+        # closed allowlist; role attestation and every write-capable
+        # action stay out.
         self.assertEqual(
             capability_names(),
-            ("refresh", "view-source", "copy-agent-command"),
+            ("refresh", "view-source", "copy-agent-command", "diagnostic-export"),
         )
 
     def test_status_render_launches_no_process_and_writes_nothing(self) -> None:

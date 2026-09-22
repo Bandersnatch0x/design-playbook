@@ -732,8 +732,11 @@ class DisabledActionSurfaceTest(harness._ServerTestCase):
         )
 
     def test_the_capability_allowlist_has_no_role_attestation_entry(self) -> None:
+        # ADR-0044 added the accepted diagnostic-export capability; role
+        # attestation stays out of the allowlist entirely.
         self.assertEqual(
-            capability_names(), ("refresh", "view-source", "copy-agent-command")
+            capability_names(),
+            ("refresh", "view-source", "copy-agent-command", "diagnostic-export"),
         )
         for name in ("role-attestation", "attest-role", "attest", "attestation"):
             with self.subTest(name=name):

@@ -297,7 +297,7 @@ class RehearsalTestCase(unittest.TestCase):
         )
         blocker = self.fact(3).inner_text()
         self.assertIn("No blocking findings", blocker)
-        self.assertIn("2 recorded limitations", blocker)
+        self.assertIn("1 recorded limitation", blocker)  # ADR-0044: export limitation gone
         action = self.fact(4).inner_text()
         self.assertIn(doc["nextActions"]["primary"]["result"]["label"], action)
         self.assertIn("run-operator", action)

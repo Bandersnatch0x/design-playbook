@@ -139,23 +139,17 @@ class LimitationProjectionTests(unittest.TestCase):
     def test_disabled_capabilities_are_closed_frozen_limitations(self) -> None:
         limitations = project_limitations()
 
+        # ADR-0044 (2026-09-22): the diagnostic-export gate is accepted, so
+        # the one remaining disabled capability is role attestation.
         self.assertEqual(
             tuple(item.code for item in limitations),
-            (
-                "role-attestation-owner-unmapped",
-                "diagnostic-export-contract-unavailable",
-            ),
+            ("role-attestation-owner-unmapped",),
         )
         self.assertEqual(
             limitations[0].summary,
             "Role attestation is unavailable until an existing owner is mapped.",
         )
-        self.assertEqual(
-            limitations[1].summary,
-            "Diagnostic export is unavailable until its contract is accepted.",
-        )
         self.assertEqual(limitations[0].affects_assertion_ids, ())
-        self.assertEqual(limitations[1].affects_assertion_ids, ())
         with self.assertRaises(FrozenInstanceError):
             limitations[0].summary = "arbitrary"
 

@@ -62,7 +62,11 @@ read seams that section 6 condition 2 anticipates —
 `status_projection.project_next_action` (structured next action), and
 `run_metadata` (package metadata, safe run identity, and structured
 limitations), all under `packages/design-playbook/scripts/`. The
-Role-attestation and Diagnostic-export gates remain open.
+Diagnostic-export gate was resolved on 2026-09-22 by separately accepting
+and implementing the versioned contract
+([ADR-0044](../adr/0044-diagnostic-export-contract-v1.md) +
+[the contract spec](2026-09-22-diagnostic-export-v1.md), per section 7
+item 5's first branch). The Role-attestation gate remains open.
 
 ## 3. Assertion coverage matrix
 

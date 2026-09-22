@@ -685,6 +685,17 @@ this snapshot contract does not authorize an ad-hoc export payload. Export
 never writes under `evidence/`, never updates a Manifest, never changes a
 verdict, never uploads, and never counts as acceptance.
 
+> **Implementation note (2026-09-22):** the separate schema has since been
+> accepted — [ADR-0044](../adr/0044-diagnostic-export-contract-v1.md) accepts
+> `diagnostic-export.schema.v1`, and
+> [the contract spec](2026-09-22-diagnostic-export-v1.md) fixes the field
+> table, the two-phase transaction, and the binding vocabulary. The preview
+> and write routes are live (S35 enabled state) and S36-S37 are binding
+> tests (`test_diagnostic_export_server.py`). Every boundary above is
+> unchanged: no write under `evidence/`, no Manifest update, no verdict
+> change, no upload, never acceptance. Role attestation (S31-S34) and all
+> other typed actions remain locked.
+
 ### 12.6 Forbidden actions
 
 The Console MUST NOT execute a repair, rerun an Agent, invoke a Provider,

@@ -89,13 +89,6 @@ _DISABLED_CAPABILITY_LIMITATIONS = (
         ),
         affects_assertion_ids=(),
     ),
-    Limitation(
-        code="diagnostic-export-contract-unavailable",
-        summary=(
-            "Diagnostic export is unavailable until its contract is accepted."
-        ),
-        affects_assertion_ids=(),
-    ),
 )
 
 

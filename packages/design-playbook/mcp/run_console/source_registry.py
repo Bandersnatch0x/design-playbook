@@ -152,6 +152,28 @@ def _gate(
     )
 
 
+def _action_owner(key: str, kind: str) -> RegisteredSource:
+    """One accepted action owner: mapped, never a viewable source (ADR-0044).
+
+    The Diagnostic export transaction owns the ``diagnostic-export`` key:
+    its authority is the separately accepted contract, its writes are
+    confined to ``trial-export/``, and it issues no locator and carries no
+    viewable target.
+    """
+    return RegisteredSource(
+        key=key,
+        source_ref=None,
+        authority_key=key,
+        kind=kind,
+        locator_class="non-viewable",
+        capture_targets=(),
+        root_scope="run-root",
+        viewable=False,
+        mapped=True,
+        anchored=False,
+    )
+
+
 _FIXED_SOURCES: tuple[RegisteredSource, ...] = (
     _source(
         "session.selected-run",
@@ -249,7 +271,7 @@ _FIXED_SOURCES: tuple[RegisteredSource, ...] = (
         anchored=False,
     ),
     _gate("role-attestation.owner"),
-    _gate("diagnostic-export"),
+    _action_owner("diagnostic-export", "export-transaction"),
 )
 
 _SOURCES_BY_KEY = {source.key: source for source in _FIXED_SOURCES}

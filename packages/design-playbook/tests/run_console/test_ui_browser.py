@@ -186,7 +186,7 @@ class ComprehensionFactsTest(BrowserTestCase):
         # 3 — blocker source/limitation.
         blocker = self.fact(3).inner_text()
         self.assertIn("No blocking findings", blocker)
-        self.assertIn("2 recorded limitations", blocker)
+        self.assertIn("1 recorded limitation", blocker)  # ADR-0044: export limitation gone
         # 4 — next owner/action.
         action = self.fact(4).inner_text()
         self.assertIn("Run complete (Pass). Ship or start a new run.", action)
@@ -680,7 +680,9 @@ class SecurityTest(BrowserTestCase):
         labels = {disabled.nth(i).inner_text() for i in range(disabled.count())}
         self.assertIn("Copy agent command", labels)
         self.assertIn("Attest role", labels)
-        self.assertIn("Export diagnostics", labels)
+        # ADR-0044: the diagnostic export is the accepted capability — its
+        # control is live, not in the disabled set.
+        self.assertNotIn("Export diagnostics", labels)
         for i in range(disabled.count()):
             button = disabled.nth(i)
             described = button.get_attribute("aria-describedby")
@@ -690,7 +692,69 @@ class SecurityTest(BrowserTestCase):
         body = self.body_text()
         self.assertIn("no copyable agent command", body)
         self.assertIn("Role attestation", body)
-        self.assertIn("Diagnostic export", body)
+
+    def test_export_flow_previews_reviews_and_writes(self) -> None:
+        """ADR-0044 end to end in the real UI: preview shows the exact
+        candidate pair, the write button exists only after the explicit
+        review checkbox, the write reports the written pair, and the
+        files exist under the run's trial-export/."""
+        self.open()
+        export_button = self.page.get_by_role(
+            "button", name="Export diagnostics"
+        )
+        expect(export_button).to_be_visible()
+        self.assertTrue(export_button.is_enabled())
+        export_button.click()
+        dialog = self.page.locator(".export-dialog")
+        expect(dialog).to_be_visible()
+        preview_button = dialog.get_by_role("button", name="Preview export")
+        write_button = dialog.get_by_role("button", name="Write export")
+        close_button = dialog.get_by_role("button", name="Close")
+        # The write is armed only by the explicit review acknowledgement.
+        self.assertTrue(write_button.is_disabled())
+        self.assertFalse(
+            dialog.locator("#export-review-checkbox").is_visible()
+        )
+        preview_button.click()
+        expect(dialog.locator("pre.export-pre").first).to_be_visible(
+            timeout=10000
+        )
+        # The reviewed pair: JSON contract and Markdown view, plus the
+        # preview hash and the review checkbox.
+        json_text = dialog.locator("pre.export-pre").first.inner_text()
+        self.assertIn('"exportContract"', json_text)
+        self.assertIn("diagnostic-export.schema.v1", json_text)
+        self.assertIn("notCollected", json_text)
+        expect(dialog.get_by_text("Preview hash:")).to_be_visible()
+        checkbox = dialog.locator("#export-review-checkbox")
+        expect(checkbox).to_be_visible()
+        self.assertTrue(write_button.is_disabled())
+        # Reviewing is what arms the write.
+        checkbox.check()
+        self.assertTrue(write_button.is_enabled())
+        checkbox.uncheck()
+        self.assertTrue(write_button.is_disabled())
+        checkbox.check()
+        write_button.click()
+        expect(dialog.get_by_text("Written:")).to_be_visible(timeout=10000)
+        # The dialog names the written pair; the files exist under
+        # trial-export/ and the snapshot was rebuilt in place.
+        body = dialog.inner_text()
+        self.assertIn("trial-export/export-", body)
+        self.assertIn("rebuilt", body)
+        trial = self.console.session.run_root / "trial-export"
+        pairs = sorted(p.name for p in trial.glob("*"))
+        self.assertEqual(len(pairs), 2, pairs)
+        self.assertTrue(pairs[0].endswith(".json"))
+        self.assertTrue(pairs[1].endswith(".md"))
+        written = json.loads((trial / pairs[0]).read_text(encoding="utf-8"))
+        self.assertEqual(
+            written["exportContract"]["id"], "diagnostic-export.schema.v1"
+        )
+        self.assertTrue(written["transaction"]["participantReviewed"])
+        # Closing removes the overlay entirely.
+        close_button.click()
+        expect(self.page.locator(".export-dialog")).to_have_count(0)
 
     def test_copyable_command_copies_plaintext_when_known(self) -> None:
         self.context.grant_permissions(["clipboard-read", "clipboard-write"])

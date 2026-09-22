@@ -231,12 +231,12 @@ _EXPECTED_SOURCES = {
     "diagnostic-export": {
         "source_ref": None,
         "authority_key": "diagnostic-export",
-        "kind": "authority-record",
+        "kind": "export-transaction",
         "locator_class": "non-viewable",
         "capture_targets": (),
         "root_scope": "run-root",
         "viewable": False,
-        "mapped": False,
+        "mapped": True,
         "anchored": False,
     },
 }
@@ -318,13 +318,26 @@ class FixedRegistryTest(_RegistryTestCase):
             self.assertIsNotNone(_SOURCE_REF_PATTERN.match(ref), ref)
 
     def test_gate_keys_have_no_source_record(self) -> None:
-        for key in ("role-attestation.owner", "diagnostic-export"):
-            source = self.registry.source(key)
-            self.assertIsNone(source.source_ref)
-            self.assertFalse(source.mapped)
-            self.assertFalse(source.viewable)
-            self.assertEqual(source.locator_class, "non-viewable")
-            self.assertEqual(source.capture_targets, ())
+        # role-attestation stays an unmapped gate (no accepted owner).
+        # ADR-0044: diagnostic-export is now a mapped action owner — it has
+        # no source record, but it is no longer a gate (see the next test).
+        source = self.registry.source("role-attestation.owner")
+        self.assertIsNone(source.source_ref)
+        self.assertFalse(source.mapped)
+        self.assertFalse(source.viewable)
+        self.assertEqual(source.locator_class, "non-viewable")
+        self.assertEqual(source.capture_targets, ())
+
+    def test_diagnostic_export_is_a_mapped_action_owner(self) -> None:
+        # ADR-0044: the export transaction owns this key — mapped, but
+        # never a viewable source: no locator, no capture targets.
+        source = self.registry.source("diagnostic-export")
+        self.assertIsNone(source.source_ref)
+        self.assertTrue(source.mapped)
+        self.assertFalse(source.viewable)
+        self.assertEqual(source.locator_class, "non-viewable")
+        self.assertEqual(source.capture_targets, ())
+        self.assertEqual(source.kind, "export-transaction")
 
     def test_mapped_and_viewable_partitions(self) -> None:
         mapped = self.registry.mapped_sources
@@ -830,7 +843,7 @@ class EvidenceArtifactSourceTest(_RegistryTestCase):
     def test_derivation_does_not_extend_the_fixed_registry(self) -> None:
         self.registry.derive_evidence_artifact_source("L6.3-error.png")
         self.assertEqual(self.registry.keys, _EXPECTED_KEYS)
-        self.assertEqual(len(self.registry.mapped_sources), 13)
+        self.assertEqual(len(self.registry.mapped_sources), 14)  # ADR-0044: diagnostic-export mapped
 
     HOSTILE_ARTIFACT_NAMES = (
         "../manifest.jsonl",

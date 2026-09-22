@@ -91,16 +91,18 @@ class TickingClock:
 
 
 class ClosedCapabilityRegistryTest(unittest.TestCase):
-    """The allowlist is closed: three capabilities, no generic dispatch."""
+    """The allowlist is closed: four capabilities, no generic dispatch."""
 
-    def test_registry_exposes_exactly_the_three_base_capabilities(self) -> None:
+    def test_registry_exposes_exactly_the_four_capabilities(self) -> None:
         self.assertEqual(
-            capability_names(), ("refresh", "view-source", "copy-agent-command")
+            capability_names(),
+            ("refresh", "view-source", "copy-agent-command", "diagnostic-export"),
         )
 
     def test_allowlist_is_closed_names_not_a_router(self) -> None:
         self.assertEqual(
-            CAPABILITIES, ("refresh", "view-source", "copy-agent-command")
+            CAPABILITIES,
+            ("refresh", "view-source", "copy-agent-command", "diagnostic-export"),
         )
         for name in CAPABILITIES:
             with self.subTest(name=name):

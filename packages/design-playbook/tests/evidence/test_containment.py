@@ -731,3 +731,125 @@ class G6MappingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TrialExportTargetTests(unittest.TestCase):
+    """ADR-0044 write boundary: one bare filename under trial-export/."""
+
+    def _target(self, filename: str) -> str:
+        with tempfile.TemporaryDirectory(prefix="dx-containment-") as tmp:
+            root = Path(tmp)
+            result = containment.trial_export_write_target(filename, root)
+            return result
+
+    def test_bare_filename_resolves_inside_trial_export(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="dx-containment-") as tmp:
+            root = Path(tmp)
+            result = containment.trial_export_write_target(
+                "export-0123456789ab.json", root
+            )
+            self.assertTrue(result.ok)
+            assert result.path is not None
+            self.assertEqual(
+                result.path.relative_to(root.resolve()),
+                Path("trial-export") / "export-0123456789ab.json",
+            )
+            # The subtree may not exist yet; the write side permits that.
+            self.assertFalse(result.path.exists())
+
+    def test_separator_forms_are_rejected_before_resolution(self) -> None:
+        for bad in (
+            "sub/export.json",
+            "sub\export.json",
+            "./export.json",
+            "../export.json",
+            "/export.json",
+            "C:\export.json",
+            "C:export.json",
+            "export.json/..",
+        ):
+            with self.subTest(bad=bad):
+                result = containment.trial_export_write_target(bad, Path("."))
+                self.assertFalse(result.ok, bad)
+                self.assertIn(result.reason, (containment.REASON_ABSOLUTE_PATH,
+                                              containment.REASON_RESERVED_NAME))
+
+    def test_reserved_names_rejected(self) -> None:
+        for bad in ("manifest.jsonl", "", ".", ".."):
+            with self.subTest(bad=bad):
+                result = containment.trial_export_write_target(bad, Path("."))
+                self.assertFalse(result.ok)
+                self.assertEqual(result.reason, containment.REASON_RESERVED_NAME)
+
+    def test_win32_fold_names_are_rejected(self) -> None:
+        # CreateFile folds a trailing dot/space (the on-disk name would
+        # diverge from the reviewed one) and reserved device stems are
+        # never regular files; both are rejected as reserved.
+        for bad in (
+            "export.json.",
+            "export.json ",
+            "export.json.  ",
+            "con.json",
+            "NUL",
+            "com1.md",
+            "lpt3.txt",
+        ):
+            with self.subTest(bad=bad):
+                result = containment.trial_export_write_target(bad, Path("."))
+                self.assertFalse(result.ok)
+                self.assertEqual(result.reason, containment.REASON_RESERVED_NAME)
+        # A device-like middle segment is a legal filename stem.
+        ok = containment.trial_export_write_target(
+            "export-con-notes.json", Path(".")
+        )
+        self.assertTrue(ok.ok)
+
+    def test_non_string_rejected(self) -> None:
+        result = containment.trial_export_write_target(None, Path("."))  # type: ignore[arg-type]
+        self.assertFalse(result.ok)
+        self.assertEqual(result.reason, containment.REASON_RESERVED_NAME)
+
+    def test_escape_via_existing_symlink_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="dx-containment-") as tmp:
+            root = Path(tmp)
+            outside = root.parent / f"outside-{os.getpid()}.txt"
+            outside.write_text("secret", encoding="utf-8")
+            (root / "trial-export").mkdir()
+            link = root / "trial-export" / "export-link.json"
+            try:
+                os.symlink(outside, link)
+            except OSError:  # pragma: no cover - platform without symlink
+                self.skipTest("symlinks unavailable")
+            result = containment.trial_export_write_target("export-link.json", root)
+            self.assertFalse(result.ok)
+            self.assertIn(
+                result.reason,
+                (containment.REASON_SYMLINK_ESCAPE, containment.REASON_CANONICAL_ESCAPE),
+            )
+            outside.unlink()
+
+    def test_resolution_only_writes_nothing(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="dx-containment-") as tmp:
+            root = Path(tmp)
+            result = containment.trial_export_write_target(
+                "export-0123456789ab.md", root
+            )
+            self.assertTrue(result.ok)
+            self.assertFalse((root / "trial-export").exists())
+
+    def test_evidence_boundary_unchanged_regression(self) -> None:
+        # The evidence write/read operations keep their exact boundary and
+        # timing; the trial-export addition must not have moved them.
+        with tempfile.TemporaryDirectory(prefix="dx-containment-") as tmp:
+            root = Path(tmp)
+            self.assertFalse(write_target("../x.bin", root).ok)
+            (root / "evidence").mkdir()
+            # The evidence contract surface takes run-root-relative paths
+            # that include the evidence/ prefix.
+            ok = write_target("evidence/artifact.png", root)
+            self.assertTrue(ok.ok)
+            assert ok.path is not None
+            self.assertIn("evidence", str(ok.path))
+            missing = read_artifact("evidence/artifact.png", root)
+            self.assertFalse(missing.ok)
+            self.assertEqual(missing.reason, containment.REASON_NOT_REGULAR_FILE)

@@ -108,9 +108,12 @@ review exactly:
   by the facilitator's notes only, and only during an authorized trial.
 - **What a participant is asked to share, and only if they choose to:**
   an explicitly initiated Diagnostic export (per ADR-0036), previewed by
-  the participant before sharing — and only once a Diagnostic export
-  contract is separately accepted and implemented. Today that control
-  is disabled in the Console and no export exists.
+  the participant before sharing. Since ADR-0044 (2026-09-22) the
+  contract is separately accepted and implemented — the preview/write
+  transaction is live and the participant reviews the exact candidate
+  pair before any write — but an export only ever exists after a
+  participant runs it, and it is shared manually. Nothing here runs a
+  trial or creates an export.
 - **Participant identity:** no name, account, machine fingerprint, or
   hidden identifier is collected. Any pseudonymous participant
   identifier is created by invitation, retained by the participant, and

@@ -220,12 +220,29 @@
       attest_role: "Attest role",
       export_diagnostics: "Export diagnostics",
       role_reason_default: "Role attestation is not available in this read-only console phase.",
-      export_reason_default: "Diagnostic export is not available: its contract is not accepted.",
+
+      section_diagnostic_export: "Diagnostic export",
+      export_hint: "Preview the exact JSON and Markdown pair, review it yourself, then write it under this run's trial-export/. Nothing is uploaded — sharing is manual.",
+      export_preview: "Preview export",
+      export_previewing: "Preparing the preview…",
+      export_participant_ref: "Participant ref (optional, participant-supplied)",
+      export_json_heading: "JSON contract",
+      export_markdown_heading: "Markdown view",
+      export_preview_hash: "Preview hash",
+      export_review_prompt: "I have reviewed this export and consent to writing it under this run's trial-export/.",
+      export_write: "Write export",
+      export_writing: "Writing…",
+      export_written: "Written:",
+      export_rebuilt: "The snapshot was rebuilt after the write.",
+      export_error: "Export failed",
+      export_err_network: "the console server is unreachable",
+      export_err_preview_mismatch: "the export preview no longer matches the current snapshot — preview again",
+      export_err_write_failed: "the export transaction failed; no partial file was left behind",
+      export_close: "Close",
 
       section_limitations: "Limitations",
       empty_limitations: "No limitations are recorded in this snapshot.",
       affects_prefix: "Affects: ",
-      limitation_diagnostic_export_contract_unavailable: "Diagnostic export is unavailable until its contract is accepted.",
       limitation_role_attestation_owner_unmapped: "Role attestation is unavailable until an existing owner is mapped.",
 
       section_sources: "Sources",
@@ -477,12 +494,29 @@
       attest_role: "认证角色",
       export_diagnostics: "导出诊断报告",
       role_reason_default: "在当前只读控制台阶段，角色认证不可用。",
-      export_reason_default: "诊断导出不可用：未接受其契约。",
+
+      section_diagnostic_export: "诊断导出",
+      export_hint: "先预览确切的 JSON 与 Markdown 产物，由本人审阅后写入本 run 的 trial-export/。不上传任何内容——分享是手动的。",
+      export_preview: "预览导出",
+      export_previewing: "正在生成预览…",
+      export_participant_ref: "参与者编号（可选，由参与者本人提供）",
+      export_json_heading: "JSON 契约",
+      export_markdown_heading: "Markdown 视图",
+      export_preview_hash: "预览哈希",
+      export_review_prompt: "我已审阅本导出，并同意写入本 run 的 trial-export/。",
+      export_write: "写入导出",
+      export_writing: "正在写入…",
+      export_written: "已写入：",
+      export_rebuilt: "写入后快照已重建。",
+      export_error: "导出失败",
+      export_err_network: "控制台服务不可达",
+      export_err_preview_mismatch: "导出预览与当前快照不再一致——请重新预览",
+      export_err_write_failed: "导出事务失败；没有留下任何部分文件",
+      export_close: "关闭",
 
       section_limitations: "局限性",
       empty_limitations: "本次快照中未记录任何局限性。",
       affects_prefix: "影响范围: ",
-      limitation_diagnostic_export_contract_unavailable: "诊断导出不可用：未接受其契约。",
       limitation_role_attestation_owner_unmapped: "角色认证不可用：尚未映射责任人。",
 
       section_sources: "源数据",
@@ -1471,10 +1505,6 @@
     var roleReason = (currentLang === "zh-CN" ? t(roleKey) : null) ||
       limitationSummary(items, "role-attestation-owner-unmapped") ||
       t("role_reason_default");
-    var exportKey = "limitation_diagnostic_export_contract_unavailable";
-    var exportReason = (currentLang === "zh-CN" ? t(exportKey) : null) ||
-      limitationSummary(items, "diagnostic-export-contract-unavailable") ||
-      t("export_reason_default");
     return el("div", { class: "sub-card" },
       el("h3", null, t("heading_unavail_controls")),
       el("div", { class: "action-card" },
@@ -1482,13 +1512,242 @@
           type: "button", class: "button", disabled: "disabled",
           "aria-describedby": "unavailable-role-reason",
         }, t("attest_role")),
-        el("span", { class: "unavailable-reason", id: "unavailable-role-reason", text: roleReason })),
-      el("div", { class: "action-card" },
-        el("button", {
-          type: "button", class: "button", disabled: "disabled",
-          "aria-describedby": "unavailable-export-reason",
-        }, t("export_diagnostics")),
-        el("span", { class: "unavailable-reason", id: "unavailable-export-reason", text: exportReason })));
+        el("span", { class: "unavailable-reason", id: "unavailable-role-reason", text: roleReason })));
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Diagnostic export (ADR-0044): preview, participant review, write.  */
+  /* ---------------------------------------------------------------- */
+
+  var EXPORT_PREVIEW_PATH = "/api/v1/actions/diagnostic-export/preview";
+  var EXPORT_WRITE_PATH = "/api/v1/actions/diagnostic-export/write";
+
+  function requestExportPreview(participantRef) {
+    var body = { schemaVersion: 1, action: "diagnostic-export-preview" };
+    if (participantRef) body.participantRef = participantRef;
+    return window.fetch(EXPORT_PREVIEW_PATH, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + sessionToken,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    }).then(parseJsonResponse);
+  }
+
+  function requestExportWrite(expectedSourceSetHash, previewHash, participantRef) {
+    var body = {
+      schemaVersion: 1,
+      action: "diagnostic-export-write",
+      expectedSourceSetHash: expectedSourceSetHash,
+      previewHash: previewHash,
+      participantReviewed: true,
+    };
+    if (participantRef) body.participantRef = participantRef;
+    return window.fetch(EXPORT_WRITE_PATH, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + sessionToken,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    }).then(parseJsonResponse);
+  }
+
+  function exportErrorMessage(result) {
+    var error = result.body && result.body.error ? result.body.error : null;
+    if (error) {
+      var code = String(error.code || "UNKNOWN");
+      var localized = {
+        "EXPORT_PREVIEW_MISMATCH": t("export_err_preview_mismatch"),
+        "EXPORT_WRITE_FAILED": t("export_err_write_failed"),
+      }[code];
+      return localized || String(error.message || code);
+    }
+    return t("export_error");
+  }
+
+  /* One export flow, one overlay. The write button exists only after the
+     preview has been reviewed (the explicit checkbox), so a write request
+     always carries a preview the participant actually saw. */
+  function exportControl() {
+    var openButton = el("button", { type: "button", class: "button" },
+      t("export_diagnostics"));
+    openButton.addEventListener("click", function () {
+      openExportDialog();
+    });
+    return el("div", { class: "sub-card" },
+      el("h3", null, t("section_diagnostic_export")),
+      el("div", { class: "action-card" }, openButton),
+      el("p", { class: "fact-meta", text: t("export_hint") }));
+  }
+
+  function openExportDialog() {
+    var overlay = el("div", { class: "export-overlay", role: "presentation" });
+    var errorLine = el("p", { class: "export-error", role: "alert", text: "" });
+    var participantRef = el("input", {
+      class: "export-ref-input", type: "text", maxlength: "64",
+      "aria-label": t("export_participant_ref"),
+    });
+    var refLabel = el("label", { class: "export-field" },
+      el("span", { text: t("export_participant_ref") }), participantRef);
+    var jsonPre = el("pre", { class: "export-pre" });
+    var markdownPre = el("pre", { class: "export-pre" });
+    var hashLine = el("p", { class: "fact-meta" });
+    var review = el("input", { type: "checkbox", id: "export-review-checkbox" });
+    var reviewLabel = el("label", { class: "export-review", "for": "export-review-checkbox" }, review);
+    reviewLabel.appendChild(document.createTextNode(" " + t("export_review_prompt")));
+    var writeButton = el("button", {
+      type: "button", class: "button", disabled: "disabled",
+    }, t("export_write"));
+    var previewButton = el("button", { type: "button", class: "button" },
+      t("export_preview"));
+    var closeButton = el("button", { type: "button", class: "button button-secondary" },
+      t("export_close"));
+
+    var dialog = el("div", {
+      class: "export-dialog", role: "dialog", "aria-modal": "true",
+      "aria-label": t("section_diagnostic_export"),
+    },
+      el("h3", null, t("section_diagnostic_export")),
+      el("p", { class: "fact-meta", text: t("export_hint") }),
+      refLabel,
+      el("div", { class: "action-card" }, previewButton, writeButton, closeButton),
+      errorLine,
+      hashLine,
+      el("h4", null, t("export_json_heading")), jsonPre,
+      el("h4", null, t("export_markdown_heading")), markdownPre,
+      reviewLabel);
+
+    /* The reviewed binding: only a successful preview arms the write, and
+       only the explicit checkbox enables the button (the server enforces
+       participantReviewed independently — the client cannot forge a pass). */
+    var reviewed = null;
+    var opener = document.activeElement;
+    function hide(node) { node.classList.add("export-hidden"); }
+    function show(node) { node.classList.remove("export-hidden"); }
+    /* Modal focus discipline: Escape closes, Tab stays inside the dialog,
+       and closing restores focus to the control that opened it. */
+    function onDialogKey(event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      var focusable = dialog.querySelectorAll(
+        "button, input, [href], [tabindex]:not([tabindex='-1'])"
+      );
+      if (!focusable.length) return;
+      var first = focusable[0];
+      var last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    function resetReview() {
+      reviewed = null;
+      review.checked = false;
+      writeButton.disabled = true;
+      hide(jsonPre); hide(markdownPre); hide(reviewLabel); hide(hashLine);
+      jsonPre.textContent = "";
+      markdownPre.textContent = "";
+      hashLine.textContent = "";
+    }
+    function showError(text) {
+      errorLine.textContent = text;
+      show(errorLine);
+    }
+    function close() {
+      document.removeEventListener("keydown", onDialogKey, true);
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      if (opener && typeof opener.focus === "function") opener.focus();
+    }
+
+    hide(errorLine);
+    resetReview();
+    review.addEventListener("change", function () {
+      writeButton.disabled = !(review.checked && reviewed !== null);
+    });
+    closeButton.addEventListener("click", close);
+    overlay.addEventListener("click", function (event) {
+      if (event.target === overlay) close();
+    });
+
+    previewButton.addEventListener("click", function () {
+      errorLine.textContent = "";
+      hide(errorLine);
+      resetReview();
+      previewButton.disabled = true;
+      previewButton.textContent = t("export_previewing");
+      requestExportPreview(participantRef.value.trim()).then(function (result) {
+        previewButton.disabled = false;
+        previewButton.textContent = t("export_preview");
+        if (!result.ok) {
+          showError(t("export_error") + " — " + exportErrorMessage(result));
+          return;
+        }
+        var view = result.body;
+        reviewed = view;
+        jsonPre.textContent = JSON.stringify(view.json, null, 2);
+        markdownPre.textContent = String(view.markdown || "");
+        hashLine.textContent = t("export_preview_hash") + ": " + String(view.previewHash);
+        show(jsonPre); show(markdownPre); show(hashLine); show(reviewLabel);
+        writeButton.disabled = !review.checked;
+      }).catch(function () {
+        previewButton.disabled = false;
+        previewButton.textContent = t("export_preview");
+        showError(t("export_error") + " — " + t("export_err_network"));
+      });
+    });
+
+    writeButton.addEventListener("click", function () {
+      if (!review.checked || reviewed === null) return;
+      errorLine.textContent = "";
+      hide(errorLine);
+      writeButton.disabled = true;
+      writeButton.textContent = t("export_writing");
+      requestExportWrite(
+        String(reviewed.expectedSourceSetHash),
+        String(reviewed.previewHash),
+        participantRef.value.trim()
+      ).then(function (result) {
+        writeButton.disabled = false;
+        writeButton.textContent = t("export_write");
+        if (!result.ok) {
+          /* A binding mismatch (S36) tells the participant to preview
+             again; reset so the stale pair cannot be re-submitted. */
+          resetReview();
+          showError(t("export_error") + " — " + exportErrorMessage(result));
+          return;
+        }
+        var body = result.body;
+        var names = (body.written || []).join(", ");
+        resetReview();
+        hashLine.textContent = t("export_written") + " " + names + " — " + t("export_rebuilt");
+        show(hashLine);
+        /* The write response carries the rebuilt snapshot: adopt it the
+           same way a refresh result would be adopted. */
+        if (body.snapshot && typeof body.snapshot.schemaVersion === "number") {
+          classifySnapshotResult({ status: 200, ok: true, body: body.snapshot });
+        }
+      }).catch(function () {
+        writeButton.disabled = false;
+        writeButton.textContent = t("export_write");
+        showError(t("export_error") + " — " + t("export_err_network"));
+      });
+    });
+
+    document.addEventListener("keydown", onDialogKey, true);
+    document.body.appendChild(overlay);
+    overlay.appendChild(dialog);
+    participantRef.focus();
   }
 
   function renderNextActions(details, snapshot) {
@@ -1534,6 +1793,7 @@
     }
     children.push(el("div", { class: "sub-card" }, el("h3", null, t("heading_alternatives")), alternatives));
     children.push(unavailableControls(snapshot.limitations.items || []));
+    children.push(exportControl());
 
     details.appendChild(section("section-next-actions", t("section_next_actions"), children));
   }

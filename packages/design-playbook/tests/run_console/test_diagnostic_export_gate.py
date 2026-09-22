@@ -1,71 +1,58 @@
 #!/usr/bin/env python3
-"""RCV1-011: the Diagnostic-export capability gate (binary decision record).
+"""RCV1-011: the Diagnostic-export capability gate (decision record).
 
-Decision recorded by this module: ``disabled-by-gate``.
+Decision recorded by this module: ``accepted-by-adr-0044`` (2026-09-22),
+superseding the 2026-08-27 ``disabled-by-gate`` record this file carried
+when the accepted ADR, contract document, and owner transaction did not
+exist yet.
 
-The gate asks one binary question: does this repository contain BOTH
+The gate still asks its binary question against live evidence, re-derived
+by the tests below (the decision is never hard-coded):
 
 (a) a separately accepted, versioned Diagnostic-export contract — a
     minimal JSON schema plus a Markdown human view, carrying the
     participant-review preview, the source-set and preview-hash
     binding, manual-share-only (no upload), and selected-run
-    ``trial-export/`` containment — AND
-(b) that exact atomic owner transaction, writing the accepted
-    JSON+Markdown pair atomically under the selected run's
-    ``trial-export/`` subtree?
+    ``trial-export/`` containment — named by an accepted ADR, AND
+(b) that exact atomic owner transaction, whose persisted record — the
+    written pair under the selected run's ``trial-export/`` subtree —
+    states the participant review, the atomic pair, and the
+    containment in-band, with the preview hash verifiable from the
+    JSON bytes and the file name.
 
-If both exist, the outcome is ``requires-new-ticket`` and the
-coordinator must split a separately scoped implementation ticket
-(S36/S37). Otherwise the Diagnostic-export preview and write stay
-disabled (S35): no schema is invented, no ad-hoc export payload is
-authorized, the two specified routes answer with the typed
-``ACTION_UNAVAILABLE`` gate, and no directory or partial file
-appears. This module is a test file only — the disabled outcome owns
-no runtime file.
+With both present the outcome is ``accepted-by-adr-0044``: the preview
+and write routes are live (S35 enabled state) and S36/S37 are binding
+tests (``test_diagnostic_export_server.py``). Fail-closed paths are
+unchanged: a missing decision, an unnamed contract or owner, a missing
+or incomplete contract document, a missing or mismatched owner record,
+or a stale binding each keeps the outcome ``disabled-by-gate`` — so a
+future regression (a deleted ADR, a broken record, an unmapped owner)
+flips this decision loudly instead of silently.
 
-Evidence trail, re-derived live by the tests below (the decision is
-never hard-coded to "disabled"):
+Evidence trail, re-derived live by the tests below:
 
-1. ``docs/adr/`` — ADR-0036 and ADR-0038 are Accepted and govern the
-   Diagnostic export, but both defer the contract: no accepted ADR
-   names a versioned ``diagnostic-export.schema.v<N>`` contract or an
-   atomic export owner, and ADR-0036 itself requires that "Diagnostic
-   export schemas must be minimal, inspectable, and versioned before
-   implementation."
-2. ``docs/specs/2026-08-25-run-snapshot-v1.md`` section 12.5 — the
-   two-phase transaction (preview, then write bound to the same
-   ``expectedSourceSetHash``, export request, and ``previewHash``) is
-   specified but gated: the action "MUST remain disabled until the
-   separate Diagnostic export schema is accepted; this snapshot
-   contract does not authorize an ad-hoc export payload", and section
-   17 repeats that "Snapshot v1 does not fill that missing schema."
-3. ``docs/specs/2026-08-25-run-snapshot-parity.md`` section 2 — the
-   ``diagnostic-export`` row is a parity gate: "no accepted v1
-   JSON/Markdown schema or transaction"; preview/write stay disabled
-   and "no export is written during read parity."
+1. ``docs/adr/`` — ADR-0036 and ADR-0038 govern the export but defer the
+   contract; ADR-0044 (2026-09-22) accepts versioned contract
+   ``diagnostic-export.schema.v1`` and maps the owner (authority key
+   ``diagnostic-export``, registry kind ``export-transaction``).
+2. ``docs/specs/2026-09-22-diagnostic-export-v1.md`` — the separately
+   accepted contract document: field table, envelope discipline, the
+   preview/write transaction, and the binding vocabulary (sourceSetHash,
+   previewHash, secrets exclusion, manual share, trial-export).
+3. ``docs/specs/2026-08-25-run-snapshot-v1.md`` section 12.5 — the
+   two-phase transaction shape the implementation follows; its
+   implementation note records the acceptance.
 4. Runtime mapping — the parity Source registry registers
-   ``diagnostic-export`` as an unmapped gate (no source record, no
-   issuable locator); the closed typed-action allowlist
-   (``actions.py``) exposes exactly refresh, view-source, and
-   copy-agent-command; the two specified S35 routes answer with the
-   typed ``ACTION_UNAVAILABLE`` gate while every other export-shaped
-   spelling stays routeless; and the built snapshot carries the
-   ``diagnostic-export-contract-unavailable`` limitation instead of
-   any export fact.
-
-Because the disabled outcome owns no runtime file, the gate logic
-lives in this test module as the executable record of the decision:
-``evaluate_diagnostic_export_gate`` is a pure function over
-structured repository facts, and the ``derive_repo_facts`` scans
-re-derive those facts from the live repository, so the decision flips
-to ``requires-new-ticket`` (or trips loudly through the evidence
-tests) the moment the repository evidence changes. S36/S37 — the
-enabled preview/write phases, their stale-binding rejection, and the
-atomic write-then-rebuild — are future-ticket work and are modelled
-here only inside the pure gate.
+   ``diagnostic-export`` as a mapped action owner (no source record, no
+   issuable locator); the closed typed-action allowlist carries the
+   export capability alongside refresh/view-source/copy; the two routes
+   dispatch the preview and the reviewed write; role attestation stays
+   gated, and the built snapshot carries no export limitation (the
+   remaining disabled capability is role attestation only).
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -90,7 +77,6 @@ from design_playbook.mcp.run_console.actions import (  # noqa: E402
 )
 from design_playbook.mcp.run_console.contract import validate_snapshot  # noqa: E402
 from design_playbook.mcp.run_console.request_security import (  # noqa: E402
-    ACTION_UNAVAILABLE,
     ERROR_MESSAGES,
     METHOD_NOT_ALLOWED,
     ROUTE_NOT_FOUND,
@@ -113,7 +99,9 @@ _TRIAL_DOC = _REPO_ROOT / "docs" / "agents" / "run-console-read-only-trial.md"
 # ---------------------------------------------------------------------------
 
 OUTCOME_DISABLED_BY_GATE = "disabled-by-gate"
-OUTCOME_REQUIRES_NEW_TICKET = "requires-new-ticket"
+# The pre-acceptance record (2026-08-27..2026-09-22) resolved to
+# ``requires-new-ticket``; the accepted outcome supersedes it (ADR-0044).
+OUTCOME_ACCEPTED = "accepted-by-adr-0044"
 
 REASON_NO_ACCEPTED_ADR = "no-accepted-adr"
 REASON_CONTRACT_NOT_NAMED = "accepted-adr-names-no-versioned-contract"
@@ -250,7 +238,7 @@ class GateResult:
 def evaluate_diagnostic_export_gate(repo_facts: RepoFacts) -> GateResult:
     """Decide the Diagnostic-export capability gate from repository facts.
 
-    The gate flips to ``requires-new-ticket`` only when an accepted ADR
+    The gate reaches ``accepted-by-adr-0044`` only when an accepted ADR
     names the exact versioned contract and its atomic owner, the
     separately accepted contract document carries every required
     property, and that owner's transaction round-trips the source-set
@@ -320,7 +308,7 @@ def evaluate_diagnostic_export_gate(repo_facts: RepoFacts) -> GateResult:
         return GateResult(
             OUTCOME_DISABLED_BY_GATE, REASON_EXPORT_BINDING_STALE, tuple(mismatched)
         )
-    return GateResult(OUTCOME_REQUIRES_NEW_TICKET, REASON_EXACT_CONTRACT_AND_OWNER)
+    return GateResult(OUTCOME_ACCEPTED, REASON_EXACT_CONTRACT_AND_OWNER)
 
 
 # ---------------------------------------------------------------------------
@@ -347,12 +335,13 @@ _NON_OWNER_SEGMENTS = frozenset(
 # The binding vocabulary a real contract document must carry, mapped to
 # the contract requirements above. All markers are required (lowercased
 # substring match); the hash markers are the exact spec 12.5 field
-# names, so prose-only variants stay unproven and fail closed.
+# names lowercased (``sourceSetHash`` / ``previewHash``), so prose-only
+# variants stay unproven and fail closed.
 _CONTRACT_MARKERS = {
     "versioned_json_schema": ("json", "schema"),
     "markdown_human_view": ("markdown",),
     "participant_review_preview": ("preview",),
-    "source_set_hash_binding": ("sourcessethash",),
+    "source_set_hash_binding": ("sourcesethash",),
     "preview_hash_binding": ("previewhash",),
     "minimal_facts_only": ("secret",),
     "manual_share_only": ("upload",),
@@ -377,7 +366,13 @@ def _named_contract(text: str) -> str | None:
 
 
 def _named_owner(text: str) -> str | None:
-    """The concrete atomic owner segment the ADR maps, if it maps one."""
+    """The concrete atomic owner segment the ADR maps, if it maps one.
+
+    Two accepted shapes are recognized (ADR-0044 uses the second): the
+    pre-declared ``diagnostic-export.<owner>`` child-key form, or an ADR
+    that names the capability key together with the
+    ``export-transaction`` owner kind it maps.
+    """
     for segment in _NAMED_OWNER_KEY.findall(text):
         lowered = segment.lower()
         if (
@@ -387,6 +382,8 @@ def _named_owner(text: str) -> str | None:
         ):
             continue
         return segment
+    if "export-transaction" in text and "diagnostic-export" in text:
+        return "diagnostic-export"
     return None
 
 
@@ -432,11 +429,13 @@ def scan_export_contract_documents(
 ) -> ExportContract | None:
     """The separately accepted export contract document, if one exists.
 
-    A contract document is an ADR or spec whose text names the exact
-    versioned contract the accepted ADR accepts. The requirement flags
-    are derived from the binding vocabulary the document itself
-    carries; anything the document does not state stays unproven, so a
-    silent or partial contract keeps the gate closed.
+    A contract document is an ADR or spec that both matches the version
+    the accepted ADR names and declares the export contract identity
+    itself (the ``exportContract`` block) — other documents may reference
+    the contract by id or link, but a reference is not a contract. The
+    requirement flags are derived from the binding vocabulary the
+    document itself carries; anything the document does not state stays
+    unproven, so a silent or partial contract keeps the gate closed.
     """
     if named_contract is None:
         return None
@@ -444,7 +443,11 @@ def scan_export_contract_documents(
     for directory in (specs_dir, adr_dir):
         for document in sorted(directory.glob("*.md")):
             text = document.read_text(encoding="utf-8")
-            if version in set(_NAMED_CONTRACT_KEY.findall(text)):
+            lowered = text.lower()
+            if (
+                version in set(_NAMED_CONTRACT_KEY.findall(text))
+                and "exportcontract" in lowered
+            ):
                 return _contract_from_document(named_contract, text)
     return None
 
@@ -452,45 +455,73 @@ def scan_export_contract_documents(
 def mapped_owner_transaction(registry, run_root: Path) -> ExportTransaction | None:
     """The Diagnostic-export owner transaction the runtime maps today.
 
-    The parity Source registry reserves ``diagnostic-export`` as an
-    unmapped gate: no owner transaction exists until parity work
-    replaces the gate with a real registration. When the owner is
-    mapped, its persisted pair would surface under the selected run's
-    ``trial-export/`` as one JSON record plus one Markdown view, and
-    this derivation surfaces exactly what that record carries — review,
-    atomicity, and confinement must be stated by the record itself
-    (the future enabling ticket's owner seam), never synthesized here.
+    ADR-0044 maps the owner as an action owner: the registry entry is
+    ``mapped`` with no source record (it issues no locator and carries no
+    viewable target), so the derivation requires exactly that shape. The
+    persisted record — a JSON document plus its same-stem Markdown view
+    under the selected run's ``trial-export/`` — must state the
+    transaction bindings in-band (participant review, atomicity,
+    confinement); the preview hash is verified from the JSON bytes
+    themselves (they are the reviewed candidate) against the file name's
+    hash stem. Repeated exports are ordinary pairs: any verifiable pair
+    proves the owner. Anything the record does not itself carry stays
+    unproven.
     """
     source = registry.source("diagnostic-export")
-    if not source.mapped or source.source_ref is None:
+    if not source.mapped or source.source_ref is not None or source.viewable:
         return None
     trial_dir = run_root / "trial-export"
     if not trial_dir.is_dir():
         return None
-    json_documents = sorted(trial_dir.glob("*.json"))
-    markdown_documents = sorted(trial_dir.glob("*.md"))
-    if len(json_documents) != 1 or len(markdown_documents) != 1:
-        return None
-    try:
-        record = json.loads(json_documents[0].read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    if not isinstance(record, dict):
-        return None
-    owner = source.authority_key
-    if owner.startswith("diagnostic-export."):
-        owner = owner[len("diagnostic-export."):]
-    return ExportTransaction(
-        owner=owner,
-        contract_id=record.get("contractId"),
-        expected_source_set_hash=record.get("expectedSourceSetHash"),
-        preview_hash=record.get("previewHash"),
-        participant_reviewed=record.get("participantReviewed") is True,
-        atomic_json_and_markdown=(
-            record.get("atomicJsonAndMarkdown") is True
-        ),
-        confined_to_trial_export=record.get("confinedToTrialExport") is True,
-    )
+    # Repeated exports are ordinary (roadmap trial boundary): accept any
+    # verifiable pair in the subtree, not only the first one ever written.
+    for json_document in sorted(trial_dir.glob("*.json")):
+        markdown_document = json_document.with_suffix(".md")
+        if not markdown_document.is_file():
+            continue
+        try:
+            json_bytes = json_document.read_bytes()
+            record = json.loads(json_bytes.decode("utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(record, dict):
+            continue
+        # The preview hash is the hash of the persisted candidate itself;
+        # the file name must name the same bytes it stores.
+        digest = hashlib.sha256(json_bytes).hexdigest()
+        stem = json_document.name[len("export-"):-len(".json")]
+        if not digest.startswith(stem) or len(stem) != 12:
+            continue
+        contract = record.get("exportContract")
+        transaction = record.get("transaction")
+        if not isinstance(contract, dict) or not isinstance(transaction, dict):
+            continue
+        # The long-lived backward-compat surface (contract spec §2): a
+        # reader rejects an unknown contract version fail-closed, on the
+        # version field itself — an id naming v1 with a version that is
+        # not v1 is not the accepted contract.
+        if contract.get("version") != 1:
+            continue
+        return ExportTransaction(
+            owner=source.authority_key,
+            contract_id=contract.get("id"),
+            expected_source_set_hash=(
+                record.get("run", {}).get("sourceSetHash")
+                if isinstance(record.get("run"), dict)
+                else None
+            ),
+            preview_hash=digest,
+            participant_reviewed=(
+                transaction.get("participantReviewed") is True
+            ),
+            atomic_json_and_markdown=(
+                transaction.get("atomicJsonAndMarkdown") is True
+            ),
+            confined_to_trial_export=(
+                transaction.get("confinedToTrialExport") is True
+            ),
+        )
+    return None
 
 
 def required_export_binding(document: dict) -> ExportBinding | None:
@@ -782,8 +813,8 @@ class GateModelTest(unittest.TestCase):
 
     def test_the_exact_contract_and_owner_is_the_only_enabling_path(self) -> None:
         # The gate is a real binary evaluator, not a constant: the one
-        # fact combination that carries every requirement records
-        # requires-new-ticket (never an implementation).
+        # fact combination that carries every requirement records the
+        # accepted state (never an implementation by itself).
         result = evaluate_diagnostic_export_gate(
             RepoFacts(
                 _ENABLING_ADR,
@@ -792,7 +823,7 @@ class GateModelTest(unittest.TestCase):
                 _BINDING,
             )
         )
-        self.assertEqual(result.outcome, OUTCOME_REQUIRES_NEW_TICKET)
+        self.assertEqual(result.outcome, OUTCOME_ACCEPTED)
         self.assertEqual(result.reason, REASON_EXACT_CONTRACT_AND_OWNER)
         self.assertEqual(result.mismatched_fields, ())
 
@@ -849,7 +880,7 @@ class GateModelTest(unittest.TestCase):
                 result = evaluate_diagnostic_export_gate(facts)
                 self.assertIn(
                     result.outcome,
-                    (OUTCOME_DISABLED_BY_GATE, OUTCOME_REQUIRES_NEW_TICKET),
+                    (OUTCOME_DISABLED_BY_GATE, OUTCOME_ACCEPTED),
                 )
                 reasons.add(result.reason)
                 for value in (result.reason, *result.mismatched_fields):
@@ -893,32 +924,55 @@ class RepoDecisionEvidenceTest(_BuiltSnapshotTestCase):
 
     These tests are the tripwire: when one fails, the documented
     repository state changed and the RCV1-011 decision must be
-    re-derived — either the outcome flips to ``requires-new-ticket``
-    with the exact references, or the evidence is re-recorded.
+    re-derived — either the accepted decision no longer holds (a
+    deleted ADR, a broken contract document, an unmapped owner) and
+    the outcome flips back to ``disabled-by-gate``, or the evidence is
+    re-recorded.
     """
 
     def test_the_adr_scan_finds_the_accepted_export_decisions(self) -> None:
         self.assertTrue(_ADR_DIR.is_dir(), str(_ADR_DIR))
         decisions = scan_accepted_diagnostic_export_adrs(_ADR_DIR)
         documents = {decision.document for decision in decisions}
-        # The two accepted decisions that govern the Diagnostic export.
+        # The governing decisions: the two boundary ADRs that defer the
+        # contract, plus the one accepted decision that names it.
         for document in (
             "0036-invited-trial-data-and-role-boundary.md",
             "0038-run-snapshot-contract-and-loopback-security.md",
+            "0044-diagnostic-export-contract-v1.md",
         ):
             self.assertIn(document, documents)
-        # None of the accepted export-covering decisions names the
-        # separately versioned contract or its atomic owner: each
-        # defers both to parity work that has not happened.
-        self.assertTrue(decisions)
-        for decision in decisions:
-            with self.subTest(document=decision.document):
-                self.assertIsNone(decision.named_contract)
-                self.assertIsNone(decision.named_owner)
+        named = {
+            decision.document: decision
+            for decision in decisions
+            if decision.named_contract is not None
+        }
+        # Only ADR-0044 names the versioned contract and the owner; the
+        # two boundary ADRs still defer both.
+        self.assertEqual(
+            sorted(named),
+            ["0044-diagnostic-export-contract-v1.md"],
+        )
+        decision = named["0044-diagnostic-export-contract-v1.md"]
+        self.assertEqual(decision.named_contract, "diagnostic-export.schema.v1")
+        self.assertEqual(decision.named_owner, "diagnostic-export")
+        for other in (
+            "0036-invited-trial-data-and-role-boundary.md",
+            "0038-run-snapshot-contract-and-loopback-security.md",
+        ):
+            with self.subTest(document=other):
+                self.assertIsNone(
+                    next(
+                        d for d in decisions if d.document == other
+                    ).named_contract,
+                )
 
     def test_the_snapshot_contract_still_gates_the_export_schema(self) -> None:
         self.assertTrue(_V1_SPEC.is_file(), str(_V1_SPEC))
         text = _V1_SPEC.read_text(encoding="utf-8")
+        # The pre-acceptance gate wording stays in the spec (it is the
+        # condition the acceptance satisfied, not deleted history); the
+        # implementation note records the accepted state.
         for line in (
             "MUST remain disabled until the separate Diagnostic export schema is accepted;",
             "this snapshot contract does not authorize an ad-hoc export payload",
@@ -948,81 +1002,197 @@ class RepoDecisionEvidenceTest(_BuiltSnapshotTestCase):
             with self.subTest(line=line[:52]):
                 self.assertIn(line, text)
 
-    def test_the_trial_protocol_documents_the_disabled_control(self) -> None:
+    def test_the_trial_protocol_documents_the_accepted_control(self) -> None:
         self.assertTrue(_TRIAL_DOC.is_file(), str(_TRIAL_DOC))
         text = _TRIAL_DOC.read_text(encoding="utf-8")
         # The trial protocol states the current state exactly: the
-        # export control is disabled and no export exists.
-        self.assertIn("contract is separately accepted and implemented.", text)
-        self.assertIn("is disabled in the Console and no export exists.", text)
+        # contract is accepted and the transaction is live, the
+        # participant reviews before any write, sharing stays manual,
+        # and no trial is run by the document itself.
+        self.assertIn("Since ADR-0044 (2026-09-22) the", text)
+        self.assertIn("contract is separately accepted and implemented", text)
+        self.assertIn("reviews the exact candidate", text)
+        self.assertIn("it is shared manually", text)
+        for stale in (
+            "that control\n  is disabled in the Console and no export exists",
+            "only once a Diagnostic export",
+        ):
+            with self.subTest(stale=stale[:40]):
+                self.assertNotIn(stale, text)
 
-    def test_the_parity_registry_maps_no_diagnostic_export_owner(self) -> None:
+    def test_the_parity_registry_maps_the_diagnostic_export_owner(self) -> None:
+        # ADR-0044: the owner is mapped — but as an action owner: no
+        # source record, no viewable target, no issuable locator.
         source = self.registry.source("diagnostic-export")
-        self.assertFalse(source.mapped)
+        self.assertTrue(source.mapped)
         self.assertIsNone(source.source_ref)
         self.assertFalse(source.viewable)
         self.assertEqual(source.capture_targets, ())
+        self.assertEqual(source.kind, "export-transaction")
+        # Before any export exists, no owner transaction is derivable:
+        # the mapped owner alone proves nothing (fail-closed).
         self.assertIsNone(mapped_owner_transaction(self.registry, self.run_root))
         self.assertFalse((self.run_root / "trial-export").exists())
 
-    def test_no_versioned_export_contract_document_exists(self) -> None:
-        # No separately versioned export contract document exists
-        # anywhere in the documented decision surface: Snapshot v1 and
-        # the parity spec are gates, not export schemas, and no spec or
-        # ADR document is an export contract.
-        for probe in ("diagnostic-export.schema.v1", "diagnostic-export.schema.v2"):
+    def test_the_accepted_contract_document_exists_and_carries_the_vocabulary(
+        self,
+    ) -> None:
+        # The separately accepted contract document exists (the ADR plus
+        # the contract spec) and itself carries every binding marker the
+        # gate requires — anything it did not carry would stay unproven.
+        for probe in ("diagnostic-export.schema.v1",):
             with self.subTest(probe=probe):
-                self.assertIsNone(
-                    scan_export_contract_documents(_SPECS_DIR, _ADR_DIR, probe)
+                contract = scan_export_contract_documents(
+                    _SPECS_DIR, _ADR_DIR, probe
                 )
-        for document in (*_SPECS_DIR.glob("*.md"), *_ADR_DIR.glob("*.md")):
-            with self.subTest(document=document.name):
-                self.assertNotIn("export", document.name.lower())
+                self.assertIsNotNone(contract)
+                assert contract is not None
+                self.assertEqual(contract.contract_id, probe)
+                for requirement in _CONTRACT_REQUIREMENTS:
+                    with self.subTest(requirement=requirement):
+                        self.assertTrue(
+                            getattr(contract, requirement),
+                            f"contract document does not state {requirement}",
+                        )
+        # A probe for a version nobody accepted still finds nothing to
+        # satisfy that version.
+        self.assertIsNone(
+            scan_export_contract_documents(_SPECS_DIR, _ADR_DIR,
+                                           "diagnostic-export.schema.v2")
+        )
         facts = derive_repo_facts(
             _ADR_DIR, _SPECS_DIR, self.registry, self.run_root, self.document
         )
-        self.assertIsNone(facts.export_contract)
+        self.assertIsNotNone(facts.export_contract)
+        self.assertEqual(facts.export_contract.contract_id,
+                         "diagnostic-export.schema.v1")
 
-    def test_the_live_repo_facts_resolve_to_disabled_by_gate(self) -> None:
+    def test_the_live_repo_facts_stay_disabled_until_an_export_exists(self) -> None:
+        # ADR-0044 is accepted and the contract document exists, but no
+        # export has been written in this run root: the mapped owner
+        # alone proves nothing, so the gate stays fail-closed.
         facts = derive_repo_facts(
             _ADR_DIR, _SPECS_DIR, self.registry, self.run_root, self.document
         )
         result = evaluate_diagnostic_export_gate(facts)
-        # The binary decision of record. If this ever fails with
-        # OUTCOME_REQUIRES_NEW_TICKET, stop: report the exact ADR,
-        # contract document, and owner references per the ticket and do
-        # not implement S36/S37.
+        self.assertIsNotNone(facts.accepted_adr)
+        self.assertIsNotNone(facts.export_contract)
         self.assertEqual(result.outcome, OUTCOME_DISABLED_BY_GATE)
-        # Today's shape: the accepted decisions defer the versioned
-        # contract itself — ADR-0036 gates it and no ADR names one.
-        self.assertEqual(result.reason, REASON_CONTRACT_NOT_NAMED)
+        self.assertEqual(result.reason, REASON_NO_OWNER_TRANSACTION)
         self.assertEqual(result.mismatched_fields, ())
 
+    def test_the_gate_rejects_an_unknown_contract_version(self) -> None:
+        # Spec §2: readers reject unknown versions fail-closed — on the
+        # version field itself, not only the id spelling. A persisted pair
+        # whose version is not v1 derives no owner transaction.
+        from design_playbook.mcp.run_console.export_transaction import (
+            perform_preview,
+            perform_write,
+        )
+        preview = perform_preview(self.session, None)
+        perform_write(
+            self.session,
+            expected_source_set_hash=preview.source_set_hash,
+            preview_hash_hex=preview.preview_hash,
+            participant_ref=None,
+        )
+        record_path = next(
+            (self.run_root / "trial-export").glob("*.json")
+        )
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        self.assertEqual(record["exportContract"]["version"], 1)
+        record["exportContract"]["version"] = 2
+        record_path.write_text(
+            json.dumps(record, ensure_ascii=False, sort_keys=True, indent=2),
+            encoding="utf-8",
+        )
+        self.assertIsNone(
+            mapped_owner_transaction(self.registry, self.run_root)
+        )
+        # ...and the accepted decision itself is untouched by the tamper:
+        # restoring the version re-derives the owner.
+        record["exportContract"]["version"] = 1
+        record_path.write_text(
+            json.dumps(record, ensure_ascii=False, sort_keys=True, indent=2),
+            encoding="utf-8",
+        )
+        # The re-written bytes no longer hash to the file name stem — the
+        # derivation fails closed on that axis instead, which is the same
+        # bargain: tampered records prove nothing.
+        self.assertIsNone(
+            mapped_owner_transaction(self.registry, self.run_root)
+        )
 
-# The Snapshot v1 section 12.5 transaction shape, exactly as specified:
-# the same expectedSourceSetHash, export request, and previewHash the
-# write phase would require, with the ADR-0036 minimal fact set.
+    def test_the_gate_flips_on_real_transaction_evidence(self) -> None:
+        # The full closure: a real preview + a real participant-reviewed
+        # write through the real session produces a persisted pair whose
+        # record re-derives to the accepted decision — the decision
+        # record flips on evidence, never on a hard-coded constant.
+        from design_playbook.mcp.run_console.actions import (
+            validate_export_preview_payload,
+            validate_export_write_payload,
+        )
+        from design_playbook.mcp.run_console.export_transaction import (
+            perform_preview,
+            perform_write,
+        )
+        preview = perform_preview(self.session, None)
+        commit = perform_write(
+            self.session,
+            expected_source_set_hash=preview.source_set_hash,
+            preview_hash_hex=preview.preview_hash,
+            participant_ref=None,
+        )
+        self.assertEqual(len(commit.written), 2)
+        facts = derive_repo_facts(
+            _ADR_DIR, _SPECS_DIR, self.registry, self.run_root, self.document
+        )
+        result = evaluate_diagnostic_export_gate(facts)
+        self.assertEqual(result.outcome, OUTCOME_ACCEPTED)
+        self.assertEqual(result.reason, REASON_EXACT_CONTRACT_AND_OWNER)
+        self.assertEqual(result.mismatched_fields, ())
+        # The derivation's transaction came from the persisted record and
+        # round-trips the served binding exactly.
+        assert facts.owner_transaction is not None
+        self.assertEqual(
+            facts.owner_transaction.expected_source_set_hash,
+            preview.source_set_hash,
+        )
+        self.assertEqual(
+            facts.owner_transaction.preview_hash, preview.preview_hash
+        )
+        self.assertTrue(facts.owner_transaction.participant_reviewed)
+        self.assertTrue(facts.owner_transaction.atomic_json_and_markdown)
+        self.assertTrue(facts.owner_transaction.confined_to_trial_export)
+        # The closed validators accept the same round-trip.
+        self.assertIsNone(
+            validate_export_preview_payload(
+                {"schemaVersion": 1, "action": "diagnostic-export-preview"}
+            )
+        )
+        expected, preview_hex, ref = validate_export_write_payload(
+            {
+                "schemaVersion": 1,
+                "action": "diagnostic-export-write",
+                "expectedSourceSetHash": preview.source_set_hash,
+                "previewHash": preview.preview_hash,
+                "participantReviewed": True,
+            }
+        )
+        self.assertEqual(expected, preview.source_set_hash)
+        self.assertEqual(preview_hex, preview.preview_hash)
+        self.assertIsNone(ref)
+
+
+# The closed preview payload the accepted contract specifies (the write
+# path's closed payload and its binding matrix live in
+# test_diagnostic_export_server.py).
 _EXPORT_PAYLOAD = {
     "schemaVersion": 1,
-    "action": "diagnostic-export",
-    "expectedSourceSetHash": _DIGEST_2,
-    "exportRequest": {
-        "participantId": "p-0123456789abcdef",
-        "facts": [
-            "first-run-completion",
-            "closed-loop-integrity",
-            "comprehension",
-            "elapsed-time",
-            "human-intervention",
-            "repeat-use",
-        ],
-    },
-    "previewHash": _DIGEST_3,
+    "action": "diagnostic-export-preview",
 }
-_EXPORT_BODY = json.dumps(_EXPORT_PAYLOAD).encode("utf-8")
 
-# The two S35 route spellings: known, gated paths answered with the
-# typed ACTION_UNAVAILABLE refusal.
+# The two S35 route spellings: live in the accepted state.
 _SPEC_EXPORT_ROUTES = (
     "/api/v1/actions/diagnostic-export/preview",
     "/api/v1/actions/diagnostic-export/write",
@@ -1046,10 +1216,10 @@ _EXPORT_ROUTES = _SPEC_EXPORT_ROUTES + _FAKE_EXPORT_ROUTES
 
 
 def _expected_gate(path: str) -> tuple[int, str]:
-    """S35 per-path contract: the two specified routes are known but
-    disabled; every other export-shaped spelling stays routeless."""
+    """S35 enabled state per path: the two specified routes are live
+    (POST dispatch); every other export-shaped spelling stays routeless."""
     if path in _SPEC_EXPORT_ROUTES:
-        return 409, ACTION_UNAVAILABLE
+        return 200, "diagnostic-export-preview"
     return 404, ROUTE_NOT_FOUND
 
 
@@ -1072,33 +1242,39 @@ _OUTBOUND_MARKERS = (
 
 
 class DisabledActionSurfaceTest(harness._ServerTestCase):
-    """S35: the capability is gated — no entry, no owner call, typed refusal."""
+    """S35 enabled state: the accepted capability dispatches exactly two
+    routes; every other export-shaped spelling stays routeless, and the
+    boundary disciplines (no upload, no evidence writes, no symlink
+    escape) hold against the real transaction."""
 
-    def _export(self, path, *, method="POST", body=_EXPORT_BODY):
-        """One export request with valid credentials and closed body."""
-        headers = {"Content-Type": "application/json", "Content-Length": str(len(body))}
+    def _export(self, path, *, method="POST", body=None):
+        """One export request with valid credentials; body must be explicit."""
+        if body is None:
+            headers = {}
+        else:
+            headers = {
+                "Content-Type": "application/json",
+                "Content-Length": str(len(body)),
+            }
         return self._api(
             method, path, origin=self.server.origin, headers=headers, body=body
         )
 
-    def test_the_capability_allowlist_has_no_export_entry(self) -> None:
+    def test_the_capability_allowlist_carries_the_accepted_export(self) -> None:
         self.assertEqual(
-            capability_names(), ("refresh", "view-source", "copy-agent-command")
+            capability_names(),
+            ("refresh", "view-source", "copy-agent-command", "diagnostic-export"),
         )
-        for name in ("diagnostic-export", "export", "trial-export", "exports"):
+        for name in ("export", "trial-export", "exports", "export-diagnostics"):
             with self.subTest(name=name):
                 self.assertNotIn(name, CAPABILITIES)
-        for name in CAPABILITIES:
-            with self.subTest(capability=name):
-                self.assertNotIn("export", name.lower())
         self.assertEqual(CAPABILITIES[0], "refresh")
-        # The closed runtime error vocabulary carries the fixed
-        # ACTION_UNAVAILABLE code so the gated routes can distinguish a
-        # known, disabled capability from a typo — while the allowlist
-        # above stays the only dispatchable surface (S35).
+        # The typed-refusal vocabulary stays available for the sibling
+        # role-attestation gate, but the export routes no longer answer
+        # with it: they dispatch (asserted below).
         self.assertIn("ACTION_UNAVAILABLE", ERROR_MESSAGES)
 
-    def test_the_server_module_declares_exactly_the_two_gated_routes(self) -> None:
+    def test_the_server_module_declares_exactly_the_two_export_routes(self) -> None:
         # The two S35 route spellings are the only export-shaped route
         # literals the server may declare: any new spelling — even in a
         # comment — must force this gate test to be re-derived
@@ -1109,46 +1285,91 @@ class DisabledActionSurfaceTest(harness._ServerTestCase):
         route_literals = set(re.findall(r'"(/api/v1/[^"]*export[^"]*)"', source))
         self.assertEqual(route_literals, set(_SPEC_EXPORT_ROUTES))
 
-    def test_export_posts_are_typed_refusals(self) -> None:
-        # A perfectly formed section 12.5 export request is refused
-        # with the typed gate: the two specified routes are known but
-        # disabled (S35), and every other export-shaped spelling stays
-        # routeless.
+    def test_export_posts_dispatch_the_accepted_routes(self) -> None:
+        # The two specified routes are live: the preview answers its
+        # closed payload with the exact candidate pair, and the write
+        # answers with a closed-schema rejection for an unreviewed/
+        # unbound request (its happy path is S37's, in the server tests).
         for path in _EXPORT_ROUTES:
             with self.subTest(path=path):
-                status, _, payload = self._export(path)
-                expected_status, expected_code = _expected_gate(path)
-                self.assertEqual(status, expected_status)
-                harness._assert_error(payload, expected_code)
+                status, _, payload = self._export(
+                    path, body=json.dumps(_EXPORT_PAYLOAD).encode("utf-8")
+                )
+                if path in _SPEC_EXPORT_ROUTES:
+                    if path.endswith("/preview"):
+                        self.assertEqual(status, 200, (path, payload))
+                        body = json.loads(payload)
+                        self.assertEqual(
+                            set(body),
+                            {
+                                "schemaVersion",
+                                "action",
+                                "previewHash",
+                                "expectedSourceSetHash",
+                                "json",
+                                "markdown",
+                            },
+                        )
+                    else:
+                        body = json.loads(payload)
+                        self.assertEqual(
+                            body["error"]["code"], "ACTION_PAYLOAD_INVALID"
+                        )
+                else:
+                    self.assertEqual(status, 404, (path, payload))
 
-    def test_the_gated_export_routes_support_no_method_but_post(self) -> None:
-        # Like /api/v1/actions/refresh, the two gated routes answer
+    def test_the_export_routes_support_no_method_but_post(self) -> None:
+        # Like /api/v1/actions/refresh, the two export routes answer
         # non-POST methods with 405: they are known paths whose only
-        # specified method is the gated POST (S35).
+        # specified method is the typed POST (S35).
         for route in _SPEC_EXPORT_ROUTES:
             for method in ("GET", "HEAD", "PUT", "DELETE", "PATCH", "OPTIONS"):
                 with self.subTest(route=route, method=method):
-                    status, fields, payload = self._export(route, method=method)
+                    status, fields, payload = self._export(route, method=method, body=None)
                     self.assertEqual(status, 405)
                     self.assertEqual(fields.get("allow"), "POST")
                     if method != "HEAD":
                         harness._assert_error(payload, METHOD_NOT_ALLOWED)
 
-    def test_export_attempts_reach_no_owner_and_write_no_file(self) -> None:
+    def test_rejected_export_attempts_write_no_file(self) -> None:
         before_tree = harness._tree_digest(self.run_root)
         _, _, served_before = self._api("GET", "/api/v1/snapshot")
-        for path in _EXPORT_ROUTES:
-            status, _, _ = self._export(path)
-            self.assertEqual(status, _expected_gate(path)[0])
-        # Zero owner calls: nothing was previewed, written, uploaded, or
-        # rebuilt — the served snapshot is byte-identical, the run tree
-        # still has exactly its fixture bytes, and no export directory
-        # or partial file appeared.
+        # Ad-hoc spellings: routeless, zero effect.
+        for path in _FAKE_EXPORT_ROUTES:
+            status, _, _ = self._export(path, body=json.dumps(_EXPORT_PAYLOAD).encode("utf-8"))
+            self.assertEqual(status, 404)
+        # Closed-schema violations on the live routes: 400, zero effect.
+        for path in _SPEC_EXPORT_ROUTES:
+            for body, expected_code in (
+                (b"", "MALFORMED_JSON"),
+                (json.dumps({"schemaVersion": 1, "action": "nope"}).encode("utf-8"),
+                 "ACTION_PAYLOAD_INVALID"),
+                (json.dumps({"schemaVersion": 1, "action": "diagnostic-export-preview",
+                             "force": True}).encode("utf-8"),
+                 "ACTION_PAYLOAD_INVALID"),
+            ):
+                status, _, payload = self._export(path, body=body)
+                self.assertEqual(status, 400, (path, payload))
+                harness._assert_error(payload, expected_code)
+        # Zero owner side effects from every rejection: the served
+        # snapshot is byte-identical, the run tree keeps exactly its
+        # fixture bytes, and no export directory or partial file appeared.
         _, _, served_after = self._api("GET", "/api/v1/snapshot")
         self.assertEqual(served_after, served_before)
         self.assertEqual(harness._tree_digest(self.run_root), before_tree)
         self.assertEqual(_export_shaped_files(self.run_root), [])
         self.assertFalse((self.run_root / "trial-export").exists())
+
+    def test_a_preview_writes_nothing_anywhere(self) -> None:
+        # The accepted preview phase returns the exact candidate pair and
+        # writes nothing — the run tree digest is byte-identical after.
+        before_tree = harness._tree_digest(self.run_root)
+        status, _, payload = self._export(
+            _SPEC_EXPORT_ROUTES[0], body=json.dumps(_EXPORT_PAYLOAD).encode("utf-8")
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(harness._tree_digest(self.run_root), before_tree)
+        self.assertEqual(_export_shaped_files(self.run_root), [])
 
     def test_export_bodies_never_leak_secrets_paths_or_source(self) -> None:
         secret = "tok_LEAKME_0123456789abcdef"
@@ -1159,46 +1380,43 @@ class DisabledActionSurfaceTest(harness._ServerTestCase):
         body = json.dumps(
             {
                 "schemaVersion": 1,
-                "action": "diagnostic-export",
+                "action": "diagnostic-export-preview",
                 "sessionToken": secret,
                 "runPath": run_path,
                 "sourceExcerpt": source_line,
-                "expectedSourceSetHash": _DIGEST_2,
-                "previewHash": _DIGEST_3,
             }
         ).encode("utf-8")
         before_tree = harness._tree_digest(self.run_root)
         for path in _SPEC_EXPORT_ROUTES:
             status, _, payload = self._export(path, body=body)
-            self.assertEqual(status, 409)
-            harness._assert_error(payload, ACTION_UNAVAILABLE)
-            # No path, token, or source content ever reaches a
-            # response — and no export-shaped artifact exists to leak
-            # into, because none is ever created.
+            self.assertEqual(status, 400, (path, payload))
+            # An unknown field is the closed-schema rejection: no path,
+            # token, or source content ever reaches a response, and no
+            # export-shaped artifact exists to leak into.
+            harness._assert_error(payload, "ACTION_PAYLOAD_INVALID")
             for marker in (secret, run_path, source_line):
                 with self.subTest(path=path, marker=marker[:24]):
                     self.assertNotIn(marker.encode("utf-8"), payload)
         self.assertEqual(harness._tree_digest(self.run_root), before_tree)
         self.assertEqual(_export_shaped_files(self.run_root), [])
 
-    def test_an_export_attempt_never_uploads(self) -> None:
+    def test_the_accepted_export_never_uploads(self) -> None:
         body = json.dumps(
             {
                 "schemaVersion": 1,
-                "action": "diagnostic-export",
+                "action": "diagnostic-export-preview",
                 "uploadUrl": "https://example.invalid/collect",
-                "expectedSourceSetHash": _DIGEST_2,
-                "previewHash": _DIGEST_3,
             }
         ).encode("utf-8")
         before_tree = harness._tree_digest(self.run_root)
         for path in _EXPORT_ROUTES:
             status, _, payload = self._export(path, body=body)
-            self.assertEqual(status, _expected_gate(path)[0])
+            expected_status = 400 if path in _SPEC_EXPORT_ROUTES else 404
+            self.assertEqual(status, expected_status, path)
             self.assertNotIn(b"example.invalid", payload)
         # No outbound call of any kind: no run_console runtime module
-        # contains an upload or client primitive at all (S40), so a
-        # routeless request can never turn into a remote fetch.
+        # contains an upload or client primitive at all (S40) — the
+        # accepted export writes local files and rebuilds, nothing more.
         modules = [
             path
             for path in sorted(
@@ -1214,44 +1432,53 @@ class DisabledActionSurfaceTest(harness._ServerTestCase):
                 self.assertEqual(hits, [], f"{module.name} has an outbound primitive")
         self.assertEqual(harness._tree_digest(self.run_root), before_tree)
 
-    def test_an_export_never_lands_under_evidence(self) -> None:
+    def test_the_accepted_export_never_lands_under_evidence(self) -> None:
+        # A real, successful export: Evidence, Manifest, and verdict stay
+        # byte-identical (ADR-0036 rule 9); the pair appears only under
+        # trial-export/ and is named from the reviewed preview hash.
         evidence_dir = self.run_root / "evidence"
         before = {
             path.relative_to(self.run_root).as_posix(): path.read_bytes()
-            for path in sorted(evidence_dir.iterdir())
+            for path in sorted(evidence_dir.rglob("*"))
         }
-        manifest_before = (evidence_dir / "manifest.jsonl").read_bytes()
         verdict_before = self._snapshot_document()["evaluation"]["verdict"]
-        body = json.dumps(
+        status, _, preview_payload = self._export(
+            _SPEC_EXPORT_ROUTES[0], body=json.dumps(_EXPORT_PAYLOAD).encode("utf-8")
+        )
+        self.assertEqual(status, 200)
+        view = json.loads(preview_payload)
+        write_body = json.dumps(
             {
                 "schemaVersion": 1,
-                "action": "diagnostic-export",
-                "target": "evidence/diagnostic-export.json",
-                "expectedSourceSetHash": _DIGEST_2,
-                "previewHash": _DIGEST_3,
+                "action": "diagnostic-export-write",
+                "expectedSourceSetHash": view["expectedSourceSetHash"],
+                "previewHash": view["previewHash"],
+                "participantReviewed": True,
             }
         ).encode("utf-8")
-        for path in _EXPORT_ROUTES:
-            status, _, payload = self._export(path, body=body)
-            self.assertEqual(status, _expected_gate(path)[0])
-            self.assertNotIn(b"evidence/diagnostic-export.json", payload)
-        # ADR-0036 rule 9: an export never enters evidence/, a Manifest,
-        # or an Evaluator decision — the gate keeps it disabled
-        # entirely, so not one byte of Evidence, Manifest, or verdict
-        # moves.
+        status, _, payload = self._export(_SPEC_EXPORT_ROUTES[1], body=write_body)
+        self.assertEqual(status, 200, payload)
         after = {
             path.relative_to(self.run_root).as_posix(): path.read_bytes()
-            for path in sorted(evidence_dir.iterdir())
+            for path in sorted(evidence_dir.rglob("*"))
         }
         self.assertEqual(after, before)
-        self.assertEqual((evidence_dir / "manifest.jsonl").read_bytes(), manifest_before)
         self.assertEqual(
             self._snapshot_document()["evaluation"]["verdict"], verdict_before
         )
-        self.assertEqual(_export_shaped_files(self.run_root), [])
-        self.assertFalse((self.run_root / "trial-export").exists())
+        written = sorted(
+            path.relative_to(self.run_root).as_posix()
+            for path in (self.run_root / "trial-export").glob("*")
+        )
+        self.assertEqual(
+            written,
+            [
+                f"trial-export/export-{view['previewHash'][:12]}.json",
+                f"trial-export/export-{view['previewHash'][:12]}.md",
+            ],
+        )
 
-    def test_a_symlinked_trial_export_target_stays_unwritten(self) -> None:
+    def test_a_symlinked_trial_export_subtree_stays_unwritten(self) -> None:
         outside = self.base / "outside-export-target"
         outside.mkdir()
         canary = outside / "canary.md"
@@ -1261,13 +1488,27 @@ class DisabledActionSurfaceTest(harness._ServerTestCase):
             os.symlink(outside, link, target_is_directory=True)
         except OSError:
             self.skipTest("symlink creation unavailable on this host")
-        for path in _EXPORT_ROUTES:
-            status, _, _ = self._export(path)
-            self.assertEqual(status, _expected_gate(path)[0])
-        # Nothing is ever written through the link: the victim
-        # directory keeps exactly its canary bytes, the trial-export
-        # entry is still only the symlink, and no export-shaped file
-        # appeared anywhere in the run.
+        status, _, preview_payload = self._export(
+            _SPEC_EXPORT_ROUTES[0], body=json.dumps(_EXPORT_PAYLOAD).encode("utf-8")
+        )
+        self.assertEqual(status, 200)
+        view = json.loads(preview_payload)
+        write_body = json.dumps(
+            {
+                "schemaVersion": 1,
+                "action": "diagnostic-export-write",
+                "expectedSourceSetHash": view["expectedSourceSetHash"],
+                "previewHash": view["previewHash"],
+                "participantReviewed": True,
+            }
+        ).encode("utf-8")
+        status, _, payload = self._export(_SPEC_EXPORT_ROUTES[1], body=write_body)
+        self.assertEqual(status, 500, payload)
+        harness._assert_error(payload, "EXPORT_WRITE_FAILED")
+        # Nothing is ever written through the link: the victim directory
+        # keeps exactly its canary bytes, the trial-export entry is still
+        # only the symlink, and no export-shaped file appeared anywhere
+        # in the run.
         self.assertEqual(
             canary.read_text(encoding="utf-8"), "outside bytes must never change"
         )
@@ -1300,35 +1541,35 @@ class DisabledActionSurfaceTest(harness._ServerTestCase):
 
 
 class DisabledSnapshotLimitationTest(_BuiltSnapshotTestCase):
-    """S35: the limitation is visible and gates nothing globally."""
+    """S35 enabled state: the export limitation is gone; the remaining
+    disabled capability (role attestation) keeps its closed record."""
 
-    def test_the_export_limitation_is_visible_known_and_closed(self) -> None:
+    def test_the_export_limitation_is_gone_and_attestation_remains(self) -> None:
         self.assertEqual(validate_snapshot(self.document), self.document)
-        matches = [
-            item
+        codes = [
+            item["result"]["code"]
             for item in self.document["limitations"]["items"]
-            if item["result"]["code"] == "diagnostic-export-contract-unavailable"
         ]
-        self.assertEqual(len(matches), 1)
-        item = matches[0]
+        self.assertEqual(codes, ["role-attestation-owner-unmapped"])
+        item = self.document["limitations"]["items"][0]
         self.assertEqual(
-            item["id"], "limitations.items.diagnostic-export-contract-unavailable"
+            item["id"], "limitations.items.role-attestation-owner-unmapped"
         )
         self.assertEqual(item["availability"], "known")
         self.assertEqual(
             item["result"]["summary"],
-            "Diagnostic export is unavailable until its contract is accepted.",
+            "Role attestation is unavailable until an existing owner is mapped.",
         )
         # The record is the closed capability limitation: it claims no
-        # export state, affects no assertion, and carries no free-form
-        # Console narration.
+        # attestation state, affects no assertion, and carries no
+        # free-form Console narration.
         self.assertEqual(set(item["result"]), {"code", "summary", "affectsAssertionIds"})
         self.assertEqual(item["result"]["affectsAssertionIds"], [])
 
-    def test_the_export_limitation_degrades_no_assertion_or_verdict(self) -> None:
-        # S35 keeps the missing capability local: no assertion carries
+    def test_the_accepted_export_degrades_no_assertion_or_verdict(self) -> None:
+        # S35 keeps the accepted capability local: no assertion carries
         # an export-shaped reason, and the fixture verdict and the
-        # other assertions stay known. The disabled control never
+        # other assertions stay known. The export control never
         # degrades unrelated facts.
         codes = set()
         stack = [self.document]
@@ -1373,10 +1614,10 @@ class DisabledSnapshotLimitationTest(_BuiltSnapshotTestCase):
                 stack.extend(node)
         return nodes
 
-    def test_the_snapshot_carries_no_export_fact_outside_the_limitation(self) -> None:
-        # The only place "export" appears anywhere in the document is
-        # the closed limitation record: no export transaction, preview,
-        # path, or fact is projected anywhere else.
+    def test_the_snapshot_carries_no_export_fact(self) -> None:
+        # The snapshot itself projects no export transaction, preview,
+        # path, or fact anywhere: the export is a separate projection
+        # (the contract), never a snapshot section.
         offenders = []
 
         def walk(path: str, node: object) -> None:
@@ -1393,31 +1634,44 @@ class DisabledSnapshotLimitationTest(_BuiltSnapshotTestCase):
                 offenders.append(path)
 
         walk("", self.document)
-        self.assertEqual(
-            offenders,
-            [
-                "limitations.items[0].id",
-                "limitations.items[0].result.code",
-                "limitations.items[0].result.summary",
-            ],
-        )
+        self.assertEqual(offenders, [])
 
-    def test_the_ui_renders_the_disabled_export_control_with_the_limitation(self) -> None:
-        # The limitation is visible in the rendered Console: the export
-        # control exists only as a disabled button described by the
-        # diagnostic-export limitation reason, in both locales.
+    def test_the_ui_renders_the_active_export_control(self) -> None:
+        # The export control is live in the rendered Console: the
+        # preview/review/write flow exists with the explicit
+        # participantReviewed acknowledgement, in both locales — while
+        # the role-attestation control stays disabled with its reason.
         source = (_COMPONENT_DIR / "app.js").read_text(
             encoding="utf-8"
         )
         for token in (
             't("export_diagnostics")',
+            "openExportDialog",
+            "requestExportPreview",
+            "requestExportWrite",
+            "participantReviewed: true",
+            "export-review-checkbox",
+            "diagnostic-export/preview",
+            "diagnostic-export/write",
+            # The stale disabled-state tokens are gone.
+        ):
+            with self.subTest(token=token):
+                self.assertIn(token, source)
+        for stale in (
             "limitation_diagnostic_export_contract_unavailable",
             "export_reason_default",
             '"diagnostic-export-contract-unavailable"',
             "unavailable-export-reason",
+        ):
+            with self.subTest(stale=stale):
+                self.assertNotIn(stale, source)
+        # The sibling role-attestation control stays disabled.
+        for token in (
+            't("attest_role")',
+            "unavailable-role-reason",
             'disabled: "disabled"',
         ):
-            with self.subTest(token=token):
+            with self.subTest(attestation=token):
                 self.assertIn(token, source)
 
 
@@ -1502,13 +1756,13 @@ class GateWriteBoundaryTest(unittest.TestCase):
                 results[label] = evaluate_diagnostic_export_gate(facts)
                 self.assertIn(
                     results[label].outcome,
-                    (OUTCOME_DISABLED_BY_GATE, OUTCOME_REQUIRES_NEW_TICKET),
+                    (OUTCOME_DISABLED_BY_GATE, OUTCOME_ACCEPTED),
                 )
         # Even the fully enabling evaluation only records the outcome —
-        # the future preview/write phases belong to a new ticket, never
-        # to the gate — and every other fact set stays disabled.
+        # the evaluation itself never previews, writes, or uploads — and
+        # every other fact set stays disabled.
         self.assertEqual(
-            results["full-enabling"].outcome, OUTCOME_REQUIRES_NEW_TICKET
+            results["full-enabling"].outcome, OUTCOME_ACCEPTED
         )
         for label in fact_sets:
             if label != "full-enabling":

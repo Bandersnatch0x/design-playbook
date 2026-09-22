@@ -23,6 +23,11 @@ consume it instead of mirroring the escape classes. The ``evidence/``
 operations remain the ADR-0026 contract surface - same reason codes, same
 existence timing - now expressed as specializations of the one resolver.
 
+ADR-0044 adds the Diagnostic export write boundary as a third specialization:
+``trial_export_write_target`` confines one bare filename under
+``<run_root>/trial-export/`` (the trial-export subtree), with the same
+reason-code discipline and TOCTOU limit.
+
 Threat-model limit (ADR-0026, explicit): this module resolves and validates
 the path; it does NOT perform the write. Path resolution alone cannot close
 the TOCTOU gap - a concurrent untrusted filesystem actor that replaces a
@@ -50,6 +55,9 @@ REASON_RESOLUTION_FAILURE = "resolution_failure"
 REASON_CANONICAL_ESCAPE = "canonical_escape"
 REASON_SYMLINK_ESCAPE = "symlink_escape"
 REASON_NOT_REGULAR_FILE = "not_regular_file"
+# Trial-export targets (ADR-0044) accept bare filenames only; a name that
+# carries any separator or reserved form is rejected before resolution.
+REASON_RESERVED_NAME = "reserved_name"
 
 # Every resolution-time escape reason (the classes the ADR requires both
 # operations to reject at resolution time). The Provider treats all of these
@@ -203,3 +211,86 @@ def read_artifact(artifact_path: str, run_root: Path) -> ContainmentResult:
     must not bind a directory or a missing path).
     """
     return _resolve(artifact_path, run_root, require_existing_file=True)
+
+
+# The Diagnostic export write boundary (ADR-0044): one subtree, sibling of
+# evidence/, owned here so the export transaction cannot disagree with the
+# one containment authority on where trial exports may land.
+TRIAL_EXPORT_SUBDIR = "trial-export"
+
+# Names the export subtree may never carry. ``manifest.jsonl`` is reserved
+# across the run tree (the Evidence Manifest authority); the current-directory
+# name is a no-op write and is refused as malformed rather than silently
+# permitted.
+_TRIAL_EXPORT_RESERVED_NAMES = frozenset({"manifest.jsonl", "", ".", ".."})
+
+# Win32 name quirks that CreateFile folds but Path.resolve does not: a
+# trailing dot or space vanishes on write (the on-disk name would diverge
+# from the reviewed one), and the reserved device names are never regular
+# files. The export writes exactly the reviewed pair, so both classes are
+# rejected as reserved.
+_WIN32_DEVICE_NAMES = frozenset(
+    {"CON", "PRN", "AUX", "NUL",
+     *(f"COM{i}" for i in range(1, 10)),
+     *(f"LPT{i}" for i in range(1, 10))},
+)
+
+
+def trial_export_write_target(filename: str, run_root: Path) -> ContainmentResult:
+    """Resolve a Diagnostic export write target under ``trial-export/``.
+
+    ``filename`` must be a bare filename - no directory separators (native,
+    POSIX, or Windows), no drive form, no ``..`` segment, and not one of the
+    reserved names, Win32 fold forms (trailing dot or space), or reserved
+    device stems - anything the platform would write under a different name
+    than the one reviewed. Same resolution-time escape
+    rejection and TOCTOU limit as every operation in this module; the
+    transaction performs the staged write and rollback around this resolution.
+    """
+    if not isinstance(filename, str) or filename == "":
+        return ContainmentResult(None, REASON_RESERVED_NAME)
+    if filename in _TRIAL_EXPORT_RESERVED_NAMES:
+        return ContainmentResult(None, REASON_RESERVED_NAME)
+    # Bare-filename precondition: any separator, drive, or traversal form
+    # fails before the generic resolver can even see it.
+    if (
+        PurePosixPath(filename).is_absolute()
+        or PureWindowsPath(filename).is_absolute()
+        or "/" in filename
+        or "\\" in filename
+        or any(part == ".." for part in PurePosixPath(filename).parts)
+        or any(part == ".." for part in PureWindowsPath(filename).parts)
+        or ":" in filename
+    ):
+        return ContainmentResult(None, REASON_ABSOLUTE_PATH)
+    # Win32 fold classes: a trailing dot/space or a reserved device stem
+    # would make the on-disk name differ from the reviewed name.
+    if filename != filename.rstrip(" ."):
+        return ContainmentResult(None, REASON_RESERVED_NAME)
+    if filename.split(".", 1)[0].upper() in _WIN32_DEVICE_NAMES:
+        return ContainmentResult(None, REASON_RESERVED_NAME)
+    # The boundary subtree itself must be a real child of the run root: a
+    # ``trial-export`` symlink pointing outside the run root would make the
+    # generic under-boundary check pass while writing outside the selected
+    # run, so the resolved boundary is required to stay inside the resolved
+    # run root before anything else is resolved against it.
+    try:
+        resolved_root = run_root.resolve(strict=False)
+        boundary = (run_root / TRIAL_EXPORT_SUBDIR).resolve(strict=False)
+        Path(os.path.realpath(boundary)).relative_to(
+            Path(os.path.realpath(resolved_root))
+        )
+    except (OSError, ValueError):
+        return ContainmentResult(None, REASON_SYMLINK_ESCAPE)
+    result = _resolve_candidate(
+        run_root,
+        f"{TRIAL_EXPORT_SUBDIR}/{filename}",
+        run_root / TRIAL_EXPORT_SUBDIR,
+        require_existing_file=False,
+    )
+    # The generic resolver also folds "." segments; a name like "a/." or
+    # "a.." is a file name here, but a name that Path normalizes to
+    # something other than itself inside the subtree must not pass.
+    if result.ok and result.path is not None and result.path.name != filename:
+        return ContainmentResult(None, REASON_RESERVED_NAME)
+    return result

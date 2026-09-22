@@ -35,6 +35,8 @@ from .actions import (
     content_type_is_json,
     parse_json_action_body,
     perform_refresh,
+    validate_export_preview_payload,
+    validate_export_write_payload,
     validate_refresh_payload,
 )
 from .contract import (
@@ -42,6 +44,12 @@ from .contract import (
     SNAPSHOT_VERSION,
     SnapshotContractError,
     validate_snapshot,
+)
+from .diagnostic_export import ExportInputError
+from .export_transaction import (
+    ExportTransactionError,
+    perform_preview,
+    perform_write,
 )
 from .projection import (
     SOURCE_HASH_MISMATCH,
@@ -53,6 +61,8 @@ from .request_security import (
     ACTION_UNAVAILABLE,
     DEFAULT_BIND_HOST,
     ERROR_MESSAGES,
+    EXPORT_PREVIEW_MISMATCH,
+    EXPORT_WRITE_FAILED,
     METHOD_NOT_ALLOWED,
     ORIGIN_INVALID,
     REQUEST_TOO_LARGE,
@@ -103,10 +113,12 @@ _STATUS_BY_CODE = {
     METHOD_NOT_ALLOWED: 405,
     SOURCE_HASH_MISMATCH: 409,
     ACTION_UNAVAILABLE: 409,
+    EXPORT_PREVIEW_MISMATCH: 409,
     REQUEST_TOO_LARGE: 413,
     CONTENT_TYPE_UNSUPPORTED: 415,
     SNAPSHOT_CONTRACT_INVALID: 422,
     SNAPSHOT_BUILD_FAILED: 500,
+    EXPORT_WRITE_FAILED: 500,
 }
 
 
@@ -280,6 +292,11 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
             self._serve_refresh(session, split.query)
             return
         if path in _DIAGNOSTIC_EXPORT_ROUTES:
+            # ADR-0044: the one run-tree-writing capability. The preview
+            # writes nothing; the write commits the reviewed pair under
+            # trial-export/ and rebuilds. Dispatch and body handling mirror
+            # the refresh action exactly (closed payload, JSON content
+            # type, bounded body, zero effect on every rejection).
             if self.command != "POST":
                 self._drain_body()
                 self._send_error(
@@ -287,12 +304,7 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
                     extra_headers={"Allow": "POST"},
                 )
                 return
-            # The route is intentionally present so clients can distinguish
-            # a known, gated capability from a typo.  No request body is
-            # parsed and no owner or filesystem operation is reached until a
-            # separately accepted export contract enables this gate.
-            self._drain_body()
-            self._send_error(ACTION_UNAVAILABLE)
+            self._serve_export(session, path, split.query)
             return
         self._drain_body()
         if path == ROUTE_SNAPSHOT:
@@ -469,6 +481,94 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_error(SNAPSHOT_CONTRACT_INVALID, message=str(exc))
             return
         self._send_json(200, document)
+
+    def _serve_export(self, session: RunConsoleSession, path: str, query: str) -> None:
+        """POST /api/v1/actions/diagnostic-export/{preview,write} (ADR-0044).
+
+        The preview returns the exact candidate pair and writes nothing;
+        the write re-binds the preview hash and source set, commits the
+        reviewed pair under ``trial-export/`` atomically, and rebuilds the
+        snapshot. Every rejection before commit is zero-effect.
+        """
+        is_write = path == DIAGNOSTIC_EXPORT_WRITE_ROUTE
+        if query:
+            # The typed action accepts no request parameters.
+            self._send_error(ACTION_PAYLOAD_INVALID)
+            return
+        if not content_type_is_json(self._single_header("Content-Type")):
+            self._send_error(
+                CONTENT_TYPE_UNSUPPORTED, message=CONTENT_TYPE_UNSUPPORTED_MESSAGE
+            )
+            return
+        body = self._read_bounded_body()
+        if body is None:
+            self._send_error(ACTION_PAYLOAD_INVALID)
+            return
+        try:
+            payload = parse_json_action_body(body)
+        except MalformedJSONError:
+            self._send_error(MALFORMED_JSON, message=MALFORMED_JSON_MESSAGE)
+            return
+        try:
+            if is_write:
+                expected, preview, ref = validate_export_write_payload(payload)
+            else:
+                ref = validate_export_preview_payload(payload)
+        except ActionPayloadError:
+            self._send_error(ACTION_PAYLOAD_INVALID)
+            return
+        try:
+            if is_write:
+                commit = perform_write(
+                    session,
+                    expected_source_set_hash=expected,
+                    preview_hash_hex=preview,
+                    participant_ref=ref,
+                )
+            else:
+                view = perform_preview(session, ref)
+        except RunConsoleSessionError:
+            # A closed session presents no valid token.
+            self._send_error(SESSION_TOKEN_INVALID)
+            return
+        except SnapshotBuildError:
+            self._send_error(SNAPSHOT_BUILD_FAILED)
+            return
+        except ExportTransactionError as exc:
+            self._send_error(exc.code, message=str(exc))
+            return
+        except ExportInputError as exc:
+            # A served snapshot that cannot be projected is a contract
+            # failure, never a quiet or partial export.
+            self._send_error(SNAPSHOT_CONTRACT_INVALID, message=str(exc))
+            return
+        if is_write:
+            try:
+                validate_snapshot(commit.snapshot)
+            except SnapshotContractError as exc:
+                self._send_error(SNAPSHOT_CONTRACT_INVALID, message=str(exc))
+                return
+            self._send_json(
+                200,
+                {
+                    "schemaVersion": SNAPSHOT_VERSION,
+                    "action": "diagnostic-export-write",
+                    "written": list(commit.written),
+                    "snapshot": commit.snapshot,
+                },
+            )
+        else:
+            self._send_json(
+                200,
+                {
+                    "schemaVersion": SNAPSHOT_VERSION,
+                    "action": "diagnostic-export-preview",
+                    "previewHash": view.preview_hash,
+                    "expectedSourceSetHash": view.source_set_hash,
+                    "json": view.json_document,
+                    "markdown": view.markdown,
+                },
+            )
 
     def _read_bounded_body(self) -> bytes | None:
         """Read the in-bound (already size-checked) body, exactly once.

@@ -6,16 +6,20 @@ in process memory; the Snapshot and source-registry lifecycle and
 close-time invalidation of the token and every locator are owned here.
 The Snapshot is produced and resolved only through the RCV1-005 seams
 (:func:`build_snapshot`, :func:`resolve_source_excerpt`); no owner logic
-is reimplemented. Every operation is read-only for the run tree.
+is reimplemented. Every operation is read-only for the run tree — with
+the one ADR-0044 exception: the diagnostic export transaction writes its
+reviewed pair under ``trial-export/`` through :meth:`transaction_lock`,
+the single serialization seam for run-tree-writing work.
 """
 from __future__ import annotations
 
 import secrets
 import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterator
 
 from .projection import (
     SOURCE_LOCATOR_INVALID,
@@ -148,6 +152,22 @@ class RunConsoleSession:
         """The registry that issued the served snapshot's locators."""
         with self._state_lock:
             return self._registry
+
+    @contextmanager
+    def transaction_lock(self) -> Iterator[None]:
+        """Serialize one run-tree-writing transaction (ADR-0044).
+
+        The export transaction must hold one lock across read-candidate,
+        verify bindings, commit the pair, and rebuild — otherwise a second
+        worker can rebuild between the binding check and the commit and the
+        written pair would name a source set the served snapshot no longer
+        has. A closed session raises; the lock is reentrant (the rebuild
+        inside re-enters the same lock).
+        """
+        with self._state_lock:
+            if self._closed:
+                raise RunConsoleSessionError(SESSION_CLOSED)
+            yield
 
     # -- lifecycle -----------------------------------------------------
 
