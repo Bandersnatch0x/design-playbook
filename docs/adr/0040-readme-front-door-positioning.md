@@ -52,3 +52,23 @@ or linked away.
   superseding this ADR.
 - README edits must run the prose-contract test suite, not only
   `check_doc_links.py` (the v0.21.0 PR failed CI on exactly this).
+
+## Amendment (2026-09-22, product-audit closeout): verification-first emphasis and current-gate wording
+
+The two headline selling points keep their order and their target reader,
+with three updates from the six product audits (2026-09-21):
+
+1. **Evidence-forced acceptance is the positioning subject**, not just the
+   first bullet: the front door leads with "agents cannot grade their own
+   UI; this plugin makes them prove it, criterion by criterion". "One
+   command → three artifacts" stays as the mechanism story that follows.
+2. **design-baseline (existing-product UI work) is promoted to the second
+   selling point**, ahead of pipeline shape: the roadmap's 90-day result
+   targets existing Web products, and the audits found the front door
+   under-sold exactly that surface.
+3. The decision text above says "six gates green" because six run gates
+   existed on 2026-08-27; the run gate matrix is now G1–G12, and current
+   public surfaces word the claim against the current matrix (historical
+   records keep their original wording).
+
+Changing the target reader again still supersedes this ADR.

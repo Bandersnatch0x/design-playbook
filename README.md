@@ -17,7 +17,18 @@
 
 ---
 
+## ✅ Agents can't grade their own UI — so this plugin makes them prove it
+
+Every claim an agent makes about its own output is self-review. Acceptance here is **evidence-forced** instead: each acceptance criterion is bound to a captured artifact, every finding points back to the declaration it violates, and a missing capture is recorded as `audited: false` — a refusal, not a pass. The verdict comes from the evaluator, not the implementer, and blocking findings recirculate until the loop closes.
+
+Two surfaces carry this:
+
+1. **Acceptance with proof** — `ui-evaluator` + the point-back ledger: findings must cite criterion-bound evidence, and the closure trail is part of the run, not a chat summary.
+2. **Existing-product UI work** — `design-baseline` discovers, validates, or drafts the project's `DESIGN.md` *before* changing a live product, so the change stays consistent with what already shipped.
+
 ## ⚡ One command, three artifacts
+
+The mechanism behind that proof is one pass:
 
 ```text
 /design-playbook:design-io <your UI ask>
@@ -51,7 +62,7 @@ Then, namespaced (bare `/design-io` is a `--plugin-dir` dev alias only):
 /design-playbook:design-io <your UI ask>
 ```
 
-On Cursor, Windsurf, Gemini CLI, Zed, or any of 30 supported agents: see [🌐 Install on other agents](#-install-on-other-agents).
+On Cursor, Windsurf, Gemini CLI, Zed, or any of 30 supported agents: see [🌐 Install on other agents](#-install-on-other-agents). Honest degradation: 22 of the 30 are the generated `AGENTS.md` floor (orchestrator contract + MCP install guide, commands as prompt docs) — the tier table says exactly what each tier gets.
 
 Codex install notes, the `[mcp_servers.*]` fallback when a marketplace is unavailable, and preview prerequisites: [`packages/design-playbook/codex/AGENTS.md`](./packages/design-playbook/codex/AGENTS.md).
 

@@ -17,7 +17,18 @@
 
 ---
 
+## ✅ Agent 无法自评 UI——这个插件让它逐条拿出证据
+
+Agent 对自己产出的每一句"没问题"都是自评。这里的验收是**证据强制**的：每条验收判据绑定一个采集到的证据工件，每条发现都指回它违反的声明，缺失的采集被记为 `audited: false`——那是拒绝，不是通过。判定来自评审器而非实现者，阻塞性发现回流修复直到闭环。
+
+承载它的是两个面：
+
+1. **带证据的验收**——`ui-evaluator` + point-back 台账：发现必须引用绑定判据的证据，闭环轨迹是 run 的一部分，不是聊天摘要。
+2. **存量产品的 UI 改动**——`design-baseline` 在改动既有产品之前先发现、校验或生成项目 `DESIGN.md`，让改动与已上线的部分保持一致。
+
 ## ⚡ 一条命令，三份产物
+
+证据背后的机制是一条链路：
 
 ```text
 /design-playbook:design-io <你的 UI 需求>
@@ -51,7 +62,7 @@ codex plugin add design-playbook@design-playbook
 /design-playbook:design-io <你的 UI 需求>
 ```
 
-用 Cursor、Windsurf、Gemini CLI 等 30 个受支持的 agent？见 [🌐 跨平台安装](#-跨平台安装)。
+用 Cursor、Windsurf、Gemini CLI 等 30 个受支持的 agent？见 [🌐 跨平台安装](#-跨平台安装)。诚实降级：30 个里有 22 个走的是生成的 `AGENTS.md` 地板（编排契约 + MCP 安装指南，命令退化为提示文档）——每一档实际拿到什么，分层表写得明明白白。
 
 Codex 安装细节、marketplace 不可用时的 `[mcp_servers.*]` 直配 fallback、preview 前置条件：见 [`packages/design-playbook/codex/AGENTS.md`](./packages/design-playbook/codex/AGENTS.md)。
 

@@ -2,7 +2,12 @@
 
 主线：把 **packages/design-playbook** 打磨成可公开安装、过程可预测的 Design I/O 插件。
 
-## 北极星（v0）
+## 管线序列（v0）
+
+> 北极星的名分归位于 [`docs/roadmap.md`](../roadmap.md)：**陌生外部 Run operator
+> 在无维护者介入下完成合格 audited run 的比率**，配套三元组——60 秒理解通过
+> （intent / verdict / blocker source / next owner）、`Recirculate → repair →
+> Pass` 闭环、30 天自愿复跑。本节只是支撑它的编排序列，不是北极星本身。
 
 一次 `/design-io`（编排序列 SSOT 见 `packages/design-playbook/skills/design-playbook/SKILL.md`）：
 
@@ -89,4 +94,4 @@ Preview 与 Evidence 的 MCP 运行时随主插件打包（`packages/design-play
 
 ## 跨平台适配器（ADR-0042）
 
-`npx design-playbook init <agent>`（npm bin 壳 → `packages/design-playbook/scripts/generate_adapter.py`）从 canonical `skills/` / `commands/` / `mcp/` 渲染各平台产物，三层保真：Tier1 全保真（Claude Code、Codex——Codex 快照为生成后提交，`validate.py` / `doctor.py` 防漂移门禁校验）；Tier2 skills+MCP（Cursor、Gemini CLI、OpenCode、Windsurf、Copilot）；Tier3 AGENTS.md 地板（其余 22 agent）。生成产物禁止手改；**版本升级后必须重跑 `generate_adapter.py codex` 刷新快照**。能力矩阵：`docs/specs/2026-08-28-multi-platform-adapter.md`。
+`npx design-playbook init <agent>`（npm bin 壳 → `packages/design-playbook/scripts/generate_adapter.py`）从 canonical `skills/` / `commands/` / `mcp/` 渲染各平台产物，三层保真：Tier1 全保真（Claude Code、Codex——Codex 快照为生成后提交，`validate.py` / `doctor.py` 防漂移门禁校验）；Tier2 skills+MCP（Cursor、Gemini CLI、OpenCode、Windsurf、Copilot、Zed）；Tier3 AGENTS.md 地板（其余 22 agent；矩阵宽度按 ADR-0042 修订冻结在 30 行，validate.py 挂门）。生成产物禁止手改；**版本升级后必须重跑 `generate_adapter.py codex` 刷新快照**。能力矩阵：`docs/specs/2026-08-28-multi-platform-adapter.md`。
