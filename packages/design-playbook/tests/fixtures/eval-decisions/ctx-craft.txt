@@ -1,0 +1,2 @@
+registry entry CRAFT-08: motion must honor prefers-reduced-motion.
+surface under edit contains one CSS transition.

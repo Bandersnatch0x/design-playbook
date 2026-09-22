@@ -1,0 +1,2 @@
+scene: list page with a dense table
+density baseline: console-tight
