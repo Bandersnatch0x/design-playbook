@@ -380,6 +380,31 @@ for _surf, _pat, _label in (
             f"{_rel}: agent count {_m.group(1)} matches capability matrix ({_agent_total})",
         )
 
+# Matrix breadth freeze (ADR-0042 amendment, 2026-09-22; ADR-0045): the
+# published breadth is policy-frozen at 30 rows (2 Tier-1 + 6 Tier-2 +
+# 22 Tier-3, including the `generic` fallback). The lockstep gate above
+# derives the count, so it would silently follow a 31st row; this freeze
+# gate fails closed on any row-count or tier-decomposition change so a
+# matrix edit without a revision decision cannot ship.
+_FROZEN_BREADTH = (2, 6, 22)
+_frozen_tiers = tuple(
+    sum(1 for row in adapter_matrix.MATRIX if row.tier == tier)
+    for tier in (1, 2, 3)
+)
+check(
+    _frozen_tiers == _FROZEN_BREADTH,
+    "adapter matrix breadth is frozen at "
+    f"{_FROZEN_BREADTH[0]}+{_FROZEN_BREADTH[1]}+{_FROZEN_BREADTH[2]} = "
+    f"{sum(_FROZEN_BREADTH)} rows (ADR-0042 amendment); current tiers "
+    f"{_frozen_tiers} — adding/removing/re-tiering a row requires a "
+    "revision decision first",
+)
+check(
+    _agent_total == sum(_FROZEN_BREADTH),
+    "adapter matrix total matches the frozen breadth "
+    f"({sum(_FROZEN_BREADTH)}; got {_agent_total})",
+)
+
 # The Run Console is implemented and ships with the package (v0.21.0+), so a
 # current public surface must not still describe it as planned or not
 # shipped. Its public claim stays local / experimental / trial-gated until

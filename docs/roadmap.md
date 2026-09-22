@@ -35,8 +35,9 @@ source of truth. See [ADR-0035](adr/0035-run-view-projection-authority.md).
 
 ## Delivered present
 
-As of 2026-08-25, the formal public release is `v0.20.2`. The shipped product
-is an installable Claude Code / Codex plugin, not a standalone application or
+As of 2026-09-22, the formal public release is `v0.24.4` (tag `v0.24.4`;
+npm `latest` on both installable packages). The shipped product is an
+installable Claude Code / Codex plugin, not a standalone application or
 hosted service. Its released surface includes:
 
 - the Design I/O pipeline of declarations, contracts, implementation review,
@@ -48,16 +49,30 @@ hosted service. Its released surface includes:
   produces Artifacts, the Manifest binds them to Criteria, and the Evaluator
   owns Findings and the source verdict;
 - namespaced skills and commands for shaping, implementation, review, status,
-  and installation diagnosis.
+  and installation diagnosis;
+- the local, single-run **Run Console** (shipped in v0.21.0): the secured
+  loopback read surface over the Run snapshot v1 contract with the typed
+  refresh action. **Accepted, not yet in a released package:** the
+  Diagnostic export contract (preview plus participant-reviewed write under
+  the run's `trial-export/`) was accepted on 2026-09-22
+  ([ADR-0044](adr/0044-diagnostic-export-contract-v1.md)) and is implemented
+  on the unreleased working tree; it ships with the next release
+  transaction. The Console's public claim stays **local · experimental ·
+  trial-gated** until `G-RO-TRIAL-PASS` is satisfied by real external
+  evidence ([ADR-0043](adr/0043-product-beachhead-and-operator-continuation.md));
+- the Run Operator continuation surfaces (`run-status`, `run-handoff`,
+  `run-review`, Repair Packet, static handoff), shipped v0.22.0+.
 
 The exact installed surface and current operating model remain documented in
 the [README](../README.md), [product definition](../PRODUCT.md), and
 [domain context](../CONTEXT.md). Unreleased branches and active workstreams do
 not count as delivered merely because they exist in this repository.
 
-> **Not delivered:** the Closed-loop Run Console, Run snapshot v1, typed
-> Console actions, Diagnostic export, and invited-trial program described below
-> are planned work. They are not present-tense product capability.
+> **Not delivered:** the invited-trial program and its evidence set —
+> `G-RO-TRIAL-PASS` is NOT SATISFIED — plus role attestation (snapshot
+> S31–S34) and every later typed action. The Diagnostic export contract is
+> accepted and implemented; it is the instrument a trial uses to produce
+> evidence, never evidence itself.
 
 ## Rolling 90-day commitment
 
@@ -128,7 +143,7 @@ Console → external read-only trial → typed actions → expanded trial.
 
 | Order | Deliverable | Entry condition | Exit gate |
 | --- | --- | --- | --- |
-| 1 | Freeze the Run snapshot and Diagnostic export contracts | ADR-0035 through ADR-0038 remain accepted and existing authority owners are mapped | A versioned domain contract defines values, availability, sources, freshness, errors, compatibility, and export boundaries without mirroring UI components or filenames |
+| 1 | Freeze the Run snapshot and Diagnostic export contracts | ADR-0035 through ADR-0038 remain accepted and existing authority owners are mapped | A versioned domain contract defines values, availability, sources, freshness, errors, compatibility, and export boundaries without mirroring UI components or filenames — **satisfied**: snapshot v1 frozen 2026-08-25; Diagnostic export contract v1 frozen and implemented 2026-09-22 ([ADR-0044](adr/0044-diagnostic-export-contract-v1.md)) |
 | 2 | Establish deterministic read parity | Contract v1 is frozen | Fixtures map every projected assertion to an existing authority; missing, stale, partial, inconsistent, and source-change cases fail visibly; repeated rebuilds do not invent or strengthen semantics |
 | 3 | Build the secured single-run Console | Read parity is proven | An on-demand, loopback-only session opens one explicit run, passes containment and request-security checks, and remains read-only |
 | 4 | Run the external read-only invited trial | Console parity and security gates pass | Unrelated external users can complete the fixed comprehension check without hidden telemetry or raw-file reconstruction; interventions are disclosed |
@@ -297,6 +312,16 @@ become first-party rules, product dependencies, or sources of truth.
   inventory.
 - The 90-day layer is reviewed against exported evidence, not feature count or
   elapsed time.
+- **Effort gate ([ADR-0045](adr/0045-external-evidence-spend-gate.md)):** until
+  `G-RO-TRIAL-PASS` is satisfied by real external evidence, no new capability
+  work starts. Agent-side effort is limited to the diagnostic-export
+  instrument (ADR-0044), repairs that unblock the trial, and
+  documentation/drift normalization; the adapter matrix is frozen at 30 rows
+  by the [ADR-0042 amendment](adr/0042-multi-platform-adapter-generator.md).
+  The Day-90 review (about 2026-11-23) rules pass / repair / stop against the
+  acceptance floor — an empty exported-evidence set is a valid stop result,
+  and no new participant entering the comprehension check within 30 days of
+  ADR-0044 triggers the stop review early.
 - A new writer, remote surface, identity claim, or authority migration requires
   an explicit decision before implementation.
 - The most specific accepted ADR wins over roadmap shorthand. The domain terms

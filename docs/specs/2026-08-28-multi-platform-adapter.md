@@ -26,6 +26,14 @@ lists; only above-floor agents register a dedicated renderer, keyed by agent
 id in a single map (wording aligned with the shipped dispatch, 2026-08-28
 audit).
 
+> **Breadth freeze (2026-09-22):** the matrix is policy-frozen at its
+> current 30 rows (2 Tier-1 + 6 Tier-2 + 22 Tier-3, including the
+> `generic` fallback) by the
+> [ADR-0042 amendment](../adr/0042-multi-platform-adapter-generator.md);
+> the `validate.py` breadth-freeze gate fails closed on any row-count or
+> tier-decomposition change, so adding, removing, or re-tiering a row
+> requires an explicit revision decision first.
+
 ## 2. Generator contract
 
 ```

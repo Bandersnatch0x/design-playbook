@@ -88,3 +88,21 @@ package README) are now derived from the matrix and enforced by a
 validate.py gate, closing the hand-bump drift the Zed adapter row
 demonstrated (commit 903f6c6 missed the zh README). Decision recorded in
 `.agents/specs/2026-09-20-arch-deepening-round6.md` D6.
+
+## Amendment (2026-09-22, product-audit closeout): matrix breadth frozen at 30
+
+The matrix is policy-frozen at its current breadth: 30 rows (2 Tier-1 +
+6 Tier-2 + 22 Tier-3), with the `generic` fallback row required to stay.
+Adding, removing, or re-tiering a row now requires an explicit revision
+decision (a new ADR or a superseding amendment); until then the
+`validate.py` breadth-freeze gate fails closed on any row-count change, so a
+matrix edit without a decision cannot ship. The Consequences bullet above
+("adding an agent = adding a matrix row") remains true mechanically but is no
+longer sufficient: the row is necessary, and the revision decision is the
+gate. Basis: six product audits (2026-09-21) found engineering flowing into
+adapter breadth while the primary journey lacked external evidence —
+"adapter breadth does not outrank the primary journey"
+([ADR-0043](0043-product-beachhead-and-operator-continuation.md) decision 6),
+now enforced as
+[ADR-0045](0045-external-evidence-spend-gate.md). Decision recorded in
+`.agents/specs/2026-09-22-product-audit-closeout.md`.

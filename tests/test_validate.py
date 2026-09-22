@@ -138,6 +138,48 @@ class ValidateGateTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("FAIL  orchestrator skips native-craft for Web targets", result.stdout)
 
+    def _mutate_matrix(self, old: str, new: str) -> None:
+        matrix = (
+            self.root / "packages" / "design-playbook" / "scripts"
+            / "adapter_matrix.py"
+        )
+        text = matrix.read_text(encoding="utf-8")
+        self.assertIn(old, text)
+        matrix.write_text(text.replace(old, new), encoding="utf-8")
+
+    def test_matrix_breadth_freeze_fails_on_tier_change(self) -> None:
+        # ADR-0042 amendment (2026-09-22) / ADR-0045: the published breadth
+        # is policy-frozen at 2+6+22 = 30. A re-tier that keeps the total
+        # at 30 passes the lockstep count gate but must fail the freeze
+        # gate: adding/removing/re-tiering a row requires a revision
+        # decision first.
+        self._mutate_matrix(
+            'AgentRow(agent="zed", tier=2),',
+            'AgentRow(agent="zed", tier=2),\n    AgentRow(agent="generic", tier=2),',
+        )
+        self._mutate_matrix(
+            '    "trae",\n    "generic",\n)',
+            '    "trae",\n)',
+        )
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("adapter matrix breadth is frozen", result.stdout)
+        self.assertIn("revision decision", result.stdout)
+
+    def test_matrix_breadth_freeze_fails_on_added_row(self) -> None:
+        # A 31st row fails both the derived-count lockstep and the freeze.
+        self._mutate_matrix(
+            '    "trae",\n    "generic",\n)',
+            '    "trae",\n    "generic",\n    "one-more",\n)',
+        )
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("adapter matrix breadth is frozen", result.stdout)
+
     def test_stale_run_console_claim_fails(self) -> None:
         # T-005: the Run Console ships locally, so a current public surface
         # describing it as planned / not shipped is a stale capability claim.

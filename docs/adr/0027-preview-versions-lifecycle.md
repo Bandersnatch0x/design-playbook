@@ -42,3 +42,13 @@ lock-policy decision remain in force during this lifecycle.
 Existing users and artifacts retain compatibility while the feature stops
 growing. Removal becomes a separate migration decision with explicit evidence,
 rather than a file deletion hidden inside an unrelated refactor.
+
+## Amendment (2026-09-22, product-audit closeout): removal approved, execution stays bound to v1.0.0
+
+The removal decision itself is approved: the dead compatibility layer is Cut
+by the feature-scope audit and the maintainer preauthorized that
+recommendation. Approval does not move the execution date — removal stays
+bound to the v1.0.0 migration and keeps every precondition above: migrate
+compatibility reading and log projection to a long-lived owner, prove old
+artifacts remain readable, and land the removal as its own explicit migration
+with evidence, never inside an unrelated refactor.
