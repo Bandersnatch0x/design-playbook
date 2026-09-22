@@ -110,6 +110,10 @@ def _failed(
     }
     if request is not None:
         payload["request"] = request
+    if written_path and _run_root_misrooted():
+        # Same misroot warning as the success payload: a failed write outside
+        # the run tree is exactly where the orchestrator needs the hint.
+        payload["warnings"] = [_MISROOTED_WARNING]
     return payload
 
 
@@ -141,12 +145,7 @@ def _captured(
     if _run_root_misrooted():
         # The stderr warning fires once per process and may never reach the
         # model; the payload is what the orchestrator actually reads.
-        payload["warnings"] = [
-            "run root resolved to a markerless cwd (DESIGN_PLAYBOOK_RUN_ROOT "
-            "unset or '.'); written_path is outside the run tree — set "
-            "DESIGN_PLAYBOOK_RUN_ROOT to the run root (.scratch/<run>/) "
-            "before binding this artifact"
-        ]
+        payload["warnings"] = [_MISROOTED_WARNING]
     if probe_artifact:
         payload["probe_artifact"] = probe_artifact
     return payload
@@ -278,6 +277,14 @@ def _apply_freeze(page: Any, freeze: dict[str, Any]) -> None:
 
 _RUN_MARKERS = ("plan.md", "point-back.md")
 _warned_run_root = False
+
+
+_MISROOTED_WARNING = (
+    "run root resolved to a markerless cwd (DESIGN_PLAYBOOK_RUN_ROOT "
+    "unset or '.'); written_path is outside the run tree — set "
+    "DESIGN_PLAYBOOK_RUN_ROOT to the run root (.scratch/<run>/) "
+    "before binding this artifact"
+)
 
 
 def _run_root_misrooted() -> bool:

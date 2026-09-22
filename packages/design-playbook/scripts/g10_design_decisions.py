@@ -1020,7 +1020,11 @@ def main(argv: list[str]) -> int:
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
-        print(f"G10 INVALID: cannot read {path}: {exc}", file=sys.stderr)
+        print(
+            f"G10 INVALID: cannot read {path}: {exc} — pass the run's "
+            f"decision report `.scratch/<run>/decision-report.md`",
+            file=sys.stderr,
+        )
         return 2
     preview_dir = path.parent / "preview"
     findings = check_g10(

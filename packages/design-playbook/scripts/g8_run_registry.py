@@ -27,6 +27,7 @@ fixture check applies.
 """
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -124,14 +125,26 @@ def check_g8_run(craft_text: str, entries: list, tier: str | None) -> list[Findi
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) not in (2, 4) or (len(argv) == 4 and argv[2] != "--plan"):
-        print("Usage: g8_run_registry.py <craft-guard.md> [--plan <plan.md>]",
-              file=sys.stderr)
-        return 2
-    craft_path = Path(argv[1])
-    plan_path = (
-        Path(argv[3]) if len(argv) == 4 else craft_path.parent / "plan.md"
+    """Single-gate CLI (left-shifted validation, spec 2026-09-22 D3)."""
+    parser = argparse.ArgumentParser(
+        prog="g8_run_registry.py",
+        description="G8 run-registry gate: one seven-column audit row per "
+                    "applicable advisory registry entry in craft-guard.md.",
     )
+    parser.add_argument(
+        "craft_guard",
+        help="path to the run's craft-guard.md "
+             "(`.scratch/<run>/craft-guard.md`)",
+    )
+    parser.add_argument(
+        "--plan",
+        default=None,
+        help="path to plan.md for the run tier (default: sibling of "
+             "craft-guard.md)",
+    )
+    args = parser.parse_args(argv[1:])
+    craft_path = Path(args.craft_guard)
+    plan_path = Path(args.plan) if args.plan else craft_path.parent / "plan.md"
     try:
         craft_text = craft_path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:

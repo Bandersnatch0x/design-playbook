@@ -301,14 +301,25 @@ def main(argv: list[str]) -> int:
             file=sys.stderr,
         )
         return 2
-    report = (
-        Path(args.decision_report)
-        if args.decision_report
-        else preview_dir.parent / "decision-report.md"
-    )
-    findings = check_preview(
-        preview_dir, report if report.is_file() else None
-    )
+    if not any(preview_dir.glob("round-*.html")) and not any(
+        preview_dir.glob("confirm-round-*.json")
+    ):
+        print(
+            f"G5 INVALID: {preview_dir} holds no round-*.html / "
+            f"confirm-round-*.json — pass the run's preview directory "
+            f"`.scratch/<run>/preview/`",
+            file=sys.stderr,
+        )
+        return 2
+    # An explicitly passed --decision-report goes through verbatim: a missing
+    # file must surface as G5.decision_report_missing (matching validate_run),
+    # never be swallowed to None. Only the default sibling may fall back.
+    if args.decision_report:
+        report: Path | None = Path(args.decision_report)
+    else:
+        sibling = preview_dir.parent / "decision-report.md"
+        report = sibling if sibling.is_file() else None
+    findings = check_preview(preview_dir, report)
     if not findings:
         print("G5 OK: preview confirmation satisfies the integrity gate")
         return 0

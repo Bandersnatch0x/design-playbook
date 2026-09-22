@@ -32,7 +32,8 @@ def _tool_schema() -> dict[str, Any]:
             "schemaVersion=1 plus explicit viewport, apply deterministic freeze "
             "by default, write one artifact (screenshot / a11y tree / "
             "interaction trace). Returns capture result only (artifact, "
-            "observed_state, result, error, written_path, request) — never "
+            "observed_state, result, error, written_path, request; plus a "
+            "warnings list when the run root looks misconfigured) — never "
             "writes manifest; never judges criteria."
         ),
         "inputSchema": {

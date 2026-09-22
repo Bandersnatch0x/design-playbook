@@ -12,10 +12,17 @@ Usage:
 
     python scripts/evidence_manifest.py append <run-dir> \
         --criterion L6.2 --artifact audit-page-populated.a11y.txt \
+        --request '{"schemaVersion":1,"viewport":{...},"freeze":{...}}' \
         [--source "execute_capture_plan decision_id=…"]
 
 ``<run-dir>`` is the run root ``.scratch/<run>/`` (the one containing
 ``evidence/``) — not the evidence directory itself.
+
+A G6-passing row needs the Provider contract echo: pass the
+``execute_capture_plan`` result's ``request`` object verbatim as
+``--request '<json>'`` (schemaVersion=1 + viewport + freeze, ADR-0018).
+The snapshot is validated at write time — a row that would fail G6 is
+refused here first.
 """
 from __future__ import annotations
 
@@ -33,6 +40,9 @@ if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
 from design_playbook.mcp.evidence import containment  # noqa: E402
+from design_playbook.mcp.evidence.capture_contract import (  # noqa: E402
+    validate_capture_snapshot,
+)
 
 _MANIFEST = "manifest.jsonl"
 
@@ -63,14 +73,34 @@ def append_entry(
     run_dir: Path,
     criterion: str,
     artifact: str,
+    request: dict,
+    *,
     source: str | None = None,
+    capture: dict | None = None,
 ) -> dict:
     """Append one binding line to ``<run_dir>/evidence/manifest.jsonl``.
 
+    ``request`` is the Provider contract echo (capture contract v1), stored
+    verbatim — G6's read side requires it. ``capture`` optionally holds the
+    original provider call; ``source`` is a free-text provenance note.
     Returns the appended entry. Raises ManifestAppendError on a non-bare
-    artifact name, an escape-class path, or a missing artifact file.
+    artifact name, an escape-class path, a missing artifact file, or a
+    request snapshot that would fail G6.
     """
     _check_bare_filename(artifact)
+    if not isinstance(request, dict):
+        raise ManifestAppendError(
+            "request must be a JSON object — pass the execute_capture_plan "
+            "result's `request` field verbatim (schemaVersion=1 + viewport "
+            "+ freeze)"
+        )
+    facts = validate_capture_snapshot(request)
+    if facts:
+        raise ManifestAppendError(
+            f"request snapshot fails capture contract v1 "
+            f"({facts[0].code}: {facts[0].detail}) — pass the "
+            f"execute_capture_plan result's `request` field verbatim"
+        )
     run_dir = Path(run_dir)
     # containment paths are run-root-relative and carry the evidence/ prefix
     # (same convention as G6's read side); the bare-filename rule above has
@@ -83,17 +113,20 @@ def append_entry(
             f"capture it there first, then bind"
         )
     digest = hashlib.sha256(resolved.path.read_bytes()).hexdigest()
-    entry: dict[str, str] = {
+    entry: dict[str, object] = {
         "ts": datetime.now().astimezone().isoformat(timespec="seconds"),
         "criterion": criterion,
         "artifact": artifact,
         "sha256": digest,
+        "request": request,
     }
+    if capture is not None:
+        entry["capture"] = capture
     if source:
-        entry["capture"] = source
-    evidence_dir = run_dir / "evidence"
-    evidence_dir.mkdir(parents=True, exist_ok=True)
-    manifest = evidence_dir / _MANIFEST
+        entry["source"] = source
+    # No mkdir: read_artifact above already required the artifact (and hence
+    # the evidence/ directory) to exist.
+    manifest = run_dir / "evidence" / _MANIFEST
     with manifest.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
     return entry
@@ -127,15 +160,45 @@ def main(argv: list[str]) -> int:
              "the file must already exist there",
     )
     app.add_argument(
+        "--request",
+        required=True,
+        help="REQUIRED for a G6-passing row: the execute_capture_plan "
+             "result's `request` object as a JSON string (capture contract "
+             "v1: schemaVersion=1 + viewport + freeze); validated at write "
+             "time",
+    )
+    app.add_argument(
+        "--capture",
+        default=None,
+        help="optional original provider call as a JSON string (stored in "
+             "the `capture` field)",
+    )
+    app.add_argument(
         "--source",
         default=None,
-        help="optional capture provenance note (stored in the `capture` "
-             "field, e.g. the provider call or decision id)",
+        help="optional free-text provenance note (stored in the `source` "
+             "field, e.g. the decision id)",
     )
     args = parser.parse_args(argv[1:])
     try:
+        request = json.loads(args.request)
+        capture = json.loads(args.capture) if args.capture else None
+    except json.JSONDecodeError as exc:
+        print(
+            f"INVALID: --request/--capture must be JSON strings ({exc}) — "
+            f"pass the execute_capture_plan result's `request` field "
+            f"verbatim as a JSON object",
+            file=sys.stderr,
+        )
+        return 2
+    try:
         entry = append_entry(
-            Path(args.run_dir), args.criterion, args.artifact, args.source
+            Path(args.run_dir),
+            args.criterion,
+            args.artifact,
+            request,
+            source=args.source,
+            capture=capture,
         )
     except ManifestAppendError as exc:
         print(f"INVALID: {exc}", file=sys.stderr)
