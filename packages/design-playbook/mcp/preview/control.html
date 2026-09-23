@@ -168,7 +168,10 @@
       </div>
       <div class="dpb-foot-actions">
         <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-draft" data-i18n-title="draft_desc" title="{t_draft_desc}" data-i18n="draft">{t_draft}</button>
-        <button type="submit" name="choice" value="{primary_val}" class="dpb-btn dpb-btn-primary" data-i18n-title="confirm_desc" title="{t_confirm_desc}"{primary_i18n}>{primary_label}</button>
+        <button type="submit" name="choice" value="{primary_val}" id="dpb-approve-drawer" class="dpb-btn dpb-btn-primary dpb-approve-btn dpb-approve-muted" data-i18n-title="confirm_desc" title="{t_confirm_desc}">
+          <span class="dpb-approve-dot" aria-hidden="true"></span>
+          <span id="dpb-approve-label-drawer"{primary_i18n}>{primary_label}</span>
+        </button>
       </div>
     </div>
   </aside>

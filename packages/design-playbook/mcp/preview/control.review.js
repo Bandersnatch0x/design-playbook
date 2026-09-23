@@ -95,17 +95,20 @@
     updateStatus();
   }
   function updateStatus() {
-    // REC-04: the header approve button doubles as the readiness indicator.
+    // REC-04: the approve triggers double as the readiness indicator — the
+    // header button AND the drawer footer button share one dynamic state
+    // (count label, muted/ready classes, pulse dot; DEF-04).
     var ready = isSubstantive();
-    if (approveBtn) {
-      approveBtn.classList.toggle("dpb-approve-ready", ready);
-      approveBtn.classList.toggle("dpb-approve-muted", !ready);
-      if (approveLabel) {
-        approveLabel.textContent = ready
-          ? ttN("approve_ready", anchors.length)
-          : tt("approve_not_ready");
-      }
-    }
+    var readyLabel = ttN(anchors.length === 1 ? "approve_ready_one" : "approve_ready", anchors.length);
+    [["dpb-btn-approve", "dpb-approve-label"], ["dpb-approve-drawer", "dpb-approve-label-drawer"]]
+      .forEach(function (pair) {
+        var btn = document.getElementById(pair[0]);
+        var label = document.getElementById(pair[1]);
+        if (!btn) return;
+        btn.classList.toggle("dpb-approve-ready", ready);
+        btn.classList.toggle("dpb-approve-muted", !ready);
+        if (label) label.textContent = ready ? readyLabel : tt("approve_not_ready");
+      });
   }
 
   // list interactions (delegated)
@@ -175,6 +178,9 @@
   // ---- focus / roam (J/K) ----
   function focusAnchor(idx) {
     if (idx < 0 || idx >= anchors.length) return;
+    // DEF-03: roaming or locating an anchor must surface its card — jump
+    // back to the annotations view when the criteria tab holds the rail.
+    if (specViewActive()) setSpecPanel(false);
     activeIdx = idx;
     var rows = listEl.querySelectorAll(".dpb-anchor");
     for (var i = 0; i < rows.length; i++) rows[i].classList.remove("dpb-active");
@@ -392,6 +398,9 @@
     if (targetBtn) form.requestSubmit(targetBtn); else form.requestSubmit();
   }
   form.addEventListener("submit", function (e) {
+    // DEF-01: a mouse click on any submit trigger must not silently drop an
+    // uncommitted draft — fold it first (same defense as the Ctrl+Enter path).
+    if (draftPopoverOpen() && annoInput && annoInput.value.trim()) saveDraftAnchor();
     syncCriteriaHidden();
     var submitter = e.submitter;
     var choice = submitter && submitter.name === "choice" ? submitter.value : "";

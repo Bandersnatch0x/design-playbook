@@ -71,6 +71,7 @@ class LabelSetTests(unittest.TestCase):
             "tab_annotations",
             "tab_spec",
             "approve_ready",
+            "approve_ready_one",
             "approve_not_ready",
             "coachmark_title",
             "coachmark_text",
@@ -81,6 +82,16 @@ class LabelSetTests(unittest.TestCase):
                 self.assertTrue(
                     value and value.strip(), f"{key} missing in {locale}"
                 )
+
+    def test_approve_ready_uses_english_singular_for_one_note(self) -> None:
+        # DEF-06: EN "1 notes" is ungrammatical — the ready label branches on
+        # count; zh has no plural so both keys carry the same wording.
+        self.assertEqual(i18n._STRINGS[i18n.EN]["approve_ready_one"], "Approve (1 note)")
+        self.assertEqual(i18n._STRINGS[i18n.EN]["approve_ready"], "Approve ({n} notes)")
+        self.assertEqual(
+            i18n._STRINGS[i18n.ZH]["approve_ready_one"],
+            i18n._STRINGS[i18n.ZH]["approve_ready"],
+        )
 
     def test_control_page_renders_skip_button_with_locale_label(self) -> None:
         html = preview_control._build_control(

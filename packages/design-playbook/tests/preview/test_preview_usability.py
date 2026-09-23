@@ -73,6 +73,87 @@ def save_anchor(page, text, selector="#prototype h1"):
     expect(page.locator("#dpb-anchors .dpb-anchor")).to_have_count(1)
 
 
+def test_mouse_approve_folds_open_draft_and_submits_anchor(page):
+    # DEF-01 (P1), form A: with the only review content sitting uncommitted in
+    # the popover, a mouse click on Approve must fold the draft into an anchor
+    # and submit it — not misfire the "no substantive feedback" shake.
+    dismiss_intro(page)
+    ta = open_popover(page)
+    ta.fill("未回车的草稿")
+    page.locator("#dpb-btn-approve").click()
+    assert page.evaluate("window.submittedChoices") == ["确认通过"]
+    payload = page.evaluate("() => JSON.parse(document.getElementById('dpb-anchors-json').value)")
+    assert len(payload) == 1 and payload[0]["comment"] == "未回车的草稿"
+
+
+def test_mouse_approve_folds_draft_alongside_existing_anchor(page):
+    # DEF-01 (P1), form B: an existing anchor must not let the submit path
+    # silently drop the second, not-yet-Enter'd popover note.
+    dismiss_intro(page)
+    page.evaluate("""() => {
+      const proto = document.getElementById('prototype');
+      const p = document.createElement('p');
+      p.id = 'second-el';
+      p.textContent = '第二目标';
+      proto.appendChild(p);
+    }""")
+    save_anchor(page, "第一处")
+    ta = open_popover(page, "#second-el")
+    ta.fill("第二处")
+    page.locator("#dpb-btn-approve").click()
+    assert page.evaluate("window.submittedChoices") == ["确认通过"]
+    payload = page.evaluate("() => JSON.parse(document.getElementById('dpb-anchors-json').value)")
+    assert [a["comment"] for a in payload] == ["第一处", "第二处"]
+
+
+def test_popover_traps_tab_inside_and_esc_returns_focus_to_canvas(page):
+    # DEF-02: the role=dialog popover owns Tab — it cycles input ↔ tag buttons
+    # in both directions instead of escaping to the coachmark/body; Esc closes
+    # and hands focus back to the canvas (R4 rhythm intact).
+    dismiss_intro(page)
+    open_popover(page)
+    for _ in range(5):
+        page.keyboard.press("Tab")
+        assert page.evaluate("document.activeElement.closest('#dpb-anno-popover') !== null")
+    page.keyboard.press("Shift+Tab")
+    assert page.evaluate("document.activeElement.closest('#dpb-anno-popover') !== null")
+    page.keyboard.press("Escape")
+    expect(page.locator("#dpb-anno-popover")).to_be_hidden()
+    assert page.evaluate("document.activeElement.id") == "dpb-canvas"
+
+
+def test_roaming_from_spec_view_switches_back_to_annotations(page, tmp_path):
+    # DEF-03: J/K roaming (and anchor focus) must surface the focused card —
+    # the rail leaves the criteria tab for the annotations list.
+    page.goto(_write_control_page(tmp_path, [{"id": "A1", "title": "Real criterion"}]))
+    dismiss_intro(page)
+    save_anchor(page, "第一处")
+    page.click("#dpb-tab-spec")
+    expect(page.locator("#dpb-spec-view")).to_be_visible()
+    page.keyboard.press("j")
+    expect(page.locator("#dpb-annotations-view")).to_be_visible()
+    expect(page.locator("#dpb-spec-view")).to_be_hidden()
+
+
+def test_drawer_approve_mirrors_header_dynamic_state(page):
+    # DEF-04: the drawer footer trigger shares the header button's dynamic
+    # count/muted/ready state (REC-04 dual entry, one truth). DEF-06 rides the
+    # same label: English singular for exactly one note.
+    dismiss_intro(page)
+    header_label = page.locator("#dpb-approve-label")
+    drawer = page.locator("#dpb-approve-drawer")
+    expect(drawer).to_contain_text("写意见或点选标注后确认")
+    assert "dpb-approve-muted" in drawer.get_attribute("class")
+    assert "dpb-approve-ready" not in drawer.get_attribute("class")
+    save_anchor(page, "第一处")
+    expect(header_label).to_have_text("确认通过 (1 处批注)")
+    expect(drawer).to_contain_text("确认通过 (1 处批注)")
+    assert "dpb-approve-ready" in drawer.get_attribute("class")
+    page.locator("#dpb-language-toggle").click()
+    expect(header_label).to_have_text("Approve (1 note)")
+    expect(drawer).to_contain_text("Approve (1 note)")
+
+
 def test_coachmark_persists_until_first_anchor_not_timed_out(page):
     # R9: the card is non-modal and never auto-hides; the canvas is operable.
     page.wait_for_timeout(2600)

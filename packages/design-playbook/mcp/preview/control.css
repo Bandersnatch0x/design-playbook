@@ -401,30 +401,34 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-toolbar-hint { font: 500 9px/1 ui-monospace, Consolas, monospace; color: var(--dpb-muted); }
 
 /* ---- dynamic decision trigger (REC-04: one authoritative button) ---- */
-#dpb-btn-approve {
+.dpb-approve-btn {
   background: var(--dpb-elev); color: var(--dpb-muted);
   border: 1px solid var(--dpb-line);
   font-weight: 600; padding: 0 12px; transition: all var(--dpb-duration-spring) var(--dpb-ease-spring);
 }
-#dpb-btn-approve:hover { background: var(--dpb-elev-hover); color: var(--dpb-ink); }
-#dpb-btn-approve .dpb-approve-dot {
+.dpb-approve-btn:hover { background: var(--dpb-elev-hover); color: var(--dpb-ink); }
+/* DEF-04: the drawer trigger carries .dpb-btn-primary too, which would paint
+   the muted state accent — re-assert the shared muted look at 2-class weight. */
+.dpb-approve-btn.dpb-approve-muted { background: var(--dpb-elev); color: var(--dpb-muted); border-color: var(--dpb-line); box-shadow: none; }
+.dpb-approve-btn.dpb-approve-muted:hover { background: var(--dpb-elev-hover); color: var(--dpb-ink); transform: none; }
+.dpb-approve-btn .dpb-approve-dot {
   width: 7px; height: 7px; border-radius: 999px; flex: 0 0 auto;
   background: var(--dpb-muted);
 }
-#dpb-btn-approve.dpb-approve-ready {
+.dpb-approve-btn.dpb-approve-ready {
   background: var(--dpb-accent); color: var(--dpb-accent-ink);
   border-color: var(--dpb-accent);
   box-shadow: var(--dpb-shadow-glow);
 }
-#dpb-btn-approve.dpb-approve-ready:hover { background: var(--dpb-accent-deep); color: var(--dpb-accent-ink); transform: translateY(-1px); }
-#dpb-btn-approve.dpb-approve-ready .dpb-approve-dot {
+.dpb-approve-btn.dpb-approve-ready:hover { background: var(--dpb-accent-deep); color: var(--dpb-accent-ink); transform: translateY(-1px); }
+.dpb-approve-btn.dpb-approve-ready .dpb-approve-dot {
   background: var(--dpb-accent-ink);
   box-shadow: 0 0 6px var(--dpb-accent-ink);
   animation: dpb-ping 1.8s var(--dpb-ease-pulse) infinite;
 }
-#dpb-btn-approve.dpb-approve-ready kbd { background: var(--dpb-highlight); color: var(--dpb-accent-ink); border-color: transparent; border-bottom-width: 1px; }
-#dpb-btn-approve kbd { color: var(--dpb-muted); }
-#dpb-btn-approve.is-shaking { animation: dpb-shake 300ms ease; }
+.dpb-approve-btn.dpb-approve-ready kbd { background: var(--dpb-highlight); color: var(--dpb-accent-ink); border-color: transparent; border-bottom-width: 1px; }
+.dpb-approve-btn kbd { color: var(--dpb-muted); }
+.dpb-approve-btn.is-shaking { animation: dpb-shake 300ms ease; }
 
 .dpb-filter-tabs {
   display: flex; gap: 4px; padding: 10px 12px 6px; flex: 0 0 auto;
@@ -797,12 +801,12 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   .dpb-anchor.dpb-anchor-enter,
   .dpb-toast,
   .dpb-status-dot::after,
-  #dpb-btn-approve.dpb-approve-ready .dpb-approve-dot,
+  .dpb-approve-btn.dpb-approve-ready .dpb-approve-dot,
   .dpb-anno-popover,
   .dpb-coachmark-card,
   .dpb-pin-flash,
   .dpb-field textarea[name="feedback"].is-shaking,
-  #dpb-btn-approve.is-shaking {
+  .dpb-approve-btn.is-shaking {
     animation: none !important;
   }
   .dpb-artboard-wrap { transition: none; }

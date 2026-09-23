@@ -1239,6 +1239,23 @@
       // Ctrl/Cmd+Enter falls through to the global approve channel.
     });
   }
+  // DEF-02: the popover is a role=dialog — Tab cycles its own controls
+  // (textarea ↔ tag buttons) instead of escaping to background chrome.
+  // Esc is handled per-target (input) or by the global keymap (tag buttons),
+  // and both paths return focus to the canvas via cancelDraft(true).
+  if (annoPopover) {
+    annoPopover.addEventListener("keydown", function (e) {
+      if (e.key !== "Tab" || !draftPopoverOpen()) return;
+      var items = [annoInput].concat(
+        Array.prototype.slice.call(document.querySelectorAll("#dpb-anno-tags .dpb-tag"))
+      ).filter(function (el) { return el && !el.disabled; });
+      if (!items.length) { e.preventDefault(); return; }
+      var idx = items.indexOf(document.activeElement);
+      var dir = e.shiftKey ? -1 : 1;
+      e.preventDefault();
+      items[(idx + dir + items.length) % items.length].focus();
+    });
+  }
   Array.prototype.forEach.call(document.querySelectorAll("#dpb-anno-tags .dpb-tag"), function (b) {
     b.addEventListener("click", function () {
       activeTag = b.getAttribute("data-tag") || "copy";
