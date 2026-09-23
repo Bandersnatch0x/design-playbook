@@ -32,7 +32,7 @@ SPEC_LAYERS = ["L1", "L2", "L3", "L4", "L5", "L6"]
 
 SPEC_SCHEMA_2 = re.compile(r"spec-schema:\s*2\b")
 FIVE_STATES = ("initial", "loading", "success", "failure", "empty")
-PATH_REF = re.compile(r"\(path:\s*(P\d+)\)")
+PATH_REF = re.compile(r"[(（]path:\s*(P\d+)[)）]")
 
 
 @dataclass(frozen=True)

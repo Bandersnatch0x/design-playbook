@@ -646,6 +646,10 @@ class G1DeepeningTests(unittest.TestCase):
         rules = {f.rule_id for f in check_spec(text)}
         self.assertIn("G1.deep_l6_path_ref", rules)
 
+    def test_deepened_fullwidth_paren_path_reference_passes(self) -> None:
+        text = self.DEEP.replace("(path: P1)", "（path: P1）")
+        self.assertEqual(check_spec(text), [])
+
     def test_fixture_spec_passes_deepened(self) -> None:
         self.assertEqual(
             check_spec((FIXTURE_RUN / "spec.md").read_text(encoding="utf-8")),
