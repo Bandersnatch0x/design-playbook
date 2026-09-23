@@ -189,6 +189,27 @@ class DesignBaselineInterfaceTests(unittest.TestCase):
             self.assertEqual(binding["status"], "waived")
             self.assertEqual(verified["status"], "waived")
 
+    def test_waiver_reason_with_shell_mojibake_is_refused(self) -> None:
+        """T-081: surrogateescape residue in --reason must not reach state.json."""
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "product"
+            run = project / ".scratch" / "run-mojibake"
+            _existing_frontend(project)
+            design_baseline.prepare(project, run)
+
+            with self.assertRaises(design_baseline.BaselineError) as ctx:
+                design_baseline.confirm(
+                    project,
+                    run,
+                    decision="waive",
+                    reason="评审\udc80\udc81延期",
+                )
+            self.assertIn("undecodable bytes", str(ctx.exception))
+            state = json.loads(
+                (run / "design-baseline" / "state.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(state["decision"], None)
+
     @unittest.skipUnless(hasattr(os, "symlink"), "symlink unsupported")
     def test_prepare_rejects_candidate_symlink_escape(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

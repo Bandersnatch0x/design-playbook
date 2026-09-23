@@ -40,6 +40,8 @@ python scripts/design_baseline.py confirm <project_root> <run_root> --decision a
 python scripts/design_baseline.py verify  <project_root> <run_root>
 ```
 
+On Windows, non-ASCII `--reason` text can be mangled between shell and Python (ANSI code page, e.g. GBK on zh-CN). When argv carries undecodable bytes, `confirm` refuses with an error instead of persisting mojibake; prefer the module API (`confirm(project_root, run_root, decision, reason=...)`) or ASCII text for CLI `--reason` with non-ASCII content.
+
 State is a cache, not authority. Every public call resolves paths against the supplied project root. `verify` re-hashes the bound baseline and its first-party sources before returning a downstream binding. Fill and other consumers may only use a binding that just passed `verify`.
 
 | `status` | Meaning |

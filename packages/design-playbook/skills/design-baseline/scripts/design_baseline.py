@@ -22,6 +22,12 @@ from typing import Any, Iterable
 
 
 SCHEMA = "design-baseline/v1"
+# T-081: when stdout/stderr is a pipe, CPython uses the ANSI code page
+# (cp936 on zh-CN Windows), so ensure_ascii=False JSON printed by main()
+# arrives at the caller as GBK bytes. Callers decoding as UTF-8 then see
+# U+FFFD garbage and may persist it. Force UTF-8 on piped streams; the
+# interactive console is left alone (uses the console's UTF-8 API path).
+_PIPED_STREAM_ENCODING = "utf-8"
 STATE_RELATIVE = Path("design-baseline/state.json")
 EVIDENCE_RELATIVE = Path("design-baseline/evidence.json")
 DRAFT_RELATIVE = Path("design-baseline/DESIGN.draft.md")
@@ -665,6 +671,16 @@ def confirm(
         normalized_reason = reason.strip() if isinstance(reason, str) else ""
         if not normalized_reason:
             raise BaselineError("waiver requires a non-empty reason")
+        # T-081: lone surrogates in argv mean some layer decoded the command
+        # line with the wrong codec (surrogateescape residue). Legit text
+        # never contains them, so persisting the reason would corrupt
+        # state.json. Refuse with an actionable hint instead.
+        if any(0xDC80 <= ord(char) <= 0xDCFF for char in normalized_reason):
+            raise BaselineError(
+                "waiver reason contains undecodable bytes from the shell "
+                "(likely an ANSI/GBK code-page mismatch); write the reason "
+                "in ASCII, run via PowerShell, or call the module API directly"
+            )
         _validate_source_records(project, state.get("sources"))
         state["status"] = "waived"
         state["baseline"] = None
@@ -799,6 +815,12 @@ def verify(project_root: Path | str, run_root: Path | str) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # T-081: piped stdout/stderr defaults to the ANSI code page (GBK on
+    # zh-CN Windows); force UTF-8 so ensure_ascii=False JSON survives.
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name)
+        if stream is not None and not stream.isatty() and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding=_PIPED_STREAM_ENCODING)
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     for command in ("prepare", "verify"):
