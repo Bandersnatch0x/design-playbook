@@ -27,9 +27,21 @@ class EvalDecisionsTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
         template = (FIXTURES / "suite.template.jsonl").read_text(encoding="utf-8")
+        rows = [json.loads(line) for line in template.splitlines() if line.strip()]
+        # 现算好样本哈希（对 CRLF/LF 检出轮换免疫）；smoke-03 的占位错配哈希保留
+        import hashlib
+
+        for row in rows:
+            for ref in row["context"]:
+                ref["path"] = ref["path"].replace("CTX_DIR", FIXTURES.as_posix())
+                if ref.get("sha256") and not ref["sha256"].startswith("0000"):
+                    ref["sha256"] = hashlib.sha256(
+                        Path(ref["path"]).read_bytes()
+                    ).hexdigest()
         self.suite = self.tmp / "suite.jsonl"
         self.suite.write_text(
-            template.replace("CTX_DIR", FIXTURES.as_posix()), encoding="utf-8"
+            "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n",
+            encoding="utf-8",
         )
 
     def tearDown(self) -> None:
