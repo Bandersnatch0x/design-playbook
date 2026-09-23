@@ -9,6 +9,16 @@ description: Route and orchestrate outcome-first product UI work. Use for answer
 
 Not a style library. For palettes/type catalogs use other packs; here the product pipeline and acceptance are the product.
 
+## Plugin root (`<plugin>`)
+
+`<plugin>` in every command below means the loaded plugin package root. Confirm it deterministically **before the first `<plugin>` command** — the skill's base directory is `<plugin>/skills/design-playbook`, so resolve from it and verify the package marker:
+
+```bash
+python -c "import json,sys; from pathlib import Path; p=Path(sys.argv[1]).resolve().parents[1]; print('plugin root:', p); print('version:', json.loads((p/'.claude-plugin'/'plugin.json').read_text(encoding='utf-8'))['version'])" "<skill base directory>"
+```
+
+An empty `$CLAUDE_PLUGIN_ROOT` (dev `--plugin-dir` loads) is expected; this probe does not depend on it. If the marker read fails, the loaded tree is not the packaged plugin — stop and report the path actually in use.
+
 ## Run contract
 
 Keep each control in one authoritative place:
