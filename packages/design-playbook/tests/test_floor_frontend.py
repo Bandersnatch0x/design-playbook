@@ -127,13 +127,17 @@ def main():
             failures.append("S2: feedback-text confirm not allowed through")
 
         # --- S3: element pin + comment -> submit allowed ---
+        # REC-01: the comment is typed in the in-context popover; Enter lands
+        # the anchor with a non-empty comment.
         fresh(page)
         page.click("#hdr")  # default tool: select/pin, mode: annotate
+        page.wait_for_selector("#dpb-anno-popover")
+        page.fill("#dpb-anno-input", "fix spacing on this header")
+        page.keyboard.press("Enter")
         page.wait_for_selector("#dpb-anchors .dpb-anchor")
         sel = page.evaluate(
             "() => JSON.parse(document.getElementById('dpb-anchors-json')"
             ".value || '[]')[0].selector")
-        page.fill('#dpb-anchors input[data-i="0"]', 'fix spacing on this header')
         page.click("#dpb-btn-approve")
         nav_ok = wait_submit_navigated(page)
         s3_ok = nav_ok and sel == "#hdr"
@@ -163,10 +167,17 @@ def main():
         if not blocked:
             failures.append("S5: whitespace-only feedback must be blocked")
 
-        # --- S6: feedback + incomplete anchor (no comment) -> blocked ---
+        # --- S6: feedback + emptied anchor comment -> blocked ---
+        # With two-phase commit an anchor can no longer be born empty (REC-01),
+        # so the incomplete-anchor state is reached the same way a reviewer
+        # would: save an anchor, then clear its comment in the rail list.
         fresh(page)
         page.click("#hdr")
+        page.wait_for_selector("#dpb-anno-popover")
+        page.fill("#dpb-anno-input", "temp note")
+        page.keyboard.press("Enter")
         page.wait_for_selector("#dpb-anchors .dpb-anchor")
+        page.fill('#dpb-anchors input[data-i="0"]', "")
         page.fill('textarea[name="feedback"]', 'some text here')
         page.click("#dpb-btn-approve")
         page.wait_for_timeout(300)
@@ -179,8 +190,10 @@ def main():
         # --- S7: anchor-only (complete) -> allowed ---
         fresh(page)
         page.click("#hdr")
+        page.wait_for_selector("#dpb-anno-popover")
+        page.fill("#dpb-anno-input", "fix spacing")
+        page.keyboard.press("Enter")
         page.wait_for_selector("#dpb-anchors .dpb-anchor")
-        page.fill('#dpb-anchors input[data-i="0"]', 'fix spacing')
         page.click("#dpb-btn-approve")
         nav_ok = wait_submit_navigated(page)
         print(f"  S7 anchor-only complete: submit_allowed={nav_ok} -> "
@@ -188,21 +201,21 @@ def main():
         if not nav_ok:
             failures.append("S7: complete anchor-only must confirm")
 
-        # --- S8: status pill readiness flips ---
+        # --- S8: header approve trigger reflects readiness (REC-04) ---
         fresh(page)
         initial = page.evaluate(
-            "() => document.getElementById('dpb-status-pill')"
-            ".classList.contains('dpb-is-ready')")
+            "() => document.getElementById('dpb-btn-approve')"
+            ".classList.contains('dpb-approve-ready')")
         page.fill('textarea[name="feedback"]', 'ready now')
         page.wait_for_timeout(150)
         ready = page.evaluate(
-            "() => document.getElementById('dpb-status-pill')"
-            ".classList.contains('dpb-is-ready')")
+            "() => document.getElementById('dpb-btn-approve')"
+            ".classList.contains('dpb-approve-ready')")
         s8_ok = (not initial) and ready
-        print(f"  S8 readiness pill: initial={initial} after_text={ready} -> "
+        print(f"  S8 readiness trigger: initial={initial} after_text={ready} -> "
               f"{'OK' if s8_ok else 'FAIL'}")
         if not s8_ok:
-            failures.append("S8: status pill readiness must track substantive state")
+            failures.append("S8: the approve trigger readiness must track substantive state")
 
         # --- S9: empty revise is blocked with gate ---
         fresh(page)
@@ -236,19 +249,23 @@ def main():
         if not s10_ok:
             failures.append("S10: ready approve must submit the CONFIRM choice")
 
-        # --- S11: status-approve button gates when not ready ---
+        # --- S11: Ctrl+Enter with an open draft commits it first (REC-01/R4) ---
         fresh(page)
-        page.click("#dpb-status-approve")
+        page.evaluate(CAPTURE_SUBMITTER_JS)
+        page.click("#hdr")
+        page.wait_for_selector("#dpb-anno-popover")
+        page.fill("#dpb-anno-input", "committed by ctrl enter")
+        page.keyboard.press("Control+Enter")
         page.wait_for_timeout(300)
-        blocked = page.url.startswith("file:")
-        hint_on = page.evaluate(
-            "() => document.getElementById('dpb-feedback-hint')"
-            ".classList.contains('is-on')")
-        s11_ok = blocked and hint_on
-        print(f"  S11 status pill gate: blocked={blocked} hint={hint_on} -> "
-              f"{'OK' if s11_ok else 'FAIL'}")
+        captured = page.evaluate("() => window.__capturedSubmitter")
+        n_anchors = page.evaluate(
+            "() => JSON.parse(document.getElementById('dpb-anchors-json')"
+            ".value || '[]').length")
+        s11_ok = captured == PRIMARY_OPT and n_anchors == 1
+        print(f"  S11 ctrl+enter commits draft: captured={captured!r} "
+              f"anchors={n_anchors} -> {'OK' if s11_ok else 'FAIL'}")
         if not s11_ok:
-            failures.append("S11: status quick-approve must gate when not ready")
+            failures.append("S11: Ctrl+Enter with a written draft must commit it and confirm")
 
         # --- S12: drawer collapse + reopen tab + [ shortcut ---
         fresh(page)
@@ -329,7 +346,7 @@ def main():
         if not s16_ok:
             failures.append("S16: header decision buttons must carry titles")
 
-        # --- S17: free pin drops on canvas padding ---
+        # --- S17: free pin drops on canvas padding (two-phase: popover) ---
         fresh(page)
         page.evaluate("""() => {
           const c = document.getElementById('dpb-canvas');
@@ -337,6 +354,9 @@ def main():
           c.dispatchEvent(new MouseEvent('click', {bubbles: true,
             clientX: b.x + 30, clientY: b.y + 30}));
         }""")
+        page.wait_for_selector("#dpb-anno-popover")
+        page.fill("#dpb-anno-input", "pin here")
+        page.keyboard.press("Enter")
         page.wait_for_timeout(250)
         free = page.evaluate(
             "() => JSON.parse(document.getElementById('dpb-anchors-json')"
@@ -368,6 +388,9 @@ def main():
         page.mouse.move(r["x"] - 10, r["y"] + 80, steps=3)
         page.mouse.move(r["x"], r["y"], steps=3)
         page.mouse.up()
+        page.wait_for_selector("#dpb-anno-popover")
+        page.fill("#dpb-anno-input", "loop problem")
+        page.keyboard.press("Enter")
         page.wait_for_timeout(300)
         draw = page.evaluate(
             "() => JSON.parse(document.getElementById('dpb-anchors-json')"

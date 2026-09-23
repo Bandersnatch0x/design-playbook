@@ -57,6 +57,7 @@ class _PlaywrightPinAdapter:
         self.snapshots: dict[str, list[dict]] = {}
         self.comment = ""
         self.highlighted = False
+        self.popover_after_duplicate = False
 
     def open(self, url: str) -> object:
         def drive() -> None:
@@ -81,26 +82,35 @@ class _PlaywrightPinAdapter:
                         def record(name: str) -> None:
                             self.snapshots[name] = hidden()
 
-                        # v9: boots in annotate+select (pick channel ON)
+                        # v10: boots in annotate+select (pick channel ON); an
+                        # iframe click opens the in-context draft popover in
+                        # the parent (REC-01) — the anchor lands on Enter.
                         proto_frame.locator("#hdr").evaluate("el => el.click()")
+                        page.wait_for_selector("#dpb-anno-popover")
+                        page.fill("#dpb-anno-input", "fix spacing on header")
+                        page.keyboard.press("Enter")
                         page.wait_for_timeout(350)
                         record("s1")
 
                         page.wait_for_selector(".dpb-anchor input, .dpb-anchor textarea")
-                        page.fill(".dpb-anchor input, .dpb-anchor textarea", "fix spacing on header")
+                        page.fill(".dpb-anchor input, .dpb-anchor textarea", "fix spacing on header edited")
                         page.wait_for_timeout(150)
                         self.comment = hidden()[0].get("comment", "")
 
                         proto_frame.locator("#action").evaluate("el => el.click()")
+                        page.wait_for_selector("#dpb-anno-popover")
+                        page.fill("#dpb-anno-input", "clarify action label")
+                        page.keyboard.press("Enter")
                         page.wait_for_timeout(350)
                         record("s3")
-                        page.fill(
-                            '#dpb-anchors input[data-i="1"]',
-                            "clarify action label",
-                        )
+
+                        # duplicate pick: same selector again must not add a
+                        # row nor reopen a draft (flash + announce instead).
                         proto_frame.locator("#action").evaluate("el => el.click()")
                         page.wait_for_timeout(350)
                         record("s4")
+                        self.popover_after_duplicate = page.locator(
+                            "#dpb-anno-popover").is_visible()
 
                         # pick channel OFF: preview mode deactivates it
                         page.click("#dpb-mode-preview")
@@ -155,11 +165,13 @@ def main():
 
     hidden = adapter.snapshots.get("s1", [])
     n_rows = len(hidden)
+    # REC-01: the anchor tag carries the reviewer's category chip (default
+    # "copy") instead of the raw DOM tag; the DOM tag still drives the label.
     s1_ok = (
         n_rows == 1
         and hidden[0].get("selector") == "#hdr"
-        and hidden[0].get("tag") == "h2"
-        and hidden[0].get("label")
+        and hidden[0].get("tag") == "copy"
+        and hidden[0].get("comment") == "fix spacing on header"
     )
     print(
         f"  S1 iframe click -> anchor: rows={n_rows} hidden={hidden} "
@@ -168,17 +180,17 @@ def main():
     if not s1_ok:
         failures.append(
             "S1: pin-on iframe click must produce one anchor "
-            "(selector=#hdr, tag=h2, non-empty label) in the parent list"
+            "(selector=#hdr, category chip tag, non-empty comment) in the parent list"
         )
 
-    s2_ok = adapter.comment == "fix spacing on header"
+    s2_ok = adapter.comment == "fix spacing on header edited"
     print(
-        f"  S2 comment on bridge anchor: comment={adapter.comment!r} "
+        f"  S2 comment edit on bridge anchor: comment={adapter.comment!r} "
         f"-> {'OK' if s2_ok else 'FAIL'}"
     )
     if not s2_ok:
         failures.append(
-            "S2: comment typed on a cross-origin anchor must serialize"
+            "S2: comment edited on a cross-origin anchor must serialize"
         )
 
     hidden3 = adapter.snapshots.get("s3", [])
@@ -186,7 +198,7 @@ def main():
     s3_ok = (
         n3 == 2
         and hidden3[1].get("selector") == "#action"
-        and hidden3[1].get("tag") == "button"
+        and hidden3[1].get("comment") == "clarify action label"
     )
     print(
         f"  S3 second iframe element: rows={n3} "
@@ -197,8 +209,9 @@ def main():
         failures.append("S3: second distinct iframe click must add a second anchor")
 
     n4 = len(adapter.snapshots.get("s4", []))
-    s4_ok = n4 == 2
-    print(f"  S4 de-dupe same selector: rows={n4} -> {'OK' if s4_ok else 'FAIL'}")
+    s4_ok = n4 == 2 and not adapter.popover_after_duplicate
+    print(f"  S4 de-dupe same selector: rows={n4} "
+          f"draft_reopened={adapter.popover_after_duplicate} -> {'OK' if s4_ok else 'FAIL'}")
     if not s4_ok:
         failures.append("S4: clicking the same iframe element again must not duplicate")
 

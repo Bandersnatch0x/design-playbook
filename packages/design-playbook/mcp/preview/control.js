@@ -111,13 +111,12 @@
   var listEl = document.getElementById("dpb-anchors");
   var field = document.getElementById("dpb-feedback");
   var hint = document.getElementById("dpb-feedback-hint");
-  var commentInput = document.getElementById("dpb-comment-input");
-  var statusPill = document.getElementById("dpb-status-pill");
-  var statusText = document.getElementById("dpb-status-text");
-  var statusApprove = document.getElementById("dpb-status-approve");
+  var approveBtn = document.getElementById("dpb-btn-approve");
+  var approveLabel = document.getElementById("dpb-approve-label");
   var countBadge = document.getElementById("dpb-count-badge");
   var reopenBadge = document.getElementById("dpb-reopen-badge");
   var canvas = document.getElementById("dpb-canvas");
+  canvas.setAttribute("tabindex", "-1");  // R4: Enter-save refocuses the canvas
   var wrap = document.getElementById("dpb-artboard-wrap");
   var artboard = document.getElementById("dpb-artboard");
   var artboardInner = document.getElementById("dpb-artboard-inner");
@@ -137,10 +136,12 @@
   var modePreviewBtn = document.getElementById("dpb-mode-preview");
   var modeAnnotateBtn = document.getElementById("dpb-mode-annotate");
   var criteriaHidden = document.getElementById("dpb-criteria-json");
-  var criteriaPanel = document.getElementById("dpb-spec-panel");
-  var criteriaToggle = document.getElementById("dpb-criteria-toggle");
+  var criteriaPanel = document.getElementById("dpb-spec-view");
+  var criteriaToggle = document.getElementById("dpb-tab-spec");
   var criteriaCount = document.getElementById("dpb-criteria-count");
   var criteriaChecks = document.querySelectorAll(".dpb-criterion-check");
+  var tabAnnotations = document.getElementById("dpb-tab-annotations");
+  var annotationsView = document.getElementById("dpb-annotations-view");
   var themeToggle = document.getElementById("dpb-theme-toggle");
 
   // ---- state ----
@@ -148,7 +149,7 @@
   var historyStack = [];
   var redoStack = [];
   var DRAFT_KEY = window.DPB_DRAFT_KEY || "";
-  var drawSeq = 0, boxSeq = 0, noteSeq = 0, freePinSeq = 0;
+  var drawSeq = 0, boxSeq = 0, freePinSeq = 0;
   var activeIdx = -1;
   var resolvedSet = {};          // selector -> true (local resolve state)
   var filter = "all";
@@ -199,21 +200,33 @@
     if (criteriaToggle) criteriaToggle.hidden = items.length === 0;
     syncCriteriaCards();
   }
+  // REC-02: the spec criteria live in the unified rail as a tab, not a
+  // separate left panel. "open" = show the spec view (and keep the rail open);
+  // close returns to the annotations view.
+  function specViewActive() {
+    return !criteriaPanel.hidden;
+  }
   function setSpecPanel(open) {
     if (!criteriaPanel) return;
-    if (open && compactWorkspace.matches) setDrawer(false, true);
-    criteriaPanel.classList.toggle("dpb-collapsed", !open);
-    criteriaPanel.inert = !open;
-    root.classList.toggle("dpb-spec-collapsed", !open);
-    if (criteriaToggle) criteriaToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    criteriaPanel.hidden = !open;
+    annotationsView.hidden = open;
+    if (tabAnnotations) {
+      tabAnnotations.classList.toggle("is-on", !open);
+      tabAnnotations.setAttribute("aria-selected", open ? "false" : "true");
+    }
+    if (criteriaToggle) {
+      criteriaToggle.classList.toggle("is-on", open);
+      criteriaToggle.setAttribute("aria-selected", open ? "true" : "false");
+    }
   }
   for (var ci = 0; ci < criteriaChecks.length; ci++) {
     criteriaChecks[ci].addEventListener("change", syncCriteriaHidden);
   }
   if (criteriaToggle) {
-    criteriaToggle.addEventListener("click", function () {
-      setSpecPanel(criteriaPanel.classList.contains("dpb-collapsed"));
-    });
+    criteriaToggle.addEventListener("click", function () { setSpecPanel(true); });
+  }
+  if (tabAnnotations) {
+    tabAnnotations.addEventListener("click", function () { setSpecPanel(false); });
   }
   if (themeToggle) {
     themeToggle.addEventListener("click", function () {
@@ -539,7 +552,6 @@
     if (protoFrame()) return;  // iframe pages capture inside the bridge
     e.preventDefault();
     e.stopPropagation();
-    el.classList.add("dpb-pin-target");
     var selector = cssPath(el);
     if (!selector) return;
     for (var i = 0; i < anchors.length; i++) {
@@ -550,15 +562,17 @@
         return;
       }
     }
-    pushHistory();
-    anchors.push(markFresh({
+    // REC-01: two-phase commit — the click only opens the in-context draft
+    // popover; the anchor enters the list on Enter with a non-empty comment.
+    var r = el.getBoundingClientRect();
+    openDraft({
+      kind: "element",
       selector: selector,
       label: labelFor(el),
-      comment: "",
-      tag: el.tagName.toLowerCase(),
+      domTag: el.tagName.toLowerCase(),
       el: el,
-    }));
-    render();
+      rect: { x: r.left, y: r.top, w: r.width, h: r.height },
+    });
   }, true);
 
   function markFresh(a) {
@@ -574,6 +588,7 @@
   function anchorSnapshot() {
     return JSON.stringify(anchors.map(function (a) {
       var o = { selector: a.selector, label: a.label, comment: a.comment, tag: a.tag };
+      if (a.dom_tag) o.dom_tag = a.dom_tag;
       if (a.points) o.points = a.points;
       if (a.rect) o.rect = a.rect;
       if (a.kind) o.kind = a.kind;
@@ -598,6 +613,7 @@
         if (p.selector && String(p.selector).charAt(0) !== "@") el = document.querySelector(p.selector);
       } catch (e) {}
       var a = { selector: p.selector, label: p.label, comment: p.comment, tag: p.tag, el: el };
+      if (p.dom_tag) a.dom_tag = p.dom_tag;
       if (p.points) a.points = p.points;
       if (p.rect) a.rect = p.rect;
       if (p.resolved) resolvedSet[p.selector] = true;
@@ -657,6 +673,7 @@
     // snapshot but absent here is silently lost at submit time.
     hidden.value = JSON.stringify(anchors.map(function (a) {
       var o = { selector: a.selector, label: a.label, comment: a.comment, tag: a.tag };
+      if (a.dom_tag) o.dom_tag = a.dom_tag;
       if (a.points) o.points = a.points;
       if (a.rect) o.rect = a.rect;
       if (resolvedSet[a.selector]) o.resolved = true;
@@ -1010,55 +1027,232 @@
   canvas.addEventListener("click", function (e) {
     if (tool !== "select" || mode !== "annotate") return;
     if (e.target.closest && e.target.closest(
-      "#dpb-header, #dpb-toolbar, #dpb-inspector, .dpb-status-pill, #dpb-reopen-tab, .dpb-modal-scrim, .dpb-toasts"
+      "#dpb-header, #dpb-toolbar, #dpb-inspector, #dpb-reopen-tab, .dpb-modal-scrim, .dpb-toasts, .dpb-coachmark, .dpb-anno-popover"
     )) return;
     if (e.target !== canvas && e.target !== wrap && !wrap.contains(e.target)) return;
     var pt = toArtboardPoint(e);
     addFreePinAnchor(pt);
   });
 
+  // Geometry tools (draw/box/free pin) stage their shape into a draft and
+  // open the same in-context popover; the anchor lands on Enter (REC-01).
+  function stageDraft(kind, geometry, anchorRect) {
+    openDraft({ kind: kind, geometry: geometry, rect: anchorRect });
+  }
+
   function addDrawAnchor(points) {
     if (!points || points.length < 4) return;
-    drawSeq += 1;
-    pushHistory();
-    anchors.push(markFresh({
-      selector: "@draw-" + drawSeq,
-      label: ttN("draw_label", anchors.length + 1),
-      comment: "",
-      tag: "draw",
-      points: points,
-    }));
-    render();
-    toast(ttN("toast_loop_done", anchors.length));
-    if (commentInput) commentInput.focus();
+    var r = artboard.getBoundingClientRect();
+    var p0 = points[0];
+    stageDraft("draw", points, {
+      x: r.left + p0[0] * zoom,
+      y: r.top + p0[1] * zoom,
+      w: 24, h: 24,
+    });
   }
   function addBoxAnchor(rect) {
     if (!rect || rect.width < 4 || rect.height < 4) return;
-    boxSeq += 1;
-    pushHistory();
-    anchors.push(markFresh({
-      selector: "@box-" + boxSeq,
-      label: ttN("box_label", anchors.length + 1),
-      comment: "",
-      tag: "box",
-      rect: rect,
-    }));
-    render();
-    if (commentInput) commentInput.focus();
+    var r = artboard.getBoundingClientRect();
+    stageDraft("box", rect, {
+      x: r.left + rect.x * zoom,
+      y: r.top + rect.y * zoom,
+      w: rect.width * zoom, h: rect.height * zoom,
+    });
   }
   function addFreePinAnchor(pt) {
-    freePinSeq += 1;
-    pushHistory();
-    anchors.push(markFresh({
-      selector: "@pin-" + freePinSeq,
-      label: ttN("toast_pin_added", anchors.length + 1),
-      comment: "",
-      tag: "pin",
-      points: [pt],
-    }));
+    var r = artboard.getBoundingClientRect();
+    stageDraft("pin", pt, {
+      x: r.left + pt[0] * zoom,
+      y: r.top + pt[1] * zoom,
+      w: 28, h: 28,
+    });
+  }
+
+  // ---- in-context draft popover (REC-01: two-phase anchor commit) ----
+  // The popover exists only while a draft is unsaved; anchors enter the list
+  // exclusively via saveDraftAnchor() with a non-empty comment, so an empty
+  // anchor can never reach the ADR-0008 floor (frontend mirror or server).
+  var annoPopover = document.getElementById("dpb-anno-popover");
+  var annoInput = document.getElementById("dpb-anno-input");
+  var annoSel = document.getElementById("dpb-anno-sel");
+  var annoN = document.getElementById("dpb-anno-n");
+  var annoFloorHint = document.getElementById("dpb-anno-floor-hint");
+  var draftState = null;  // {kind, selector, label, el?, geometry?, rect}
+
+  function draftPopoverOpen() { return !!draftState; }
+
+  function positionDraftPopover() {
+    if (!draftState || !annoPopover) return;
+    var rect = draftState.rect;
+    if (!annoPopover.offsetWidth) return;  // hidden
+    var pw = annoPopover.offsetWidth || 280;
+    var ph = annoPopover.offsetHeight || 140;
+    var margin = 8;
+    var x, y;
+    if (!rect) {
+      var cr = canvas.getBoundingClientRect();
+      x = cr.left + cr.width / 2 - pw / 2;
+      y = cr.top + cr.height / 2 - ph / 2;
+    } else {
+      // R3: 4-quadrant flip — prefer right of the element, else left, else
+      // clamp horizontally; below the element, else above, else clamp.
+      if (rect.x + rect.w + margin + pw <= window.innerWidth - margin) {
+        x = rect.x + rect.w + margin;
+      } else if (rect.x - margin - pw >= margin) {
+        x = rect.x - margin - pw;
+      } else {
+        x = Math.max(margin, Math.min(rect.x, window.innerWidth - pw - margin));
+      }
+      if (rect.y + rect.h + margin + ph <= window.innerHeight - margin) {
+        y = rect.y + rect.h + margin;
+      } else if (rect.y - margin - ph >= 0) {
+        y = rect.y - margin - ph;
+      } else {
+        y = Math.max(margin, Math.min(rect.y, window.innerHeight - ph - margin));
+      }
+    }
+    annoPopover.style.left = Math.round(x) + "px";
+    annoPopover.style.top = Math.round(y) + "px";
+  }
+
+  function openDraft(draft) {
+    // A pending draft is replaced (never committed) by the next pick —
+    // empty drafts self-destruct instead of piling up ghost anchors.
+    cancelDraft(false);
+    draftState = draft;
+    annoPopover.hidden = false;
+    annoPopover.setAttribute("data-theme", root.getAttribute("data-theme") || "light");
+    annoSel.textContent = draft.selector || "";
+    annoSel.title = draft.selector || "";
+    annoN.textContent = String(anchors.length + 1);
+    annoFloorHint.textContent = "";
+    Array.prototype.forEach.call(document.querySelectorAll("#dpb-anno-tags .dpb-tag"), function (b) {
+      b.classList.toggle("is-on", (b.getAttribute("data-tag") || "copy") === activeTag);
+    });
+    annoInput.value = "";
+    positionDraftPopover();
+    annoInput.focus();
+    announce(tt("popover_aria"));
+  }
+
+  function saveDraftAnchor() {
+    if (!draftState) return true;
+    var text = annoInput.value.trim();
+    if (!text) {
+      // Empty save attempt: nudge, don't commit (no ghost anchor).
+      annoFloorHint.textContent = tt("anchor_placeholder");
+      annoInput.classList.remove("is-shaking");
+      void annoInput.offsetWidth;
+      annoInput.classList.add("is-shaking");
+      return false;
+    }
+    var d = draftState;
+    var seq = anchors.length + 1;
+    var anchor;
+    if (d.kind === "element") {
+      anchor = {
+        selector: d.selector,
+        label: d.label,
+        comment: text,
+        tag: activeTag,
+      };
+      // The chip category goes to `tag` for the rail chip; the DOM tag rides
+      // along as `dom_tag` so the server's v2 reconnect hint (features.tag)
+      // keeps pointing at the real element kind.
+      if (d.domTag) anchor.dom_tag = d.domTag;
+      if (d.el && d.el.isConnected) {
+        anchor.el = d.el;
+        d.el.classList.add("dpb-pin-target");
+      }
+    } else if (d.kind === "draw") {
+      drawSeq += 1;
+      anchor = {
+        selector: "@draw-" + drawSeq,
+        label: ttN("draw_label", seq),
+        comment: text,
+        tag: "draw",
+        points: d.geometry,
+      };
+    } else if (d.kind === "box") {
+      boxSeq += 1;
+      anchor = {
+        selector: "@box-" + boxSeq,
+        label: ttN("box_label", seq),
+        comment: text,
+        tag: "box",
+        rect: d.geometry,
+      };
+    } else {
+      freePinSeq += 1;
+      anchor = {
+        selector: "@pin-" + freePinSeq,
+        label: ttN("toast_pin_added", seq),
+        comment: text,
+        tag: "pin",
+        points: [d.geometry],
+      };
+    }
+    pushHistory();  // one snapshot per create+type+Enter (R4 undo granularity)
+    anchors.push(markFresh(anchor));
+    hideCoachmark(true);  // R9: the first created anchor dismisses the coachmark
+    hideDraftPopover();
+    draftState = null;
     render();
-    toast(ttN("toast_pin_added", anchors.length));
-    if (commentInput) commentInput.focus();
+    // R4: focus returns to the canvas; the pick channel stays on so the next
+    // click opens a fresh bubble immediately.
+    try { canvas.focus({ preventScroll: true }); } catch (e) { canvas.focus(); }
+    return true;
+  }
+
+  function cancelDraft(refocus) {
+    if (!draftState) return;
+    draftState = null;
+    hideDraftPopover();
+    // Re-echo the anchor list: the bridge highlights the clicked iframe
+    // element at click time; a cancelled draft must clear that highlight.
+    syncAnchorsToFrame();
+    if (refocus) { try { canvas.focus({ preventScroll: true }); } catch (e) { canvas.focus(); } }
+  }
+
+  function hideDraftPopover() {
+    if (!annoPopover) return;
+    annoPopover.hidden = true;
+    if (annoInput) {
+      annoInput.value = "";
+      annoInput.classList.remove("is-shaking");
+    }
+  }
+
+  if (annoInput) {
+    annoInput.addEventListener("keydown", function (e) {
+      // R2: an IME's Enter commits composition, never the draft.
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        saveDraftAnchor();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        cancelDraft(true);
+      }
+      // Ctrl/Cmd+Enter falls through to the global approve channel.
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("#dpb-anno-tags .dpb-tag"), function (b) {
+    b.addEventListener("click", function () {
+      activeTag = b.getAttribute("data-tag") || "copy";
+      Array.prototype.forEach.call(document.querySelectorAll("#dpb-anno-tags .dpb-tag"), function (x) {
+        x.classList.toggle("is-on", x === b);
+      });
+      annoInput.focus();
+    });
+  });
+  // Panning/zooming invalidates the draft's screen position — drop the draft
+  // rather than pinning text to a stale anchor point.
+  canvas.addEventListener("wheel", function () { if (draftState) cancelDraft(false); }, { passive: true });
+  if (annoPopover) {
+    window.addEventListener("resize", function () { if (draftState) positionDraftPopover(); });
   }
 
   // ---- bridge messages ----
@@ -1096,14 +1290,26 @@
         return;
       }
     }
-    pushHistory();
-    anchors.push(markFresh({
+    // Cross-origin draft: the bridge reports the element rect in iframe
+    // viewport coords; the iframe fills the artboard 1:1, so screen coords
+    // are artboardRect.left + x * zoom (artboard rect already carries the
+    // wrap's translate+scale transform).
+    var r = artboard.getBoundingClientRect();
+    var rect = (a.rect && typeof a.rect.x === "number")
+      ? {
+          x: r.left + Number(a.rect.x) * zoom,
+          y: r.top + Number(a.rect.y) * zoom,
+          w: Number(a.rect.w || 0) * zoom,
+          h: Number(a.rect.h || 0) * zoom,
+        }
+      : null;
+    openDraft({
+      kind: "element",
       selector: selector,
       label: labelForTag(tag, selector),
-      comment: "",
-      tag: tag,
-    }));
-    render();
+      domTag: tag || "",
+      rect: rect,
+    });
   });
 
   /* DPB_REVIEW_INSERT */

@@ -214,6 +214,7 @@ def _build_control(
         criteria_count_label=criteria_count_label,
         criteria_count=criteria_count,
         criteria_toggle_hidden=criteria_toggle_hidden,
+        spec_tab_hidden=" hidden" if criteria_count == 0 else "",
         secondary_html=secondary_html,
         primary_val=primary_val,
         primary_label=primary_label,

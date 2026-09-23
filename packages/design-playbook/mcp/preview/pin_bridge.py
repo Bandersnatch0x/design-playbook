@@ -181,7 +181,17 @@ BRIDGE_SCRIPT = r"""<script>
     el.classList.add("dpb-pin-target");
     var selector = cssPath(el);
     if (!selector) return;
-    parent.postMessage({ dpbPinAnchor: { selector: selector, tag: el.tagName.toLowerCase() } }, "*");
+    // T-083 REC-01: report the element rect (iframe viewport coords) so the
+    // parent can anchor the in-context draft popover next to the click.
+    // Data-only (no parent DOM access) — the G5 safety contract is unchanged.
+    var er = el.getBoundingClientRect();
+    parent.postMessage({
+      dpbPinAnchor: {
+        selector: selector,
+        tag: el.tagName.toLowerCase(),
+        rect: { x: er.left, y: er.top, w: er.width, h: er.height },
+      },
+    }, "*");
   }, true);
 
   // ---- #57 scheme A: cross-origin locate, flash and numbered badges ----

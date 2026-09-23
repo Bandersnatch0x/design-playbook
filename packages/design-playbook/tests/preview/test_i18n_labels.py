@@ -25,10 +25,15 @@ class LabelSetTests(unittest.TestCase):
         self.assertFalse(i18n.SKIP_LABELS & i18n.CONFIRM_LABELS)
 
     def test_confirm_labels_keep_new_and_historical_cta_labels(self) -> None:
+        # R7 lockstep (T-083 REC-08): the active-locale CTA wording was renamed
+        # to "确认通过"/"Approve"; the union must carry BOTH the new labels and
+        # every historical one so older submitted options still classify.
         self.assertIn("确认签署决策", i18n.CONFIRM_LABELS)
         self.assertIn("Confirm & sign decision", i18n.CONFIRM_LABELS)
         self.assertIn("确认通过", i18n.CONFIRM_LABELS)
         self.assertIn("Confirm", i18n.CONFIRM_LABELS)
+        for locale in (i18n.ZH, i18n.EN):
+            self.assertIn(i18n._STRINGS[locale]["confirm"], i18n.CONFIRM_LABELS)
 
     def test_pass_remains_a_confirm_and_is_not_a_skip(self) -> None:
         self.assertIn("pass", i18n.CONFIRM_LABELS)
@@ -50,6 +55,7 @@ class LabelSetTests(unittest.TestCase):
             "drawer_empty_title",
             "drawer_empty_desc",
             "criteria_title",
+            "criteria_title_short",
             "criteria_count",
             "criteria_empty",
             "criteria_toggle_title",
@@ -59,6 +65,16 @@ class LabelSetTests(unittest.TestCase):
             "box_label",
             "ruler_size",
             "ruler_distance",
+            # T-083 REC-01/03/04/05/07 keys
+            "popover_placeholder",
+            "popover_save",
+            "tab_annotations",
+            "tab_spec",
+            "approve_ready",
+            "approve_not_ready",
+            "coachmark_title",
+            "coachmark_text",
+            "field_label",
         ):
             for locale in (i18n.ZH, i18n.EN):
                 value = i18n._STRINGS[locale].get(key)
@@ -73,19 +89,23 @@ class LabelSetTests(unittest.TestCase):
         self.assertIn('id="dpb-btn-skip"', html)
         self.assertIn(i18n._STRINGS[i18n.ZH]["skip"], html)
 
-    def test_control_page_renders_v9_shell_chrome(self) -> None:
-        # v9 app shell: header actions + toolbar tools + inspector + dual i18n.
+    def test_control_page_renders_v10_shell_chrome(self) -> None:
+        # v10 app shell: header actions + mini-dock + unified rail + popover +
+        # coachmark + dual i18n (REC-01..04).
         html = preview_control._build_control(
             round_n=1, summary="评审", options=["确认通过", "需要修改"]
         )
         for i in ("dpb-header", "dpb-toolbar", "dpb-inspector", "dpb-canvas",
                   "dpb-btn-approve", "dpb-btn-skip", "dpb-pin-toggle",
                   "dpb-draw-toggle", "dpb-box-toggle", "dpb-ruler-toggle",
-                  "dpb-zoom-fit", "dpb-status-pill",
-                  "dpb-comment-input", "dpb-shortcut-modal", "dpb-spec-panel",
-                  "dpb-criteria-json", "dpb-criteria-toggle", "dpb-theme-toggle"):
+                  "dpb-zoom-fit", "dpb-anno-popover", "dpb-anno-input",
+                  "dpb-coachmark", "dpb-shortcut-modal", "dpb-spec-view",
+                  "dpb-criteria-json", "dpb-tab-spec", "dpb-theme-toggle"):
             self.assertIn(f'id="{i}"', html, f"missing {i}")
         self.assertIn("DPB_I18N_DUAL", html)
+        # R6: the overall-feedback field is explicitly marked optional.
+        self.assertIn("（可选）", html)
+        self.assertIn("optional", html)
 
 
 if __name__ == "__main__":

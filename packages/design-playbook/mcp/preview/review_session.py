@@ -157,7 +157,7 @@ def _anchor_features(item: dict, tag: str) -> dict[str, Any]:
     assets/current-canvas-matrix.md §5/§7): hints are stored so a later manual
     re-pin can propose candidates.
     """
-    features: dict[str, Any] = {"tag": tag or ""}
+    features: dict[str, Any] = {"tag": str(item.get("dom_tag") or "").strip() or tag or ""}
     label = str(item.get("label") or "")
     quoted = re.search(r'"([^"]+)"', label)
     if quoted:
@@ -196,6 +196,12 @@ def _parse_anchors(raw: str, round_n: int = 0) -> list[dict[str, Any]]:
             "comment": str(item.get("comment") or "").strip()[:500],
             "tag": tag,
         }
+        # T-083 REC-01: element anchors classify via the reviewer's category
+        # chip in `tag`; the real DOM tag rides along as `dom_tag` so the
+        # reconnect hint below keeps pointing at the element kind.
+        dom_tag = str(item.get("dom_tag") or "").strip()[:40]
+        if dom_tag:
+            anchor["dom_tag"] = dom_tag
         if item.get("resolved") is True:
             # Only the exact boolean counts: a truthy string must not silently
             # mark a reviewer's open item as resolved.
