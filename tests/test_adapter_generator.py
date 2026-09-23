@@ -427,9 +427,10 @@ class CursorRendererTests(unittest.TestCase):
     def test_all_skill_mdc_files_written(self) -> None:
         skill_mdcs = [f for f in self.out.rglob("*.mdc")
                       if "commands" not in f.name and "mcp" not in f.name]
-        # 8 skills: craft-guard, design-baseline, design-playbook, native-craft,
-        #           reference-intake, ui-evaluator, ui-picker, ux-spec
-        self.assertEqual(len(skill_mdcs), 8, f"expected 8 skill .mdc files, got {[f.name for f in skill_mdcs]}")
+        # 9 skills: component-distill, craft-guard, design-baseline,
+        #           design-playbook, native-craft, reference-intake,
+        #           ui-evaluator, ui-picker, ux-spec
+        self.assertEqual(len(skill_mdcs), 9, f"expected 9 skill .mdc files, got {[f.name for f in skill_mdcs]}")
 
     def test_orchestrator_rule_has_always_apply_true(self) -> None:
         f = self.out / ".cursor" / "rules" / "design-playbook.mdc"
@@ -479,8 +480,8 @@ class CursorRendererTests(unittest.TestCase):
 
     def test_total_file_count(self) -> None:
         paths = [e["path"] for e in self.manifest["files"]]
-        # 8 skills + 1 commands + 1 mcp note + 1 mcp.json = 11
-        self.assertEqual(len(paths), 11)
+        # 9 skills + 1 commands + 1 mcp note + 1 mcp.json = 12
+        self.assertEqual(len(paths), 12)
 
 
 class WindsurfRendererTests(unittest.TestCase):
@@ -496,12 +497,12 @@ class WindsurfRendererTests(unittest.TestCase):
 
     def test_all_skill_rule_files_written(self) -> None:
         rules = list((self.out / ".windsurf" / "rules").glob("*.md"))
-        self.assertEqual(len(rules), 8, f"expected 8 skill rules, got {[f.name for f in rules]}")
+        self.assertEqual(len(rules), 9, f"expected 9 skill rules, got {[f.name for f in rules]}")
 
     def test_workflow_files_written(self) -> None:
         workflows = list((self.out / ".windsurf" / "workflows").glob("*.md"))
-        # one workflow file per shipped command (7 as of 0.22)
-        self.assertEqual(len(workflows), 7)
+        # one workflow file per shipped command (8 as of 0.25)
+        self.assertEqual(len(workflows), 8)
 
     def test_workflow_file_naming(self) -> None:
         names = {f.name for f in (self.out / ".windsurf" / "workflows").glob("*.md")}
@@ -521,8 +522,8 @@ class WindsurfRendererTests(unittest.TestCase):
         self.assertIn("design-playbook-preview", text)
 
     def test_total_file_count(self) -> None:
-        # 8 rules + 7 workflows + 1 mcp guide = 16
-        self.assertEqual(len(self.manifest["files"]), 16)
+        # 9 rules + 8 workflows + 1 mcp guide = 18
+        self.assertEqual(len(self.manifest["files"]), 18)
 
 
 class GeminiCLIRendererTests(unittest.TestCase):
@@ -555,7 +556,7 @@ class GeminiCLIRendererTests(unittest.TestCase):
 
     def test_all_command_toml_files_written(self) -> None:
         toml_files = list((self.out / ".gemini" / "commands").glob("*.toml"))
-        self.assertEqual(len(toml_files), 7)
+        self.assertEqual(len(toml_files), 8)
 
     def test_command_toml_has_args_placeholder(self) -> None:
         f = self.out / ".gemini" / "commands" / "design-io.toml"
@@ -672,7 +673,7 @@ class GitHubCopilotRendererTests(unittest.TestCase):
 
     def test_all_skill_instruction_files_written(self) -> None:
         inst_files = list((self.out / ".github" / "instructions").glob("*.instructions.md"))
-        self.assertEqual(len(inst_files), 8)
+        self.assertEqual(len(inst_files), 9)
 
     def test_instruction_files_have_apply_to_frontmatter(self) -> None:
         f = self.out / ".github" / "instructions" / "ui-picker.instructions.md"
@@ -750,9 +751,9 @@ class FrontmatterHeaderPlacementTests(unittest.TestCase):
                 lines[close + 1], self._GENERATED_BY_LINE,
                 f"{agent}:{rel}: generated-by comment must be the first line after "
                 f"the frontmatter block, got {lines[close + 1]!r}")
-        # 10 cursor .mdc (8 skills + commands + mcp note) + 8 copilot .instructions.md
-        self.assertEqual(fm_artifacts, 18,
-                         f"expected 18 frontmatter-bearing artifacts across the matrix, "
+        # 11 cursor .mdc (9 skills + commands + mcp note) + 9 copilot .instructions.md
+        self.assertEqual(fm_artifacts, 20,
+                         f"expected 20 frontmatter-bearing artifacts across the matrix, "
                          f"got {fm_artifacts}")
 
 

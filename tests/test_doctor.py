@@ -49,7 +49,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIn(".mcp.json", result.stdout)
         self.assertIn("mcp/preview/server.py", result.stdout)
         self.assertIn("gate 1 structural smoke", result.stdout)
-        self.assertIn("8 skills present", result.stdout)
+        self.assertIn("9 skills present", result.stdout)
         # Issue #71: the audit-preferences module is part of the shipped
         # scripts surface; doctor's layout check must fail closed on it.
         self.assertIn("scripts/audit_preferences.py", result.stdout)

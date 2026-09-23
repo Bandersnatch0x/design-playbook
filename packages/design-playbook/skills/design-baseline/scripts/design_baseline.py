@@ -757,6 +757,180 @@ def confirm(
     return verify(project, run)
 
 
+def _load_user_promotions(project: Path, governance_log: Path | None) -> dict[str, dict]:
+    """Read the promotion governance log and return user ``promote`` decisions.
+
+    Imported lazily so the baseline module stays importable standalone; the
+    governance module is a sibling script. Returns the ``(kind::target) ->
+    event`` map from ``promotion_governance.user_promotions``.
+    """
+    if governance_log is None:
+        governance_log = project / "promotion-governance.jsonl"
+    if not governance_log.is_file():
+        return {}
+    try:
+        from design_playbook.scripts import promotion_governance as _pg
+    except ImportError:  # standalone script import (skill payload)
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "promotion_governance",
+            Path(__file__).resolve().parents[3] / "scripts"
+            / "promotion_governance.py")
+        _pg = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_pg)  # type: ignore[union-attr]
+    events = _pg.parse_promotion_log(governance_log.read_text(encoding="utf-8"))
+    return _pg.user_promotions(events)
+
+
+_COMPONENT_SECTION = "Component Stylings"
+# Promoted tokens land in their own section (T-072), not in the extraction
+# template's ``## Color Palette & Roles`` etc., so a promoted token never
+# collides with or rewrites an extracted-color entry — the two axes stay
+# distinct. The section is created on first token promotion.
+_TOKEN_SECTION = "Design Tokens (Promoted)"
+_SECTION_BY_KIND = {
+    "component": _COMPONENT_SECTION,
+    "token": _TOKEN_SECTION,
+}
+_HEADING_RE = re.compile(r"^##\s+(?P<title>.+?)\s*$", re.M)
+
+
+def _merge_component_into_baseline(
+        text: str, component_path: str, entry_line: str,
+        section: str = _COMPONENT_SECTION) -> str:
+    """Insert or update one entry under the named ``## <section>``.
+
+    Only that section changes; everything outside the heading pair is returned
+    byte-identical. If the section is absent it is appended at the end. An
+    existing bullet that references ``component_path`` *as a delimited token*
+    (not merely as a substring — so promoting ``Button.tsx`` never clobbers a
+    ``ButtonGroup.tsx`` bullet) is replaced; if the existing bullet is already
+    identical to the new entry it is left untouched (user-adjudicated skip);
+    otherwise the entry is appended to the section.
+    """
+    headings = list(_HEADING_RE.finditer(text))
+    target = None
+    for index, match in enumerate(headings):
+        if match.group("title").strip().lower() == section.lower():
+            end = (headings[index + 1].start() if index + 1 < len(headings)
+                   else len(text))
+            target = (match.end(), end)
+            break
+    bullet = entry_line if entry_line.startswith("- ") else f"- {entry_line}"
+    if target is None:
+        sep = "" if text.endswith("\n") else "\n"
+        return f"{text}{sep}\n## {section}\n\n{bullet}\n"
+    body = text[target[0]:target[1]]
+    lines = body.splitlines(keepends=True)
+    # Delimited-token identity: the path must appear as a whole token bounded
+    # by a non-path character (start, space, backtick, paren, etc.), so a
+    # sibling whose name merely extends it (ButtonGroup.tsx) is not matched.
+    token_re = re.compile(r"(?<![\w./-])" + re.escape(component_path)
+                          + r"(?![\w.-])")
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("- ") and token_re.search(line):
+            if line.rstrip("\n") == bullet:
+                break  # identical entry already present — skip, keep as-is
+            lines[i] = bullet + ("\n" if line.endswith("\n") else "")
+            break
+    else:
+        # Append after the last existing bullet, before trailing blank lines.
+        insert_at = len(lines)
+        while insert_at > 0 and not lines[insert_at - 1].strip():
+            insert_at -= 1
+        lines.insert(insert_at, bullet + "\n")
+    return text[:target[0]] + "".join(lines) + text[target[1]:]
+
+
+def promote(
+    project_root: Path | str,
+    run_root: Path | str,
+    component_path: str,
+    entry_line: str,
+    *,
+    kind: str = "component",
+    governance_log: Path | str | None = None,
+) -> dict[str, Any]:
+    """Merge one user-accepted component or token into the bound baseline.
+
+    ``kind`` selects the target section: ``component`` → ``## Component
+    Stylings`` (T-070); ``token`` → ``## Design Tokens (Promoted)`` (T-072).
+    Write gate: the target may be merged only when the promotion governance log
+    carries a user-decisive ``promotion_decided``/``promote`` event naming it
+    (T-068); absent that, refuse. The merge is incremental — only the target
+    section changes, the rest of the document is byte-identical — and reuses
+    confirm()'s discipline: byte-exact backup of the prior authority, atomic
+    write, post-write TOCTOU re-check, and a final ``verify``.
+    """
+    project, run = _roots(project_root, run_root)
+    kind = kind.strip().lower()
+    if kind not in _SECTION_BY_KIND:
+        raise BaselineError(
+            f"unsupported promotion kind: {kind!r} (component|token)")
+    target_name = component_path.strip()
+    if not target_name:
+        raise BaselineError("promote requires a non-empty component/token target")
+    if not entry_line.strip():
+        raise BaselineError("promote requires a non-empty entry line")
+    state = _load_state(project, run)
+    if state.get("status") != "ready":
+        raise BaselineError(
+            f"baseline is not ready for promotion (status: {state.get('status')})"
+            " — resolve the baseline gate first (ADR-0012)")
+    baseline = state.get("baseline") or {}
+    relative = baseline.get("path")
+    if relative not in {candidate.as_posix() for candidate in CANDIDATES}:
+        raise BaselineError("ready baseline lacks a bound canonical path")
+
+    accepted = _load_user_promotions(
+        project, Path(governance_log) if governance_log else None)
+    key = f"{kind}::{target_name}"
+    if key not in accepted:
+        raise BaselineError(
+            f"no user promotion decision for {target_name!r}; promotion is "
+            "user-gated (record a promotion_decided/promote event first)")
+
+    canonical = project / relative
+    if canonical.is_symlink():
+        raise BaselineError("canonical DESIGN.md must not be a symlink")
+    prior_hash = _sha256(canonical)
+    text = _read_text_capped(canonical, "baseline")
+    merged = _merge_component_into_baseline(
+        text, target_name, entry_line, section=_SECTION_BY_KIND[kind])
+    _atomic_copy(canonical, run / PREVIOUS_RELATIVE)
+    _atomic_write_text(canonical, merged)
+    if canonical.is_symlink() or not canonical.is_file():
+        raise BaselineError("canonical DESIGN.md was replaced during write")
+    if not _inside(canonical.resolve(), project):
+        raise BaselineError("canonical DESIGN.md escapes project root after write")
+    state["replaced_baseline"] = {
+        "path": relative,
+        "sha256": prior_hash,
+        "backup": PREVIOUS_RELATIVE.as_posix(),
+    }
+    state["baseline"] = {
+        "path": relative,
+        "sha256": _sha256(canonical),
+        "origin": baseline.get("origin", "generated"),
+    }
+    # Record the promoted entry's source provenance (US-6): the on-disk source
+    # hash at promotion time, so verify() can later detect drift of a promoted
+    # component (D7). A promoted token names no file; its sha256 stays None.
+    source_sha = None
+    if kind == "component":
+        source_sha = _sha256(project / target_name) \
+            if (project / target_name).is_file() else None
+    state.setdefault("promotions", []).append({
+        "kind": kind,
+        "target": target_name,
+        "event_id": accepted[key].get("id"),
+        "source_sha256": source_sha,
+        "promoted_at": _utc_now(),
+    })
+    _write_state(run, state)
+    return verify(project, run)
+
+
 def verify(project_root: Path | str, run_root: Path | str) -> dict[str, Any]:
     """Return a verified binding for downstream consumers."""
 
@@ -811,6 +985,20 @@ def verify(project_root: Path | str, run_root: Path | str) -> dict[str, Any]:
     state_sources = _validate_source_records(project, state.get("sources"))
     if document_sources != state_sources:
         raise BaselineError("baseline provenance does not match bound state")
+    # D7: re-check promoted entries against their recorded source provenance —
+    # a promoted component whose source drifted after promotion fails closed.
+    for promotion in state.get("promotions", []):
+        if not isinstance(promotion, dict):
+            continue
+        recorded = promotion.get("source_sha256")
+        target = promotion.get("target")
+        if promotion.get("kind") == "component" and recorded and isinstance(
+                target, str):
+            source_path = _safe_relative_file(project, target,
+                                              "promoted component source")
+            if _sha256(source_path) != recorded:
+                raise BaselineError(
+                    f"promoted component source drifted: {target}")
     return state
 
 
@@ -832,6 +1020,16 @@ def main(argv: list[str] | None = None) -> int:
     confirm_parser.add_argument("run_root", type=Path)
     confirm_parser.add_argument("--decision", required=True, choices=("accept", "waive"))
     confirm_parser.add_argument("--reason")
+    promote_parser = subparsers.add_parser("promote")
+    promote_parser.add_argument("project_root", type=Path)
+    promote_parser.add_argument("run_root", type=Path)
+    promote_parser.add_argument("--component", required=True,
+                                help="component path / token name to merge")
+    promote_parser.add_argument("--entry", required=True,
+                                help="the bullet text to merge")
+    promote_parser.add_argument("--kind", default="component",
+                                choices=("component", "token"))
+    promote_parser.add_argument("--governance-log", type=Path, default=None)
     args = parser.parse_args(argv)
 
     try:
@@ -839,6 +1037,10 @@ def main(argv: list[str] | None = None) -> int:
             result = prepare(args.project_root, args.run_root)
         elif args.command == "confirm":
             result = confirm(args.project_root, args.run_root, args.decision, args.reason)
+        elif args.command == "promote":
+            result = promote(args.project_root, args.run_root, args.component,
+                             args.entry, kind=args.kind,
+                             governance_log=args.governance_log)
         else:
             result = verify(args.project_root, args.run_root)
     except BaselineError as error:

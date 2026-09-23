@@ -8,8 +8,9 @@
  *    `skills/` directory. The plugin locates the directory via `__dirname`,
  *    so no `!!js` expression and no cwd-dependent resolution is involved.
  *
- * 2. Slash commands (ctx.commands) — `design-io`, `doctor`,
- *    `run-handoff`, `run-review`, `run-status`, `ui-review`, `ux-spec` —
+ * 2. Slash commands (ctx.commands) — `component-distill`, `design-io`,
+ *    `doctor`, `run-handoff`, `run-review`, `run-status`, `ui-review`,
+ *    `ux-spec` —
  *    that load the matching `commands/<name>.md` prompt, substitute
  *    `$ARGUMENTS` with the raw trailing input, and inject it as a
  *    user-role follow-up turn via `agent.followup()`.
@@ -87,6 +88,7 @@ exports.createUserMessageFromPrompt = createUserMessageFromPrompt
  * substituted) is injected as a user follow-up turn.
  */
 const COMMAND_NAMES = [
+  'component-distill',
   'design-io',
   'doctor',
   'run-handoff',

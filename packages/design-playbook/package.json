@@ -1,6 +1,6 @@
 {
   "name": "design-playbook",
-  "version": "0.24.4",
+  "version": "0.25.0",
   "description": "Design I/O for coding agents: evidence-forced UI acceptance — every criterion bound to a captured artifact, findings pointing back to declarations, verdicts owned by the evaluator, not the implementer. Design-baseline covers existing-product UI work. Use for product UI - console, dashboard, agent-ops, CJK-first apps.",
   "keywords": [
     "pi-package",

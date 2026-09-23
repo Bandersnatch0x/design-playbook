@@ -30,9 +30,9 @@ class TestEstimate:
 
 
 class TestMeasureSkills:
-    def test_eight_skills_covered_and_numbers_match_bytes(self) -> None:
+    def test_nine_skills_covered_and_numbers_match_bytes(self) -> None:
         report = cb.measure_skills(REAL_PKG)
-        assert len(report["skills"]) == 8
+        assert len(report["skills"]) == 9
         by_name = {s["skill"]: s for s in report["skills"]}
         # wc -c cross-check for one known skill (orchestrator).
         raw = (REAL_PKG / "skills" / "design-playbook" / "SKILL.md").read_text(
@@ -79,7 +79,7 @@ class TestCLI:
         assert cb.main(["--json"]) == 0
         payload = json.loads(capsys.readouterr().out)
         assert payload["estimate"] is True
-        assert len(payload["skills"]) == 8
+        assert len(payload["skills"]) == 9
 
         assert cb.main([]) == 0
         text = capsys.readouterr().out

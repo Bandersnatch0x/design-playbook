@@ -42,7 +42,7 @@ SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 # validate can never disagree on what a version line ships. Keep the
 # checklist wording in docs/agents/release-checklist.md in sync when the
 # plugin surface grows or shrinks.
-GATE1_EXPECTED_SKILLS = 8
+GATE1_EXPECTED_SKILLS = 9
 GATE1_EXPECTED_PLUGIN_NAME = "design-playbook"
 
 failures: list[str] = []

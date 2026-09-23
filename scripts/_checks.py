@@ -122,6 +122,18 @@ COMMAND_INVENTORY: dict[tuple[int, int], frozenset[str]] = {
         "run-handoff",
         "doctor",
     }),
+    # 0.25 adds component-distill (component backflow / DESIGN.md promotion,
+    # spec 2026-09-22): a new cross-run command, so a minor bump.
+    (0, 25): frozenset({
+        "component-distill",
+        "design-io",
+        "ux-spec",
+        "ui-review",
+        "run-review",
+        "run-status",
+        "run-handoff",
+        "doctor",
+    }),
 }
 STABLE_SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 
