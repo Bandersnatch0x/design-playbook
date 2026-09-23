@@ -23,6 +23,7 @@ def run(spec: Path, pointback: Path, *extra: str) -> subprocess.CompletedProcess
         [sys.executable, str(VALIDATOR), str(spec), str(pointback), *extra],
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
 
 
@@ -463,6 +464,7 @@ def main() -> int:
             [sys.executable, str(RUN_STATUS), str(run_root), "--json"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
 
     # G3 gate: each invalid cardinality rejects with its stable diagnostic.

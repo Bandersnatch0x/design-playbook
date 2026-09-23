@@ -75,3 +75,6 @@ docs/research/
 
 # Local Codex CLI MCP config (dev-session convenience; AGENTS.md rule 8 keeps root dot-dirs out of git)
 .codex/
+
+# ZCode editor-local ignore mirror (syncs .gitignore rules for the ZCode IDE)
+.zcodeignore
