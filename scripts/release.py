@@ -55,7 +55,7 @@ def fail(msg: str) -> None:
 
 
 def run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, capture_output=True, text=True, **kwargs)
+    return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", **kwargs)
 
 
 def git(*args: str) -> str:
@@ -212,31 +212,34 @@ def check_release_group() -> None:
 def check_validate() -> None:
     print("== 4. scripts/validate.py ==")
     result = run([sys.executable, str(VALIDATOR)])
-    if result.returncode == 0 and "VALIDATION PASSED" in result.stdout:
+    stdout = result.stdout or ""
+    if result.returncode == 0 and "VALIDATION PASSED" in stdout:
         ok("validate.py PASSED")
         return
     fail(f"validate.py failed (exit {result.returncode})")
-    print(result.stdout[-600:])
+    print(stdout[-600:])
 
 
 def check_seam() -> None:
     print("== 5. seam test (test_validate_run.py) ==")
     result = run([sys.executable, str(SEAM_TEST)])
-    if result.returncode == 0 and "SEAM TEST PASSED" in result.stdout:
+    stdout = result.stdout or ""
+    if result.returncode == 0 and "SEAM TEST PASSED" in stdout:
         ok("SEAM TEST PASSED")
         return
     fail(f"seam test failed (exit {result.returncode})")
-    print(result.stdout[-800:])
+    print(stdout[-800:])
 
 
 def check_adapter() -> None:
     print("== 6. adapter floor self-check ==")
     result = run([sys.executable, str(PREVIEW_SERVER), "--self-check"])
-    if result.returncode == 0 and "FLOOR SELF-CHECK PASSED" in result.stdout:
+    stdout = result.stdout or ""
+    if result.returncode == 0 and "FLOOR SELF-CHECK PASSED" in stdout:
         ok("FLOOR SELF-CHECK PASSED")
         return
     fail(f"adapter self-check failed (exit {result.returncode})")
-    print(result.stdout[-400:])
+    print(stdout[-400:])
 
 
 def check_tag(*, apply: bool) -> str:
