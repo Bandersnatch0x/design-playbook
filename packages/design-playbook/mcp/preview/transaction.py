@@ -193,6 +193,10 @@ DIRECTORY_LOCK_STALE_SECONDS = 30.0
 DIRECTORY_LOCK_HEARTBEAT_SECONDS = 10.0
 DIRECTORY_LOCK_POLL_SECONDS = 0.01
 PROJECTION_LOCK_NAME = ".preview-projection.lock"
+# ponytail: fixed 4x25ms retry covers AV/indexer WinError-5 windows on
+# Windows; backoff only if field reports ever exceed ~100ms.
+_REPLACE_RETRY_ATTEMPTS = 4
+_REPLACE_RETRY_SECONDS = 0.025
 
 
 class DirectoryLockError(OSError):
@@ -512,7 +516,19 @@ def atomic_write(path: Path, content: str) -> None:
             fh.write(content)
             fh.flush()
             os.fsync(fh.fileno())
-        os.replace(temp_name, path)
+        for attempt in range(_REPLACE_RETRY_ATTEMPTS):
+            try:
+                os.replace(temp_name, path)
+                break
+            except PermissionError:
+                # Windows: a freshly written target (e.g. log.md replaced by a
+                # prior writer milliseconds ago) can be briefly held open by
+                # AV/indexer scanning, making os.replace fail with WinError 5.
+                # The conflict is transient; retry the same temp file instead
+                # of surfacing a spurious commit failure.
+                if os.name != "nt" or attempt == _REPLACE_RETRY_ATTEMPTS - 1:
+                    raise
+                time.sleep(_REPLACE_RETRY_SECONDS)
     except BaseException:
         try:
             os.unlink(temp_name)
