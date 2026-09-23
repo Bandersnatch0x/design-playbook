@@ -13,6 +13,7 @@ PACKAGE = Path(__file__).resolve().parents[2]
 if str(PACKAGE) not in sys.path:
     sys.path.insert(0, str(PACKAGE))
 
+from design_playbook.mcp.preview import review_session  # noqa: E402
 from design_playbook.mcp.preview.control import _build_control  # noqa: E402
 from design_playbook.mcp.preview.review_session import (  # noqa: E402
     _bind_preview_server,
@@ -78,23 +79,38 @@ class PreviewPortTests(unittest.TestCase):
             os.environ["DESIGN_PLAYBOOK_PREVIEW_PORT"] = self._old
 
     def test_default_port_is_fixed(self) -> None:
-        server = _bind_preview_server(BaseHTTPRequestHandler)
-        try:
-            self.assertEqual(server.server_address[1], 4619)
-        finally:
-            server.server_close()
-
-    def test_occupied_default_falls_back_to_ephemeral(self) -> None:
-        blocker = socket.socket()
-        blocker.bind(("127.0.0.1", 4619))
-        blocker.listen(1)
+        # 常量钉死默认端口语义（不绑定——Windows 保留端口段会让硬绑 4619 变脆）
+        self.assertEqual(review_session.DEFAULT_PREVIEW_PORT, 4619)
+        self.assertNotEqual(review_session.DEFAULT_PREVIEW_PORT, 0)
+        # 行为面：env 指定的可用端口被精确绑定
+        probe = socket.socket()
+        probe.bind(("127.0.0.1", 0))
+        free_port = probe.getsockname()[1]
+        probe.close()
+        os.environ["DESIGN_PLAYBOOK_PREVIEW_PORT"] = str(free_port)
         try:
             server = _bind_preview_server(BaseHTTPRequestHandler)
             try:
-                self.assertNotEqual(server.server_address[1], 4619)
+                self.assertEqual(server.server_address[1], free_port)
             finally:
                 server.server_close()
         finally:
+            os.environ.pop("DESIGN_PLAYBOOK_PREVIEW_PORT", None)
+
+    def test_occupied_default_falls_back_to_ephemeral(self) -> None:
+        blocker = socket.socket()
+        blocker.bind(("127.0.0.1", 0))
+        taken = blocker.getsockname()[1]
+        blocker.listen(1)
+        os.environ["DESIGN_PLAYBOOK_PREVIEW_PORT"] = str(taken)
+        try:
+            server = _bind_preview_server(BaseHTTPRequestHandler)
+            try:
+                self.assertNotEqual(server.server_address[1], taken)
+            finally:
+                server.server_close()
+        finally:
+            os.environ.pop("DESIGN_PLAYBOOK_PREVIEW_PORT", None)
             blocker.close()
 
 

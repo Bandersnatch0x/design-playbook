@@ -382,6 +382,9 @@ def _build_parent_page(prototype_html: str, control_html: str) -> str:
     )
 
 
+DEFAULT_PREVIEW_PORT = 4619
+
+
 def _bind_preview_server(handler: type) -> HTTPServer:
     """Bind the preview HTTP server (fixed default port, ephemeral fallback).
 
@@ -390,7 +393,7 @@ def _bind_preview_server(handler: type) -> HTTPServer:
     rounds; fall back to an ephemeral port when it is taken (concurrent
     previews). DESIGN_PLAYBOOK_PREVIEW_PORT overrides; 0 forces ephemeral.
     """
-    port = int(os.environ.get("DESIGN_PLAYBOOK_PREVIEW_PORT", "4619"))
+    port = int(os.environ.get("DESIGN_PLAYBOOK_PREVIEW_PORT", str(DEFAULT_PREVIEW_PORT)))
     try:
         return HTTPServer(("127.0.0.1", port), handler)
     except OSError:
