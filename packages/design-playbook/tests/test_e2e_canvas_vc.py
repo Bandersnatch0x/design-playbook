@@ -75,9 +75,13 @@ class _PlaywrightReviewAdapter:
                         page.goto(url)
                         page.wait_for_selector("#dpb-root")
                         _dismiss_onboarding(page)
+                        # REC-01: iframe click opens the in-context draft; the
+                        # anchor lands on Enter with its comment.
                         page.frame_locator("iframe.dpb-proto-frame").locator("#hdr").click()
+                        page.wait_for_selector("#dpb-anno-popover")
+                        page.fill("#dpb-anno-input", "tighten spacing")
+                        page.keyboard.press("Enter")
                         page.wait_for_selector("#dpb-anchors .dpb-anchor")
-                        page.fill('#dpb-anchors input[data-i="0"]', "tighten spacing")
                         page.fill('textarea[name="feedback"]', "looks good, ship it")
                         page.click("#dpb-btn-approve")
                         page.wait_for_load_state("domcontentloaded")
@@ -205,21 +209,18 @@ class FrontendInteractionTests(unittest.TestCase):
                 page.wait_for_selector("#dpb-root")
                 _dismiss_onboarding(page)
                 page.click("#a")
+                page.wait_for_selector("#dpb-anno-popover")
+                page.fill("#dpb-anno-input", "first")
+                page.keyboard.press("Enter")
                 page.wait_for_selector("#dpb-anchors .dpb-anchor")
-                page.evaluate(
-                    """() => {
-                        document.querySelector('#b').click();
-                        document.querySelector('#dpb-undo-btn').focus();
-                        return new Promise(resolve => setTimeout(resolve, 0));
-                    }"""
-                )
+                page.click("#b")
+                page.wait_for_selector("#dpb-anno-popover")
+                page.fill("#dpb-anno-input", "second")
+                page.keyboard.press("Enter")
                 page.wait_for_function(
                     "document.querySelectorAll('#dpb-anchors .dpb-anchor').length === 2")
                 # Ctrl/Cmd+Z undoes the second pin
-                self.assertEqual(
-                    page.evaluate("document.activeElement.id"),
-                    "dpb-undo-btn",
-                )
+                page.locator("#dpb-undo-btn").focus()
                 page.keyboard.press("Control+Z")
                 page.wait_for_function(
                     "document.querySelectorAll('#dpb-anchors .dpb-anchor').length === 1")
@@ -242,6 +243,9 @@ class FrontendInteractionTests(unittest.TestCase):
                 page.wait_for_selector("#dpb-root")
                 _dismiss_onboarding(page)
                 page.click("#a")
+                page.wait_for_selector("#dpb-anno-popover")
+                page.fill("#dpb-anno-input", "seed note")
+                page.keyboard.press("Enter")
                 comment = page.locator('#dpb-anchors input[data-i="0"]')
                 comment.press_sequentially("draft comment")
 
@@ -263,8 +267,10 @@ class FrontendInteractionTests(unittest.TestCase):
                 page.wait_for_selector("#dpb-root")
                 _dismiss_onboarding(page)
                 page.click("#a")
+                page.wait_for_selector("#dpb-anno-popover")
+                page.fill("#dpb-anno-input", "before")
+                page.keyboard.press("Enter")
                 comment = page.locator('#dpb-anchors input[data-i="0"]')
-                comment.fill("before")
                 page.locator("#dpb-undo-btn").focus()
                 comment.fill("after")
                 page.locator("#dpb-undo-btn").focus()
@@ -290,6 +296,9 @@ class FrontendInteractionTests(unittest.TestCase):
                 page.wait_for_selector("#dpb-root")
                 _dismiss_onboarding(page)
                 page.click("#a")
+                page.wait_for_selector("#dpb-anno-popover")
+                page.fill("#dpb-anno-input", "seed")
+                page.keyboard.press("Enter")
                 page.wait_for_selector("#dpb-anchors .dpb-anchor")
                 page.fill('#dpb-anchors input[data-i="0"]', "草稿评论")
                 page.fill('textarea[name="feedback"]', "草稿反馈")
@@ -325,6 +334,9 @@ class FrontendInteractionTests(unittest.TestCase):
                 page.mouse.move(500, 420, steps=3)
                 page.mouse.move(440, 320, steps=3)
                 page.mouse.up()
+                page.wait_for_selector("#dpb-anno-popover")
+                page.fill("#dpb-anno-input", "圈出标题区域")
+                page.keyboard.press("Enter")
                 page.wait_for_selector("#dpb-anchors .dpb-anchor")
                 anchors = page.evaluate(
                     "() => JSON.parse(document.getElementById('dpb-anchors-json').value || '[]')")
@@ -338,10 +350,10 @@ class FrontendInteractionTests(unittest.TestCase):
                 self.assertGreaterEqual(
                     page.locator("#dpb-draw-layer .dpb-draw-badge").count(), 1)
                 # comment flows through the ordinary anchor row
-                page.fill('#dpb-anchors input[data-i="0"]', "圈出标题区域")
+                page.fill('#dpb-anchors input[data-i="0"]', "圈出标题区域·改")
                 anchors2 = page.evaluate(
                     "() => JSON.parse(document.getElementById('dpb-anchors-json').value || '[]')")
-                self.assertEqual(anchors2[0]["comment"], "圈出标题区域")
+                self.assertEqual(anchors2[0]["comment"], "圈出标题区域·改")
                 # Esc exits draw mode; the stroke stays
                 page.locator("#dpb-undo-btn").focus()
                 page.keyboard.press("Escape")
@@ -383,8 +395,10 @@ class FrontendInteractionTests(unittest.TestCase):
                                 page.mouse.move(500, 420, steps=3)
                                 page.mouse.move(440, 320, steps=3)
                                 page.mouse.up()
+                                page.wait_for_selector("#dpb-anno-popover")
+                                page.fill("#dpb-anno-input", "圈出主区域")
+                                page.keyboard.press("Enter")
                                 page.wait_for_selector("#dpb-anchors .dpb-anchor")
-                                page.fill('#dpb-anchors input[data-i="0"]', "圈出主区域")
                                 page.fill('textarea[name="feedback"]', "整体走查通过")
                                 page.click("#dpb-btn-approve")
                                 page.wait_for_load_state("domcontentloaded")

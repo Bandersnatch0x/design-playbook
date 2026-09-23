@@ -1,4 +1,10 @@
-"""Browser regressions for locale changes and non-destructive keyboard review."""
+"""Browser regressions for locale changes and non-destructive keyboard review.
+
+T-083 notes: the v10 shell replaces the blocking onboarding modal with a
+non-modal coachmark (REC-03/R9) and the drawer free-note input with an
+in-context popover (REC-01). The IME guard (R2) now lives on the popover
+textarea; this file keeps the same lockstep patterns against the new DOM.
+"""
 from __future__ import annotations
 
 import json
@@ -38,18 +44,46 @@ def page(browser, tmp_path, monkeypatch):
         window.submittedChoices.push(e.submitter && e.submitter.value);
       });
     }""")
-    expect(page.locator("#dpb-onboarding-modal")).to_be_visible()
+    # REC-03: the coachmark is non-blocking; assert it is present for first
+    # use, then close it so scenarios start from a quiet shell.
+    expect(page.locator("#dpb-coachmark")).to_be_visible()
     yield page
     page.close()
 
 
 def dismiss_intro(page):
-    page.locator("#dpb-onboarding-close").click()
+    card = page.locator("#dpb-coachmark")
+    if card.is_visible():
+        page.locator("#dpb-coachmark-close").click()
+    expect(card).to_be_hidden()
 
 
-def test_escape_dismisses_onboarding_without_submitting_skip(page):
+def open_popover(page, selector="#prototype h1"):
+    """REC-01 helper: pick an element and land on the in-context popover."""
+    page.click(selector)
+    expect(page.locator("#dpb-anno-popover")).to_be_visible()
+    return page.locator("#dpb-anno-input")
+
+
+def save_anchor(page, text, selector="#prototype h1"):
+    ta = open_popover(page, selector)
+    ta.fill(text)
+    page.keyboard.press("Enter")
+    expect(page.locator("#dpb-anno-popover")).to_be_hidden()
+    expect(page.locator("#dpb-anchors .dpb-anchor")).to_have_count(1)
+
+
+def test_coachmark_persists_until_first_anchor_not_timed_out(page):
+    # R9: the card is non-modal and never auto-hides; the canvas is operable.
+    page.wait_for_timeout(2600)
+    expect(page.locator("#dpb-coachmark")).to_be_visible()
+    save_anchor(page, "第一处批注")
+    expect(page.locator("#dpb-coachmark")).to_be_hidden()
+
+
+def test_escape_dismisses_coachmark_without_submitting_skip(page):
     page.keyboard.press("Escape")
-    expect(page.locator("#dpb-onboarding-modal")).to_be_hidden()
+    expect(page.locator("#dpb-coachmark")).to_be_hidden()
     assert page.evaluate("window.submittedChoices") == []
 
 
@@ -91,12 +125,27 @@ def test_abort_defaults_to_cancel_and_returns_focus(page):
     assert page.evaluate("window.submittedChoices") == []
 
 
-def test_ime_enter_does_not_create_annotation(page):
+def test_ime_enter_does_not_save_annotation_draft(page):
+    # R2 (lockstep, was test_ime_enter on the drawer input): an IME Enter
+    # commits composition inside the popover textarea, never the draft.
     dismiss_intro(page)
-    field = page.locator("#dpb-comment-input")
-    field.fill("正在输入中文")
-    field.dispatch_event("keydown", {"key": "Enter", "code": "Enter", "isComposing": True})
-    expect(field).to_have_value("正在输入中文")
+    ta = open_popover(page)
+    ta.fill("正在输入中文")
+    ta.dispatch_event("keydown", {"key": "Enter", "code": "Enter", "isComposing": True})
+    expect(ta).to_have_value("正在输入中文")
+    expect(page.locator("#dpb-anno-popover")).to_be_visible()
+    expect(page.locator("#dpb-anchors .dpb-anchor")).to_have_count(0)
+
+
+def test_text_target_suspends_single_key_shortcuts(page):
+    # R2: while the popover textarea holds focus, single-character hotkeys
+    # type text instead of switching tools/viewports.
+    dismiss_intro(page)
+    ta = open_popover(page)
+    for key in ["b", "1", "v", "d", "s", "j"]:
+        ta.press(key)
+    expect(ta).to_have_value("b1vdsj")
+    expect(page.locator("#dpb-anno-popover")).to_be_visible()
     expect(page.locator("#dpb-anchors .dpb-anchor")).to_have_count(0)
 
 
@@ -108,12 +157,65 @@ def test_space_activates_focused_button_instead_of_panning(page):
     assert page.evaluate("window.submittedChoices") == ["确认通过"]
 
 
+def test_enter_saves_returns_focus_and_next_click_reopens(page):
+    # R4: Enter saves; focus lands on the canvas; the pick channel stays on so
+    # the very next click opens a fresh bubble.
+    dismiss_intro(page)
+    page.evaluate("""() => {
+      const proto = document.getElementById('prototype');
+      const p = document.createElement('p');
+      p.id = 'second-el';
+      p.textContent = '第二目标';
+      proto.appendChild(p);
+    }""")
+    save_anchor(page, "第一处")
+    assert page.evaluate("document.activeElement.id") == "dpb-canvas"
+    ta = open_popover(page, "#second-el")
+    expect(ta).to_be_focused()
+    ta.fill("第二处")
+    page.keyboard.press("Enter")
+    expect(page.locator("#dpb-anno-popover")).to_be_hidden()
+    assert page.evaluate(
+        "() => JSON.parse(document.getElementById('dpb-anchors-json').value).length"
+    ) == 2
+
+
+def test_escape_cancels_empty_draft_without_anchor(page):
+    # REC-01 guard: an untyped draft self-destructs; no ghost anchor lands.
+    dismiss_intro(page)
+    open_popover(page)
+    page.keyboard.press("Escape")
+    expect(page.locator("#dpb-anno-popover")).to_be_hidden()
+    assert page.evaluate("window.submittedChoices") == []
+    assert page.evaluate(
+        "() => JSON.parse(document.getElementById('dpb-anchors-json').value).length"
+    ) == 0
+
+
+def test_popover_flips_inside_viewport_near_right_edge(page):
+    # R3 (minimal 4-quadrant flip): a wide element hugging the right side of
+    # the artboard must not push the popover off-screen.
+    dismiss_intro(page)
+    page.evaluate("""() => {
+      const proto = document.getElementById('prototype');
+      const wide = document.createElement('div');
+      wide.id = 'wide-el';
+      wide.style.cssText = 'height:40px;background:#eee;';
+      proto.appendChild(wide);
+    }""")
+    open_popover(page, "#wide-el")
+    box = page.locator("#dpb-anno-popover").bounding_box()
+    vw = page.evaluate("window.innerWidth")
+    assert box is not None
+    assert box["x"] + box["width"] <= vw, (box, vw)
+
+
 def test_live_language_updates_chrome_accessibility_not_choice_values(page):
     dismiss_intro(page)
     page.locator("#dpb-feedback").fill("Keep user text 中文 unchanged")
     page.locator("#dpb-language-toggle").click()
     expect(page.locator("#dpb-root")).to_have_attribute("lang", "en")
-    expect(page.locator("#dpb-btn-approve")).to_contain_text("Confirm")
+    expect(page.locator("#dpb-btn-approve")).to_contain_text("Approve")
     expect(page.locator("#dpb-theme-toggle")).to_have_attribute("aria-label", "Toggle light/dark theme")
     assert page.locator("#dpb-btn-skip").get_attribute("title").isascii()
     assert page.locator("#dpb-pin-toggle").get_attribute("title").isascii()
@@ -142,27 +244,36 @@ def test_annotation_kinds_localize_without_changing_payload(page):
     page.reload()
     dismiss_intro(page)
     for labels in [
-        ["文案 Copy", "布局 Layout", "视觉 Visual", "圈画", "框选", "定位点", "批注", "元素"],
+        ["文案", "布局", "视觉", "圈画", "框选", "定位点", "批注", "元素"],
         ["Copy", "Layout", "Visual", "Draw", "Box", "Pin", "Note", "Element"],
-        ["文案 Copy", "布局 Layout", "视觉 Visual", "圈画", "框选", "定位点", "批注", "元素"],
+        ["文案", "布局", "视觉", "圈画", "框选", "定位点", "批注", "元素"],
     ]:
         expect(page.locator(".dpb-anchor-kind")).to_have_text(labels)
         assert json.loads(page.locator("#dpb-anchors-json").input_value()) == anchors
         page.locator("#dpb-language-toggle").click()
 
 
-@pytest.mark.parametrize("selector", ["#dpb-btn-approve", "#dpb-status-approve"])
-def test_empty_confirmation_announces_localized_feedback_hint(page, selector):
+def test_empty_confirmation_announces_localized_feedback_hint(page):
     dismiss_intro(page)
     hint = page.locator("#dpb-feedback-hint")
     expect(hint).to_be_hidden()
     for locale in ["zh", "en"]:
         message = page.evaluate("locale => window.DPB_I18N_DUAL.field_hint[locale]", locale)
-        page.locator(selector).click()
+        page.locator("#dpb-btn-approve").click()
         expect(hint).to_be_visible()
         expect(hint).to_have_text(message)
         expect(page.locator("#dpb-announce")).to_have_text(message)
         page.locator("#dpb-language-toggle").click()
+
+
+def test_skip_stays_a_visible_secondary_button(page):
+    # R8: skip is a visible secondary action in the header; only abort (with
+    # its confirm popover) is a two-step tucked-away disposition.
+    dismiss_intro(page)
+    skip = page.locator("#dpb-btn-skip")
+    expect(skip).to_be_visible()
+    skip.click()
+    assert page.evaluate("window.submittedChoices") == ["跳过"]
 
 
 def test_language_switch_does_not_translate_author_attributes_in_inline_prototype(page):
@@ -228,20 +339,25 @@ def test_english_header_actions_remain_inside_window(page, tmp_path, width):
     toolbar = page.locator("#dpb-toolbar").bounding_box()
     header = page.locator("#dpb-header").bounding_box()
     assert toolbar["y"] >= header["y"] + header["height"]
-    assert page.locator("#dpb-status-approve span").evaluate("el => { const r = document.createRange(); r.selectNodeContents(el); return r.getClientRects().length; }") == 1
+    assert page.locator("#dpb-btn-approve span#dpb-approve-label").evaluate("el => { const r = document.createRange(); r.selectNodeContents(el); return r.getClientRects().length; }") == 1
 
 
-def test_compact_workspace_keeps_canvas_usable_and_panels_reachable(page, tmp_path):
+def test_compact_workspace_keeps_canvas_usable_and_rail_reachable(page, tmp_path):
+    # REC-02: one rail owns criteria AND annotations, so the canvas keeps its
+    # width even on compact screens; the rail stays collapsible.
     page.set_viewport_size({"width": 768, "height": 900})
     page.goto(_write_control_page(tmp_path, [{"id": "A1", "title": "Real criterion"}]))
     dismiss_intro(page)
     assert page.locator("#dpb-canvas").bounding_box()["width"] >= 400
-    expect(page.locator("#dpb-criteria-toggle")).to_have_attribute("aria-expanded", "false")
-    page.locator("#dpb-criteria-toggle").click()
-    expect(page.locator("#dpb-criteria-toggle")).to_have_attribute("aria-expanded", "true")
+    expect(page.locator("#dpb-drawer-toggle")).to_have_attribute("aria-expanded", "true")
+    page.locator("#dpb-drawer-toggle").click()
     expect(page.locator("#dpb-drawer-toggle")).to_have_attribute("aria-expanded", "false")
     assert page.locator("#dpb-inspector").evaluate("el => el.inert")
     page.locator("#dpb-drawer-toggle").click()
     expect(page.locator("#dpb-drawer-toggle")).to_have_attribute("aria-expanded", "true")
-    expect(page.locator("#dpb-criteria-toggle")).to_have_attribute("aria-expanded", "false")
-    assert page.locator("#dpb-spec-panel").evaluate("el => el.inert")
+    # the spec tab is reachable inside the same rail (S hotkey too)
+    page.click("#dpb-tab-spec")
+    expect(page.locator("#dpb-spec-view")).to_be_visible()
+    expect(page.locator("#dpb-annotations-view")).to_be_hidden()
+    page.click("#dpb-tab-annotations")
+    expect(page.locator("#dpb-annotations-view")).to_be_visible()

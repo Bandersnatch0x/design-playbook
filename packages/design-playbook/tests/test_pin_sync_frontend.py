@@ -192,7 +192,7 @@ class _PlaywrightPinSyncAdapter:
                             )
 
                         # --- #56 passive bridge: pin off, click passes through
-                        # v9 boots in annotate+select (pin ON); preview mode
+                        # v10 boots in annotate+select (pin ON); preview mode
                         # deactivates the pick channel for the passive check.
                         page.click("#dpb-mode-preview")
                         page.wait_for_timeout(200)
@@ -218,7 +218,14 @@ class _PlaywrightPinSyncAdapter:
                         page.wait_for_timeout(200)
                         self.obs["rows_after_spoof"] = len(hidden())
 
+                        # REC-01: the iframe click opens the parent-side draft
+                        # popover; the anchor lands on Enter.
                         proto_frame.locator("#hdr").evaluate("el => el.click()")
+                        page.wait_for_selector("#dpb-anno-popover")
+                        self.obs["popover_visible"] = page.locator(
+                            "#dpb-anno-popover").is_visible()
+                        page.fill("#dpb-anno-input", "tighten header spacing")
+                        page.keyboard.press("Enter")
                         page.wait_for_timeout(300)
                         self.obs["on_rows"] = len(hidden())
 
@@ -234,6 +241,9 @@ class _PlaywrightPinSyncAdapter:
 
                         # picking continues from the collapsed pill
                         proto_frame.locator("#action").evaluate("el => el.click()")
+                        page.wait_for_selector("#dpb-anno-popover")
+                        page.fill("#dpb-anno-input", "clarify action label")
+                        page.keyboard.press("Enter")
                         page.wait_for_timeout(300)
                         self.obs["rows_after_collapse_pick"] = len(hidden())
 
@@ -385,14 +395,20 @@ def main():
             "S1: with pin off the bridge must not intercept or highlight "
             "prototype clicks (passive start)")
 
-    on_ok = obs.get("on_rows") == 1 and obs.get("pin_aria") == "true"
+    on_ok = (
+        obs.get("on_rows") == 1
+        and obs.get("pin_aria") == "true"
+        and obs.get("popover_visible") is True
+    )
     print(
         f"  S2 #56 pin-on intercept: rows={obs.get('on_rows')} "
-        f"aria-pressed={obs.get('pin_aria')} -> {'OK' if on_ok else 'FAIL'}")
+        f"aria-pressed={obs.get('pin_aria')} "
+        f"draft_popover={obs.get('popover_visible')} -> {'OK' if on_ok else 'FAIL'}")
     if not on_ok:
         failures.append(
-            "S2: toggling pin on must sync into the bridge and intercept "
-            "iframe clicks immediately")
+            "S2: toggling pin on must sync into the bridge, intercept "
+            "iframe clicks immediately, and open the in-context draft popover"
+        )
 
     collapse_ok = (
         obs.get("pin_after_collapse") is True

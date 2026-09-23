@@ -95,14 +95,17 @@
     updateStatus();
   }
   function updateStatus() {
-    if (!statusPill) return;
+    // REC-04: the header approve button doubles as the readiness indicator.
     var ready = isSubstantive();
-    statusPill.classList.toggle("dpb-is-ready", ready);
-    var pending = anchors.filter(function (a) { return !resolvedSet[a.selector]; }).length;
-    statusText.textContent = ready
-      ? ttN("status_ready", pending)
-      : tt("status_not_ready");
-    if (statusApprove) statusApprove.disabled = false;
+    if (approveBtn) {
+      approveBtn.classList.toggle("dpb-approve-ready", ready);
+      approveBtn.classList.toggle("dpb-approve-muted", !ready);
+      if (approveLabel) {
+        approveLabel.textContent = ready
+          ? ttN("approve_ready", anchors.length)
+          : tt("approve_not_ready");
+      }
+    }
   }
 
   // list interactions (delegated)
@@ -213,33 +216,9 @@
     if (b) b.addEventListener("click", function () { setFilter(k); });
   });
 
-  // ---- comment form: tags + add note ----
-  Array.prototype.forEach.call(document.querySelectorAll(".dpb-tag"), function (b) {
-    b.addEventListener("click", function () {
-      activeTag = b.getAttribute("data-tag") || "copy";
-      Array.prototype.forEach.call(document.querySelectorAll(".dpb-tag"), function (x) {
-        x.classList.toggle("is-on", x === b);
-      });
-    });
-  });
-  function submitComment() {
-    var val = commentInput.value.trim();
-    if (!val) return;
-    noteSeq += 1;
-    pushHistory();
-    anchors.push(markFresh({
-      selector: "@note-" + noteSeq,
-      label: val.slice(0, 18),
-      comment: val,
-      tag: activeTag,
-    }));
-    commentInput.value = "";
-    render();
-    activeIdx = anchors.length - 1;
-    focusAnchor(activeIdx);
-    toast(ttN("toast_note_added", anchors.length));
-  }
-  document.getElementById("dpb-comment-send").addEventListener("click", submitComment);
+  // REC-05: the free-note drawer input is gone — element comments are typed
+  // in the in-context popover (control.js) and this drawer keeps only the
+  // optional overall feedback field. No detached @note anchors can be created.
 
   // ---- readiness (I4 floor mirror) ----
   function feedbackValue() { return field ? field.value : ""; }
@@ -258,21 +237,15 @@
   function setReadiness() { updateStatus(); }
   if (field) field.addEventListener("input", function () { setReadiness(); scheduleDraft(); });
 
-  // ---- drawer collapse ----
+  // ---- rail collapse (unified rail, REC-02) ----
   function setDrawer(open, quiet) {
-    if (open && compactWorkspace.matches) setSpecPanel(false);
     inspector.classList.toggle("dpb-collapsed", !open);
     inspector.inert = !open;
     document.getElementById("dpb-drawer-toggle").setAttribute("aria-expanded", open ? "true" : "false");
     reopenTab.hidden = open;
     if (!quiet) toast(tt(open ? "toast_drawer_open" : "toast_drawer_closed"));
   }
-  function syncWorkspacePanels() {
-    if (compactWorkspace.matches && !inspector.classList.contains("dpb-collapsed")) setSpecPanel(false);
-  }
-  compactWorkspace.addEventListener("change", syncWorkspacePanels);
   setDrawer(true, true);
-  syncWorkspacePanels();
   document.getElementById("dpb-drawer-toggle").addEventListener("click", function () { setDrawer(inspector.classList.contains("dpb-collapsed")); });
   document.getElementById("dpb-inspector-close").addEventListener("click", function () { setDrawer(false); });
   reopenTab.addEventListener("click", function () { setDrawer(true); });
@@ -448,20 +421,12 @@
     setHintGate(true);
     announce(tt("field_hint"));
     setDrawer(true, true);
-  });
-  if (statusApprove) statusApprove.addEventListener("click", function () {
-    if (isSubstantive()) submitPrimary();
-    else {
-      setDrawer(true, true);
-      if (field) {
-        field.setAttribute("aria-invalid", "true");
-        field.classList.remove("is-shaking");
-        void field.offsetWidth;
-        field.classList.add("is-shaking");
-        setTimeout(function () { field.focus(); }, 0);
-      }
-      setHintGate(true);
-      announce(tt("field_hint"));
+    setSpecPanel(false);
+    // REC-04: the muted trigger shakes too — the blocked click explains why.
+    if (approveBtn) {
+      approveBtn.classList.remove("is-shaking");
+      void approveBtn.offsetWidth;
+      approveBtn.classList.add("is-shaking");
     }
   });
   var draftBtn = document.getElementById("dpb-draft");
@@ -470,7 +435,7 @@
     setDrawer(false);
   });
 
-  // ---- keyboard map (v9) ----
+  // ---- keyboard map (v10) ----
   function isTextEditingTarget(el) {
     if (!el) return false;
     return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable;
@@ -482,8 +447,7 @@
     if (dialog) {
       if (e.key === "Escape") {
         e.preventDefault();
-        if (dialog === onboardingModal) toggleOnboarding(false);
-        else if (dialog === modal) toggleModal(false);
+        if (dialog === modal) toggleModal(false);
         else hideAbortPopover(true);
       } else if (e.key === "Tab") {
         trapDialogTab(e, dialog);
@@ -495,17 +459,15 @@
     }
     var activeEl = document.activeElement;
     // Ctrl/Cmd+Enter is the global approve channel - it must fire even while
-    // a textarea/input has focus (v9 keymap).
+    // a textarea/input has focus (v9 keymap). An open draft with text is
+    // committed first so Ctrl+Enter never silently discards a written note.
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       e.preventDefault();
+      if (draftPopoverOpen() && annoInput && annoInput.value.trim()) saveDraftAnchor();
       submitPrimary();
       return;
     }
     if (isTextEditingTarget(activeEl)) {
-      if (e.key === "Enter" && !e.shiftKey && activeEl === commentInput) {
-        e.preventDefault();
-        submitComment();
-      }
       return;
     }
     if (e.code === "Space" && !isSpaceDown) {
@@ -524,6 +486,10 @@
       if (e.shiftKey) {
         var skipBtn = document.getElementById("dpb-btn-skip");
         if (skipBtn) form.requestSubmit(skipBtn);
+      } else if (draftPopoverOpen()) {
+        cancelDraft(true);
+      } else if (!coachmark.hidden) {
+        hideCoachmark(true);
       } else if (tool !== "select") {
         setTool("select");
       }
@@ -546,6 +512,7 @@
     if (k === "j") { e.preventDefault(); roam(1); return; }
     if (k === "k") { e.preventDefault(); roam(-1); return; }
     if (k === "v") { e.preventDefault(); setMode("preview"); setTool("select", true); return; }
+    if (k === "s") { e.preventDefault(); setDrawer(true, true); setSpecPanel(true); return; }
     if (k === "d") { e.preventDefault(); setTool(tool === "draw" ? "select" : "draw"); return; }
     if (k === "b") { e.preventDefault(); setTool(tool === "box" ? "select" : "box"); return; }
     if (k === "r") { e.preventDefault(); setTool(tool === "ruler" ? "select" : "ruler"); return; }
@@ -553,6 +520,10 @@
     if (e.key === "=" || e.key === "+") { e.preventDefault(); handleZoom(0.1); return; }
     if (e.key === "-" || e.key === "_") { e.preventDefault(); handleZoom(-0.1); return; }
     if (e.key === "0") { e.preventDefault(); fitCanvas(); return; }
+    // REC-07: direct viewport switching (1 desktop / 2 tablet / 3 mobile).
+    if (e.key === "1") { e.preventDefault(); setViewport("desktop"); return; }
+    if (e.key === "2") { e.preventDefault(); setViewport("tablet"); return; }
+    if (e.key === "3") { e.preventDefault(); setViewport("mobile"); return; }
     if (e.key === "[" || e.key === "]") {
       e.preventDefault();
       setDrawer(inspector.classList.contains("dpb-collapsed"));
@@ -566,28 +537,32 @@
     }
   });
 
-  // ---- onboarding (first-use, versioned and best-effort persisted) ----
+  // ---- coachmark (REC-03/R9: non-blocking, persistent until the first
+  // anchor is created — never timed out, never modal) ----
   var ONBOARDING_KEY = "dpb.onboarding.v1";
-  var onboardingModal = document.getElementById("dpb-onboarding-modal");
-  var onboardingClose = document.getElementById("dpb-onboarding-close");
-  var onboardingDismiss = document.getElementById("dpb-onboarding-dismiss");
+  var coachmark = document.getElementById("dpb-coachmark");
+  var coachmarkClose = document.getElementById("dpb-coachmark-close");
   function onboardingWasSeen() {
     try { return localStorage.getItem(ONBOARDING_KEY) === "1"; }
     catch (e) { return false; }
   }
   function rememberOnboarding() {
     try { localStorage.setItem(ONBOARDING_KEY, "1"); }
-    catch (e) { /* private mode/quota: onboarding remains best-effort */ }
+    catch (e) { /* private mode/quota: coachmark remains best-effort */ }
   }
-  function toggleOnboarding(show) {
-    setReviewDialog(onboardingModal, show, onboardingClose);
-    if (!show) rememberOnboarding();
+  function hideCoachmark(persist) {
+    if (!coachmark) return;
+    coachmark.hidden = true;
+    if (persist) rememberOnboarding();
   }
-  if (onboardingClose) onboardingClose.addEventListener("click", function () { toggleOnboarding(false); });
-  if (onboardingDismiss) onboardingDismiss.addEventListener("click", function () { toggleOnboarding(false); });
-  if (onboardingModal) onboardingModal.addEventListener("click", function (e) {
-    if (e.target === onboardingModal) toggleOnboarding(false);
-  });
+  function showCoachmark() {
+    if (!coachmark || onboardingWasSeen()) return;
+    coachmark.hidden = false;
+  }
+  if (coachmarkClose) coachmarkClose.addEventListener("click", function () { hideCoachmark(true); });
+  // R9: the first created anchor is the dismissal signal (both the draft
+  // popover save and a restored draft list count), so the card stays up for
+  // as long as the user has not annotated.
 
   // ---- init ----
   setViewport("desktop", true);
@@ -602,4 +577,7 @@
   syncDrawToFrame();
   syncRulerToFrame();
   syncAnchorsToFrame();
-  if (!onboardingWasSeen()) setTimeout(function () { toggleOnboarding(true); }, 0);
+  if (anchors.length) rememberOnboarding();  // restored draft: they've annotated
+  if (!onboardingWasSeen()) showCoachmark();
+  // Position is pure CSS (fixed bottom-left of the canvas, clear of the
+  // dock); no JS measurement — a late-layout measure raced the first paint.

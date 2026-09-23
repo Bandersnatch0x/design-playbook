@@ -304,8 +304,12 @@ class ControlResourceAssemblyTests(unittest.TestCase):
             control,
             r'<button type="submit" name="choice" value="Needs changes"[^>]*class="[^"]*dpb-btn-secondary[^"]*"',
         )
-        # v9 shell chrome: status pill + feedback field + announce region
-        self.assertIn('id="dpb-status-pill"', control)
+        # v10 shell chrome: dynamic approve trigger + anno popover + coachmark
+        # + rail + feedback field + announce region (REC-01/02/03/04).
+        self.assertIn('id="dpb-btn-approve"', control)
+        self.assertIn('id="dpb-anno-popover"', control)
+        self.assertIn('id="dpb-coachmark"', control)
+        self.assertIn('id="dpb-inspector"', control)
         self.assertIn('id="dpb-feedback"', control)
         self.assertIn('id="dpb-announce"', control)
         self.assertIn("z-index: 999", control)
@@ -324,13 +328,15 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                 try:
                     page = browser.new_page()
                     page.goto(file_url, wait_until="domcontentloaded")
-                    page.wait_for_selector("#dpb-spec-panel")
+                    page.wait_for_selector("#dpb-spec-view", state="attached")
                     dismiss_onboarding(page)
 
-                    self.assertIn(
-                        "验收准则 (Spec Matrix)",
-                        page.locator("#dpb-spec-title").inner_text(),
-                    )
+                    # REC-02: criteria live in the unified rail as a tab; the
+                    # annotations list is the default view.
+                    self.assertFalse(
+                        page.locator("#dpb-spec-view").is_visible())
+                    page.click("#dpb-tab-spec")
+
                     self.assertEqual(page.locator(".dpb-spec-card").count(), 2)
                     self.assertIn(
                         "L6.1: Queue cards",
@@ -345,18 +351,14 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                         "准则 0/2",
                     )
 
-                    pane_text = page.locator("#dpb-spec-panel").inner_text()
+                    pane_text = page.locator("#dpb-spec-view").inner_text()
                     self.assertNotIn("G1", pane_text)
                     self.assertNotIn("待整改", pane_text)
                     self.assertNotIn("通过", pane_text)
 
-                    toggle = page.locator("#dpb-criteria-toggle")
-                    self.assertEqual(toggle.get_attribute("aria-expanded"), "true")
-                    self.assertTrue(
-                        toggle.evaluate(
-                            "el => el.matches("
-                            "'#dpb-criteria-toggle[aria-expanded=\\\"true\\\"]')"
-                        )
+                    self.assertEqual(
+                        page.locator("#dpb-tab-spec").get_attribute("aria-selected"),
+                        "true",
                     )
                     page.check('.dpb-criterion-check[data-criterion-id="L6.1"]')
                     self.assertEqual(
@@ -378,18 +380,12 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                         ],
                     )
 
-                    page.click("#dpb-criteria-toggle")
-                    self.assertEqual(toggle.get_attribute("aria-expanded"), "false")
-                    self.assertFalse(
-                        toggle.evaluate(
-                            "el => el.matches("
-                            "'#dpb-criteria-toggle[aria-expanded=\\\"true\\\"]')"
-                        )
+                    page.click("#dpb-tab-annotations")
+                    self.assertEqual(
+                        page.locator("#dpb-tab-spec").get_attribute("aria-selected"),
+                        "false",
                     )
-                    self.assertIn(
-                        "dpb-collapsed",
-                        page.locator("#dpb-spec-panel").get_attribute("class") or "",
-                    )
+                    self.assertFalse(page.locator("#dpb-spec-view").is_visible())
                 finally:
                     browser.close()
 
@@ -406,15 +402,12 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                 try:
                     page = browser.new_page()
                     page.goto(file_url, wait_until="domcontentloaded")
-                    page.wait_for_selector("#dpb-spec-panel")
+                    page.wait_for_selector("#dpb-spec-view", state="attached")
                     dismiss_onboarding(page)
 
                     self.assertEqual(page.locator(".dpb-spec-card").count(), 0)
-                    self.assertIn(
-                        "无 spec 判据来源",
-                        page.locator("#dpb-spec-list").inner_text(),
-                    )
-                    self.assertTrue(page.locator("#dpb-criteria-toggle").is_hidden())
+                    # No criteria source: the spec tab hides itself entirely.
+                    self.assertTrue(page.locator("#dpb-tab-spec").is_hidden())
                     self.assertEqual(
                         page.evaluate(
                             "() => document.getElementById('dpb-criteria-json').value"
@@ -440,9 +433,13 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                     empty = page.locator(".dpb-anchor-empty")
                     self.assertTrue(empty.is_visible())
                     self.assertIn("还没有批注", empty.inner_text())
-                    self.assertIn("按 B 框选区域，或按 D 圈画问题", empty.inner_text())
+                    self.assertIn("点选元素添加行内意见", empty.inner_text())
 
-                    page.fill("#dpb-comment-input", "empty state should disappear")
+                    # REC-01: pick an element, type in the in-context popover,
+                    # Enter commits the anchor (two-phase, no ghost anchors).
+                    page.click("#prototype h1")
+                    page.wait_for_selector("#dpb-anno-popover")
+                    page.fill("#dpb-anno-input", "empty state should disappear")
                     page.keyboard.press("Enter")
                     page.wait_for_selector("#dpb-anchors .dpb-anchor")
                     self.assertEqual(page.locator(".dpb-anchor-empty").count(), 0)
@@ -466,7 +463,9 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                     page.wait_for_selector("#dpb-root")
                     dismiss_onboarding(page)
 
-                    page.fill("#dpb-comment-input", "reduced motion note")
+                    page.click("#prototype h1")
+                    page.wait_for_selector("#dpb-anno-popover")
+                    page.fill("#dpb-anno-input", "reduced motion note")
                     page.keyboard.press("Enter")
                     card = page.locator("#dpb-anchors .dpb-anchor").first
                     card.wait_for()
@@ -546,6 +545,7 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                                 page.goto(url, wait_until="domcontentloaded")
                                 page.wait_for_selector("#dpb-root")
                                 dismiss_onboarding(page)
+                                page.click("#dpb-tab-spec")  # REC-02: criteria live in the rail tab
                                 page.check(
                                     '.dpb-criterion-check[data-criterion-id="L6.2"]'
                                 )
@@ -616,8 +616,13 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                                 page.mouse.down()
                                 page.mouse.move(x2, y2, steps=4)
                                 page.mouse.up()
+                                # REC-01: the drag opens the in-context draft;
+                                # the box anchor lands on Enter with a comment.
+                                page.wait_for_selector("#dpb-anno-popover")
+                                page.fill("#dpb-anno-input", "highlight this area")
+                                page.keyboard.press("Enter")
                                 page.wait_for_selector("#dpb-anchors .dpb-anchor")
-                                page.fill('#dpb-anchors input[data-i="0"]', "highlight this area")
+                                page.wait_for_timeout(150)
                                 with page.expect_response(
                                     lambda response: response.url.endswith("/decide")
                                     and response.request.method == "POST"
