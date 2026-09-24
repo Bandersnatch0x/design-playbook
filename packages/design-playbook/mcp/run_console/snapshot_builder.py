@@ -119,7 +119,8 @@ _RETAINED_FIELDS = (
 # Capture-contract quality findings (G6.capture_*) do not unbind evidence
 # at this boundary.
 _UNBINDABLE_RULES = frozenset(
-    {"G6.artifact_missing", "G6.escape", "G6.no_binding", "G6.unknown_criterion"}
+    {"G6.artifact_missing", "G6.escape", "G6.no_binding", "G6.unknown_criterion",
+     "G6.binding_conflict"}
 )
 _DEGRADING_RULES = frozenset({"G6.artifact_missing", "G6.escape"})
 

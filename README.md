@@ -35,6 +35,11 @@ replays are not evidence of external adoption or repeat use. New capability
 specs are proposals, not implementation or release commitments. Resumption
 requires an explicit maintainer decision, not a date or passing internal tests.
 
+The 2026-09-25 bounded self-use exception permits the source checkout's
+[read-only frontend scope report](packages/design-playbook/commands/run-status.md).
+It does not reopen recruitment, catalog submission, or release, and no measured
+time-saving is claimed. The boundary is recorded in [ADR-0045](docs/adr/0045-external-evidence-spend-gate.md).
+
 ## ⚡ One command, three artifacts
 
 The mechanism behind that proof is one pass:

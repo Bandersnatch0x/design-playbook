@@ -166,6 +166,13 @@ python <pkg>/scripts/run_status.py --list                  # newest runs under .
 
 The status command reuses the packaged validator’s G5 confirm rules. It is part of the installed package — not monorepo-only tooling. For an eligible run it also reports an explicit `open-console` continuation command for the local Run Console (it never starts a server itself), with the blocking reason and a safe fallback when the run or Console prerequisites are ineligible. The Console’s current claim is **local, experimental, and trial-gated** — `run-status --json` reports the same capability receipt (`publicClaim: experimental`) — and no authorized external trial or public release is claimed until the separately authorized read-only trial gate passes (ADR-0043).
 
+The source checkout adds a bounded self-use report:
+`python <pkg>/scripts/run_status.py <run> --scope path:P1 --json`.
+It links explicit declarations, summarizes evidence gaps, and retains the original
+owner's re-verification requirements. Unknown impact cannot safely narrow that
+scope. See [scope inputs, source refresh, and limits](commands/run-status.md).
+This is not a release or measured productivity claim.
+
 ### Static handoff
 
 ```text

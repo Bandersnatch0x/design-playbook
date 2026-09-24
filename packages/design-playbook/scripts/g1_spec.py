@@ -63,6 +63,85 @@ class SpecificationProjectionError(ValueError):
 
 
 @dataclass(frozen=True)
+class ScopeLink:
+    """An explicit declaration relation, not a source-code dependency guess."""
+
+    scope: str
+    criterion: str
+    path: str
+    assumed: bool
+
+
+@dataclass(frozen=True)
+class ProofRequirement:
+    """Optional precise evidence seed; unparsed prose remains unavailable."""
+
+    criterion: str
+    availability: str
+    proof: str | None = None
+    state: str | None = None
+    viewport: tuple[int, int] | None = None
+
+
+def project_proof_requirements(text: str) -> tuple[ProofRequirement, ...]:
+    specification = project_specification(text)
+    requirements = []
+    for criterion, item in zip(specification.criteria, _l6_items(text)):
+        seeds = re.findall(r"^[ \t]*Required evidence:\s*([^\r\n]+)", item, re.M)
+        if len(seeds) != 1:
+            requirements.append(ProofRequirement(
+                criterion.criterion_id, "inconsistent" if seeds else "unknown"))
+            continue
+        match = re.fullmatch(
+            r"(screenshot|a11y_tree|interaction_trace)"
+            r"(?:; state=([\w-]{1,64}))?"
+            r"(?:; viewport=([1-9]\d{0,4})x([1-9]\d{0,4}))?", seeds[0].strip())
+        if match is None:
+            requirements.append(ProofRequirement(criterion.criterion_id, "unknown"))
+            continue
+        proof, state, width, height = match.groups()
+        viewport = (int(width), int(height)) if width and height else None
+        requirements.append(ProofRequirement(criterion.criterion_id, "known", proof, state, viewport))
+    return tuple(requirements)
+
+
+def project_scope_links(text: str) -> tuple[ScopeLink, ...]:
+    """Read L3 rows and L6 path references through the G1 syntax owner.
+
+    Page associations require an exact step token (optionally backticked)
+    separated by an arrow. Mentioning a page in prose is not an association.
+    """
+    specification = project_specification(text)
+    table = _table_by_header(_layer_body(text, "L3"), ("Path", "Steps"))
+    if not table:
+        return ()
+    path_index, steps_index = (table[0].index(name) for name in ("Path", "Steps"))
+    duties = _table_by_header(_layer_body(text, "L2"), ("Page", "Duty"))
+    page_index = duties[0].index("Page") if duties else 0
+    pages = {row[page_index] for row in (duties or [])[1:] if len(row) > page_index}
+    paths: dict[str, str] = {}
+    for row in table[1:]:
+        if len(row) <= max(path_index, steps_index):
+            raise SpecificationProjectionError("path-row-incomplete")
+        path, steps = row[path_index], row[steps_index]
+        if path in paths or not re.fullmatch(r"P\d+", path) or not steps:
+            raise SpecificationProjectionError("path-row-inconsistent")
+        paths[path] = steps
+    result: list[ScopeLink] = []
+    for criterion, item in zip(specification.criteria, _l6_items(text)):
+        for path in dict.fromkeys(PATH_REF.findall(item)):
+            if path not in paths:
+                raise SpecificationProjectionError("path-reference-unknown")
+            assumed = bool(re.search(r"\b(?:assumed|assumption)\b", paths[path], re.I))
+            result.append(ScopeLink(f"path:{path}", criterion.criterion_id, path, assumed))
+            for step in re.split(r"\s*(?:->|\u2192)\s*", paths[path]):
+                page = step.strip().strip("`")
+                if page in pages and not assumed:
+                    result.append(ScopeLink(f"page:{page}", criterion.criterion_id, path, False))
+    return tuple(result)
+
+
+@dataclass(frozen=True)
 class _L6Syntax:
     """Single owner parse used by both validation and projection."""
 

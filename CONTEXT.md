@@ -15,6 +15,9 @@ not implementation approval; ADR-0045's spend gate remains. Internal dogfood
 does not satisfy external trial or adoption criteria. The 30-day checkpoint
 is approximately 2026-10-22; the original Day-90 review is approximately
 2026-11-23. Neither date automatically resumes activity.
+The bounded self-use exception for a read-only frontend scope report is
+defined in [ADR-0045](docs/adr/0045-external-evidence-spend-gate.md); it does
+not resume catalog submission or recruitment.
 
 Current repository release baseline: `v0.25.0`, per
 [release record](docs/releases/v0.25.0.md). Later source fixes are not thereby

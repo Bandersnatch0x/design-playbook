@@ -234,7 +234,43 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="list discovered runs under --scratch and exit",
     )
+    parser.add_argument(
+        "--scope", action="append",
+        help="explicit change scope (path:P1, page:id, component:id, file:relative-path)",
+    )
+    parser.add_argument("--git-root", help="explicit repository root for optional change clues")
+    parser.add_argument("--base-revision", help="explicit Git base; never inferred")
+    parser.add_argument("--head-revision", help="explicit Git head (exclusive with --worktree)")
+    parser.add_argument("--worktree", action="store_true",
+                        help="compare working tree to explicit base, including untracked paths")
+    parser.add_argument("--expected-source-hash",
+                        help="revalidate a prior scope report before copying its owner action")
     args = parser.parse_args(argv)
+    if not args.scope and (args.git_root or args.base_revision or args.head_revision
+                           or args.worktree or args.expected_source_hash):
+        parser.error("Scope report options require --scope")
+
+    if args.scope:
+        if not args.run_root or args.list:
+            parser.error("--scope requires an explicit run and cannot be combined with --list")
+        from design_playbook.scripts.frontend_review import (
+            FrontendReviewError,
+            build_frontend_review,
+            text_lines,
+        )
+        try:
+            report = build_frontend_review(
+                Path(args.run_root), tuple(args.scope),
+                git_root=Path(args.git_root) if args.git_root else None,
+                base_revision=args.base_revision, head_revision=args.head_revision,
+                worktree=args.worktree, expected_source_hash=args.expected_source_hash,
+            )
+        except FrontendReviewError as error:
+            print(f"RUN STATUS ERROR: {error}", file=sys.stderr)
+            return 2
+        print(json.dumps(report, ensure_ascii=False, indent=2) if args.json
+              else "\n".join(text_lines(report)))
+        return 0
 
     scratch = Path(args.scratch)
     if args.list:

@@ -122,6 +122,31 @@ def _g6_capture_findings(criterion: str, snapshot: object) -> list[Finding]:
     return []
 
 
+def select_bound_entry(entries: list[dict], criterion: str, artifact: str) -> dict | None:
+    """The latest binding for one criterion/artifact; ambiguous heads fail closed."""
+    bound = [entry for entry in entries
+             if entry.get("criterion") == criterion and entry.get("artifact") == artifact]
+    if not bound:
+        return None
+    if any(not isinstance(entry.get("ts", ""), str) for entry in bound):
+        raise ValueError("invalid-binding-timestamp")
+    latest = max(bound, key=lambda entry: entry.get("ts", ""))
+    if any(entry.get("ts", "") == latest.get("ts", "") and entry != latest for entry in bound):
+        raise ValueError("conflicting-bindings")
+    return latest
+
+
+def bound_capture_request(entry: dict) -> dict:
+    """Read the provider snapshot with the same precedence as G6."""
+    request = entry.get("request")
+    if isinstance(request, dict):
+        return request
+    capture = entry.get("capture")
+    if isinstance(capture, dict) and isinstance(capture.get("request"), dict):
+        return capture["request"]
+    return {}
+
+
 def check_evidence(
         pointback_text: str,
         expected_l6: int,
@@ -230,7 +255,18 @@ def check_evidence(
                     repair="Append a manifest line binding criterion and artifact",
                 ))
             continue
-        latest = max(bound, key=lambda m: m.get("ts", ""))
+        try:
+            latest = select_bound_entry(bound, criterion, leaf)
+        except ValueError:
+            errs.append(finding(
+                "G6.binding_conflict",
+                "G6 evidence: binding timestamps are malformed or the latest entries conflict",
+                owner="evidence/manifest.jsonl",
+                expected="one unambiguous latest binding", actual="conflicting bindings",
+                repair="Resolve conflicting bindings before re-evaluation",
+            ))
+            continue
+        assert latest is not None
         if latest.get("criterion") not in valid_criterion_ids:
             errs.append(finding(
                 "G6.unknown_criterion",
@@ -247,10 +283,7 @@ def check_evidence(
         # viewport, and freeze. Unversioned or partial snapshots have no
         # compatibility reader — recapture. Validated through the contract
         # module's read authority (fail-closed on malformed shape).
-        capture = latest.get("capture") if isinstance(latest.get("capture"), dict) else {}
-        request = latest.get("request")
-        if not isinstance(request, dict):
-            request = capture.get("request") if isinstance(capture.get("request"), dict) else {}
+        request = bound_capture_request(latest)
         capture_findings = _g6_capture_findings(criterion, request)
         if capture_findings:
             errs.extend(capture_findings)

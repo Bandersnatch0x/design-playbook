@@ -96,6 +96,9 @@ jobs:
       - name: Documentation portability and Git boundary tests
         run: python3 -m pytest tests/test_doc_links.py -q
 
+      - name: Read-only frontend scope review
+        run: python3 -m pytest tests/test_frontend_review.py -q
+
       - name: Shared transport + Preview transaction/stdin tests (required)
         run: |
           python3 -m pytest \
