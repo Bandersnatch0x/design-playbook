@@ -415,7 +415,7 @@ def run_checks(
         ) if run_env else _check(
             "run_root.env",
             False,
-            "Set DESIGN_PLAYBOOK_RUN_ROOT to the absolute .scratch/<run> path for evidence captures",
+            "Set DESIGN_PLAYBOOK_RUN_ROOT to the absolute .scratch/<run> path for evidence captures, or pass run_root=<abs run root> on a capture call when the server is already running",
             required=False,
         ))
 

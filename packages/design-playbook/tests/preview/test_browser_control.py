@@ -114,11 +114,17 @@ def _write_spec_fixture(root: Path) -> Path:
     return report
 
 
-def _write_control_page(root: Path, criteria: list[dict[str, str]]) -> str:
-    # These fixture assertions are Chinese, independent of the test host's LANG.
-    with patch.dict("os.environ", {"DPB_PREVIEW_LANG": "zh-CN"}):
+def _write_control_page(
+    root: Path,
+    criteria: list[dict[str, str]],
+    lang: str = "zh-CN",
+    options: tuple[str, ...] = ("确认通过", "需要修改"),
+) -> str:
+    # Default fixture assertions are Chinese, independent of the test host's
+    # LANG; OBS-1 checks pass an explicit ``lang`` to render the other locale.
+    with patch.dict("os.environ", {"DPB_PREVIEW_LANG": lang}):
         control = preview_control._build_control(
-            1, "Spec matrix workbench", ["确认通过", "需要修改"], criteria=criteria
+            1, "Spec matrix workbench", list(options), criteria=criteria
         )
     page_path = root / "workbench.html"
     page_path.write_text(

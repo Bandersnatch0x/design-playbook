@@ -2,6 +2,10 @@
 
 Use when an L6 criterion is proven (in part or wholly) by an `a11y tree` capture. This is judgment guidance for `ui-evaluator`, not a capture schema and not an automatic L6 seed generator.
 
+## What the artifact is
+
+The provider writes a JSON envelope — `{"format": "aria_snapshot", "tree": "..."}` — where `tree` is Playwright's `aria_snapshot` **indentation text** (`- button "Save" [disabled]`), not a node/role object tree. Read roles, names, and states out of that text by indentation; an older adapter may instead emit the legacy `{role, name, children}` object form, which is also valid JSON. Neither shape is a claim about visual properties.
+
 ## What the tree is good for
 
 - Accessible **name** presence and usefulness for interactive controls

@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import json
+import re
+import shlex
 import subprocess
 import sys
 import unittest
@@ -441,6 +443,80 @@ class AdaptiveRoutingSkillContractTests(unittest.TestCase):
 
         self.assertIn("**Done when:**", section)
         self.assertIn("run_profile.py route", section)
+
+    def test_entry_routing_cli_example_runs_as_written(self) -> None:
+        # DEF-3 (T-087): the documented route example is the only CLI sample the
+        # orchestrator copies, so its flags must exist on the real parser — an
+        # invented --repo-root/--request costs the run two failed calls.
+        section = _heading_section(
+            MAIN_SKILL.read_text(encoding="utf-8"),
+            "### 1. Entry routing",
+        )
+        blocks = [
+            block
+            for block in re.findall(r"```text\n(.*?)```", section, re.DOTALL)
+            if "run_profile.py route" in block
+        ]
+        self.assertEqual(len(blocks), 1, "step 1 must carry exactly one route CLI example")
+        argv = shlex.split(blocks[0].replace("\\\n", " "))
+        self.assertEqual(argv[:2], ["python", "<plugin>/scripts/run_profile.py"])
+        argv = [sys.executable, str(PKG / "scripts" / "run_profile.py"), *argv[2:]]
+        completed = subprocess.run(
+            argv, check=False, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=10,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        json.loads(completed.stdout)
+
+    def test_entry_routing_help_lists_the_documented_flags(self) -> None:
+        section = _heading_section(
+            MAIN_SKILL.read_text(encoding="utf-8"),
+            "### 1. Entry routing",
+        )
+        example = next(
+            block
+            for block in re.findall(r"```text\n(.*?)```", section, re.DOTALL)
+            if "run_profile.py route" in block
+        )
+        documented = set(re.findall(r"--[a-z][a-z-]+", example))
+        help_text = subprocess.run(
+            [
+                sys.executable,
+                str(PKG / "scripts" / "run_profile.py"),
+                "route",
+                "--help",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+        ).stdout
+        real = set(re.findall(r"--[a-z][a-z-]+", help_text))
+        self.assertTrue(documented <= real, f"undocumented flags: {documented - real}")
+        self.assertTrue({"--intent", "--consequence"} <= documented)
+
+    def test_design_baseline_waiver_needs_this_run_user(self) -> None:
+        # DEF-1 (T-087): a waive may be recommended, but only this run's user
+        # can grant it — a stored/historical ruling is not consent.
+        section = _heading_section(
+            BASELINE_SKILL.read_text(encoding="utf-8"),
+            "### 3. Confirm or waive",
+        )
+        self.assertIn("the first waiver of a run must be put to this run's user", section)
+        self.assertIn("provenance, not this user's consent", section)
+        self.assertIn('Never call `confirm(..., "waive")`', section)
+        done = _done_when(section)
+        self.assertIn("this run's user", done)
+
+    def test_orchestrator_pointer_keeps_the_waiver_boundary(self) -> None:
+        section = _heading_section(
+            MAIN_SKILL.read_text(encoding="utf-8"),
+            "### 1A. `design-baseline`",
+        )
+        self.assertIn("waiver is never carried over", section)
+        self.assertIn("that skill owns the rule", section)
 
     def test_codex_agents_delegates_router_flags_to_main_skill(self) -> None:
         bridge = _heading_section(

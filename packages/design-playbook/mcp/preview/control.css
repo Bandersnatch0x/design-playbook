@@ -113,6 +113,8 @@ body.dpb-shell { overflow: hidden; height: 100vh; }
 }
 #dpb-root kbd, .dpb-toasts kbd {
   display: inline-flex; align-items: center; justify-content: center;
+  /* OBS-1: a shortcut badge is a fixed glyph run — never squeeze or fold it. */
+  flex: 0 0 auto; white-space: nowrap;
   font: 600 9px/1.2 ui-monospace, "JetBrains Mono", Consolas, monospace;
   padding: 1px 5px; border-radius: 4px;
   background: var(--dpb-surface); color: var(--dpb-soft);
@@ -548,10 +550,13 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   border-color: var(--dpb-danger) !important;
   box-shadow: 0 0 0 3px var(--dpb-ring-danger) !important;
 }
-.dpb-foot-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.dpb-foot-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 .dpb-btn {
   appearance: none; cursor: pointer; height: 32px; padding: 0 14px; border-radius: 8px;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  /* OBS-1: a fixed-height pill must keep one text line; long locale labels
+     (EN "Approve (2 notes)") wrap onto a second row of the actions instead. */
+  flex: 0 0 auto; white-space: nowrap;
   border: 1px solid var(--dpb-line-strong); background: transparent; color: var(--dpb-soft);
   font: 600 12px/1 inherit; transition: all var(--dpb-duration-spring) var(--dpb-ease-spring);
 }

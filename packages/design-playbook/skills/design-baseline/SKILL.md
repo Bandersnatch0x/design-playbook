@@ -48,7 +48,7 @@ State is a cache, not authority. Every public call resolves paths against the su
 | --- | --- |
 | `ready` | Bound baseline (`decision.kind` = `existing` or `accepted`) |
 | `needs_confirmation` | Provenance-backed draft awaits accept/waive; `baseline_rejection` records why an existing candidate was not bound (`null` when none existed) |
-| `waived` | Explicit user waiver with non-empty reason |
+| `waived` | Explicit waiver confirmed by this run's user, carrying that user's non-empty reason |
 | `ambiguous` | Conflicting candidates; human choice required |
 
 ## Workflow
@@ -83,12 +83,12 @@ Never write or overwrite project `DESIGN.md` in this step.
 Show a compact summary: atmosphere, core tokens, typography, layout, primitives, conflicting evidence, inferred claims. Ask before the durable write.
 
 - **Accept:** `confirm(..., decision="accept")` atomically writes canonical `<project-root>/DESIGN.md` from the bound draft and returns a `ready` state. If a differing `DESIGN.md` already exists, the previous content is backed up byte-exact first and the state records it as `replaced_baseline` (`path`, `sha256`, `backup`); the CLI prints an overwrite warning with the backup path.
-- **Waive:** `confirm(..., decision="waive", reason=<user reason>)` does not write `DESIGN.md`. Existing-product Fill may continue only after this explicit waiver.
+- **Waive:** `confirm(..., decision="waive", reason=<user reason>)` does not write `DESIGN.md`. Existing-product Fill may continue only after this explicit waiver. A waiver belongs to the user, not the agent: recommending it is allowed, but **the first waiver of a run must be put to this run's user and answered there**, and `reason` carries what that user actually said. A waiver or ruling from an earlier run, another agent, or a surviving `state.json` is provenance, not this user's consent — the same boundary ADR-0033 draws for repository-stored preferences. Never call `confirm(..., "waive")` before this run's user has answered.
 - **Revise:** edit only the draft (or fix sources), then `prepare` again.
 
 Never infer acceptance from silence. Never replace a valid baseline merely because extraction found different implementation details; report the drift for a decision.
 
-**Done when:** `state.json` is `ready` (existing or accepted) or `waived` with a non-empty reason.
+**Done when:** `state.json` is `ready` (existing or accepted) or `waived` with a non-empty reason given by **this run's user**.
 
 ### 3a. Promote an adjudicated component (`promote`)
 

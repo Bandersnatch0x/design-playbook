@@ -1044,5 +1044,29 @@ class SkillLockstepTests(unittest.TestCase):
         self.assertIn("seen, omitted", text)
 
 
+    def test_capture_bytes_and_run_root_hatch_are_documented(self) -> None:
+        # DEF-4 / DEF-6 (T-087): the prose the orchestrator copies must match
+        # what the Provider writes (trace ZIP, aria_snapshot envelope) and what
+        # it accepts (per-call run_root).
+        orch = ORCH.read_text(encoding="utf-8")
+        observe = (
+            PKG / "skills" / "design-playbook" / "references" / "observe-ops.md"
+        ).read_text(encoding="utf-8")
+        for name, text in (("SKILL.md", orch), ("observe-ops.md", observe)):
+            with self.subTest(doc=name):
+                self.assertIn("aria_snapshot", text)
+                self.assertIn("run_root", text)
+                self.assertIn(".zip", text)
+        a11y_ref = (
+            PKG / "skills" / "ui-evaluator" / "references" / "a11y-tree.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("aria_snapshot", a11y_ref)
+        for skill in ("ux-spec", "craft-guard", "ui-evaluator"):
+            text = (PKG / "skills" / skill / "SKILL.md").read_text(encoding="utf-8")
+            with self.subTest(skill=skill):
+                self.assertNotIn("interaction-trace JSON", text)
+                self.assertIn("trace **ZIP**", text)
+
+
 if __name__ == "__main__":
     unittest.main()

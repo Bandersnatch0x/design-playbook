@@ -37,8 +37,10 @@ try:
         parse_capture_contract,
     )
     from design_playbook.mcp.evidence.path_syntax import (  # noqa: E402
+        TRACE_SUFFIX,
         lexical_posix_key,
         probe_sidecar_rel,
+        trace_artifact_error,
         trimmed_relpath,
     )
 except ImportError:  # standalone execution: same-dir seam (rules_registry pattern)
@@ -52,8 +54,10 @@ except ImportError:  # standalone execution: same-dir seam (rules_registry patte
     )
     from capture_contract import parse_capture_contract  # noqa: E402
     from path_syntax import (  # noqa: E402
+        TRACE_SUFFIX,
         lexical_posix_key,
         probe_sidecar_rel,
+        trace_artifact_error,
         trimmed_relpath,
     )
 
@@ -132,6 +136,14 @@ def preflight_entry(request: object, entry: int) -> list[PreflightFact]:
             facts.append(_error("bad_artifact_path", bad, entry,
                                 expected="relative path starting with "
                                          f"{ARTIFACT_PREFIX!r}",
+                                actual=artifact))
+        elif isinstance(capture_type, str) and (
+            name_error := trace_artifact_error(capture_type, artifact)
+        ):
+            # Same rule the Provider rejects with (path_syntax), reported here
+            # before a browser starts (DEF-6).
+            facts.append(_error("bad_artifact_extension", name_error, entry,
+                                expected=f"name ending in {TRACE_SUFFIX}",
                                 actual=artifact))
 
     actions = request.get("actions")

@@ -98,6 +98,31 @@ class PreflightPlanTests(unittest.TestCase):
                 self.assertEqual(_codes(facts), {"bad_artifact_path"},
                                  f"expected rejection for {path}")
 
+    def test_trace_artifact_extension_mirrors_provider_rule(self) -> None:
+        # DEF-6: the Provider writes a Playwright trace ZIP and refuses any
+        # other name, so preflight must not call such a plan clean.
+        self.assertEqual(
+            _codes(ep.preflight_entry(
+                _entry(type="interaction trace", artifact_path="evidence/t.json"), 1
+            )),
+            {"bad_artifact_extension"},
+        )
+        for ok_path in ("evidence/t.trace.zip", "evidence/t.ZIP"):
+            with self.subTest(artifact_path=ok_path):
+                self.assertEqual(
+                    _codes(ep.preflight_entry(
+                        _entry(type="interaction trace", artifact_path=ok_path), 1
+                    )),
+                    set(),
+                )
+        # the rule is trace-only: other types keep their own extensions
+        self.assertEqual(
+            _codes(ep.preflight_entry(
+                _entry(type="a11y tree", artifact_path="evidence/t.json"), 1
+            )),
+            set(),
+        )
+
     def test_action_parameter_requirements(self) -> None:
         facts = ep.preflight_entry(_entry(actions=[
             {"do": "click"},

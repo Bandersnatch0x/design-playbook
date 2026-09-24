@@ -19,6 +19,7 @@ if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
 from tests.preview.test_browser_control import _write_control_page  # noqa: E402
+from design_playbook.mcp.preview import i18n  # noqa: E402
 from design_playbook.mcp.preview.control import _build_control  # noqa: E402
 from design_playbook.mcp.preview.review_session import _build_parent_page  # noqa: E402
 
@@ -442,3 +443,58 @@ def test_compact_workspace_keeps_canvas_usable_and_rail_reachable(page, tmp_path
     expect(page.locator("#dpb-annotations-view")).to_be_hidden()
     page.click("#dpb-tab-annotations")
     expect(page.locator("#dpb-annotations-view")).to_be_visible()
+
+
+def test_english_approve_pills_stay_single_line(browser, tmp_path, monkeypatch):
+    # OBS-1 (T-087): the EN shell renders longer decision labels than zh-CN, so
+    # the Approve pill folded onto two lines inside a fixed-height button and
+    # its "Ctrl/⌘↵" badge lost glyphs at the rail width. Same contract must hold
+    # in EN at the RC window size.
+    monkeypatch.setenv("DPB_PREVIEW_LANG", "en")
+    url = _write_control_page(
+        tmp_path, [], lang="en", options=("Approve", "Revise")
+    )
+    label = i18n.t("approve_ready", n=2)
+    assert label == "Approve (2 notes)", label
+    page = browser.new_page(viewport={"width": 1257, "height": 773})
+    page.goto(url)
+    facts = page.evaluate(
+        """(text) => {
+      const out = {};
+      const pill = (spanId, btnId) => {
+        const btn = document.getElementById(btnId);
+        const span = document.getElementById(spanId);
+        span.textContent = text;
+        const b = btn.getBoundingClientRect();
+        const kbd = btn.querySelector('kbd');
+        const k = kbd ? kbd.getBoundingClientRect() : null;
+        out[btnId] = {
+          lines: span.getClientRects().length,
+          width: Math.round(span.getBoundingClientRect().width),
+          overflowY: btn.scrollHeight - btn.clientHeight,
+          kbdCut: k ? (k.right > b.right + 0.5 || k.left < b.left - 0.5 ||
+                       kbd.scrollWidth - kbd.clientWidth > 0.5) : false,
+        };
+      };
+      pill('dpb-approve-label', 'dpb-btn-approve');
+      pill('dpb-approve-label-drawer', 'dpb-approve-drawer');
+      const draft = document.getElementById('dpb-draft');
+      const range = document.createRange();
+      range.selectNodeContents(draft);
+      out.dpbDraft = {
+        lines: range.getClientRects().length,
+        overflowY: draft.scrollHeight - draft.clientHeight,
+      };
+      return out;
+    }""",
+        label,
+    )
+    page.close()
+    for btn_id in ("dpb-btn-approve", "dpb-approve-drawer"):
+        row = facts[btn_id]
+        assert row["width"] > 0, f"{btn_id} label was not laid out"
+        assert row["lines"] == 1, f"{btn_id} label folded to {row['lines']} lines"
+        assert row["overflowY"] <= 0, f"{btn_id} content overflowed its box"
+        assert not row["kbdCut"], f"{btn_id} shortcut badge is clipped"
+    assert facts["dpbDraft"]["lines"] == 1, "draft button label folded"
+    assert facts["dpbDraft"]["overflowY"] <= 0, "draft button overflowed its box"

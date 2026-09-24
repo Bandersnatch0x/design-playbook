@@ -49,7 +49,10 @@ def _tool_schema() -> dict[str, Any]:
                         'v1: "screenshot" | "a11y tree" | "interaction trace". '
                         "A screenshot capture also writes a sibling "
                         ".probe.json page-probe artifact (facts, not a "
-                        "judgment) when the adapter can probe."
+                        "judgment) when the adapter can probe. An a11y tree "
+                        "is a JSON envelope {format, tree} whose tree is "
+                        "Playwright aria_snapshot text; an interaction trace "
+                        "is a Playwright trace ZIP (name it .zip)."
                     ),
                     "enum": ["screenshot", "a11y tree", "interaction trace"],
                 },
@@ -77,6 +80,17 @@ def _tool_schema() -> dict[str, Any]:
                         "Relative artifact path under the evidence/ subtree of "
                         "the configured run root (must already start with "
                         "'evidence/'). Provider only writes this file."
+                    ),
+                },
+                "run_root": {
+                    "type": "string",
+                    "description": (
+                        "Optional absolute run root (.scratch/<run>/) for THIS "
+                        "call only, overriding DESIGN_PLAYBOOK_RUN_ROOT / "
+                        "process cwd. Use it when the MCP process was started "
+                        "without the env var and cannot be restarted; the "
+                        "directory must exist and carry a run marker "
+                        "(plan.md or point-back.md)."
                     ),
                 },
                 "overwrite": {

@@ -31,3 +31,29 @@ def probe_sidecar_rel(artifact_rel: str) -> str:
     if "." in artifact_rel.rsplit("/", 1)[-1]:
         return artifact_rel.rsplit(".", 1)[0] + ".probe.json"
     return artifact_rel + ".probe.json"
+
+
+# On-disk shape of an interaction trace (DEF-6): ``tracing.stop(path=...)``
+# writes a Playwright trace ZIP, so any other extension mislabels binary bytes.
+TRACE_SUFFIX = ".zip"
+TRACE_EXAMPLE = "evidence/<criterion>.trace.zip"
+
+
+def trace_artifact_error(capture_type: str, artifact_rel: str) -> str:
+    """Naming error when a trace capture is not named ``.zip``; "" otherwise.
+
+    One definition for the capture runtime (hard reject) and the static
+    preflight (early fact), so a plan never passes preflight only to fail there.
+    An empty name is left to the required-field check at each call site.
+    """
+    if (
+        capture_type == "interaction trace"
+        and artifact_rel
+        and not artifact_rel.casefold().endswith(TRACE_SUFFIX)
+    ):
+        return (
+            "interaction trace artifacts are Playwright trace ZIP files — name "
+            f"artifact_path with a {TRACE_SUFFIX} extension (e.g. {TRACE_EXAMPLE}); "
+            f"got {artifact_rel!r}"
+        )
+    return ""
