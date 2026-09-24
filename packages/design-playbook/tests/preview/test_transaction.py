@@ -137,6 +137,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
                 "confirm_record_path": str(confirm_path),
                 "aborted": False,
                 "skipped": False,
+                "timeout": False,
                 "decision_id": result["decision_id"],
             },
         )
@@ -232,6 +233,27 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
         self.assertIsNone(confirm)
         self.assertIn("- rejected: true", log)
         self.assertIn("- rejection: invalid_token", log)
+
+    def test_timeout_submission_fails_floor_without_self_feed(self) -> None:
+        # T-086/DEF-5: the collect-timeout system text must never pass the
+        # ADR-0008 floor as if the user wrote it — floor is explicitly false.
+        result, confirm, log = self._run_submission(
+            {
+                "choice": "",
+                "feedback": "timeout waiting for user",
+                "timeout": True,
+                "aborted": True,
+                "anchors": [],
+            }
+        )
+
+        self.assertFalse(result["confirmed"])
+        self.assertFalse(result["floor_pass"])
+        self.assertTrue(result["timeout"])
+        self.assertEqual(result["feedback"], "timeout waiting for user")
+        self.assertIsNone(confirm)
+        self.assertIn("- timeout: true", log)
+        self.assertIn("- floor_pass: false", log)
 
     def test_same_binding_retry_repairs_without_collecting_again(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

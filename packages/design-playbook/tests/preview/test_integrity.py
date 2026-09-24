@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 # One import seam (ADR-0022): package root on sys.path once, then absolute
 # design_playbook.* imports below. No per-runtime sys.path adapters.
@@ -15,6 +17,7 @@ _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
+from design_playbook.mcp.preview import ledger  # noqa: E402
 from design_playbook.mcp.preview.integrity import (  # noqa: E402
     evaluate_feedback_floor,
     inspect_preview,
@@ -231,6 +234,83 @@ class PreviewIntegritySnapshotTests(unittest.TestCase):
             snapshot = inspect_preview(preview)
 
             self.assertFalse(snapshot.occurred)
+
+
+class PreviewLedgerGateTests(unittest.TestCase):
+    """T-086/DEF-2: run-external ledger union + orphan round INVALID."""
+
+    def test_ledger_orphan_round_is_invalid_not_silent_pass(self) -> None:
+        # Simulate the gate-wash attempt: move the round artifacts out of
+        # preview/ while the run-external ledger still registers them —
+        # G5 must stay INVALID with an observable reason.
+        from design_playbook.scripts.g5_preview import check_preview
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                tempfile.TemporaryDirectory() as ledger_tmp, \
+                mock.patch.dict(
+                    os.environ,
+                    {ledger.LEDGER_ENV_VAR: ledger_tmp},
+                ):
+            preview = Path(tmp) / "preview"
+            preview.mkdir()
+            ledger.append_record(
+                preview, {"round": 1, "confirmed": True, "floor_pass": True}
+            )
+
+            # Directory empty (records moved away): snapshot says no
+            # occurrence, but the ledger still has round 1.
+            findings = check_preview(preview, None)
+
+            self.assertEqual(len(findings), 1)
+            self.assertEqual(findings[0].rule_id, "G5.ledger_orphan_round")
+            self.assertIn("moved, renamed, or deleted", findings[0].message)
+
+    def test_no_ledger_and_no_artifacts_stays_conditional(self) -> None:
+        from design_playbook.scripts.g5_preview import check_preview
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                tempfile.TemporaryDirectory() as ledger_tmp, \
+                mock.patch.dict(
+                    os.environ,
+                    {ledger.LEDGER_ENV_VAR: ledger_tmp},
+                ):
+            preview = Path(tmp) / "preview"
+            preview.mkdir()
+
+            findings = check_preview(preview, None)
+
+            self.assertEqual(findings, [])
+
+    def test_transaction_appends_run_external_ledger_record(self) -> None:
+        from design_playbook.mcp.preview.transaction import (
+            run_preview_transaction,
+        )
+
+        def collect(*args: object, criteria: list[dict[str, str]]) -> dict:
+            return {
+                "choice": "确认通过", "feedback": "清晰",
+                "anchors": [], "aborted": False,
+            }
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                tempfile.TemporaryDirectory() as ledger_tmp, \
+                mock.patch.dict(
+                    os.environ,
+                    {ledger.LEDGER_ENV_VAR: ledger_tmp},
+                ):
+            prototype = Path(tmp) / "round-1.html"
+            prototype.write_text("reviewed", encoding="utf-8")
+
+            run_preview_transaction(
+                path_arg=str(prototype), html=None, summary="summary",
+                round_n=1, report_ref="report.md",
+                options=["确认通过", "需要修改"], collect=collect,
+            )
+
+            self.assertEqual(ledger.rounds_for(Path(tmp)), (1,))
+            wash_dir = Path(tmp) / "wash"
+            wash_dir.mkdir()
+            self.assertEqual(ledger.rounds_for(wash_dir), ())
 
 
 if __name__ == "__main__":

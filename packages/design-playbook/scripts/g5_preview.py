@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from design_playbook.scripts._diagnostics import Finding, finding
+from design_playbook.mcp.preview import ledger
 from design_playbook.mcp.preview.integrity import (
     ConfirmRecord,
     PreviewSnapshot,
@@ -168,8 +169,30 @@ def check_preview(
     if preview_dir is None:
         return []
     snapshot = snapshot or inspect_preview(preview_dir)
-    if not snapshot.occurred:
+    # T-086/DEF-2: occurrence takes the union of on-disk preview evidence
+    # and the run-external append-only ledger, so moving/renaming/deleting
+    # preview/ records cannot wash the gate into a no-preview pass.
+    ledger_rounds = ledger.rounds_for(preview_dir)
+    if not snapshot.occurred and not ledger_rounds:
         return []
+    # Union check: every registered round must still have on-disk artifacts.
+    # A round registered in the run-external ledger but absent from preview/
+    # means records were moved/renamed/deleted — an observable INVALID, never
+    # a pass (T-086/DEF-2 gate-wash prevention).
+    orphans = [r for r in ledger_rounds if r not in snapshot.rounds]
+    if orphans:
+        return [finding(
+            "G5.ledger_orphan_round",
+            "G5 preview: round record(s) registered outside the run tree are "
+            f"missing from preview/ (moved, renamed, or deleted): rounds "
+            f"{', '.join(str(r) for r in orphans)}",
+            owner="preview/",
+            expected="preview/ round artifacts for every registered round",
+            actual="run-external ledger has rounds with no preview/ artifacts",
+            repair="Restore the moved/deleted preview records, or re-run the "
+                   "affected rounds and confirm them; moving/renaming/deleting "
+                   "preview records is a prohibited gate-bypass attempt",
+        )]
 
     fact_findings = _g5_fact_findings(snapshot)
     if fact_findings and fact_findings[0].rule_id in {
