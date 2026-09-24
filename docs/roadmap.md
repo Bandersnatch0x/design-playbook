@@ -35,7 +35,7 @@ source of truth. See [ADR-0035](adr/0035-run-view-projection-authority.md).
 
 ## Delivered present
 
-As of 2026-09-22, the formal public release is `v0.24.4` (tag `v0.24.4`;
+As of 2026-09-24, the formal public release is `v0.25.0` (tag `v0.25.0`;
 npm `latest` on both installable packages). The shipped product is an
 installable Claude Code / Codex plugin, not a standalone application or
 hosted service. Its released surface includes:
@@ -52,16 +52,17 @@ hosted service. Its released surface includes:
   and installation diagnosis;
 - the local, single-run **Run Console** (shipped in v0.21.0): the secured
   loopback read surface over the Run snapshot v1 contract with the typed
-  refresh action. **Accepted, not yet in a released package:** the
-  Diagnostic export contract (preview plus participant-reviewed write under
-  the run's `trial-export/`) was accepted on 2026-09-22
-  ([ADR-0044](adr/0044-diagnostic-export-contract-v1.md)) and is implemented
-  on the unreleased working tree; it ships with the next release
-  transaction. The Console's public claim stays **local · experimental ·
-  trial-gated** until `G-RO-TRIAL-PASS` is satisfied by real external
-  evidence ([ADR-0043](adr/0043-product-beachhead-and-operator-continuation.md));
+  refresh action, plus the **Diagnostic export contract** (preview plus
+  participant-reviewed write under the run's `trial-export/`, accepted
+  2026-09-22 via [ADR-0044](adr/0044-diagnostic-export-contract-v1.md),
+  shipped in v0.25.0). The Console's public claim stays **local ·
+  experimental · trial-gated** until `G-RO-TRIAL-PASS` is satisfied by real
+  external evidence ([ADR-0043](adr/0043-product-beachhead-and-operator-continuation.md));
 - the Run Operator continuation surfaces (`run-status`, `run-handoff`,
-  `run-review`, Repair Packet, static handoff), shipped v0.22.0+.
+  `run-review`, Repair Packet, static handoff), shipped v0.22.0+;
+- design-io throughput hardening and the rebuilt Preview review shell
+  (inline annotation flow, single sidebar, gate-integrity ledger), plus the
+  `component-distill` design-backflow command, shipped v0.25.0.
 
 The exact installed surface and current operating model remain documented in
 the [README](../README.md), [product definition](../PRODUCT.md), and
