@@ -79,6 +79,26 @@ class ValidateGateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("VALIDATION PASSED", result.stdout)
 
+    def test_package_description_drift_fails(self) -> None:
+        package = self.root / "packages" / "design-playbook" / "package.json"
+        manifest = json.loads(package.read_text(encoding="utf-8"))
+        manifest["description"] = "An unrelated product claim"
+        package.write_text(json.dumps(manifest), encoding="utf-8")
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("package.json description matches plugin.json", result.stdout)
+
+    def test_catalog_description_drift_fails(self) -> None:
+        catalog = self.root / ".claude-plugin" / "marketplace.json"
+        manifest = json.loads(catalog.read_text(encoding="utf-8"))
+        manifest["plugins"][0]["description"] = "An unrelated catalog claim"
+        catalog.write_text(json.dumps(manifest), encoding="utf-8")
+        result = self.validate()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("marketplace description matches plugin.json", result.stdout)
+
     def _rewrite_codex_prompt(self, old: str, new: str) -> None:
         package = self.root / "packages" / "design-playbook"
         for relative in ("scripts/adapter_templates/codex-agents.md", "codex/AGENTS.md"):

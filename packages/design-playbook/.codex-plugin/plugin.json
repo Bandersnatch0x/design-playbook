@@ -1,7 +1,7 @@
 {
   "name": "design-playbook",
   "version": "0.25.0",
-  "description": "Design I/O for coding agents: controllable UI generation via declarations (spec/domain/craft/design/components/template) and contracts (skill/evaluator). Use for product UI—console, dashboard, agent-ops, CJK-first apps.",
+  "description": "Evidence-backed UI delivery for coding agents working on existing Web products: declared criteria, criterion-bound artifacts, findings linked to declarations, and repair guidance. Evaluator review does not replace human semantic approval.",
   "author": {
     "name": "Bandersnatch0x",
     "url": "https://github.com/Bandersnatch0x"

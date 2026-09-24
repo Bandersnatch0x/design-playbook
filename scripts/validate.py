@@ -70,6 +70,23 @@ check(bool(mj), f"marketplace.json present at repo root: {market_json}")
 check(bool(pj.get("version")), "plugin.json has explicit semver version")
 check(bool(pj.get("name")), "plugin.json has name")
 check(bool(pj.get("description")), "plugin.json has description")
+package_manifest = _read_json(PKG / "package.json")
+check(
+    bool(pj.get("description"))
+    and package_manifest.get("description") == pj.get("description"),
+    "package.json description matches plugin.json",
+)
+catalog_plugins = mj.get("plugins", [])
+catalog_plugin = next(
+    (entry for entry in catalog_plugins
+     if isinstance(entry, dict) and entry.get("name") == pj.get("name")),
+    {},
+)
+check(
+    bool(pj.get("description"))
+    and catalog_plugin.get("description") == pj.get("description"),
+    "marketplace description matches plugin.json",
+)
 
 print("== Plugin-root layout (ADR-0006) ==")
 check((PKG / "skills").is_dir(), "skills/ at plugin root")
