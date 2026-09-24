@@ -74,6 +74,11 @@ class ClosedLoopTests(unittest.TestCase):
             # 1. Distill (T-067): 4 runs / 4 scenes reuse the same component.
             runs = {f"run-{i}": _report(scene) for i, scene in enumerate(
                 ["console", "list", "settings", "dashboard"], 1)}
+            for run_id, report in runs.items():
+                run_dir = project / ".scratch" / run_id
+                run_dir.mkdir(parents=True, exist_ok=True)
+                (run_dir / "decision-report.md").write_text(
+                    report, encoding="utf-8")
             view = cc.candidate_view(runs)
             self.assertEqual(len(view["qualifying"]), 1)
             cand = view["qualifying"][0]

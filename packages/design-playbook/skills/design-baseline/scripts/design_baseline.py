@@ -782,6 +782,23 @@ def _load_user_promotions(project: Path, governance_log: Path | None) -> dict[st
     return _pg.user_promotions(events)
 
 
+def _current_component_candidates(project: Path) -> set[str]:
+    """Re-derive qualifying component targets at the durable write seam."""
+    try:
+        from design_playbook.scripts import component_candidates as _cc
+    except ImportError:  # standalone script import (skill payload)
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "component_candidates",
+            Path(__file__).resolve().parents[3] / "scripts"
+            / "component_candidates.py")
+        _cc = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = _cc
+        spec.loader.exec_module(_cc)  # type: ignore[union-attr]
+    view = _cc.project_candidate_view(project)
+    return {item["component"] for item in view["qualifying"]}
+
+
 _COMPONENT_SECTION = "Component Stylings"
 # Promoted tokens land in their own section (T-072), not in the extraction
 # template's ``## Color Palette & Roles`` etc., so a promoted token never
@@ -890,6 +907,14 @@ def promote(
             f"no user promotion decision for {target_name!r}; promotion is "
             "user-gated (record a promotion_decided/promote event first)")
 
+    source_path = None
+    if kind == "component":
+        source_path = _safe_relative_file(
+            project, target_name, "promoted component source")
+        if target_name not in _current_component_candidates(project):
+            raise BaselineError(
+                f"component is not currently promotion-qualified: {target_name}")
+
     canonical = project / relative
     if canonical.is_symlink():
         raise BaselineError("canonical DESIGN.md must not be a symlink")
@@ -916,10 +941,7 @@ def promote(
     # Record the promoted entry's source provenance (US-6): the on-disk source
     # hash at promotion time, so verify() can later detect drift of a promoted
     # component (D7). A promoted token names no file; its sha256 stays None.
-    source_sha = None
-    if kind == "component":
-        source_sha = _sha256(project / target_name) \
-            if (project / target_name).is_file() else None
+    source_sha = _sha256(source_path) if source_path is not None else None
     state.setdefault("promotions", []).append({
         "kind": kind,
         "target": target_name,
@@ -1047,8 +1069,10 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"error": str(error)}, ensure_ascii=False), file=sys.stderr)
         return 2
     replaced = result.get("replaced_baseline")
-    if isinstance(replaced, dict) and replaced.get("backup"):
-        # The overwrite is explicit in the output, not just in the state.
+    if (args.command == "confirm" and isinstance(replaced, dict)
+            and replaced.get("backup")):
+        # Only the command that performed the replacement emits this warning;
+        # later verify calls return historical state without replaying it.
         print(
             f"WARNING: accept replaced the existing {replaced.get('path')}; "
             f"the previous content is backed up at {replaced['backup']}",

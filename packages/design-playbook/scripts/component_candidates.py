@@ -42,8 +42,11 @@ KIND_TOKEN = "token"
 
 UNSPECIFIED_SCENE = "(unspecified)"
 
-# ```text fenced top block of a decision report.
+# ```text fenced top block of a decision report. Older reports may expose the
+# same Fill face as unfenced top matter; in that case parsing stops before the
+# first appended DD entry.
 _FENCE_RE = re.compile(r"```text\n(.*?)```", re.DOTALL)
+_DD_ENTRY_RE = re.compile(r"(?m)^##\s+DD-")
 # One components: entry — "<role> -> reuse <path> (reason)"; the path token
 # carries no whitespace. extend counts too (a reused component needing a
 # documented variant); new is a gap and is ignored for candidacy.
@@ -53,6 +56,7 @@ _COMPONENT_LINE_RE = re.compile(
     r"(?:\s+(?P<path>\S+))?",
     re.IGNORECASE)
 _SCENE_LINE_RE = re.compile(r"^scene\s*:\s*(?P<scene>.+)$", re.IGNORECASE)
+_PATH_SUFFIX_RE = re.compile(r"\.[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 @dataclass(frozen=True)
@@ -106,15 +110,31 @@ class ComponentCandidate:
         }
 
 
-def parse_component_references(text: str, run: str) -> list[ComponentReference]:
-    """Parse the reusable-component references out of one decision report.
+def _valid_component_path(value: str) -> bool:
+    """Return whether a reported reuse target resembles a project path."""
+    if not value or any(char in value for char in "(),，（）"):
+        return False
+    if value.startswith(("/", "\\")) or "://" in value:
+        return False
+    parts = value.replace("\\", "/").split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        return False
+    return len(parts) > 1 or bool(_PATH_SUFFIX_RE.search(value))
 
-    Reads the first ```text fenced block (the Fill consumption face); the
-    trailing DD entry blocks are yaml and carry no components: section.
+
+def _scene_identity(value: str) -> str:
+    """Count explanatory scene labels by their controlled leading value."""
+    return re.split(r"[（(]", value.strip(), maxsplit=1)[0].strip()
+
+
+def parse_component_references(text: str, run: str) -> list[ComponentReference]:
+    """Parse reusable-component references from a decision report's Fill face.
+
+    Prefer the first ```text fenced block. For legacy/unfenced reports, parse
+    the top matter only and stop before appended ``## DD-*`` entries.
     """
     match = _FENCE_RE.search(text)
-    if not match:
-        return []
+    surface = match.group(1) if match else _DD_ENTRY_RE.split(text, maxsplit=1)[0]
     scene = ""
     refs: list[ComponentReference] = []
     in_components = False
@@ -125,8 +145,8 @@ def parse_component_references(text: str, run: str) -> list[ComponentReference]:
             return
         action = ref_match.group("action").lower()
         path = (ref_match.group("path") or "").strip()
-        if action == "new" or not path:
-            return  # a gap records no reusable component
+        if action == "new" or not _valid_component_path(path):
+            return  # a gap or prose value records no reusable component
         refs.append(ComponentReference(
             run=run,
             role=ref_match.group("role").strip(),
@@ -135,7 +155,7 @@ def parse_component_references(text: str, run: str) -> list[ComponentReference]:
             scene=scene,
         ))
 
-    for line in match.group(1).splitlines():
+    for line in surface.splitlines():
         stripped = line.strip()
         if not in_components:
             scene_match = _SCENE_LINE_RE.match(stripped)
@@ -183,6 +203,26 @@ def parse_evidence_file(path: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def project_candidate_view(project_root: Path | str) -> dict:
+    """Derive the current candidate view from a project's run artifacts."""
+    project = Path(project_root).resolve()
+    scratch = project / ".scratch"
+    reports: dict[str, str] = {}
+    evidence: dict[str, dict] = {}
+    if scratch.is_dir():
+        for run in sorted(scratch.iterdir(), key=lambda path: path.name):
+            if not run.is_dir() or run.is_symlink():
+                continue
+            report = run / "decision-report.md"
+            if report.is_file() and not report.is_symlink():
+                reports[run.name] = report.read_text(encoding="utf-8")
+            evidence_path = run / "design-baseline" / "evidence.json"
+            if evidence_path.is_file() and not evidence_path.is_symlink():
+                evidence[run.name] = parse_evidence_file(evidence_path)
+    return candidate_view(
+        reports, evidence_by_run=evidence, project_root=project)
+
+
 def derive_candidates(
         references: list[ComponentReference],
         *,
@@ -213,7 +253,7 @@ def derive_candidates(
     if evidence_by_run:
         for run_id, evidence in evidence_by_run.items():
             for component in evidence.get("components", []):
-                if not isinstance(component, str):
+                if not isinstance(component, str) or not _valid_component_path(component):
                     continue
                 already = any(
                     ref.run == run_id for ref in groups.get(component, []))
@@ -226,7 +266,7 @@ def derive_candidates(
     for sequence, (path, group) in enumerate(
             sorted(groups.items(), key=lambda item: item[0]), 1):
         distinct_runs = len({ref.run for ref in group})
-        scenes = {ref.scene.strip() or UNSPECIFIED_SCENE for ref in group}
+        scenes = {_scene_identity(ref.scene) or UNSPECIFIED_SCENE for ref in group}
         gaps: list[str] = []
         if distinct_runs < min_distinct_runs:
             gaps.append(f"distinct_runs {distinct_runs} < {min_distinct_runs}")

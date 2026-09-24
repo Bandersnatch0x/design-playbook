@@ -8,7 +8,9 @@ In-process via the same importlib seam as test_design_baseline.py.
 """
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import json
 import sys
 import tempfile
@@ -63,6 +65,18 @@ def _frontend(project: Path) -> Path:
     return theme
 
 
+def _candidate_history(project: Path, target: str = COMPONENT,
+                       scenes: tuple[str, ...] = ("console", "list", "settings")) -> None:
+    for index, scene in enumerate(scenes, 1):
+        run = project / ".scratch" / f"candidate-{index}"
+        run.mkdir(parents=True, exist_ok=True)
+        (run / "decision-report.md").write_text(
+            "# Decision report\n\n```text\n"
+            f"scene: {scene}\ncomponents:\n"
+            f"  primary-action -> reuse {target} (stable)\n```\n",
+            encoding="utf-8")
+
+
 def _ready_baseline(project: Path, run: Path,
                     seed_component: bool = True) -> None:
     """Generate + accept a baseline (the reliable ready path), then inject a
@@ -72,6 +86,11 @@ def _ready_baseline(project: Path, run: Path,
     design_baseline.prepare(project, run)
     binding = design_baseline.confirm(project, run, decision="accept")
     assert binding["status"] == "ready", binding
+    promoted = project / COMPONENT
+    promoted.parent.mkdir(parents=True, exist_ok=True)
+    promoted.write_text("export function Button() { return null; }\n",
+                        encoding="utf-8")
+    _candidate_history(project)
     if not seed_component:
         return
     design = project / "DESIGN.md"
@@ -166,6 +185,48 @@ class PromoteTests(unittest.TestCase):
             self.assertTrue(backup.is_file())
             self.assertEqual(backup.read_bytes(), prior)
             self.assertEqual(result["status"], "ready")
+
+    def test_verify_cli_does_not_replay_historical_replacement_warning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project, run = self._project_with_baseline(tmp)
+            _write_event(project / "promotion-governance.jsonl",
+                         _promote_event())
+            design_baseline.promote(project, run, COMPONENT,
+                                    f"primary-action: {COMPONENT}")
+            for _ in range(2):
+                stderr = io.StringIO()
+                with contextlib.redirect_stdout(io.StringIO()), \
+                        contextlib.redirect_stderr(stderr):
+                    code = design_baseline.main(
+                        ["verify", str(project), str(run)])
+                self.assertEqual(code, 0)
+                self.assertNotIn("accept replaced", stderr.getvalue())
+                self.assertEqual(stderr.getvalue(), "")
+
+    def test_refuses_component_below_current_threshold(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project, run = self._project_with_baseline(tmp)
+            for stale in (project / ".scratch" / "candidate-2",
+                          project / ".scratch" / "candidate-3"):
+                (stale / "decision-report.md").unlink()
+            _write_event(project / "promotion-governance.jsonl",
+                         _promote_event())
+            before = (project / "DESIGN.md").read_bytes()
+            with self.assertRaisesRegex(
+                    design_baseline.BaselineError, "not currently promotion-qualified"):
+                design_baseline.promote(project, run, COMPONENT, "x")
+            self.assertEqual((project / "DESIGN.md").read_bytes(), before)
+
+    def test_refuses_missing_component_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project, run = self._project_with_baseline(tmp)
+            missing = "src/ui/Missing.tsx"
+            _candidate_history(project, target=missing)
+            _write_event(project / "promotion-governance.jsonl",
+                         _promote_event(missing))
+            with self.assertRaisesRegex(
+                    design_baseline.BaselineError, "does not exist"):
+                design_baseline.promote(project, run, missing, "x")
 
     def test_refuses_without_user_promote_event(self):
         with tempfile.TemporaryDirectory() as tmp:

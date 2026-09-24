@@ -25,7 +25,9 @@ Derivation lives in [`../../scripts/component_candidates.py`](../../scripts/comp
 candidate_view(reports_by_run) -> dict   # qualifying + below_threshold + gaps
 ```
 
-`reports_by_run` maps a run id to its `decision-report.md` text. The module parses each report's `components:` block, counts `reuse <path>` / `extend <path>` as one recurrence of that component path (a `new` entry is a gap, never a candidate), and qualifies a candidate when it recurs across **distinct runs ≥ 3 AND distinct scenes ≥ 2**. Every group is returned — qualifying first, then below-threshold signals with their gap list — so distance to qualification is visible, never silent.
+`reports_by_run` maps a run id to its `decision-report.md` text. The module prefers the Fill face in a `text` code fence, but also accepts legacy reports whose Fill face is unfenced top matter (parsing stops before the first `## DD-*` entry). It parses `components:`, counts only path-shaped `reuse <path>` / `extend <path>` targets (a `new` entry or prose such as “no component” is not a candidate), and qualifies a candidate when it recurs across **distinct runs ≥ 3 AND distinct scenes ≥ 2**; explanatory suffixes in `scene` after `(` / `（` do not create a new scene identity. Every group is returned — qualifying first, then below-threshold signals with their gap list — so distance to qualification is visible, never silent.
+
+Candidate identity is currently the **referenced file path**. Multiple selectors or semantic primitives implemented in one file therefore remain one candidate; changing identity to `path#selector` (and migrating governance targets, provenance, and merge semantics) is a separate schema-level change, not inferred by this skill.
 
 ## Workflow
 
@@ -36,7 +38,8 @@ candidate_view(reports_by_run) -> dict   # qualifying + below_threshold + gaps
    - **Qualifying candidates** — one block per candidate: component path, recurrence, distinct runs, distinct scenes, the contributing references (`run / role / action / scene`), and a **decision slot** for the user (`promote | reject | defer`).
    - **Below threshold** — candidates approaching the threshold with their gap list (e.g. `distinct_runs 2 < 3`), so the distance is visible.
    - **Coverage** — `runs_with_components` / `total_references`, so an empty corpus reads as "no qualifying candidates + why", never silence.
-4. **Adjudicate (user).** Present the proposal; the user marks each qualifying candidate. Record the decision as a governance event (agent may append `promotion_candidate_opened`; only the user's `promotion_decided` carries `promote`/`reject`/`defer`). This skill stops at the proposal — it does not write `DESIGN.md`.
+4. **Adjudicate (user).** Present the proposal; the user marks each qualifying candidate. Record the decision as a governance event (agent may append `promotion_candidate_opened`; only the user's `promotion_decided` carries `promote`/`reject`/`defer`). In this local-file architecture, `decided_by: user` is an explicit attestation enforced by the read/write protocol, not cryptographic or OS-backed identity authentication; processes with filesystem write access remain inside the local trust boundary. This skill stops at the proposal — it does not write `DESIGN.md`.
+5. **Promote through the write seam.** `design_baseline.py promote` re-derives the current project candidate view and refuses a component that is no longer threshold-qualified or whose project-relative source file does not exist, even when an older user decision is present.
 
 **Done when:** the proposal artifact exists at the named output path, qualifying candidates carry full provenance and a decision slot, below-threshold signals carry their gaps, and nothing under the project `DESIGN.md` was touched.
 

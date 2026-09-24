@@ -90,11 +90,15 @@ Never infer acceptance from silence. Never replace a valid baseline merely becau
 
 **Done when:** `state.json` is `ready` (existing or accepted) or `waived` with a non-empty reason.
 
+### 3a. Promote an adjudicated component (`promote`)
+
+A component promotion requires both a user `promotion_decided/promote` governance event and a fresh execution-time check: the source must be a real project-relative file and the current `.scratch/<run>/decision-report.md` history must still meet the component threshold. The governance event alone is not a durable bypass for stale or fabricated candidates. Token promotion remains governed separately because token candidate extraction is a different input seam.
+
 ### 4. Verify before Fill (`verify`)
 
 Immediately before Fill (and any time a consumer needs a binding), call `verify(project_root, run_root)`.
 
-- Re-checks path containment, baseline hash, source freshness, and provenance alignment.
+- Re-checks path containment, baseline hash, source freshness, and provenance alignment. Promoted component sources are bound by `source_sha256`; source drift fails closed and requires a fresh adjudication/promotion rather than silently updating the binding.
 - Rejects forged `state.json`, stale sources, candidate conflicts, and symlink escape.
 - On success, returns the binding: baseline path + sha256 (or an explicit waiver).
 

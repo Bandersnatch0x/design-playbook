@@ -64,9 +64,24 @@ class ParseTests(unittest.TestCase):
             {r.path for r in refs},
             {"src/ui/Button.tsx", "src/ui/Badge.tsx"})
 
-    def test_no_fence_yields_no_references(self):
+    def test_unfenced_fill_face_is_parsed_before_dd_entries(self):
+        text = ("# Decision report\n\nscene: list（dense operations table）\n"
+                "components:\n"
+                "  primary-action -> reuse src/ui/Button.tsx (ok)\n\n"
+                "## DD-001\n\n```yaml\ncomponents: forged\n```\n")
+        refs = cc.parse_component_references(text, run="run-1")
+        self.assertEqual([ref.path for ref in refs], ["src/ui/Button.tsx"])
+
+    def test_no_components_yields_no_references(self):
         self.assertEqual(
             cc.parse_component_references("no block here", run="run-1"), [])
+
+    def test_prose_reuse_target_is_not_a_component_path(self):
+        refs = cc.parse_component_references(
+            _report("list", [
+                "action-text -> reuse 无组件(纯文本单元格,category...)"
+            ]), run="run-1")
+        self.assertEqual(refs, [])
 
     def test_reference_without_path_is_dropped(self):
         refs = cc.parse_component_references(
@@ -98,6 +113,12 @@ class DeriveTests(unittest.TestCase):
         (cand,) = cc.derive_candidates(refs)
         self.assertFalse(cand.qualifies)
         self.assertTrue(any("distinct_runs" in g for g in cand.gaps))
+
+    def test_scene_explanations_do_not_inflate_distinct_scene_count(self):
+        refs = self._refs("src/ui/Button.tsx", ["r1", "r2", "r3"],
+                          ["list（table）", "list（cards）", "dashboard(chart)"])
+        (cand,) = cc.derive_candidates(refs)
+        self.assertEqual(cand.distinct_scenes, 2)
 
     def test_below_threshold_reports_scene_gap(self):
         refs = self._refs("src/ui/Button.tsx", ["r1", "r2", "r3"],
@@ -190,6 +211,15 @@ class ViewTests(unittest.TestCase):
         self.assertEqual(len(no_leg["qualifying"]), 0)
         self.assertEqual(len(with_leg["qualifying"]), 1)
         self.assertEqual(with_leg["qualifying"][0]["distinct_runs"], 3)
+
+    def test_evidence_prose_value_is_filtered(self):
+        reports = {"r1": _report("console", ["status -> new (gap)"])}
+        evidence = {"r1": {"components": [
+            "无组件(纯文本单元格,category...)", "src/ui/Button.tsx"]}}
+        view = cc.candidate_view(reports, evidence_by_run=evidence)
+        self.assertEqual(
+            [item["component"] for item in view["below_threshold"]],
+            ["src/ui/Button.tsx"])
 
     def test_candidate_carries_source_sha256_provenance(self):
         """P2: with a project_root, a candidate resolves its on-disk source
