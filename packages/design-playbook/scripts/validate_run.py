@@ -657,4 +657,11 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
+    # T-081 family: under a pipe the Windows default stdout codec is cp936,
+    # and any non-GBK byte in findings (CJK, quotes) crashes the caller's
+    # UTF-8 reader thread. Emit UTF-8 deterministically.
+    if not sys.stdout.isatty() and hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if not sys.stderr.isatty() and hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
     sys.exit(main(sys.argv))
