@@ -556,6 +556,9 @@ def collect_review(
                 {
                     "choice": "",
                     "feedback": "timeout waiting for user",
+                    # T-086/DEF-5: mark the timeout so the transaction never
+                    # evaluates this system text against the ADR-0008 floor.
+                    "timeout": True,
                     "aborted": True,
                     "anchors": [],
                 }

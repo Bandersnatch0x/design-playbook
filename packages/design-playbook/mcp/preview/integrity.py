@@ -93,6 +93,7 @@ class PreviewSnapshot:
     current_confirms: tuple[ConfirmRecord, ...]
     canonical_current_confirm: ConfirmRecord | None
     facts: tuple[IntegrityFact, ...]
+    rounds: tuple[int, ...] = ()
 
 
 def evaluate_feedback_floor(
@@ -403,4 +404,5 @@ def inspect_preview(preview_dir: Path) -> PreviewSnapshot:
         current_confirms=tuple(current_records),
         canonical_current_confirm=canonical_current_confirm,
         facts=tuple(facts),
+        rounds=tuple(sorted(set(rounds))),
     )

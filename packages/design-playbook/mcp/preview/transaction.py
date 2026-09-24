@@ -22,6 +22,7 @@ if os.name == "nt":
 else:
     import fcntl
 
+from design_playbook.mcp.preview import ledger
 from design_playbook.mcp.preview.control import _format_feedback
 from design_playbook.mcp.preview.i18n import CONFIRM_LABELS, SKIP_LABELS
 from design_playbook.mcp.preview.integrity import (
@@ -685,6 +686,8 @@ def render_log(entries: list[dict[str, Any]]) -> str:
             f"- anchors: {len(anchors)}",
             f"- floor_pass: {str(bool(outcome.get('floor_pass'))).lower()}",
         ]
+        if outcome.get("timeout"):
+            lines.append("- timeout: true")
         if outcome.get("floor_failure"):
             lines.append(f"- floor_failure: {outcome['floor_failure']}")
         if outcome.get("rejected"):
@@ -707,6 +710,21 @@ def valid_entries(preview_dir: Path) -> list[dict[str, Any]]:
         if entry is not None:
             entries.append(entry)
     return entries
+
+
+def _ledger_record(entry: dict[str, Any]) -> dict[str, Any]:
+    """T-086/DEF-2: the run-external registration for one committed round."""
+    binding = entry["binding"]
+    outcome = entry["outcome"]
+    return {
+        "round": int(binding["round"]),
+        "decision_id": entry["decision_id"],
+        "timestamp": entry["timestamp"],
+        "confirmed": outcome["confirmed"],
+        "floor_pass": outcome["floor_pass"],
+        "aborted": outcome["aborted"],
+        "binding_digest": binding["digest"],
+    }
 
 
 def _commit_projections_unlocked(preview_dir: Path, entry: dict[str, Any]) -> str:
@@ -767,6 +785,7 @@ def _result(entry: dict[str, Any], confirm_path: str) -> dict[str, Any]:
         "confirm_record_path": confirm_path,
         "aborted": outcome["aborted"],
         "skipped": bool(outcome.get("skipped")),
+        "timeout": bool(outcome.get("timeout")),
         "decision_id": entry["decision_id"],
     }
     if outcome.get("criteria_review"):
@@ -860,6 +879,9 @@ def _run_locked(
                 retryable=False, round_n=round_n,
                 decision_id=str(existing["decision_id"]), artifact=str(entry_path),
             )
+        # T-086/DEF-2: repair the run-external registration if a crash landed
+        # between the entry write and the ledger append (append-only, idempotent).
+        ledger.append_record(preview_dir, _ledger_record(existing))
         confirm_path = _commit_projections(preview_dir, existing)
         return _result(existing, confirm_path)
 
@@ -881,6 +903,10 @@ def _run_locked(
     criteria_review = _criteria_review_from_submission(submission, criteria)
     rejected = bool(submission.get("rejected"))
     aborted = bool(submission.get("aborted"))
+    # T-086/DEF-5: a collect timeout is a system state, never user feedback —
+    # it must not be fed to the ADR-0008 floor (the "timeout waiting for
+    # user" text previously passed the floor as if the user wrote it).
+    timed_out = bool(submission.get("timeout"))
     choice = str(submission.get("choice") or "")
     selected = [] if aborted or rejected or not choice else [choice]
 
@@ -896,6 +922,9 @@ def _run_locked(
     if rejected:
         floor_pass = False
         floor_failure = str(submission.get("floor_failure") or "")
+    elif timed_out:
+        floor_pass = False
+        floor_failure = "preview timed out waiting for user input"
     elif is_skip:
         floor_pass = True
         floor_failure = ""
@@ -930,10 +959,14 @@ def _run_locked(
             "rejected": rejected,
             "rejection": str(submission.get("rejection") or ""),
             "skipped": is_skip,
+            "timeout": timed_out,
         },
     }
     if criteria_review:
         entry["outcome"]["criteria_review"] = criteria_review
     atomic_write(entry_path, json_text(entry))
+    # T-086/DEF-2: register the committed round outside the run tree so the
+    # G5 gate survives records being moved/renamed/deleted from preview/.
+    ledger.append_record(preview_dir, _ledger_record(entry))
     confirm_path = _commit_projections(preview_dir, entry)
     return _result(entry, confirm_path)
