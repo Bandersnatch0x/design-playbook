@@ -238,6 +238,8 @@ class EvidencePurePathTests(unittest.TestCase):
         self.assertEqual(schema["properties"]["schemaVersion"]["const"], 1)
         self.assertIn("viewport", schema["required"])
         self.assertIn("freeze", schema["properties"])
+        # DEF-4: the dev-mode run-root escape hatch must be discoverable.
+        self.assertIn("run_root", schema["properties"])
 
     def test_runtime_rejects_unknown_fields(self) -> None:
         for forbidden in ("criterion", "criterion_ref", "criterion_id", "unexpected"):
@@ -330,6 +332,81 @@ class EvidencePurePathTests(unittest.TestCase):
                     "evidence/x.png", "ok", str(run_dir / "evidence" / "x.png"), request
                 )
             self.assertNotIn("warnings", payload)
+
+    def test_run_root_argument_redirects_one_capture(self) -> None:
+        # DEF-4: a `--plugin-dir` dev host cannot edit DESIGN_PLAYBOOK_RUN_ROOT
+        # after the server starts. `run_root` binds the run root for one call so
+        # evidence lands inside the run tree; the next call falls back again.
+        env = {key: value for key, value in os.environ.items()
+               if key != capture_runtime.RUN_ROOT_ENV}
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            run_dir = workspace / ".scratch" / "run-1"
+            (run_dir / "evidence").mkdir(parents=True)
+            (run_dir / "plan.md").write_text("# plan", encoding="utf-8")
+            fake = _FakeBrowserAdapter("ready")
+            with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(
+                capture_runtime.Path, "cwd", return_value=workspace
+            ):
+                payload = capture_runtime.execute_capture_plan(
+                    _v1_capture_args(run_root=str(run_dir)), fake
+                )
+                self.assertEqual(payload["result"], "captured", payload)
+                self.assertTrue((run_dir / "evidence" / "x.png").is_file())
+                self.assertNotIn("warnings", payload)
+                stray = capture_runtime.execute_capture_plan(
+                    _v1_capture_args(artifact_path="evidence/y.png"), fake
+                )
+            self.assertEqual(stray["result"], "captured", stray)
+            self.assertIn("warnings", stray)
+            self.assertIn("run_root", stray["warnings"][0])
+            self.assertTrue((workspace / "evidence" / "y.png").is_file())
+
+    def test_run_root_argument_rejects_roots_that_are_not_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            bare = workspace / "not-a-run"
+            bare.mkdir()
+            cases = [
+                ("non-string", 7, "non-empty absolute path string"),
+                ("relative path", "evidence", "absolute"),
+                ("missing directory", str(workspace / "nope"), "not an existing directory"),
+                ("markerless directory", str(bare), "run marker"),
+            ]
+            for label, value, expected in cases:
+                with self.subTest(case=label):
+                    payload = capture_runtime.execute_capture_plan(
+                        _v1_capture_args(run_root=value), _FakeBrowserAdapter()
+                    )
+                    self.assertEqual(payload["result"], "failed", payload)
+                    self.assertIn(expected, payload["error"])
+            self.assertFalse((bare / "evidence").exists())
+            self.assertFalse((workspace / "evidence").exists())
+
+    def test_interaction_trace_must_be_named_zip(self) -> None:
+        # DEF-6: the adapter writes a Playwright trace ZIP, so a `.json` name
+        # promises bytes that never exist (RC run had to sniff the binary).
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with mock.patch.object(capture_runtime, "_run_root", return_value=root):
+                bad = capture_runtime.execute_capture_plan(
+                    _v1_capture_args(
+                        type="interaction trace", artifact_path="evidence/t.json"
+                    ),
+                    _FakeBrowserAdapter(),
+                )
+                good = capture_runtime.execute_capture_plan(
+                    _v1_capture_args(
+                        type="interaction trace",
+                        artifact_path="evidence/t.trace.zip",
+                    ),
+                    _FakeBrowserAdapter(),
+                )
+            self.assertEqual(bad["result"], "failed", bad)
+            self.assertIn(".zip", bad["error"])
+            self.assertEqual(good["result"], "captured", good)
+            self.assertTrue((root / "evidence" / "t.trace.zip").is_file())
+            self.assertFalse((root / "evidence" / "t.json").exists())
 
     def test_runtime_rejects_non_evidence_subtree_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -728,6 +805,9 @@ class EvidenceCaptureTests(unittest.TestCase):
                     self.assertTrue(artifact.is_file(), artifact)
                     if capture_type == "a11y tree":
                         parsed = json.loads(artifact.read_text(encoding="utf-8"))
+                        # DEF-6: documented envelope, not a node/role tree.
+                        self.assertEqual(parsed["format"], "aria_snapshot")
+                        self.assertIn("Export jobs", parsed["tree"])
                         serialized = json.dumps(parsed, ensure_ascii=False)
                         self.assertIn("Export jobs", serialized)
                         self.assertIn("Retry", serialized)

@@ -11,7 +11,8 @@ from __future__ import annotations
 import json
 import math
 import os
-from pathlib import Path
+from contextvars import ContextVar
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Protocol
 
 from design_playbook.mcp.evidence import containment
@@ -22,6 +23,7 @@ from design_playbook.mcp.evidence.action_params import (
 from design_playbook.mcp.evidence.capture_contract import parse_capture_contract
 from design_playbook.mcp.evidence.path_syntax import (
     probe_sidecar_rel,
+    trace_artifact_error,
     trimmed_relpath,
 )
 from design_playbook.mcp.evidence.disclosure import (
@@ -50,6 +52,7 @@ ALLOWED_ARGUMENTS = frozenset(
         "viewport",
         "freeze",
         "storage_state",
+        "run_root",
     }
 )
 RUN_ROOT_ENV = "DESIGN_PLAYBOOK_RUN_ROOT"
@@ -278,13 +281,55 @@ def _apply_freeze(page: Any, freeze: dict[str, Any]) -> None:
 _RUN_MARKERS = ("plan.md", "point-back.md")
 _warned_run_root = False
 
+# Per-call run root (DEF-4): a `--plugin-dir` dev host cannot edit the shipped
+# DESIGN_PLAYBOOK_RUN_ROOT after the MCP process starts, so
+# `execute_capture_plan` accepts a `run_root` argument that binds the
+# resolution for the duration of one call and nothing longer.
+_CALL_RUN_ROOT: ContextVar["Path | None"] = ContextVar(
+    "design_playbook_call_run_root", default=None
+)
 
 _MISROOTED_WARNING = (
     "run root resolved to a markerless cwd (DESIGN_PLAYBOOK_RUN_ROOT "
-    "unset or '.'); written_path is outside the run tree — set "
-    "DESIGN_PLAYBOOK_RUN_ROOT to the run root (.scratch/<run>/) "
-    "before binding this artifact"
+    "unset or '.'); written_path is outside the run tree — pass "
+    "run_root=<abs .scratch/<run>/> on the recapture (no server restart "
+    "needed) or set DESIGN_PLAYBOOK_RUN_ROOT before launch"
 )
+
+
+def _has_run_marker(root: Path) -> bool:
+    """True when ``root`` carries one of the run's own marker artifacts."""
+    return any((root / marker).is_file() for marker in _RUN_MARKERS)
+
+
+def _validated_call_run_root(value: object) -> Path:
+    """Normalize an explicit ``run_root`` argument.
+
+    Absolute, existing, and marker-carrying: a mistyped root must fail the
+    call rather than scatter evidence into a directory that is not a run.
+    """
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("run_root must be a non-empty absolute path string")
+    raw = value.strip()
+    if not (
+        Path(raw).is_absolute()
+        or PureWindowsPath(raw).is_absolute()
+        or PurePosixPath(raw).is_absolute()
+    ):
+        raise ValueError(f"run_root must be an absolute path (got {raw!r})")
+    root = Path(raw).expanduser().resolve()
+    if not root.is_dir():
+        raise ValueError(
+            f"run_root {root} is not an existing directory; pass the run root "
+            ".scratch/<run>/"
+        )
+    if not _has_run_marker(root):
+        raise ValueError(
+            f"run_root {root} carries no run marker "
+            f"({' / '.join(_RUN_MARKERS)}); pass the run root, not the "
+            "workspace root or the evidence/ directory"
+        )
+    return root
 
 
 def _run_root_misrooted() -> bool:
@@ -293,15 +338,21 @@ def _run_root_misrooted() -> bool:
     The shipped .mcp.json default (DESIGN_PLAYBOOK_RUN_ROOT=".") makes the
     server resolve artifacts under its process cwd; in a host workspace that
     cwd is the repo root, so captures silently land outside the run tree.
+    A per-call ``run_root`` is marker-validated before use, so it is never
+    misrooted.
     """
+    if _CALL_RUN_ROOT.get() is not None:
+        return False
     configured = os.environ.get(RUN_ROOT_ENV)
     if configured and configured != ".":
         return False
-    root = Path.cwd().resolve()
-    return not any((root / marker).is_file() for marker in _RUN_MARKERS)
+    return not _has_run_marker(Path.cwd().resolve())
 
 
 def _run_root() -> Path:
+    explicit = _CALL_RUN_ROOT.get()
+    if explicit is not None:
+        return explicit
     configured = os.environ.get(RUN_ROOT_ENV)
     if not configured or configured == ".":
         # Warn only when cwd does not look like a run dir (no run marker
@@ -318,7 +369,8 @@ def _run_root() -> Path:
                 f"({' / '.join(_RUN_MARKERS)}); artifacts resolve under "
                 f"{root}/evidence/. Set DESIGN_PLAYBOOK_RUN_ROOT to the run "
                 "root when the host workspace is not the intended run "
-                "directory."
+                "directory, or pass run_root=<abs run root> on the capture "
+                "call when the server cannot be restarted."
             )
         return root
     return Path(configured).resolve()
@@ -793,6 +845,34 @@ def execute_capture_plan(
     args: dict[str, Any],
     browser_adapter: BrowserAdapter | None = None,
 ) -> dict[str, Any]:
+    """Capture one artifact, then report the result (never a verdict).
+
+    Run root resolution order: an explicit ``run_root`` argument (bound to
+    this call only) → ``DESIGN_PLAYBOOK_RUN_ROOT`` → process cwd. The explicit
+    root is marker-validated before use, so a dev host that cannot restart the
+    MCP server still lands evidence inside the run tree (DEF-4).
+    """
+    raw_run_root = args.get("run_root")
+    if raw_run_root is None:
+        return _capture(args, browser_adapter)
+    artifact = args.get("artifact_path")
+    label = artifact if isinstance(artifact, str) else ""
+    try:
+        root = _validated_call_run_root(raw_run_root)
+    except (ValueError, OSError) as exc:
+        # OSError is in range: Path.resolve() rejects host-illegal characters.
+        return _failed(label, str(exc))
+    token = _CALL_RUN_ROOT.set(root)
+    try:
+        return _capture(args, browser_adapter)
+    finally:
+        _CALL_RUN_ROOT.reset(token)
+
+
+def _capture(
+    args: dict[str, Any],
+    browser_adapter: BrowserAdapter | None,
+) -> dict[str, Any]:
     unknown = sorted(set(args) - ALLOWED_ARGUMENTS)
     if unknown:
         names = ", ".join(unknown)
@@ -824,6 +904,9 @@ def execute_capture_plan(
         raise ValueError("storage_state must be a string path when provided")
 
     rel = artifact_path.strip()
+    trace_error = trace_artifact_error(cap_type, rel)
+    if trace_error:
+        return _failed(rel, trace_error, request=request)
     try:
         out_path = _resolve_artifact_path(rel)
     except ValueError as exc:
