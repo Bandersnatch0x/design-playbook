@@ -1,8 +1,7 @@
 """Static-handoff disclosure review builder (Stage 9 evidence).
 
 Produces the ``disclosure-review.json`` delivery credential defined by the
-Static Handoff spec (docs/specs/2026-08-22-interactive-review-and-static-handoff
--implementation-plan.md §4.2): a single authoritative payload binding the run
+Static Handoff contract (ADR-0034): a single authoritative payload binding the run
 identity, verdict, profile, decision authority, the five standard viewport
 layout metrics (``sw`` / ``innerH`` / ``hOverflow`` / ``disclosure.inFold``),
 and the G1–G8 gate count — so a front-end/QA consumer can reproduce and audit
@@ -16,7 +15,7 @@ Two seams keep the contract builder pure and testable without a browser:
   The probe JS string is also exposed (``LAYOUT_PROBE_JS``) for a static
   syntax/structure check.
 * ``build_disclosure(...)`` — deterministic pure builder: no I/O, no browser.
-  It only normalizes caller-supplied facts into the §4.2 shape.
+  It only normalizes caller-supplied facts into the disclosure shape.
 
 ``build_handoff_zip()`` packages the disclosure credential plus any caller-
 supplied snapshot artifacts into a single ZIP. The Evidence-side builder

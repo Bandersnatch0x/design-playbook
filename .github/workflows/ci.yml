@@ -93,6 +93,9 @@ jobs:
       - name: Install pytest (for stdio gates)
         run: python3 -m pip install pytest
 
+      - name: Documentation portability and Git boundary tests
+        run: python3 -m pytest tests/test_doc_links.py -q
+
       - name: Shared transport + Preview transaction/stdin tests (required)
         run: |
           python3 -m pytest \

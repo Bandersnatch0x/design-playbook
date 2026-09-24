@@ -1,13 +1,11 @@
 # Product workflow — design-playbook
 
-主线：把 **packages/design-playbook** 打磨成可公开安装、过程可预测的 Design I/O 插件。
+本文说明安装包的运行管线与工件边界，不规定维护者个人开发步骤。
+当前投入与冻结范围见 [roadmap](../roadmap.md)，文档和交付要求见[贡献指南](../../.github/CONTRIBUTING.zh-CN.md)。
 
-## 管线序列（v0）
+## 产品运行管线
 
-> 北极星的名分归位于 [`docs/roadmap.md`](../roadmap.md)：**陌生外部 Run operator
-> 在无维护者介入下完成合格 audited run 的比率**，配套三元组——60 秒理解通过
-> （intent / verdict / blocker source / next owner）、`Recirculate → repair →
-> Pass` 闭环、30 天自愿复跑。本节只是支撑它的编排序列，不是北极星本身。
+本节说明运行机制，不将内部演练或自动夹具计作外部采用证据。
 
 一次 `/design-io`（编排序列 SSOT 见 `packages/design-playbook/skills/design-playbook/SKILL.md`）：
 
@@ -24,28 +22,9 @@
 7. blocking 回流声明层
 8. 陌生人可复制安装（package README）
 
-## 阶段
-
-```text
-0 setup       done
-1 grill       → CONTEXT + ADRs
-2 dogfood     → /product-dogfood（process only）
-3 to-spec     → .scratch/design-playbook-v0/spec.md
-4 to-tickets  → .scratch/design-playbook-v0/issues/
-5 implement*  → 每票清上下文；改 packages/design-playbook/**
-6 polish      → 再 dogfood + writing-great-skills
-```
-
-规则：
-
-- 1→4 同一上下文；顶 smart zone 用 handoff。  
-- implement 每票新会话。  
-- **只改 package 内自有表面**；禁止搬迁上游正文/图。  
-- references 剔除 playbook 特化示例（改写为通用）。
-
 ## 命令
 
-安装包内七命令（`packages/design-playbook/commands/`，v0.22 起 run-handoff 入列；既有六命令签名零改动）：
+安装包命令（库存权威为 `packages/design-playbook/commands/`）：
 
 | 命令 | 职责 | vNext 面 |
 | --- | --- | --- |
@@ -56,12 +35,13 @@
 | `run-status` | run 状态读模型 | 识别 run-profile/成形会话/invalidated 重入叙述；显式 `open-console` 延续动作（不静默起服务；本地 Run Console 现行口径为 local · experimental · trial-gated，单独授权的只读试用门禁通过前不宣称 stable、不宣称已授权外部试用或公开发布，ADR-0043） |
 | `run-handoff` | 静态交付包入口 | 薄封装既有 handoff builder：唯一 `fill:` 声明自动选用，缺失即失败并给修复指引；`Pending` 保持诚实 |
 | `doctor` | 安装/运行时健康诊断（`ok`/`degraded`/`broken` 仅述安装与运行健康，非公开成熟度口径，也不新增健康/能力态权威） | 零改动（rules.md 属包内工件由 validate.py 校验） |
+| `component-distill` | 已有跨 run 组件/token 提案 | 只出报告，不自动晋升；新增投入仍受能力冻结约束 |
 
-维护者命令 `product-next / product-grill / product-dogfood` 在 monorepo `.claude/commands/`（不进安装包）。
+根目录 `.claude/` 中的维护者命令与配置仅保留在本地，不随仓库或安装包分发，也不是贡献前提。
 
-## vNext 工件面（S1-S6 落地）
+## 运行工件
 
-规格权威：[`docs/specs/ui-ux-vnext/`](../specs/ui-ux-vnext/)（八份定稿原型 + 切片图）。落码要点：
+现行决策见 [ADR-0029](../adr/0029-vnext-closed-loop-final-state.md)，产品契约以包内 references 为准；旧研发原型仅留本地。落码要点：
 
 - **档位**：每个 run 的 `plan.md` 头部必写 `run-profile` 结构化块（tier P1|P2|P3 + 判据核对 + 跳过清单 + 升档事件）；升档自动、降档需用户；G12 机器复盘。
 - **成形**：`ux-spec` S0-S6 会话工件 `.scratch/<run>/shaping/`（shaping-log.jsonl + 派生 queue.json），G9 校验出口。
@@ -70,28 +50,16 @@
 - **评审**：point-back 六块报告（+Positive/Coverage/Limitations）+ `invalidated:` 失效集 + finding 附加字段；G11 消费 Coverage statement（P3 档强制五态×页面采样矩阵块）。
 - **示例**：`packages/design-playbook/examples/`（export-entry P2 / export-upgrade P3 / dogfood S6 自举全链 / rules-governance 治理走查）。
 
-## 票夹
-
-`.scratch/design-playbook-v0/`
-
-## v0 ship 勾选
-
-- [ ] CONTEXT + ADR 覆盖范围/许可/SSOT/仓形态
-- [ ] package README 安装路径可复制
-- [ ] references 无上游特化残留
-- [ ] ≥2 次 dogfood 过程门通过
-- [ ] issues 全 resolved 或 wontfix
-
 ## Release gate
 
-见 [`release-checklist.md`](release-checklist.md)：五步门 + semver tag。静态部分由 CI（`.github/workflows/ci.yml` -> `scripts/validate.py`）自动跑；会话级步骤仍手动。`git init` + 公开 remote 是公开 claim 的硬前置（ADR-0006 / 票 06）。
+见[发布清单](release-checklist.md)：静态部分由 CI 自动运行，会话级步骤仍手动。本文和维护者辅助命令均不授权发布或恢复招募。
 
 ## Bundled MCP adapters（G5 preview / G6 evidence）
 
 Preview 与 Evidence 的 MCP 运行时随主插件打包（`packages/design-playbook/mcp/` + 带 `${CLAUDE_PLUGIN_ROOT}` 的 `.mcp.json`）；marketplace 安装即注册 `preview_prototype` 与 `execute_capture_plan` 两个工具，无需第二个包。`packages/design-playbook-preview/`、`packages/design-playbook-evidence/` 仅是兼容 launcher + 文档。orchestrator 仍按存在性探测：`preview*` 确认后才进 Fill（G5）；`observe*` 依 spec L6 派生 capture plan，产物绑定进 `.scratch/<run>/evidence/manifest.jsonl`（G6）——binding 与 verdict 归 design-playbook，runtime 永远归 provider。
 
-适配器缺席不降级协议：缺席 = 显式 `blocked` / `not-applicable` 记录或既有通道回落，永不静默跳过、永不臆断 pass（vnext-prototype 第 4 节；预览缺席记 run-profile 跳过清单一行，取证缺席记 ledger `result: blocked` 回流 R5）。
+适配器缺席不降级协议：缺席 = 显式 `blocked` / `not-applicable` 记录或既有通道回落，永不静默跳过、永不臆断 pass（预览缺席记 run-profile 跳过清单一行，取证缺席记 ledger `result: blocked` 回流 R5）。
 
 ## 跨平台适配器（ADR-0042）
 
-`npx design-playbook init <agent>`（npm bin 壳 → `packages/design-playbook/scripts/generate_adapter.py`）从 canonical `skills/` / `commands/` / `mcp/` 渲染各平台产物，三层保真：Tier1 全保真（Claude Code、Codex——Codex 快照为生成后提交，`validate.py` / `doctor.py` 防漂移门禁校验）；Tier2 skills+MCP（Cursor、Gemini CLI、OpenCode、Windsurf、Copilot、Zed）；Tier3 AGENTS.md 地板（其余 22 agent；矩阵宽度按 ADR-0042 修订冻结在 30 行，validate.py 挂门）。生成产物禁止手改；**版本升级后必须重跑 `generate_adapter.py codex` 刷新快照**。能力矩阵：`docs/specs/2026-08-28-multi-platform-adapter.md`。
+`npx design-playbook init <agent>` 从包内声明生成各平台适配器。分层语义见 [ADR-0042](../adr/0042-multi-platform-adapter-generator.md)，当前库存见 [adapter_matrix.py](../../packages/design-playbook/scripts/adapter_matrix.py)，不再以个人 spec 作共享权威。生成产物禁止手改；版本升级后重跑 `python packages/design-playbook/scripts/generate_adapter.py codex`，由 validate/doctor 检查漂移。

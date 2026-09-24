@@ -30,3 +30,12 @@ Demo/learning material outside the package retains its own rights; it is not the
 - Packaging/docs must define a **plugin root** (skills + commands + metadata + clean examples), not “clone whole repo = install.”
 - Tickets will include rewrite or drop of attachment examples for onboarding.
 - LICENSE/NOTICE on the plugin surface is a v0 deliverable; do not imply rights over upstream playbook body.
+
+## Amendment (2026-09-25): local maintainer configuration
+
+The root `.claude/` directory is personal configuration and workflow tooling:
+retain it locally, ignore it in Git, and do not depend on it from shared
+documentation. Its formerly tracked commands are no longer distributed with
+the repository. Product commands remain under `packages/design-playbook/commands/`.
+Root and package `.claude-plugin/` metadata remains tracked; that distinct
+directory is required by the existing plugin distribution layout.

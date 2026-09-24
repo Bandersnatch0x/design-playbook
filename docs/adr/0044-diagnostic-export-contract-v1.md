@@ -7,7 +7,8 @@ Accepted (roundtable verdict A with user preauthorization 「全部按推荐」,
 
 Unlocks the export transaction defined by
 [ADR-0036](0036-invited-trial-data-and-role-boundary.md) §2 and
-[snapshot v1 spec](../specs/2026-08-25-run-snapshot-v1.md) §12.5; it does not
+[snapshot contract](../../packages/design-playbook/mcp/run_console/snapshot_v1.schema.json);
+the original snapshot planning document is local-only. This decision does not
 satisfy `G-RO-TRIAL-PASS` and does not unlock any other typed action.
 
 ## Context

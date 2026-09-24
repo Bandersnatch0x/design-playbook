@@ -106,3 +106,13 @@ adapter breadth while the primary journey lacked external evidence —
 now enforced as
 [ADR-0045](0045-external-evidence-spend-gate.md). Decision recorded in
 `.agents/specs/2026-09-22-product-audit-closeout.md`.
+
+## Documentation amendment (2026-09-24)
+
+The spec paths above record the original implementation context. Those personal
+planning files are now local and untracked, not public implementation authority.
+The current adapter inventory is owned by
+[adapter_matrix.py](../../packages/design-playbook/scripts/adapter_matrix.py);
+rendering is owned by
+[generate_adapter.py](../../packages/design-playbook/scripts/generate_adapter.py)
+and its templates. This ADR retains the decisions and freeze boundary.

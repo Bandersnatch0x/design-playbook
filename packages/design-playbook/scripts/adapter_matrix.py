@@ -10,8 +10,8 @@ ADR-0042 amendment): the tier encodes the capability class, each renderer
 documents its own output surface, and the published counts are derived
 from this matrix by the validate.py gate.
 
-Authority: docs/specs/2026-08-28-multi-platform-adapter.md §1 and
-           docs/adr/0042-multi-platform-adapter-generator.md.
+Decision authority: docs/adr/0042-multi-platform-adapter-generator.md.
+This module owns the current adapter inventory.
 """
 from __future__ import annotations
 

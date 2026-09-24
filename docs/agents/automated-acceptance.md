@@ -2,8 +2,8 @@
 
 The required test inventory is [CI](../../.github/workflows/ci.yml). Quick
 validate/link/doctor checks are necessary but do not replace its Python and
-Chromium matrix. Formal Standards and Spec review starts only after that matrix
-is green. Missing Chromium is a failed gate, not an accepted skip.
+Chromium matrix. Complete acceptance requires that matrix to be green.
+Missing Chromium is a failed gate, not an accepted skip.
 
 ## Extra-project replay
 
@@ -59,10 +59,11 @@ journey does not replace them or introduce another status parser.
 
 ## Review and second-round verification
 
-For an acceptance batch, retain full-matrix commands, exit codes, counts, and logs
-under `.scratch/`. Review Standards and Spec separately against a pinned base,
-including working-tree and new files. If delegated, use the delegation channel
-and reviewer authorized by the user. Resolve findings explicitly, rerun affected
-gates (and the full matrix when the scope changes), then use a fresh reviewer for
-second-round verification of fixes and evidence. Record remaining gaps rather
-than promoting a partially verified run to Pass.
+For an acceptance batch, retain commands, exit codes, counts, and raw logs in
+local ignored storage; publish a self-contained delivery summary, not private
+planning files. State the reviewed base and scope, including working-tree and
+new files, and distinguish self-review from an independent review.
+Resolve findings explicitly and rerun affected gates (and the full matrix when
+scope changes). Record unrun checks and remaining gaps rather than promoting a
+partially verified run to Pass. Contributors choose their own review workflow;
+these requirements concern observable delivery evidence.

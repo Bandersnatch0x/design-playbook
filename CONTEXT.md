@@ -8,6 +8,25 @@ Domain glossary and product facts for agents. Updated by `/grill-with-docs` / `/
 
 No reading-demo app in-repo (removed). Product surface is the installable package only.
 
+**Current operating stage (2026-09-24): self-use and maintenance.** Catalog
+submissions and recruitment are paused by explicit maintainer decision. Existing
+install paths remain available. New capability specs/tickets are proposals,
+not implementation approval; ADR-0045's spend gate remains. Internal dogfood
+does not satisfy external trial or adoption criteria. The 30-day checkpoint
+is approximately 2026-10-22; the original Day-90 review is approximately
+2026-11-23. Neither date automatically resumes activity.
+
+Current repository release baseline: `v0.25.0`, per
+[release record](docs/releases/v0.25.0.md). Later source fixes are not thereby
+claimed to be in that release; registry `latest` is not re-verified here.
+
+Shared document and delivery requirements are defined by the
+[contribution guide](.github/CONTRIBUTING.md). Local legacy phase
+logs are history, not current authorization. All specs, plans, research and
+independent work tickets remain local and untracked, outside `docs/`.
+Shared documentation describes current behavior and durable decisions;
+task-local planning is not a shared prerequisite. Personal workflows remain local.
+
 ## Glossary
 
 > Evidence exists only to satisfy a declared criterion.
@@ -176,10 +195,18 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 | `packages/design-playbook/skills/` | Skills SSOT |
 | `docs/agents/` | Tracker + product workflow |
 | `.scratch/<run>/` | Single-run artifacts (design-baseline / reference / spec / plan / decision / preview / filled-ui / craft-guard / evidence / point-back) |
-| `.agents/tickets/` | Wayfinder maps (`M-NNN`) + local tickets (`T-NNN`); see docs/agents/issue-tracker.md（`.scratch/<effort>/` 下的旧 map.md 是迁移前存量，不新增） |
+| Local planning (untracked) | Personal specs, plans, research and internal tickets; authorized historical issue archives stay local, while GitHub serves user reports and feedback |
 | `docs/adr/` | Decisions |
 
-## Active effort
+## Effort history
+
+The dated entries below preserve their original execution context. The
+current operating stage above takes precedence over historical next actions,
+release labels, or requests to resume distribution. The planning
+locators below are historical, non-navigable references: on 2026-09-24 all
+personal planning moved to ignored local storage. Shared behavior is defined
+by the current ADRs, product contracts and implementation, not those private
+records. Dated conclusions are unchanged.
 
 - **Preview 壳交互重构 + 缺陷清零（2026-09-24，implementation-verified + 独立评审，**已随 `v0.25.0` 发布**）：** T-079 实测审计（confirm 8 步/五图标无文字/底线规则隐藏）→ agy 提案 RFC（行内气泡 3 步闭环 + 单侧栏）+ 高保真 mockup → 圆桌四视角评审（首次用户/实现维护/协议完整性/高频效率，9 条约束 R1-R9）→ T-083 worker 全量实施（REC-01…08 一次落地：行内两阶段气泡、单侧栏 tab 检查台、非模态 coachmark、动态决策按钮、游离笔记删除、暗色 4 级 token、热键矩阵、措辞并集锁步；**confirm 8→3 步**，R2-R9 逐条有证据，pin_bridge 扩 rect 做跨 iframe 坐标）→ agy 独立落地评审（A-，7 缺陷）→ T-084 补丁（DEF-01 草稿收拢消灭静默丢失、DEF-02 焦点闭环、DEF-03 漫游切回、DEF-04 双入口联动、DEF-06 单复数）+ T-085 flake 根治（`atomic_write` 对 Windows `os.replace` 瞬态 PermissionError 短重试，复现环 17%→300 次全绿）。全量矩阵 **1034+1126 全绿**（含 eval 夹具哈希 CRLF 免疫修复 `07a0d80`）。评审链：提案→mockup→圆桌→实施→独立评审→补丁全经 Orca 编排多 worker。commit `e9c5875`/`41ee6a6`/`0a47202`/`74a7307`/`adf7b89`/`45064aa`/`07a0d80`。未发布。
 - **design-io 提速双图（2026-09-23，implementation-verified + 复跑实证，**已随 `v0.25.0` 发布**）:** 73min demo run（glm-5.3，单页 P2）量化归因为 27 决策点/2162s（`.scratch/design-io-speedup/`），拆出双 wayfinder 图：**M-002 过程卡点**（spec `.agents/specs/2026-09-22-design-io-friction.md` D1–D5，票 T-059…T-065 + 缺陷票 T-073…T-078）——CLI 自文档化（门模块获官方单门入口，ADR-0023 修订）、skill 契约指针 9 处、校验左移（Done-when 嵌单门 + 末端确认性复跑指引）、`evidence_manifest.py` 官方绑定 CLI、evidence misrooted 载荷 warnings；两轴评审 6 项修复清零（归档 `.scratch/2026-09-22-design-io-friction/review-archive.md`）。**M-001 决策层**（spec `.agents/specs/2026-09-23-design-io-decision-layer.md` D1–D5）：eval 夹具（`eval_decisions.py` 三靶运行器 + 76 原子金标）benchmark 实证 **constrained 约束输出全胜 baseline**（acc 0.855/0.829、critical 档 8/8 vs 7/8、p50 -19%）→ 裁决**决策层=constrained、小模型引擎封存**（重启条件入 spec D2）。复跑实证（Orca 编排 worker，alert-rules-page）：**73min → 28m15s**（≤40min 判据达标），左移门当步拦截生效；复跑抓到 6 个真缺陷（preview options 标签确认失效、双确认按钮、onboarding 跨 origin 复弹、shaping_log mappings 缺口、manifest 五键缺口、G6 WARN 假阳性）全修（commit `2ba7213`）。新摩擦成票 T-080…T-082 待做。合入 main（merge `1b7f8ec`），未发布。
@@ -191,9 +218,9 @@ No reading-demo app in-repo (removed). Product surface is the installable packag
 - **Adapter lifecycle check (2026-09-19, implementation-verified):** packaged doctor 新增 `adapter_lifecycle` 报告型检查（T-023–T-025）：drift 语义 =「以当前安装包重跑 `npx design-playbook init <agent>` 会改变该文件」，marker 归属（无 marker 文件永不判定，含无 marker JSON 合并目标这一记录在案的诚实限制）、版本/CRLF 归一化重渲染比对（版本滞后内容一致 = clean）、namespaced 孤儿检测、共享目标（AGENTS.md = opencode + 22 tier-3 floor）多候选 clean 语义；只读断言钉死零写入。`generate_adapter.py` 新增只读 seam `render_entries()`（render 重构复用，行为零变更）。v0.21.1 真实语料闭环 33/33（`.scratch/2026-09-19-adapter-lifecycle/`）。goals/roundtable 同目录；spec `.agents/specs/2026-09-19-adapter-lifecycle-check.md`。未发布；trial 与 catalog 保持 paused。
 - **v0.22.2 baseline-safety release (2026-09-10):** `prepare()` keeps a rejected candidate's reason in state (`baseline_rejection`), `confirm(accept)` byte-copies a differing canonical DESIGN.md to `design-baseline/previous-DESIGN.md` and records `replaced_baseline`, and run-status diagnoses Fill declarations written inside fenced blocks (`fenced_fill_declarations`) instead of silently skipping them. All facts are additive; the `design-baseline/v1` schema and existing consumers are unchanged.
 - **v0.22.1 continuation boundary (2026-09-08):** the Recirculate owner action now carries an invalidated-evidence criterion set, explicit `ui-evaluator` resume stage, and the minimum recapture requirement through Snapshot v1 into the read-only Repair Packet. Pass and non-owner paths still report explicit gaps rather than inferring those facts from progress or command prose. The Run Console is shipped as a local, experimental, trial-gated capability; `G-RO-TRIAL-PASS` is NOT SATISFIED, and implementation/tests do not authorize a stable public claim.
-- **v0.24.4 is the formal/latest version (2026-09-21):** `design-playbook`, `dsh-design-playbook`, the plugin manifest, README badges, and generated Codex snapshot are version-aligned at `0.24.4`; [`docs/releases/v0.24.4.md`](docs/releases/v0.24.4.md) records the release boundary (DSH 上架契约修复：npm tarball 补 `cordis.patch.yml` + `dsh.compatibility.dshReleases` 显式矩阵，无运行时行为变更)。前一版 v0.24.3 [`docs/releases/v0.24.3.md`](docs/releases/v0.24.3.md)（architecture-deepening round 6）。
+- **v0.24.4 release baseline at 2026-09-21 (historical):** `design-playbook`, `dsh-design-playbook`, the plugin manifest, README badges, and generated Codex snapshot were version-aligned at `0.24.4`; [`docs/releases/v0.24.4.md`](docs/releases/v0.24.4.md) records that release boundary. Superseded by the `v0.25.0` release record; this is not a current registry assertion.
 - **Nightly host scenarios removed (2026-08-28):** the scheduled CI workflow and its contract test are deleted by user decision; `scripts/host_scenario.py` stays as a human-triggered local tool.
 - **Adapter snapshot rule:** `.codex-plugin/` + `codex/AGENTS.md` are generated committed snapshots — after any version bump run `python packages/design-playbook/scripts/generate_adapter.py codex`, or the validate/doctor drift gate fails.
 - **Run Console v1 chain complete (2026-08-27):** RCV1-001..012 from `.scratch/run-console-v1/map.md` are all executed and merged; RCV1-R1 legibility remediation shipped after the first trial miss; RCV1-010/011 resolved `disabled-by-gate`; RCV1-012 audit verdict `NOT READY`.
-- **Trial gate deferred; recruitment currently infeasible (2026-09-22):** `G-RO-TRIAL-PASS` is NOT SATISFIED (2026-08-26, participant 1 miss, ~120 s) and further participant collection is deferred by user decision; RCV1-009 ran under the earlier deferral record. On 2026-09-22 the user stated direct recruitment is currently not feasible (no users to recruit), which meets the ADR-0045 early-stop clause condition (30 days without a new participant) as a fact: the stop review is queued for the Day-90 review (about 2026-11-23) or earlier if data arrives, to rule among narrowing to a single-point ui-evaluator audit, a graceful stop, and continuation. Passive discovery channels (catalog, npm, DSH store) are the live path meanwhile.
-- **Distribution: catalog route region-blocked (2026-09-22).** The `@claude-community` submission pack was refreshed to the `v0.24.4` pin (`9a38087`, strict validation passed) and resumption was approved by user adjudication — but the Console form (`platform.claude.com/plugins/submit`) redirects to `app-unavailable-in-region` from this machine (stable reproduction; the claude.ai form needs Team/Enterprise, and official docs name no PR route). The catalog channel is unavailable until a supported-region path or an organization route exists. Remaining live passive channels: npm (`latest` 0.24.4), the repo-root marketplace install path (`/plugin marketplace add` from GitHub), and the DSH store entry (re-baselining pending with the store maintainer, issue #437).
+- **Trial gate deferred (2026-09-22; corrected 2026-09-24):** `G-RO-TRIAL-PASS` is NOT SATISFIED (2026-08-26, participant 1 miss, approximately 120 s). RCV1-009 ran under the earlier deferral record. Recruitment infeasibility on 2026-09-22 did not mean that 30 days since ADR-0044 had elapsed. That checkpoint is approximately 2026-10-22; the original Day-90 review remains approximately 2026-11-23. The current self-use pause is an explicit new decision recorded in the ADR-0045 amendment, not a historical trial outcome.
+- **Distribution (2026-09-22 observation; superseded operating instruction 2026-09-24):** the catalog pack was prepared at the `v0.24.4` pin and the submission route was observed to be region-blocked. The ADR-0045 amendment now pauses catalog submission independently of that technical obstacle. Existing installation paths remain, but channel recovery does not authorize submission or recruitment. No current registry or store status was re-verified in this documentation update.

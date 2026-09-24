@@ -52,3 +52,12 @@ cheaply unless a spend gate makes the mainline the only open lane.
 - If the trial resumes and passes, the next capability batch still goes
   through normal decision discipline; lifting the gate re-opens the lane, it
   does not pre-approve anything.
+
+## Amendment (2026-09-24): explicit self-use pause
+
+The maintainer explicitly paused catalog submission and recruitment on
+2026-09-24. This preserves the spend
+gate and requires explicit resumption during the pause; neither the review
+date nor internal dogfood automatically authorizes capability work. The
+30-day checkpoint is approximately 2026-10-22, measured from ADR-0044's
+2026-09-22 acceptance, not a condition already met on that acceptance date.

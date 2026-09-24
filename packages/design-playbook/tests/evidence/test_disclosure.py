@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """Disclosure-review contract tests for the Stage 9 static handoff.
 
-Covers the ``mcp/evidence/disclosure.py`` surface (docs/specs/
-2026-08-22-interactive-review-and-static-handoff-implementation-plan.md §4.2):
+Covers the ``mcp/evidence/disclosure.py`` surface under ADR-0034:
 
 - ``VIEWPORTS`` / ``VIEWPORT_ORDER`` — the five standard delivery viewports in
   the canonical matrix order.
-- ``build_disclosure`` — deterministic §4.2 payload: run identity, verdict,
+- ``build_disclosure`` — deterministic disclosure payload: run identity, verdict,
   profile, authority, timestamp, decisions, five viewport metrics, gate count.
 - ``probe_layout`` — the DOM probe maps Playwright-evaluate output to coerced
   ``ViewportMetrics`` (fail-closed on malformed hosts, no browser needed).

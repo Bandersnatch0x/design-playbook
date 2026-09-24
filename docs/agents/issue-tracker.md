@@ -1,63 +1,27 @@
-# Issue tracker: GitHub for bugs, local files for the rest
+# 议题与个人规划
 
-GitHub Issues carry **bug tickets only** — defects in shipped behavior that anyone could report. Every other planning artifact (specs, research notes, non-bug work tickets, wayfinder maps) lives as local files under `.agents/` (gitignored, never pushed). Use the `gh` CLI for all GitHub operations.
+GitHub Issues 只作为使用者报告问题、提交反馈的入口，不承载维护者内部规划或实施票。spec、plan、research、独立工作票和决策地图全部本地保留，不进入 `docs/` 或 Git。个人目录与格式由贡献者自行选择。
 
-## Routing
+## 使用者反馈
 
-| Artifact | Home | Reference in commits |
-| --- | --- | --- |
-| Bug ticket | GitHub issue (`gh issue create`) | `(#NNN)` |
-| Spec | `.agents/specs/YYYY-MM-DD-<slug>.md` | path |
-| Research note | `.agents/research/YYYY-MM-DD-<slug>.md` | path |
-| Work ticket (non-bug) | `.agents/tickets/T-NNN-<slug>.md` | `(T-NNN)` |
-| Wayfinder map | `.agents/tickets/M-NNN-<slug>.md` | `(M-NNN)` |
+维护者使用 `gh` 读取、答复和处理使用者 issue。缺陷报告应包含预期/实际行为、包与宿主版本、最小复现和脱敏证据。反馈不自动构成实施授权；仍受当前产品范围和相关 ADR 约束。
 
-- **When a skill says "publish to the issue tracker"**: route by the table above — only bugs become GitHub issues.
-- **When a skill says "fetch the relevant ticket"**: `gh issue view <number> --comments` for `#NNN`; read the file for `T-NNN` / `M-NNN`.
+- 读取：`gh issue view <number> --comments`。
+- 列表：`gh issue list --state open --json number,title,labels`。
+- 评论或更新：`gh issue comment`、`gh issue edit`；关闭前在远端记录结果及实际验证。
+- 标签语义见[分诊标签](triage-labels.md)。仓库由当前 Git remote 推导。
 
-## GitHub conventions (bug tickets)
+收到模糊的 `#NNN` 时先区分 issue 与 PR。内部拆票留在本地，不自动发布成 GitHub issue；PR 用于交付可独立理解的改动。
 
-- **Create**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
-- **Read**: `gh issue view <number> --comments`, also fetching labels.
-- **List**: `gh issue list --state open --json number,title,body,labels,comments` with appropriate `--label` and `--state` filters.
-- **Comment / label / close**: `gh issue comment`, `gh issue edit --add-label` / `--remove-label`, `gh issue close --comment`.
-- Triage labels apply to GitHub bug tickets; see `triage-labels.md`.
+## 历史迁移边界
 
-Infer the repository from `git remote -v`; `gh` does this automatically inside the clone.
+2026-09-24，维护者明确授权将当时已有的 issue 一次性归档到本地并从 GitHub 删除，替代此前“不留本地副本”的规则。迁移先冻结清单，保存正文、评论、时间线和元数据，校验后再删除；PR 和清单之外的新 issue 不在范围内。
 
-## Local tickets
+归档只留本地且不提交 Git，不是持续同步机制。后续使用者 issue 保留远端，不自动归档或删除；未来删除需要另外授权。旧 issue 编号仅是历史线索，共享说明必须自包含，不能依赖已删除 issue 才能理解。归档不保证恢复原编号、URL、附件二进制或平台关联。
 
-One file per ticket, front matter first:
+## 文档与交付边界
 
-```yaml
----
-id: T-014            # or M-NNN for a wayfinder map
-status: open         # open | in-progress | done | wontfix
-owner:               # empty = unclaimed
-blocked-by: []       # e.g. [T-012, T-013]
-part-of:             # map id, when the ticket belongs to a wayfinder map
-spec:                # optional path to the driving spec
----
-```
+工具要求“发布到 tracker”时按本政策分流：使用者反馈在 GitHub 处理，维护者内部工作只写本地票。任何本地 issue 归档或工作票都不放入 `docs/` 或提交 Git。
+读取独立本地票时，不要求其他维护者拥有同一份个人文件。
 
-- **Numbering**: next integer after the highest existing `T-NNN` / `M-NNN` in `.agents/tickets/`.
-- Triage roles map onto `status` + `owner`: an open, unclaimed, unblocked ticket is ready to pick up.
-
-## Wayfinding operations
-
-Used by `/wayfinder`. The **map** is one `M-NNN` file holding Notes, Decisions-so-far, and Fog; children are ordinary `T-NNN` tickets carrying `part-of: M-NNN`.
-
-- **Blocking**: `blocked-by` front matter on the child.
-- **Frontier**: choose the first open child in map order that has no open blocker and no owner.
-- **Claim**: set `owner` in the child's front matter; this is the session's first write.
-- **Resolve**: append the answer to the child, set `status: done`, then append a gist to the map's Decisions-so-far.
-
-## Pull requests as a triage surface
-
-**PRs as a request surface: no.** Set this to `yes` only if external PRs should enter the triage queue.
-
-GitHub shares one number space across issues and PRs. Resolve an ambiguous `#<number>` with `gh pr view <number>` and fall back to `gh issue view <number>`.
-
-## Legacy
-
-Issues ≤ #114 predate this policy and include specs and non-bug tickets: finish them where they are and close them — do not migrate.
+共享说明应能在干净检出中独立读懂。需要长期维护的行为写入所属架构或子系统文档，长期裁决写入 ADR；PR 或交付摘要包含范围、验收结果、实际测试、未跑项和限制，而不是要求读者访问私有 spec。具体规范见[贡献指南](../../.github/CONTRIBUTING.zh-CN.md)。

@@ -30,7 +30,7 @@ Example (host run):
 }
 ```
 
-Plugin auto-load: [`../.mcp.json`](../.mcp.json) (under `packages/design-playbook/`).  
+Plugin auto-load: [`../../.mcp.json`](../../.mcp.json) (under `packages/design-playbook/`).
 Codex / manual: sibling [`mcp.example.toml`](../../../design-playbook-evidence/mcp.example.toml).
 
 ## Return shape

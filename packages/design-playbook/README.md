@@ -1,6 +1,12 @@
 # design-playbook
 
-Agent plugin: **Design I/O** for product UI (Claude Code / Codex).
+Agent plugin for **evidence-backed UI delivery** in existing Web products
+(Claude Code / Codex). **Design I/O** is the declaration and contract mechanism.
+
+The project is in maintainer self-use and maintenance. Catalog submissions
+and recruitment are paused; installed paths remain available. Missing required
+proof stays `blocked`; an explicitly skipped evaluator records `audited: false`,
+not an audited Pass. Evaluator review does not replace human semantic approval.
 
 Declarations + contracts — not a style CSV pack. Compose with [ui-ux-pro-max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) and Anthropic `frontend-design` for aesthetics; this package owns pipeline and acceptance.
 
@@ -52,6 +58,7 @@ After install, skills and commands are **namespaced** by the plugin name:
 | `/design-playbook:craft-guard` | Craft / anti-slop skill |
 | `/design-playbook:native-craft` | Native-feel desktop declaration skill |
 | `/design-playbook:ui-evaluator` | Point-back acceptance skill |
+| `/design-playbook:component-distill` | Cross-run component/token proposal skill and command; report-only, promotion requires a user decision |
 | `/design-playbook:design-io` | Full pipeline command |
 | `/design-playbook:ux-spec` | Spec-only command |
 | `/design-playbook:ui-review` | Review command |
@@ -75,8 +82,8 @@ pi has no plugin namespace — skills are `/skill:<name>`, commands are bare `/<
 | Invoke | Role |
 | --- | --- |
 | `/skill:design-playbook` | Orchestrator skill (model-invoked) |
-| `/skill:ux-spec` … `/skill:ui-evaluator` | Same eight skills as above |
-| `/design-io` · `/ux-spec` · `/ui-review` · `/run-review` · `/run-status` · `/run-handoff` · `/doctor` | Pipeline / spec-only / review / cross-run / status / handoff / health commands |
+| `/skill:ux-spec` … `/skill:component-distill` | Same nine skills as above |
+| `/design-io` · `/ux-spec` · `/ui-review` · `/run-review` · `/run-status` · `/run-handoff` · `/doctor` · `/component-distill` | Pipeline / spec-only / review / cross-run / status / handoff / health / proposal commands |
 
 pi ships no built-in MCP, so `preview*` and `observe*` skip by default (ADR-0009 absent→skip; the pipeline still runs spec → picker → fill → craft → accept). To enable both gates, install an MCP adapter and register the bundled servers in your project `.mcp.json`:
 
@@ -113,7 +120,7 @@ npx design-playbook init <agent>   # e.g. cursor, gemini-cli, windsurf
 npx design-playbook --list         # all 30 agents, shows which have renderers
 ```
 
-See the root [README](../../README.md#install-on-other-agents) for the tier table and capability notes.
+See the root [README](../../README.md#-install-on-other-agents) for the tier table and capability notes.
 
 ## Stack with other skills
 
@@ -131,7 +138,7 @@ See the root [README](../../README.md#install-on-other-agents) for the tier tabl
 .mcp.json              ← bundled MCP servers, launched via ${CLAUDE_PLUGIN_ROOT} (ADR-0009)
 mcp/{preview,evidence}/← MCP adapter runtimes (preview_prototype / execute_capture_plan)
 skills/<name>/SKILL.md ← model-invoked skills
-commands/<name>.md     ← slash commands (design-io, ux-spec, ui-review, run-review, run-status, run-handoff, doctor)
+commands/<name>.md     ← slash commands; see invocation tables above
 codex/AGENTS.md        ← Codex bridge notes
 examples/              ← self-authored onboarding samples
 LICENSE · NOTICE       ← authored-only scope
@@ -176,7 +183,7 @@ python <pkg>/scripts/doctor.py --json
 
 One packaged diagnosis for interpreter, package surface, optional Playwright, and run-root configuration. Distinguishes `ok` / `degraded` / `broken` with repair actions. Those three states describe **install and runtime health** of what is present locally — they are not a public capability-maturity verdict; maturity vocabulary (`stable` / `experimental` / `blocked-by-gate` / `not-shipped`) stays with the `run-status` capability receipt, and doctor reads existing facts rather than adding a new health or capability-state authority.
 
-**Bundled MCP (v0.3+):** Preview (`mcp/preview/`) and Evidence (`mcp/evidence/`) runtimes ship inside this package and are registered by `.mcp.json` (`${CLAUDE_PLUGIN_ROOT}`). Sibling monorepo dirs remain compatibility launchers/docs. The orchestrator still **probes** MCP `tools/list` and skips `preview*` / `observe*` when tools are absent. Evidence provider writes artifacts only — never the manifest. **`DESIGN_PLAYBOOK_RUN_ROOT`:** default `"."` in `.mcp.json` is the **MCP process cwd**, not the chat workspace — for a host-app dogfood, set an **absolute** path to `.scratch/<run>/` (see [`mcp/evidence/README.md`](mcp/evidence/README.md)). Capture responses include `written_path` (absolute) so mis-rooted writes are visible without a filesystem search.
+**Bundled MCP (v0.3+):** Preview (`mcp/preview/`) and Evidence (`mcp/evidence/`) runtimes ship inside this package and are registered by `.mcp.json` (`${CLAUDE_PLUGIN_ROOT}`). Sibling monorepo dirs remain compatibility launchers/docs. The orchestrator still **probes** MCP `tools/list` and skips `preview*` / `observe*` when tools are absent. Evidence provider writes artifacts only — never the manifest. **`DESIGN_PLAYBOOK_RUN_ROOT`:** `.mcp.json` passes this variable through without pinning a default. With no explicit root, artifacts resolve under the **MCP process cwd**, not necessarily the chat workspace. For a host-app run, use an absolute `.scratch/<run>/` root; per-call overrides and marker requirements are documented in [`mcp/evidence/README.md`](mcp/evidence/README.md). Capture responses include `written_path` (absolute) so mis-rooted writes are visible without a filesystem search.
 
 What is **deterministically enforced** today: repository install/structure CI checks and the run-artifact shape (`scripts/validate_run.py` — L1–L6 present; every top-level L6 item ordered `Given -> When -> Then`; one non-empty four-field evidence ledger row per `L6.<n>` with allowed results; four non-empty finding fields with non-empty source; exactly one explicit `## Verdict` of `Pass` or `Recirculate`; Pass requires every evidence result to be `pass` and exactly one issue-linked `0 blocking` closure per blocking finding; exit 0/`RUN OK`, exit 1/`RUN INVALID`, exit 2/`RUN ERROR`; regression-tested by `tests/test_validate_run.py`, which also validates the showcase artifacts directly; **G5** is a *conditional* preview-confirm gate — enforced only when preview artifacts exist / `--preview-dir` is used; **G6** is a *conditional* evidence-binding gate — enforced only when a ledger `observed` references an `evidence/` artifact / `--evidence-dir` is used; opt-in **strict mode** via `--require-preview` / `--require-evidence` / `--strict`). The `observe*` step probes MCP tool `execute_capture_plan` and is skipped when absent. Everything else in the pipeline is agent-executed craft judgment, not a machine gate.
 
