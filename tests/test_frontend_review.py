@@ -171,21 +171,31 @@ def test_missing_declared_proof_blocks_without_inventing_extra_states(tmp_path):
     assert report["sampling"] == []
 
 
-def write_evidence(run: Path, **request_changes) -> None:
+def write_evidence(run: Path, *, artifact_name: str = "L6.1-error.png",
+                   capture_artifact_name: str | None = None,
+                   proof: str = "screenshot", **request_changes) -> None:
     evidence = run / "evidence"
     evidence.mkdir(exist_ok=True)
-    artifact = evidence / "L6.1-error.png"
+    artifact = evidence / artifact_name
+    capture_artifact = evidence / (capture_artifact_name or artifact_name)
     artifact.write_bytes(b"test-rendered-artifact")
+    capture_artifact.write_bytes(b"test-rendered-artifact")
     request = {
-        "schemaVersion": 1, "url": "https://private.invalid/?token=SECRET",
-        "type": "screenshot", "state": "error", "artifact_path": "evidence/L6.1-error.png",
+        "schemaVersion": 1,
         "viewport": {"width": 390, "height": 844, "devicePixelRatio": 1, "colorScheme": "light"},
         "freeze": {"enabled": True, "waitFonts": True, "networkIdle": True},
         **request_changes,
     }
+    capture = {
+        "url": "https://private.invalid/?token=SECRET",
+        "type": proof,
+        "state": "error",
+        "artifact_path": f"evidence/{capture_artifact.name}",
+    }
     entry = {"criterion": "L6.1", "artifact": artifact.name,
              "ts": "2026-09-24T10:00:00Z",
-             "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(), "request": request}
+             "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
+             "request": request, "capture": capture}
     (evidence / "manifest.jsonl").write_text(json.dumps(entry) + "\n", encoding="utf-8")
     (run / "point-back.md").write_text("""## Findings
 ```
@@ -209,7 +219,7 @@ invalidated:
 ```
 criterion: L6.1
 required: screenshot
-observed: evidence/L6.1-error.png
+observed: evidence/{artifact_name}
 result: pass
 
 criterion: L6.2
@@ -217,7 +227,7 @@ required: receipt
 observed: not applicable: SECRET personal rationale
 result: n/a
 ```
-""", encoding="utf-8")
+""".format(artifact_name=artifact_name), encoding="utf-8")
 
 
 def test_binding_integrity_is_separate_from_verdict_and_private_prose(tmp_path):
@@ -235,6 +245,145 @@ def test_binding_integrity_is_separate_from_verdict_and_private_prose(tmp_path):
     assert report["evaluation"]["value"] == "Recirculate"
     assert "SECRET" not in result.stdout
     assert "private.invalid" not in result.stdout
+
+
+def test_normalized_capture_snapshot_without_capture_metadata_stays_unavailable(tmp_path):
+    run = make_run(tmp_path)
+    write_evidence(run)
+    manifest = run / "evidence/manifest.jsonl"
+    entry = json.loads(manifest.read_text(encoding="utf-8"))
+    entry["request"] = {
+        key: entry["request"][key]
+        for key in ("schemaVersion", "viewport", "freeze")
+    }
+    entry.pop("capture", None)
+    manifest.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+
+    result = status(run, "--scope", "path:P1", "--json")
+    assert result.returncode == 0, result.stderr
+    gap = json.loads(result.stdout)["evidence_gaps"][0]
+    assert gap["binding"] != "complete"
+    assert gap["status"] == "blocked"
+    assert "capture-metadata-unavailable" in gap["reasons"]
+    assert not any(reason.startswith("capture.") for reason in gap["reasons"])
+
+
+def test_capture_metadata_takes_precedence_over_legacy_request_aliases(tmp_path):
+    run = make_run(tmp_path)
+    write_evidence(run)
+    manifest = run / "evidence/manifest.jsonl"
+    entry = json.loads(manifest.read_text(encoding="utf-8"))
+    entry["request"].update({"type": "screenshot", "state": "error"})
+    entry["capture"].update({"type": "a11y tree", "state": "default"})
+    manifest.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+
+    result = status(run, "--scope", "path:P1", "--json")
+    assert result.returncode == 0, result.stderr
+    gap = json.loads(result.stdout)["evidence_gaps"][0]
+    assert {"proof-type-mismatch", "state-mismatch"} <= set(gap["reasons"])
+    assert gap["binding"] == "invalid"
+    assert gap["status"] == "blocked"
+
+
+@pytest.mark.parametrize("proof,capture_type,artifact_name", [
+    ("screenshot", "screenshot", "L6.1-error.png"),
+    ("a11y_tree", "a11y tree", "L6.1-error.json"),
+    ("interaction_trace", "interaction trace", "L6.1-error.trace.zip"),
+])
+def test_declared_proof_type_matches_provider_capture_vocabulary(
+        tmp_path, proof, capture_type, artifact_name):
+    run = make_run(tmp_path)
+    (run / "spec.md").write_text(SPEC.replace(
+        "Required evidence: screenshot; state=error; viewport=390x844",
+        f"Required evidence: {proof}; state=error; viewport=390x844",
+    ), encoding="utf-8")
+    write_evidence(run, artifact_name=artifact_name, proof=capture_type)
+
+    result = status(run, "--scope", "path:P1", "--json")
+    assert result.returncode == 0, result.stderr
+    gap = json.loads(result.stdout)["evidence_gaps"][0]
+    assert gap["binding"] == "complete"
+    assert gap["status"] == "available"
+    assert "proof-type-mismatch" not in gap["reasons"]
+
+
+@pytest.mark.parametrize("declare_probe", [False, True])
+def test_probe_primary_artifact_binds_to_originating_capture(tmp_path, declare_probe):
+    run = make_run(tmp_path)
+    write_evidence(
+        run,
+        artifact_name="L6.1-error.probe.json",
+        capture_artifact_name="L6.1-error.png",
+    )
+    if declare_probe:
+        manifest = run / "evidence/manifest.jsonl"
+        entry = json.loads(manifest.read_text(encoding="utf-8"))
+        entry["probe_artifact"] = "evidence/L6.1-error.probe.json"
+        manifest.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+
+    result = status(run, "--scope", "path:P1", "--json")
+    assert result.returncode == 0, result.stderr
+    gap = json.loads(result.stdout)["evidence_gaps"][0]
+    assert gap["binding"] == "complete"
+    assert gap["status"] == "available"
+    assert "capture-artifact-mismatch" not in gap["reasons"]
+
+
+def test_probe_sidecar_only_binds_to_a_screenshot_capture(tmp_path):
+    run = make_run(tmp_path)
+    (run / "spec.md").write_text(SPEC.replace(
+        "Required evidence: screenshot; state=error; viewport=390x844",
+        "Required evidence: a11y_tree; state=error; viewport=390x844",
+    ), encoding="utf-8")
+    write_evidence(
+        run,
+        artifact_name="L6.1-error.probe.json",
+        capture_artifact_name="L6.1-error.json",
+        proof="a11y tree",
+    )
+
+    result = status(run, "--scope", "path:P1", "--json")
+    assert result.returncode == 0, result.stderr
+    gap = json.loads(result.stdout)["evidence_gaps"][0]
+    assert "capture-artifact-mismatch" in gap["reasons"]
+    assert gap["binding"] == "invalid"
+    assert gap["status"] == "blocked"
+
+
+def test_unrelated_explicit_probe_artifact_does_not_bind(tmp_path):
+    run = make_run(tmp_path)
+    write_evidence(
+        run,
+        artifact_name="L6.1-other.probe.json",
+        capture_artifact_name="L6.1-error.png",
+    )
+    manifest = run / "evidence/manifest.jsonl"
+    entry = json.loads(manifest.read_text(encoding="utf-8"))
+    entry["probe_artifact"] = "evidence/L6.1-other.probe.json"
+    manifest.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+
+    result = status(run, "--scope", "path:P1", "--json")
+    assert result.returncode == 0, result.stderr
+    gap = json.loads(result.stdout)["evidence_gaps"][0]
+    assert "capture-artifact-mismatch" in gap["reasons"]
+    assert gap["binding"] == "invalid"
+    assert gap["status"] == "blocked"
+
+
+def test_unrelated_primary_artifact_does_not_bind_to_capture(tmp_path):
+    run = make_run(tmp_path)
+    write_evidence(
+        run,
+        artifact_name="L6.1-other.png",
+        capture_artifact_name="L6.1-error.png",
+    )
+
+    result = status(run, "--scope", "path:P1", "--json")
+    assert result.returncode == 0, result.stderr
+    gap = json.loads(result.stdout)["evidence_gaps"][0]
+    assert "capture-artifact-mismatch" in gap["reasons"]
+    assert gap["binding"] == "invalid"
+    assert gap["status"] == "blocked"
 
 
 @pytest.mark.parametrize("change,reason,availability", [
@@ -255,7 +404,7 @@ def test_evidence_gaps_fail_closed(tmp_path, change, reason, availability):
     if change == "viewport":
         entry["request"]["viewport"]["width"] = 1280
     elif change == "state":
-        entry["request"]["state"] = "default"
+        entry["capture"]["state"] = "default"
     elif change == "criterion":
         entry["criterion"] = "L6.99"
     elif change == "artifact":

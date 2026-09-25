@@ -14,7 +14,8 @@ from design_playbook.mcp.evidence.containment import (
     REASON_NOT_REGULAR_FILE,
     read_under,
 )
-from design_playbook.mcp.evidence.evidence_preflight import preflight_entry
+from design_playbook.mcp.evidence.capture_contract import validate_capture_snapshot
+from design_playbook.mcp.evidence.path_syntax import probe_sidecar_rel
 from design_playbook.mcp.run_console.repair_packet import derive_repair_packet
 from design_playbook.mcp.run_console.snapshot_builder import build_snapshot, SnapshotBuildError
 from design_playbook.mcp.run_console.source_registry import select_source_registry
@@ -33,6 +34,11 @@ from design_playbook.scripts.pointback_projection import (
 from design_playbook.scripts.run_facts import capture_run_facts
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+PROOF_CAPTURE_TYPES = {
+    "screenshot": "screenshot",
+    "a11y_tree": "a11y tree",
+    "interaction_trace": "interaction trace",
+}
 
 
 class FrontendReviewError(ValueError):
@@ -156,18 +162,26 @@ def _binding(root: Path, criterion: str, token: str, entries: list[dict],
     if not resolved.ok:
         return {"integrity": "missing", "reasons": reasons or ["artifact-unavailable"]}
     request = bound_capture_request(entry)
-    reasons += ["preflight." + fact.code for fact in preflight_entry(request, 1)
-                if fact.level == "error"]
-    if request.get("type") != required["proof"]:
-        reasons.append("proof-type-mismatch")
-    if required["state"] is not None and request.get("state") != required["state"]:
-        reasons.append("state-mismatch")
+    reasons += ["capture." + fact.code for fact in validate_capture_snapshot(request)]
+    capture = entry.get("capture")
+    if isinstance(capture, dict):
+        expected_type = PROOF_CAPTURE_TYPES.get(required["proof"])
+        if expected_type is not None and capture.get("type") != expected_type:
+            reasons.append("proof-type-mismatch")
+        if required["state"] is not None and capture.get("state") != required["state"]:
+            reasons.append("state-mismatch")
+        artifact_path = capture.get("artifact_path")
+        primary_artifacts = (artifact_path,)
+        if capture.get("type") == "screenshot" and isinstance(artifact_path, str):
+            primary_artifacts += (probe_sidecar_rel(artifact_path),)
+        if token not in primary_artifacts:
+            reasons.append("capture-artifact-mismatch")
+    else:
+        reasons.append("capture-metadata-unavailable")
     viewport = request.get("viewport")
     if required["viewport"] and (not isinstance(viewport, dict) or any(
             viewport.get(key) != value for key, value in required["viewport"].items())):
         reasons.append("viewport-mismatch")
-    if request.get("artifact_path") != token:
-        reasons.append("capture-artifact-mismatch")
     try:
         actual = hashlib.sha256(resolved.path.read_bytes()).hexdigest()
     except OSError:
