@@ -25,7 +25,7 @@
   "mcpServers": "./.codex-plugin/mcp.json",
   "interface": {
     "displayName": "design-playbook",
-    "shortDescription": "Design I/O declarations + contracts for product UI",
+    "shortDescription": "Evidence-backed UI delivery for coding agents working on existing Web products",
     "developerName": "Bandersnatch0x",
     "category": "Design",
     "brandColor": "#2DD4BF",

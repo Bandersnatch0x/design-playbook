@@ -311,7 +311,13 @@ _CODEX_PLUGIN_EXTRA = {
     "mcpServers": "./.codex-plugin/mcp.json",
     "interface": {
         "displayName": "design-playbook",
-        "shortDescription": "Design I/O declarations + contracts for product UI",
+        # Leading truncation of the canonical plugin description (ADR-0040
+        # positioning); validated as a prefix so the Codex picker copy cannot
+        # keep an older product framing than the Claude package.
+        "shortDescription": (
+            "Evidence-backed UI delivery for coding agents working on "
+            "existing Web products"
+        ),
         "developerName": "Bandersnatch0x",
         "category": "Design",
         "brandColor": "#2DD4BF",
