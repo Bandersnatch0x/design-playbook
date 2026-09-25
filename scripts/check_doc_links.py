@@ -17,6 +17,7 @@ Usage: check_doc_links.py [--root <repo root>]
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -140,11 +141,39 @@ def check_tracked_assets(root: Path) -> list[str]:
 
 def ignored_paths(root: Path, paths: list[Path], *,
                   include_tracked: bool = False) -> set[Path]:
-    """Ask Git in one batch; ordinary tracked links survive broad cache rules."""
-    names = sorted({path.relative_to(root).as_posix() for path in paths
-                    if path.is_relative_to(root)})
+    """Ask Git in one batch; ordinary tracked links survive broad cache rules.
+
+    Ignore rules match the repository *name* a caller hands in, so the batch
+    keeps that lexical form: a link whose own name is ignored - a symlink, or a
+    directory replaced by one - is invisible once ``resolve_navigation`` has
+    followed it to a tracked target. Members come back keyed to the same name
+    under both the caller's root and its resolved form, because callers compare
+    lexical paths (``collect_files``) and resolved ones (``check_file``).
+
+    Names that walk through a symlinked directory are not Git pathspecs at all
+    (``check-ignore`` fails the whole batch with "is beyond a symbolic link"),
+    so they are classified by their own ancestors instead: the link itself
+    decides whether a clean checkout can reach the path below it.
+    """
+    root_real = root.resolve()
+    names = sorted({name for path in paths
+                    if (name := _relative_name(path, root, root_real))})
     if not names or not (root / ".git").exists():
         return set()
+    linked = {name for name in names if _symlinked_ancestor(root, name)}
+    names = [name for name in names if name not in linked]
+    ignored = set()
+    if names:
+        ignored.update(_git_ignored(root, names, include_tracked=include_tracked))
+    for name in sorted(linked):
+        if _ignored_ancestor(root, name, include_tracked=include_tracked):
+            ignored.add(name)
+    return {form for name in ignored for form in (root / name, root_real / name)}
+
+
+def _git_ignored(root: Path, names: list[str], *,
+                 include_tracked: bool) -> set[str]:
+    """Git's verdict for names it accepts as pathspecs."""
     command = ["git", "-C", str(root), "check-ignore", "-z", "--stdin"]
     if include_tracked:
         command.append("--no-index")
@@ -156,16 +185,67 @@ def ignored_paths(root: Path, paths: list[Path], *,
     if result.returncode not in (0, 1):
         raise subprocess.CalledProcessError(
             result.returncode, result.args, result.stdout, result.stderr)
-    return {root / name for name in result.stdout.split("\0") if name}
+    return {name for name in result.stdout.split("\0") if name}
+
+
+def _symlinked_ancestor(root: Path, name: str) -> bool:
+    """Whether the path below the link is beyond a symlink Git will not follow."""
+    current = root
+    for part in Path(name).parts[:-1]:
+        current = current / part
+        if current.is_symlink():
+            return True
+    return False
+
+
+def _ignored_ancestor(root: Path, name: str, *,
+                      include_tracked: bool) -> bool:
+    """Whether an ignore rule makes a symlinked path unreachable when cloned.
+
+    Git cannot classify names below the link, but it still classifies the
+    prefixes above it, so the search stops at the first symlink it reaches.
+    """
+    parts = Path(name).parts[:-1]
+    current = root
+    for index, part in enumerate(parts):
+        current = current / part
+        prefix = Path(*parts[:index + 1]).as_posix()
+        if _git_ignored(root, [prefix], include_tracked=include_tracked):
+            return True
+        if current.is_symlink():
+            return False
+    return False
+
+
+def _relative_name(path: Path, root: Path, root_real: Path) -> str | None:
+    """The Git-visible name for one candidate, in the caller's own shape.
+
+    A lexical path stays lexical; a path that arrived already resolved (the
+    navigation form) still gets named when the caller's root is spelled through
+    a symlink or a Windows short name.
+    """
+    if path.is_relative_to(root):
+        return path.relative_to(root).as_posix()
+    resolved = path.resolve()
+    if resolved.is_relative_to(root_real):
+        return resolved.relative_to(root_real).as_posix()
+    return None
+
+
+def lexical_navigation(path: Path, root: Path, target_path: str) -> Path:
+    """The target a link asks for: ``..`` folded, symlinks left alone."""
+    raw = unquote(target_path)
+    base = root if raw.startswith("/") else path.parent
+    return Path(os.path.normpath(base / raw.lstrip("/")))
 
 
 def resolve_navigation(path: Path, root: Path, target_path: str) -> Path:
-    raw = unquote(target_path)
-    return ((root / raw.lstrip("/")) if raw.startswith("/")
-            else (path.parent / raw)).resolve()
+    return lexical_navigation(path, root, target_path).resolve()
 
 
-def navigation_paths(files: list[Path], root: Path) -> list[Path]:
+def navigation_paths(files: list[Path], root: Path, *,
+                     resolve: bool = True) -> list[Path]:
+    """Every path a set of documents reaches, optionally kept lexical."""
     paths = list(files)
     for path in files:
         text = strip_code(path.read_text(encoding="utf-8"))
@@ -174,7 +254,8 @@ def navigation_paths(files: list[Path], root: Path) -> list[Path]:
                 target = match.group(1).strip().removeprefix("<").removesuffix(">")
                 parsed = urlparse(target)
                 if not parsed.scheme and not parsed.netloc and parsed.path:
-                    paths.append(resolve_navigation(path, root, parsed.path))
+                    joined = lexical_navigation(path, root, parsed.path)
+                    paths.append(joined.resolve() if resolve else joined)
     return paths
 
 
@@ -203,7 +284,8 @@ def check_file(path: Path, root: Path, *, public: bool = True,
             if not raw_path:
                 continue
             resolved = resolve_navigation(path, root, parsed.path)
-            if public and ignored and resolved in ignored:
+            lexical = lexical_navigation(path, root, parsed.path)
+            if public and ignored and (resolved in ignored or lexical in ignored):
                 problems.append(
                     f"{_rel(path, root)}: ignored artifact {kind} -> {target}; "
                     "public navigation must resolve in a clean checkout")
@@ -255,6 +337,7 @@ def main(argv: list[str]) -> int:
         ignored = ignored_paths(root, files)
         files = [path for path in files if path not in ignored]
         ignored |= ignored_paths(root, navigation_paths(files, root))
+        ignored |= ignored_paths(root, navigation_paths(files, root, resolve=False))
     except (OSError, UnicodeError, subprocess.SubprocessError) as exc:
         print(f"DOC LINKS ERROR: cannot classify document visibility: {exc}",
               file=sys.stderr)

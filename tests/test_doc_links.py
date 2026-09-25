@@ -30,6 +30,16 @@ def run_gate(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def symlink(root: Path, name: str, target: str, *, directory: bool = False) -> None:
+    """Symlink or skip: Windows needs developer mode for either kind."""
+    path = root / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.symlink_to(target, target_is_directory=directory)
+    except (NotImplementedError, OSError):
+        pytest.skip("symlink creation unavailable")
+
+
 @pytest.mark.parametrize("directory", [
     "docs/specs", "docs/plan", "docs/research", "docs/issues", "docs/tickets",
     "specs", "plans", "research", "issues", "tickets", ".agents/specs",
@@ -191,6 +201,53 @@ def test_cli_rejects_public_link_to_locally_excluded_document(tmp_path):
     )
     assert result.returncode == 1
     assert "ignored artifact link" in result.stdout
+
+
+def test_cli_rejects_public_link_to_ignored_symlink_name(tmp_path):
+    """The link's own name decides: resolve() hides an ignored symlink entry."""
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True, timeout=10)
+    write(tmp_path, ".gitignore", "ignored-link.md\n")
+    write(tmp_path, "docs/inside.md")
+    symlink(tmp_path, "ignored-link.md", "docs/inside.md")
+    write(tmp_path, "README.md", "[inside](ignored-link.md)\n")
+    result = run_gate(tmp_path)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "ignored artifact link -> ignored-link.md" in result.stdout
+
+
+def test_cli_rejects_public_link_below_an_ignored_symlink(tmp_path):
+    """Git cannot name a path beyond the link, but it still ignores the link."""
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True, timeout=10)
+    write(tmp_path, ".gitignore", "linkdir\n")
+    write(tmp_path, "docs/inside.md")
+    symlink(tmp_path, "linkdir", "docs", directory=True)
+    write(tmp_path, "README.md", "[inside](linkdir/inside.md)\n")
+    result = run_gate(tmp_path)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "ignored artifact link -> linkdir/inside.md" in result.stdout
+
+
+def test_cli_rejects_public_link_through_symlink_to_ignored_directory(tmp_path):
+    """The resolved target keeps its ignore verdict when reached through a link."""
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True, timeout=10)
+    write(tmp_path, ".gitignore", "realdir/\n")
+    write(tmp_path, "realdir/inside.md")
+    symlink(tmp_path, "alias", "realdir", directory=True)
+    write(tmp_path, "README.md", "[inside](alias/inside.md)\n")
+    result = run_gate(tmp_path)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "ignored artifact link -> alias/inside.md" in result.stdout
+
+
+def test_cli_allows_symlinked_navigation_a_clean_checkout_still_reaches(tmp_path):
+    """`linkdir/` matches directories only, so the symlink entry stays public."""
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True, timeout=10)
+    write(tmp_path, ".gitignore", "linkdir/\n")
+    write(tmp_path, "docs/inside.md")
+    symlink(tmp_path, "linkdir", "docs", directory=True)
+    write(tmp_path, "README.md", "[inside](linkdir/inside.md)\n")
+    result = run_gate(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_cli_rejects_forced_add_of_locally_excluded_document(tmp_path):
