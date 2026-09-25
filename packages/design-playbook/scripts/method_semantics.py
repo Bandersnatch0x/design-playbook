@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from design_playbook.scripts._diagnostics import Finding, finding
+from design_playbook.scripts.g6_records import latest_by_instant
 
 METHODS = frozenset({
     "static-inspection",
@@ -195,7 +196,12 @@ def check_method_semantics(
         ]
         if not bound:
             continue  # binding itself is G6.no_binding's diagnostic
-        latest = max(bound, key=lambda m: _text(m.get("ts")))
+        # Latest by ts instant, not by string order (P2-3). An unusable ts
+        # leaves no latest to judge here; the hard G6 binding gate reports it
+        # as G6.binding_conflict for this same criterion/artifact pair.
+        latest = latest_by_instant(bound)
+        if latest is None:
+            continue
         reason = parse_method_semantics(latest).unusable_reason
         if reason:
             errs.append(finding(

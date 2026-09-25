@@ -167,6 +167,18 @@ class MethodSemanticsGateTests(unittest.TestCase):
         errs, _warns = check_method_semantics(entries, rows)
         self.assertIn("G6.method_unusable_pass", _rules(errs))
 
+    def test_latest_bound_entry_uses_instant_not_string_order(self) -> None:
+        # P2-3: the older +08:00 stamp sorts above the newer Z stamp as text,
+        # so a string max would judge the usable row and miss the newer one.
+        older_usable = {**self.USERTEST, "ethics": "consented",
+                        "ts": "2026-09-24T12:00:00+08:00"}
+        newer_unusable = {**self.USERTEST, "ts": "2026-09-24T10:00:00Z"}
+        errs, _warns = check_method_semantics(
+            [older_usable, newer_unusable],
+            [("L6.1", "pass", "evidence/notes.md")],
+        )
+        self.assertIn("G6.method_unusable_pass", _rules(errs))
+
     def test_supplementary_unusable_entry_is_quarantined(self) -> None:
         entries = [self.USERTEST, {
             "criterion": "L6.1", "artifact": "trace.json",
@@ -501,6 +513,7 @@ class FixtureWalkthroughTests(unittest.TestCase):
             entries.append({
                 "criterion": "L6.1",
                 "artifact": "L6.1-usertest-notes.md",
+                "ts": "2026-08-14T11:20:00Z",
                 "method": "user-test",
                 "observation": "temporary test observation",
                 "scope": "one temporary test session",

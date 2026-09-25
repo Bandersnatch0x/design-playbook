@@ -44,11 +44,13 @@ def make_run(tmp_path: Path) -> Path:
     return run
 
 
-def status(run: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def status(run: Path, *args: str,
+           env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(STATUS), str(run), *args],
         capture_output=True, text=True, encoding="utf-8", timeout=20,
-        env={**os.environ, "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1"},
+        env={**os.environ, "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1",
+             **(env or {})},
     )
 
 
@@ -146,11 +148,16 @@ def test_git_clues_use_explicit_revisions_and_include_uncommitted_files(tmp_path
 
 def test_git_clues_never_guess_base_or_discover_a_parent_repository(tmp_path):
     run = make_run(tmp_path)
+    # Pin Git's discovery ceiling so the case is decided by the fixture, not
+    # by where pytest put its basetemp: with --basetemp inside a checkout the
+    # unmodified test found the host repository and reported
+    # git-root-must-be-explicit instead of the expected no-repository failure.
+    ceiling = {"GIT_CEILING_DIRECTORIES": str(tmp_path)}
     result = status(run, "--scope", "path:P1", "--git-root", str(run),
-                    "--worktree", "--json")
+                    "--worktree", "--json", env=ceiling)
     assert result.returncode == 2
     result = status(run, "--scope", "path:P1", "--git-root", str(run),
-                    "--base-revision", "HEAD", "--worktree", "--json")
+                    "--base-revision", "HEAD", "--worktree", "--json", env=ceiling)
     assert result.returncode == 2
     assert "git-input-unavailable" in result.stderr
 
@@ -394,6 +401,7 @@ def test_unrelated_primary_artifact_does_not_bind_to_capture(tmp_path):
     ("hash", "artifact-hash-mismatch", "stale"),
     ("partial", "manifest-malformed", "inconsistent"),
     ("conflict", "conflicting-bindings", "inconsistent"),
+    ("ts-naive", "invalid-binding-timestamp", "inconsistent"),
     ("capture", "G6.capture_freeze", "known"),
 ])
 def test_evidence_gaps_fail_closed(tmp_path, change, reason, availability):
@@ -413,6 +421,8 @@ def test_evidence_gaps_fail_closed(tmp_path, change, reason, availability):
         (run / "evidence/L6.1-error.png").write_bytes(b"changed-after-binding")
     elif change == "capture":
         entry["request"].pop("freeze")
+    elif change == "ts-naive":
+        entry["ts"] = "2026-09-24T10:00:00"
     content = json.dumps(entry) + "\n"
     if change == "partial":
         content += '{"partial":'
@@ -428,6 +438,51 @@ def test_evidence_gaps_fail_closed(tmp_path, change, reason, availability):
     assert gap["binding"] != "complete"
 
 
+@pytest.mark.parametrize("change", ["complete", "artifact", "conflict"])
+def test_binding_entries_keep_one_shape_and_report_declares_schema_version(tmp_path, change):
+    run = make_run(tmp_path)
+    write_evidence(run)
+    manifest = run / "evidence/manifest.jsonl"
+    entry = json.loads(manifest.read_text(encoding="utf-8"))
+    content = json.dumps(entry) + "\n"
+    if change == "artifact":
+        (run / "evidence/L6.1-error.png").unlink()
+    elif change == "conflict":
+        content += json.dumps({**entry, "sha256": "0" * 64}) + "\n"
+    manifest.write_text(content, encoding="utf-8")
+
+    result = status(run, "--scope", "path:P1", "--json")
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["schemaVersion"] == 1
+    bindings = [binding for gap in report["evidence_gaps"] for binding in gap["bindings"]]
+    assert bindings
+    assert all(set(binding) == {"integrity", "reasons", "source", "content_hash"}
+               for binding in bindings)
+    values = [binding[key] for binding in bindings for key in ("source", "content_hash")]
+    if change == "complete":
+        assert all(values)
+    else:
+        assert all(value is None for value in values)
+
+
+def test_latest_binding_orders_mixed_offsets_by_instant(tmp_path):
+    """P2-3: the later capture wins even when its stamp sorts lower as text."""
+    run = make_run(tmp_path)
+    write_evidence(run)
+    manifest = run / "evidence/manifest.jsonl"
+    entry = json.loads(manifest.read_text(encoding="utf-8"))
+    older = {**entry, "ts": "2026-09-24T12:00:00+08:00"}  # 04:00Z
+    newer = {**entry, "ts": "2026-09-24T10:00:00Z", "sha256": "0" * 64}
+    manifest.write_text(f"{json.dumps(older)}\n{json.dumps(newer)}\n", encoding="utf-8")
+
+    result = status(run, "--scope", "path:P1", "--json")
+    assert result.returncode == 0, result.stderr
+    gap = json.loads(result.stdout)["evidence_gaps"][0]
+    assert gap["binding"] == "stale"
+    assert "artifact-hash-mismatch" in gap["reasons"]
+
+
 def test_skipped_evaluator_never_turns_na_into_accepted_proof(tmp_path):
     run = make_run(tmp_path)
     write_evidence(run)
@@ -438,6 +493,34 @@ def test_skipped_evaluator_never_turns_na_into_accepted_proof(tmp_path):
     assert report["evaluation"]["value"] == "unaudited"
     assert report["evidence_gaps"][0]["evaluator"] == "unaudited"
     assert report["evidence_gaps"][1]["status"] == "blocked"
+
+
+@pytest.mark.parametrize("ledger,availability", [
+    ("interrupted", "inconsistent"),
+    ("missing", "unknown"),
+])
+def test_unprojectable_owner_ledger_is_not_reported_as_absent(tmp_path, ledger,
+                                                              availability):
+    # An owner ledger that exists but cannot be projected used to collapse into
+    # the same report as an absent one (availability=unknown, no reason), so a
+    # half-written point-back read as "the evaluator never ran".
+    run = make_run(tmp_path)
+    write_evidence(run)
+    pointback = run / "point-back.md"
+    if ledger == "missing":
+        pointback.unlink()
+    else:
+        lines = pointback.read_text(encoding="utf-8").splitlines()
+        pointback.write_text("\n".join(lines[:9]) + "\n", encoding="utf-8")
+
+    report = json.loads(status(run, "--scope", "path:P1", "--json").stdout)
+    assert report["freshness"] == "current"
+    assert report["evaluation"] == {"availability": availability, "value": "unaudited"}
+    gaps = report["evidence_gaps"]
+    assert [gap["evaluator"] for gap in gaps] == ["unaudited", "unaudited"]
+    malformed = [gap["reasons"] for gap in gaps]
+    assert ["pointback-malformed" in reasons for reasons in malformed] == [
+        ledger == "interrupted"] * 2
 
 
 def test_sampling_only_enumerates_declared_cells_and_preserves_unreviewed_reason(tmp_path):

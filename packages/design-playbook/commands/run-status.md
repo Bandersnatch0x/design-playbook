@@ -33,7 +33,11 @@ python <plugin>/scripts/run_status.py <run> --scope path:P1 --git-root <repo> --
 
 - A run path and at least one `--scope` are required. Scope mode does not discover
   runs and cannot combine with `--list`; `--scratch` only applies to discovery.
-  Its JSON is a scope report, not the legacy status JSON or Run Snapshot v1.
+  Its JSON is a scope report, not the legacy status JSON or Run Snapshot v1. It
+  carries `schemaVersion: 1`; every member of `evidence_gaps[].bindings[]` has the
+  same keys `integrity`, `reasons`, `source`, `content_hash`, and an unbound or
+  unreadable entry reports `source: null` / `content_hash: null` rather than
+  dropping those keys.
 - Repeated scopes accept `path:P1`, `page:<id>`, `component:<id>`, and
   `file:<relative/path>`. Paths must stay within the explicit Git root, or the
   selected run if no Git root was given. Absolute paths and traversal are rejected.
@@ -63,10 +67,19 @@ The separate sampling summary enumerates only nonblank L5 state cells.
 
 The report separates source availability, binding integrity, evidence gaps, and
 the original evaluator result. Missing required proof is `blocked`; skipping the
-evaluator remains `unaudited`. Not-applicable and unreviewed reasons are referenced
-at their source, not copied as private prose. It does not start a Provider, read
-browser login state, emit capture URLs or source code, write run artifacts, or
-grant semantic approval. Treat scope names and relative file paths as local data.
+evaluator remains `unaudited`. An owner ledger that exists but cannot be
+projected is never read as an absent one: every gap gains the
+`pointback-malformed` reason, and sources that are still current report the
+evaluation as `inconsistent` rather than `unknown`. Binding timestamps order
+by instant, so mixed `Z` / `+HH:MM` stamps pick the real latest capture: a
+stamp that is missing, offset-less, or not ISO-8601 reports
+`invalid-binding-timestamp`, and two distinct entries sharing the latest
+instant report `conflicting-bindings`; both leave the binding `inconsistent`.
+Not-applicable and unreviewed reasons are referenced at their source, not
+copied as private prose.
+It does not start a Provider, read browser login state, emit capture URLs or
+source code, write run artifacts, or grant semantic approval. Treat scope names
+and relative file paths as local data.
 
 Reverification candidates retain the original Repair Packet's invalidated set,
 owner, resume stage, and recapture requirement. **They cannot safely narrow the

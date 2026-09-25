@@ -34,6 +34,7 @@ from design_playbook.scripts.pointback_projection import (
 from design_playbook.scripts.run_facts import capture_run_facts
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+REPORT_SCHEMA_VERSION = 1
 PROOF_CAPTURE_TYPES = {
     "screenshot": "screenshot",
     "a11y_tree": "a11y tree",
@@ -146,6 +147,13 @@ def _authority(root: Path, filename: str, secret: bytes):
     return facts, snapshot
 
 
+def _binding_result(integrity: str, reasons: list[str], source: str | None = None,
+                    content_hash: str | None = None) -> dict:
+    """One binding shape for every outcome; unbound entries carry explicit nulls."""
+    return {"integrity": integrity, "reasons": reasons,
+            "source": source, "content_hash": content_hash}
+
+
 def _binding(root: Path, criterion: str, token: str, entries: list[dict],
              expected_count: int, required: dict) -> dict:
     errors = check_evidence("", expected_count, root / "evidence", root,
@@ -154,13 +162,16 @@ def _binding(root: Path, criterion: str, token: str, entries: list[dict],
     leaf = token[len("evidence/"):]
     try:
         entry = select_bound_entry(entries, criterion, leaf)
-    except ValueError:
-        return {"integrity": "inconsistent", "reasons": ["conflicting-bindings"]}
+    except ValueError as unorderable:
+        # Selector-owned reason code: a malformed or offset-less ts
+        # (``invalid-binding-timestamp``) is not the same defect as two
+        # distinct entries sharing the latest instant.
+        return _binding_result("inconsistent", [str(unorderable)])
     if entry is None:
-        return {"integrity": "missing", "reasons": reasons or ["required-proof-missing"]}
+        return _binding_result("missing", reasons or ["required-proof-missing"])
     resolved = read_under(root, token)
     if not resolved.ok:
-        return {"integrity": "missing", "reasons": reasons or ["artifact-unavailable"]}
+        return _binding_result("missing", reasons or ["artifact-unavailable"])
     request = bound_capture_request(entry)
     reasons += ["capture." + fact.code for fact in validate_capture_snapshot(request)]
     capture = entry.get("capture")
@@ -185,25 +196,30 @@ def _binding(root: Path, criterion: str, token: str, entries: list[dict],
     try:
         actual = hashlib.sha256(resolved.path.read_bytes()).hexdigest()
     except OSError:
-        return {"integrity": "missing", "reasons": reasons + ["artifact-unreadable"]}
+        return _binding_result("missing", reasons + ["artifact-unreadable"])
     expected = entry.get("sha256")
     if expected != actual:
         reasons.append("artifact-hash-mismatch" if expected else "artifact-hash-unavailable")
     integrity = "stale" if "artifact-hash-mismatch" in reasons else "invalid" if reasons else "complete"
-    return {"integrity": integrity, "reasons": sorted(set(reasons)),
-            "source": f"evidence/manifest.jsonl#{criterion}", "content_hash": "sha256:" + actual}
+    return _binding_result(integrity, sorted(set(reasons)),
+                           f"evidence/manifest.jsonl#{criterion}", "sha256:" + actual)
 
 
 def _evidence_gaps(root: Path, requirements, filename: str, digest: str | None,
-                   facts) -> list[dict]:
+                   facts) -> tuple[list[dict], str | None]:
     ids = tuple(item.criterion for item in requirements)
     try:
         pointback = project_pointback(facts.pointback_text, ids)
         evaluations = {item.criterion_id: item for item in pointback.criteria}
         audited = pointback.verdict != VerdictDisposition.UNAUDITED
+        evaluator_reason = None
     except PointBackProjectionError:
+        # An owner ledger that exists but cannot be projected stays
+        # distinguishable from an absent one; both keep the evaluator unaudited.
         evaluations = {}
         audited = False
+        evaluator_reason = (
+            "pointback-malformed" if facts.pointback_text.strip() else None)
     entries = list(facts.manifest_entries)
     manifest_bad = any(error.artifact == "manifest" for error in facts.read_errors)
     gaps = []
@@ -238,6 +254,8 @@ def _evidence_gaps(root: Path, requirements, filename: str, digest: str | None,
             reasons.append("requirement-unavailable")
         elif not bindings:
             reasons.append("required-proof-missing")
+        if evaluator_reason:
+            reasons.append(evaluator_reason)
         not_applicable = None
         if audited and evaluation and evaluation.outcome == "notApplicable":
             status = "notApplicable"
@@ -253,7 +271,7 @@ def _evidence_gaps(root: Path, requirements, filename: str, digest: str | None,
             "evaluator": evaluation.outcome if audited and evaluation else "unaudited",
             "not_applicable_reason": not_applicable, "reasons": sorted(set(reasons)),
         })
-    return gaps
+    return gaps, evaluator_reason
 
 
 def _context_hash(snapshot: dict, root: Path, digest: str | None,
@@ -296,7 +314,7 @@ def _proposal(snapshot: dict, impact: list[dict], gaps: list[dict],
     for gap in gaps:
         if gap["status"] in {"blocked", "unknown"}:
             include(gap["criterion"], "evidence-gap", gap["declaration"],
-                    *(binding["source"] for binding in gap["bindings"] if "source" in binding))
+                    *(binding["source"] for binding in gap["bindings"] if binding["source"]))
         if unresolved or invalidated["availability"] != "known":
             include(gap["criterion"], "cannot-safely-narrow", gap["declaration"])
     fields = {}
@@ -383,10 +401,13 @@ def build_frontend_review(
     try:
         requirements = project_proof_requirements(spec)
     except SpecificationProjectionError:
+        # project_scope_links parsed the same text first, so its state already
+        # carries this failure; this branch only keeps the projection total.
         requirements = ()
     secret = secrets.token_bytes(32)
     facts, snapshot = _authority(run_root, filename, secret)
-    gaps = _evidence_gaps(run_root, requirements, filename, digest, facts)
+    gaps, evaluator_reason = _evidence_gaps(
+        run_root, requirements, filename, digest, facts)
     verdict = snapshot["evaluation"]["verdict"]
     sampling = project_sampling(facts.pointback_text, spec)
     for row in sampling:
@@ -396,7 +417,7 @@ def build_frontend_review(
     source_hash = _context_hash(snapshot, run_root, digest, gaps, scopes, clues, facts)
     verified_facts, verified_snapshot = _authority(run_root, filename, secret)
     _, verified_digest = _read_source(run_root, filename)
-    verified_gaps = _evidence_gaps(
+    verified_gaps, _ = _evidence_gaps(
         run_root, requirements, filename, verified_digest, verified_facts)
     verified_clues = _git_clues(git_root, base_revision, head_revision, worktree)
     verified_hash = _context_hash(
@@ -415,12 +436,17 @@ def build_frontend_review(
         for gap in gaps:
             gap["availability"] = "stale"
         verdict = {**verdict, "availability": "stale"}
-    return {"impact": impact, "unaffected": [], "change_clues": clues,
+    evaluation_availability = verdict["availability"]
+    if evaluator_reason and freshness == "current":
+        # A present but unreadable owner ledger is inconsistent, not absent.
+        evaluation_availability = "inconsistent"
+    return {"schemaVersion": REPORT_SCHEMA_VERSION,
+            "impact": impact, "unaffected": [], "change_clues": clues,
             "source_hash": source_hash, "freshness": freshness,
             "evidence_gaps": gaps, "sampling": sampling,
             "sampling_reasons": sorted({finding.rule_id for finding in sampling_findings}),
             "reverification": _proposal(snapshot, impact, gaps, freshness),
-            "evaluation": {"availability": verdict["availability"],
+            "evaluation": {"availability": evaluation_availability,
                            "value": verdict["result"] or "unaudited"}}
 
 
@@ -445,7 +471,7 @@ def text_lines(report: dict) -> list[str]:
                      f"proof={required['proof']}; state={required['state']}; "
                      f"viewport={required['viewport']}; reasons={','.join(gap['reasons']) or 'none'}")
         for binding in gap["bindings"]:
-            if "source" in binding:
+            if binding["source"]:
                 lines.append(f"  Evidence: {binding['source']}; {binding['content_hash']}; "
                              f"{binding['integrity']}")
         if gap["not_applicable_reason"]:
