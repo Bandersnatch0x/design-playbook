@@ -25,6 +25,7 @@ import json
 import re
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 try:
@@ -303,8 +304,15 @@ def preflight_plan(plan: object) -> list[PreflightFact]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    if sys.stdout and hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")  # Windows GBK consoles
+    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
+    # regardless of the host code page. See scripts/stdio_encoding.py.
+    for _candidate in Path(__file__).resolve().parents:
+        if (_candidate / "design_playbook.py").is_file():
+            sys.path.insert(0, str(_candidate))
+            break
+    from design_playbook.scripts.stdio_encoding import configure_piped_utf8
+
+    configure_piped_utf8()
     args = sys.argv[1:] if argv is None else argv
     md = "--md" in args
     paths = [a for a in args if a != "--md"]

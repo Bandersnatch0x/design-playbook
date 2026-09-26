@@ -28,6 +28,7 @@ import json
 import re
 import sys
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 
 RUN_PROFILE_MARKER = re.compile(r"<!--\s*run-profile(?::\s*v(\d+))?\s*-->")
 FENCED_BLOCK = re.compile(r"```[a-zA-Z]*\n(.*?)```", re.S)
@@ -326,4 +327,13 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
+    # regardless of the host code page. See scripts/stdio_encoding.py.
+    for _candidate in Path(__file__).resolve().parents:
+        if (_candidate / "design_playbook.py").is_file():
+            sys.path.insert(0, str(_candidate))
+            break
+    from design_playbook.scripts.stdio_encoding import configure_piped_utf8
+
+    configure_piped_utf8()
     raise SystemExit(main())

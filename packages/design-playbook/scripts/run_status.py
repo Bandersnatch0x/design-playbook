@@ -294,11 +294,13 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    # T-081 family: --json writes JSON, which every consumer reads as strict
-    # UTF-8. Under a pipe the Windows default stdout codec is the locale code
-    # page, so the narration em dashes in status_projection would emit cp936
-    # bytes and the caller's reader would reject the document. Emit UTF-8.
-    for _stream in (sys.stdout, sys.stderr):
-        if _stream is not None and not _stream.isatty() and hasattr(_stream, "reconfigure"):
-            _stream.reconfigure(encoding="utf-8")
+    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
+    # regardless of the host code page. See scripts/stdio_encoding.py.
+    for _candidate in Path(__file__).resolve().parents:
+        if (_candidate / "design_playbook.py").is_file():
+            sys.path.insert(0, str(_candidate))
+            break
+    from design_playbook.scripts.stdio_encoding import configure_piped_utf8
+
+    configure_piped_utf8()
     sys.exit(main())

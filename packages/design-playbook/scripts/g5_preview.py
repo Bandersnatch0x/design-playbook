@@ -353,4 +353,13 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
+    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
+    # regardless of the host code page. See scripts/stdio_encoding.py.
+    for _candidate in Path(__file__).resolve().parents:
+        if (_candidate / "design_playbook.py").is_file():
+            sys.path.insert(0, str(_candidate))
+            break
+    from design_playbook.scripts.stdio_encoding import configure_piped_utf8
+
+    configure_piped_utf8()
     sys.exit(main(sys.argv))

@@ -99,6 +99,11 @@ jobs:
       - name: Read-only frontend scope review
         run: python3 -m pytest tests/test_frontend_review.py -q
 
+      - name: Piped-stdout encoding (every entry point, non-UTF-8 code pages)
+        # T-105: static net (every entry point wires the one seam) plus a sweep
+        # of every entry point under cp1252 / shift_jis / gbk.
+        run: python3 -m pytest tests/test_stdio_encoding.py -q
+
       - name: Shared transport + Preview transaction/stdin tests (required)
         run: |
           python3 -m pytest \

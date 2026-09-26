@@ -318,8 +318,12 @@ def markdown_view(payload: dict) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    if sys.stdout and hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")  # Windows GBK consoles
+    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
+    # regardless of the host code page. See scripts/stdio_encoding.py.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packages" / "design-playbook"))
+    from design_playbook.scripts.stdio_encoding import configure_piped_utf8
+
+    configure_piped_utf8()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--runs", nargs="*", default=None)

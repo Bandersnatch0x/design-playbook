@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 EVIDENCE_PREFIX = "evidence/"
 EVIDENCE_MANIFEST = "evidence/manifest.jsonl"
@@ -94,9 +95,14 @@ STAGES_BY_KEY = {stage.key: stage for stage in STAGES}
 
 
 if __name__ == "__main__":
-    # T-081 family: same pipe-encoding guard as the other shipped entry points.
-    for _stream in (sys.stdout, sys.stderr):
-        if _stream is not None and not _stream.isatty() and hasattr(_stream, "reconfigure"):
-            _stream.reconfigure(encoding="utf-8")
+    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
+    # regardless of the host code page. See scripts/stdio_encoding.py.
+    for _candidate in Path(__file__).resolve().parents:
+        if (_candidate / "design_playbook.py").is_file():
+            sys.path.insert(0, str(_candidate))
+            break
+    from design_playbook.scripts.stdio_encoding import configure_piped_utf8
+
+    configure_piped_utf8()
     print("scripts/stages.py is a module-level API, not a CLI — import it "
           "(see module docstring); no command-line interface exists.")

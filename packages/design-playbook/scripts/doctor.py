@@ -465,10 +465,13 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    # T-081 family: under a pipe the Windows default stdout codec is the locale
-    # code page, so a repair line carrying an em dash or CJK crashes the
-    # caller's UTF-8 reader thread. Emit UTF-8 deterministically.
-    for _stream in (sys.stdout, sys.stderr):
-        if _stream is not None and not _stream.isatty() and hasattr(_stream, "reconfigure"):
-            _stream.reconfigure(encoding="utf-8")
+    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
+    # regardless of the host code page. See scripts/stdio_encoding.py.
+    for _candidate in Path(__file__).resolve().parents:
+        if (_candidate / "design_playbook.py").is_file():
+            sys.path.insert(0, str(_candidate))
+            break
+    from design_playbook.scripts.stdio_encoding import configure_piped_utf8
+
+    configure_piped_utf8()
     sys.exit(main())
