@@ -7,6 +7,7 @@ thresholds — change the map here, never at both call sites.
 """
 from __future__ import annotations
 
+import posixpath
 import re
 import subprocess
 import sys
@@ -325,7 +326,31 @@ _PUBLIC_SURFACE_PATTERNS = (
     "README.md",
     "commands/**/*.md",
     "skills/**/*.md",
+    # The npm tarball ships these too, and the pi.dev gallery / jsDelivr render
+    # them for readers, so their links are just as public. Omitting them let
+    # two broken links ship in v0.25.1 (`mcp/evidence/README.md`).
+    "mcp/**/*.md",
+    "codex/**/*.md",
 )
+
+
+def _reference_candidates(package_root: Path) -> list[tuple[Path, str, bool]]:
+    """Every raw reference named by a shipped public Markdown surface."""
+    surfaces: set[Path] = set()
+    for pattern in _PUBLIC_SURFACE_PATTERNS:
+        surfaces.update(path for path in package_root.glob(pattern) if path.is_file())
+
+    candidates: list[tuple[Path, str, bool]] = []
+    for surface in surfaces:
+        text = surface.read_text(encoding="utf-8")
+        link_candidates = {match.group(1) for match in _MARKDOWN_LINK.finditer(text)}
+        candidates.extend((surface, raw, True) for raw in link_candidates)
+        candidates.extend(
+            (surface, match.group(1), False)
+            for match in _PACKAGE_PATH.finditer(text)
+            if match.group(1) not in link_candidates
+        )
+    return candidates
 
 
 def _normalize_package_target(
@@ -334,6 +359,7 @@ def _normalize_package_target(
     raw: str,
     *,
     relative_to_surface: bool,
+    report_escapes: bool = False,
 ) -> str | None:
     target = raw.strip().strip("`'\"").split("#", 1)[0].split("?", 1)[0]
     target = target.replace("\\", "/").rstrip(".,;:")
@@ -344,61 +370,101 @@ def _normalize_package_target(
     if "<" in target or ">" in target:
         return None
 
+    def _relative_or_escape(base: Path) -> str | None:
+        """Package-relative path, or the escaping path when asked to report it.
+
+        A reference that leaves the package root cannot resolve for any reader
+        of the published surface: npmjs.com and the pi.dev gallery resolve it
+        against the package root, so `../../README.md` becomes
+        `https://cdn.jsdelivr.net/README.md` (HTTP 400). Silently dropping it --
+        the previous behavior -- hid two such links through v0.25.1.
+        """
+        package_root_resolved = package_root.resolve()
+        absolute = (base / target).resolve()
+        try:
+            return absolute.relative_to(package_root_resolved).as_posix()
+        except ValueError:
+            if not report_escapes:
+                return None
+        try:
+            base_relative = base.resolve().relative_to(package_root_resolved).as_posix()
+        except ValueError:
+            return None
+        return posixpath.normpath(f"{base_relative}/{target}")
+
     package_prefix = "packages/design-playbook/"
     if target.startswith(package_prefix):
         target = target[len(package_prefix):]
     elif relative_to_surface:
         local_roots = ("scripts/", "examples/", "skills/", "commands/", "mcp/", "codex/", "references/")
         relative_target = target.lstrip("./")
-        if not relative_target.startswith(local_roots) and "references" not in surface.parts:
+        # An exiting reference (`../../…`) is never valid on the published
+        # surface, so it must reach the resolver instead of being filtered out
+        # here by a prefix that can no longer match after lstrip().
+        escaping = target.startswith("../")
+        if (
+            not escaping
+            and not relative_target.startswith(local_roots)
+            and "references" not in surface.parts
+        ):
             return None
-        absolute = (surface.parent / target).resolve()
-        try:
-            target = absolute.relative_to(package_root.resolve()).as_posix()
-        except ValueError:
+        resolved = _relative_or_escape(surface.parent)
+        if resolved is None:
             return None
+        target = resolved
     elif target.startswith(("scripts/", "examples/", "skills/")):
         pass
     elif target.startswith(("references/", "./references/", "../")):
-        absolute = (surface.parent / target).resolve()
-        try:
-            target = absolute.relative_to(package_root.resolve()).as_posix()
-        except ValueError:
+        resolved = _relative_or_escape(surface.parent)
+        if resolved is None:
             return None
+        target = resolved
     else:
         return None
 
-    normalized = PurePosixPath(target).as_posix().lstrip("./")
-    if normalized == ".." or normalized.startswith("../"):
+    normalized = PurePosixPath(target).as_posix()
+    # Strip one explicit `./` prefix only. `lstrip("./")` also ate the dots of
+    # `../…` escapes and of dotfiles (`.mcp.json` -> `mcp.json`), which is how
+    # a broken link stayed invisible.
+    if normalized.startswith("./"):
+        normalized = normalized[2:]
+    if (normalized == ".." or normalized.startswith("../")) and not report_escapes:
         return None
     return normalized
 
 
 def discover_package_references(package_root: Path) -> tuple[PackageReference, ...]:
     """Find package-local paths named by shipped public Markdown surfaces."""
-    surfaces: set[Path] = set()
-    for pattern in _PUBLIC_SURFACE_PATTERNS:
-        surfaces.update(path for path in package_root.glob(pattern) if path.is_file())
-
     found: set[PackageReference] = set()
-    for surface in surfaces:
-        text = surface.read_text(encoding="utf-8")
-        link_candidates = {match.group(1) for match in _MARKDOWN_LINK.finditer(text)}
-        candidates = [(raw, True) for raw in link_candidates]
-        candidates.extend(
-            (match.group(1), False)
-            for match in _PACKAGE_PATH.finditer(text)
-            if match.group(1) not in link_candidates
+    for surface, raw, relative_to_surface in _reference_candidates(package_root):
+        target = _normalize_package_target(
+            surface,
+            package_root,
+            raw,
+            relative_to_surface=relative_to_surface,
         )
-        for raw, relative_to_surface in candidates:
-            target = _normalize_package_target(
-                surface,
-                package_root,
-                raw,
-                relative_to_surface=relative_to_surface,
-            )
-            if target is not None:
-                found.add(PackageReference(surface.relative_to(package_root).as_posix(), target))
+        if target is not None:
+            found.add(PackageReference(surface.relative_to(package_root).as_posix(), target))
+    return tuple(sorted(found))
+
+
+def discover_escaping_package_references(package_root: Path) -> tuple[PackageReference, ...]:
+    """Find shipped public Markdown references that leave the package root.
+
+    These are broken for every reader of the published surface, and no local
+    check saw them while the monorepo checkout still resolved the target.
+    """
+    found: set[PackageReference] = set()
+    for surface, raw, relative_to_surface in _reference_candidates(package_root):
+        target = _normalize_package_target(
+            surface,
+            package_root,
+            raw,
+            relative_to_surface=relative_to_surface,
+            report_escapes=True,
+        )
+        if target is not None and (target == ".." or target.startswith("../")):
+            found.add(PackageReference(surface.relative_to(package_root).as_posix(), target))
     return tuple(sorted(found))
 
 

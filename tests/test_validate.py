@@ -100,6 +100,52 @@ class ValidateGateTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("marketplace description matches plugin.json", result.stdout)
 
+    def _append_link(self, relative: str, markdown_link: str) -> None:
+        path = self.root / "packages" / "design-playbook" / relative
+        path.write_text(
+            path.read_text(encoding="utf-8") + f"\nSee {markdown_link}.\n",
+            encoding="utf-8",
+        )
+
+    def test_published_link_escaping_the_package_fails(self) -> None:
+        # v0.25.1 shipped `../../README.md` in the package README. The monorepo
+        # checkout resolves it, so no local gate saw it; npmjs.com and the
+        # pi.dev gallery resolve relative links against the package root, where
+        # it becomes https://cdn.jsdelivr.net/README.md (HTTP 400).
+        self._append_link("README.md", "[root README](../../README.md#install)")
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("escapes the package root", result.stdout)
+        self.assertIn("README.md -> ../../README.md", result.stdout)
+
+    def test_published_link_outside_the_scanned_surface_fails(self) -> None:
+        # The same defect in a bundled MCP README: mcp/**/*.md is rendered by
+        # the gallery too, and was outside the scanned public surface until
+        # v0.25.1's follow-up.
+        self._append_link(
+            "mcp/evidence/README.md",
+            "[host config](../../../design-playbook-evidence/mcp.example.toml)",
+        )
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("escapes the package root", result.stdout)
+        self.assertIn("mcp/evidence/README.md", result.stdout)
+
+    def test_published_link_to_an_unshipped_file_fails(self) -> None:
+        # `.mcp.json` exists in the package but npm does not publish it, so the
+        # link 404s on the published surface while passing locally.
+        self._append_link("mcp/evidence/README.md", "[plugin config](../../.mcp.json)")
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("included by package.json files[]", result.stdout)
+        self.assertIn("mcp/evidence/README.md -> .mcp.json", result.stdout)
+
     def _rewrite_codex_prompt(self, old: str, new: str) -> None:
         package = self.root / "packages" / "design-playbook"
         for relative in ("scripts/adapter_templates/codex-agents.md", "codex/AGENTS.md"):

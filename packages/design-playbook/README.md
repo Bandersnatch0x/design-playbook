@@ -120,7 +120,8 @@ npx design-playbook init <agent>   # e.g. cursor, gemini-cli, windsurf
 npx design-playbook --list         # all 30 agents, shows which have renderers
 ```
 
-See the root [README](../../README.md#-install-on-other-agents) for the tier table and capability notes.
+See the root [README](https://github.com/Bandersnatch0x/design-playbook#-install-on-other-agents)
+for the tier table and capability notes.
 
 ## Stack with other skills
 

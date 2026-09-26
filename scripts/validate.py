@@ -338,6 +338,23 @@ if isinstance(npmj, dict) and npmj:
                 f"public package reference included by package.json files[]: {label}",
             )
 
+    # A reference that leaves the package root resolves for the monorepo
+    # checkout but never for a reader of the published surface (npmjs.com and
+    # the pi.dev gallery both resolve relative links against the package root,
+    # so `../../README.md` becomes https://cdn.jsdelivr.net/README.md -- 400).
+    # Three such links shipped in v0.25.1 and were found only by rendering the
+    # gallery page; nothing local could see them.
+    escaping = _checks.discover_escaping_package_references(PKG)
+    if escaping:
+        for reference in escaping:
+            check(
+                False,
+                f"public package reference escapes the package root: "
+                f"{reference.surface} -> {reference.target}",
+            )
+    else:
+        check(True, "no public package reference escapes the package root")
+
 print("== Skill frontmatter ==")
 for skill_dir in sorted((PKG / "skills").iterdir()):
     sm = skill_dir / "SKILL.md"

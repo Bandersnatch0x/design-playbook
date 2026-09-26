@@ -30,8 +30,9 @@ Example (host run):
 }
 ```
 
-Plugin auto-load: [`../../.mcp.json`](../../.mcp.json) (under `packages/design-playbook/`).
-Codex / manual: sibling [`mcp.example.toml`](../../../design-playbook-evidence/mcp.example.toml).
+Plugin auto-load: [`packages/design-playbook/.mcp.json`](https://github.com/Bandersnatch0x/design-playbook/blob/main/packages/design-playbook/.mcp.json)
+(a repository file, not shipped in the npm tarball).
+Codex / manual: sibling [`mcp.example.toml`](https://github.com/Bandersnatch0x/design-playbook/blob/main/packages/design-playbook-evidence/mcp.example.toml).
 
 ## Return shape
 
