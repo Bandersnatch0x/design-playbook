@@ -25,6 +25,7 @@ patterns stay with the Preview integrity module.
 """
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 
 EVIDENCE_PREFIX = "evidence/"
@@ -93,5 +94,9 @@ STAGES_BY_KEY = {stage.key: stage for stage in STAGES}
 
 
 if __name__ == "__main__":
+    # T-081 family: same pipe-encoding guard as the other shipped entry points.
+    for _stream in (sys.stdout, sys.stderr):
+        if _stream is not None and not _stream.isatty() and hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8")
     print("scripts/stages.py is a module-level API, not a CLI — import it "
           "(see module docstring); no command-line interface exists.")

@@ -459,12 +459,56 @@ def main() -> int:
     # `Run complete (Pass)` from missing/malformed/ambiguous/repeated text.
     verdict_spec = PASS / "zero-findings.spec.md"
 
+    # --- T-081 family: run_status --json must be UTF-8 on a locale-codec pipe ---
+    # --json is a JSON document, so every consumer reads it as strict UTF-8,
+    # and the narration strings in status_projection carry em dashes. Under a
+    # pipe whose codec is the locale code page the serialized document used to
+    # hold cp936 bytes, which nulled the caller's stdout instead of parsing.
+    # PYTHONIOENCODING pins that condition on every platform, so this check
+    # fails on Linux CI too when the pipe-encoding guard regresses.
+    with tempfile.TemporaryDirectory() as tmp:
+        run_root = Path(tmp)
+        _write_text(run_root / "spec.md", "spec\n")
+        _write_text(run_root / "point-back.md", _verdict_probe_pointback(""))
+        locale_env = dict(os.environ)
+        locale_env["PYTHONIOENCODING"] = "gbk"
+        locale_env.pop("PYTHONUTF8", None)
+        piped = subprocess.run(
+            [sys.executable, str(RUN_STATUS), str(run_root), "--json"],
+            capture_output=True,
+            env=locale_env,
+        )
+        try:
+            document = piped.stdout.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            failures.append(
+                "run_status --json is not UTF-8 under a locale-code-page "
+                f"pipe: {exc}"
+            )
+        else:
+            if document.isascii():
+                failures.append(
+                    "the encoding fixture is ASCII-only, so this check proves "
+                    "nothing; the run whose narration is non-ASCII must be the "
+                    "one sampled here"
+                )
+            try:
+                json.loads(document)
+            except json.JSONDecodeError as exc:
+                failures.append(f"run_status --json did not parse: {exc}")
+            else:
+                print("  ok    run_status --json stays UTF-8 on a non-UTF-8 pipe")
+
     def _run_status_json(run_root: Path) -> subprocess.CompletedProcess[str]:
+        # errors="replace": this harness asserts behavior, and the UTF-8
+        # guarantee of run_status's piped stdout has its own strict check in
+        # the T-081 guard block below.
         return subprocess.run(
             [sys.executable, str(RUN_STATUS), str(run_root), "--json"],
             capture_output=True,
             text=True,
             encoding="utf-8",
+            errors="replace",
         )
 
     # G3 gate: each invalid cardinality rejects with its stable diagnostic.

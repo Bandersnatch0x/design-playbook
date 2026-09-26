@@ -294,4 +294,11 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # T-081 family: --json writes JSON, which every consumer reads as strict
+    # UTF-8. Under a pipe the Windows default stdout codec is the locale code
+    # page, so the narration em dashes in status_projection would emit cp936
+    # bytes and the caller's reader would reject the document. Emit UTF-8.
+    for _stream in (sys.stdout, sys.stderr):
+        if _stream is not None and not _stream.isatty() and hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8")
     sys.exit(main())

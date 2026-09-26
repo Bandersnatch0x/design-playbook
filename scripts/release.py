@@ -55,7 +55,15 @@ def fail(msg: str) -> None:
 
 
 def run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", **kwargs)
+    # errors="replace" keeps this a gate, not an encoding police: a stray
+    # non-UTF-8 byte in a child's log line must not make a green child read as
+    # "failed (exit 0)" (the reader thread used to null stdout instead). The
+    # CLIs themselves are asserted to emit UTF-8 by tests/test_validate.py and
+    # packages/design-playbook/tests/test_validate_run.py.
+    return subprocess.run(
+        cmd, capture_output=True, text=True, encoding="utf-8",
+        errors="replace", **kwargs,
+    )
 
 
 def git(*args: str) -> str:

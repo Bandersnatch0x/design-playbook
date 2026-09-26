@@ -16,6 +16,17 @@ import subprocess
 import sys
 from pathlib import Path
 
+# T-081 family: under a pipe the Windows default stdout codec is the locale
+# code page (cp936 on a zh-CN host), so any non-GBK byte in the report -- an em
+# dash, CJK -- crashes the caller's UTF-8 reader thread. release.py read a green
+# child as "validate.py failed (exit 0)" that way. Emit UTF-8 deterministically
+# when the streams are not terminals. Guarded by __main__ so an in-process
+# import cannot re-encode the importer's stdout.
+if __name__ == "__main__":
+    for _stream in (sys.stdout, sys.stderr):
+        if _stream is not None and not _stream.isatty() and hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8")
+
 # scripts/ must resolve even when validate.py is imported in-process rather
 # than run as `python scripts/validate.py` (mirrors doctor.py's guard).
 sys.path.insert(0, str(Path(__file__).resolve().parent))

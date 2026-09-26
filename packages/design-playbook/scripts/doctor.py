@@ -465,4 +465,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # T-081 family: under a pipe the Windows default stdout codec is the locale
+    # code page, so a repair line carrying an em dash or CJK crashes the
+    # caller's UTF-8 reader thread. Emit UTF-8 deterministically.
+    for _stream in (sys.stdout, sys.stderr):
+        if _stream is not None and not _stream.isatty() and hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8")
     sys.exit(main())

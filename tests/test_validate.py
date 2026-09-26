@@ -14,6 +14,7 @@ review item M4.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -784,6 +785,42 @@ class RuffPinTests(unittest.TestCase):
         self.assertIn("ruff 0.14.0 is installed", mismatch[0])
         self.assertIn(f"required ruff=={self.checks.RUFF_VERSION}", mismatch[0])
         self.assertEqual(self.checks.ruff_pin_errors(self.checks.RUFF_VERSION), ())
+
+
+class PipedStdoutEncodingTests(unittest.TestCase):
+    """The gate must emit UTF-8 regardless of the host's pipe codec.
+
+    T-081 family: under a pipe the Windows default stdout codec is the locale
+    code page (cp936 on a zh-CN host). ``validate.py`` prints an em dash in the
+    frozen-breadth line, so it used to write cp936 bytes -- and ``release.py``,
+    decoding strictly as UTF-8, read a green child as "validate.py failed
+    (exit 0)" because the reader thread nulled stdout.
+
+    ``PYTHONIOENCODING`` pins that condition on every platform, so this test
+    fails on a UTF-8 CI host too when the pipe-encoding guard regresses.
+    """
+
+    def test_validate_emits_utf8_on_a_non_utf8_pipe(self) -> None:
+        env = dict(os.environ)
+        env["PYTHONIOENCODING"] = "gbk"
+        env.pop("PYTHONUTF8", None)
+        proc = subprocess.run(
+            [sys.executable, str(VALIDATE)],
+            cwd=ROOT,
+            capture_output=True,
+            env=env,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr.decode("utf-8", "replace"))
+        try:
+            report = proc.stdout.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            self.fail(f"validate.py stdout is not UTF-8 on a gbk pipe: {exc}")
+        self.assertFalse(
+            report.isascii(),
+            "the report is ASCII-only, so this check proves nothing; the "
+            "frozen-breadth line carries an em dash and must stay sampled",
+        )
+        self.assertIn("VALIDATION PASSED", report)
 
 
 if __name__ == "__main__":
