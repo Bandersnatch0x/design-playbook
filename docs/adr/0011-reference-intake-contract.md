@@ -6,7 +6,8 @@ Accepted (2026-07-22). Boundary + first skill surface; no new machine gate.
 
 ## Context
 
-Dogfood and research (see `docs/research/2026-07-21-open-design-projects.md`) show a recurring gap: users arrive with a screenshot, URL, existing design, or "like product X" taste note, but `ux-spec` and `ui-picker` only accept free-form chat. That leaves:
+Dogfood and research (originally `docs/research/2026-07-21-open-design-projects.md`,
+now retained locally; not a public prerequisite) showed a recurring gap: users arrive with a screenshot, URL, existing design, or "like product X" taste note, but `ux-spec` and `ui-picker` only accept free-form chat. That leaves:
 
 - inferred visual intent unmarked as observed vs guessed;
 - Keep / Change / Do not copy boundaries unrecorded;

@@ -14,8 +14,9 @@ dist-ssr
 *.local
 .design-playbook/preferences.local.yaml
 
-# Local agent planning, research, dogfood, and temporary artifacts.
+# Personal planning and temporary artifacts stay local.
 .scratch/
+/.claude/
 .workbuddy/
 .workflow/
 # Tool caches and regenerated run artifacts (pytest/ruff self-ignore via
@@ -27,12 +28,30 @@ evidence/
 # The Evidence runtime is source, not generated run evidence.
 !packages/design-playbook/mcp/evidence/
 !packages/design-playbook/tests/evidence/
-# .agents/plugins/ is a publish surface (ADR-0009 dual publish; validate.py
-# hard-gates on marketplace.json), so it must stay trackable. Ignoring
-# `.agents/` wholesale leaves already-tracked files working while silently
-# swallowing any new file added there.
+# Only the existing catalog file is a distribution exception (ADR-0009).
 .agents/*
 !.agents/plugins/
+.agents/plugins/*
+!.agents/plugins/marketplace.json
+# Guard old locations too; docs/ holds long-lived shared documentation only.
+/spec/
+/specs/
+/plan/
+/plans/
+/research/
+/issue/
+/issues/
+/ticket/
+/tickets/
+/docs/spec/
+/docs/specs/
+/docs/plan/
+/docs/plans/
+/docs/research/
+/docs/issue/
+/docs/issues/
+/docs/ticket/
+/docs/tickets/
 
 # Stray debug screenshots at repo root (showcase/screenshots/ is tracked).
 /*.png
@@ -59,10 +78,6 @@ __pycache__/
 .playwright-cli/
 .pi-subagents/
 .pi/
-
-# External-reference research notes (not version-controlled; avoid
-# third-party attribution/attribution drift. Keep local only.)
-docs/research/
 
 # firecrawl scratch output
 .firecrawl/

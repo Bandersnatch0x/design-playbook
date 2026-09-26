@@ -30,7 +30,7 @@ Gates: working tree clean (untracked files also block) · versions match across 
 ```text
 python scripts/install_smoke.py
 # optional explicit evidence location
-python scripts/install_smoke.py --output-dir .scratch/design-playbook-v0/evidence/install-smoke-vX.Y.Z
+python scripts/install_smoke.py --output-dir .scratch/install-smoke-vX.Y.Z
 ```
 
 Defaults come from the local package manifest and exact source inventory. The script creates a fresh `CLAUDE_CONFIG_DIR`, adds the documented HTTPS marketplace, installs at user scope, checks version/enabled state plus exact skills/commands/scripts/MCP sets, runs strict plugin validation, performs real `initialize` + `tools/list` handshakes against both installed MCP servers, installs the matching npm artifact in a clean consumer, then writes `result.json` and `result.md`. Successful runs remove the temporary install directory; failures retain it and record the path. This live network flow stays human-triggered; CI runs `tests/test_install_smoke.py` without public installs.
@@ -43,7 +43,7 @@ Defaults come from the local package manifest and exact source inventory. The sc
 ## Five-step gate (manual)
 
 - [ ] **1. Plugin loads:** `claude --plugin-dir <abs>/packages/design-playbook` starts; `/reload-plugins` reports no errors; nine skills + **version-line command inventory** (0.25: 8 commands incl. `component-distill`/`run-status`/`run-handoff`/`doctor`) appear under the `design-playbook` namespace in `/help`. **Semi-automated:** `scripts/doctor.py` checks static counts against `COMMAND_INVENTORY` (9 skills / N commands / plugin.json namespace); the dynamic `--plugin-dir` load + `/help` listing stay human (host slash, not automatable).
-- [ ] **2. Six-gate dogfood:** `/design-playbook:design-io <real product UI ask>` passes all six gates (L5/L6 before UI; decision report before code; point-back findings; no Done-when skip; generality; recirculate closure). Log under `.scratch/design-playbook-v0/dogfood/`.
+- [ ] **2. Six-gate dogfood:** `/design-playbook:design-io <real product UI ask>` passes all six gates (L5/L6 before UI; decision report before code; point-back findings; no Done-when skip; generality; recirculate closure). Retain local evidence and report the result and limitations in the delivery summary; no personal directory or template is required.
 - [ ] **3. Validate:** `python scripts/validate.py` green (also in `release.py` and CI); `claude plugin validate` too if your Claude Code version has it.
 - [ ] **4. Clean surface:** covered by `scripts/validate.py` (runtime surface; attribution files excluded).
 - [ ] **5. Install docs copy-paste:** after public main/npm update, `python scripts/install_smoke.py` passes from an isolated config and writes JSON/Markdown evidence. Interactive `/help` remains a human check.
@@ -57,7 +57,8 @@ Defaults come from the local package manifest and exact source inventory. The sc
 - [ ] Do not configure `NPM_TOKEN` / `NODE_AUTH_TOKEN`; both publish workflows use job-scoped GitHub OIDC with npm Trusted Publishing.
 - [ ] After the first successful OIDC publish, disable traditional token publishing where appropriate and revoke obsolete npm automation tokens and GitHub secrets.
 
-The requirements and the local reference-implementation comparison are recorded in `.scratch/design-playbook-v0/research/npm-trusted-publishing.md` (local working notes, untracked).
+The executable release configuration lives in `.github/workflows/release.yml`
+and `.github/workflows/release-dsh-bundle.yml`; private research is not a prerequisite.
 
 ## Version + tag + publish (tag-triggered, irreversible)
 
@@ -72,9 +73,9 @@ The requirements and the local reference-implementation comparison are recorded 
 - [ ] Main publish run failed **before** npm publish (`design-playbook@X.Y.Z` absent on the registry): dispatch is recovery-only (`release_state.py`), and a UI re-run replays the workflow file from the original tag commit, so the only path is to fix the workflow on main, then move the tag to the fix commit and push it again (`git push origin :refs/tags/vX.Y.Z`, re-tag, push). Nothing else may have been published yet; otherwise the registry-collision rules below apply. v0.21.0 precedent: the publish run failed at release gates because `release.yml` never installed the pinned Ruff that `validate.py` requires.
 - [ ] Shared Release recovery (both npm artifacts exist, GitHub Release missing): `gh workflow run release.yml --ref vX.Y.Z -f tag=vX.Y.Z -f recovery=true`. Fresh tag runs fail on any existing version instead of silently skipping it.
 - [ ] Smoke: `python scripts/install_smoke.py` passes against public main + npm; retain or move its `result.json` / `result.md` under the release evidence directory.
-- [ ] Sync `.scratch/design-playbook-v0/phase.md` **header** (`**Current:**` line: version, tag, Release URL, npm latest) — the phase table row alone is not enough; the header is a second write point and has drifted before (v0.8.0 header survived the v0.9.0 release).
+- [ ] Record the tag, release URL, verified package versions, and smoke results in the release delivery summary. Distinguish source HEAD from the published artifacts; a personal phase log is not a release requirement.
 
 ## "Not yet" (do not block v0.x)
 
-- Community catalog (`@claude-community`) submission; interactive `/help` inventory inspection remains human.
+- Catalog submission and recruitment remain explicitly paused; passing this checklist does not resume either. Interactive `/help` inventory inspection remains human.
 - i18n (CJK-first product; no i18n infra yet, not a v0 goal).

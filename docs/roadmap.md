@@ -1,344 +1,134 @@
-# design-playbook roadmap
+# 产品方向与验收边界
 
-Status: canonical strategy and rolling commitment, accepted 2026-08-25.
+更新于 2026-09-24。本文说明长期产品方向和验收边界，不承载个人排期、实施计划或工作票。
 
-This roadmap separates facts from commitments and possibilities:
+## 当前阶段
 
-| Horizon | Meaning | Change control |
+design-playbook 为 coding agent 提供带证据的 UI 交付链路：声明、契约、实现、验收、回流。
+首要使用场景是在已有 Web 产品中修改 UI，帮助执行者理解目标、定位阻塞、修复问题并验证结果。
+它不是独立托管应用，也不承诺通用设计平台或组织协作工作台。
+
+项目处于维护者自用和维护阶段。catalog 提交、招募和外部试验暂停；
+新增能力必须取得 [ADR-0045](adr/0045-external-evidence-spend-gate.md) 所要求的明确、有界授权。
+安装路径继续可用，渠道恢复、日期到达或提案写成均不自动解冻。
+内部自用记录、演示和自动化夹具不能冒充使用者反馈或满足外部验收门。
+
+本地可核验的正式发布基线为 `v0.25.1`，见[发布记录](releases/v0.25.1.md)；
+本文未重新查询 npm 或 catalog 的远端状态。源码中的后续修复不能倒算进已发布版本。
+
+## 已有能力与限制
+
+当前能力及使用入口以 [README](../README.md)、[产品定义](../PRODUCT.md) 和
+[领域上下文](../CONTEXT.md) 为准：
+
+- Design I/O 管线将 Criteria、Evidence、Findings 和 point-back 关联起来，支持有界修复回流。
+- 可选 Preview / Evidence runtime 提供人工确认与证据采集；采集者不拥有验收裁决权。
+- Run status、handoff、review 和 Repair Packet 提供继续工作所需的来源与下一责任人。
+- Run Console 提供本地、单 run、loopback 会话视图；快照是来源投影，不是新的状态权威。
+  已有 refresh、source view、copy 及经 [ADR-0044](adr/0044-diagnostic-export-contract-v1.md)
+  单独接受的 Diagnostic export。
+- Console 仍为 **local / experimental / trial-gated**。
+  `G-RO-TRIAL-PASS` 未满足；Role attestation 仍未解锁。
+  已交付的导出工具不等于已经取得真实试验证据。
+
+## 维护方向
+
+优先修复能在真实自用中重现的问题：重复补充上下文、定位失败依据耗时、修复交接遗漏、
+证据与判据无法对应、文档和运行行为不一致。新增功能提案与测量计划保留本地，
+公开交付应说明实际解决的痛点、可观察验收结果及剩余限制，不以功能数量代替效果。
+
+长期希望验证的结果是：执行者在 60 秒内理解目标、来源裁决、阻塞来源和下一责任人，
+完成 `Recirculate → repair → Pass`，并主动在另一项真实 UI 工作中再次使用。
+当前没有证据证明这一结果已达到；不能把它写成产品现状。
+
+## 权威与安全
+
+| 角色 | 拥有 | 不能代替 |
 | --- | --- | --- |
-| Delivered present | Capability available in the current formal release | Must be supported by released package inventory and checks |
-| Rolling 90 days | The only delivery commitment | Re-baselined only through an explicit evidence review |
-| Conditional 12-month north star | Falsifiable product branches, not promised dates or scope | Each branch stays in discovery until its entry conditions hold |
-
-The current public promise is **evidence-backed UI delivery for coding agents**.
-**Design I/O** names the mechanism. “Design OS”, “CI/CD for AI-generated UI”,
-and “Workspace” are not current product claims.
-
-## Strategy
-
-The next user to win is a frontend or product engineer using Claude or Codex
-to deliver UI in a real product repository. That person is the initial
-**Run operator**, not a universal approver. Product, design, and engineering
-Semantic approvers retain authority for the normative claims in their roles.
-
-The near-term product result is deliberately narrow:
-
-> A Run operator can understand the intent, source verdict, blocker source,
-> and next owner within 60 seconds, complete a
-> `Recirculate → repair → Pass` loop, and later choose to use the workflow for
-> another real UI work item.
-
-The visible surface for this result will be a source-linked projection over
-existing authorities. It will not introduce a writable `DesignRun` aggregate
-or copy decisions, Evidence, Findings, confirmations, or verdicts into a new
-source of truth. See [ADR-0035](adr/0035-run-view-projection-authority.md).
-
-## Delivered present
-
-As of 2026-09-24, the formal public release is `v0.25.0` (tag `v0.25.0`;
-npm `latest` on both installable packages). The shipped product is an
-installable Claude Code / Codex plugin, not a standalone application or
-hosted service. Its released surface includes:
-
-- the Design I/O pipeline of declarations, contracts, implementation review,
-  criterion-bound Evidence, point-back, and bounded recirculation;
-- run-scoped artifacts under `.scratch/<run>/`, with run status derived from
-  durable artifacts rather than an independent run-state store;
-- bundled optional Preview and Evidence MCP runtimes;
-- `execute_capture_plan` as the single runtime Provider seam: the Provider
-  produces Artifacts, the Manifest binds them to Criteria, and the Evaluator
-  owns Findings and the source verdict;
-- namespaced skills and commands for shaping, implementation, review, status,
-  and installation diagnosis;
-- the local, single-run **Run Console** (shipped in v0.21.0): the secured
-  loopback read surface over the Run snapshot v1 contract with the typed
-  refresh action, plus the **Diagnostic export contract** (preview plus
-  participant-reviewed write under the run's `trial-export/`, accepted
-  2026-09-22 via [ADR-0044](adr/0044-diagnostic-export-contract-v1.md),
-  shipped in v0.25.0). The Console's public claim stays **local ·
-  experimental · trial-gated** until `G-RO-TRIAL-PASS` is satisfied by real
-  external evidence ([ADR-0043](adr/0043-product-beachhead-and-operator-continuation.md));
-- the Run Operator continuation surfaces (`run-status`, `run-handoff`,
-  `run-review`, Repair Packet, static handoff), shipped v0.22.0+;
-- design-io throughput hardening and the rebuilt Preview review shell
-  (inline annotation flow, single sidebar, gate-integrity ledger), plus the
-  `component-distill` design-backflow command, shipped v0.25.0.
-
-The exact installed surface and current operating model remain documented in
-the [README](../README.md), [product definition](../PRODUCT.md), and
-[domain context](../CONTEXT.md). Unreleased branches and active workstreams do
-not count as delivered merely because they exist in this repository.
-
-> **Not delivered:** the invited-trial program and its evidence set —
-> `G-RO-TRIAL-PASS` is NOT SATISFIED — plus role attestation (snapshot
-> S31–S34) and every later typed action. The Diagnostic export contract is
-> accepted and implemented; it is the instrument a trial uses to produce
-> evidence, never evidence itself.
-
-## Rolling 90-day commitment
-
-This horizon begins from the 2026-08-25 decision baseline. Day 90 triggers a
-review; it does not automatically publish a beta, unlock the north star, or
-convert unfinished work into delivered capability.
-
-### Outcome and trial boundary
-
-The commitment is to validate the near-term result on P2/P3 changes in
-**existing Web products**, with the Evaluator enabled and at least one rendered
-or interaction Criterion backed by a Manifest-bound Artifact. Greenfield work,
-marketing-site generation, native mobile, desktop, multi-platform automation,
-and Canvas workflows are outside this trial.
-
-Only these definitions count toward the result:
-
-- A **Qualified audited run** has the scope above, a final point-back record,
-  and every Maintainer intervention disclosed.
-- A **Voluntary repeat** occurs only when a participant independently starts a
-  new Qualified audited run for a different real UI work item after the first
-  run ends. Same-run repair, reopening the Console, repeated export, or a
-  maintainer-scheduled demo does not count.
-
-### Resource assumption
-
-The horizon assumes **one primary maintainer plus coding agents**. Suggested
-capacity allocation is:
-
-- 50%: closed-loop reliability, Criterion/Evidence binding, and actionable
-  Findings;
-- 30%: Run snapshot, parity verification, and the Closed-loop Run Console;
-- 20%: distribution, positioning, first-run quality, and invited trials.
-
-Later platform branches do not become commitments without a stable,
-explicitly committed 2–4 person team covering at least two quarters.
-
-### Authority and evidence invariants
-
-All work in this horizon must preserve the current ownership model:
-
-| Actor | Owns | Must not claim |
-| --- | --- | --- |
-| Human Semantic approver | Intent, durable decisions, preference/rule promotion, exceptions, and role-scoped semantic acceptance | Reproducible machine facts outside human judgment |
-| Deterministic validator | Hashes, bindings, structural gates, and reproducible metrics | What counts as good product or design intent |
-| Agent | Proposals, implementation, repair suggestions, and learning candidates | Self-promotion or final confirmation |
-| Runtime Provider | Captured Artifacts | Evidence binding, Findings, or verdicts |
-
-A normative claim names a required product, design, or engineering approver
-only when downstream acceptance depends on that judgment. A missing Role
-attestation blocks only dependent results; there is no global three-role gate.
-Attestation scopes a confirmation but does not prove identity, employment,
-organization membership, or legal consent. Continuing a run never implies
-approval in another role.
-
-The horizon retains `execute_capture_plan` as the single Provider collector
-seam. It improves Manifest binding, Evaluator reasoning, and visibility rather
-than splitting capture and judgment across criterion-aware MCP tools.
-
-### Delivery sequence and phase gates
-
-Work proceeds strictly in this order. A phase cannot begin until the preceding
-exit gate passes. Implementation tickets remain subject to the contract,
-parity, and security gates; a UI is not evidence that those gates passed.
-
-The committed order is: contract freeze → read parity → secured single-run
-Console → external read-only trial → typed actions → expanded trial.
-
-| Order | Deliverable | Entry condition | Exit gate |
-| --- | --- | --- | --- |
-| 1 | Freeze the Run snapshot and Diagnostic export contracts | ADR-0035 through ADR-0038 remain accepted and existing authority owners are mapped | A versioned domain contract defines values, availability, sources, freshness, errors, compatibility, and export boundaries without mirroring UI components or filenames — **satisfied**: snapshot v1 frozen 2026-08-25; Diagnostic export contract v1 frozen and implemented 2026-09-22 ([ADR-0044](adr/0044-diagnostic-export-contract-v1.md)) |
-| 2 | Establish deterministic read parity | Contract v1 is frozen | Fixtures map every projected assertion to an existing authority; missing, stale, partial, inconsistent, and source-change cases fail visibly; repeated rebuilds do not invent or strengthen semantics |
-| 3 | Build the secured single-run Console | Read parity is proven | An on-demand, loopback-only session opens one explicit run, passes containment and request-security checks, and remains read-only |
-| 4 | Run the external read-only invited trial | Console parity and security gates pass | Unrelated external users can complete the fixed comprehension check without hidden telemetry or raw-file reconstruction; interventions are disclosed |
-| 5 | Add the typed-action allowlist | Read-only trial demonstrates that the projection is understood and each action has an existing authority owner | Only the approved typed actions are reachable; every write is routed to its owner and followed by a full snapshot rebuild |
-| 6 | Expand the invited trial and evaluate graduation | Typed-action tests, privacy boundaries, and rebuild parity remain green | The acceptance floor and public-beta gate below both pass; otherwise the horizon ends in review, repair, or stop |
-
-### Planned Console boundary
-
-The planned **Closed-loop Run Console** is an on-demand local Web application
-bound only to loopback. One session opens one explicitly selected run and ends
-when its server session closes. A recent-run locator may help select a run, but
-the Console is not a daemon, project dashboard, cross-run report, cloud
-service, Canvas, or organization Workspace.
-
-Each refresh builds one disposable, source-hash-bound Run snapshot. The
-snapshot exposes domain assertions rather than raw artifact topology and
-separates each assertion's domain result from its availability:
-`known`, `unknown`, `stale`, or `inconsistent`. Partial writes, changing hashes,
-missing authorities, and unknown values remain visible; the Console never
-silently displays an older successful value as current.
-
-Read parity precedes actions. The initial typed-action allowlist is limited to:
-
-- refresh the snapshot;
-- resolve and view a server-rendered, read-only authority excerpt;
-- copy the next Agent command;
-- request a claim- and role-scoped attestation through the existing authority
-  owner;
-- generate a participant-reviewed Diagnostic export.
-
-The Console will not execute repairs, automatically rerun an Agent, edit
-arbitrary artifacts, provide a generic run mutation endpoint, or write
-acceptance. Role-attestation requests bind the claim identity and hash,
-requested role, and current authoritative source hash; source changes
-invalidate the request or prior attestation.
-
-Loopback is an exposure boundary, not trust. The implementation must use an
-unguessable session token, validate Origin, keep GET and HEAD side-effect-free,
-protect fixed-schema action requests, constrain opaque Source locators to the
-selected run, and fail closed on invalid tokens, versions, hashes, locators, or
-payloads. See [ADR-0037](adr/0037-local-single-run-console-lifecycle.md) and
-[ADR-0038](adr/0038-run-snapshot-contract-and-loopback-security.md).
-
-### Invited-trial data boundary
-
-The trial is local-first and has no hidden telemetry, account requirement,
-machine fingerprint, or upload endpoint. Each participant explicitly initiates
-and reviews a Diagnostic export, then shares it manually. An export is a
-versioned JSON contract plus a Markdown view, stored under that run's
-`trial-export/` subtree and marked as non-Evidence and non-acceptance input.
-
-The export contains only the minimum facts needed to evaluate first-run
-completion, closed-loop integrity, comprehension, elapsed time, disclosed
-human intervention, and repeat use. Secrets, credentials, source code,
-unselected artifacts, and raw model reasoning are excluded. See
-[ADR-0036](adr/0036-invited-trial-data-and-role-boundary.md).
-
-The comprehension check times four fixed answers against the Run snapshot:
-intent, source verdict, blocker source, and next owner. Satisfaction and
-interview notes may supplement this evidence but cannot replace it.
-
-### Acceptance floor
-
-The direction is evaluated only after all of these minimum quantities exist:
-
-- at least 5 unrelated external participants;
-- at least 3 real repositories;
-- at least 10 Qualified audited runs;
-- at least 5 completed `Recirculate → repair → Pass` loops;
-- at least 3 of the 5 participants completing a Voluntary repeat within 30
-  days;
-- at least 80% of runs forming a complete Evidence loop without a maintainer
-  manually editing run artifacts;
-- at least 4 of 5 participants correctly identifying the fixed comprehension
-  answers without opening raw run files, with median location time below 60
-  seconds;
-- fewer than 20% of real blocking Findings judged unactionable, false, or
-  unable to point back to an owning declaration.
-
-### Public-beta exit gate
-
-Meeting the quantity floor is necessary but not sufficient. Public beta also
-requires:
-
-- zero competing writes introduced by the projection or typed facade;
-- zero unexplained sensitive-data disclosures;
-- 50 consecutive Run snapshot rebuilds with zero semantic drift;
-- every parity, containment, action-owner, and fail-closed security gate still
-  passing.
-
-Elapsed time never substitutes for this gate.
-
-### Stop and redirect conditions
-
-- If fewer than 3 invited users achieve first-run success by day 45 after a
-  qualified invitation, pause Console expansion and repair positioning,
-  installation, or closed-loop quality first.
-- If Voluntary repeat is below 40%, do not start general Design Memory.
-- If the Run View does not materially improve comprehension or location time,
-  stop the Design OS / Workspace direction and retain a CLI status summary.
-- If more than 20% of real blocking Findings are unactionable, false, or cannot
-  point back, pause Memory and Multi-Agent work and repair Criterion/Evidence
-  semantics first.
-- If any phase violates a current authority boundary, introduces competing
-  writes, or cannot pass its security gate, stop progression and revise the
-  contract or implementation before continuing.
-
-### Explicit non-goals
-
-The rolling horizon does not include:
-
-- a writable `DesignRun` authority, permanent snapshot history, or generic
-  run mutation API;
-- general Design Memory or automatic promotion of learned preferences;
-- a Multi-Agent runtime or speculative coordination layer;
-- Canvas, persistent dashboard, cloud or organization Workspace;
-- enterprise governance, accounts, authenticated organization identity, or
-  hidden/public telemetry;
-- public adapter ecosystem expansion or five specialized Evidence collectors;
-- direct repair execution, automatic reruns, or automatic acceptance from the
-  Console;
-- greenfield, native mobile, desktop, or multi-platform trial coverage;
-- a public claim that Design OS or CI/CD for AI-generated UI is delivered.
-
-## Conditional 12-month north star
-
-The north star is a possible evolution from a proven closed loop toward an
-AI-native design operating layer: human intent remains authoritative, agents
-execute through explicit contracts, runtime artifacts become criterion-bound
-Evidence, failures point back, and confirmed learning can improve later work.
-
-This is a **sequencing hypothesis, not a dated plan**. The candidate Phase 3–6
-month labels are retired. Each branch requires a new review and, where it
-changes authority, a superseding ADR.
-
-| Conditional branch | Evidence required before commitment | Boundary that remains true |
-| --- | --- | --- |
-| Confirmed cross-run learning / Design Memory | The repeat-use gate passes and repeated decisions show a real cross-run need | Learning candidates remain derived; only explicit humans promote durable rules or preferences |
-| Minimal run coordination for multiple Agents | At least two approved independent command writers need atomic coordination, or reproducible lost updates, duplicate effects, or recovery failures exist; replay parity and cutover/rollback are proven | A coordinator may own command identity, expected version, lease, cancellation, or ordering only; Contract, Preview, Manifest, Finding, and Verdict stay with existing owners |
-| Multi-Agent design runtime | Closed-loop repeat use is proven, coordination need is real, and the 2–4 person staffing gate is met | Agent roles do not create semantic approval or self-promotion authority |
-| Remote review or Design Workspace | Local Console value is proven and a separate decision defines identity, access control, consent, retention, deletion, and remote lifecycle | Workspace views do not become acceptance or run-state authority |
-| Adapter ecosystem | Repeated user demand identifies a supported boundary and maintainers can test it | Adapters produce or translate typed inputs/Artifacts; they do not become rule or verdict authorities |
-| Enterprise governance and audit | Organizations demonstrate demand after the local closed loop and identity model are proven | Governance makes authority explicit; it does not infer approval from activity or Agent output |
-
-Failure of a branch condition is a valid roadmap result. It keeps that branch in
-discovery rather than silently moving it into the next 90-day commitment.
-
-## Relationship to doop, Figma, and React
-
-design-playbook does not aim to clone Figma or compete with a human/AI Canvas
-such as doop. It owns the tool-neutral delivery contracts, Evidence semantics,
-Evaluator boundary, and point-back loop used by coding agents.
-
-| Surface | Relationship |
-| --- | --- |
-| doop | Optional external design/review surface. It may exchange typed artifacts in a future conditional integration, but it is not a dependency, authority, or current delivery target. |
-| Figma | Optional source or destination for explicit references and artifacts. Figma is not required for installation, intent, Evidence, or acceptance, and a future importer remains conditional ecosystem work. |
-| React | A common implementation output for the first Web validation surface, not the product's domain model. A React adapter may be useful later, but core contracts remain stack-neutral. |
-
-External references can reveal missing capabilities or conflicts. They do not
-become first-party rules, product dependencies, or sources of truth.
-
-## Roadmap governance
-
-- Delivered claims advance only with a formal release and verified installable
-  inventory.
-- The 90-day layer is reviewed against exported evidence, not feature count or
-  elapsed time.
-- **Effort gate ([ADR-0045](adr/0045-external-evidence-spend-gate.md)):** until
-  `G-RO-TRIAL-PASS` is satisfied by real external evidence, no new capability
-  work starts. Agent-side effort is limited to the diagnostic-export
-  instrument (ADR-0044), repairs that unblock the trial, and
-  documentation/drift normalization; the adapter matrix is frozen at 30 rows
-  by the [ADR-0042 amendment](adr/0042-multi-platform-adapter-generator.md).
-  The Day-90 review (about 2026-11-23) rules pass / repair / stop against the
-  acceptance floor — an empty exported-evidence set is a valid stop result,
-  and no new participant entering the comprehension check within 30 days of
-  ADR-0044 triggers the stop review early.
-- A new writer, remote surface, identity claim, or authority migration requires
-  an explicit decision before implementation.
-- The most specific accepted ADR wins over roadmap shorthand. The domain terms
-  in [CONTEXT.md](../CONTEXT.md) remain canonical.
-
-## Accepted-decision coverage
-
-| Decisions | Roadmap location |
-| --- | --- |
-| Q1, Q12, Q27 | Three horizons; current public promise; delivered-present boundary |
-| Q2, Q6, Q7 | Strategy; outcome and trial boundary |
-| Q3, Q4, Q11, Q16 | Authority and evidence invariants; planned Console boundary |
-| Q5 | Resource assumption |
-| Q8, Q13, Q14, Q15 | Delivery sequence; planned Console boundary |
-| Q9 | Authority and evidence invariants |
-| Q10, Q17 | Invited-trial data boundary |
-| Q18 | Acceptance floor |
-| Q37 | Delivery sequence and phase gates |
-| Q38 | Public-beta exit gate; stop and redirect conditions |
+| 人工 Semantic approver | 意图、长期决策、规则提升、例外和角色范围内的语义确认 | 可复现的机器事实 |
+| 确定性 validator | hash、绑定、结构门禁和可复现指标 | 产品或设计意图判断 |
+| Agent | 提案、实现、修复建议和学习候选 | 人工最终确认或自我提升 |
+| Runtime Provider | 采集 Artifacts | Evidence 绑定、Findings 或 verdict |
+
+沿用 `execute_capture_plan` 作为 Provider 采集入口。投影和 typed actions
+不能建立可写的 `DesignRun` 权威、任意文件写接口或第二套裁决来源，
+见 [ADR-0035](adr/0035-run-view-projection-authority.md)。
+
+需要特定角色判断的 claim 才要求相应确认，不设置全局三角色门。
+Role attestation 只限定确认范围，不证明身份、雇佣关系或法律同意；
+继续 run 不意味着代其他角色批准。
+
+Console 会话只绑定一个显式选定的 run，不是 daemon、跨 run 仪表盘或云服务。
+快照重建须保持来源 hash 一致；`known`、`unknown`、`stale`、`inconsistent`
+不得混为一个状态，也不能静默显示旧成功结果。
+
+Loopback 不是信任边界。会话 token、Origin 校验、只读 GET/HEAD、固定 action schema、
+Source locator containment 和 fail-closed 规则仍适用。
+Console 不执行修复、不自动重跑 Agent、不写验收；
+新增 action 必须明确既有 owner，见
+[ADR-0037](adr/0037-local-single-run-console-lifecycle.md) 和
+[ADR-0038](adr/0038-run-snapshot-contract-and-loopback-security.md)。
+
+## 外部验证契约
+
+本节保留暂停前确立的长期验收定义，不是招募计划或恢复授权。
+实际执行还须单独授权，并遵循[只读试验协议](agents/run-console-read-only-trial.md)。
+
+### 范围与计数
+
+外部验证限于已有 Web 产品的 P2/P3 修改，启用 Evaluator，且至少一项渲染或交互
+Criterion 有 Manifest 绑定的 Artifact。Greenfield、营销站生成、原生移动/桌面、
+跨平台自动化和 Canvas 不在该范围。
+
+- **Qualified audited run**：符合上述范围，有最终 point-back，披露全部维护者干预。
+- **Voluntary repeat**：参与者在首次 run 结束后，自主为另一项真实 UI 工作开启新的合格 run。
+  同 run 修复、重开 Console、重复导出或维护者安排的演示均不计。
+- 理解度检查固定测量意图、来源裁决、阻塞来源、下一责任人。
+  满意度或访谈不能替代这四项来源绑定答案。
+
+### 隐私
+
+无隐式遥测、账号要求、机器指纹或上传端点。参与者显式发起并检查导出，
+之后自行选择手动分享。导出仅为版本化 JSON 与 Markdown，
+保存在该 run 的 `trial-export/`，不是 Evidence 或验收输入。
+不包含密钥、凭证、源码、未选择的工件或原始模型推理。
+导出之外的计时和回答由获授权的人工观察并记录，
+见 [ADR-0036](adr/0036-invited-trial-data-and-role-boundary.md)。
+
+### 最低验收线
+
+以下门槛全部保留，不因自用或文档迁移降低：
+
+- 至少 5 名无关联外部参与者、3 个真实仓库、10 次 Qualified audited runs。
+- 至少 5 次完整 `Recirculate → repair → Pass`。
+- 至少 3/5 参与者在 30 天内完成 Voluntary repeat。
+- 至少 80% 的 run 无需维护者手改工件即可形成完整 Evidence 闭环。
+- 至少 4/5 参与者不打开原始 run 文件即可正确回答四项理解度问题，中位定位时间小于 60 秒。
+- 真实阻塞 Findings 中，被判为不可操作、错误或不能指回声明 owner 的比例小于 20%。
+
+公开 beta 还要求：零竞争写入、零未解释敏感数据披露、连续 50 次快照重建无语义漂移，
+且 parity、containment、action-owner 和安全门全部通过。时间流逝不能代替验收。
+
+### 停止条件
+
+- 合格邀请开始后第 45 天，首次成功的使用者不足 3 人：暂停 Console 扩展，先修定位、安装或闭环质量。
+- Voluntary repeat 低于 40%：不启动通用跨 run Design Memory。
+- 视图未显著改善理解或定位时间：停止组织工作台方向，保留 CLI 状态摘要。
+- 不可操作、错误或不能回指的阻塞 Findings 超过 20%：先修 Criterion/Evidence 语义，
+  暂停 Memory 与多 Agent 扩展。
+- 违反权威边界、产生竞争写入或安全门未过：停止推进，先修契约或实现。
+
+ADR-0044 的 30 天检查点约为 2026-10-22，原 Day-90 复议约为 2026-11-23。
+这是复议时点而非交付承诺；无外部证据可以得到停止结论，任何恢复仍需明确裁决。
+
+## 非目标与变更规则
+
+当前不开展通用 Design Memory、多 Agent runtime、Canvas、持久仪表盘、云或组织 Workspace、
+企业身份治理、隐式遥测、自动接受，以及新的公共 adapter 扩张。
+Adapter 矩阵保持 [ADR-0042](adr/0042-multi-platform-adapter-generator.md) 修订规定的 30 行。
+不因借鉴外部工具而引入产品依赖；核心契约保持工具与技术栈中立。
+
+跨 run 学习需重复使用与真实需求证据；协调器需可复现的多 writer 冲突及回放/回滚证明；
+远程能力需身份、权限、同意、保留和删除决策。它们都不是已承诺功能。
+新的 writer、远端表面、身份声明或权威迁移必须先有明确决策。
+具体已接受 ADR 优先于本文概述，领域词汇以 `CONTEXT.md` 为准。

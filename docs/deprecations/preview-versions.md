@@ -108,4 +108,6 @@ the artifact migration obligation outlive SemVer permission.
 - `packages/design-playbook/mcp/preview/compatibility.py` - long-lived owner
 - `packages/design-playbook/mcp/preview/transaction.py` - decision authority
 - `packages/design-playbook/tests/preview/test_versions_freeze.py` - freeze guard
-- `docs/research/architecture-deepening-issues/05-versions.md` - US-5
+- Historical issue #13 (US-5) was archived locally under the authorized
+  2026-09-24 migration; it is not a public dependency. The compatibility
+  contract and removal criteria are maintained above and in ADR-0027.

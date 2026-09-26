@@ -4,9 +4,9 @@
 
 # 🎴 design-playbook
 
-### *Agent 交付的 UI 没人能验证。这个插件让它拿出证据。*
+### *为 coding agent 提供带证据的 UI 交付闭环。*
 
-[![Version](https://img.shields.io/badge/Version-0.25.0-2DD4BF?style=flat-square&logo=semver&logoColor=black)](https://www.npmjs.com/package/design-playbook)
+[![Version](https://img.shields.io/badge/Version-0.25.1-2DD4BF?style=flat-square&logo=semver&logoColor=black)](https://www.npmjs.com/package/design-playbook)
 [![License](https://img.shields.io/badge/License-MIT-2DD4BF?style=flat-square&logo=opensourceinitiative&logoColor=black)](./packages/design-playbook/LICENSE)
 [![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-2DD4BF?style=flat-square&logo=claude&logoColor=black)](#-试一把)
 [![Skills](https://img.shields.io/badge/Skills-9-2DD4BF?style=flat-square)](#-skills-与命令)
@@ -17,14 +17,24 @@
 
 ---
 
-## ✅ Agent 无法自评 UI——这个插件让它逐条拿出证据
+## ✅ 对照声明的判据和证据评审 UI
 
-Agent 对自己产出的每一句"没问题"都是自评。这里的验收是**证据强制**的：每条验收判据绑定一个采集到的证据工件，每条发现都指回它违反的声明，缺失的采集被记为 `audited: false`——那是拒绝，不是通过。判定来自评审器而非实现者，阻塞性发现回流修复直到闭环。
+面向使用 coding agent 修改既有 Web UI 的前端或产品工程师，design-playbook 把需求、验收判据、证据与修复责任人串起来。必需证据缺失时，判据保持 `blocked`；显式跳过评审器时，产出 `audited: false` 骨架，而非已审计的 Pass。发现指回所属声明，阻塞性发现回流修复。评审器不替代具名人工角色的语义批准，也不保证独立判断。
 
 承载它的是两个面：
 
 1. **带证据的验收**——`ui-evaluator` + point-back 台账：发现必须引用绑定判据的证据，闭环轨迹是 run 的一部分，不是聊天摘要。
 2. **存量产品的 UI 改动**——`design-baseline` 在改动既有产品之前先发现、校验或生成项目 `DESIGN.md`，让改动与已上线的部分保持一致。
+
+### 当前阶段
+
+截至 2026-09-24，项目处于**维护者自用与维护阶段**，catalog 提交和参与者招募均已暂停。
+现有安装路径继续保留；内部 dogfood、历史案例和自动回放不构成外部采用或自愿复用证据。
+新增能力 spec 只是提案，不代表实施或发布承诺。恢复活动须经维护者明确决定，
+不因日期到达或内部测试通过而自动恢复。
+
+2026-09-25 的有界自用例外允许源码工作区提供[前端改动只读摘要](docs/subsystems/run-console.zh.md)。
+这不恢复招募、catalog 提交或发布，也不宣称已测得提效；边界见 [ADR-0045](docs/adr/0045-external-evidence-spend-gate.md)。
 
 ## ⚡ 一条命令，三份产物
 
@@ -34,7 +44,7 @@ Agent 对自己产出的每一句"没问题"都是自评。这里的验收是**�
 /design-playbook:design-io <你的 UI 需求>
 ```
 
-一次通过——MCP 工具已随包内置，零额外配置——在 `.scratch/<run>/` 落下三样产物：
+一次 Design I/O run 使用随包内置的 MCP 配置，在宿主支持且运行前提满足时，将三类核心产物记录在 `.scratch/<run>/`：
 
 1. **`spec.md`**——六层的"什么是好"声明（意图 → 验收），写在任何 UI 之前
 2. **决策报告**——骨架 + 组件语义，写在任何代码之前
@@ -66,6 +76,11 @@ codex plugin add design-playbook@design-playbook
 
 Codex 安装细节、marketplace 不可用时的 `[mcp_servers.*]` 直配 fallback、preview 前置条件：见 [`packages/design-playbook/codex/AGENTS.md`](./packages/design-playbook/codex/AGENTS.md)。
 
+**运行前提**：受支持的宿主已注册相应 MCP 工具，内置运行时需要 Python 3，Preview 需要本地浏览器。
+运行取证还需要 Playwright 与 Chromium，以及可访问的应用、相应测试数据和登录态。见
+[取证安装说明](./packages/design-playbook-evidence/README.md#install--mcp-config)。
+可选适配器不可用时会披露限制，但跳过取证不等于必需证据已通过。
+
 <details>
 <summary>本地开发 / 自测</summary>
 
@@ -80,15 +95,20 @@ codex plugin marketplace add <仓库根绝对路径>
 codex plugin add design-playbook@design-playbook
 ```
 
+版本权威：`packages/design-playbook/package.json` 与
+`packages/design-playbook/.claude-plugin/plugin.json` 保持版本一致；
+桥接包、根 catalog、README 徽章和生成的 Codex 快照随之同步。
+
 </details>
 
 ## 📸 证据，不是承诺
 
-Agent 永远不能悄悄给自己的作业打分：
+验收记录必须保留证据边界：
 
 - **Point-back**——每个验收发现都点名拥有它的 spec、领域规则或工艺声明。不存在无主的"看起来不错"。
 - **回流（recirculate）**——blocking 发现回流到 owning 阶段直到闭环；闭环轨迹本身就是 run 产物的一部分。
 - **不能静默跳过**——跳过审计仍会产出 point-back 骨架，但标记 `audited: false`，strict 校验不把它当已审计结果放行。
+- **缺失不等于不适用**：必需证据缺失为 `blocked`；`not-applicable` 必须有未触发的适用条件与理由，不能因为取证工具不可用就判不适用。
 
 [历史案例与用户旅程](./packages/design-playbook/showcase/README.md#user-journey)：三次独立任务，外加一个[完整的当前实跑](./packages/design-playbook/showcase/case-reader/index.html)（案例阅读器）——规格、真实预览确认、Fill、工艺审计、运行取证、评审、静态交付全程打包，并附[跨 run 回顾报告](./packages/design-playbook/showcase/run-review-2026-09-08.md)。SwarSight 队列案例保留了规格、设计决策与评审修复记录，早于当前计划交接和运行取证要求。
 
@@ -133,7 +153,7 @@ design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?
 
 ## 🧩 Skills 与命令
 
-八个 model 触发 skill（`/design-playbook:<名>`）：
+包内九个 skill（`/design-playbook:<名>`）：
 
 | Skill | 职责 |
 | :--- | :--- |
@@ -145,8 +165,9 @@ design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?
 | `craft-guard` | 🛡️ 细节工艺检查——间距、层级、动效等手作细节（反 AI 味），对照内置规则表 |
 | `native-craft` | 🖥️ 桌面原生手感声明 |
 | `ui-evaluator` | ✅ 验收——每个发现都指回它违反的声明，blocking 发现回流重修 |
+| `component-distill` | 已有跨 run 组件/token 晋升提案，只出报告；持久晋升需用户裁决，不属于单 run 管线 |
 
-**命令**：`design-io`（全链路）· `ux-spec`（只出 spec）· `ui-review`（只验收）· `run-review`（跨 run 复盘）· `run-status`（阶段与恢复叙述）· `run-handoff`（为已评审 run 出静态交付包）· `doctor`（安装面健康）
+**八个命令**：`design-io`（全链路）· `ux-spec`（只出 spec）· `ui-review`（只验收）· `run-review`（跨 run 复盘）· `run-status`（阶段与恢复叙述）· `run-handoff`（为已评审 run 出静态交付包）· `doctor`（安装面健康）· `component-distill`（跨 run 提案，不自动晋升）
 
 ## 🎚️ Run 档位（P1/P2/P3）
 
@@ -163,7 +184,7 @@ design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?
 
 </details>
 
-完整矩阵与重入语义见 [`docs/specs/ui-ux-vnext/loop-prototype.md`](./docs/specs/ui-ux-vnext/loop-prototype.md)。
+档位与重入决策见 [ADR-0029](./docs/adr/0029-vnext-closed-loop-final-state.md)。维护者说明见[中文文档入口](./docs/README.md)。
 
 ## 🔌 适配器（随主插件打包）
 
@@ -191,7 +212,7 @@ npx design-playbook init <agent>
 | **Tier 2**（生成） | Cursor、Gemini CLI、OpenCode、Windsurf、GitHub Copilot、Zed | skills 以各平台 rules 格式输出 + 项目级 MCP 配置；commands 降级为提示文档 |
 | **Tier 3**（兜底） | Kiro、Amp、Jules、Qwen Code 等共 22 个——`npx design-playbook --list` | 含 orchestrator 合约 + MCP 安装指南的 `AGENTS.md` |
 
-Claude Code 为原生平台。Tier 2/3 为生成适配器，已诚实说明降级内容。完整能力矩阵：[docs/specs/2026-08-28-multi-platform-adapter.md](./docs/specs/2026-08-28-multi-platform-adapter.md)。
+Claude Code 为原生平台。Tier 2/3 为生成适配器，已诚实说明降级内容。当前库存见[适配器矩阵](./packages/design-playbook/scripts/adapter_matrix.py)，分层语义见 [ADR-0042](./docs/adr/0042-multi-platform-adapter-generator.md)。
 
 ## 🔗 与生态组合
 
@@ -208,13 +229,18 @@ Claude Code 为原生平台。Tier 2/3 为生成适配器，已诚实说明降�
 
 - **多模态**——截图内容理解依赖**宿主模型的视觉能力**。插件本身只做图片登记（locator + SHA-256 + metadata）；无视觉宿主改骑你给的文字说明。
 - **Run Console**——已交付、状态 **experimental（实验性）**：本地单 run 控制台，把已有 run 产物投影成运营者可直接读的意图、来源判定、阻塞来源与下一 owner（含派生 Repair Packet，以及 `run-status` 发出的显式 `open-console` 延续动作）。保持**本地、受试用门禁约束**（尚未获得外部授权）、不是云端 Workspace、永远不会成为第二运行态权威。
+- **MCP 打包配置**：marketplace 路径包含包内 MCP 运行时配置；registry 发布包可能未包含根 MCP 配置，需要宿主显式注册。
+- **Windows 上的 Console loopback**：本地 Console 使用 loopback 传输；历史 dogfood 曾遇到传输中断，不能把本地 loopback 当作固定平台保证。
 - **证明 vs 形态**——`scripts/validate_run.py` 机检的是 run 产物的*形态*与闭环轨迹；不宣称每个未来 run 自动就是高质量 UI。历史结论仅适用于各自记录的案例，不代表当前完整链路通过，也不是统计保证。
 
 ## 📄 许可
 
 MIT（原创内容）。见 [`LICENSE`](./packages/design-playbook/LICENSE) + [`NOTICE`](./packages/design-playbook/NOTICE)。不主张任何第三方 playbook 内容的权利。
 
-仓库结构、维护脚本与工程壳在门面之后：[package README](./packages/design-playbook/README.md) · [docs/agents](./docs/agents)。
+仓库结构、维护脚本与工程壳在门面之后：[package README](./packages/design-playbook/README.md) · [docs/agents](./docs/agents) · [贡献指南](./.github/CONTRIBUTING.zh-CN.md)。
+
+GitHub Issues 只供使用者报告问题和反馈。内部 spec、plan、research 和工作票只留本地、不提交，
+边界见[票据政策](./docs/agents/issue-tracker.md)。
 
 维护者：[自动化验收](./docs/agents/automated-acceptance.md) 说明完整矩阵与独立项目操作流程回放。模拟审查输入只是回归夹具，不是外部试用证据。
 

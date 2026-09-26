@@ -4,9 +4,9 @@
 
 # 🎴 design-playbook
 
-### *Agents ship UI nobody can verify. This plugin makes them prove it.*
+### *Evidence-backed UI delivery for coding agents.*
 
-[![Version](https://img.shields.io/badge/Version-0.25.0-2DD4BF?style=flat-square&logo=semver&logoColor=black)](https://www.npmjs.com/package/design-playbook)
+[![Version](https://img.shields.io/badge/Version-0.25.1-2DD4BF?style=flat-square&logo=semver&logoColor=black)](https://www.npmjs.com/package/design-playbook)
 [![License](https://img.shields.io/badge/License-MIT-2DD4BF?style=flat-square&logo=opensourceinitiative&logoColor=black)](./packages/design-playbook/LICENSE)
 [![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-2DD4BF?style=flat-square&logo=claude&logoColor=black)](#-try-it)
 [![Skills](https://img.shields.io/badge/Skills-9-2DD4BF?style=flat-square)](#-skills--commands)
@@ -17,14 +17,28 @@
 
 ---
 
-## ✅ Agents can't grade their own UI — so this plugin makes them prove it
+## ✅ Review UI against declared criteria and evidence
 
-Every claim an agent makes about its own output is self-review. Acceptance here is **evidence-forced** instead: each acceptance criterion is bound to a captured artifact, every finding points back to the declaration it violates, and a missing capture is recorded as `audited: false` — a refusal, not a pass. The verdict comes from the evaluator, not the implementer, and blocking findings recirculate until the loop closes.
+For a frontend or product engineer changing an existing Web UI with a coding agent, design-playbook connects the request, acceptance criteria, evidence, and repair owner. Required evidence that is missing leaves the criterion `blocked`. Explicitly skipping the evaluator produces an `audited: false` skeleton, not an audited Pass. Findings point back to their owning declarations and blocking findings recirculate for repair. Evaluator review does not replace the named human's semantic approval or guarantee independent judgment.
 
 Two surfaces carry this:
 
 1. **Acceptance with proof** — `ui-evaluator` + the point-back ledger: findings must cite criterion-bound evidence, and the closure trail is part of the run, not a chat summary.
 2. **Existing-product UI work** — `design-baseline` discovers, validates, or drafts the project's `DESIGN.md` *before* changing a live product, so the change stays consistent with what already shipped.
+
+### Current stage
+
+As of 2026-09-24, this project is in **maintainer self-use and maintenance**.
+Catalog submissions and participant recruitment are paused. Existing install
+paths remain available; internal dogfood, historical examples, and automated
+replays are not evidence of external adoption or repeat use. New capability
+specs are proposals, not implementation or release commitments. Resumption
+requires an explicit maintainer decision, not a date or passing internal tests.
+
+The 2026-09-25 bounded self-use exception permits the source checkout's
+[read-only frontend scope report](packages/design-playbook/commands/run-status.md).
+It does not reopen recruitment, catalog submission, or release, and no measured
+time-saving is claimed. The boundary is recorded in [ADR-0045](docs/adr/0045-external-evidence-spend-gate.md).
 
 ## ⚡ One command, three artifacts
 
@@ -34,7 +48,7 @@ The mechanism behind that proof is one pass:
 /design-playbook:design-io <your UI ask>
 ```
 
-One pass — MCP tools bundled, zero extra config — lands three artifacts under `.scratch/<run>/`:
+A Design I/O run uses bundled MCP configuration, subject to host support and runtime prerequisites, and records three core artifacts under `.scratch/<run>/`:
 
 1. **`spec.md`** — the six-layer declaration of what good is (intent → acceptance), written *before* any UI
 2. **Decision report** — shell + component semantics, written *before* any code
@@ -66,6 +80,14 @@ On Cursor, Windsurf, Gemini CLI, Zed, or any of 30 supported agents: see [🌐 I
 
 Codex install notes, the `[mcp_servers.*]` fallback when a marketplace is unavailable, and preview prerequisites: [`packages/design-playbook/codex/AGENTS.md`](./packages/design-playbook/codex/AGENTS.md).
 
+**Runtime prerequisites:** a supported host with the relevant MCP tools
+registered, Python 3 for the bundled runtimes, and a local browser for Preview.
+Runtime capture additionally needs Playwright with Chromium and a reachable
+application with the required test data and login state. See the
+[capture setup](./packages/design-playbook-evidence/README.md#install--mcp-config).
+An unavailable optional adapter is disclosed; required proof still cannot be
+treated as passed merely because capture was skipped.
+
 <details>
 <summary>Local dev / self-test</summary>
 
@@ -88,11 +110,12 @@ sibling bundle, root catalog, README badges, and generated Codex snapshot follow
 
 ## 📸 Evidence, not promises
 
-The agent never quietly grades its own homework:
+Acceptance records keep their evidence limits visible:
 
 - **Point-back** — every acceptance finding names the spec, domain, or craft declaration that owns it. No free-floating "looks good".
 - **Recirculate** — blocking findings flow back to the owning stage until they close; the closure trail is part of the run artifacts.
 - **No silent skip** — skip the audit and the result still carries the point-back skeleton, but marked `audited: false`, which strict validation refuses as a final result.
+- **Missing is not inapplicable** - missing required proof is `blocked`; `not-applicable` needs an unmet applicability condition and a reason, not an unavailable capture tool.
 
 [Historical cases and journey coverage](./packages/design-playbook/showcase/README.md#user-journey): three independent requests, plus one [complete current live run](./packages/design-playbook/showcase/case-reader/index.html) (case reader) that packages the whole chain — spec, real preview confirmations, Fill, craft audit, captured evidence, review, static handoff — with a [cross-run review report](./packages/design-playbook/showcase/run-review-2026-09-08.md). The SwarSight queue case retains its specification, design decisions, and review / repair record; it predates the current plan and capture requirements.
 
@@ -137,7 +160,7 @@ Six **declarations** own what good is (`spec` · `domain` · `craft` · `design`
 
 ## 🧩 Skills & commands
 
-Eight model-invoked skills (`/design-playbook:<name>`):
+Nine skills in the package (`/design-playbook:<name>`):
 
 | Skill | Role |
 | :--- | :--- |
@@ -149,8 +172,9 @@ Eight model-invoked skills (`/design-playbook:<name>`):
 | `craft-guard` | 🛡️ Detail-craft check — spacing, hierarchy, motion (anti-AI-slop) against the built-in rule registry |
 | `native-craft` | 🖥️ Native-feel desktop declaration |
 | `ui-evaluator` | ✅ Acceptance — every finding points back to its declaration; blocking ones recirculate |
+| `component-distill` | Existing cross-run, report-only component/token promotion proposals; durable promotion requires a user decision. Not a single-run pipeline step |
 
-**Commands:** `design-io` (full pipeline) · `ux-spec` (spec only) · `ui-review` (accept only) · `run-review` (cross-run) · `run-status` (phase + resume narration) · `run-handoff` (static delivery package for a reviewed run) · `doctor` (install health)
+**Eight commands:** `design-io` (full pipeline) · `ux-spec` (spec only) · `ui-review` (accept only) · `run-review` (cross-run) · `run-status` (phase + resume narration) · `run-handoff` (static delivery package for a reviewed run) · `doctor` (install health) · `component-distill` (cross-run proposals, no automatic promotion)
 
 ## 🎚️ Run profiles (P1/P2/P3)
 
@@ -167,7 +191,7 @@ Every run declares a tier in the `plan.md` **run-profile** block — process wei
 
 </details>
 
-Full matrix and re-entry semantics: [`docs/specs/ui-ux-vnext/loop-prototype.md`](./docs/specs/ui-ux-vnext/loop-prototype.md).
+Run-profile and re-entry decisions: [ADR-0029](./docs/adr/0029-vnext-closed-loop-final-state.md). Maintainer documentation: [Chinese documentation index](./docs/README.md).
 
 ## 🔌 Adapters (bundled)
 
@@ -196,7 +220,7 @@ npx design-playbook init <agent>
 | **Tier 2** (generated) | Cursor, Gemini CLI, OpenCode, Windsurf, GitHub Copilot, Zed | Skills as platform rules + project-level MCP config; commands degrade to prompt docs. Zed: `.rules` (first-match aware — skipped if a competing rules file exists without one) + `.zed/settings.json` context_servers |
 | **Tier 3** (floor) | 22 total, including Kiro, Amp, Jules, Qwen Code — `npx design-playbook --list` | `AGENTS.md` with orchestrator contract + MCP install guide |
 
-Claude Code is the native surface. Tier-2/3 outputs are generated adapters with honest degradation. Full capability matrix: [docs/specs/2026-08-28-multi-platform-adapter.md](./docs/specs/2026-08-28-multi-platform-adapter.md).
+Claude Code is the native surface. Tier-2/3 outputs are generated adapters with honest degradation. Current inventory: [adapter matrix](./packages/design-playbook/scripts/adapter_matrix.py); tier semantics: [ADR-0042](./docs/adr/0042-multi-platform-adapter-generator.md).
 
 ## 🔗 Stack with ecosystem
 
@@ -221,7 +245,10 @@ Not another style/palette pack — this plugin owns the **delivery pipeline, evi
 
 MIT (authored content). See [`LICENSE`](./packages/design-playbook/LICENSE) + [`NOTICE`](./packages/design-playbook/NOTICE). No rights claimed over any third-party playbook corpus.
 
-Repo layout, maintainer scripts, and the engineering shell live behind the front door: [package README](./packages/design-playbook/README.md) · [docs/agents](./docs/agents).
+Repo layout, maintainer scripts, and the engineering shell live behind the front door: [package README](./packages/design-playbook/README.md) · [docs/agents](./docs/agents) · [Contributing](./.github/CONTRIBUTING.md).
+
+GitHub Issues are for user reports and feedback. Internal specs, plans, research,
+and work tickets stay local and untracked; see the [issue policy](./docs/agents/issue-tracker.md).
 
 Maintainers: [automated acceptance](./docs/agents/automated-acceptance.md) covers the required matrix and an extra-project operator replay. Its simulated review inputs are regression fixtures, not external trial evidence.
 

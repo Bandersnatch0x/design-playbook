@@ -9,7 +9,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from design_playbook.scripts._diagnostics import Finding, finding
-from design_playbook.scripts.g6_records import ledger_observed, manifest_entries
+from design_playbook.scripts.g6_records import (
+    latest_by_instant,
+    ledger_observed,
+    manifest_entries,
+)
 from design_playbook.scripts.stages import EVIDENCE_PREFIX
 
 
@@ -70,7 +74,10 @@ def check_superseded_ledger_warnings(
     entries = entries if entries is not None else manifest_entries(evidence_dir)
     if not entries:
         return []
-    # Latest artifact per criterion by ts.
+    # Latest artifact per criterion by ts instant (mixed Z / +08:00 stamps
+    # must compare by capture time, not by string order). An unusable ts has
+    # no latest to name: stay quiet here - the hard gate reports malformed
+    # binding timestamps as G6.binding_conflict.
     latest_by_crit: dict[str, str] = {}
     for crit in {e.get("criterion") for e in entries if isinstance(e.get("criterion"), str)}:
         candidates = [
@@ -79,7 +86,9 @@ def check_superseded_ledger_warnings(
         ]
         if not candidates:
             continue
-        latest = max(candidates, key=lambda m: m.get("ts", ""))
+        latest = latest_by_instant(candidates)
+        if latest is None:
+            continue
         latest_by_crit[crit] = latest["artifact"]
 
     warns: list[Finding] = []

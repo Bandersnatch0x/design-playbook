@@ -35,13 +35,11 @@ Evidence trail, re-derived live by the tests below:
    contract; ADR-0044 (2026-09-22) accepts versioned contract
    ``diagnostic-export.schema.v1`` and maps the owner (authority key
    ``diagnostic-export``, registry kind ``export-transaction``).
-2. ``docs/specs/2026-09-22-diagnostic-export-v1.md`` — the separately
-   accepted contract document: field table, envelope discipline, the
-   preview/write transaction, and the binding vocabulary (sourceSetHash,
-   previewHash, secrets exclusion, manual share, trial-export).
-3. ``docs/specs/2026-08-25-run-snapshot-v1.md`` section 12.5 — the
-   two-phase transaction shape the implementation follows; its
-   implementation note records the acceptance.
+2. ADR-0044 carries the accepted preview/write transaction and binding
+   vocabulary (sourceSetHash, previewHash, secrets exclusion, manual
+   share, trial-export); private planning documents are not test inputs.
+3. The packaged snapshot schema and the export transaction define the
+   executable contract; transaction and HTTP suites verify their behavior.
 4. Runtime mapping — the parity Source registry registers
    ``diagnostic-export`` as a mapped action owner (no source record, no
    issuable locator); the closed typed-action allowlist carries the
@@ -89,9 +87,7 @@ from design_playbook.mcp.run_console.source_registry import (  # noqa: E402
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _ADR_DIR = _REPO_ROOT / "docs" / "adr"
-_SPECS_DIR = _REPO_ROOT / "docs" / "specs"
-_V1_SPEC = _SPECS_DIR / "2026-08-25-run-snapshot-v1.md"
-_PARITY_SPEC = _SPECS_DIR / "2026-08-25-run-snapshot-parity.md"
+_EXPORT_ADR = _ADR_DIR / "0044-diagnostic-export-contract-v1.md"
 _TRIAL_DOC = _REPO_ROOT / "docs" / "agents" / "run-console-read-only-trial.md"
 
 # ---------------------------------------------------------------------------
@@ -425,11 +421,11 @@ def _contract_from_document(
 
 
 def scan_export_contract_documents(
-    specs_dir: Path, adr_dir: Path, named_contract: str
+    adr_dir: Path, named_contract: str
 ) -> ExportContract | None:
     """The separately accepted export contract document, if one exists.
 
-    A contract document is an ADR or spec that both matches the version
+    A contract document is an accepted ADR that both matches the version
     the accepted ADR names and declares the export contract identity
     itself (the ``exportContract`` block) — other documents may reference
     the contract by id or link, but a reference is not a contract. The
@@ -440,15 +436,14 @@ def scan_export_contract_documents(
     if named_contract is None:
         return None
     version = named_contract.rsplit(".v", 1)[-1]
-    for directory in (specs_dir, adr_dir):
-        for document in sorted(directory.glob("*.md")):
-            text = document.read_text(encoding="utf-8")
-            lowered = text.lower()
-            if (
-                version in set(_NAMED_CONTRACT_KEY.findall(text))
-                and "exportcontract" in lowered
-            ):
-                return _contract_from_document(named_contract, text)
+    for document in sorted(adr_dir.glob("*.md")):
+        text = document.read_text(encoding="utf-8")
+        if (
+            _adr_is_accepted(text)
+            and version in set(_NAMED_CONTRACT_KEY.findall(text))
+            and "exportcontract" in text.lower()
+        ):
+            return _contract_from_document(named_contract, text)
     return None
 
 
@@ -540,7 +535,7 @@ def required_export_binding(document: dict) -> ExportBinding | None:
 
 
 def derive_repo_facts(
-    adr_dir: Path, specs_dir: Path, registry, run_root: Path, document: dict
+    adr_dir: Path, registry, run_root: Path, document: dict
 ) -> RepoFacts:
     """Re-derive the gate's input facts from the live repository."""
     decisions = scan_accepted_diagnostic_export_adrs(adr_dir)
@@ -551,7 +546,7 @@ def derive_repo_facts(
     contract = None
     if accepted is not None and accepted.named_contract is not None:
         contract = scan_export_contract_documents(
-            specs_dir, adr_dir, accepted.named_contract
+            adr_dir, accepted.named_contract
         )
     return RepoFacts(
         accepted_adr=accepted,
@@ -967,37 +962,32 @@ class RepoDecisionEvidenceTest(_BuiltSnapshotTestCase):
                     ).named_contract,
                 )
 
-    def test_the_snapshot_contract_still_gates_the_export_schema(self) -> None:
-        self.assertTrue(_V1_SPEC.is_file(), str(_V1_SPEC))
-        text = _V1_SPEC.read_text(encoding="utf-8")
-        # The pre-acceptance gate wording stays in the spec (it is the
-        # condition the acceptance satisfied, not deleted history); the
-        # implementation note records the accepted state.
+    def test_the_accepted_adr_preserves_export_transaction_boundaries(self) -> None:
+        text = _EXPORT_ADR.read_text(encoding="utf-8")
+        # Preserve the public decision independently of local planning.
+        # Server/transaction tests exercise rejection and atomicity.
         for line in (
-            "MUST remain disabled until the separate Diagnostic export schema is accepted;",
-            "this snapshot contract does not authorize an ad-hoc export payload",
-            "never uploads, and never counts as acceptance.",
-            "versioned JSON/Markdown contract is accepted. Snapshot v1 does not fill that",
-            "Diagnostic export schema is not separately accepted/enabled",
-            "Preview/write actions return `ACTION_UNAVAILABLE`; no ad-hoc export is written",
-            "Write is rejected; no partial JSON/Markdown pair exists",
-            "Only an atomic JSON/Markdown pair appears under `trial-export/`",
-            "`evidence/`, Manifest, verdict, and acceptance facts are unchanged",
-            "POST /api/v1/actions/diagnostic-export/preview",
-            "POST /api/v1/actions/diagnostic-export/write",
-            "`expectedSourceSetHash`, export request, and `previewHash`",
+            '"id": "diagnostic-export.schema.v1", "version": 1',
+            "`expectedSourceSetHash` and `previewHash`",
+            "`participantReviewed`",
+            "both files or neither",
+            "export never writes under `evidence/`",
+            "never updates a Manifest, never changes a verdict, never uploads",
+            "never counts as acceptance",
+            "selected run's",
+            "`trial-export/` subtree",
         ):
             with self.subTest(line=line[:52]):
                 self.assertIn(line, text)
 
-    def test_the_parity_specification_still_gates_the_export_owner(self) -> None:
-        self.assertTrue(_PARITY_SPEC.is_file(), str(_PARITY_SPEC))
-        text = _PARITY_SPEC.read_text(encoding="utf-8")
+    def test_the_accepted_adr_names_the_owner_without_authorizing_a_trial(self) -> None:
+        text = _EXPORT_ADR.read_text(encoding="utf-8")
         for line in (
-            "**Gate:** no accepted v1 JSON/Markdown schema or transaction",
-            "Preview/write action disabled with `ACTION_UNAVAILABLE`",
-            "no export is written during read parity",
-            "Accept a separate versioned Diagnostic export schema and atomic transaction,",
+            "authority key `diagnostic-export`",
+            "`export-transaction`",
+            "This decision does not",
+            "satisfy `G-RO-TRIAL-PASS`",
+            "Role attestation (S31",
         ):
             with self.subTest(line=line[:52]):
                 self.assertIn(line, text)
@@ -1037,13 +1027,12 @@ class RepoDecisionEvidenceTest(_BuiltSnapshotTestCase):
     def test_the_accepted_contract_document_exists_and_carries_the_vocabulary(
         self,
     ) -> None:
-        # The separately accepted contract document exists (the ADR plus
-        # the contract spec) and itself carries every binding marker the
+        # The accepted public ADR itself carries every binding marker the
         # gate requires — anything it did not carry would stay unproven.
         for probe in ("diagnostic-export.schema.v1",):
             with self.subTest(probe=probe):
                 contract = scan_export_contract_documents(
-                    _SPECS_DIR, _ADR_DIR, probe
+                    _ADR_DIR, probe
                 )
                 self.assertIsNotNone(contract)
                 assert contract is not None
@@ -1057,11 +1046,11 @@ class RepoDecisionEvidenceTest(_BuiltSnapshotTestCase):
         # A probe for a version nobody accepted still finds nothing to
         # satisfy that version.
         self.assertIsNone(
-            scan_export_contract_documents(_SPECS_DIR, _ADR_DIR,
+            scan_export_contract_documents(_ADR_DIR,
                                            "diagnostic-export.schema.v2")
         )
         facts = derive_repo_facts(
-            _ADR_DIR, _SPECS_DIR, self.registry, self.run_root, self.document
+            _ADR_DIR, self.registry, self.run_root, self.document
         )
         self.assertIsNotNone(facts.export_contract)
         self.assertEqual(facts.export_contract.contract_id,
@@ -1072,7 +1061,7 @@ class RepoDecisionEvidenceTest(_BuiltSnapshotTestCase):
         # export has been written in this run root: the mapped owner
         # alone proves nothing, so the gate stays fail-closed.
         facts = derive_repo_facts(
-            _ADR_DIR, _SPECS_DIR, self.registry, self.run_root, self.document
+            _ADR_DIR, self.registry, self.run_root, self.document
         )
         result = evaluate_diagnostic_export_gate(facts)
         self.assertIsNotNone(facts.accepted_adr)
@@ -1145,7 +1134,7 @@ class RepoDecisionEvidenceTest(_BuiltSnapshotTestCase):
         )
         self.assertEqual(len(commit.written), 2)
         facts = derive_repo_facts(
-            _ADR_DIR, _SPECS_DIR, self.registry, self.run_root, self.document
+            _ADR_DIR, self.registry, self.run_root, self.document
         )
         result = evaluate_diagnostic_export_gate(facts)
         self.assertEqual(result.outcome, OUTCOME_ACCEPTED)

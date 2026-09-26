@@ -72,3 +72,14 @@ with three updates from the six product audits (2026-09-21):
    records keep their original wording).
 
 Changing the target reader again still supersedes this ADR.
+
+## Amendment (2026-09-24): truthful stage and evidence prerequisites
+
+The maintainer requested a short self-use-stage notice in both READMEs,
+without changing the target reader.
+Replace the original "zero extra config" promise with bundled configuration
+plus explicit host, Python, browser, and capture prerequisites. Required
+evidence missing means `blocked`; an explicitly skipped evaluator yields an
+`audited: false` skeleton. Evaluator review is a separate pipeline role, not
+a claim of an independent human reviewer or a replacement for semantic
+approval. Keep the skill and command inventories aligned with the package.

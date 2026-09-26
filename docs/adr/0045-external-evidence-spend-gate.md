@@ -52,3 +52,27 @@ cheaply unless a spend gate makes the mainline the only open lane.
 - If the trial resumes and passes, the next capability batch still goes
   through normal decision discipline; lifting the gate re-opens the lane, it
   does not pre-approve anything.
+
+## Amendment (2026-09-24): explicit self-use pause
+
+The maintainer explicitly paused catalog submission and recruitment on
+2026-09-24. This preserves the spend
+gate and requires explicit resumption during the pause; neither the review
+date nor internal dogfood automatically authorizes capability work. The
+30-day checkpoint is approximately 2026-10-22, measured from ADR-0044's
+2026-09-22 acceptance, not a condition already met on that acceptance date.
+
+## Amendment (2026-09-25): bounded self-use exception
+
+The maintainer explicitly authorized a read-only extension of the existing
+run-status entry point: declared change scope to criterion mapping, evidence
+gap summaries, and a re-verification proposal that retains every owner
+requirement. This is a narrow exception, not satisfaction of the external
+trial gate. Snapshot v1, persistent contracts, Console capabilities, and
+execution/approval authority are unchanged; no collector or gate is added.
+The existing G6 binding check rejects conflicting latest manifest entries
+rather than choosing one arbitrarily.
+
+Self-use paired measurement may be prepared, but insufficient real samples
+must remain insufficient; deterministic tests cannot establish time savings.
+Catalog submission, recruitment, and other new capability work remain paused.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Diagnostic export contract v1 — pure projection tests (ADR-0044, T-047).
 
-Pins docs/specs/2026-09-22-diagnostic-export-v1.md §3 at the module seam:
+Pins the accepted ADR-0044 contract at the module seam:
 the field table against real fixture snapshots, the envelope discipline
 (value only when ``known``, reasonCode passthrough otherwise), the
 ``notCollected`` and exclusion scans over every exported byte, the canonical

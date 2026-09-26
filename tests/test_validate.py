@@ -79,6 +79,26 @@ class ValidateGateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("VALIDATION PASSED", result.stdout)
 
+    def test_package_description_drift_fails(self) -> None:
+        package = self.root / "packages" / "design-playbook" / "package.json"
+        manifest = json.loads(package.read_text(encoding="utf-8"))
+        manifest["description"] = "An unrelated product claim"
+        package.write_text(json.dumps(manifest), encoding="utf-8")
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("package.json description matches plugin.json", result.stdout)
+
+    def test_catalog_description_drift_fails(self) -> None:
+        catalog = self.root / ".claude-plugin" / "marketplace.json"
+        manifest = json.loads(catalog.read_text(encoding="utf-8"))
+        manifest["plugins"][0]["description"] = "An unrelated catalog claim"
+        catalog.write_text(json.dumps(manifest), encoding="utf-8")
+        result = self.validate()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("marketplace description matches plugin.json", result.stdout)
+
     def _rewrite_codex_prompt(self, old: str, new: str) -> None:
         package = self.root / "packages" / "design-playbook"
         for relative in ("scripts/adapter_templates/codex-agents.md", "codex/AGENTS.md"):
@@ -578,6 +598,37 @@ class ValidateGateTests(unittest.TestCase):
         # FAIL line names both sides so the drift is visible at a glance.
         self.assertIn("matches Claude plugin.json", result.stdout)
 
+    def test_codex_short_description_drift_fails(self) -> None:
+        # ADR-0040 positioning: the Codex picker copy is a leading truncation
+        # of the canonical description. Template and snapshot can drift
+        # together -- that is how the pre-0.24 framing survived the pinned
+        # description trio -- so this counterexample moves all four published
+        # description sites in place and leaves the adapter drift gate clean.
+        source = (
+            self.root / "packages" / "design-playbook"
+            / ".claude-plugin" / "plugin.json"
+        )
+        old = json.loads(source.read_text(encoding="utf-8"))["description"]
+        new = "A rephrased front-door claim that no picker copy truncates"
+        for relative in (
+            "packages/design-playbook/.claude-plugin/plugin.json",
+            "packages/design-playbook/.codex-plugin/plugin.json",
+            "packages/design-playbook/package.json",
+            ".claude-plugin/marketplace.json",
+        ):
+            path = self.root / relative
+            text = path.read_text(encoding="utf-8")
+            self.assertIn(old, text)
+            path.write_text(text.replace(old, new), encoding="utf-8")
+
+        result = self.validate()
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("interface.shortDescription is a prefix", result.stdout)
+        # The drift gate stays clean, so the new positioning check is the
+        # failure under test rather than a stale generated snapshot.
+        self.assertNotIn("FAIL  adapter", result.stdout)
+
     def test_dsh_dependency_version_drift_fails(self) -> None:
         dsh_package = (
             self.root / "packages" / "dsh-design-playbook" / "package.json"
@@ -663,6 +714,16 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("from _checks import RUFF_VERSION", ci)
         self.assertIn('ruff==${RUFF_VERSION}', ci)
         self.assertNotIn(f"ruff=={_checks.RUFF_VERSION}", ci)
+
+    def test_windows_job_runs_frontend_review_under_windows_paths(self) -> None:
+        # P2-4: the review resolves drive letters, backslashes and
+        # case-insensitive paths, so an ubuntu-only run cannot see a Windows
+        # regression. The Windows job must install pytest before using it.
+        ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        windows = ci.split("powershell-quoting:", 1)[1]
+        self.assertIn("runs-on: windows-latest", windows)
+        self.assertIn("python -m pip install pytest", windows)
+        self.assertIn("python -m pytest tests/test_frontend_review.py", windows)
 
 
 class GitIgnoreBoundaryTests(unittest.TestCase):

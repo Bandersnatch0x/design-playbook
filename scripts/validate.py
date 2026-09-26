@@ -70,6 +70,23 @@ check(bool(mj), f"marketplace.json present at repo root: {market_json}")
 check(bool(pj.get("version")), "plugin.json has explicit semver version")
 check(bool(pj.get("name")), "plugin.json has name")
 check(bool(pj.get("description")), "plugin.json has description")
+package_manifest = _read_json(PKG / "package.json")
+check(
+    bool(pj.get("description"))
+    and package_manifest.get("description") == pj.get("description"),
+    "package.json description matches plugin.json",
+)
+catalog_plugins = mj.get("plugins", [])
+catalog_plugin = next(
+    (entry for entry in catalog_plugins
+     if isinstance(entry, dict) and entry.get("name") == pj.get("name")),
+    {},
+)
+check(
+    bool(pj.get("description"))
+    and catalog_plugin.get("description") == pj.get("description"),
+    "marketplace description matches plugin.json",
+)
 
 print("== Plugin-root layout (ADR-0006) ==")
 check((PKG / "skills").is_dir(), "skills/ at plugin root")
@@ -144,7 +161,23 @@ check(
     f"(codex={codex_version!r}, claude={claude_version!r})",
 )
 
-# 2) Codex mcp.json preview/evidence target files exist on disk. The Codex
+# 2) The Codex picker copy is a leading truncation of the canonical description
+#    (ADR-0040 positioning). `description` is pinned across Claude/package/
+#    catalog above, but the Codex `interface.shortDescription` is a second
+#    publish surface: without this check it silently kept a pre-0.24 framing
+#    after the other three moved. A short form may truncate, never rephrase.
+codex_interface = cpj.get("interface") if isinstance(cpj, dict) else None
+codex_short = (codex_interface.get("shortDescription")
+               if isinstance(codex_interface, dict) else None)
+canonical_description = pj.get("description") if isinstance(pj, dict) else None
+check(
+    bool(codex_short) and bool(canonical_description)
+    and canonical_description.startswith(codex_short),
+    ".codex-plugin/plugin.json interface.shortDescription is a prefix of the "
+    f"canonical description (short={codex_short!r})",
+)
+
+# 3) Codex mcp.json preview/evidence target files exist on disk. The Codex
 #    adapter resolves these relative to its install cwd, so a missing file
 #    would surface only at runtime in a foreign agent.
 if isinstance(cmcp, dict):
@@ -166,7 +199,7 @@ if isinstance(cmcp, dict):
         check(target_path.is_file(),
               f".codex-plugin/mcp.json {codex_server_name} target exists on disk: {target_arg}")
 
-# 3) .agents marketplace plugins[0].source.path must resolve to a real dir.
+# 4) .agents marketplace plugins[0].source.path must resolve to a real dir.
 #    Unlike the Claude marketplace, the .agents catalog intentionally has no
 #    version field (issue 07); only the source path is verified here.
 if isinstance(amj, dict):

@@ -159,6 +159,29 @@ def parse_matrix_lines(section: str) -> list[tuple[str, str, str]]:
     ]
 
 
+def project_sampling(pointback_text: str, spec_text: str) -> list[dict[str, str | None]]:
+    """Conservative read view of declared cells, without copying observation prose."""
+    section = _section_after_heading(pointback_text, COVERAGE_HEADING)
+    rows = parse_matrix_lines(section) if MATRIX_MARKER.search(section) else []
+    result = []
+    for page, state in spec_matrix_cells(spec_text):
+        values = [value for p, s, value in rows if (p, s) == (page, state)]
+        status = "unknown"
+        reason_source = None
+        if len(values) > 1:
+            status = "inconsistent"
+        elif values:
+            if UNREVIEWED_VALUE.match(values[0]):
+                reason = UNREVIEWED_VALUE.sub("", values[0]).strip("（）()：:—- ")
+                status = "unreviewed" if reason else "inconsistent"
+                reason_source = "point-back.md#coverage" if reason else None
+            elif values[0]:
+                status = "reported"  # A sampling claim is not a verified binding.
+        result.append({"page": page, "state": state, "status": status,
+                       "reason_source": reason_source})
+    return result
+
+
 def check_sampling_matrix(
         pointback_text: str,
         spec_text: str,

@@ -27,16 +27,14 @@ never hard-coded to "disabled"):
    the authority-registry mapping ``role-attestation.<owner>`` with a
    concrete owner, and ADR-0038 itself requires "an explicit allowlist
    change with an identified transaction owner" for any new action.
-2. ``docs/specs/2026-08-25-run-snapshot-parity.md`` section 2 — the
-   ``role-attestation.<owner>`` row is a parity gate: "no
-   transaction/read seam preserving the full
-   claim/assertion/role/authority/source-hash binding is proven"; the
-   action stays disabled with no generic confirmation file.
+2. ADR-0038 requires claim/role/source-hash binding and the existing
+   authority owner; ADR-0044 leaves Role attestation locked. Private
+   planning documents are not inputs to this gate.
 3. Runtime mapping — the parity Source registry registers
    ``role-attestation.owner`` as an unmapped gate (no source record,
    no issuable locator); the closed typed-action allowlist
-   (``actions.py``) exposes exactly refresh, view-source, and
-   copy-agent-command; and no HTTP route answers any
+   (``actions.py``) exposes refresh, view-source, copy-agent-command
+   and the separately accepted export capability; no HTTP route answers any
    attestation-shaped request.
 4. No claim binding — a real built Snapshot v1 document carries no
    ``approval`` object at all, so no attestation record or owner
@@ -87,7 +85,6 @@ from design_playbook.mcp.run_console.source_registry import (  # noqa: E402
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _ADR_DIR = _REPO_ROOT / "docs" / "adr"
-_PARITY_SPEC = _REPO_ROOT / "docs" / "specs" / "2026-08-25-run-snapshot-parity.md"
 
 # ---------------------------------------------------------------------------
 # The pure gate: structured facts in, one binary result out.
@@ -647,12 +644,19 @@ class RepoDecisionEvidenceTest(_BuiltSnapshotTestCase):
             with self.subTest(document=decision.document):
                 self.assertIsNone(decision.named_owner)
 
-    def test_the_parity_specification_still_gates_the_owner_mapping(self) -> None:
-        self.assertTrue(_PARITY_SPEC.is_file(), str(_PARITY_SPEC))
-        text = _PARITY_SPEC.read_text(encoding="utf-8")
-        self.assertIn("role-attestation.<owner>", text)
-        self.assertIn("Action disabled", text)
-        self.assertIn("no generic confirmation file", text)
+    def test_the_public_adr_preserves_claim_and_owner_binding(self) -> None:
+        text = (_ADR_DIR / "0038-run-snapshot-contract-and-loopback-security.md").read_text(
+            encoding="utf-8"
+        )
+        for requirement in (
+            "stable claim ID, the claim hash, requested role",
+            "current authoritative source hash",
+            "Only explicit human submission reaches the existing authority owner",
+            "Any bound source change invalidates",
+            "roles cannot inherit one another's confirmation",
+        ):
+            with self.subTest(requirement=requirement):
+                self.assertIn(requirement, text)
 
     def test_the_parity_registry_maps_no_role_attestation_owner(self) -> None:
         source = self.registry.source("role-attestation.owner")

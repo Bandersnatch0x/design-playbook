@@ -1,6 +1,8 @@
 # Triage Labels
 
-The engineering skills use five canonical triage roles. This file maps those roles to the GitHub labels used by this repository.
+These existing labels classify user reports and feedback. They do not authorize
+publishing internal work tickets or require a particular engineering workflow;
+see the [issue policy](issue-tracker.md).
 
 | Canonical triage role | Label in our tracker | Meaning |
 | --------------------- | -------------------- | ------- |
@@ -10,4 +12,6 @@ The engineering skills use five canonical triage roles. This file maps those rol
 | `ready-for-human`          | `ready-for-human`    | Requires human implementation |
 | `wontfix`                  | `wontfix`            | Will not be actioned |
 
-When a skill mentions a triage role, apply the corresponding GitHub label from this table.
+When triaging a user report, apply the label matching its actual state.
+Keep internal implementation breakdowns local; a readiness label does not
+override the current capability freeze or an accepted ADR.

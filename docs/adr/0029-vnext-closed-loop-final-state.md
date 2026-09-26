@@ -2,13 +2,13 @@
 
 ## Status
 
-Accepted (vNext S6, issue #41, 2026-08-14). Spec authority:
-[`docs/specs/ui-ux-vnext/`](../specs/ui-ux-vnext/) (eight finalized
-prototypes; `loop-prototype.md` owns the tier matrix and state machine,
-`vnext-prototype.md` owns the slice plan S1-S6). This ADR records the
-delivered final state so the architecture is discoverable from
-`docs/adr/`; per-decision rationale and the full tables live in the spec
-directory and are not restated here.
+Accepted (vNext S6, issue #41, 2026-08-14).
+
+Documentation amendment (2026-09-24): the original eight development
+prototypes are now local-only. This ADR retains the delivered decisions;
+current run semantics are maintained in the packaged
+[orchestration contract](../../packages/design-playbook/skills/design-playbook/SKILL.md)
+and its references. Personal planning is not a public runtime authority.
 
 ## Context
 
@@ -62,9 +62,8 @@ extended spectrum fits together once all slices shipped.
 
 ## Consequences
 
-- The spec directory remains the single authority; this ADR is the
-  entry point. Future tier-criteria changes go through the spec docs
-  first, then the gate modules.
+- Future tier-criteria changes update the packaged contract and corresponding
+  gate tests together; changes to accepted decisions require an ADR.
 - A P3 declaration now fails validation without a complete sampling
   matrix block — fixture runs and dogfood demonstrate the obligation
   (`examples/export-upgrade/`, `examples/dogfood/`).

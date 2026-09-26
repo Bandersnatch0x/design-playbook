@@ -6,7 +6,7 @@ Accepted (2026-08-24).
 
 ## Context
 
-The 2026-08-22 spec (`docs/specs/2026-08-22-interactive-review-and-static-handoff-implementation-plan.md`, issue #36) landed Stage 6 (preview) and Stage 9 (evidence/static handoff) together. Stage 6 had prior decisions to land against — ADR-0008 (feedback floor), ADR-0013 (preview transaction), ADR-0024/0027 (versions) — and its implementation followed them. Stage 9 had none, so it was implemented directly inside the Stage 6 runtime: the three delivery routes (`/static-handoff`, `/export-zip`, `/disclosure-review.json`) are registered on the `collect_review` HTTP handler and share that server's lifetime.
+The 2026-08-22 spec (originally `docs/specs/2026-08-22-interactive-review-and-static-handoff-implementation-plan.md`, now local planning; issue #36) landed Stage 6 (preview) and Stage 9 (evidence/static handoff) together. Stage 6 had prior decisions to land against — ADR-0008 (feedback floor), ADR-0013 (preview transaction), ADR-0024/0027 (versions) — and its implementation followed them. Stage 9 had none, so it was implemented directly inside the Stage 6 runtime: the three delivery routes (`/static-handoff`, `/export-zip`, `/disclosure-review.json`) are registered on the `collect_review` HTTP handler and share that server's lifetime.
 
 That placement silently crossed boundaries the glossary already fixes:
 

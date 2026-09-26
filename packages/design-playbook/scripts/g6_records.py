@@ -9,6 +9,7 @@ ledger parsing - the syntax facts come from one deep module (ADR-0025).
 """
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from design_playbook.mcp.evidence.ledger_syntax import LedgerFacts, parse_ledger
@@ -54,3 +55,49 @@ def ledger_observed(
 def manifest_entries(evidence_dir: Path) -> list[dict]:
     """Read evidence/manifest.jsonl as one dict per non-empty valid line."""
     return list(capture_run_facts(evidence_dir=evidence_dir).manifest_entries)
+
+
+def binding_instant(ts: object) -> datetime | None:
+    """Parse one manifest ``ts`` into an offset-aware instant.
+
+    ``None`` means the value is unusable as an ordering fact: not a string,
+    blank, not ISO-8601, or naive. A stamp without an offset names no instant
+    of its own - it would only be comparable through the reader's clock - so
+    it is rejected rather than guessed. ``Z``/``z`` normalize to ``+00:00``
+    and are the only offsets rewritten; everything else round-trips through
+    ``datetime.fromisoformat``.
+    """
+    if not isinstance(ts, str):
+        return None
+    text = ts.strip()
+    if not text:
+        return None
+    if text[-1] in ("Z", "z"):
+        text = f"{text[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed
+
+
+def latest_by_instant(entries: list[dict]) -> dict | None:
+    """The entry with the greatest parsable ``ts``; ``None`` when any is not.
+
+    Ordering is by real instant, so mixed offsets (``Z`` vs ``+08:00``) pick
+    the later capture rather than the lexicographically larger string.
+    ``None`` covers an empty list and any entry whose ``ts`` is unusable: the
+    caller owns whether that is a hard error (the G6 gate) or a reason to
+    stay quiet (soft warnings).
+    """
+    stamped: list[tuple[datetime, dict]] = []
+    for entry in entries:
+        instant = binding_instant(entry.get("ts"))
+        if instant is None:
+            return None
+        stamped.append((instant, entry))
+    if not stamped:
+        return None
+    return max(stamped, key=lambda pair: pair[0])[1]

@@ -188,7 +188,7 @@ def checklist() -> int:
         ("9 observe*", "If execute_capture_plan present: schemaVersion=1 + viewport every call; else skip narrate"),
         ("10 Accept", "point-back + verdict + run artifact index"),
         ("11 Verify", "python scripts/vnext_live_dogfood.py verify --run-root <run>"),
-        ("12 Log", "Write .scratch/design-playbook-v0/dogfood/YYYY-MM-DD-HHMM-vnext-live.md"),
+        ("12 Log", "Record actual checks and limitations, e.g. .scratch/<run>/dogfood.md"),
     ]
     for title, detail in steps:
         print(f"  [ ] {title}")
@@ -419,7 +419,7 @@ def verify(run_root: Path) -> int:
     print("  [ ] six process gates filled in dogfood log")
     print("  [ ] skip narration if preview*/observe* absent")
     print("  [ ] recirculate trail or acceptance for every blocking finding")
-    print("  [ ] log at .scratch/design-playbook-v0/dogfood/*-vnext-live.md")
+    print("  [ ] local untracked log with results, artifact index, and limitations")
     print()
     if failures:
         print(f"VERIFY FAILED: {failures} automated issue(s)")

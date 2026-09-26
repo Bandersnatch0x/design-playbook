@@ -4,15 +4,15 @@
     "name": "Bandersnatch0x"
   },
   "metadata": {
-    "description": "Agent UI design plugin: Design I/O declarations + contracts (not a style CSV pack).",
-    "version": "0.25.0"
+    "description": "Evidence-backed UI delivery for coding agents using Design I/O declarations and contracts.",
+    "version": "0.25.1"
   },
   "plugins": [
     {
       "name": "design-playbook",
       "source": "./packages/design-playbook",
-      "description": "Design I/O plugin for Claude Code / coding agents. Six design declarations + skill/evaluator contracts so UI generation is constrained, reviewable, and refinable.",
-      "version": "0.25.0",
+      "description": "Evidence-backed UI delivery for coding agents working on existing Web products: declared criteria, criterion-bound artifacts, findings linked to declarations, and repair guidance. Evaluator review does not replace human semantic approval.",
+      "version": "0.25.1",
       "author": {
         "name": "Bandersnatch0x"
       },

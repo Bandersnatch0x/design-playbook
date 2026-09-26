@@ -5,25 +5,14 @@
 - `CONTEXT.md`
 - `docs/adr/` relevant to the task
 
-Missing files → proceed silently; create via grill/domain-modeling when needed.
+Missing required authority -> report the gap and resolve it before relying on
+the decision. Missing local history is not a fresh-clone blocker.
 
 ## Layout
 
-```
-/
-├── CONTEXT.md
-├── docs/adr/
-├── docs/agents/
-├── .scratch/
-└── packages/design-playbook/    ← product (plugin root)
-    ├── .claude-plugin/plugin.json
-    ├── skills/
-    ├── commands/
-    ├── codex/AGENTS.md
-    ├── examples/
-    ├── LICENSE · NOTICE
-    └── README.md
-```
+Document locations and delivery evidence follow [Contributing](../../.github/CONTRIBUTING.md).
+Local task planning does not become a public prerequisite. CONTEXT carries
+vocabulary and current pointers, not new execution logs; decisions belong in ADRs.
 
 ## Vocabulary
 

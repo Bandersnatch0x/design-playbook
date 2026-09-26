@@ -93,6 +93,12 @@ jobs:
       - name: Install pytest (for stdio gates)
         run: python3 -m pip install pytest
 
+      - name: Documentation portability and Git boundary tests
+        run: python3 -m pytest tests/test_doc_links.py -q
+
+      - name: Read-only frontend scope review
+        run: python3 -m pytest tests/test_frontend_review.py -q
+
       - name: Shared transport + Preview transaction/stdin tests (required)
         run: |
           python3 -m pytest \
@@ -254,7 +260,9 @@ jobs:
     # The ubuntu matrix runs every t002 test except the PowerShell
     # round-trip class (skipIf os.name != "nt"): quoting regressions
     # (statement splitting, interpolation, empty-argv shifts) are only
-    # caught by a real PowerShell parser. stdlib-only file - no installs.
+    # caught by a real PowerShell parser. The read-only frontend review
+    # resolves drive letters, backslashes and case-insensitive paths, so
+    # its filesystem semantics need a real Windows runner too.
     name: PowerShell quoting regression (Windows)
     runs-on: windows-latest
     steps:
@@ -264,3 +272,7 @@ jobs:
           python-version: "3.12"
       - name: Run-status continuation tests against a real PowerShell
         run: python tests/test_t002_run_status_continuation.py
+      - name: Install pytest (read-only frontend review)
+        run: python -m pip install pytest
+      - name: Read-only frontend scope review on Windows paths
+        run: python -m pytest tests/test_frontend_review.py -q

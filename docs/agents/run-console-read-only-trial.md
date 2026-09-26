@@ -15,9 +15,10 @@ Companion deterministic rehearsal:
 Decisions that bound this protocol:
 [ADR-0036](../adr/0036-invited-trial-data-and-role-boundary.md),
 [ADR-0037](../adr/0037-local-single-run-console-lifecycle.md),
-[ADR-0038](../adr/0038-run-snapshot-contract-and-loopback-security.md);
-sequence authority: the [roadmap](../roadmap.md) delivery order
-(phase 4, "Run the external read-only invited trial").
+[ADR-0038](../adr/0038-run-snapshot-contract-and-loopback-security.md).
+The [product direction](../roadmap.md) retains the external acceptance floor;
+the [ADR-0045 amendment](../adr/0045-external-evidence-spend-gate.md)
+pauses recruitment and execution until explicitly authorized.
 
 ## Scope and authority
 
@@ -29,14 +30,15 @@ sequence authority: the [roadmap](../roadmap.md) delivery order
   browser test, or maintainer rehearsal can never satisfy the
   `G-RO-TRIAL-PASS` gate. The gate is satisfied only by an authorized,
   real read-only invited trial in which unrelated participants complete
-  the fixed comprehension check (roadmap phase 4 exit gate:
+  the fixed comprehension check:
   "Unrelated external users can complete the fixed comprehension check
   without hidden telemetry or raw-file reconstruction; interventions
-  are disclosed").
+  are disclosed".
 - Until that separately authorized real evidence satisfies the gate, the
-  program state remains **NOT SATISFIED**, and typed actions (RCV1-009+)
-  remain locked. The earlier miss is not erased and does not authorize
-  promotion.
+  program state remains **NOT SATISFIED**. The existing refresh, source
+  view, copy, and separately accepted Diagnostic export actions do not
+  constitute a trial pass. Role attestation remains locked. The earlier
+  miss is not erased and does not authorize promotion.
 
 ## The fixed four comprehension questions
 
@@ -175,6 +177,6 @@ record.
   neither repeats nor replaces the recorded earlier miss.
 - A green rehearsal is **not** trial evidence and does not satisfy
   `G-RO-TRIAL-PASS`.
-- Nothing here authorizes RCV1-009 (typed actions) or any later
-  ticket; the authorized frontier of the implementation chain ends at
-  this readiness protocol.
+- Nothing here authorizes a new capability or resumes recruitment.
+  Existing action behavior is governed by its accepted contract and
+  implementation, not by this rehearsal's outcome.

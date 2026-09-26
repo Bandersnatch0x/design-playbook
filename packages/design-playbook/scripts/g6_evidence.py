@@ -28,7 +28,12 @@ if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
 from design_playbook.scripts._diagnostics import Finding, finding  # noqa: E402
-from design_playbook.scripts.g6_records import ledger_observed, manifest_entries  # noqa: E402
+from design_playbook.scripts.g6_records import (  # noqa: E402
+    binding_instant,
+    latest_by_instant,
+    ledger_observed,
+    manifest_entries,
+)
 from design_playbook.scripts.run_facts import ArtifactReadFact  # noqa: E402
 from design_playbook.scripts.stages import EVIDENCE_PREFIX  # noqa: E402
 from design_playbook.mcp.evidence.capture_contract import validate_capture_snapshot  # noqa: E402
@@ -120,6 +125,39 @@ def _g6_capture_findings(criterion: str, snapshot: object) -> list[Finding]:
                 repair="Recapture and embed the provider request snapshot",
             )]
     return []
+
+
+def select_bound_entry(entries: list[dict], criterion: str, artifact: str) -> dict | None:
+    """The latest binding for one criterion/artifact; ambiguous heads fail closed.
+
+    ``ts`` decides the winner as a real instant, not as a string: ``Z`` and
+    ``+08:00`` stamps of one manifest must order by capture time (P2-3).
+    Malformed, offset-less or missing stamps name no instant and fail closed;
+    two distinct entries sharing the latest instant stay ambiguous.
+    """
+    bound = [entry for entry in entries
+             if entry.get("criterion") == criterion and entry.get("artifact") == artifact]
+    if not bound:
+        return None
+    latest = latest_by_instant(bound)
+    if latest is None:
+        raise ValueError("invalid-binding-timestamp")
+    latest_instant = binding_instant(latest.get("ts"))
+    if any(binding_instant(entry.get("ts")) == latest_instant and entry != latest
+           for entry in bound):
+        raise ValueError("conflicting-bindings")
+    return latest
+
+
+def bound_capture_request(entry: dict) -> dict:
+    """Read the provider snapshot with the same precedence as G6."""
+    request = entry.get("request")
+    if isinstance(request, dict):
+        return request
+    capture = entry.get("capture")
+    if isinstance(capture, dict) and isinstance(capture.get("request"), dict):
+        return capture["request"]
+    return {}
 
 
 def check_evidence(
@@ -230,7 +268,21 @@ def check_evidence(
                     repair="Append a manifest line binding criterion and artifact",
                 ))
             continue
-        latest = max(bound, key=lambda m: m.get("ts", ""))
+        try:
+            latest = select_bound_entry(bound, criterion, leaf)
+        except ValueError as conflict:
+            errs.append(finding(
+                "G6.binding_conflict",
+                "G6 evidence: binding timestamps are malformed or the latest entries conflict",
+                owner="evidence/manifest.jsonl",
+                expected="one unambiguous latest binding with an offset-aware "
+                         "ISO-8601 ts",
+                actual=str(conflict),
+                repair="Give every binding an offset-aware ISO-8601 ts and "
+                       "resolve conflicting bindings before re-evaluation",
+            ))
+            continue
+        assert latest is not None
         if latest.get("criterion") not in valid_criterion_ids:
             errs.append(finding(
                 "G6.unknown_criterion",
@@ -247,10 +299,7 @@ def check_evidence(
         # viewport, and freeze. Unversioned or partial snapshots have no
         # compatibility reader — recapture. Validated through the contract
         # module's read authority (fail-closed on malformed shape).
-        capture = latest.get("capture") if isinstance(latest.get("capture"), dict) else {}
-        request = latest.get("request")
-        if not isinstance(request, dict):
-            request = capture.get("request") if isinstance(capture.get("request"), dict) else {}
+        request = bound_capture_request(latest)
         capture_findings = _g6_capture_findings(criterion, request)
         if capture_findings:
             errs.extend(capture_findings)
