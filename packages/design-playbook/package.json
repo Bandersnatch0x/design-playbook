@@ -1,6 +1,6 @@
 {
   "name": "design-playbook",
-  "version": "0.25.1",
+  "version": "0.25.2",
   "description": "Evidence-backed UI delivery for coding agents working on existing Web products: declared criteria, criterion-bound artifacts, findings linked to declarations, and repair guidance. Evaluator review does not replace human semantic approval.",
   "keywords": [
     "pi-package",

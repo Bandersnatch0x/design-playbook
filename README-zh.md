@@ -6,7 +6,7 @@
 
 ### *为 coding agent 提供带证据的 UI 交付闭环。*
 
-[![Version](https://img.shields.io/badge/Version-0.25.1-2DD4BF?style=flat-square&logo=semver&logoColor=black)](https://www.npmjs.com/package/design-playbook)
+[![Version](https://img.shields.io/badge/Version-0.25.2-2DD4BF?style=flat-square&logo=semver&logoColor=black)](https://www.npmjs.com/package/design-playbook)
 [![License](https://img.shields.io/badge/License-MIT-2DD4BF?style=flat-square&logo=opensourceinitiative&logoColor=black)](./packages/design-playbook/LICENSE)
 [![Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-2DD4BF?style=flat-square&logo=claude&logoColor=black)](#-试一把)
 [![Skills](https://img.shields.io/badge/Skills-9-2DD4BF?style=flat-square)](#-skills-与命令)
