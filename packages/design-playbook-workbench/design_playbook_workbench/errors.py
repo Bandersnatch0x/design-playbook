@@ -5,6 +5,10 @@ that never contains a filesystem path, credential, or traceback, and a
 ``retryable`` flag. Handlers raise :class:`WorkbenchError`; the HTTP
 layer is the only place that turns it into a response, so no module
 invents its own status mapping.
+
+The unauthorized, origin-invalid, invalid-target, and disconnected codes
+stay fully generic; a ``detail`` that only echoes what the caller itself
+sent, and is identical whichever reason applied, does not weaken that.
 """
 from __future__ import annotations
 
@@ -74,13 +78,6 @@ STATUS_BY_CODE: dict[str, int] = {
 
 #: Codes a consumer may safely repeat with the same operation ID.
 RETRYABLE_CODES = frozenset({OWNER_UNAVAILABLE, RECOVERY_REQUIRED, CONFLICT})
-
-#: Codes whose message must stay fully generic: a caller probing an
-#: unauthorized or invalid target learns nothing about paths or state.
-#: A ``detail`` that only echoes what the caller itself sent (and is
-#: identical whichever reason applied) does not breach this; see
-#: ``assets.AssetService.enumerate_selection``.
-_OPAQUE_CODES = frozenset({UNAUTHORIZED, ORIGIN_INVALID, INVALID_TARGET, DISCONNECTED})
 
 
 class WorkbenchError(Exception):
