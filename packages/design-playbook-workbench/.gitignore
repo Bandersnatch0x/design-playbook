@@ -1,0 +1,19 @@
+# Local build and install artifacts of this package, never source.
+build/
+dist/
+*.egg-info/
+
+# One-off maintainer scratch (edit/patch/debug helpers), never source or shipped.
+.dbg_*
+.patch_*
+.insert_*
+.check_nest*
+.depth*
+.fix_*
+.orch_*
+.owner_*
+.work_*
+.life_*
+.settings_*
+.canvas_*
+.scratch/

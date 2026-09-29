@@ -76,3 +76,50 @@ rather than choosing one arbitrarily.
 Self-use paired measurement may be prepared, but insufficient real samples
 must remain insufficient; deterministic tests cannot establish time savings.
 Catalog submission, recruitment, and other new capability work remain paused.
+
+## Amendment (2026-09-26): personal local asset-workbench implementation exception
+
+The maintainer explicitly authorizes implementation and local validation of
+one independently distributed, loopback-only asset workbench for a single
+personal maintainer. This is an exception to the spend gate, not evidence that
+G-RO-TRIAL-PASS has passed and not a reopening of the general capability
+lane.
+
+The authorized product boundary is:
+
+- project-scoped local-folder registration with explicit path confirmation,
+  plus the project-bound slash entry-point changes needed to select the same
+  target when the plugin is installed at project or user scope;
+- import, search, immutable asset revisions, explicit cross-project reuse,
+  design-system and component maintenance, personal canvas composition,
+  design orchestration, archive/delete lifecycle, and backup/restore;
+- maintainer-approved repository change proposals with complete diffs,
+  baseline hashes, recoverable application, and no automatic commit, push, or
+  publication; and
+- scoped Agent handoff and result intake, while the maintainer retains target,
+  permission, publication, design-decision, and acceptance authority.
+
+Authority remains partitioned. The workbench owns only its project registry,
+asset metadata and revisions, canvases, orchestration records, tasks,
+proposals, and lifecycle data. Existing baseline, distillation, preview,
+evidence, evaluator, and run owners remain authoritative for their current
+facts; the workbench may keep source locators and projections or call narrow
+typed bridges, but may not create a second verdict, baseline, evidence, or
+arbitrary-file authority. Read, write, execute, and model-send grants are
+separate and are checked at the operation boundary.
+
+The exception excludes member invitation, team roles, multi-user or real-time
+collaboration, LAN or public hosting, cloud accounts or sync, new adapter rows,
+general Console expansion, new collectors or gates, catalog submission, and
+participant recruitment. It does not authorize a reading-demo site or a
+replacement terminal CLI. The existing plugin CLI remains unchanged; the new
+surface is a local service with Web UI and the bounded slash integration above.
+
+Authorization to implement is not a completion claim. Delivery requires a
+clean installation, all declared positive and negative acceptance paths,
+real Windows and CI-platform evidence where platform semantics differ, real
+Agent-host journeys rather than protocol mocks, full repository test gates,
+and review that confirms the authority partition above. A missing, blocked, or
+unrun required path leaves the capability undelivered. Commit, release,
+catalog submission, recruitment, and publication still require their normal
+separate decisions.

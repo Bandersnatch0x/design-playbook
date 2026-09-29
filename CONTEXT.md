@@ -8,16 +8,23 @@ Domain glossary and product facts for agents. Updated by `/grill-with-docs` / `/
 
 No reading-demo app in-repo (removed). Product surface is the installable package only.
 
-**Current operating stage (2026-09-24): self-use and maintenance.** Catalog
-submissions and recruitment are paused by explicit maintainer decision. Existing
-install paths remain available. New capability specs/tickets are proposals,
-not implementation approval; ADR-0045's spend gate remains. Internal dogfood
-does not satisfy external trial or adoption criteria. The 30-day checkpoint
-is approximately 2026-10-22; the original Day-90 review is approximately
-2026-11-23. Neither date automatically resumes activity.
-The bounded self-use exception for a read-only frontend scope report is
-defined in [ADR-0045](docs/adr/0045-external-evidence-spend-gate.md); it does
-not resume catalog submission or recruitment.
+**Current operating stage (2026-09-26): self-use and maintenance with bounded
+exceptions.** Catalog submissions and recruitment are paused by explicit
+maintainer decision. Existing install paths remain available. New capability
+specs/tickets remain proposals unless an explicit ADR-0045 exception covers
+their exact scope. Internal dogfood does not satisfy external trial or adoption
+criteria. The 30-day checkpoint is approximately 2026-10-22; the original
+Day-90 review is approximately 2026-11-23. Neither date automatically resumes
+activity.
+
+[ADR-0045](docs/adr/0045-external-evidence-spend-gate.md) currently contains
+two bounded self-use exceptions: the read-only frontend scope report and the
+single-maintainer, loopback-only local asset workbench authorized on
+2026-09-26. The workbench exception authorizes implementation and local
+validation only within its recorded authority and distribution boundary; it
+does not claim that the workbench exists, passes acceptance, or has been
+released. It does not reopen catalog submission, recruitment, adapter breadth,
+or unrelated capability work.
 
 Current repository release baseline: `v0.25.1`, per
 [release record](docs/releases/v0.25.1.md). Later source fixes are not thereby

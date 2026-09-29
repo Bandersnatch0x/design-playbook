@@ -332,19 +332,30 @@ def _validated_call_run_root(value: object) -> Path:
     return root
 
 
+def _is_unset_run_root(value: str | None) -> bool:
+    """True when an env value must fall back to process cwd.
+
+    Unset/empty and the literal ``"."`` both mean "no explicit root". A value
+    that still contains ``"${"`` is an interpolation token the launching host
+    did not expand — e.g. the ``.mcp.json`` ``${DESIGN_PLAYBOOK_RUN_ROOT:-}``
+    passthrough on a host that does not resolve ``${…}`` (ADR-0009) — so treat
+    it as unset rather than resolving a literal ``"${…}"`` into a bogus root.
+    """
+    return not value or value == "." or "${" in value
+
+
 def _run_root_misrooted() -> bool:
     """True when the run root fell back to a markerless cwd.
 
-    The shipped .mcp.json default (DESIGN_PLAYBOOK_RUN_ROOT=".") makes the
-    server resolve artifacts under its process cwd; in a host workspace that
-    cwd is the repo root, so captures silently land outside the run tree.
-    A per-call ``run_root`` is marker-validated before use, so it is never
-    misrooted.
+    The shipped .mcp.json forwards ``${DESIGN_PLAYBOOK_RUN_ROOT:-}`` (empty when
+    the host has no run root set), so the server resolves artifacts under its
+    process cwd; in a host workspace that cwd is the repo root, so captures
+    silently land outside the run tree. A per-call ``run_root`` is
+    marker-validated before use, so it is never misrooted.
     """
     if _CALL_RUN_ROOT.get() is not None:
         return False
-    configured = os.environ.get(RUN_ROOT_ENV)
-    if configured and configured != ".":
+    if not _is_unset_run_root(os.environ.get(RUN_ROOT_ENV)):
         return False
     return not _has_run_marker(Path.cwd().resolve())
 
@@ -354,7 +365,7 @@ def _run_root() -> Path:
     if explicit is not None:
         return explicit
     configured = os.environ.get(RUN_ROOT_ENV)
-    if not configured or configured == ".":
+    if _is_unset_run_root(configured):
         # Warn only when cwd does not look like a run dir (no run marker
         # file) — the shipped default resolving to a real run dir is correct
         # usage, not a misconfig — and only once per process to avoid

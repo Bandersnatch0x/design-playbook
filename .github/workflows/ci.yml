@@ -68,6 +68,7 @@ jobs:
           python3 tests/test_vnext_s5.py
           python3 tests/test_vnext_s6.py
           python3 tests/test_operator_evidence_hardening.py
+          python3 tests/test_project_target.py
       - name: Queue monitor dialog state tests
         run: node packages/design-playbook/showcase/test_queue_monitor_state.js
 
@@ -136,6 +137,29 @@ jobs:
             --ignore=packages/design-playbook/tests/run_console/test_read_only_trial.py \
             --ignore=packages/design-playbook/tests/run_console/test_repair_packet.py \
             -v
+
+      - name: Workbench — pure-Python tests (required, no Playwright)
+        # The workbench suite runs a real loopback service over real
+        # temporary directories: path/identity/alias rules, transport and
+        # credential negatives, mutation and proposal idempotency, apply
+        # recovery, and packaging. test_ui_browser.py is wholly browser tests
+        # (module-scope Playwright import) and is excluded. test_preview.py is
+        # mixed: its pure urllib PreviewOriginHttpTest must run here, so only
+        # its PreviewBrowserTest class is deselected by name (same split as
+        # Evidence PurePathTests / CaptureTests below). Chromium is launched
+        # inside PreviewBrowserTest, not at module scope, so collection here
+        # never needs Playwright.
+        run: |
+          python3 -m pytest packages/design-playbook-workbench/tests \
+            --ignore=packages/design-playbook-workbench/tests/test_ui_browser.py \
+            -k "not PreviewBrowserTest" \
+            -q
+
+      - name: Owner projection publisher — R12 thin interface (required)
+        # The owner-side writer for the projection document the workbench
+        # reads. The cross-package round trip (publish -> list/read/freshness)
+        # is covered by the workbench suite's integration test.
+        run: python3 packages/design-playbook/tests/test_publish_owner_projection.py
 
       - name: Evidence MCP stdio — pure-path tests (required, no Playwright)
         # Direct runtime tests cover argument rejection, containment,
@@ -227,6 +251,20 @@ jobs:
             packages/design-playbook/tests/run_console/test_repair_packet.py \
             -v
 
+      - name: Workbench — browser journeys (require chromium)
+        if: steps.pw_install.outcome == 'success'
+        # test_ui_browser.py is wholly browser tests; from the mixed
+        # test_preview.py only PreviewBrowserTest runs here — its pure
+        # PreviewOriginHttpTest already ran in the required gate above, so the
+        # two groups stay disjoint.
+        run: |
+          python3 -m pytest \
+            packages/design-playbook-workbench/tests/test_ui_browser.py \
+            -q
+          python3 -m pytest \
+            packages/design-playbook-workbench/tests/test_preview.py \
+            -q -k PreviewBrowserTest
+
       - name: Preview canvas version-control e2e (require chromium)
         if: steps.pw_install.outcome == 'success'
         run: |
@@ -281,3 +319,35 @@ jobs:
         run: python -m pip install pytest
       - name: Read-only frontend scope review on Windows paths
         run: python -m pytest tests/test_frontend_review.py -q
+
+  workbench-python312:
+    # R15 names Python 3.12 as the main target. The `validate` job runs the
+    # workbench suite on the runner's default `python3`, which is not a pinned
+    # 3.12; this job pins the interpreter explicitly so the portable-logic
+    # evidence is bound to the target version rather than an inherited one.
+    # It is additive: no existing job is modified by it.
+    name: Workbench — Python 3.12 target interpreter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pytest and ruff
+        run: |
+          RUFF_VERSION=$(python -c "import sys; sys.path.insert(0, 'scripts'); from _checks import RUFF_VERSION; print(RUFF_VERSION)")
+          python -m pip install --disable-pip-version-check pytest "ruff==${RUFF_VERSION}"
+      - name: Workbench — pure-Python tests on Python 3.12
+        # Same split as the required gate above: exclude the wholly-browser
+        # file, deselect only PreviewBrowserTest from the mixed file. No
+        # Playwright install in this job, so this proves the pure path needs
+        # none.
+        run: |
+          python -m pytest packages/design-playbook-workbench/tests \
+            --ignore=packages/design-playbook-workbench/tests/test_ui_browser.py \
+            -k "not PreviewBrowserTest" \
+            -q
+      - name: Workbench — ruff on Python 3.12
+        run: python -m ruff check packages/design-playbook-workbench
+      - name: Record the interpreter actually used
+        run: python --version

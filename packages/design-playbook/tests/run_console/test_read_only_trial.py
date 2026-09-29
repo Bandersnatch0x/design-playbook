@@ -67,7 +67,7 @@ _COMPONENT_DIR = _PKG_ROOT / "mcp" / "run_console"
 
 from tests.run_console import test_http_server as harness  # noqa: E402
 from design_playbook.mcp.run_console import session as session_module  # noqa: E402
-from design_playbook.mcp.run_console.http_server import serve_run_console  # noqa: E402
+from tests.run_console.test_ui_browser import serve_on_navigable_port  # noqa: E402
 from design_playbook.mcp.run_console.session import RunConsoleSession  # noqa: E402
 
 TRIAL_STATUS = "TRIAL_NOT_RUN"
@@ -175,7 +175,7 @@ class RehearsalHarness:
             now_fn=lambda: _NOW,
         )
         self.document = self._build_document()
-        self.server = serve_run_console(self.session, bind_host="127.0.0.1", port=0)
+        self.server = serve_on_navigable_port(self.session)
         self.digest_before = harness._tree_digest(self.run_root)
 
     def _build_document(self) -> dict:

@@ -1,0 +1,792 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>设计资产工作台 · 项目入口</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<a class="skip-link" href="#main">跳到主要内容</a>
+<header class="shell-header">
+  <div>
+    <h1>设计资产工作台</h1>
+    <p class="subtitle">本机单人维护者入口 · 仅监听回环地址 · 项目默认只读</p>
+  </div>
+  <p id="session-state" class="session-state" role="status">
+    正在建立会话…
+  </p>
+  <button type="button" id="settings-open" class="secondary">设置与备份</button>
+</header>
+
+<main id="main">
+  <section class="panel" id="session-error" hidden aria-labelledby="session-error-heading">
+    <h2 id="session-error-heading">会话不可用</h2>
+    <p id="session-error-message"></p>
+    <p class="hint">
+      请使用启动服务时打印的 bootstrap 链接重新打开本页面；
+      链接中的一次性内容会在交换成功后从地址栏清除。
+    </p>
+  </section>
+
+  <section class="panel" aria-labelledby="add-heading">
+    <h2 id="add-heading">添加本机项目目录</h2>
+    <p class="hint">
+      输入项目的<strong>绝对目录</strong>。登记的只是工作台访问授权，
+      不会复制或删除你的文件；登记后默认只读，写入需单独授权。
+    </p>
+    <form id="probe-form" class="row-form" autocomplete="off">
+      <label for="project-path">项目绝对目录</label>
+      <input id="project-path" name="path" type="text" spellcheck="false"
+             placeholder="D:\work\my-product" required
+             aria-describedby="project-path-help">
+      <button type="submit" id="probe-button">检查目录</button>
+    </form>
+    <p id="project-path-help" class="hint">
+      只接受本机绝对路径。相对路径、文件名、网络路径与当前用户主目录本身会被拒绝。
+    </p>
+
+    <div id="candidate" class="candidate" hidden aria-labelledby="candidate-heading">
+      <h3 id="candidate-heading">确认登记</h3>
+      <dl class="facts">
+        <dt>规范化绝对路径</dt><dd id="candidate-path"></dd>
+        <dt>目录身份</dt><dd id="candidate-identity"></dd>
+        <dt>授权范围</dt><dd id="candidate-scope">只读发现</dd>
+      </dl>
+      <p class="hint" id="candidate-warning">
+        登记前请核对以上路径与身份。目录移动、权限撤回或身份变化后本工作台会显示断开，不会自动匹配同名目录。
+      </p>
+      <form id="register-form" class="row-form" autocomplete="off">
+        <label for="project-name">项目名称（可选）</label>
+        <input id="project-name" name="name" type="text" maxlength="120"
+               placeholder="默认使用目录名">
+        <button type="submit" id="register-button">登记项目</button>
+        <button type="button" id="cancel-candidate" class="secondary">取消</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="list-heading">
+    <div class="panel-head">
+      <h2 id="list-heading">项目</h2>
+      <button type="button" id="refresh-button" class="secondary">重新探测</button>
+    </div>
+    <p id="list-empty" class="empty" hidden>
+      还没有项目。先在上方添加一个本机目录。
+    </p>
+    <p id="list-error" class="error-text" hidden></p>
+    <table id="project-table" class="project-table" hidden>
+      <caption class="visually-hidden">已登记项目及其连接状态</caption>
+      <thead>
+        <tr>
+          <th scope="col">项目</th>
+          <th scope="col">目录</th>
+          <th scope="col">连接状态</th>
+          <th scope="col">授权范围</th>
+          <th scope="col">操作</th>
+        </tr>
+      </thead>
+      <tbody id="project-rows"></tbody>
+    </table>
+  </section>
+
+  <section class="panel" id="assets-panel" hidden aria-labelledby="assets-heading">
+    <div class="panel-head">
+      <h2 id="assets-heading">资产库</h2>
+      <button type="button" id="assets-close" class="secondary">关闭</button>
+    </div>
+    <p class="hint" id="assets-scope"></p>
+    <form id="assets-filter" class="row-form" autocomplete="off">
+      <label for="assets-query">检索名称或标签</label>
+      <input id="assets-query" name="query" type="search" placeholder="例如 brand、tokens">
+      <label for="assets-kind">类型</label>
+      <select id="assets-kind">
+        <option value="">全部</option>
+        <option value="markdown">Markdown</option>
+        <option value="tokens">Tokens</option>
+        <option value="component">组件（工作台文档）</option>
+        <option value="page">页面（工作台文档）</option>
+        <option value="static-package">静态页面包</option>
+        <option value="react-source">React/TS 源码</option>
+        <option value="image">图片</option>
+        <option value="run-artifact">Run 工件</option>
+        <option value="binary">二进制</option>
+      </select>
+      <label for="assets-capability">能力</label>
+      <select id="assets-capability">
+        <option value="">全部</option>
+        <option value="reference">参考</option>
+        <option value="static-preview">静态预览</option>
+        <option value="source-unverified">未验证源码</option>
+        <option value="runnable-verified">已运行验证</option>
+        <option value="native-editable">原生可编辑</option>
+      </select>
+      <button type="submit" id="assets-search-button">检索</button>
+    </form>
+    <p id="assets-error" class="error-text" hidden></p>
+    <p id="assets-empty" class="empty" hidden>还没有导入资产。先在项目里导入设计说明、组件、页面或截图。</p>
+    <div class="preview-controls" id="document-create-controls">
+      <button type="button" id="create-component" class="secondary">新建组件</button>
+      <button type="button" id="create-page" class="secondary">新建页面</button>
+    </div>
+    <p class="hint">
+      新建的组件与页面是本工作台的类型化文档（schema 校验），不会写入项目文件；组件源码仍经变更提案修改。
+    </p>
+    <div class="assets-layout">
+      <ul id="asset-items" class="asset-list"></ul>
+      <div id="asset-detail" class="asset-detail" hidden aria-labelledby="asset-detail-heading">
+        <h3 id="asset-detail-heading"></h3>
+        <dl class="facts">
+          <dt>类型</dt><dd id="asset-detail-kind"></dd>
+          <dt>生命周期</dt><dd id="asset-detail-lifecycle"></dd>
+          <dt>能力</dt><dd id="asset-detail-capabilities"></dd>
+          <dt>版本</dt><dd id="asset-detail-revision"></dd>
+        </dl>
+        <h4>文件清单</h4>
+        <ul id="asset-manifest" class="plain-list"></ul>
+        <h4>来源</h4>
+        <ul id="asset-locators" class="plain-list"></ul>
+        <p id="asset-warnings" class="warning-text" hidden></p>
+        <h4>隔离预览</h4>
+        <div class="preview-controls">
+          <button type="button" id="asset-preview-static" class="secondary">静态预览</button>
+          <button type="button" id="asset-preview-dynamic" class="secondary">动态预览</button>
+          <button type="button" id="asset-preview-enable" class="secondary" hidden>启用动态预览</button>
+        </div>
+        <p id="asset-preview-note" class="hint" role="status"></p>
+        <iframe id="asset-preview-frame" class="asset-preview-frame" hidden
+                title="资产隔离预览" sandbox=""></iframe>
+        <div class="design-system-entry" id="asset-canvas-controls">
+          <button type="button" id="asset-into-canvas">拖入画布 / 放入画布</button>
+        </div>
+        <p class="hint">
+          拖入画布会从该资产当前已发布的修订建立一个固定版本实例，再作为画布节点引用；升级与回退仍走资产实例路径。
+        </p>
+        <div class="design-system-entry" id="asset-design-system-controls" hidden>
+          <button type="button" id="asset-design-system" class="secondary">打开设计系统</button>
+        </div>
+        <p class="hint" id="asset-design-system-hint" hidden>
+          该资产是 token 集：可在设计系统中编辑、比较版本并生成基线替换提案。
+        </p>
+        <div class="design-system-entry" id="asset-document-controls" hidden>
+          <button type="button" id="asset-open-document" class="secondary">打开文档</button>
+        </div>
+        <p class="hint" id="asset-document-hint" hidden>
+          该资产是工作台持有的类型化文档：可编辑公开面、发布修订，或从页面提炼候选。
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="tokens-panel" hidden aria-labelledby="tokens-heading">
+    <div class="panel-head">
+      <h2 id="tokens-heading">设计系统</h2>
+      <button type="button" id="tokens-close" class="secondary">关闭</button>
+    </div>
+    <p class="hint" id="tokens-scope"></p>
+    <p id="tokens-error" class="error-text" hidden></p>
+
+    <h3>校验结果</h3>
+    <p id="tokens-validation" role="status"></p>
+    <ul id="tokens-validation-errors" class="plain-list"></ul>
+
+    <h3>编辑 tokens</h3>
+    <p class="hint">
+      编辑器里是资产当前存储的原始文档。保存只写入草稿：缺失引用、引用循环、类型不符或取值非法都会整份拒绝。
+    </p>
+    <label for="tokens-document">tokens 文档（JSON）</label>
+    <textarea id="tokens-document" class="tokens-editor" rows="16" spellcheck="false"></textarea>
+    <div class="preview-controls">
+      <button type="button" id="tokens-save">校验并保存草稿</button>
+      <button type="button" id="tokens-publish">发布新版本</button>
+      <button type="button" id="tokens-reload" class="secondary">重新载入</button>
+    </div>
+    <p id="tokens-status" class="hint" role="status"></p>
+
+    <h3>主题样例预览</h3>
+    <div class="preview-controls">
+      <label for="tokens-theme">主题</label>
+      <select id="tokens-theme"><option value="">默认（不加主题）</option></select>
+      <button type="button" id="tokens-preview-refresh">渲染样例</button>
+    </div>
+    <p id="tokens-preview-note" class="hint" role="status"></p>
+    <iframe id="tokens-preview-frame" class="asset-preview-frame" hidden
+            title="设计系统样例预览" sandbox=""></iframe>
+
+    <h3>版本差异</h3>
+    <div class="preview-controls">
+      <button type="button" id="tokens-diff-button" class="secondary">与上一版本比较</button>
+    </div>
+    <p id="tokens-diff-counts" class="hint"></p>
+    <ul id="tokens-diff" class="plain-list"></ul>
+
+    <h3>受影响的引用</h3>
+    <p class="hint" id="tokens-affected-note"></p>
+    <ul id="tokens-affected" class="plain-list"></ul>
+
+    <h3>项目基线替换提案</h3>
+    <p class="hint">
+      发布资产本身从不改写项目基线文件。这里生成的是普通变更提案，需在“变更提案”面板中由维护者授权后才写入。
+    </p>
+    <form id="tokens-baseline-form" class="row-form" autocomplete="off">
+      <label for="tokens-baseline-path">基线文件路径</label>
+      <input id="tokens-baseline-path" name="path" type="text" spellcheck="false"
+             placeholder="tokens/brand.json" required>
+      <button type="submit" id="tokens-baseline-button">生成提案</button>
+    </form>
+    <p id="tokens-baseline-result" class="hint" role="status"></p>
+  </section>
+
+  <section class="panel" id="document-panel" hidden aria-labelledby="document-heading">
+    <div class="panel-head">
+      <h2 id="document-heading">组件与页面</h2>
+      <button type="button" id="document-close" class="secondary">关闭</button>
+    </div>
+    <p class="hint" id="document-scope"></p>
+    <p id="document-error" class="error-text" hidden></p>
+
+    <h3>校验结果</h3>
+    <p id="document-validation" role="status"></p>
+    <ul id="document-validation-errors" class="plain-list"></ul>
+
+    <h3 id="document-editor-title">文档</h3>
+    <p class="hint" id="document-editor-hint"></p>
+    <label for="document-text">文档（JSON）</label>
+    <textarea id="document-text" class="tokens-editor" rows="16" spellcheck="false"></textarea>
+    <div class="preview-controls">
+      <button type="button" id="document-save">校验并保存草稿</button>
+      <button type="button" id="document-publish">发布新版本</button>
+      <button type="button" id="document-reload" class="secondary">重新载入</button>
+    </div>
+    <p id="document-status" class="hint" role="status"></p>
+
+    <div id="component-instance" hidden>
+      <h3>实例参数与样例</h3>
+      <p class="hint">
+        参数按公开属性 schema 校验；样例只渲染声明的公开面，不执行组件源码，也不声称截图或框架源码有内部图层。
+      </p>
+      <label for="instance-params">参数（JSON）</label>
+      <textarea id="instance-params" class="tokens-editor" rows="4" spellcheck="false"></textarea>
+      <div class="preview-controls">
+        <button type="button" id="instance-render">渲染样例</button>
+      </div>
+      <p id="instance-note" class="hint" role="status"></p>
+      <dl class="facts">
+        <dt>变体</dt><dd id="instance-variants"></dd>
+        <dt>状态</dt><dd id="instance-states"></dd>
+        <dt>slots</dt><dd id="instance-slots"></dd>
+      </dl>
+      <iframe id="instance-frame" class="asset-preview-frame" hidden
+              title="组件样例预览" sandbox=""></iframe>
+    </div>
+
+    <div id="page-distill" hidden>
+      <h3>页面区块提炼候选</h3>
+      <p class="hint">
+        候选只作为草稿存在：补全公开参数与依赖后才能另行发布，源页面不会被修改，也不因此声称已复用。
+      </p>
+      <form id="distill-form" class="row-form" autocomplete="off">
+        <label for="distill-nodes">区块节点 ID（逗号分隔）</label>
+        <input id="distill-nodes" name="nodes" type="text" spellcheck="false"
+               placeholder="root, title" required>
+        <label for="distill-name">候选名称（可选）</label>
+        <input id="distill-name" name="name" type="text" maxlength="120"
+               placeholder="默认使用页面名 + 区块">
+        <button type="submit" id="distill-button">生成候选</button>
+      </form>
+      <p id="distill-result" class="hint" role="status"></p>
+    </div>
+  </section>
+
+  <section class="panel" id="proposals-panel" hidden aria-labelledby="proposals-heading">
+    <div class="panel-head">
+      <h2 id="proposals-heading">变更提案</h2>
+      <button type="button" id="proposals-close" class="secondary">关闭</button>
+    </div>
+    <p class="hint" id="proposals-scope"></p>
+    <p class="hint">
+      提案只暂存在工作台数据目录。应用前会重新校验目录绑定、授权、路径与每个文件的基线 hash；
+      期间源码被改动即整次拒绝写入。多文件写入不是操作系统级原子操作，中途失败会显示“需要恢复”。
+    </p>
+    <p id="proposals-error" class="error-text" hidden></p>
+    <p id="proposals-empty" class="empty" hidden>该项目还没有变更提案。</p>
+    <ul id="proposal-items" class="proposal-list"></ul>
+  </section>
+
+  <section class="panel" id="canvas-panel" hidden aria-labelledby="canvas-heading">
+    <div class="panel-head">
+      <h2 id="canvas-heading">画布</h2>
+      <button type="button" id="canvas-close" class="secondary">关闭</button>
+    </div>
+    <p class="hint" id="canvas-scope"></p>
+    <p id="canvas-error" class="error-text" hidden></p>
+    <form id="canvas-create-form" class="row-form" autocomplete="off">
+      <label for="canvas-name">新建画布名称</label>
+      <input id="canvas-name" name="name" type="text" maxlength="120"
+             placeholder="例如 首页方案" required>
+      <button type="submit" id="canvas-create">新建画布</button>
+    </form>
+    <div class="row-form">
+      <label for="canvas-select">当前画布</label>
+      <select id="canvas-select"></select>
+      <button type="button" id="canvas-reload" class="secondary">重新载入</button>
+      <button type="button" id="canvas-fork" class="secondary" hidden>冲突另存分支</button>
+      <button type="button" id="canvas-retry" class="secondary" hidden>重试保存</button>
+    </div>
+    <p id="canvas-save-state" class="hint" role="status">未载入画布</p>
+
+    <div class="canvas-toolbar">
+      <select id="canvas-board" aria-label="当前画板"></select>
+      <button type="button" id="canvas-board-add" class="secondary">新建画板</button>
+      <button type="button" id="canvas-zoom-out" class="secondary" title="缩小" aria-label="缩小">−</button>
+      <span id="canvas-zoom-label">100%</span>
+      <button type="button" id="canvas-zoom-in" class="secondary" title="放大" aria-label="放大">+</button>
+      <button type="button" id="canvas-fit" class="secondary">适配视图</button>
+      <button type="button" id="canvas-undo" class="secondary" title="撤销" aria-label="撤销">↶</button>
+      <button type="button" id="canvas-redo" class="secondary" title="重做" aria-label="重做">↷</button>
+      <button type="button" id="canvas-group" class="secondary">成组</button>
+      <button type="button" id="canvas-duplicate" class="secondary">复制</button>
+      <button type="button" id="canvas-delete" class="danger">删除</button>
+    </div>
+    <div class="canvas-toolbar">
+      <span class="hint">对齐：</span>
+      <button type="button" class="canvas-align secondary" data-align="left">左</button>
+      <button type="button" class="canvas-align secondary" data-align="hcenter">水平居中</button>
+      <button type="button" class="canvas-align secondary" data-align="right">右</button>
+      <button type="button" class="canvas-align secondary" data-align="top">上</button>
+      <button type="button" class="canvas-align secondary" data-align="vcenter">垂直居中</button>
+      <button type="button" class="canvas-align secondary" data-align="bottom">下</button>
+      <button type="button" class="canvas-align secondary" data-align="hdistribute">水平分布</button>
+      <button type="button" class="canvas-align secondary" data-align="vdistribute">垂直分布</button>
+    </div>
+    <div class="canvas-toolbar">
+      <span class="hint">图层：</span>
+      <button type="button" class="canvas-layer secondary" data-action="front">置顶</button>
+      <button type="button" class="canvas-layer secondary" data-action="forward">上移</button>
+      <button type="button" class="canvas-layer secondary" data-action="backward">下移</button>
+      <button type="button" class="canvas-layer secondary" data-action="back">置底</button>
+      <button type="button" id="canvas-snapshot" class="secondary">静态快照</button>
+    </div>
+
+    <div class="canvas-layout">
+      <div id="canvas-viewport" class="canvas-viewport" tabindex="0"
+           role="application"
+           aria-label="画布视图：方向键移动选中节点，Shift 加速，Ctrl+Z 撤销，Ctrl+D 复制，Ctrl+G 成组，Delete 删除">
+        <div id="canvas-stage" class="canvas-stage"></div>
+      </div>
+      <div class="canvas-props" aria-labelledby="canvas-props-heading">
+        <h3 id="canvas-props-heading">属性</h3>
+        <p id="canvas-selection" class="hint">未选择任何节点</p>
+        <div id="canvas-node-props" hidden>
+          <div class="row-form">
+            <label for="prop-x">X</label>
+            <input id="prop-x" type="number" step="1">
+            <label for="prop-y">Y</label>
+            <input id="prop-y" type="number" step="1">
+          </div>
+          <div class="row-form">
+            <label for="prop-width">宽</label>
+            <input id="prop-width" type="number" step="1" min="1">
+            <label for="prop-height">高</label>
+            <input id="prop-height" type="number" step="1" min="1">
+          </div>
+          <p class="hint">
+            几何按倍数缩放/移动；一个拖动手势是一事务，键盘与表单编辑走同一命令集。
+          </p>
+          <div class="row-form">
+            <label for="prop-content" id="prop-content-label">内容</label>
+            <input id="prop-content" type="text">
+            <button type="button" id="prop-content-apply">应用内容</button>
+          </div>
+          <div class="row-form">
+            <label for="prop-token">token 引用</label>
+            <input id="prop-token" type="text" placeholder="color.brand">
+            <button type="button" id="prop-token-apply">应用 token</button>
+          </div>
+          <p class="hint">
+            内容按节点类型写入：文本/按钮/链接写在文本上，图片写在来源上；token 引用供设计系统对齐使用（不自动改资产）。
+          </p>
+        </div>
+        <div id="canvas-board-props" hidden>
+          <div class="row-form">
+            <label for="board-width">画板宽</label>
+            <input id="board-width" type="number" step="1" min="1">
+            <label for="board-height">画板高</label>
+            <input id="board-height" type="number" step="1" min="1">
+            <button type="button" id="board-resize">应用</button>
+          </div>
+        </div>
+        <div id="canvas-instance-props" hidden>
+          <h4>固定资产实例</h4>
+          <p class="hint" id="canvas-instance-info"></p>
+          <label for="canvas-instance-params">实例参数（JSON）</label>
+          <textarea id="canvas-instance-params" class="tokens-editor" rows="4"
+                    spellcheck="false"></textarea>
+          <div class="preview-controls">
+            <button type="button" id="canvas-instance-apply">应用参数</button>
+            <button type="button" id="canvas-instance-upgrade" class="secondary">升级到最新版本</button>
+          </div>
+        </div>
+        <p id="canvas-dirty-note" class="warning-text" hidden>
+          有未确认的编辑停留在本页内存中；关闭前请先重试保存，或另存分支。
+        </p>
+      </div>
+    </div>
+    <h3>静态布局快照</h3>
+    <p class="hint">快照只渲染几何与节点类型，不执行脚本，也不代表组件内部结构；它不是验收截图。</p>
+    <p id="canvas-snapshot-note" class="hint" role="status"></p>
+    <iframe id="canvas-snapshot-frame" class="asset-preview-frame" hidden
+            title="画板静态快照" sandbox=""></iframe>
+    <h3>流程编排</h3>
+    <p class="hint">
+      导航/用户流程可以成环；这里的边只表达交互路径，不会改写资产血缘（derived-from）或运行/证据关系。
+    </p>
+    <div class="canvas-toolbar">
+      <label for="flow-from">起点</label>
+      <select id="flow-from" aria-label="流程边起点"></select>
+      <label for="flow-to">终点</label>
+      <select id="flow-to" aria-label="流程边终点"></select>
+      <select id="flow-kind" aria-label="流程边类型">
+        <option value="navigation">navigation</option>
+        <option value="user-flow">user-flow</option>
+        <option value="interaction">interaction</option>
+        <option value="back">back</option>
+      </select>
+      <input id="flow-label" type="text" aria-label="流程边说明（可选）" placeholder="说明（可选）" maxlength="120">
+      <button type="button" id="flow-add">添加流程边</button>
+    </div>
+    <p id="flow-error" class="error-text" hidden></p>
+    <ul id="flow-list" class="plain-list"></ul>
+
+    <h3>方案约束</h3>
+    <p class="hint">
+      每个方案声明目标视口、设计规则、可替换区域与验收意图；约束只描述方案，不授予批准。
+    </p>
+    <div class="row-form">
+      <label for="scheme-width">视口宽</label>
+      <input id="scheme-width" type="number" min="1" step="1" value="1440">
+      <label for="scheme-height">视口高</label>
+      <input id="scheme-height" type="number" min="1" step="1" value="900">
+      <label for="scheme-device">设备</label>
+      <input id="scheme-device" type="text" maxlength="40" placeholder="desktop">
+    </div>
+    <label for="scheme-rules">设计规则（每行一条，最多 20 条）</label>
+    <textarea id="scheme-rules" class="tokens-editor" rows="3" spellcheck="false"></textarea>
+    <label for="scheme-regions">可替换区域（节点 ID，逗号分隔）</label>
+    <input id="scheme-regions" type="text" spellcheck="false" placeholder="n_xxxx, n_yyyy">
+    <label for="scheme-acceptance">验收意图</label>
+    <textarea id="scheme-acceptance" class="tokens-editor" rows="2" spellcheck="false"></textarea>
+    <div class="preview-controls">
+      <button type="button" id="scheme-save">保存方案约束</button>
+      <button type="button" id="scheme-derive" class="secondary">派生方案</button>
+    </div>
+    <p id="scheme-note" class="hint" role="status"></p>
+    <p id="scheme-error" class="error-text" hidden></p>
+
+    <h3>固定快照与并排比较</h3>
+    <p class="hint">
+      固定快照绑定抓取时的画布 counter 与内容 hash，之后的编辑不会改变它；比较只呈现差异，不选赢家、不授予批准。
+    </p>
+    <div class="preview-controls">
+      <button type="button" id="snapshot-create">固定当前画板快照</button>
+    </div>
+    <ul id="snapshot-list" class="plain-list"></ul>
+    <div class="canvas-toolbar">
+      <label for="compare-left">左</label>
+      <select id="compare-left" aria-label="左侧快照"></select>
+      <label for="compare-right">右</label>
+      <select id="compare-right" aria-label="右侧快照"></select>
+      <button type="button" id="compare-run">并排比较</button>
+    </div>
+    <p id="compare-note" class="hint" role="status"></p>
+    <div class="compare-grid" id="compare-grid" hidden>
+      <figure>
+        <figcaption id="compare-left-caption"></figcaption>
+        <iframe id="compare-left-frame" class="asset-preview-frame" title="左侧快照" sandbox=""></iframe>
+      </figure>
+      <figure>
+        <figcaption id="compare-right-caption"></figcaption>
+        <iframe id="compare-right-frame" class="asset-preview-frame" title="右侧快照" sandbox=""></iframe>
+      </figure>
+    </div>
+
+    <h3>Agent 上下文选择</h3>
+    <p class="hint">
+      只有被显式选择的内容才会进入上下文：项目文件、历史日志与凭据默认排除；确认绑定当前 digest，内容一变旧确认立即失效。
+    </p>
+    <div class="preview-controls">
+      <button type="button" id="context-build">用当前选择建立上下文</button>
+      <button type="button" id="context-confirm">确认发送范围</button>
+    </div>
+    <label for="context-files">显式加入的项目文件（相对路径，逗号分隔）</label>
+    <input id="context-files" type="text" spellcheck="false" placeholder="notes.md">
+    <p id="context-state" class="hint" role="status"></p>
+    <p id="context-stale" class="warning-text" hidden>
+      内容已变化：之前的确认不再适用，需要重新确认。
+    </p>
+    <ul id="context-content" class="plain-list"></ul>
+    <ul id="context-exclusions" class="plain-list"></ul>
+    <p id="context-error" class="error-text" hidden></p>
+  </section>
+  <section class="panel" id="work-panel" hidden aria-labelledby="work-heading">
+    <div class="panel-head">
+      <h2 id="work-heading">Agent 任务</h2>
+      <button type="button" id="work-close" class="secondary">关闭</button>
+    </div>
+    <p class="hint" id="work-scope"></p>
+    <h3>Agent 任务</h3>
+    <p class="hint">
+      任务以已确认的上下文为输入；确认发送范围后才生成 slash 接手命令。未接手时保持 waiting-for-agent，
+      界面不显示模拟进度，也不声称任务已完成。
+    </p>
+    <p id="work-error" class="error-text" hidden></p>
+    <form id="work-create-form" class="row-form" autocomplete="off">
+      <label for="work-title">任务标题</label>
+      <input id="work-title" name="title" type="text" maxlength="200" required
+             placeholder="例如 首页静态改版">
+      <label for="work-goal">目标</label>
+      <input id="work-goal" name="goal" type="text" maxlength="400" required
+             placeholder="例如 改写首页标题并保持既有布局">
+      <label for="work-stack">目标栈</label>
+      <select id="work-stack">
+        <option value="static-html">静态 HTML/CSS/JS</option>
+        <option value="react-ts">React/TypeScript</option>
+      </select>
+      <label for="work-expiry">有效期（秒）</label>
+      <input id="work-expiry" type="number" min="60" step="60" value="86400">
+    </form>
+    <div class="row-form">
+      <label for="work-reuse">复用（每行一条）</label>
+      <textarea id="work-reuse" class="tokens-editor" rows="2" spellcheck="false"></textarea>
+      <label for="work-adapt">适配（每行一条）</label>
+      <textarea id="work-adapt" class="tokens-editor" rows="2" spellcheck="false"></textarea>
+      <label for="work-new">新增（每行一条）</label>
+      <textarea id="work-new" class="tokens-editor" rows="2" spellcheck="false"></textarea>
+    </div>
+    <fieldset class="work-actions">
+      <legend>允许动作</legend>
+      <label><input type="checkbox" class="work-action" value="read-context" checked> 读取上下文</label>
+      <label><input type="checkbox" class="work-action" value="propose-source" checked> 提交源码提案</label>
+      <label><input type="checkbox" class="work-action" value="add-dependency"> 安装依赖</label>
+      <label><input type="checkbox" class="work-action" value="run-build"> 执行构建</label>
+      <label><input type="checkbox" class="work-action" value="run-tests"> 执行测试</label>
+      <label><input type="checkbox" class="work-action" value="run-preview"> 启动预览</label>
+    </fieldset>
+    <label for="work-required">结果必需字段（逗号分隔）</label>
+    <input id="work-required" type="text" spellcheck="false" value="summary, entrypoints">
+    <div class="preview-controls">
+      <button type="button" id="work-create">用当前确认上下文建立任务</button>
+      <button type="button" id="work-reload" class="secondary">重新载入任务</button>
+    </div>
+    <p id="work-context-note" class="hint"></p>
+
+    <ul id="work-list" class="plain-list"></ul>
+    <div id="work-detail" hidden>
+      <h4 id="work-detail-heading"></h4>
+      <dl class="facts">
+        <dt>状态</dt><dd id="work-detail-state"></dd>
+        <dt>能力凭证</dt><dd id="work-detail-capability"></dd>
+        <dt>上下文</dt><dd id="work-detail-context"></dd>
+        <dt>过期</dt><dd id="work-detail-expiry"></dd>
+        <dt>计划</dt><dd id="work-detail-plan"></dd>
+      </dl>
+      <p class="hint" id="work-handoff-note"></p>
+      <pre id="work-handoff" class="proposal-diff" tabindex="0" aria-label="slash 接手命令"></pre>
+      <div class="preview-controls">
+        <button type="button" id="work-copy-handoff" class="secondary">复制接手命令</button>
+        <button type="button" id="work-consent">确认发送范围并生成接手命令</button>
+        <button type="button" id="work-cancel" class="danger">请求取消</button>
+        <button type="button" id="work-confirm-cancel" class="secondary">宿主已确认停止</button>
+        <button type="button" id="work-retry" class="secondary">重试（新 attempt）</button>
+        <button type="button" id="work-reject" class="secondary">拒绝结果</button>
+      </div>
+      <h4>尝试与进度（服务端实际事件）</h4>
+      <p id="work-attempt" class="hint" role="status"></p>
+      <ul id="work-attempts" class="plain-list"></ul>
+      <h4>结果</h4>
+      <p id="work-result" class="hint" role="status"></p>
+      <ul id="work-result-list" class="plain-list"></ul>
+    </div>
+  </section>
+  <section class="panel" id="owner-panel" hidden aria-labelledby="owner-heading">
+    <div class="panel-head">
+      <h2 id="owner-heading">原 owner 验证</h2>
+      <button type="button" id="owner-close" class="secondary">关闭</button>
+    </div>
+    <p class="hint" id="owner-scope"></p>
+    <h3>原 owner 验证事实</h3>
+    <p class="hint">
+      以下判据、证据与问题来自原工具链（run-console 等）发布在项目内的投影；工作台只展示，不重新裁决。
+      确认只绑定当时的对象 hash，源变化后旧确认失效并显示 stale/unknown。
+    </p>
+    <p id="owner-error" class="error-text" hidden></p>
+    <div class="row-form">
+      <label for="owner-run">运行</label>
+      <select id="owner-run" aria-label="owner 运行"></select>
+      <button type="button" id="owner-reload" class="secondary">重新载入投影</button>
+    </div>
+    <p id="owner-run-note" class="hint" role="status"></p>
+    <h4>判据</h4>
+    <ul id="owner-criteria" class="plain-list"></ul>
+    <h4>证据</h4>
+    <ul id="owner-evidence" class="plain-list"></ul>
+    <h4>问题与指回</h4>
+    <ul id="owner-findings" class="plain-list"></ul>
+    <h4>已记录的人工确认</h4>
+    <p class="hint">确认绑定 run + 对象 + hash + 语义角色；Agent 自批、截图上传、repair 完成都不自动通过。</p>
+    <ul id="owner-confirmations" class="plain-list"></ul>
+  </section>
+  <section class="panel" id="life-panel" hidden aria-labelledby="life-heading">
+    <div class="panel-head">
+      <h2 id="life-heading">生命周期与回收站</h2>
+      <button type="button" id="life-close" class="secondary">关闭</button>
+    </div>
+    <p class="hint" id="life-scope"></p>
+    <p id="life-error" class="error-text" hidden></p>
+    <div class="row-form">
+      <label for="life-filter">生命周期</label>
+      <select id="life-filter">
+        <option value="all">全部</option>
+        <option value="published">已发布</option>
+        <option value="archived">已归档</option>
+        <option value="trashed">回收站</option>
+        <option value="draft">草稿</option>
+      </select>
+      <button type="button" id="life-reload" class="secondary">重新载入</button>
+      <button type="button" id="life-project-archive" class="secondary">归档项目</button>
+      <button type="button" id="life-project-unarchive" class="secondary">取消归档</button>
+    </div>
+    <p id="life-project-note" class="hint" role="status"></p>
+    <p class="hint">
+      归档与回收站只改变发现状态，不破坏引用；永久删除需二次确认、引用检查与索引完整，
+      删除只清工作台记录，从不改动本地源仓库文件。
+    </p>
+    <ul id="life-list" class="plain-list"></ul>
+    <div id="life-detail" hidden>
+      <h4 id="life-detail-name"></h4>
+      <p id="life-detail-state" class="hint"></p>
+      <div class="preview-controls">
+        <button type="button" id="life-archive">归档</button>
+        <button type="button" id="life-unarchive" class="secondary">取消归档</button>
+        <button type="button" id="life-trash" class="secondary">移入回收站</button>
+        <button type="button" id="life-restore" class="secondary">从回收站恢复</button>
+        <button type="button" id="life-references" class="secondary">查看引用影响</button>
+        <button type="button" id="life-delete" class="danger">永久删除</button>
+      </div>
+      <p id="life-refs-note" class="hint" role="status"></p>
+      <ul id="life-refs" class="plain-list"></ul>
+      <div id="life-delete-confirm" class="delete-confirm" hidden role="group" aria-labelledby="life-delete-confirm-heading">
+        <h5 id="life-delete-confirm-heading">确认永久删除</h5>
+        <p id="life-delete-confirm-body" class="hint"></p>
+        <div class="preview-controls">
+          <button type="button" id="life-delete-cancel" class="secondary">取消</button>
+          <button type="button" id="life-delete-confirm-button" class="danger">确认永久删除</button>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="panel" id="settings-panel" hidden aria-labelledby="settings-heading">
+    <div class="panel-head">
+      <h2 id="settings-heading">设置与备份</h2>
+      <button type="button" id="settings-close" class="secondary">关闭</button>
+    </div>
+    <p class="hint">
+      备份是数据库一致性快照加固定 blob 清单的密封包；不含 token、有效授权或源仓库。
+      恢复到新目录并校验后原数据保留，切换为显式动作，恢复后需重新授权。
+    </p>
+    <p id="settings-error" class="error-text" hidden></p>
+    <div class="row-form">
+      <label for="backup-dest">备份输出（绝对路径，可留空用默认目录）</label>
+      <input id="backup-dest" type="text" spellcheck="false" placeholder="D:\\backups\\workbench.dpwb.zip">
+      <button type="button" id="backup-create">创建备份</button>
+    </div>
+    <p id="backup-note" class="hint" role="status"></p>
+    <div class="row-form">
+      <label for="backup-verify-path">校验备份包路径</label>
+      <input id="backup-verify-path" type="text" spellcheck="false">
+      <button type="button" id="backup-verify" class="secondary">校验</button>
+    </div>
+    <p id="backup-verify-note" class="hint" role="status"></p>
+    <div class="row-form">
+      <label for="restore-path">恢复备份包路径</label>
+      <input id="restore-path" type="text" spellcheck="false">
+      <label for="restore-target">恢复到新目录（绝对路径，必须为空目录）</label>
+      <input id="restore-target" type="text" spellcheck="false">
+      <button type="button" id="restore-run">恢复到新目录</button>
+    </div>
+    <p id="restore-note" class="hint" role="status"></p>
+    <h3>诊断</h3>
+    <ul id="settings-diagnostics" class="plain-list"></ul>
+  </section>
+</main>
+
+
+
+
+
+
+<div id="live" class="visually-hidden" role="status" aria-live="polite"></div>
+
+<template id="project-row-template">
+  <tr>
+    <td class="cell-name">
+      <span class="project-name"></span>
+      <span class="current-flag" hidden>当前项目</span>
+    </td>
+    <td class="cell-path"><code class="project-path"></code></td>
+    <td class="cell-state"><span class="state-badge"></span></td>
+    <td class="cell-grants"><span class="grant-list"></span></td>
+    <td class="cell-actions">
+      <button type="button" class="open-button">设为当前</button>
+      <button type="button" class="rename-button secondary">重命名</button>
+      <button type="button" class="grants-button secondary">授权</button>
+      <button type="button" class="proposals-button secondary">提案</button>
+      <button type="button" class="assets-button secondary">资产</button>
+      <button type="button" class="canvas-button secondary">画布</button>
+      <button type="button" class="work-button secondary">任务</button>
+      <button type="button" class="owner-button secondary">验证</button>
+      <button type="button" class="life-button secondary">生命周期</button>
+      <button type="button" class="rebind-button secondary" hidden>重新绑定</button>
+      <button type="button" class="remove-button danger">移除</button>
+    </td>
+  </tr>
+</template>
+
+<template id="proposal-template">
+  <li class="proposal-item">
+    <div class="proposal-head">
+      <span class="proposal-summary"></span>
+      <span class="proposal-state state-badge"></span>
+    </div>
+    <p class="proposal-meta hint"></p>
+    <p class="proposal-recovery hint" hidden>
+      上一次应用在写入途中失败。请先选择“恢复回滚”（还原为应用前内容）或“恢复完成”
+      （继续剩余写入）；恢复前会重查每个文件的 hash，外部已改动即停止且不覆盖。
+    </p>
+    <div class="proposal-diff-wrap" hidden>
+      <pre class="proposal-diff" tabindex="0" aria-label="提案差异"></pre>
+    </div>
+    <div class="proposal-actions">
+      <button type="button" class="diff-button secondary">查看差异</button>
+      <button type="button" class="apply-button">批准应用</button>
+      <button type="button" class="reject-button secondary">拒绝</button>
+      <button type="button" class="revert-button secondary" hidden>生成回退提案</button>
+      <button type="button" class="recover-rollback-button" hidden>恢复回滚</button>
+      <button type="button" class="recover-finish-button secondary" hidden>恢复完成</button>
+    </div>
+  </li>
+</template>
+
+<template id="asset-template">
+  <li class="asset-item">
+    <button type="button" class="asset-select">
+      <span class="asset-name"></span>
+      <span class="asset-meta"></span>
+    </button>
+  </li>
+</template>
+
+<script src="/app.js" type="module"></script>
+</body>
+</html>

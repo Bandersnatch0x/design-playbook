@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "design-playbook-workbench"
+version = "0.1.0"
+description = "Local single-maintainer design asset workbench (loopback-only web service)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = []
+
+[project.scripts]
+design-playbook-workbench = "design_playbook_workbench.__main__:main"
+
+[tool.setuptools]
+packages = ["design_playbook_workbench"]
+
+[tool.setuptools.package-data]
+design_playbook_workbench = ["web/*"]

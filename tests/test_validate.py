@@ -29,7 +29,7 @@ VALIDATE = ROOT / "scripts" / "validate.py"
 def _run(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [*args], cwd=cwd, capture_output=True, text=True, check=False,
-        encoding="utf-8", errors="replace",
+        encoding="utf-8", errors="replace", timeout=60,
     )
 
 
@@ -37,22 +37,30 @@ class ValidateGateTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
-        shutil.copytree(ROOT / "scripts", self.root / "scripts")
+        ignore_caches = shutil.ignore_patterns("__pycache__", ".pytest_cache")
+        shutil.copytree(ROOT / "scripts", self.root / "scripts", ignore=ignore_caches)
         shutil.copytree(
             ROOT / "packages" / "design-playbook",
             self.root / "packages" / "design-playbook",
+            ignore=ignore_caches,
         )
         # The dsh-design-playbook thin bundle is a separate package that
         # validate.py checks for P2 MCP bridge consistency.
         shutil.copytree(
             ROOT / "packages" / "dsh-design-playbook",
             self.root / "packages" / "dsh-design-playbook",
+            ignore=ignore_caches,
         )
         # validate.py reads the repo-root Claude marketplace catalog at
         # ROOT/.claude-plugin/marketplace.json and the Codex/agents catalog
         # at ROOT/.agents/plugins/marketplace.json (ADR-0009 dual-publish).
         shutil.copytree(ROOT / ".claude-plugin", self.root / ".claude-plugin")
-        shutil.copytree(ROOT / ".agents", self.root / ".agents")
+        # Private plans and tickets are not validator inputs.
+        (self.root / ".agents" / "plugins").mkdir(parents=True)
+        shutil.copy2(
+            ROOT / ".agents" / "plugins" / "marketplace.json",
+            self.root / ".agents" / "plugins" / "marketplace.json",
+        )
         # The capability-claim alignment gate (ADR-0043 / T-005) reads the
         # root README badges and their Run Console maturity vocabulary.
         shutil.copy2(ROOT / "README.md", self.root / "README.md")
@@ -75,6 +83,11 @@ class ValidateGateTests(unittest.TestCase):
         # pass the full static gate. If this fails, some other change
         # drifted the package out of spec and the FAIL cases below cannot
         # be trusted either.
+        self.assertEqual(
+            list((self.root / ".agents").iterdir()),
+            [self.root / ".agents" / "plugins"],
+        )
+        self.assertFalse(list(self.root.rglob("__pycache__")))
         result = self.validate()
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

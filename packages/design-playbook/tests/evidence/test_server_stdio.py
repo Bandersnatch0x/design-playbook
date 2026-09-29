@@ -333,6 +333,25 @@ class EvidencePurePathTests(unittest.TestCase):
                 )
             self.assertNotIn("warnings", payload)
 
+    def test_unexpanded_interpolation_token_falls_back_like_unset(self) -> None:
+        # ADR-0009: the Claude .mcp.json forwards ${DESIGN_PLAYBOOK_RUN_ROOT:-}.
+        # A host that fails to expand it would set the literal token as the
+        # value; _run_root() must treat that as unset (cwd fallback) and never
+        # resolve a bogus "${...}" directory. A real path is still honored.
+        with tempfile.TemporaryDirectory() as tmp:
+            bare = Path(tmp).resolve()
+            literal = "${DESIGN_PLAYBOOK_RUN_ROOT:-}"
+            with mock.patch.dict(
+                os.environ, {capture_runtime.RUN_ROOT_ENV: literal}
+            ), mock.patch.object(capture_runtime.Path, "cwd", return_value=bare):
+                self.assertEqual(capture_runtime._run_root(), bare)
+                self.assertTrue(capture_runtime._run_root_misrooted())
+            with mock.patch.dict(
+                os.environ, {capture_runtime.RUN_ROOT_ENV: str(bare)}
+            ):
+                self.assertEqual(capture_runtime._run_root(), bare)
+                self.assertFalse(capture_runtime._run_root_misrooted())
+
     def test_run_root_argument_redirects_one_capture(self) -> None:
         # DEF-4: a `--plugin-dir` dev host cannot edit DESIGN_PLAYBOOK_RUN_ROOT
         # after the server starts. `run_root` binds the run root for one call so

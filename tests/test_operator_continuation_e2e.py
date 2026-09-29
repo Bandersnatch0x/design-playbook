@@ -29,7 +29,8 @@ sys.path.insert(0, str(PKG))
 from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
 from tests.run_console.test_http_server import _make_root, _tree_digest  # noqa: E402
 
-COMMAND_TIMEOUT = 90  # Handoff includes five real browser captures.
+COMMAND_TIMEOUT = 90
+HANDOFF_TIMEOUT = 180  # Five captures can each consume a 30-second browser timeout.
 STAMP = "2026-09-07T00:00:00Z"
 CAPTURE_CODE = (
     "import json,sys; "
@@ -38,21 +39,25 @@ CAPTURE_CODE = (
 )
 
 
-def _command(project: Path, *args: str, data: dict | None = None) -> str:
+def _command(
+    project: Path, *args: str, data: dict | None = None,
+    timeout: int = COMMAND_TIMEOUT,
+) -> str:
     result = subprocess.run(
         [sys.executable, "-X", "utf8", *map(str, args)],
         cwd=project, capture_output=True, text=True, encoding="utf-8",
         input=json.dumps(data) if data is not None else None,
         env={**os.environ, "PYTHONPATH": str(PKG), "PYTHONDONTWRITEBYTECODE": "1",
              "DESIGN_PLAYBOOK_RUN_ROOT": str(project / ".scratch" / "operator-run")},
-        timeout=COMMAND_TIMEOUT,
+        timeout=timeout,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     return result.stdout
 
 
 def _cli(project: Path, name: str, run: Path) -> dict:
-    return json.loads(_command(project, PKG / "scripts" / name, run, "--json"))
+    timeout = HANDOFF_TIMEOUT if name == "run_handoff.py" else COMMAND_TIMEOUT
+    return json.loads(_command(project, PKG / "scripts" / name, run, "--json", timeout=timeout))
 
 
 def _review(run: Path, *, repaired: bool) -> None:

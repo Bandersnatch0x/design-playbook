@@ -8,7 +8,17 @@ workspace. The fix is to drop the static env var from both manifests and rely
 on ``server.py _run_root()`` env->cwd fallback (host controls cwd; Codex keeps
 ``cwd: "."`` and Claude launches via ``${CLAUDE_PLUGIN_ROOT}``).
 
-These tests pin the post-fix invariant so the static var cannot silently come
+Issue 09 amended (directory schema): the run_root passthrough is expressed with
+each host's *real* env channel, not one shared shape. Codex has no env
+interpolation, so it uses the ``env_vars`` name-passthrough (host sets the value
+before launch). Claude Code's ``.mcp.json`` schema has no ``env_vars`` key -- it
+uses a standard ``env`` object with ``${VAR:-}`` interpolation -- and the
+directory submission validator checks ``.mcp.json`` against that schema, so the
+Claude side must not carry the non-standard ``env_vars`` key. Both forms keep the
+Issue 05 invariant: no *static* run root is pinned (``${VAR:-}`` expands to "" ->
+cwd fallback when unset).
+
+These tests pin the post-fix invariant so a static var cannot silently come
 back. They intentionally do not exercise ``server.py`` (owned by the evidence
 domain).
 """
@@ -56,10 +66,16 @@ class _ManifestMixin:
         assert isinstance(self.doc["mcpServers"], dict)
 
     def test_evidence_has_no_static_run_root(self) -> None:
+        # Issue 05 invariant: a value may only *pass through* the host's
+        # run root, never pin a static one. An ``env`` entry is allowed when
+        # its value is a ``${...}`` interpolation (empty -> cwd fallback);
+        # a literal like "." or a fixed path is the regression this guards.
         env = self._evidence().get("env") or {}
-        assert RUN_ROOT_ENV not in env, (
-            f"{self.manifest_path.name}: static {RUN_ROOT_ENV} must be "
-            "removed; server._run_root() falls back to process cwd when unset"
+        value = env.get(RUN_ROOT_ENV)
+        assert value is None or "${" in str(value), (
+            f"{self.manifest_path.name}: {RUN_ROOT_ENV} in env must be a "
+            f"${{...}} passthrough, not a static value (got {value!r}); "
+            "server._run_root() falls back to process cwd when unset"
         )
 
 
@@ -116,18 +132,28 @@ class ClaudeManifestTest(_ManifestMixin, unittest.TestCase):
             "Claude manifest must reference ${CLAUDE_PLUGIN_ROOT} in args",
         )
 
-    def test_evidence_passes_through_run_root_env_var(self) -> None:
-        # Issue 09 (ADR-0009 symmetry): Claude side mirrors the Codex env_vars
-        # passthrough. Behavior is unchanged when unset (falls back to
-        # Path.cwd() = host project), but the symmetric declaration keeps the
-        # run_root mechanism consistent across both manifests.
+    def test_evidence_forwards_run_root_via_env_interpolation(self) -> None:
+        # Issue 09 amended (ADR-0009): Claude uses its host's real env channel.
+        # Claude Code's .mcp.json schema has no ``env_vars`` key; it forwards a
+        # host variable with a standard ``env`` object + ``${VAR:-}``
+        # interpolation (resolved from Claude Code's own environment, so it also
+        # survives the sanitized child env on Windows). The directory submission
+        # validator checks .mcp.json against that schema, so the non-standard
+        # ``env_vars`` key must not appear here (it stays on the Codex side,
+        # whose loader has no interpolation).
         evidence = self._evidence()
-        env_vars = evidence.get("env_vars") or []
-        self.assertIn(
-            RUN_ROOT_ENV,
-            env_vars,
-            "Claude manifest must mirror the Codex env_vars passthrough for "
-            "DESIGN_PLAYBOOK_RUN_ROOT (ADR-0009 run_root mechanism symmetry)",
+        self.assertNotIn(
+            "env_vars",
+            evidence,
+            "Claude manifest must not use the non-standard env_vars key; the "
+            "directory .mcp.json schema is env-object only (ADR-0009 amended)",
+        )
+        env = evidence.get("env") or {}
+        value = str(env.get(RUN_ROOT_ENV, ""))
+        self.assertTrue(
+            RUN_ROOT_ENV in value and "${" in value,
+            "Claude manifest must forward DESIGN_PLAYBOOK_RUN_ROOT via a "
+            f"${{{RUN_ROOT_ENV}:-}} env interpolation (got {value!r})",
         )
 
 

@@ -77,6 +77,27 @@ def tearDownModule() -> None:
     _PLAYWRIGHT.stop()
 
 
+def serve_on_navigable_port(session):
+    """Share the browser's port restriction across Console test harnesses."""
+    for _ in range(20):
+        server = serve_run_console(session, bind_host="127.0.0.1", port=0)
+        if server.port not in _CHROMIUM_RESTRICTED_PORTS:
+            return server
+        server.stop()
+    raise OSError("could not bind an ephemeral port outside the Chromium restricted list")
+
+
+class NavigablePortTest(unittest.TestCase):
+    def test_restricted_port_is_closed_before_retry(self):
+        from unittest.mock import Mock, patch
+        blocked = Mock(port=6668)
+        allowed = Mock(port=18080)
+        with patch(__name__ + ".serve_run_console", side_effect=[blocked, allowed]):
+            self.assertIs(serve_on_navigable_port(object()), allowed)
+        blocked.stop.assert_called_once_with()
+        allowed.stop.assert_not_called()
+
+
 class ConsoleHarness:
     """One real run root, session, and loopback server.
 
@@ -106,15 +127,7 @@ class ConsoleHarness:
             run_root=self.run_root,
             now_fn=lambda: "2026-08-25T10:00:00Z",
         )
-        self.server = self._serve_on_navigable_port()
-
-    def _serve_on_navigable_port(self):
-        for _ in range(20):
-            server = serve_run_console(self.session, bind_host="127.0.0.1", port=0)
-            if server.port not in _CHROMIUM_RESTRICTED_PORTS:
-                return server
-            server.server_close()
-        raise OSError("could not bind an ephemeral port outside the Chromium restricted list")
+        self.server = serve_on_navigable_port(self.session)
 
     @property
     def origin(self) -> str:
