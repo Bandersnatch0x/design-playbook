@@ -1394,10 +1394,18 @@ class CanvasService:
         if replayed is not None:
             return replayed
         self.service.require_project(project_id, scope="write")
-        if not isinstance(name, str) or not name.strip():
-            raise WorkbenchError(INVALID_INPUT)
         parsed = parse_canvas(document)
-        parsed["name"] = parsed["name"] or name.strip()
+        # The name may arrive either as the request field or inside the
+        # document; reject only when neither supplies one.
+        document_name = parsed.get("name")
+        resolved = (name.strip() if isinstance(name, str) else "") or (
+            document_name.strip() if isinstance(document_name, str) else ""
+        )
+        if not resolved:
+            raise WorkbenchError(
+                INVALID_INPUT, detail="a canvas name is required"
+            )
+        parsed["name"] = resolved
         self._require_valid(project_id, parsed)
         canvas_id = str(uuid.uuid4())
         now = self._now()
@@ -1406,7 +1414,7 @@ class CanvasService:
             self.store.create_canvas(
                 canvas_id=canvas_id,
                 project_id=project_id,
-                name=name.strip()[:120],
+                name=resolved[:120],
                 document=parsed,
                 now=now,
             )

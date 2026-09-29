@@ -272,11 +272,24 @@ class AssetService:
         Default exclusions (VCS internals, dependency and cache folders)
         apply unless the maintainer's selection itself points inside one.
         """
-        parts = relative_parts(selection.relative_path)
-        start = root.joinpath(*parts)
-        resolved = assert_contained(start, root)
+        try:
+            parts = relative_parts(selection.relative_path)
+            start = root.joinpath(*parts)
+            resolved = assert_contained(start, root)
+        except WorkbenchError as error:
+            # Every unusable selection (syntactic escape, link that leaves
+            # the project, unresolvable) keeps one uniform rejection; the
+            # detail names only what the caller already sent, so it adds
+            # diagnosis without revealing what exists where.
+            raise WorkbenchError(
+                error.code,
+                detail=f"selection rejected: {selection.relative_path}",
+            ) from None
         if not resolved.exists():
-            raise WorkbenchError(INVALID_TARGET)
+            raise WorkbenchError(
+                INVALID_TARGET,
+                detail=f"selection rejected: {selection.relative_path}",
+            )
         within_exclusion = any(is_excluded_directory(part) for part in parts)
         entries: list[tuple[str, Path, bool]] = []
         warnings: list[str] = []

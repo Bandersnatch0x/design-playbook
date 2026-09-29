@@ -77,6 +77,9 @@ RETRYABLE_CODES = frozenset({OWNER_UNAVAILABLE, RECOVERY_REQUIRED, CONFLICT})
 
 #: Codes whose message must stay fully generic: a caller probing an
 #: unauthorized or invalid target learns nothing about paths or state.
+#: A ``detail`` that only echoes what the caller itself sent (and is
+#: identical whichever reason applied) does not breach this; see
+#: ``assets.AssetService.enumerate_selection``.
 _OPAQUE_CODES = frozenset({UNAUTHORIZED, ORIGIN_INVALID, INVALID_TARGET, DISCONNECTED})
 
 

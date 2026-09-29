@@ -363,13 +363,20 @@ class ProposalService:
                 if current is not None:
                     # A new file must be new: an existing file is a change
                     # of the maintainer's content, not a creation.
-                    raise WorkbenchError(CONFLICT)
+                    raise WorkbenchError(
+                        CONFLICT, detail=f"{relative} already exists"
+                    )
                 result_hash = sha256_bytes(spec.content or b"")
             else:
                 if current is None:
-                    raise WorkbenchError(CONFLICT)
+                    raise WorkbenchError(
+                        CONFLICT, detail=f"{relative} does not exist"
+                    )
                 if current != spec.base_hash:
-                    raise WorkbenchError(CONFLICT)
+                    raise WorkbenchError(
+                        CONFLICT,
+                        detail=f"{relative} changed since the proposal was created",
+                    )
                 result_hash = (
                     None if spec.operation == "delete" else sha256_bytes(spec.content or b"")
                 )
