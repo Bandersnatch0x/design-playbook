@@ -33,7 +33,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SEAM = ROOT / "packages" / "design-playbook" / "scripts" / "stdio_encoding.py"
 
-MAIN_BLOCK = re.compile(r'^if __name__ == ["\']__main__["\']:\s*$', re.MULTILINE)
+MAIN_BLOCK = re.compile(r'^if __name__ == ["\']__main__["\']:\s*(?:#.*)?$', re.MULTILINE)
 SEAM_CALL = "configure_piped_utf8()"
 INLINE_GUARD = re.compile(r"reconfigure\(encoding=")
 
@@ -43,11 +43,17 @@ COMPAT_LAUNCHERS = {
     "packages/design-playbook-preview/server.py",
     "packages/design-playbook-evidence/server.py",
 }
-# A skill payload must keep working when it is copied out of the plugin and the
-# design_playbook import seam is unavailable, so it carries the same rule inline
-# rather than importing the shared helper.
+# Files that cannot import the shared helper, so they carry the same rule
+# inline instead: a skill payload must keep working when it is copied out of
+# the plugin and the design_playbook import seam is unavailable, and the
+# workbench is a standalone package (dependencies = []) with no seam to import.
 INLINE_ONLY = {
     "packages/design-playbook/skills/design-baseline/scripts/design_baseline.py",
+    "packages/design-playbook-workbench/design_playbook_workbench/__main__.py",
+    "packages/design-playbook-workbench/tools/install_smoke.py",
+    "packages/design-playbook-workbench/tools/perf_harness.py",
+    "packages/design-playbook-workbench/tools/sample_targets.py",
+    "packages/design-playbook-workbench/tools/seed_scale.py",
 }
 # Entry points a bare no-argument run could act on, plus the one that serves a
 # protocol on stdin. Only the safe form is exercised. Several would do real,
@@ -55,13 +61,14 @@ INLINE_ONLY = {
 # the live install flow, the release gate chain -- so they are pinned to a
 # usage path like the rest.
 SAFE_INVOCATIONS = {
-    "packages/design-playbook/scripts/generate_adapter.py": [["--list"]],
-    "packages/design-playbook-workbench/tools/install_smoke.py": [["--help"]],
-    "packages/design-playbook-workbench/tools/perf_harness.py": [["--help"]],
-    "packages/design-playbook-workbench/tools/seed_scale.py": [["--help"]],
-    "scripts/install_hooks.py": [["--help"]],
-    "scripts/install_smoke.py": [["--help"]],
-    "scripts/release.py": [["--help"]],
+    "packages/design-playbook/scripts/generate_adapter.py": ["--list"],
+    "packages/design-playbook-workbench/design_playbook_workbench/__main__.py": ["--help"],
+    "packages/design-playbook-workbench/tools/install_smoke.py": ["--help"],
+    "packages/design-playbook-workbench/tools/perf_harness.py": ["--help"],
+    "packages/design-playbook-workbench/tools/seed_scale.py": ["--help"],
+    "scripts/install_hooks.py": ["--help"],
+    "scripts/install_smoke.py": ["--help"],
+    "scripts/release.py": ["--help"],
 }
 CODECS = ("cp1252", "shift_jis", "gbk")
 
@@ -174,8 +181,10 @@ class PipedCodecSweepTests(unittest.TestCase):
     exposes it best: a bare run under cp1252 (which cannot encode CJK at all,
     so a CJK message crashes) and ``--help`` under shift_jis (which cannot
     encode an em dash at all). Either failure mode -- crash or silently
-    non-UTF-8 bytes -- is caught by both pairings, and the two files that were
-    actually observed broken are pinned under *both* codecs.
+    non-UTF-8 bytes -- is caught by both pairings. Entry points a bare run
+    would act on are pinned to a safe form (``SAFE_INVOCATIONS``) run under
+    *both* codecs instead, and the two files actually observed broken are
+    exercised under a third codec too.
     """
 
     BOTH_CODECS = {
@@ -185,10 +194,11 @@ class PipedCodecSweepTests(unittest.TestCase):
     PLAN = (([], "cp1252"), (["--help"], "shift_jis"))
 
     def _invocations(self, rel: str) -> list[tuple[list[str], str]]:
-        safe = SAFE_INVOCATIONS.get(rel)
-        plan = [(args, codec) for args, codec in self.PLAN]
-        if safe is not None:
-            plan = [(safe[0], "cp1252"), (safe[0], "shift_jis")]
+        if rel in SAFE_INVOCATIONS:
+            args = SAFE_INVOCATIONS[rel]
+            plan = [(args, "cp1252"), (args, "shift_jis")]
+        else:
+            plan = list(self.PLAN)
         if rel in self.BOTH_CODECS:
             plan += [(args, "gbk") for args, _ in plan]
         return plan

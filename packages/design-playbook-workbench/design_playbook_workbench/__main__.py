@@ -78,6 +78,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Standalone package (dependencies = []): the plugin's shared seam is not
+    # importable here, so carry the same piped-UTF-8 rule inline (T-105).
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure") and not stream.isatty():
+            stream.reconfigure(encoding="utf-8", errors="replace")
     parser = build_parser()
     arguments = parser.parse_args(argv)
     data_dir = Path(arguments.data_dir) if arguments.data_dir else default_data_dir()

@@ -596,11 +596,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     # The evidence contains Chinese labels from the real UI; a cp936 console
-    # must not turn that into an encoding crash.
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, OSError):  # pragma: no cover - odd stdio
-        pass
+    # must not turn that into an encoding crash on either stream.
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure") and not stream.isatty():
+            stream.reconfigure(encoding="utf-8", errors="replace")
     args = build_parser().parse_args(argv)
     if args.canvas_nodes > 200:
         print("canvas-nodes exceeds canvas MAX_INSTANCES (200)", file=sys.stderr)
