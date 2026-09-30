@@ -42,7 +42,7 @@ Defaults come from the local package manifest and exact source inventory. The sc
 
 ## Five-step gate (manual)
 
-- [ ] **1. Plugin loads:** `claude --plugin-dir <abs>/packages/design-playbook` starts; `/reload-plugins` reports no errors; nine skills + **version-line command inventory** (0.25: 8 commands incl. `component-distill`/`run-status`/`run-handoff`/`doctor`) appear under the `design-playbook` namespace in `/help`. **Semi-automated:** `scripts/doctor.py` checks static counts against `COMMAND_INVENTORY` (9 skills / N commands / plugin.json namespace); the dynamic `--plugin-dir` load + `/help` listing stay human (host slash, not automatable).
+- [ ] **1. Plugin loads:** `claude --plugin-dir <abs>/packages/design-playbook` starts; `/reload-plugins` reports no errors; nine skills + **version-line command inventory** (0.25: 8 commands incl. `component-distill`/`run-status`/`run-handoff`/`doctor`) appear under the `design-playbook` namespace in `/help`. **Semi-automated:** `scripts/doctor.py` checks static counts against `COMMAND_INVENTORY` (9 skills / N commands / plugin.json namespace); the load and the namespaced inventory are also readable headlessly — `claude --plugin-dir <abs>/packages/design-playbook -p ok --output-format stream-json --verbose` emits a `system`/`init` record whose `plugins` entry carries the loaded version and whose `slash_commands`/`skills` list every `design-playbook:`-namespaced name (15 = 8 commands ∪ 9 skills, `component-distill`/`ux-spec` shared). Only the interactive `/help` rendering and `/reload-plugins` stay human (terminal slashes, not reachable from `-p`).
 - [ ] **2. Six-gate dogfood:** `/design-playbook:design-io <real product UI ask>` passes all six gates (L5/L6 before UI; decision report before code; point-back findings; no Done-when skip; generality; recirculate closure). Retain local evidence and report the result and limitations in the delivery summary; no personal directory or template is required.
 - [ ] **3. Validate:** `python scripts/validate.py` green (also in `release.py` and CI); `claude plugin validate` too if your Claude Code version has it.
 - [ ] **4. Clean surface:** covered by `scripts/validate.py` (runtime surface; attribution files excluded).
@@ -77,5 +77,5 @@ and `.github/workflows/release-dsh-bundle.yml`; private research is not a prereq
 
 ## "Not yet" (do not block v0.x)
 
-- Catalog submission and recruitment remain explicitly paused; passing this checklist does not resume either. Interactive `/help` inventory inspection remains human.
+- Catalog submission and recruitment remain explicitly paused; passing this checklist does not resume either. Interactive `/help` rendering remains human.
 - i18n (CJK-first product; no i18n infra yet, not a v0 goal).
