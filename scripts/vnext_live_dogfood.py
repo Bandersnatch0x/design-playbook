@@ -124,10 +124,15 @@ def preflight() -> int:
     if str(PKG) not in sys.path:
         sys.path.insert(0, str(PKG))
     try:
-        from design_playbook.mcp.evidence import server as evidence
+        # server.py wires the runtime but does not re-export the contract
+        # parser; parse_capture_contract lives in capture_contract.
+        import design_playbook.mcp.evidence.server  # noqa: F401
+        from design_playbook.mcp.evidence.capture_contract import (
+            parse_capture_contract,
+        )
 
         try:
-            evidence.parse_capture_contract({"url": "about:blank"})
+            parse_capture_contract({"url": "about:blank"})
             _fail("capture contract accepted missing schemaVersion")
             failures += 1
         except ValueError as exc:
@@ -136,7 +141,7 @@ def preflight() -> int:
             else:
                 _fail(f"unexpected capture error: {exc}")
                 failures += 1
-        evidence.parse_capture_contract(
+        parse_capture_contract(
             {
                 "schemaVersion": 1,
                 "viewport": {

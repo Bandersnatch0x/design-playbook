@@ -50,10 +50,18 @@ INLINE_ONLY = {
     "packages/design-playbook/skills/design-baseline/scripts/design_baseline.py",
 }
 # Entry points a bare no-argument run could act on, plus the one that serves a
-# protocol on stdin. Only the safe form is exercised.
+# protocol on stdin. Only the safe form is exercised. Several would do real,
+# minutes-long work on a bare run -- a benchmark, a scale seed, a wheel build,
+# the live install flow, the release gate chain -- so they are pinned to a
+# usage path like the rest.
 SAFE_INVOCATIONS = {
     "packages/design-playbook/scripts/generate_adapter.py": [["--list"]],
+    "packages/design-playbook-workbench/tools/install_smoke.py": [["--help"]],
+    "packages/design-playbook-workbench/tools/perf_harness.py": [["--help"]],
+    "packages/design-playbook-workbench/tools/seed_scale.py": [["--help"]],
     "scripts/install_hooks.py": [["--help"]],
+    "scripts/install_smoke.py": [["--help"]],
+    "scripts/release.py": [["--help"]],
 }
 CODECS = ("cp1252", "shift_jis", "gbk")
 
