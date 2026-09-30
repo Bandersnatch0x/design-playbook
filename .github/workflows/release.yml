@@ -102,7 +102,20 @@ jobs:
         run: python3 scripts/release.py
 
       - name: Run full test suite
-        run: python3 -m pytest -q
+        # Two test packages in this repo are both importable as the top-level
+        # name `tests`: packages/design-playbook/tests and
+        # packages/design-playbook-workbench/tests. One pytest process can
+        # bind only one of them, so a repo-wide run makes the other fail
+        # collection with ModuleNotFoundError. ci.yml runs them in separate
+        # processes for the same reason. tests/test_project_target.py drives
+        # the workbench service through its own test harness, so it belongs
+        # with the workbench group rather than the plugin group.
+        run: |
+          python3 -m pytest -q \
+            --ignore=packages/design-playbook-workbench \
+            --ignore=tests/test_project_target.py
+          python3 -m pytest packages/design-playbook-workbench/tests \
+            tests/test_project_target.py -q
 
       - name: Inspect npm artifact
         working-directory: packages/design-playbook

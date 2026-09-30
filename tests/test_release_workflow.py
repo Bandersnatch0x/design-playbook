@@ -335,6 +335,36 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
                 version="0.12.0",
             )
 
+    def test_release_suite_scopes_every_pytest_invocation(self) -> None:
+        # packages/design-playbook/tests and
+        # packages/design-playbook-workbench/tests are both importable as the
+        # top-level name `tests`, so one pytest process can bind only one of
+        # them and the other fails collection with ModuleNotFoundError. Every
+        # invocation must be scoped (explicit path or --ignore), never
+        # repo-wide; the workbench group must still run.
+        run = self.publish_steps["Run full test suite"]["run"]
+        flat = run.replace("\\\n", " ")
+        invocations = [
+            chunk.split() for chunk in flat.split("python3 -m pytest")[1:]
+        ]
+        self.assertTrue(invocations, "release suite must run pytest")
+        for tokens in invocations:
+            scoped = any(not token.startswith("-") for token in tokens) or any(
+                token.startswith("--ignore") for token in tokens
+            )
+            self.assertTrue(
+                scoped,
+                f"repo-wide pytest collects both `tests` packages: {tokens}",
+            )
+        self.assertTrue(
+            any(
+                "design-playbook-workbench/tests" in token
+                for tokens in invocations
+                for token in tokens
+            ),
+            "the workbench tests must run in the release suite",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
