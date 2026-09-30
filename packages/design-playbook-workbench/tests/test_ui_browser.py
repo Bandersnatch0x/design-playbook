@@ -295,8 +295,10 @@ class AssetsPanelJourneyTest(unittest.TestCase):
         )
         expect(self.page.locator("#asset-preview-note")).to_contain_text("无凭证")
         handle = self._wait_for_preview_frame()
+        # Enabling already switched to dynamic, so the click above re-selects
+        # the same mode and may reload the frame once more. Wait for the title
+        # instead of reading it back, so the check does not race that reload.
         handle.wait_for_function("() => document.title === 'ran'", timeout=10000)
-        self.assertEqual(handle.evaluate("() => document.title"), "ran")
 
     def test_a_carrier_without_preview_capability_shows_no_dynamic_button(self) -> None:
         self._open_panel()
