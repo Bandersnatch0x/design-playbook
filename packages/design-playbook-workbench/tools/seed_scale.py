@@ -358,6 +358,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Standalone package (dependencies = []): carry the piped-UTF-8 rule inline
+    # rather than importing the plugin seam (T-105).
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure") and not stream.isatty():
+            stream.reconfigure(encoding="utf-8", errors="replace")
     args = build_parser().parse_args(argv)
     if args.nodes_per_canvas > 200:
         print("nodes-per-canvas exceeds canvas MAX_INSTANCES (200)", file=sys.stderr)

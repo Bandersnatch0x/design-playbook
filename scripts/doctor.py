@@ -124,8 +124,10 @@ def check_gate1_smoke() -> None:
         f"{len(expected_cmds)} commands / namespace) =="
     )
     # Semi-automated gate 1 (release-checklist): the static counts a human
-    # would eyeball in /help. The dynamic `claude --plugin-dir` load + /help
-    # listing stay human (host slash, not automatable - see memory).
+    # would eyeball in /help. The load and the namespaced inventory are also
+    # readable headlessly from the host's session-init record
+    # (`claude --plugin-dir ... -p ok --output-format stream-json --verbose`);
+    # only the interactive /help rendering stays human.
     skills_dir = PKG / "skills"
     skill_dirs = [d for d in skills_dir.iterdir() if d.is_dir()] if skills_dir.is_dir() else []
     if len(skill_dirs) == GATE1_EXPECTED_SKILLS:
