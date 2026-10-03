@@ -2,6 +2,7 @@
 <div id="dpb-root" lang="{locale}" data-round="{round_n}">
   <form method="POST" action="/decide" id="dpb-decide-form">
   <input type="hidden" name="anchors_json" id="dpb-anchors-json" value="[]" />
+  <input type="hidden" name="visual_edits_json" id="dpb-visual-edits-json" value="{visual_edits_hidden}" />
   <input type="hidden" name="criteria_json" id="dpb-criteria-json" value="{criteria_hidden}" />
 
   <!-- 1. Header: breadcrumb / viewport+mode / dynamic decision trigger -->
@@ -123,6 +124,9 @@
         <button type="button" class="dpb-rail-tab" id="dpb-tab-spec" role="tab" aria-selected="false" aria-controls="dpb-spec-view"{spec_tab_hidden}>
           <span class="i18n" data-i18n="criteria_title_short">{t_criteria_title_short}</span> <span class="dpb-filter-n" id="dpb-criteria-count">{criteria_count_label}</span>
         </button>
+        <button type="button" class="dpb-rail-tab" id="dpb-tab-visual" role="tab" aria-selected="false" aria-controls="dpb-visual-view">
+          <span class="i18n" data-i18n="tab_visual">{t_tab_visual}</span> <span class="dpb-filter-n" id="dpb-visual-count">0</span>
+        </button>
       </div>
       <div class="dpb-rail-nav">
         <button type="button" id="dpb-roam-prev" data-i18n-title="roam_prev" data-i18n-title-suffix=" [K]" title="{t_roam_prev} [K]">
@@ -138,6 +142,13 @@
       </div>
     </div>
     <h2 class="dpb-sr-only" id="dpb-rail-title" data-i18n="drawer_title">{t_drawer_title}</h2>
+
+    <!-- React visual editor: direct preview edits stay pending until handoff.
+         Its own rail tab keeps it out of the annotations/criteria flow, so the
+         inspector never overlaps (or steals pointer events from) those views. -->
+    <div class="dpb-rail-view" id="dpb-visual-view" role="tabpanel" hidden>
+      <div id="dpb-react-editor-root"></div>
+    </div>
 
     <!-- annotations view -->
     <div class="dpb-rail-view" id="dpb-annotations-view" role="tabpanel">

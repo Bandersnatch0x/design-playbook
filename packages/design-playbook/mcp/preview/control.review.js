@@ -449,7 +449,7 @@
     if (!el) return false;
     return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable;
   }
-  document.addEventListener("keydown", function (e) {
+  function handleKeyDown(e) {
     // An IME's Enter commits composition, never a comment or review decision.
     if (e.isComposing || e.keyCode === 229) return;
     var dialog = activeReviewDialog || (abortPopoverOpen() ? abortPopover : null);
@@ -538,6 +538,15 @@
       setDrawer(inspector.classList.contains("dpb-collapsed"));
       return;
     }
+  }
+  document.addEventListener("keydown", handleKeyDown);
+  window.addEventListener("message", function (e) {
+    var frame = protoFrame();
+    if (!frame || e.source !== frame.contentWindow) return;
+    var key = (e.data || {}).dpbToolShortcut;
+    // Only harmless tool keys cross the sandbox boundary, never review actions.
+    if (["Escape", "b", "d", "h", "p", "r", "v"].indexOf(key) < 0) return;
+    handleKeyDown(new KeyboardEvent("keydown", { key: key }));
   });
   document.addEventListener("keyup", function (e) {
     if (e.code === "Space") {

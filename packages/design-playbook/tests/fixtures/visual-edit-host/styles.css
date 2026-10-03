@@ -1,0 +1,31 @@
+:root {
+  color: #24312c;
+  background: #f5f6f2;
+  font: 16px/1.6 system-ui, sans-serif;
+}
+main {
+  max-width: 44rem;
+  margin: 3rem auto;
+  padding: 1rem;
+}
+#queue-title {
+  color: rgb(36, 49, 44);
+  background-color: rgb(245, 246, 242);
+  padding: 8px;
+}
+article {
+  border-top: 1px solid #cad2cc;
+  padding: 1rem 0;
+}
+#next-read {
+  padding: 16px;
+}
+button {
+  font: inherit;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+button:focus-visible {
+  outline: 3px solid #286444;
+  outline-offset: 3px;
+}

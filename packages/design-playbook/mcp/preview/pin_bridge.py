@@ -50,6 +50,8 @@ BRIDGE_SCRIPT = r"""<script>
     "cursor:crosshair!important}" +
     ".dpb-pin-hover{outline:1px dashed rgba(20,184,166,.45)!important;" +
     "outline-offset:1px!important}" +
+    ".dpb-visual-edit-selected{outline:2px solid #2563EB!important;outline-offset:3px!important;" +
+    "box-shadow:0 0 0 4px rgba(37,99,235,.18)!important}" +
     ".dpb-pin-badge{position:absolute;z-index:2147483000;min-width:18px;height:18px;" +
     "padding:0 5px;border-radius:999px;background:#14b8a6;color:#042f2e;" +
     "font:700 11px/18px system-ui,sans-serif;text-align:center;pointer-events:none;" +
@@ -147,6 +149,41 @@ BRIDGE_SCRIPT = r"""<script>
     return parts.join(" > ");
   }
   var hoverEl = null;
+  var visualSelectedEl = null;
+  function visualStyleSnapshot(el) {
+    var computed = window.getComputedStyle(el);
+    var rect = el.getBoundingClientRect();
+    return {
+      color: computed.color,
+      backgroundColor: computed.backgroundColor,
+      fontSize: computed.fontSize,
+      fontWeight: computed.fontWeight,
+      lineHeight: computed.lineHeight,
+      margin: computed.margin,
+      padding: computed.padding,
+      width: computed.width,
+      height: computed.height,
+      display: computed.display,
+      position: computed.position,
+      gap: computed.gap,
+      borderRadius: computed.borderRadius,
+      rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+    };
+  }
+  function reportVisualSelection(el, replay, requestId) {
+    if (!el) return;
+    var selector = cssPath(el);
+    if (!selector) return;
+    if (visualSelectedEl && visualSelectedEl !== el) {
+      visualSelectedEl.classList.remove("dpb-visual-edit-selected");
+    }
+    visualSelectedEl = el;
+    el.classList.add("dpb-visual-edit-selected");
+    parent.postMessage({ dpbVisualEditSelection: {
+      selector: selector, tag: el.tagName.toLowerCase(),
+      style: visualStyleSnapshot(el), replay: !!replay, requestId: requestId
+    } }, "*");
+  }
   function clearHover() {
     if (hoverEl) {
       hoverEl.classList.remove("dpb-pin-hover");
@@ -192,6 +229,7 @@ BRIDGE_SCRIPT = r"""<script>
         rect: { x: er.left, y: er.top, w: er.width, h: er.height },
       },
     }, "*");
+    reportVisualSelection(el, false);
   }, true);
 
   // ---- #57 scheme A: cross-origin locate, flash and numbered badges ----
@@ -503,6 +541,16 @@ BRIDGE_SCRIPT = r"""<script>
     });
   }
 
+  document.addEventListener("keydown", function (e) {
+    var el = e.target;
+    if (e.isComposing || e.keyCode === 229 || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+    var key = e.key === "Escape" ? e.key : e.key.toLowerCase();
+    if ((key === "Escape" && e.shiftKey) || ["Escape", "b", "d", "h", "p", "r", "v"].indexOf(key) < 0) return;
+    e.preventDefault();
+    parent.postMessage({ dpbToolShortcut: key }, "*");
+  });
+
   window.addEventListener("message", function (e) {
     // W3: only the parent window may drive the bridge. The prototype scripts
     // share this window and must not be able to spoof pin state or badges.
@@ -513,6 +561,39 @@ BRIDGE_SCRIPT = r"""<script>
       // #56: parent is the single owner of the pin state.
       pinOn = !!data.dpbPinState.on;
       if (!pinOn) clearHover();
+      return;
+    }
+    if (data.dpbVisualEdit) {
+      var edit = data.dpbVisualEdit;
+      if (edit.type === "ping") {
+        parent.postMessage({ dpbVisualEditReady: { bridgeVersion: 1, nonce: edit.nonce, routeUrl: location.href } }, "*");
+        return;
+      }
+      if (edit.type === "select") {
+        var selected = findEl(String(edit.selector || ""));
+        if (selected) reportVisualSelection(selected, !!edit.replay);
+        return;
+      }
+      if (edit.type === "set-style") {
+        var target = edit.selector ? findEl(String(edit.selector)) : visualSelectedEl;
+        var property = String(edit.property || "");
+        var newValue = String(edit.value == null ? "" : edit.value);
+        var code = !target ? "visual_target_missing" : "visual_rejected";
+        if (!target || !/^[A-Za-z-]{1,64}$/.test(property) ||
+            (newValue !== "" && !CSS.supports(property, newValue))) {
+          parent.postMessage({ dpbVisualEditRejected: { requestId: edit.requestId, code: code } }, "*");
+          return;
+        }
+        var oldValue = target.style.getPropertyValue(property);
+        target.style.setProperty(property, newValue);
+        var acceptedValue = target.style.getPropertyValue(property);
+        reportVisualSelection(target, !!edit.replay, edit.requestId);
+        parent.postMessage({ dpbVisualEditChange: {
+          requestId: edit.requestId, selector: cssPath(target), property: property,
+          oldValue: oldValue, newValue: acceptedValue, replay: !!edit.replay
+        } }, "*");
+        return;
+      }
       return;
     }
     if (data.dpbDrawState) {
@@ -583,3 +664,12 @@ BRIDGE_SCRIPT = r"""<script>
   parent.postMessage({ dpbPinHello: true }, "*");
 })();
 </script>"""
+
+
+def build_visual_edit_bridge_script() -> str:
+    """Host opt-in: embed this script in the loopback page used as live_route_url.
+
+    Only the sandbox parent can issue preview commands. This never writes host
+    source; include the bridge before starting a review so served bytes stay stable.
+    """
+    return BRIDGE_SCRIPT

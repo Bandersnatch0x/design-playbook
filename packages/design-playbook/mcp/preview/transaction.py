@@ -25,6 +25,8 @@ else:
 from design_playbook.mcp.preview import ledger
 from design_playbook.mcp.preview.control import _format_feedback
 from design_playbook.mcp.preview.i18n import CONFIRM_LABELS, SKIP_LABELS
+from design_playbook.mcp.preview.live_route import observe_visual_source, validate_live_route_url
+from design_playbook.mcp.preview.visual_handoff import build_agent_handoff
 from design_playbook.mcp.preview.integrity import (
     compute_binding_digest,
     confirm_name,
@@ -628,6 +630,12 @@ def _confirm_record(entry: dict[str, Any]) -> dict[str, Any]:
         record["floor_failure"] = outcome["floor_failure"]
     if outcome.get("criteria_review"):
         record["criteria_review"] = list(outcome["criteria_review"])
+    if outcome.get("visual_edits"):
+        record["visual_edits"] = dict(outcome["visual_edits"])
+    if outcome.get("visual_edits_error"):
+        record["visual_edits_error"] = str(outcome["visual_edits_error"])
+    if outcome.get("visual_handoff"):
+        record["visual_handoff"] = dict(outcome["visual_handoff"])
     return record
 
 
@@ -790,6 +798,12 @@ def _result(entry: dict[str, Any], confirm_path: str) -> dict[str, Any]:
     }
     if outcome.get("criteria_review"):
         result["criteria_review"] = list(outcome["criteria_review"])
+    if outcome.get("visual_edits"):
+        result["visual_edits"] = dict(outcome["visual_edits"])
+    if outcome.get("visual_edits_error"):
+        result["visual_edits_error"] = str(outcome["visual_edits_error"])
+    if outcome.get("visual_handoff"):
+        result["visual_handoff"] = dict(outcome["visual_handoff"])
     return result
 
 
@@ -802,8 +816,10 @@ def run_preview_transaction(
     report_ref: str,
     options: list[str],
     collect: BrowserCollector,
+    live_route_url: str = "",
 ) -> dict[str, Any]:
     """Serialize, collect once, or repair one bound Preview decision."""
+    live_route_url = validate_live_route_url(live_route_url) if live_route_url else ""
     summary = summary.strip()
     report_ref = report_ref.strip()
     preview_dir = _preview_dir_for(Path(path_arg) if path_arg else None)
@@ -828,7 +844,7 @@ def run_preview_transaction(
                 report_ref=report_ref, options=options, collect=collect,
                 criteria=criteria,
                 preview_dir=preview_dir, prototype_hash=prototype_hash,
-                binding=binding, decision_id=decision_id,
+                binding=binding, decision_id=decision_id, live_route_url=live_route_url,
             )
     except PreviewTransactionError:
         raise
@@ -855,7 +871,7 @@ def _run_locked(
     report_ref: str, options: list[str], collect: BrowserCollector,
     criteria: list[dict[str, str]],
     preview_dir: Path, prototype_hash: str, binding: dict[str, Any],
-    decision_id: str,
+    decision_id: str, live_route_url: str = "",
 ) -> dict[str, Any]:
     entry_path = preview_dir / decision_name(round_n)
     # Re-resolve inside the lock to detect TOCTOU: if the path-mode file
@@ -873,6 +889,11 @@ def _run_locked(
 
     existing = load_entry(entry_path)
     if existing is not None:
+        prior_batch = existing["outcome"].get("visual_edits") or {}
+        if prior_batch.get("routeUrl", "") != live_route_url or (live_route_url and
+                prior_batch.get("sourceHash") != observe_visual_source(_prototype, live_route_url)):
+            raise TransactionConflict("live route binding changed; use next round", retryable=False,
+                                      round_n=round_n, decision_id=decision_id, artifact=str(entry_path))
         if existing["binding"].get("digest") != binding["digest"]:
             raise TransactionConflict(
                 f"round binding differs from durable decision; use next round: {round_n}",
@@ -894,13 +915,28 @@ def _run_locked(
         )
 
     prototype = _ensure_prototype(path_arg, html, round_n, preview_dir)
-    submission = collect(
-        prototype, summary, options, round_n, criteria=criteria
-    )
+    collect_options: dict[str, Any] = {"criteria": criteria}
+    if live_route_url:
+        collect_options["live_route_url"] = live_route_url
+    submission = collect(prototype, summary, options, round_n, **collect_options)
     anchors = list(submission.get("anchors") or [])
     raw_feedback = str(submission.get("feedback") or "")
     feedback = _format_feedback(raw_feedback, anchors)
     criteria_review = _criteria_review_from_submission(submission, criteria)
+    visual_edits = submission.get("visual_edits")
+    if not isinstance(visual_edits, dict):
+        visual_edits = {}
+    visual_edits_error = str(submission.get("visual_edits_error") or "")
+    visual_handoff: dict[str, Any] = {}
+    if visual_edits.get("edits") and not visual_edits_error:
+        try:
+            visual_handoff = build_agent_handoff(
+                visual_edits,
+                current_source_hash=observe_visual_source(prototype, live_route_url),
+                route_url=live_route_url,
+            )
+        except (ValueError, OSError) as exc:
+            visual_edits_error = str(exc)
     rejected = bool(submission.get("rejected"))
     aborted = bool(submission.get("aborted"))
     # T-086/DEF-5: a collect timeout is a system state, never user feedback —
@@ -960,8 +996,14 @@ def _run_locked(
             "rejection": str(submission.get("rejection") or ""),
             "skipped": is_skip,
             "timeout": timed_out,
+            "visual_edits": visual_edits,
+            "visual_edits_error": visual_edits_error,
         },
     }
+    # Only a real handoff is recorded: an absent batch must not add an empty
+    # `visual_handoff` key to every decision entry (artifact parity).
+    if visual_handoff:
+        entry["outcome"]["visual_handoff"] = visual_handoff
     if criteria_review:
         entry["outcome"]["criteria_review"] = criteria_review
     atomic_write(entry_path, json_text(entry))

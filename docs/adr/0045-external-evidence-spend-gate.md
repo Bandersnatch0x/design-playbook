@@ -123,3 +123,104 @@ and review that confirms the authority partition above. A missing, blocked, or
 unrun required path leaves the capability undelivered. Commit, release,
 catalog submission, recruitment, and publication still require their normal
 separate decisions.
+
+## Amendment (2026-10-03): bounded self-use exception for host-fixture editing
+
+The maintainer explicitly authorized this bounded exception on 2026-10-03.
+Implementation and local validation are limited to
+`packages/design-playbook/tests/fixtures/visual-edit-host/**` and the
+corresponding `packages/design-playbook/tests/preview/**` fixture tests:
+
+- multi-file apply with all-or-nothing semantics;
+- multi-file rollback on a failed post-write observation; and
+- concurrent-applier rejection where the later applier fails closed.
+
+The exception excludes real host framework/HMR integration, arbitrary external
+asset hashing, cross-process crash-recovery guarantees, any plugin-side source
+writer, multiplayer/real-time collaboration (still Phase 2), catalog submission,
+and recruitment. The plugin gains no source writer; its `writesSource` boundary
+remains false.
+
+Authorization to implement is not a completion claim. This fixture-only
+exception does not satisfy the external trial gate or authorize release or
+publication; the ADR-0045 spend gate otherwise remains in force.
+
+## Amendment (2026-10-03): bounded self-use exception (round 2: declared multi-asset binding and in-fixture crash recovery)
+
+The maintainer explicitly authorized this second bounded exception on 2026-10-03.
+Implementation and local validation are limited to
+`packages/design-playbook/tests/fixtures/visual-edit-host/**` and the
+corresponding `packages/design-playbook/tests/preview/**` fixture tests:
+
+- binding a HOST-DECLARED set of local assets: the host names its asset set,
+  every declared local asset participates in review/confirmation binding, and
+  a changed, removed, or newly undeclared declared asset makes the pending
+  batch stale or refuses the apply; and
+- crash recovery inside the fixture: a write interrupted at a defined point
+  leaves no partial state, and a restart reclaims or refuses per the existing
+  explicit lock rules with an honest diagnostic.
+
+The exception excludes real host framework/HMR integration and any real
+project's build pipeline, third-party or CDN asset fetching/crawling, arbitrary
+asset discovery, cross-process or OS-level crash guarantees beyond the fixture,
+any plugin-side source writer, multiplayer/real-time collaboration (still
+Phase 2), catalog submission, and recruitment. The plugin gains no source
+writer; its `writesSource` boundary remains false.
+
+Authorization to implement is not a completion claim. This fixture-only
+exception does not satisfy the external trial gate or authorize release or
+publication; the ADR-0045 spend gate otherwise remains in force.
+
+## Amendment (2026-10-03): bounded self-use exception (round 3: real local host integration, Vite/React dev server)
+
+The maintainer explicitly authorized implementation and local validation against
+one named real host, `D:\code_space\design-playbook-share\opsbench-demo-host`,
+on 2026-10-03. The authorized boundary is limited to:
+
+- the plugin's existing read-only live-route Preview against that host's real
+  Vite/React dev server;
+- a host-side adapter, a HOST-DECLARED asset map, and real evidence placed ONLY
+  under that host's `.scratch/visual-edit-host-real/`; and
+- host-side source writes strictly limited to files named in that host's
+  declared asset map, only after the existing hash-bound confirmation, starting
+  with `src/App.css`.
+
+The exclusions are: installing the design-playbook plugin into the host,
+fabricating `.scratch` evidence, any commit or publish in the host, writes to
+files outside the declared asset map, git operations in the host, CI/macOS
+claims, and multiplayer/real-time collaboration (still Phase 2).
+
+The plugin gains no source writer; `writesSource` stays false and the G5 boundary
+is unchanged. Authorization to implement is NOT a completion claim. This is
+one real host on one machine, not proof of arbitrary frameworks, other bundlers,
+or other platforms; the ADR-0045 spend gate otherwise remains in force.
+
+
+## Amendment (2026-10-03): bounded self-use exception (F2: Next.js host bridge proof)
+
+The maintainer explicitly authorized this bounded F2 exception on 2026-10-03.
+Implementation and local validation are limited to the named real host
+`D:\code_space\idea_project\moemail`, using its Next.js dev server rather than
+the previously exercised Vite host. The authorized boundary is:
+
+- the plugin's existing read-only live-route Preview against that host;
+- a host-side adapter, a HOST-DECLARED asset map, and genuine local evidence
+  under that host's `.scratch/visual-edit-host-next/` only; all new host files
+  remain within that directory; and
+- host-side source writes strictly limited to declared files after the existing
+  hash-bound confirmation, with one minimal property edit and restoration of
+  the original bytes; temporary bridge integration uses declared existing
+  configuration or layout files and is also restored.
+
+The exclusions are: plugin installation into the host, fabricated evidence,
+any commit or publish in the host, git operations in the host, writes outside
+the declared asset map, changes to the host's `package.json`, and CI/macOS
+claims. This does not authorize any plugin version, release, or publication
+change, new skills or commands, cloud or telemetry services, or a second
+state machine.
+
+The plugin gains no source writer; `writesSource` stays false and the G5
+boundary is unchanged. Authorization is NOT a completion claim. This is a
+bounded proof on one Next.js host on one machine, not a claim of support for
+all frameworks, bundlers, or platforms, and it does not satisfy the external
+trial gate. The ADR-0045 spend gate otherwise remains in force.

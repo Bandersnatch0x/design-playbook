@@ -231,7 +231,8 @@ body.dpb-shell { overflow: hidden; height: 100vh; }
 .dpb-rail.dpb-collapsed { margin-right: calc(-1 * var(--dpb-rail-w)); opacity: 0; pointer-events: none; }
 .dpb-rail-head {
   min-height: 48px; flex: 0 0 auto; padding: 0 10px 0 12px;
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+  padding-top: 8px; padding-bottom: 8px;
   border-bottom: 1px solid var(--dpb-line);
 }
 .dpb-rail-tabs { display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; background: var(--dpb-elev); border: 1px solid var(--dpb-line); min-width: 0; }
@@ -246,7 +247,7 @@ body.dpb-shell { overflow: hidden; height: 100vh; }
 .dpb-rail-tab.is-on { background: var(--dpb-surface); color: var(--dpb-accent); font-weight: 600; box-shadow: var(--dpb-shadow-tool); }
 .dpb-rail-tab:focus-visible { outline: 2px solid var(--dpb-accent); outline-offset: 1px; }
 .dpb-rail-tab[hidden] { display: none !important; }
-.dpb-rail-nav { display: flex; align-items: center; gap: 2px; }
+.dpb-rail-nav { margin-left: auto; flex-shrink: 0; display: flex; align-items: center; gap: 2px; }
 .dpb-rail-nav button {
   appearance: none; cursor: pointer; border: 0; background: transparent;
   width: 26px; height: 26px; border-radius: 6px;
@@ -257,6 +258,10 @@ body.dpb-shell { overflow: hidden; height: 100vh; }
 .dpb-rail-view { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .dpb-rail-view[hidden] { display: none !important; }
 #dpb-spec-view { overflow-y: auto; }
+/* T-106: the React visual editor is its own rail view; the panel scrolls and
+   the editor keeps its natural height inside it. */
+#dpb-visual-view { overflow-y: auto; }
+#dpb-visual-view .dpb-react-editor { margin: 10px 12px 12px; }
 
 /* criteria list (inside the rail view) */
 .dpb-spec-list {
@@ -816,3 +821,42 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   }
   .dpb-artboard-wrap { transition: none; }
 }
+
+/* React direct visual editor (T-106): mounted inside #dpb-visual-view. */
+#dpb-react-editor-root { flex: 0 0 auto; }
+.dpb-react-editor {
+  border: 1px solid var(--dpb-line); border-radius: 10px;
+  background: var(--dpb-elev); color: var(--dpb-ink); padding: 10px;
+  box-shadow: var(--dpb-shadow-tool);
+}
+.dpb-react-editor-head, .dpb-react-actions {
+  display: flex; align-items: center; gap: 8px;
+}
+.dpb-react-editor-head { justify-content: space-between; margin-bottom: 8px; }
+.dpb-react-badge { font-size: 10px; color: var(--dpb-muted); }
+.dpb-react-badge.is-on { color: var(--dpb-success); }
+.dpb-react-selection {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 6px 7px; border-radius: 6px; background: var(--dpb-surface);
+  color: var(--dpb-soft); font: 11px ui-monospace, Consolas, monospace;
+}
+.dpb-react-actions { margin: 8px 0; }
+.dpb-react-actions button {
+  border: 1px solid var(--dpb-line); background: var(--dpb-elev);
+  color: var(--dpb-soft); border-radius: 6px; padding: 4px 7px; cursor: pointer;
+}
+.dpb-react-actions button:disabled { opacity: .45; cursor: default; }
+.dpb-react-pending-count { margin-left: auto; color: var(--dpb-accent-soft); font-size: 11px; }
+.dpb-react-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.dpb-react-field { display: flex; flex-direction: column; gap: 3px; color: var(--dpb-soft); font-size: 10px; }
+.dpb-react-field input {
+  min-width: 0; border: 1px solid var(--dpb-line); border-radius: 5px;
+  background: var(--dpb-surface); color: var(--dpb-ink); padding: 4px 5px; font-size: 11px;
+}
+.dpb-react-field input:focus { outline: 2px solid var(--dpb-ring-accent); outline-offset: 1px; }
+.dpb-react-help { margin: 8px 0 0; color: var(--dpb-muted); font-size: 10px; line-height: 1.4; }
+
+.dpb-react-diagnostic { color: var(--dpb-soft); font-size: 12px; }
+.dpb-react-diagnostic:empty { display: none; }
+
+.dpb-react-route { overflow-wrap: anywhere; font-size: 11px; color: var(--dpb-muted); }

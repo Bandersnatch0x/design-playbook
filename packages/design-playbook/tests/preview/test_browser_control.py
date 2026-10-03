@@ -280,6 +280,10 @@ class ControlResourceAssemblyTests(unittest.TestCase):
         self.assertIn("window.DPB_I18N =", control)
         self.assertNotIn("reviseLabels", control)
         self.assertIn("isSubstantive()", control)
+        self.assertIn('id="dpb-react-editor-root"', control)
+        self.assertIn("ReactDOM.createRoot", control)
+        self.assertIn("dpbVisualEdit", control)
+        self.assertNotIn("https://unpkg.com", control)
         self.assertNotIn("<unsafe>", control)
         self.assertNotRegex(
             control, r"\{(?:t_|summary_safe|primary_|secondary_|pill_)[^}]*\}"
@@ -1199,6 +1203,9 @@ class PinAnnotationBridgeTests(unittest.TestCase):
         self.assertIn(
             "dpbPinAnchor", js, "bridge must tag its messages with the dpbPinAnchor key"
         )
+        self.assertIn("dpbVisualEditSelection", js)
+        self.assertIn("dpbVisualEditChange", js)
+        self.assertIn('type === "set-style"', js)
         # postMessage target must be the parent window
         self.assertRegex(
             js,

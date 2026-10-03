@@ -13,6 +13,7 @@ and doctor.py (read-only diagnostic aggregator).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -250,6 +251,65 @@ def check_adapter() -> None:
     print(stdout[-400:])
 
 
+def check_release_authorization(tag: str) -> None:
+    """Require the separate release decision retained by ADR-0045.
+
+    The ADR itself remains the authority; implementation exceptions, dogfood,
+    elapsed dates and --checks cannot authorize promotion. A maintainer records
+    one fenced ``release-authorization`` JSON object there with the exact tag,
+    decision="approved", authority="maintainer", and a nonempty reason.
+    Optional contentSha256 binds the decision to SHA-256 of the ASCII HEAD
+    commit ID (without a trailing newline), not to uncommitted working files.
+    This validates a recorded decision, not the identity of its author.
+    """
+    adr = ROOT / "docs/adr/0045-external-evidence-spend-gate.md"
+    try:
+        text = adr.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        fail(f"release-authorization-unreadable: {adr.relative_to(ROOT)}: {exc}")
+        return
+    marker = "```release-authorization"
+    if marker not in text:
+        fail(f"release-authorization-missing: ADR-0045 requires a separate decision for {tag}")
+        return
+    records = re.findall(r"^```release-authorization\n(.*?)\n```$", text, re.M | re.S)
+    if text.count(marker) != 1 or len(records) != 1:
+        fail("release-authorization-invalid: expected exactly one complete record in ADR-0045")
+        return
+    try:
+        record = json.loads(records[0])
+    except json.JSONDecodeError:
+        fail("release-authorization-invalid: record must be JSON")
+        return
+    if (
+        not isinstance(record, dict)
+        or set(record) - {"contentSha256"} != {"tag", "decision", "authority", "reason"}
+        or record.get("tag") != tag
+        or record.get("decision") != "approved"
+        or record.get("authority") != "maintainer"
+        or not isinstance(record.get("reason"), str)
+        or not record["reason"].strip()
+    ):
+        fail(f"release-authorization-invalid: expected maintainer approval and reason for {tag}")
+        return
+    if "contentSha256" in record:
+        expected = record["contentSha256"]
+        if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
+            fail("release-authorization-content-invalid: contentSha256 must be a lowercase SHA-256 digest")
+            return
+        head = git("rev-parse", "HEAD")
+        if not head:
+            fail("release-authorization-content-unreadable: cannot resolve HEAD")
+            return
+        if hashlib.sha256(head.encode("ascii")).hexdigest() != expected:
+            fail(f"release-authorization-content-mismatch: HEAD is not authorized for {tag}")
+            return
+        ok(f"release-authorization-content-bound: HEAD {head}")
+    else:
+        print("  WARN  release-authorization-content-unbound: contentSha256 absent; approval is tag-only")
+    ok(f"release-authorization-approved: ADR-0045 authorizes {tag}")
+
+
 def check_tag(*, apply: bool) -> str:
     print("== 7. tag ==")
     version = plugin_version()
@@ -258,6 +318,7 @@ def check_tag(*, apply: bool) -> str:
         return ""
 
     tag = f"v{version}"
+    check_release_authorization(tag)
     tag_commit = git("rev-list", "-n", "1", tag)
     head = git("rev-parse", "HEAD")
     if tag_commit:

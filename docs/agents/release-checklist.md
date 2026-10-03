@@ -79,3 +79,16 @@ and `.github/workflows/release-dsh-bundle.yml`; private research is not a prereq
 
 - Catalog submission and recruitment remain explicitly paused; passing this checklist does not resume either. Interactive `/help` rendering remains human.
 - i18n (CJK-first product; no i18n infra yet, not a v0 goal).
+
+## Optional authorization content binding
+
+The ADR-0045 release decision may include `contentSha256` alongside `tag`,
+`decision`, `authority`, and `reason`. It is the lowercase SHA-256 digest of the
+ASCII commit ID returned by `git rev-parse HEAD`, with trailing whitespace
+removed, **not** a hash of the working tree or the raw Git commit object.
+A matching digest passes; a malformed digest, an unreadable HEAD, or a mismatch
+refuses authorization even when the version/tag is unchanged. An absent field
+prints `WARN  release-authorization-content-unbound` and preserves legacy tag-only
+approval. This is opt-in commit binding, not author authentication; the separate
+clean-tree and other release gates remain required. No authorization is granted
+by these instructions, and no release decision is created automatically.

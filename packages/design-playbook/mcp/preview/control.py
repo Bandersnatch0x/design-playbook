@@ -90,6 +90,29 @@ def _load_resources() -> tuple[str, str, str, str]:
         ) from exc
 
 
+@lru_cache(maxsize=1)
+def _load_react_resources() -> tuple[str, str, str]:
+    """Load the offline React editor runtime and mount script."""
+    try:
+        return tuple(
+            (HERE / name).read_text(encoding="utf-8")
+            for name in (
+                "vendor/react.production.min.js",
+                "vendor/react-dom.production.min.js",
+                "control.react.js",
+            )
+        )
+    except (OSError, UnicodeError) as exc:
+        raise RuntimeError(
+            f"Failed to load React visual editor resources from {HERE}"
+        ) from exc
+
+
+def _script_safe(value: str) -> str:
+    """Keep an inline script payload from closing its containing tag."""
+    return value.replace("</", "<\\/").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+
+
 def _build_control(
     round_n: int,
     summary: str,
@@ -112,6 +135,10 @@ def _build_control(
             ],
             ensure_ascii=False,
         ),
+        quote=True,
+    )
+    visual_edits_hidden = html_lib.escape(
+        json.dumps({"schemaVersion": 1, "status": "pending", "edits": []}),
         quote=True,
     )
     criteria_count = len(criteria_items)
@@ -201,6 +228,7 @@ def _build_control(
          for k in _STRINGS[ZH]}
     )
     html_tpl, css_tpl, js_tpl, _review_tpl = _load_resources()
+    react_js, react_dom_js, react_editor_js = _load_react_resources()
     js_formatted = js_tpl
     localized_copy = {f"t_{key}": html_lib.escape(t(key), quote=True) for key in _STRINGS[ZH]}
     localized_copy["t_round"] = html_lib.escape(t("round_n", n=round_n))
@@ -211,6 +239,7 @@ def _build_control(
         summary_safe=summary_safe,
         criteria_html=_render_criteria_cards(criteria_items),
         criteria_hidden=criteria_hidden,
+        visual_edits_hidden=visual_edits_hidden,
         criteria_count_label=criteria_count_label,
         criteria_count=criteria_count,
         criteria_toggle_hidden=criteria_toggle_hidden,
@@ -236,7 +265,10 @@ def _build_control(
         f"<script>window.DPB_I18N_DUAL = {dual_json};</script>\n"
         f"<script>window.DPB_SKIP_LABELS = {skip_labels_json};</script>\n"
         f"<script>window.DPB_DRAFT_KEY = {json.dumps(draft_key)};</script>\n"
-        f"<script>\n{js_formatted}\n</script>"
+        f"<script>\n{js_formatted}\n</script>\n"
+        f"<script>\n{_script_safe(react_js)}\n</script>\n"
+        f"<script>\n{_script_safe(react_dom_js)}\n</script>\n"
+        f"<script>\n{_script_safe(react_editor_js)}\n</script>"
     )
 
 

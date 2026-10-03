@@ -20,6 +20,7 @@ if str(_PKG_ROOT) not in sys.path:
 from design_playbook.mcp.preview import transaction  # noqa: E402
 from design_playbook.mcp.preview import versions  # noqa: E402
 from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
+from design_playbook.mcp.preview.visual_batch import normalize_visual_batch  # noqa: E402
 from design_playbook.mcp.preview.transaction import (  # noqa: E402
     PreviewTransactionError,
     TransactionConflict,
@@ -826,6 +827,137 @@ Edges.
         )
         log = (preview_dir / "log.md").read_text(encoding="utf-8")
         return result, confirm, log
+
+
+class PreviewVisualEditHandoffTests(unittest.TestCase):
+    """T-107: pending visual edits reach the decision record as review input.
+
+    The React editor and (optional) WebMCP tools both submit one batch shape;
+    the transaction binds it to the reviewed artifact hash and projects a
+    handoff that can never claim a source write by itself.
+    """
+
+    PROTOTYPE = "<html><body>visual edit</body></html>"
+
+    def _batch(self, *, source_hash: str) -> dict:
+        return normalize_visual_batch(
+            {
+                "schemaVersion": 1,
+                "edits": [
+                    {
+                        "locator": "#hero",
+                        "property": "padding",
+                        "oldValue": "8px",
+                        "newValue": "16px",
+                    }
+                ],
+            },
+            source_hash=source_hash,
+            route_url="",  # Positive control: this collector reviews a static artifact.
+        )
+
+    def _run(self, submission: dict) -> tuple[dict, dict | None, Path]:
+        """Run one Preview transaction over a real preview dir."""
+        def collect(
+            prototype: Path,
+            summary: str,
+            options: list[str],
+            round_n: int,
+            *,
+            criteria: list[dict[str, str]],
+        ) -> dict:
+            return submission
+
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        preview_dir = Path(temp.name)
+        prototype = preview_dir / "round-1.html"
+        prototype.write_text(self.PROTOTYPE, encoding="utf-8")
+        result = run_preview_transaction(
+            path_arg=str(prototype),
+            html=None,
+            summary="summary",
+            round_n=1,
+            report_ref="report.md",
+            options=["确认通过", "需要修改"],
+            collect=collect,
+        )
+        confirm_path = preview_dir / "confirm-round-1.json"
+        confirm = (
+            json.loads(confirm_path.read_text(encoding="utf-8"))
+            if confirm_path.is_file()
+            else None
+        )
+        return result, confirm, preview_dir
+
+    def test_pending_batch_reaches_entry_confirm_and_result(self) -> None:
+        source_hash = prototype_html_digest(self.PROTOTYPE.encode("utf-8"))
+        batch = self._batch(source_hash=source_hash)
+        result, confirm, _preview_dir = self._run({
+            "choice": "确认通过",
+            "feedback": "visual edits staged",
+            "anchors": [],
+            "aborted": False,
+            "visual_edits": batch,
+        })
+
+        self.assertTrue(result["confirmed"])
+        handoff = result["visual_handoff"]
+        self.assertEqual(handoff["status"], "pending-review")
+        self.assertTrue(handoff["requiresUserConfirmation"])
+        self.assertFalse(handoff["writesSource"])
+        self.assertEqual(handoff["sourceHash"], source_hash)
+        self.assertEqual(handoff["batchHash"], batch["batchHash"])
+        self.assertEqual(handoff["edits"], batch["edits"])
+        self.assertNotIn("visual_edits_error", result)
+        self.assertEqual(confirm["visual_handoff"]["status"], "pending-review")
+        self.assertFalse(confirm["visual_handoff"]["writesSource"])
+
+    def test_decision_entry_records_batch_and_handoff(self) -> None:
+        source_hash = prototype_html_digest(self.PROTOTYPE.encode("utf-8"))
+        batch = self._batch(source_hash=source_hash)
+        _result, _confirm, preview_dir = self._run({
+            "choice": "确认通过",
+            "feedback": "visual edits staged",
+            "anchors": [],
+            "aborted": False,
+            "visual_edits": batch,
+            "visual_edits_error": "",
+        })
+        entry = json.loads(
+            (preview_dir / "decision-round-1.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(entry["outcome"]["visual_edits"]["batchHash"], batch["batchHash"])
+        self.assertEqual(
+            entry["outcome"]["visual_handoff"]["nextAction"],
+            "coding-agent-review-diff",
+        )
+        self.assertFalse(entry["outcome"]["visual_handoff"]["writesSource"])
+
+    def test_stale_batch_fails_closed_without_handoff(self) -> None:
+        stale = self._batch(source_hash="stale-source-hash")
+        result, confirm, _preview_dir = self._run({
+            "choice": "确认通过",
+            "feedback": "visual edits staged",
+            "anchors": [],
+            "aborted": False,
+            "visual_edits": stale,
+        })
+
+        self.assertNotIn("visual_handoff", result)
+        self.assertIn("stale", result["visual_edits_error"])
+        self.assertNotIn("visual_handoff", confirm or {})
+
+    def test_absent_batch_keeps_previous_behavior(self) -> None:
+        result, confirm, _preview_dir = self._run({
+            "choice": "确认通过",
+            "feedback": "no visual edits",
+            "anchors": [],
+            "aborted": False,
+        })
+        self.assertNotIn("visual_handoff", result)
+        self.assertNotIn("visual_edits_error", result)
+        self.assertNotIn("visual_handoff", confirm or {})
 
 
 if __name__ == "__main__":

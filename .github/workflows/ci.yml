@@ -114,6 +114,8 @@ jobs:
             packages/design-playbook/tests/preview/test_versions.py \
             packages/design-playbook/tests/preview/test_server_stdio.py \
             packages/design-playbook/tests/preview/test_i18n_labels.py \
+            packages/design-playbook/tests/preview/test_visual_batch.py \
+            packages/design-playbook/tests/preview/test_visual_handoff.py \
             packages/design-playbook/tests/evidence/test_capture_contract.py \
             packages/design-playbook/tests/evidence/test_disclosure.py \
             packages/design-playbook/tests/evidence/test_delivery_matrix.py \
@@ -227,12 +229,24 @@ jobs:
 
       - name: Pin-to-annotate sync e2e (require chromium)
         # #56/#57/#58: parent<->bridge state sync on the real sandbox path —
-        # pin state, badges, locate, removal/undo reconciliation.
+        # pin state, badges, locate, removal/undo reconciliation. Also asserts
+        # the T-106 React direct editor on that same real path (selection,
+        # style+layout pending edits, undo without duplicate enqueue).
         if: steps.pw_install.outcome == 'success'
         run: |
           python3 packages/design-playbook/tests/test_pin_sync_frontend.py \
             | tee /tmp/pin-sync.log
           grep -Fx "PIN SYNC E2E TEST PASSED" /tmp/pin-sync.log
+
+      - name: Visual-edit Phase 1 acceptance (require chromium)
+        # T-110: route -> React edit -> pending batch -> transaction ->
+        # confirm record as a pending coding-agent handoff, plus the
+        # fail-closed negatives (stale batch, tampered hash, drifted source).
+        if: steps.pw_install.outcome == 'success'
+        run: |
+          python3 -m pytest \
+            packages/design-playbook/tests/preview/test_visual_edit_acceptance.py \
+            -v
 
       - name: Queue monitor dialog timer races (require chromium)
         if: steps.pw_install.outcome == 'success'

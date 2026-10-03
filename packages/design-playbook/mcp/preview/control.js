@@ -142,6 +142,8 @@
   var criteriaChecks = document.querySelectorAll(".dpb-criterion-check");
   var tabAnnotations = document.getElementById("dpb-tab-annotations");
   var annotationsView = document.getElementById("dpb-annotations-view");
+  var visualPanel = document.getElementById("dpb-visual-view");
+  var tabVisual = document.getElementById("dpb-tab-visual");
   var themeToggle = document.getElementById("dpb-theme-toggle");
 
   // ---- state ----
@@ -200,24 +202,34 @@
     if (criteriaToggle) criteriaToggle.hidden = items.length === 0;
     syncCriteriaCards();
   }
-  // REC-02: the spec criteria live in the unified rail as a tab, not a
-  // separate left panel. "open" = show the spec view (and keep the rail open);
-  // close returns to the annotations view.
+  // REC-02 + T-106: the unified rail hosts three mutually exclusive views —
+  // annotations, spec criteria, and the React visual editor. Exactly one is
+  // visible, so no view can overlap (or steal pointer events from) another.
+  function railViewActive() {
+    if (visualPanel && !visualPanel.hidden) return "visual";
+    return criteriaPanel.hidden ? "annotations" : "spec";
+  }
   function specViewActive() {
-    return !criteriaPanel.hidden;
+    return railViewActive() === "spec";
+  }
+  function setRailView(view) {
+    if (criteriaPanel) criteriaPanel.hidden = view !== "spec";
+    if (annotationsView) annotationsView.hidden = view !== "annotations";
+    if (visualPanel) visualPanel.hidden = view !== "visual";
+    [
+      [tabAnnotations, "annotations"],
+      [criteriaToggle, "spec"],
+      [tabVisual, "visual"],
+    ].forEach(function (pair) {
+      var el = pair[0];
+      if (!el) return;
+      var on = pair[1] === view;
+      el.classList.toggle("is-on", on);
+      el.setAttribute("aria-selected", on ? "true" : "false");
+    });
   }
   function setSpecPanel(open) {
-    if (!criteriaPanel) return;
-    criteriaPanel.hidden = !open;
-    annotationsView.hidden = open;
-    if (tabAnnotations) {
-      tabAnnotations.classList.toggle("is-on", !open);
-      tabAnnotations.setAttribute("aria-selected", open ? "false" : "true");
-    }
-    if (criteriaToggle) {
-      criteriaToggle.classList.toggle("is-on", open);
-      criteriaToggle.setAttribute("aria-selected", open ? "true" : "false");
-    }
+    setRailView(open ? "spec" : "annotations");
   }
   for (var ci = 0; ci < criteriaChecks.length; ci++) {
     criteriaChecks[ci].addEventListener("change", syncCriteriaHidden);
@@ -227,6 +239,9 @@
   }
   if (tabAnnotations) {
     tabAnnotations.addEventListener("click", function () { setSpecPanel(false); });
+  }
+  if (tabVisual) {
+    tabVisual.addEventListener("click", function () { setRailView("visual"); });
   }
   if (themeToggle) {
     themeToggle.addEventListener("click", function () {
@@ -303,6 +318,9 @@
   var VP_WIDTHS = { desktop: 1024, tablet: 768, mobile: 375 };
   function setViewport(vp, quiet) {
     viewport = vp;
+    // T-107: visual edits are captured per viewport so a responsive change can
+    // be replayed against the width it was authored at.
+    window.DPB_ACTIVE_VIEWPORT = vp;
     artboard.style.width = VP_WIDTHS[vp] + "px";
     var ids = { desktop: "dpb-vp-desktop", tablet: "dpb-vp-tablet", mobile: "dpb-vp-mobile" };
     Object.keys(ids).forEach(function (k) {

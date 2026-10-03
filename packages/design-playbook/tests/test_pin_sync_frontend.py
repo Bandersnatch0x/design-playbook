@@ -15,6 +15,7 @@ Covers the behaviors the ticket briefs call out on the real G5 sandbox path
 Static bridge-protocol assertions complement the unit tests in
 test_browser_control.py (which pin G5 safety + structural contracts).
 """
+import json
 import re
 import sys
 import tempfile
@@ -229,6 +230,56 @@ class _PlaywrightPinSyncAdapter:
                         page.wait_for_timeout(300)
                         self.obs["on_rows"] = len(hidden())
 
+                        # T-106 React direct editor: the bridge selection feeds
+                        # the inspector, a style edit stays pending, and undo
+                        # replays the old value without adding a second edit.
+                        page.click("#dpb-tab-visual")
+                        page.wait_for_timeout(200)
+                        self.obs["react_selection"] = page.locator(
+                            "#dpb-react-editor-root .dpb-react-selection"
+                        ).inner_text()
+                        color_input = page.locator(
+                            "#dpb-react-editor-root .dpb-react-field input"
+                        ).first
+                        color_input.fill("rgb(1, 2, 3)")
+                        page.wait_for_timeout(300)
+                        self.obs["react_pending"] = page.locator(
+                            "#dpb-react-editor-root .dpb-react-pending-count"
+                        ).inner_text()
+                        self.obs["react_color"] = proto_frame.locator(
+                            "#hdr"
+                        ).evaluate("el => el.style.color")
+                        # Layout property: proves the batch distinguishes a
+                        # layout change from a style change (T-107 kinds).
+                        page.locator(
+                            '#dpb-react-editor-root .dpb-react-field[data-property="padding"] input'
+                        ).fill("21px")
+                        page.wait_for_timeout(300)
+                        self.obs["react_pending_layout"] = page.locator(
+                            "#dpb-react-editor-root .dpb-react-pending-count"
+                        ).inner_text()
+                        self.obs["react_padding"] = proto_frame.locator(
+                            "#hdr"
+                        ).evaluate("el => el.style.padding")
+                        self.obs["react_batch"] = json.loads(
+                            page.evaluate(
+                                "() => document.getElementById("
+                                "'dpb-visual-edits-json').value"
+                            )
+                        )
+                        page.click("#dpb-react-editor-root button")
+                        page.wait_for_timeout(300)
+                        self.obs["react_pending_after_undo"] = page.locator(
+                            "#dpb-react-editor-root .dpb-react-pending-count"
+                        ).inner_text()
+                        page.click("#dpb-react-editor-root button")
+                        page.wait_for_timeout(300)
+                        self.obs["react_pending_after_undo2"] = page.locator(
+                            "#dpb-react-editor-root .dpb-react-pending-count"
+                        ).inner_text()
+                        page.click("#dpb-tab-annotations")
+                        page.wait_for_timeout(200)
+
                         # --- #58 collapse the inspector; the pick tool stays on
                         page.click("#dpb-inspector-close")
                         page.wait_for_timeout(250)
@@ -373,6 +424,19 @@ class _PlaywrightPinSyncAdapter:
             raise self.error
 
 
+def _batch_kinds(batch: object) -> list[str]:
+    if not isinstance(batch, dict):
+        return []
+    return [str(e.get("kind")) for e in (batch.get("edits") or [])]
+
+
+def _batch_viewport(batch: object) -> str:
+    if not isinstance(batch, dict):
+        return ""
+    edits = batch.get("edits") or []
+    return str(edits[0].get("viewport")) if edits else ""
+
+
 def main():
     failures = []
     adapter = _PlaywrightPinSyncAdapter()
@@ -408,6 +472,30 @@ def main():
         failures.append(
             "S2: toggling pin on must sync into the bridge, intercept "
             "iframe clicks immediately, and open the in-context draft popover"
+        )
+
+    react_ok = (
+        "#hdr" in str(obs.get("react_selection", ""))
+        and str(obs.get("react_pending", "")).startswith("1 ")
+        and obs.get("react_color") == "rgb(1, 2, 3)"
+        and str(obs.get("react_pending_layout", "")).startswith("2 ")
+        and obs.get("react_padding") == "21px"
+        and str(obs.get("react_pending_after_undo", "")).startswith("1 ")
+        and str(obs.get("react_pending_after_undo2", "")).startswith("0 ")
+        and _batch_kinds(obs.get("react_batch")) == ["style", "layout"]
+        and _batch_viewport(obs.get("react_batch")) == "desktop"
+    )
+    print(
+        f"  T-106 React editor: selection={obs.get('react_selection')!r} "
+        f"pending={obs.get('react_pending')!r} color={obs.get('react_color')!r} "
+        f"after_undo={obs.get('react_pending_after_undo')!r}/"
+        f"{obs.get('react_pending_after_undo2')!r} "
+        f"kinds={_batch_kinds(obs.get('react_batch'))} "
+        f"-> {'OK' if react_ok else 'FAIL'}")
+    if not react_ok:
+        failures.append(
+            "T-106: React inspector must receive selection, apply one pending "
+            "style edit, and undo it without duplicating the batch"
         )
 
     collapse_ok = (

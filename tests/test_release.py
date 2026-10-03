@@ -7,6 +7,7 @@ bit-rotting the tag/release-notes assertions.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -136,6 +137,14 @@ class ReleaseGateTests(unittest.TestCase):
             ROOT / CURRENT_NOTES_REL,
             self.root / CURRENT_NOTES_REL,
         )
+        self.authorization = self.root / "docs/adr/0045-external-evidence-spend-gate.md"
+        self.authorization.parent.mkdir(parents=True)
+        self.freeze = (ROOT / "docs/adr/0045-external-evidence-spend-gate.md").read_text(encoding="utf-8")
+        self.record = {
+            "tag": CURRENT_TAG, "decision": "approved",
+            "authority": "maintainer", "reason": "Fixture-only release decision",
+        }
+        self.write_authorization(self.record)
         _run("git", "init", cwd=self.root)
         _run("git", "config", "user.email", "release-test@example.com", cwd=self.root)
         _run("git", "config", "user.name", "Release Test", cwd=self.root)
@@ -148,6 +157,95 @@ class ReleaseGateTests(unittest.TestCase):
 
     def release(self, *args: str) -> subprocess.CompletedProcess[str]:
         return _run(sys.executable, str(self.root / "scripts" / "release.py"), *args, cwd=self.root)
+
+    def write_authorization(self, record: object) -> None:
+        self.authorization.write_text(
+            self.freeze + "\n```release-authorization\n"
+            + json.dumps(record) + "\n```\n", encoding="utf-8",
+        )
+
+    def assert_no_tag(self) -> None:
+        tags = _run("git", "tag", "-l", CURRENT_TAG, cwd=self.root)
+        self.assertEqual(tags.returncode, 0, tags.stderr)
+        self.assertEqual(tags.stdout.strip(), "")
+
+    def test_authorization_freeze_without_record_refuses(self) -> None:
+        self.authorization.write_text(self.freeze, encoding="utf-8")
+        result = self.release("--checks", "tag", "--apply")
+        print(result.stdout)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("release-authorization-missing", result.stdout)
+        self.assert_no_tag()
+
+    def test_authorization_explicit_record_allows_dry_run(self) -> None:
+        result = self.release("--checks", "tag")
+        print(result.stdout)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("release-authorization-approved", result.stdout)
+        self.assertIn("RELEASE GATE PASSED", result.stdout)
+        self.assert_no_tag()
+
+    def test_authorization_matching_content_sha256_passes(self) -> None:
+        head = _run("git", "rev-parse", "HEAD", cwd=self.root)
+        self.assertEqual(head.returncode, 0, head.stderr)
+        self.write_authorization({**self.record, "contentSha256": hashlib.sha256(
+            head.stdout.strip().encode("ascii")).hexdigest()})
+        result = self.release("--checks", "tag")
+        print(result.stdout)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("release-authorization-content-bound", result.stdout)
+        self.assertIn("release-authorization-approved", result.stdout)
+        self.assertNotIn("WARN", result.stdout)
+        self.assert_no_tag()
+
+    def test_authorization_mismatched_content_sha256_refuses(self) -> None:
+        self.write_authorization({**self.record, "contentSha256": "0" * 64})
+        result = self.release("--checks", "tag", "--apply")
+        print(result.stdout)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("release-authorization-content-mismatch", result.stdout)
+        self.assertNotIn("release-authorization-approved", result.stdout)
+        self.assert_no_tag()
+
+    def test_authorization_without_content_sha256_warns_and_passes(self) -> None:
+        result = self.release("--checks", "tag")
+        print(result.stdout)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("WARN  release-authorization-content-unbound", result.stdout)
+        self.assertIn("release-authorization-approved", result.stdout)
+        self.assert_no_tag()
+
+    def test_authorization_invalid_content_sha256_refuses(self) -> None:
+        for value in (None, 123, "", "not-a-digest", "g" * 64):
+            with self.subTest(value=value):
+                self.write_authorization({**self.record, "contentSha256": value})
+                result = self.release("--checks", "tag", "--apply")
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn("release-authorization-content-invalid", result.stdout)
+                self.assert_no_tag()
+
+    def test_authorization_invalid_records_refuse(self) -> None:
+        for record in ({}, [], {**self.record, "reason": " "},
+                       {**self.record, "decision": "pending"},
+                       {**self.record, "tag": "v99.99.99"}):
+            with self.subTest(record=record):
+                self.write_authorization(record)
+                result = self.release("--checks", "tag", "--apply")
+                print(result.stdout)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn("release-authorization-invalid", result.stdout)
+                self.assert_no_tag()
+
+    def test_authorization_malformed_record_refuses(self) -> None:
+        self.authorization.write_text(
+            self.freeze + "\n```release-authorization\n{broken\n```\n",
+            encoding="utf-8",
+        )
+        result = self.release("--checks", "tag", "--apply")
+        print(result.stdout)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("release-authorization-invalid", result.stdout)
+        self.assert_no_tag()
 
     def test_untracked_file_blocks_release_by_default(self) -> None:
         (self.root / "untracked.txt").write_text("not released\n", encoding="utf-8")

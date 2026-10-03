@@ -39,6 +39,8 @@ from design_playbook.mcp.preview.owned_browser import (  # noqa: F401
     _screen_size,
 )
 from design_playbook.mcp.preview.pin_bridge import BRIDGE_SCRIPT
+from design_playbook.mcp.preview.visual_batch import VisualBatchError, normalize_visual_batch
+from design_playbook.mcp.preview.live_route import observe_visual_source, validate_live_route_url
 from design_playbook.mcp.util import log as _log
 
 __all__ = [
@@ -240,6 +242,19 @@ def _parse_anchors(raw: str, round_n: int = 0) -> list[dict[str, Any]]:
     return out[:40]
 
 
+def _parse_visual_edits(raw: str, source_hash: str, route_url: str = "") -> dict[str, Any]:
+    """Parse pending React/WebMCP edits; malformed batches fail closed."""
+    if not raw or not raw.strip():
+        return normalize_visual_batch({}, source_hash=source_hash, route_url=route_url)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise VisualBatchError("visual_edits_json is invalid JSON") from exc
+    if isinstance(data, dict) and data.get("edits") and (not data.get("sourceHash") or "routeUrl" not in data):
+        raise VisualBatchError("visual edit batch is missing its source binding")
+    return normalize_visual_batch(data, source_hash=source_hash, route_url=route_url)
+
+
 def _parse_criteria_review(raw: str) -> list[dict[str, Any]]:
     if not raw or not raw.strip():
         return []
@@ -330,11 +345,15 @@ def _inject_token_fields(control_html: str, token: str, round_n: int) -> str:
     )
 
 
-def _build_parent_page(prototype_html: str, control_html: str) -> str:
+def _build_parent_page(
+    prototype_html: str, control_html: str, *, live_route_url: str = "",
+    visual_binding: dict[str, str] | None = None,
+) -> str:
     """Build the trusted parent document (G5 trust boundary).
 
     The parent renders only the control bar; the prototype is isolated inside
-    ``<iframe sandbox="allow-scripts" srcdoc="...">``. ``allow-same-origin`` is
+    a sandboxed iframe: srcdoc for artifacts, src for an explicitly opted-in
+    loopback live route whose host embeds the bridge. ``allow-same-origin`` is
     deliberately omitted so the iframe is treated as a unique opaque origin and
     prototype scripts cannot reach the parent DOM — where the one-time decision
     token lives as a hidden form field.
@@ -359,7 +378,14 @@ def _build_parent_page(prototype_html: str, control_html: str) -> str:
     # document, restoring the original <script>...</script> blocks. This is the
     # attribute-escaping context (safe); it is NOT the inline-<script> context
     # where </script> would need splitting.
-    srcdoc = html.escape(prototype_html + BRIDGE_SCRIPT, quote=True)
+    live_route_url = validate_live_route_url(live_route_url) if live_route_url else ""
+    frame_source = ('src="' + html.escape(live_route_url, quote=True) if live_route_url else
+                    'srcdoc="' + html.escape(prototype_html + BRIDGE_SCRIPT, quote=True))
+    visual_binding = visual_binding or {
+        "sourceHash": prototype_html_digest(prototype_html.encode("utf-8")),
+        "routeUrl": live_route_url,
+    }
+    binding_script = "<script>window.DPB_VISUAL_BINDING = " + json.dumps(visual_binding).replace("<", "\\u003c") + ";</script>"
     # String concatenation (not .format): the CSS braces are literal here, and
     # concatenation sidesteps the format()-on-HTML brace-escaping trap.
     return (
@@ -374,9 +400,9 @@ def _build_parent_page(prototype_html: str, control_html: str) -> str:
         # shell paints first without a full-viewport flash.
         ".dpb-proto-frame{display:none;}"
         "</style></head><body>"
-        + control_html
-        + '<iframe class="dpb-proto-frame" sandbox="allow-scripts" srcdoc="'
-        + srcdoc
+        + binding_script + control_html
+        + '<iframe class="dpb-proto-frame" sandbox="allow-scripts" '
+        + frame_source
         + '" title="' + html.escape(t("prototype_label"), quote=True) + '"></iframe>'
         + "</body></html>"
     )
@@ -408,6 +434,7 @@ def collect_review(
     browser_adapter: BrowserInteraction | None = None,
     *,
     criteria: list[dict[str, str]] | None = None,
+    live_route_url: str = "",
 ) -> dict[str, Any]:
     """Serve prototype + control form; block until user submits or aborts.
 
@@ -417,6 +444,7 @@ def collect_review(
     from durable run artifacts by ``mcp/evidence/handoff.py``; it shares
     no process, port, or lifecycle with this session.
     """
+    live_route_url = validate_live_route_url(live_route_url) if live_route_url else ""
     adapter = browser_adapter or OwnedBrowserAdapter()
     result: dict[str, Any] = {
         "choice": "",
@@ -443,7 +471,9 @@ def collect_review(
     # fetch('/decide', ...) arrives without proof and fails closed.
     token = _generate_decision_token()
     control = _inject_token_fields(control, token, round_n)
-    page = _build_parent_page(prototype_html, control)
+    visual_hash = observe_visual_source(prototype, live_route_url) if live_route_url else prototype_html_hash
+    page = _build_parent_page(prototype_html, control, live_route_url=live_route_url,
+                              visual_binding={"sourceHash": visual_hash, "routeUrl": live_route_url})
     session = _DecisionSession(round_n, token)
 
     class Handler(BaseHTTPRequestHandler):
@@ -483,6 +513,18 @@ def collect_review(
             criteria_review = _parse_criteria_review(
                 (form.get("criteria_json") or ["[]"])[0]
             )
+            visual_edits: dict[str, Any] = normalize_visual_batch(
+                {}, source_hash=prototype_html_hash
+            )
+            visual_edits_error = ""
+            try:
+                visual_edits = _parse_visual_edits(
+                    (form.get("visual_edits_json") or [""])[0],
+                    observe_visual_source(prototype, live_route_url),
+                    live_route_url,
+                )
+            except (VisualBatchError, OSError) as exc:
+                visual_edits_error = str(exc)
             # G5: validate the one-time decision token before trusting choice.
             # A sandboxed prototype cannot read the hidden token, so a forged
             # fetch('/decide', ...) arrives without it and fails closed.
@@ -505,6 +547,8 @@ def collect_review(
                             "aborted": True,
                             "anchors": anchors,
                             "criteria_review": criteria_review,
+                            "visual_edits": visual_edits,
+                            "visual_edits_error": visual_edits_error,
                             "rejected": True,
                             "rejection": session.last_rejection,
                         }
@@ -517,9 +561,15 @@ def collect_review(
                         "aborted": choice == "__abort__",
                         "anchors": anchors,
                         "criteria_review": criteria_review,
+                        "visual_edits": visual_edits,
+                        "visual_edits_error": visual_edits_error,
                     }
                 )
             reply = _done_page_html()
+            if visual_edits_error:
+                # Keep a rejection visible; the successful response auto-closes.
+                reply = ('<!doctype html><meta charset="utf-8"><h1>' + t("visual_stale") +
+                         '</h1><p role="alert">' + html.escape(visual_edits_error) + "</p>").encode("utf-8")
             self.close_connection = True
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")

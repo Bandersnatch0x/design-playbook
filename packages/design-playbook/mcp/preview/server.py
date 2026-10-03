@@ -29,6 +29,7 @@ if str(_PKG_ROOT) not in sys.path:
 from design_playbook.mcp._transport import ToolError, serve_stdio  # noqa: E402
 
 from design_playbook.mcp.preview import review_session  # noqa: E402
+from design_playbook.mcp.preview.live_route import validate_live_route_url  # noqa: E402
 from design_playbook.mcp.preview.i18n import (  # noqa: E402
     CONFIRM_LABELS,
     ZH,
@@ -58,6 +59,10 @@ def _tool_schema() -> dict[str, Any]:
                 "path": {
                     "type": "string",
                     "description": "Absolute path to prototype HTML (preferred).",
+                },
+                "live_route_url": {
+                    "type": "string",
+                    "description": "Opt-in loopback HTTP(S) route; host must embed build_visual_edit_bridge_script(). No source writes.",
                 },
                 "html": {
                     "type": "string",
@@ -102,6 +107,8 @@ def _validate_preview_args(args: dict[str, Any]) -> tuple[str | None, str | None
     validation shape is testable in isolation. Returns
     (path_arg, html, summary, round_n, report_ref, options).
     """
+    if "live_route_url" in args:
+        validate_live_route_url(args["live_route_url"])
     path_arg = args.get("path")
     html = args.get("html")
     summary = args.get("summary")
@@ -149,6 +156,7 @@ def handle_preview_prototype(args: dict[str, Any]) -> dict[str, Any]:
             report_ref=report_ref,
             options=options,
             collect=review_session.collect_review,
+            live_route_url=args.get("live_route_url", ""),
         )
     except PreviewTransactionError as exc:
         raise ToolError(str(exc), exc.details) from exc
