@@ -250,6 +250,7 @@
         var hidden = document.getElementById("dpb-visual-edits-json");
         hidden.value = JSON.stringify(window.DPB_VISUAL_EDIT_BATCH);
         document.getElementById("dpb-visual-count").textContent = String(pending.length);
+        document.getElementById("dpb-tab-visual").classList.toggle("is-pending", pending.length > 0);
       }, [pending, stale]);
       React.useEffect(function () {
         var modelContext = navigator.modelContext;
@@ -287,7 +288,7 @@
       }
       return h("section", { className: "dpb-react-editor", "aria-label": t("visual_title") },
         h("div", { className: "dpb-react-editor-head" }, h("strong", null, t("visual_title")),
-          h("span", { className: "dpb-react-badge" }, webmcp ? "WebMCP" : t("visual_bridge"))),
+          h("span", { className: "dpb-react-badge" + (webmcp ? " is-on" : "") }, webmcp ? "WebMCP" : t("visual_bridge"))),
         h("div", { className: "dpb-react-route" }, binding.routeUrl || t("visual_artifact")),
         presenceStatus && h("div", { className: "dpb-react-presence", role: "status",
           "aria-live": "polite", "data-state": presenceStatus },
@@ -300,10 +301,10 @@
           }))),
         h("div", { className: "dpb-react-selection" }, selected ? selected.selector : t("visual_select")),
         h("div", { className: "dpb-react-actions" },
-          h("button", { type: "button", disabled: !ready || stale || busy || !history.length, onClick: function () { replay("undo"); } }, t("visual_undo")),
-          h("button", { type: "button", disabled: !ready || stale || busy || !future.length, onClick: function () { replay("redo"); } }, t("visual_redo")),
+          h("button", { type: "button", disabled: !ready || stale || busy || !history.length, "aria-label": t("visual_undo"), onClick: function () { replay("undo"); } }, t("visual_undo")),
+          h("button", { type: "button", disabled: !ready || stale || busy || !future.length, "aria-label": t("visual_redo"), onClick: function () { replay("redo"); } }, t("visual_redo")),
           h("span", { className: "dpb-react-pending-count" }, t("visual_pending").replace("{n}", pending.length))),
-        h("p", { className: "dpb-react-diagnostic", role: "status" }, stale ? t("visual_stale") : diagnostic ? t(diagnostic) : ""),
+        h("p", { className: "dpb-react-diagnostic", role: "status", "data-stale": stale }, stale ? t("visual_stale") : diagnostic ? t(diagnostic) : ""),
         h("div", { className: "dpb-react-fields" }, FIELDS.map(function (field) {
           var property = field[0];
           return h("label", { className: "dpb-react-field", key: property, "data-property": property },

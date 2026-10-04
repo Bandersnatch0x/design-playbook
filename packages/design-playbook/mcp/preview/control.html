@@ -146,12 +146,12 @@
     <!-- React visual editor: direct preview edits stay pending until handoff.
          Its own rail tab keeps it out of the annotations/criteria flow, so the
          inspector never overlaps (or steals pointer events from) those views. -->
-    <div class="dpb-rail-view" id="dpb-visual-view" role="tabpanel" hidden>
+    <div class="dpb-rail-view" id="dpb-visual-view" role="tabpanel" aria-labelledby="dpb-tab-visual" hidden>
       <div id="dpb-react-editor-root"></div>
     </div>
 
     <!-- annotations view -->
-    <div class="dpb-rail-view" id="dpb-annotations-view" role="tabpanel">
+    <div class="dpb-rail-view" id="dpb-annotations-view" role="tabpanel" aria-labelledby="dpb-tab-annotations">
       <div class="dpb-filter-tabs" role="tablist">
         <button type="button" id="dpb-filter-all" aria-pressed="true"><span class="i18n" data-i18n="filter_all">{t_filter_all}</span> <span class="dpb-filter-n" id="dpb-filter-n-all">0</span></button>
         <button type="button" id="dpb-filter-pending" aria-pressed="false"><span class="i18n" data-i18n="filter_pending">{t_filter_pending}</span> <span class="dpb-filter-n" id="dpb-filter-n-pending">0</span></button>
@@ -161,7 +161,7 @@
     </div>
 
     <!-- criteria view -->
-    <div class="dpb-rail-view" id="dpb-spec-view" role="tabpanel" hidden>
+    <div class="dpb-rail-view" id="dpb-spec-view" role="tabpanel" aria-labelledby="dpb-tab-spec" hidden>
       <div class="dpb-spec-list" id="dpb-spec-list">
         {criteria_html}
       </div>

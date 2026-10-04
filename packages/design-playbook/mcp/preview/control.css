@@ -731,6 +731,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 }
 /* ---- in-context annotation popover (REC-01) ---- */
 .dpb-anno-popover {
+  max-height: calc(100vh - 24px); overflow-y: auto;
   position: fixed; z-index: 1200; width: 280px;
   padding: 10px; border-radius: 12px;
   background: var(--dpb-overlay, var(--dpb-elev));
@@ -845,11 +846,14 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   border: 1px solid var(--dpb-line); background: var(--dpb-elev);
   color: var(--dpb-soft); border-radius: 6px; padding: 4px 7px; cursor: pointer;
 }
+.dpb-react-actions button:focus-visible { outline: 2px solid var(--dpb-ring-accent); outline-offset: 1px; }
 .dpb-react-actions button:disabled { opacity: .45; cursor: default; }
+.dpb-rail-tab.is-pending .dpb-filter-n { color: var(--dpb-accent); font-weight: 700; }
 .dpb-react-pending-count { margin-left: auto; color: var(--dpb-accent-soft); font-size: 11px; }
 .dpb-react-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.dpb-react-field { display: flex; flex-direction: column; gap: 3px; color: var(--dpb-soft); font-size: 10px; }
+.dpb-react-field { display: flex; flex-direction: column; gap: 3px; color: var(--dpb-soft); font-size: 11px; }
 .dpb-react-field input {
+  overflow: hidden; text-overflow: ellipsis;
   min-width: 0; border: 1px solid var(--dpb-line); border-radius: 5px;
   background: var(--dpb-surface); color: var(--dpb-ink); padding: 4px 5px; font-size: 11px;
 }
@@ -857,6 +861,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-react-help { margin: 8px 0 0; color: var(--dpb-muted); font-size: 10px; line-height: 1.4; }
 
 .dpb-react-diagnostic { color: var(--dpb-soft); font-size: 12px; }
+.dpb-react-diagnostic[data-stale="true"] { color: var(--dpb-danger); }
 .dpb-react-diagnostic:empty { display: none; }
 
 .dpb-react-route { overflow-wrap: anywhere; font-size: 11px; color: var(--dpb-muted); }

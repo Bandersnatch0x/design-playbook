@@ -284,6 +284,7 @@ class StateMachineTest(BrowserTestCase):
             )
             self.assertNotIn("rgba(0, 0, 0, 0)", background)  # no white flash
         self.expect_ready()  # the delayed response still resolves
+        expect(self.page.locator("#main")).to_have_attribute("aria-busy", "false")
 
     def test_no_token_state(self) -> None:
         self.page.goto(self.console.url())
@@ -521,6 +522,9 @@ class AccessibilityTest(BrowserTestCase):
         self.assertEqual(self.page.locator("#main").get_attribute("role"), "status")
         self.assertEqual(self.page.locator("#main").get_attribute("aria-live"),
                          "polite")
+        expect(self.page.locator("#lang-toggle-button")).to_have_attribute(
+            "aria-label", "Switch language"
+        )
         # Error views are alerts.
         self.page.goto(self.console.url())
         self.assertEqual(self.page.locator("#view-no-token").get_attribute("role"),
