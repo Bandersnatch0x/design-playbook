@@ -163,6 +163,20 @@
         return function () { observer.disconnect(); };
       }, []);
       React.useEffect(function () {
+        function onHistoryKey(event) {
+          if (!(event.ctrlKey || event.metaKey) || event.altKey || event.isComposing ||
+              event.defaultPrevented || mount.offsetParent === null) return;
+          var key = event.key.toLowerCase();
+          if (key !== "z" && key !== "y") return;
+          var state = current.current;
+          if (!state.ready || state.stale || !state.selected || request.current) return;
+          event.preventDefault();
+          replay(key === "y" || event.shiftKey ? "redo" : "undo");
+        }
+        window.addEventListener("keydown", onHistoryKey);
+        return function () { window.removeEventListener("keydown", onHistoryKey); };
+      }, []);
+      React.useEffect(function () {
         var nonce = 0, lastAck = 0;
         function ping() {
           if (lastAck && Date.now() - lastAck > 2500) disconnected();
@@ -282,7 +296,8 @@
         };
       }, []);
       function replay(action) {
-        var entries = action === "undo" ? history : future;
+        var state = current.current;
+        var entries = action === "undo" ? state.history : state.future;
         var entry = entries[entries.length - 1];
         if (entry) applyStyle(entry.property, action === "undo" ? entry.oldValue : entry.newValue, action, entry);
       }

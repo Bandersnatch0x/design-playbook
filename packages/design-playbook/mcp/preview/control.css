@@ -414,6 +414,10 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   font-weight: 600; padding: 0 12px; transition: all var(--dpb-duration-spring) var(--dpb-ease-spring);
 }
 .dpb-approve-btn:hover { background: var(--dpb-elev-hover); color: var(--dpb-ink); }
+.dpb-approve-btn > span:not(.dpb-approve-dot) {
+  min-width: 0; max-width: clamp(240px, 30vw, 280px);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 /* DEF-04: the drawer trigger carries .dpb-btn-primary too, which would paint
    the muted state accent — re-assert the shared muted look at 2-class weight. */
 .dpb-approve-btn.dpb-approve-muted { background: var(--dpb-elev); color: var(--dpb-muted); border-color: var(--dpb-line); box-shadow: none; }
@@ -433,6 +437,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   box-shadow: 0 0 6px var(--dpb-accent-ink);
   animation: dpb-ping 1.8s var(--dpb-ease-pulse) infinite;
 }
+.dpb-approve-btn.dpb-approve-muted .dpb-approve-dot { animation: none; }
 .dpb-approve-btn.dpb-approve-ready kbd { background: var(--dpb-highlight); color: var(--dpb-accent-ink); border-color: transparent; border-bottom-width: 1px; }
 .dpb-approve-btn kbd { color: var(--dpb-muted); }
 .dpb-approve-btn.is-shaking { animation: dpb-shake 300ms ease; }
@@ -855,7 +860,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-react-field input {
   overflow: hidden; text-overflow: ellipsis;
   min-width: 0; border: 1px solid var(--dpb-line); border-radius: 5px;
-  background: var(--dpb-surface); color: var(--dpb-ink); padding: 4px 5px; font-size: 11px;
+  background: var(--dpb-surface); color: var(--dpb-ink); padding: 4px 5px; font-size: 11px; font-family: inherit;
 }
 .dpb-react-field input:focus { outline: 2px solid var(--dpb-ring-accent); outline-offset: 1px; }
 .dpb-react-help { margin: 8px 0 0; color: var(--dpb-muted); font-size: 10px; line-height: 1.4; }
