@@ -17,6 +17,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from host import ASSET_MANIFEST, source_files, source_hash, source_path as _source_path
+from presence import user_identity
 
 from design_playbook.mcp.preview.live_route import observe_visual_source, validate_live_route_url
 from design_playbook.mcp.preview.visual_batch import normalize_visual_batch
@@ -182,33 +183,49 @@ class PostWriteObservationError(HostWriteError):
 
 
 @contextmanager
-def _source_lock(root: Path):
+def _source_lock(root: Path, identity: str, edits: list[dict]):
     """Serialize cooperative appliers; never infer that an old lock is safe to steal."""
     lock = root.parent / ("." + root.name + ".applier.lock")
     marker = json.dumps({"owner": "host-applier", "pid": os.getpid(),
-                         "nonce": uuid.uuid4().hex, "sourceRoot": str(root)}).encode("utf-8")
+                         "nonce": uuid.uuid4().hex, "sourceRoot": str(root),
+                         "userId": identity, "selectors": sorted({e["locator"] for e in edits}),
+                         "pendingEdits": edits}).encode("utf-8")
+    if len(marker) > 262144:
+        raise ValueError("applier ownership marker exceeds 256 KiB")
+    staged = _stage(lock, marker)
     try:
-        descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        # Publish a complete owner atomically, without replacing another owner.
+        os.link(staged, lock)
     except FileExistsError as exc:
         error = HostWriteError("lock", "applier-lock-exists", [], {})
         error.args = ("applier-lock-exists; active or stale locks require explicit inspection and removal",)
         error.details["lockPath"] = str(lock)
+        error.details["requestedBy"] = identity
         try:
-            if lock.is_symlink() or lock.stat().st_size > 4096:
+            if lock.is_symlink() or lock.stat().st_size > 262144:
                 raise ValueError("lock owner marker is linked or oversized")
             owner = json.loads(lock.read_bytes())
             if not isinstance(owner, dict):
                 raise ValueError("lock owner marker is not an object")
             error.details["lockOwner"] = owner
+            pending = owner.get("pendingEdits", [])
+            if not isinstance(pending, list) or any(not isinstance(e, dict) or
+                    any(not isinstance(e.get(key), str) for key in ("locator", "property", "oldValue", "newValue"))
+                    for e in pending):
+                raise ValueError("lock pending edits are not a list of objects")
+            requested = {(e["locator"], e["property"]) for e in edits}
+            error.details["conflicts"] = [e for e in pending
+                                          if (e.get("locator"), e.get("property")) in requested]
+            error.args = (f"applier-lock-exists; held by {owner.get('userId', owner.get('owner'))} "
+                          f"(pid={owner.get('pid')}); pending edits: {json.dumps(pending)}; "
+                          "active or stale locks require explicit inspection and removal",)
         except (OSError, ValueError) as owner_error:
             # An incomplete, corrupt or unreadable owner marker still holds the lock.
             error.details["lockOwnerError"] = str(owner_error)
         raise error from exc
+    finally:
+        staged.unlink()
     try:
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(marker)
-            stream.flush()
-            os.fsync(stream.fileno())
         yield
     finally:
         # Never remove a replacement lock belonging to a different owner.
@@ -218,12 +235,20 @@ def _source_lock(root: Path):
 
 
 def apply(root: Path, handoff: Path, candidate: Path, route: str, *,
-          interrupt_at: str | None = None) -> dict:
+          interrupt_at: str | None = None, user_id: str | None = None) -> dict:
     if interrupt_at is not None and interrupt_at not in INTERRUPT_POINTS:
         raise ValueError("unknown fixture interruption point")
     root = root.resolve()
+    identity = user_identity(user_id if user_id is not None else f"user-{os.getpid()}")
+    record = json.loads(handoff.read_text(encoding="utf-8"))
+    batch = record["visual_edits"]
+    # Metadata is the requested edit, not source-mapping or approval authority.
+    # The existing review inside the lock still validates the actual source.
+    normalized = normalize_visual_batch(batch, source_hash=batch["sourceHash"], route_url=route)
+    edits = [{key: edit[key] for key in ("locator", "property", "oldValue", "newValue")}
+             for edit in normalized["edits"]]
     try:
-        with _source_lock(root):
+        with _source_lock(root, identity, edits):
             return _apply_locked(root, handoff, candidate, route, interrupt_at)
     except HostWriteError as exc:
         if exc.details["phase"] == "interruption":
@@ -271,6 +296,7 @@ def main() -> int:
     parser.add_argument("--handoff", required=True, type=Path)
     parser.add_argument("--candidate", required=True, type=Path)
     parser.add_argument("--route-url", required=True)
+    parser.add_argument("--user-id", help="local display identity for conflict diagnostics; not authentication")
     parser.add_argument("--interrupt-at", choices=INTERRUPT_POINTS,
                         help="controlled HOST fixture abort; no OS/process crash guarantee")
     args = parser.parse_args()
@@ -281,7 +307,7 @@ def main() -> int:
             result, _ = review(args.root, args.handoff, args.candidate, args.route_url)
         else:
             result = apply(args.root, args.handoff, args.candidate, args.route_url,
-                           interrupt_at=args.interrupt_at)
+                           interrupt_at=args.interrupt_at, user_id=args.user_id)
     except (OSError, ValueError, KeyError) as exc:
         error = {"owner": "host-applier", "pluginWritesSource": False,
                  "status": "error", "error": str(exc)}

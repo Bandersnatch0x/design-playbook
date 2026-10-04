@@ -761,7 +761,7 @@ class VisualEditorRegressionTests(unittest.TestCase):
             {"name": "preview_get_selection", "inputSchema": {"type": "object", "properties": {}},
              "annotations": {"readOnlyHint": True, "consequentialHint": False}},
             {"name": "preview_set_style", "inputSchema": {
-                "type": "object", "properties": {"property": {"type": "string"}, "value": {"type": "string"}},
+                "type": "object", "properties": {"property": {"type": "string", "pattern": "^[A-Za-z-]{1,64}$"}, "value": {"type": "string"}},
                 "required": ["property", "value"]},
              "annotations": {"readOnlyHint": False, "consequentialHint": False}},
             {"name": "preview_get_pending_edits", "inputSchema": {"type": "object", "properties": {}},
@@ -841,6 +841,65 @@ class VisualEditorRegressionTests(unittest.TestCase):
         self.assertEqual(self.page.evaluate("window.tools.preview_get_pending_edits.execute({}).edits"), self.edits())
         self.assertEqual(len(self.page.evaluate("window.registrations")), 3)
 
+    def test_optional_tool_execute_propagates_post_message_error(self) -> None:
+        self.open_editor(tools=True)
+        self.select("#a")
+        result = self.page.evaluate("""async () => {
+          const failure = new Error('bridge postMessage failed');
+          const frame = document.querySelector('iframe.dpb-proto-frame');
+          const contentWindow = frame.contentWindow;
+          let calls = 0;
+          Object.defineProperty(frame, 'contentWindow', {configurable: true, value: {
+            postMessage() { calls++; throw failure; }
+          }});
+          try {
+            const value = await window.tools.preview_set_style.execute({property: 'padding', value: '17px'});
+            return {resolved: true, value, calls};
+          } catch (error) {
+            return {resolved: false, sameError: error === failure, message: error.message, calls};
+          } finally {
+            Object.defineProperty(frame, 'contentWindow', {configurable: true, value: contentWindow});
+          }
+        }""")
+        self.assertEqual(result, {
+            "resolved": False, "sameError": True, "message": "bridge postMessage failed", "calls": 1,
+        })
+        self.assertEqual(self.edits(), [])
+        self.assertEqual(self.frame.locator("#a").evaluate("el => el.style.padding"), "")
+
+    def test_optional_tool_schema_rejects_unsafe_properties(self) -> None:
+        self.open_editor(tools=True)
+        schema = self.page.evaluate("window.tools.preview_set_style.inputSchema")
+        self.assertEqual(schema["type"], "object")
+        self.assertEqual(schema["required"], ["property", "value"])
+        property_schema = schema["properties"]["property"]
+        self.assertEqual(property_schema["type"], "string")
+        self.assertIn("pattern", property_schema)
+        # JSON Schema patterns use ECMAScript regex semantics; exercise the
+        # registered constraint in the browser, not a copied test-side rule.
+        cases = [
+            ("padding", True), ("background-color", True), ("font-size", True),
+            ("a" * 64, True), ("a" * 65, False), ("", False),
+            ("../padding", False), ("..", False), (r"..\padding", False),
+            ("file:padding", False), ("about:blank", False),
+            ("javascript:padding", False), ("C:/padding", False),
+            ("/padding", False), ("padding;color", False),
+        ]
+        for property_name, allowed in cases:
+            with self.subTest(property=property_name):
+                self.assertEqual(self.page.evaluate(
+                    "property => new RegExp(window.tools.preview_set_style.inputSchema.properties.property.pattern).test(property)",
+                    property_name,
+                ), allowed)
+        # Direct callback callers can bypass host schema validation; the
+        # existing bridge must still refuse traversal without creating edits.
+        self.select("#a")
+        result = self.page.evaluate(
+            "window.tools.preview_set_style.execute({property:'../padding',value:'17px'})")
+        self.assertEqual(result, {"accepted": False, "error": "visual_rejected"})
+        self.assertEqual(self.edits(), [])
+        self.assertEqual(self.frame.locator("#a").evaluate("el => el.style.padding"), "")
+
     def test_optional_tools_register_once_and_use_the_same_batch(self) -> None:
         self.open_editor(tools=True)
         self.select("#a")
@@ -857,7 +916,7 @@ class VisualEditorRegressionTests(unittest.TestCase):
             self.assertEqual(self.page.evaluate("name => window.tools[name].annotations", name),
                              {"readOnlyHint": True, "consequentialHint": False})
         self.assertEqual(self.page.evaluate("window.tools.preview_set_style.inputSchema.properties"),
-                         {"property": {"type": "string"}, "value": {"type": "string"}})
+                         {"property": {"type": "string", "pattern": "^[A-Za-z-]{1,64}$"}, "value": {"type": "string"}})
         self.page.evaluate("window.tools.preview_set_style.execute({property:'padding',value:'17px'})")
         self.page.wait_for_timeout(100)
         self.assertEqual(self.frame.locator("#a").evaluate("el => el.style.padding"), "17px")

@@ -33,6 +33,9 @@
       var [busy, setBusy] = React.useState(false);
       var [webmcp, setWebmcp] = React.useState(false);
       var [locale, setLocale] = React.useState(root.lang);
+      var [presenceUsers, setPresenceUsers] = React.useState([]);
+      var [presenceStatus, setPresenceStatus] = React.useState("");
+      var presence = React.useRef(null);
       var current = React.useRef({}), request = React.useRef(null);
       var sequence = React.useRef(0), draftTimers = React.useRef({});
       var accepted = React.useRef({});
@@ -57,6 +60,17 @@
         }
         setBusy(false);
       }
+      function notifyPresence(type, selector, property) {
+        var connection = presence.current;
+        if (!connection || connection.source.readyState !== EventSource.OPEN) return;
+        fetch(connection.url, { method: "POST", credentials: "omit",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: connection.userId, type: type,
+            selector: selector, property: property || "" })
+        }).then(function (response) {
+          if (!response.ok) throw Error("Presence event refused: " + response.status);
+        }).catch(function () { setPresenceStatus("unavailable"); });
+      }
       function disconnected() {
         setReady(false);
         setSelected(null);
@@ -73,6 +87,7 @@
         }
         var id = ++sequence.current;
         var locator = entry ? entry.locator : state.selected.selector;
+        notifyPresence("user-editing-element", locator, property);
         setBusy(true);
         return new Promise(function (resolve) {
           request.current = { id: id, action: action || "edit", entry: entry, resolve: resolve,
@@ -95,6 +110,53 @@
         if (value === accepted.current[property]) return;
         applyStyle(property, value);
       }
+      React.useEffect(function () {
+        function close() {
+          if (presence.current) presence.current.source.close();
+          presence.current = null;
+          setPresenceUsers([]); setPresenceStatus("");
+        }
+        function advertise(event) {
+          if (event.source !== frame.contentWindow || !event.data || !event.data.dpbHostPresence ||
+              !binding.routeUrl || presence.current || mount.offsetParent === null) return;
+          // Host opt-in only. Never accept an endpoint supplied by the child or
+          // change iframe sandbox privileges to obtain presence.
+          var url = new URL("/_presence", binding.routeUrl), token = event.data.dpbHostPresence.token;
+          if (url.protocol !== "http:" || ["127.0.0.1", "localhost", "[::1]"].indexOf(url.hostname) < 0 ||
+              typeof token !== "string" || !/^[A-Za-z0-9_-]{32}$/.test(token)) return;
+          if (!window.EventSource) { setPresenceStatus("unavailable"); return; }
+          var userId = crypto.randomUUID(), name = "User " + userId.slice(0, 6);
+          url.searchParams.set("token", token);
+          var postUrl = url.href;
+          url.searchParams.set("user", userId); url.searchParams.set("name", name);
+          var source = new EventSource(url.href);
+          presence.current = { source: source, url: postUrl, userId: userId };
+          setPresenceStatus("connecting");
+          function update(message) {
+            try {
+              var data = JSON.parse(message.data);
+              if (!Array.isArray(data.users) || data.users.length > 8 || data.users.some(function (user) {
+                return !user || typeof user.userId !== "string" || typeof user.name !== "string" ||
+                  typeof user.selector !== "string" || typeof user.property !== "string";
+              })) throw Error("Invalid host presence");
+              setPresenceUsers(data.users); setPresenceStatus("connected");
+            } catch (error) {
+              source.close(); setPresenceUsers([]); setPresenceStatus("unavailable");
+            }
+          }
+          ["user-join", "user-leave", "user-editing-element", "user-committed-edit"].forEach(function (type) {
+            source.addEventListener(type, update);
+          });
+          source.onerror = function () { setPresenceUsers([]); setPresenceStatus("unavailable"); };
+        }
+        window.addEventListener("message", advertise);
+        frame.addEventListener("load", close);
+        window.addEventListener("pagehide", close);
+        return function () {
+          close(); window.removeEventListener("message", advertise);
+          frame.removeEventListener("load", close); window.removeEventListener("pagehide", close);
+        };
+      }, []);
       React.useEffect(function () {
         var observer = new MutationObserver(function () { setLocale(root.lang); });
         observer.observe(root, { attributes: true, attributeFilter: ["lang"] });
@@ -130,6 +192,7 @@
               setSelected(selection);
               accepted.current = snapshot(selection);
               setDrafts(accepted.current);
+              notifyPresence("user-editing-element", selection.selector, "");
             }
           }
           var rejected = data.dpbVisualEditRejected;
@@ -139,6 +202,8 @@
           }
           var change = data.dpbVisualEditChange, operation = request.current;
           if (!change || !operation || change.requestId !== operation.id) return;
+          // This event means bridge-acknowledged PREVIEW edit, never source apply.
+          notifyPresence("user-committed-edit", change.selector, change.property);
           clearTimeout(operation.timer); request.current = null; setBusy(false); setDiagnostic("");
           var state = current.current;
           var edit = { kind: LAYOUT.indexOf(change.property) >= 0 ? "layout" : "style",
@@ -195,7 +260,7 @@
             inputSchema: { type: "object", properties: {} },
             execute: function () { return current.current.selected || { selected: false }; } },
           { name: "preview_set_style", description: "Request one preview-only CSS edit",
-            inputSchema: { type: "object", properties: { property: { type: "string" }, value: { type: "string" } }, required: ["property", "value"] },
+            inputSchema: { type: "object", properties: { property: { type: "string", pattern: "^[A-Za-z-]{1,64}$" }, value: { type: "string" } }, required: ["property", "value"] },
             execute: function (input) { return applyStyle(String(input.property || ""), String(input.value || "")); } },
           { name: "preview_get_pending_edits", description: "Read pending Preview edits awaiting coding-agent review",
             inputSchema: { type: "object", properties: {} },
@@ -224,6 +289,15 @@
         h("div", { className: "dpb-react-editor-head" }, h("strong", null, t("visual_title")),
           h("span", { className: "dpb-react-badge" }, webmcp ? "WebMCP" : t("visual_bridge"))),
         h("div", { className: "dpb-react-route" }, binding.routeUrl || t("visual_artifact")),
+        presenceStatus && h("div", { className: "dpb-react-presence", role: "status",
+          "aria-live": "polite", "data-state": presenceStatus },
+          h("span", null, t("presence_" + presenceStatus)),
+          presenceStatus === "connected" && h("ul", null, presenceUsers.map(function (user) {
+            return h("li", { key: user.userId, "data-user-id": user.userId }, user.name,
+              presence.current && user.userId === presence.current.userId ? " " + t("presence_you") : "",
+              user.selector ? " · " + t("presence_editing") + " " + user.selector +
+                (user.property ? " · " + user.property : "") : "");
+          }))),
         h("div", { className: "dpb-react-selection" }, selected ? selected.selector : t("visual_select")),
         h("div", { className: "dpb-react-actions" },
           h("button", { type: "button", disabled: !ready || stale || busy || !history.length, onClick: function () { replay("undo"); } }, t("visual_undo")),

@@ -5,6 +5,39 @@ not plugin runtime or a source-mapping service. It needs the repository's Python
 package; the end-to-end tests also need the existing Playwright/Chromium
 installation. No network service or model invocation is required.
 
+## Bounded local presence proof
+
+Opening the **Visual edit** tab for this HOST opts the parent Preview into an
+ephemeral SSE channel at `/_presence`. Each open editor receives a random local
+display identity and lists other connected editors and their selected
+element/property. No cursor tracking, style synchronization, shared pending
+batch, account system or collaborative source editing is provided. Other hosts
+do not advertise the channel and are not probed. Closing an editor removes its
+presence after the next socket heartbeat detects disconnection (typically one
+to two seconds); this does not release an independently running applier's lock.
+
+The stdlib loopback server broadcasts `user-join`, `user-leave`,
+`user-editing-element` and `user-committed-edit`. **Committed here means an
+acknowledged preview-only edit, not a source write or source approval**; every
+event carries `scope: preview-only`. Membership and the bounded 64-event buffer
+are memory-only, with at most eight connections. Slow subscribers disconnect
+visibly; native EventSource reconnection obtains current membership. The random
+per-server capability, loopback Host/Origin checks and bounded JSON POST protect
+the endpoint; identities are display labels, not authentication against other
+local processes. Capability query values are omitted from access logs.
+
+The separate applier accepts `--user-id <local-display-id>` (default: a PID-based
+label). Its existing exclusive **root-wide** lock is the only source-write
+serialization authority: even disjoint edits are conservatively rejected.
+The atomically published owner marker includes PID, identity, requested
+selectors/properties and old/new values. A refusal includes the owner and exact
+overlapping requested edits as `conflicts`; values describe the pending request,
+not inferred source mappings or an already committed write. EOF/declined
+confirmation releases that applier's own marker so the next process can review
+and confirm normally. Crashed, corrupt or stale markers are never stolen.
+Presence loss does not authorize source writes; plugin `writesSource` remains
+false and all existing source-hash, confirmation and rollback gates remain.
+
 Copy `index.html`, `styles.css`, `palette.json` and `assets.json` into a disposable
 host source directory, then
 run `python packages/design-playbook/tests/fixtures/visual-edit-host/host.py
