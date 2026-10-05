@@ -232,7 +232,7 @@ def test_webmcp_badge_activates_success_style():
 @pytest.mark.parametrize("action", ["undo", "redo"])
 def test_history_buttons_have_names_and_keyboard_focus(action):
     assert f'"aria-label": t("visual_{action}")' in JS
-    assert "outline: 2px solid var(--dpb-ring-accent)" in rule(
+    assert "outline: 2px solid var(--dpb-accent)" in rule(
         ".dpb-react-actions button:focus-visible")
 
 
@@ -359,3 +359,144 @@ def test_round3_console_single_primary_compact_mobile_row(console_page):
         "els => els.map(el => el.getBoundingClientRect().toJSON())")
     assert abs(reload_box["y"] - refresh_box["y"]) <= 1
     assert refresh_box["x"] + refresh_box["width"] <= 320
+
+
+@pytest.fixture
+def pending_visual_edit(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    target = page.frame_locator("iframe.dpb-proto-frame").locator("#panel-title")
+    target.evaluate("el => el.click()")
+    page.keyboard.press("Escape")
+    page.locator("#dpb-tab-visual").click()
+    field = page.locator('.dpb-react-field[data-property="background-color"] input')
+    expect(field).to_be_enabled()
+    field.fill("rgb(9, 9, 9)")
+    expect(page.locator("#dpb-visual-count")).to_have_text("1")
+    return page
+
+
+@pytest.mark.parametrize("modifier", ["Control", "Meta"])
+@pytest.mark.parametrize("selector", ["#dpb-feedback", "#dpb-anno-input"])
+def test_n1_native_text_undo_does_not_replay_visual_history(
+    pending_visual_edit, modifier, selector,
+):
+    from playwright.sync_api import expect
+
+    page = pending_visual_edit
+    if selector == "#dpb-anno-input":
+        page.frame_locator("iframe.dpb-proto-frame").locator("#panel-title").evaluate(
+            "el => el.click()")
+    field = page.locator(selector)
+    field.focus()
+    page.keyboard.type("Audit note")
+    page.evaluate("""() => {
+        window.addEventListener('keydown', event => {
+            if (event.key.toLowerCase() === 'z') window.undoPrevented = event.defaultPrevented;
+        });
+    }""")
+    page.keyboard.press(f"{modifier}+z")
+    expect(page.locator("#dpb-visual-count")).to_have_text("1")
+    assert page.evaluate("window.undoPrevented") is False
+    # Chromium on Windows uses Control for native undo; Meta still must pass through.
+    if modifier == "Control":
+        assert len(field.input_value()) < len("Audit note")
+        page.keyboard.press("Control+Shift+z")
+    expect(field).to_have_value("Audit note")
+    expect(page.locator("#dpb-visual-count")).to_have_text("1")
+
+
+@pytest.mark.parametrize("modifier", ["Control", "Meta"])
+def test_n1_visual_button_shortcuts_own_visual_history(pending_visual_edit, modifier):
+    from playwright.sync_api import expect
+
+    page = pending_visual_edit
+    count = page.locator("#dpb-visual-count")
+    actions = page.locator(".dpb-react-actions button")
+    for redo in (f"{modifier}+Shift+z", f"{modifier}+y"):
+        actions.first.focus()
+        page.keyboard.press(f"{modifier}+z")
+        expect(count).to_have_text("0")
+        actions.nth(1).focus()
+        page.keyboard.press(redo)
+        expect(count).to_have_text("1")
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+@pytest.mark.parametrize("action", ["undo", "redo"])
+def test_n2_history_focus_contrast_at_least_three(pending_visual_edit, theme, action):
+    from playwright.sync_api import expect
+
+    page = pending_visual_edit
+    page.locator("#dpb-root").evaluate("(el, theme) => el.dataset.theme = theme", theme)
+    actions = page.locator(".dpb-react-actions button")
+    if action == "redo":
+        actions.first.click()
+        expect(page.locator("#dpb-visual-count")).to_have_text("0")
+    button = actions.nth(int(action == "redo"))
+    page.keyboard.press("Tab")
+    button.focus()
+    assert button.evaluate("el => el.matches(':focus-visible')")
+    expect(button).to_have_css("outline-style", "solid")
+    expect(button).to_have_css("outline-width", "2px")
+    colors = button.evaluate("""el => {
+        const outline = getComputedStyle(el).outlineColor;
+        for (let parent = el.parentElement; parent; parent = parent.parentElement) {
+            const background = getComputedStyle(parent).backgroundColor;
+            if (background.startsWith('rgb(')) return {outline, background};
+            if (background !== 'rgba(0, 0, 0, 0)') throw Error('Non-opaque background');
+        }
+        throw Error('Missing focus background');
+    }""")
+    foreground = [float(v) for v in re.findall(r"[\d.]+", colors["outline"])]
+    background = [float(v) for v in re.findall(r"[\d.]+", colors["background"])]
+    alpha = foreground[3] if len(foreground) == 4 else 1
+    composite = [alpha * f + (1 - alpha) * b for f, b in zip(foreground, background)]
+
+    def luminance(rgb):
+        linear = [v / 12.92 if v <= .04045 else ((v + .055) / 1.055) ** 2.4
+                  for v in (channel / 255 for channel in rgb)]
+        return sum(v * weight for v, weight in zip(linear, (.2126, .7152, .0722)))
+
+    low, high = sorted((luminance(composite), luminance(background)))
+    contrast = (high + .05) / (low + .05)
+    print(f"N2 {theme} {action}: {colors}, contrast={contrast:.3f}:1")
+    assert contrast >= 3, (theme, action, colors, contrast)
+
+
+@pytest.mark.parametrize("locale", ["en", "zh-CN"])
+def test_n3_language_accessible_name_contains_visible_target(console_page, locale):
+    from playwright.sync_api import expect
+
+    page = console_page
+    button = page.locator("#lang-toggle-button")
+    if locale == "zh-CN":
+        button.click()
+    expect(page.locator("html")).to_have_attribute("lang", locale)
+    target = page.locator("#lang-toggle-label").inner_text()
+    print(f"N3 {locale}: visible={target}, accessible={button.aria_snapshot()}")
+    expect(button).to_have_accessible_name(re.compile(re.escape(target)))
+
+
+@pytest.mark.parametrize("modifier", ["Control", "Meta"])
+def test_n1_annotation_history_stays_in_its_context(pending_visual_edit, modifier):
+    from playwright.sync_api import expect
+
+    page = pending_visual_edit
+    page.frame_locator("iframe.dpb-proto-frame").locator("#panel-title").evaluate(
+        "el => el.click()")
+    page.locator("#dpb-anno-input").fill("Annotation history")
+    page.locator("#dpb-anno-input").press("Enter")
+    count = page.locator("#dpb-count-badge")
+    expect(count).to_have_text("1")
+    page.locator("#dpb-theme-toggle").focus()
+    page.keyboard.press(f"{modifier}+z")
+    expect(count).to_have_text("1")
+    expect(page.locator("#dpb-visual-count")).to_have_text("1")
+    page.locator("#dpb-undo-btn").focus()
+    page.keyboard.press(f"{modifier}+z")
+    expect(count).to_have_text("0")
+    page.keyboard.press(f"{modifier}+Shift+z")
+    expect(count).to_have_text("1")
+    expect(page.locator("#dpb-visual-count")).to_have_text("1")

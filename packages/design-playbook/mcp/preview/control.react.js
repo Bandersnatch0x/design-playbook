@@ -165,7 +165,7 @@
       React.useEffect(function () {
         function onHistoryKey(event) {
           if (!(event.ctrlKey || event.metaKey) || event.altKey || event.isComposing ||
-              event.defaultPrevented || mount.offsetParent === null) return;
+              event.defaultPrevented || mount.offsetParent === null || !mount.contains(event.target)) return;
           var key = event.key.toLowerCase();
           if (key !== "z" && key !== "y") return;
           var state = current.current;

@@ -505,6 +505,10 @@
       return;
     }
     if ((e.ctrlKey || e.metaKey) && k === "z") {
+      // Annotation history owns only annotation controls/canvas, not visual or review controls.
+      if (!activeEl || !activeEl.closest(
+        "#dpb-annotations-view, #dpb-anno-popover, #dpb-toolbar, #dpb-canvas, #dpb-tab-annotations"
+      )) return;
       e.preventDefault();
       if (e.shiftKey) redo(); else undo();
       return;

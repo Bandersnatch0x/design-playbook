@@ -851,7 +851,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   border: 1px solid var(--dpb-line); background: var(--dpb-elev);
   color: var(--dpb-soft); border-radius: 6px; padding: 4px 7px; cursor: pointer;
 }
-.dpb-react-actions button:focus-visible { outline: 2px solid var(--dpb-ring-accent); outline-offset: 1px; }
+.dpb-react-actions button:focus-visible { outline: 2px solid var(--dpb-accent); outline-offset: 1px; }
 .dpb-react-actions button:disabled { opacity: .45; cursor: default; }
 .dpb-rail-tab.is-pending .dpb-filter-n { color: var(--dpb-accent); font-weight: 700; }
 .dpb-react-pending-count { margin-left: auto; color: var(--dpb-accent-soft); font-size: 11px; }

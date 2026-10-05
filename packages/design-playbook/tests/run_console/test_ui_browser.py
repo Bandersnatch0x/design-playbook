@@ -522,8 +522,8 @@ class AccessibilityTest(BrowserTestCase):
         self.assertEqual(self.page.locator("#main").get_attribute("role"), "status")
         self.assertEqual(self.page.locator("#main").get_attribute("aria-live"),
                          "polite")
-        expect(self.page.locator("#lang-toggle-button")).to_have_attribute(
-            "aria-label", "Switch language"
+        expect(self.page.locator("#lang-toggle-button")).to_have_accessible_name(
+            self.page.locator("#lang-toggle-label").inner_text()
         )
         # Error views are alerts.
         self.page.goto(self.console.url())
