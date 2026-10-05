@@ -873,6 +873,145 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-react-presence { min-height: 36px; font-size: 11px; color: var(--dpb-muted); overflow-wrap: anywhere; }
 .dpb-react-presence ul { margin: 4px 0 0; padding-inline-start: 16px; }
 
+
+/* Structured inspector sections */
+.dpb-inspector-section {
+  grid-column: 1 / -1;
+  border: 1px solid var(--dpb-line);
+  border-radius: 8px;
+  background: var(--dpb-elev);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.dpb-section-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: var(--dpb-surface);
+  border: none;
+  border-bottom: 1px solid var(--dpb-line);
+  color: var(--dpb-ink);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  user-select: none;
+  transition: background var(--dpb-duration-quick) var(--dpb-ease-spring);
+}
+.dpb-section-header:hover {
+  background: var(--dpb-elev-hover, rgba(0,0,0,.04));
+}
+.dpb-section-header:focus-visible {
+  outline: 2px solid var(--dpb-accent);
+  outline-offset: -1px;
+}
+.dpb-section-chevron {
+  font-size: 10px;
+  color: var(--dpb-muted);
+}
+.dpb-inspector-section.is-collapsed .dpb-section-header {
+  border-bottom: none;
+}
+.dpb-section-body {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dpb-react-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.dpb-react-field select {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--dpb-line);
+  border-radius: 5px;
+  background: var(--dpb-surface);
+  color: var(--dpb-ink);
+  padding: 4px 5px;
+  font-size: 11px;
+  font-family: inherit;
+}
+.dpb-react-field select:focus {
+  outline: 2px solid var(--dpb-ring-accent);
+  outline-offset: 1px;
+}
+.dpb-unit-input-wrap,
+.dpb-color-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.dpb-unit-input-wrap input {
+  width: 100%;
+  padding-right: 22px;
+}
+.dpb-unit-suffix {
+  position: absolute;
+  right: 6px;
+  color: var(--dpb-muted);
+  font-size: 10px;
+  pointer-events: none;
+}
+.dpb-color-swatch-preview {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid var(--dpb-line-strong);
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+.dpb-color-input-wrap input {
+  flex: 1;
+  min-width: 0;
+}
+.dpb-react-quad-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dpb-quad-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.dpb-quad-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--dpb-surface);
+  padding: 3px 2px;
+  border-radius: 4px;
+  border: 1px solid var(--dpb-line);
+}
+.dpb-quad-label {
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--dpb-muted);
+  text-transform: uppercase;
+}
+.dpb-quad-cell input {
+  width: 100%;
+  text-align: center;
+  padding: 2px 0;
+  font-size: 11px;
+  border: none;
+  background: transparent;
+  color: var(--dpb-ink);
+}
+.dpb-quad-cell input:focus {
+  outline: 1px solid var(--dpb-accent);
+  border-radius: 2px;
+}
+
 @media (max-width: 480px) {
   .dpb-react-fields { grid-template-columns: 1fr; }
   /* Keep the last property reachable above the fixed feedback drawer. */

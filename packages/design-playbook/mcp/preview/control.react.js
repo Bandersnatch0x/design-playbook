@@ -11,13 +11,25 @@
     // The only CSS-property -> computed snapshot key mapping in the inspector.
     var FIELDS = [
       ["color", "color"], ["background-color", "backgroundColor"],
-      ["font-size", "fontSize"], ["font-weight", "fontWeight"],
-      ["line-height", "lineHeight"], ["margin", "margin"],
-      ["padding", "padding"], ["width", "width"], ["height", "height"],
-      ["gap", "gap"], ["border-radius", "borderRadius"]
+      ["font-family", "fontFamily"], ["font-size", "fontSize"],
+      ["font-weight", "fontWeight"], ["line-height", "lineHeight"],
+      ["letter-spacing", "letterSpacing"], ["display", "display"],
+      ["position", "position"], ["flex-direction", "flexDirection"],
+      ["justify-content", "justifyContent"], ["align-items", "alignItems"],
+      ["gap", "gap"], ["width", "width"], ["height", "height"],
+      ["margin", "margin"], ["padding", "padding"],
+      ["margin-top", "marginTop"], ["margin-right", "marginRight"],
+      ["margin-bottom", "marginBottom"], ["margin-left", "marginLeft"],
+      ["padding-top", "paddingTop"], ["padding-right", "paddingRight"],
+      ["padding-bottom", "paddingBottom"], ["padding-left", "paddingLeft"],
+      ["border-radius", "borderRadius"], ["border-width", "borderWidth"],
+      ["border-color", "borderColor"], ["transform", "transform"]
     ];
     var LAYOUT = ["margin", "padding", "width", "height", "gap", "display", "position",
-      "flex", "flex-direction", "align-items", "justify-content", "grid-template-columns"];
+      "flex", "flex-direction", "align-items", "justify-content", "grid-template-columns",
+      "margin-top", "margin-right", "margin-bottom", "margin-left",
+      "padding-top", "padding-right", "padding-bottom", "padding-left",
+      "transform", "left", "top", "right", "bottom"];
     function post(message) {
       frame.contentWindow.postMessage({ dpbVisualEdit: message }, "*");
     }
@@ -39,12 +51,46 @@
       var current = React.useRef({}), request = React.useRef(null);
       var sequence = React.useRef(0), draftTimers = React.useRef({});
       var accepted = React.useRef({});
+      var [collapsed, setCollapsed] = React.useState({});
+      function toggleSection(sec) {
+        setCollapsed(function (prev) {
+          return Object.assign({}, prev, { [sec]: !prev[sec] });
+        });
+      }
       var binding = window.DPB_VISUAL_BINDING || { sourceHash: "", routeUrl: "" };
       current.current = { selected: selected, pending: pending, history: history,
         future: future, ready: ready, stale: stale, drafts: drafts };
+      var LABELS = {
+        sec_typography: { zh: "排版 (Typography)", en: "Typography" },
+        sec_colors: { zh: "颜色 (Colors)", en: "Colors" },
+        sec_layout: { zh: "布局 (Layout)", en: "Layout" },
+        sec_spacing: { zh: "间距 (Spacing)", en: "Spacing" },
+        sec_border: { zh: "边框 (Border)", en: "Border" },
+        visual_fontFamily: { zh: "字体", en: "Font family" },
+        visual_letterSpacing: { zh: "字间距", en: "Letter spacing" },
+        visual_display: { zh: "显示", en: "Display" },
+        visual_position: { zh: "定位", en: "Position" },
+        visual_flexDirection: { zh: "排列方向", en: "Direction" },
+        visual_justifyContent: { zh: "主轴对齐", en: "Justify" },
+        visual_alignItems: { zh: "交叉轴对齐", en: "Align" },
+        visual_borderWidth: { zh: "边框粗细", en: "Border width" },
+        visual_borderColor: { zh: "边框颜色", en: "Border color" },
+        visual_transform: { zh: "变换", en: "Transform" },
+        visual_marginTop: { zh: "上外边距", en: "Margin Top" },
+        visual_marginRight: { zh: "右外边距", en: "Margin Right" },
+        visual_marginBottom: { zh: "下外边距", en: "Margin Bottom" },
+        visual_marginLeft: { zh: "左外边距", en: "Margin Left" },
+        visual_paddingTop: { zh: "上内边距", en: "Padding Top" },
+        visual_paddingRight: { zh: "右内边距", en: "Padding Right" },
+        visual_paddingBottom: { zh: "下内边距", en: "Padding Bottom" },
+        visual_paddingLeft: { zh: "左内边距", en: "Padding Left" }
+      };
       function t(key) {
         var table = window.DPB_I18N_DUAL;
-        return table[key][locale.indexOf("zh") === 0 ? "zh" : "en"];
+        var isZh = (locale || "en").indexOf("zh") === 0;
+        if (table && table[key]) return table[key][isZh ? "zh" : "en"] || key;
+        if (LABELS[key]) return LABELS[key][isZh ? "zh" : "en"] || key;
+        return key;
       }
       function snapshot(selection) {
         var values = {};
@@ -215,19 +261,22 @@
             fail(rejected.code); return;
           }
           var change = data.dpbVisualEditChange, operation = request.current;
-          if (!change || !operation || change.requestId !== operation.id) return;
-          // This event means bridge-acknowledged PREVIEW edit, never source apply.
+          if (!change) return;
+          if (operation && change.requestId && change.requestId !== operation.id) return;
           notifyPresence("user-committed-edit", change.selector, change.property);
-          clearTimeout(operation.timer); request.current = null; setBusy(false); setDiagnostic("");
+          if (operation && (!change.requestId || change.requestId === operation.id)) {
+            clearTimeout(operation.timer); request.current = null; setBusy(false); setDiagnostic("");
+          }
           var state = current.current;
           var edit = { kind: LAYOUT.indexOf(change.property) >= 0 ? "layout" : "style",
-            viewport: operation.viewport, locator: change.selector, property: change.property,
+            viewport: operation ? operation.viewport : (window.DPB_ACTIVE_VIEWPORT || "any"),
+            locator: change.selector, property: change.property,
             oldValue: change.oldValue, newValue: change.newValue };
-          if (operation.action === "undo") {
+          if (operation && operation.action === "undo") {
             setHistory(state.history.slice(0, -1));
             setFuture(state.future.concat([operation.entry]));
             setPending(state.pending.slice(0, -1));
-          } else if (operation.action === "redo") {
+          } else if (operation && operation.action === "redo") {
             setFuture(state.future.slice(0, -1));
             setHistory(state.history.concat([operation.entry]));
             setPending(state.pending.concat([operation.entry]));
@@ -236,15 +285,21 @@
             setHistory(state.history.concat([edit])); setFuture([]);
           }
           if (state.selected && state.selected.selector === change.selector) {
-            accepted.current = Object.assign({}, accepted.current, { [change.property]: operation.value });
+            var valToStore = operation ? operation.value : change.newValue;
+            accepted.current = Object.assign({}, accepted.current, { [change.property]: valToStore });
             // A receipt may acknowledge an older keystroke. Never overwrite the
             // newer draft (or another selection) while that request was in flight.
             setDrafts(function (values) {
-              return values[change.property] === operation.draft
-                ? Object.assign({}, values, { [change.property]: operation.value }) : values;
+              if (operation) {
+                return values[change.property] === operation.draft
+                  ? Object.assign({}, values, { [change.property]: operation.value }) : values;
+              }
+              return Object.assign({}, values, { [change.property]: valToStore });
             });
           }
-          operation.resolve({ accepted: true, pending: change.oldValue !== change.newValue });
+          if (operation && (!change.requestId || change.requestId === operation.id)) {
+            operation.resolve({ accepted: true, pending: change.oldValue !== change.newValue });
+          }
         }
         window.addEventListener("message", onMessage);
         frame.addEventListener("load", load);
@@ -320,22 +375,173 @@
           h("button", { type: "button", disabled: !ready || stale || busy || !future.length, "aria-label": t("visual_redo"), onClick: function () { replay("redo"); } }, t("visual_redo")),
           h("span", { className: "dpb-react-pending-count" }, t("visual_pending").replace("{n}", pending.length))),
         h("p", { className: "dpb-react-diagnostic", role: "status", "data-stale": stale }, stale ? t("visual_stale") : diagnostic ? t(diagnostic) : ""),
-        h("div", { className: "dpb-react-fields" }, FIELDS.map(function (field) {
-          var property = field[0];
-          return h("label", { className: "dpb-react-field", key: property, "data-property": property },
-            h("span", null, t("visual_" + field[1])), h("input", {
-              value: drafts[property] || "", disabled: !selected || !ready || stale,
-              onChange: function (event) {
-                var value = event.target.value;
-                setDrafts(function (old) { return Object.assign({}, old, { [property]: value }); });
-                clearTimeout(draftTimers.current[property]);
-                var selector = selected.selector;
-                draftTimers.current[property] = setTimeout(function () { commit(property, value, selector); }, 200);
-              },
-              onBlur: function (event) { commit(property, event.target.value, selected && selected.selector); },
-              onKeyDown: function (event) { if (event.key === "Enter") { event.preventDefault(); commit(property, event.target.value, selected && selected.selector); } }
-            }));
-        })), h("p", { className: "dpb-react-help" }, t("visual_help")));
+        (function () {
+          function handleInput(prop, val) {
+            setDrafts(function (old) { return Object.assign({}, old, { [prop]: val }); });
+            clearTimeout(draftTimers.current[prop]);
+            var sel = selected && selected.selector;
+            draftTimers.current[prop] = setTimeout(function () { commit(prop, val, sel); }, 200);
+          }
+          function handleBlur(prop, val) {
+            commit(prop, val, selected && selected.selector);
+          }
+          function handleKey(prop, val, e) {
+            if (e.key === "Enter") { e.preventDefault(); commit(prop, val, selected && selected.selector); }
+          }
+          function renderField(prop, label, kind, opts, unit) {
+            var val = drafts[prop] || "";
+            if (kind === "select") {
+              return h("label", { className: "dpb-react-field dpb-react-dropdown", key: prop, "data-property": prop },
+                h("span", null, label),
+                h("select", {
+                  value: val, disabled: !selected || !ready || stale,
+                  onChange: function (e) {
+                    var v = e.target.value;
+                    handleInput(prop, v);
+                    commit(prop, v, selected && selected.selector);
+                  }
+                }, (opts || []).map(function (opt) {
+                  var oval = typeof opt === "string" ? opt : opt.value;
+                  var olbl = typeof opt === "string" ? (opt || "–") : opt.label;
+                  return h("option", { key: oval, value: oval }, olbl);
+                }))
+              );
+            }
+            if (kind === "unit") {
+              return h("label", { className: "dpb-react-field dpb-react-unit", key: prop, "data-property": prop },
+                h("span", null, label),
+                h("div", { className: "dpb-unit-input-wrap" },
+                  h("input", {
+                    value: val, disabled: !selected || !ready || stale,
+                    onChange: function (e) { handleInput(prop, e.target.value); },
+                    onBlur: function (e) { handleBlur(prop, e.target.value); },
+                    onKeyDown: function (e) { handleKey(prop, e.target.value, e); }
+                  }),
+                  unit ? h("span", { className: "dpb-unit-suffix" }, unit) : null
+                )
+              );
+            }
+            if (kind === "color") {
+              return h("label", { className: "dpb-react-field dpb-react-color-row", key: prop, "data-property": prop },
+                h("span", null, label),
+                h("div", { className: "dpb-color-input-wrap" },
+                  h("span", { className: "dpb-color-swatch-preview", style: { backgroundColor: val || "transparent" } }),
+                  h("input", {
+                    value: val, disabled: !selected || !ready || stale,
+                    onChange: function (e) { handleInput(prop, e.target.value); },
+                    onBlur: function (e) { handleBlur(prop, e.target.value); },
+                    onKeyDown: function (e) { handleKey(prop, e.target.value, e); }
+                  })
+                )
+              );
+            }
+            return h("label", { className: "dpb-react-field", key: prop, "data-property": prop },
+              h("span", null, label),
+              h("input", {
+                value: val, disabled: !selected || !ready || stale,
+                onChange: function (e) { handleInput(prop, e.target.value); },
+                onBlur: function (e) { handleBlur(prop, e.target.value); },
+                onKeyDown: function (e) { handleKey(prop, e.target.value, e); }
+              })
+            );
+          }
+          function renderPair(c1, c2, key) {
+            return h("div", { className: "dpb-react-pair", key: key || Math.random() }, c1, c2);
+          }
+          function renderQuad(prop, label) {
+            var sides = [["T", prop + "-top"], ["R", prop + "-right"], ["B", prop + "-bottom"], ["L", prop + "-left"]];
+            return h("div", { className: "dpb-react-quad-row", key: prop, "data-quad": prop },
+              h("label", { className: "dpb-react-field", "data-property": prop },
+                h("span", null, label),
+                h("input", {
+                  value: drafts[prop] || "", disabled: !selected || !ready || stale,
+                  placeholder: "0px",
+                  onChange: function (e) { handleInput(prop, e.target.value); },
+                  onBlur: function (e) { handleBlur(prop, e.target.value); },
+                  onKeyDown: function (e) { handleKey(prop, e.target.value, e); }
+                })
+              ),
+              h("div", { className: "dpb-quad-grid" }, sides.map(function (side) {
+                var axis = side[0], sProp = side[1];
+                return h("div", { className: "dpb-quad-cell", key: axis, "data-axis": axis, "data-property": sProp },
+                  h("em", { className: "dpb-quad-label" }, axis),
+                  h("input", {
+                    value: drafts[sProp] || "", disabled: !selected || !ready || stale,
+                    placeholder: "0",
+                    onChange: function (e) { handleInput(sProp, e.target.value); },
+                    onBlur: function (e) { handleBlur(sProp, e.target.value); },
+                    onKeyDown: function (e) { handleKey(sProp, e.target.value, e); }
+                  })
+                );
+              }))
+            );
+          }
+          function renderSection(secId, title, children) {
+            var isClosed = !!collapsed[secId];
+            return h("section", { className: "dpb-inspector-section" + (isClosed ? " is-collapsed" : " is-open"), key: secId, "data-section": secId },
+              h("button", {
+                type: "button", className: "dpb-section-header", "aria-expanded": !isClosed,
+                onClick: function () { toggleSection(secId); }
+              }, h("strong", null, title), h("span", { className: "dpb-section-chevron" }, isClosed ? "▸" : "▾")),
+              !isClosed && h("div", { className: "dpb-section-body" }, children)
+            );
+          }
+
+          var weightOpts = ["", "normal", "bold", "100", "200", "300", "400", "500", "600", "700", "800", "900"];
+          var displayOpts = ["", "block", "inline", "inline-block", "flex", "inline-flex", "grid", "inline-grid", "none"];
+          var positionOpts = ["", "static", "relative", "absolute", "fixed", "sticky"];
+          var flexDirOpts = ["", "row", "column", "row-reverse", "column-reverse"];
+          var justifyOpts = ["", "flex-start", "center", "flex-end", "space-between", "space-around", "space-evenly"];
+          var alignOpts = ["", "flex-start", "center", "flex-end", "stretch", "baseline"];
+
+          return h("div", { className: "dpb-react-fields" },
+            renderSection("colors", t("sec_colors"), [
+              renderField("color", t("visual_color"), "color"),
+              renderField("background-color", t("visual_backgroundColor"), "color")
+            ]),
+            renderSection("typography", t("sec_typography"), [
+              renderField("font-family", t("visual_fontFamily")),
+              renderPair(
+                renderField("font-size", t("visual_fontSize"), "unit", null, "px"),
+                renderField("font-weight", t("visual_fontWeight"), "text"),
+                "pair-font"
+              ),
+              renderPair(
+                renderField("line-height", t("visual_lineHeight"), "unit", null, ""),
+                renderField("letter-spacing", t("visual_letterSpacing"), "unit", null, "px"),
+                "pair-metrics"
+              )
+            ]),
+            renderSection("layout", t("sec_layout"), [
+              renderPair(
+                renderField("display", t("visual_display"), "select", displayOpts),
+                renderField("position", t("visual_position"), "select", positionOpts),
+                "pair-disp-pos"
+              ),
+              renderField("flex-direction", t("visual_flexDirection"), "select", flexDirOpts),
+              renderField("justify-content", t("visual_justifyContent"), "select", justifyOpts),
+              renderField("align-items", t("visual_alignItems"), "select", alignOpts),
+              renderField("gap", t("visual_gap"), "unit", null, "px"),
+              renderPair(
+                renderField("width", t("visual_width"), "unit", null, "px"),
+                renderField("height", t("visual_height"), "unit", null, "px"),
+                "pair-dims"
+              )
+            ]),
+            renderSection("spacing", t("sec_spacing"), [
+              renderQuad("padding", t("visual_padding")),
+              renderQuad("margin", t("visual_margin"))
+            ]),
+            renderSection("border", t("sec_border"), [
+              renderField("border-radius", t("visual_borderRadius"), "unit", null, "px"),
+              renderPair(
+                renderField("border-width", t("visual_borderWidth"), "unit", null, "px"),
+                renderField("border-color", t("visual_borderColor"), "color"),
+                "pair-border"
+              )
+            ])
+          );
+        })(), h("p", { className: "dpb-react-help" }, t("visual_help")));
     }
     window.ReactDOM.createRoot(mount).render(h(Editor));
   }

@@ -500,3 +500,139 @@ def test_n1_annotation_history_stays_in_its_context(pending_visual_edit, modifie
     page.keyboard.press(f"{modifier}+Shift+z")
     expect(count).to_have_text("1")
     expect(page.locator("#dpb-visual-count")).to_have_text("1")
+
+def test_section_collapse_expand(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    proto.locator("#panel-title").evaluate("el => el.click()")
+    page.keyboard.press("Escape")
+    page.locator("#dpb-tab-visual").click()
+
+    section = page.locator('.dpb-inspector-section[data-section="typography"]')
+    expect(section).to_have_class(re.compile(r"\bis-open\b"))
+    header = section.locator(".dpb-section-header")
+    header.click()
+    expect(section).to_have_class(re.compile(r"\bis-collapsed\b"))
+    expect(section.locator(".dpb-section-body")).not_to_be_visible()
+    header.click()
+    expect(section).to_have_class(re.compile(r"\bis-open\b"))
+    expect(section.locator(".dpb-section-body")).to_be_visible()
+
+
+def test_quad_row_trbl_input(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    target = proto.locator("#panel-title")
+    target.evaluate("el => el.click()")
+    page.keyboard.press("Escape")
+    page.locator("#dpb-tab-visual").click()
+
+    quad_cell_top = page.locator('.dpb-react-quad-row[data-quad="padding"] .dpb-quad-cell[data-axis="T"] input')
+    expect(quad_cell_top).to_be_enabled()
+    quad_cell_top.fill("16px")
+    count = page.locator("#dpb-visual-count")
+    expect(count).to_have_text("1")
+    expect(target).to_have_css("padding-top", "16px")
+
+
+def test_selection_overlay_resize_handle_drag(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    target = proto.locator("#panel-title")
+    target.evaluate("el => el.click()")
+    handle = proto.locator('.dpb-resize-handle[data-handle="se"]')
+    expect(handle).to_be_visible()
+    box = handle.bounding_box()
+    assert box is not None
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(box["x"] + box["width"] / 2 + 30, box["y"] + box["height"] / 2 + 20)
+    page.mouse.up()
+    count = page.locator("#dpb-visual-count")
+    expect(count).not_to_have_text("0")
+
+
+def test_alignment_guide_visibility(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    target = proto.locator("#panel-title")
+    target.evaluate("el => el.click()")
+    move_body = proto.locator(".dpb-move-body")
+    expect(move_body).to_be_visible()
+    guide_v = proto.locator("#dpb-guide-v")
+    guide_h = proto.locator("#dpb-guide-h")
+    assert guide_v is not None and guide_h is not None
+    box = move_body.bounding_box()
+    assert box is not None
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(box["x"] + box["width"] / 2 + 10, box["y"] + box["height"] / 2 + 10)
+    page.mouse.up()
+
+
+def test_floating_text_toolbar_toggle(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    target = proto.locator("#panel-title")
+    target.evaluate("el => el.click()")
+    page.locator("#dpb-tab-visual").click()
+    btn_bold = proto.locator('.dpb-tb-btn[data-action="bold"]')
+    expect(btn_bold).to_be_visible()
+    btn_bold.click()
+    expect(target).to_have_css("font-weight", re.compile(r"^(400|normal)$"))
+    count = page.locator("#dpb-visual-count")
+    expect(count).to_have_text("1")
+    btn_bold.click()
+    expect(target).to_have_css("font-weight", re.compile(r"^(700|bold)$"))
+    expect(count).to_have_text("2")
+
+
+def test_color_picker_hex_input(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    target = proto.locator("#panel-title")
+    target.evaluate("el => el.click()")
+    color_btn = proto.locator(".dpb-tb-color-btn")
+    expect(color_btn).to_be_visible()
+    color_btn.click()
+    color_picker = proto.locator("#dpb-color-picker")
+    expect(color_picker).to_have_class(re.compile(r"\bis-open\b"))
+    hex_input = color_picker.locator(".dpb-cp-hex")
+    expect(hex_input).to_be_visible()
+    hex_input.fill("#e11d48")
+    hex_input.press("Enter")
+    expect(target).to_have_css("color", "rgb(225, 29, 72)")
+
+
+def test_bridge_supports_resize_and_move_messages(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    target = proto.locator("#panel-title")
+    target.evaluate("el => el.click()")
+    page.locator("iframe.dpb-proto-frame").evaluate('''el => {
+        el.contentWindow.postMessage({
+            dpbVisualEdit: { type: "resize", selector: "#panel-title", width: "250px", height: "80px" }
+        }, "*");
+    }''')
+    expect(target).to_have_css("width", "250px")
+    expect(target).to_have_css("height", "80px")
+    page.locator("iframe.dpb-proto-frame").evaluate('''el => {
+        el.contentWindow.postMessage({
+            dpbVisualEdit: { type: "move", selector: "#panel-title", dx: 15, dy: 25 }
+        }, "*");
+    }''')
+    expect(target).to_have_css("transform", "matrix(1, 0, 0, 1, 15, 25)")
