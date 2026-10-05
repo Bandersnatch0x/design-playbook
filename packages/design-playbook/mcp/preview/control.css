@@ -872,3 +872,9 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-react-route { overflow-wrap: anywhere; font-size: 11px; color: var(--dpb-muted); }
 .dpb-react-presence { min-height: 36px; font-size: 11px; color: var(--dpb-muted); overflow-wrap: anywhere; }
 .dpb-react-presence ul { margin: 4px 0 0; padding-inline-start: 16px; }
+
+@media (max-width: 480px) {
+  .dpb-react-fields { grid-template-columns: 1fr; }
+  /* Keep the last property reachable above the fixed feedback drawer. */
+  #dpb-visual-view { padding-bottom: 80px; }
+}

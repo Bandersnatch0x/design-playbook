@@ -328,3 +328,34 @@ def test_rendered_editor_state_changes(tmp_path, webmcp):
             }""")
         finally:
             browser.close()
+
+
+def test_round3_narrow_visual_inspector_has_one_column_and_clearance(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    page.set_viewport_size({"width": 320, "height": 800})
+    page.locator("#dpb-tab-visual").click()
+    grid = page.locator(".dpb-react-fields")
+    assert len(grid.evaluate("el => getComputedStyle(el).gridTemplateColumns").split()) == 1
+    expect(page.locator("#dpb-visual-view")).to_have_css("padding-bottom", "80px")
+    for prop in ("line-height", "margin", "padding"):
+        field = page.locator(f'.dpb-react-field[data-property="{prop}"] input')
+        field.scroll_into_view_if_needed()
+        assert field.evaluate("el => { const r = el.getBoundingClientRect(); "
+                              "return r.left >= 0 && r.right <= innerWidth && "
+                              "document.elementFromPoint(r.x + r.width / 2, "
+                              "r.y + r.height / 2) === el; }")
+
+
+def test_round3_console_single_primary_compact_mobile_row(console_page):
+    from playwright.sync_api import expect
+
+    page = console_page
+    page.set_viewport_size({"width": 320, "height": 800})
+    expect(page.locator("#reload-button")).to_have_class(re.compile("button-secondary"))
+    expect(page.locator("#refresh-button")).not_to_have_class(re.compile("button-secondary"))
+    reload_box, refresh_box = page.locator("#reload-button, #refresh-button").evaluate_all(
+        "els => els.map(el => el.getBoundingClientRect().toJSON())")
+    assert abs(reload_box["y"] - refresh_box["y"]) <= 1
+    assert refresh_box["x"] + refresh_box["width"] <= 320

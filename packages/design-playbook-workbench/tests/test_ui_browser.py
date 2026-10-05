@@ -655,6 +655,52 @@ class CanvasJourneyTest(unittest.TestCase):
         expect(self.page.locator("#canvas-save-state")).to_contain_text("已保存")
         expect(self.page.locator(".canvas-node")).to_have_count(1)
 
+    def test_round3_canvas_dark_theme(self) -> None:
+        self.create_canvas()
+        self.page.emulate_media(color_scheme="dark")
+        node = self.page.locator(".canvas-node").first
+        self.assertNotEqual(node.evaluate("el => getComputedStyle(el).backgroundColor"),
+                            "rgb(247, 249, 252)")
+        for token in ("--canvas-grid-1", "--canvas-grid-2", "--canvas-node-bg",
+                      "--canvas-node-text-bg", "--canvas-node-instance-bg"):
+            self.assertTrue(self.page.locator("html").evaluate(
+                "(el, token) => getComputedStyle(el).getPropertyValue(token).trim()", token))
+        expect(node).to_have_css("background-color", "rgb(43, 49, 61)")
+        expect(self.page.locator("#canvas-stage")).to_have_css(
+            "background-color", "rgb(28, 31, 37)")
+        self.page.emulate_media(color_scheme="light")
+        expect(node).to_have_css("background-color", "rgb(255, 255, 255)")
+        css = (Path(__file__).parents[1] / "design_playbook_workbench" /
+               "web" / "app.css").read_text(encoding="utf-8")
+        for selector in (".canvas-node", ".canvas-node-text", ".canvas-node-instance"):
+            body = re.search(re.escape(selector) + r"\s*\{([^}]+)", css)[1]
+            self.assertNotRegex(body, r"background:\s*#")
+
+    def test_round3_scheme_fields_are_grouped_and_compact(self) -> None:
+        for selector in ("#scheme-rules", "#scheme-acceptance"):
+            expect(self.page.locator(selector)).to_have_css("min-height", "80px")
+        self.assertEqual(self.page.locator("#scheme-regions").evaluate(
+            "el => el.parentElement.querySelector('label').htmlFor"), "scheme-regions")
+
+    def test_round3_canvas_node_selection_focuses_shortcut_scope(self) -> None:
+        self.create_canvas()
+        node = self.page.locator(".canvas-node").first
+        node.click()
+        expect(self.page.locator("#canvas-viewport")).to_be_focused()
+        x = float(self.page.locator("#prop-x").input_value())
+        self.page.keyboard.press("ArrowRight")
+        expect(self.page.locator("#prop-x")).to_have_value(str(int(x + 1)))
+        self.page.locator("#canvas-heading").focus()
+        self.page.keyboard.press("ArrowRight")
+        expect(self.page.locator("#prop-x")).to_have_value(str(int(x + 2)))
+        self.page.locator("#prop-content").focus()
+        self.page.keyboard.press("ArrowRight")
+        expect(self.page.locator("#prop-x")).to_have_value(str(int(x + 2)))
+
+        self.page.locator("#canvas-board").focus()
+        self.page.keyboard.press("ArrowRight")
+        expect(self.page.locator("#prop-x")).to_have_value(str(int(x + 2)))
+
     def canvas_id(self) -> str:
         return self.page.evaluate(
             "() => document.querySelector('#canvas-select').value"
@@ -1684,6 +1730,27 @@ class LifecycleJourneyTest(unittest.TestCase):
         self.page.locator("#life-list button").first.click()
         expect(self.page.locator("#life-detail")).to_be_visible()
 
+    def test_round3_lifecycle_actions_match_state(self) -> None:
+        for lifecycle, action, visible in (
+            ("published", None, {"archive", "trash", "references", "delete"}),
+            ("archived", "archive", {"unarchive", "trash", "references", "delete"}),
+            ("trashed", "trash", {"restore", "references", "delete"}),
+            ("published", "restore", {"archive", "trash", "references", "delete"}),
+        ):
+            if action:
+                self.page.click("#life-" + action)
+                self.wait_for(lambda: self.h.runtime.store.asset(self.asset["assetId"])
+                              ["lifecycle"] == lifecycle, lifecycle)
+            self.select_asset()
+            for verb in ("archive", "unarchive", "trash", "restore", "references", "delete"):
+                button = self.page.locator("#life-" + verb)
+                if verb in visible:
+                    expect(button).to_be_visible()
+                    expect(button).to_be_enabled()
+                else:
+                    expect(button).to_be_hidden()
+                    expect(button).to_be_disabled()
+
     def test_archive_trash_restore_and_reference_safe_delete(self) -> None:
         # Archive then unarchive: discovery state only.
         self.select_asset()
@@ -1972,6 +2039,35 @@ class UiReviewRegressionTest(unittest.TestCase):
         )
         self.page.goto(self.h.runtime.bootstrap_url)
         expect(self.page.locator("#session-state")).to_contain_text("会话有效")
+
+    def test_round3_mobile_project_labels_and_no_overflow(self) -> None:
+        self.page.set_viewport_size({"width": 320, "height": 800})
+        self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 320)
+        headers = self.page.locator(".project-table th").all_text_contents()
+        cells = self.page.locator("#project-rows tr").first.locator("td")
+        self.assertEqual(cells.count(), len(headers))
+        for cell, label in zip(cells.all(), headers):
+            expect(cell).to_have_attribute("data-label", label)
+            self.assertIn(label, cell.evaluate("el => getComputedStyle(el, '::before').content"))
+
+    def test_round3_panel_siblings_close_and_nested_focus_returns(self) -> None:
+        self.page.locator(".assets-button").first.click()
+        expect(self.page.locator("#assets-panel")).to_be_visible()
+        self.page.locator("#create-component").click()
+        expect(self.page.locator("#document-panel")).to_be_visible()
+        expect(self.page.locator("#assets-panel")).to_be_hidden()
+        self.page.locator("#document-close").click()
+        expect(self.page.locator("#assets-panel")).to_be_visible()
+        expect(self.page.locator("#create-component")).to_be_focused()
+        self.page.locator("#assets-close").click()
+        expect(self.page.locator(".assets-button").first).to_be_focused()
+        self.page.locator(".assets-button").first.click()
+        self.page.locator(".life-button").first.click()
+        expect(self.page.locator("#assets-panel")).to_be_hidden()
+        expect(self.page.locator("#life-panel")).to_be_visible()
+        self.page.locator("#life-close").click()
+        expect(self.page.locator(".life-button").first).to_be_focused()
+        expect(self.page.locator("#assets-panel")).to_be_hidden()
 
     def test_the_flow_edge_note_has_an_accessible_name(self) -> None:
         # F1: every control in the flow row announces what it is; the note was

@@ -1376,3 +1376,9 @@ details.source[open] > summary {
 .export-hidden {
   display: none;
 }
+
+.snapshot-actions { display: flex; align-items: stretch; gap: 8px; }
+@media (max-width: 640px) {
+  .snapshot-actions { min-width: 0; max-width: 100%; gap: 6px; }
+  .snapshot-actions .button { min-width: 0; padding: 6px 8px; white-space: normal; }
+}

@@ -3,6 +3,7 @@
 
 const state = {
   token: null,
+  panelTriggerStack: [],
   currentProjectId: null,
   projects: [],
   candidate: null,
@@ -356,21 +357,33 @@ function newOperationId() {
   return "op_" + hex;
 }
 
+function workspacePanels() {
+  return [elements.assetsPanel, elements.tokensPanel, elements.documentPanel,
+    elements.proposalsPanel, elements.canvasPanel, elements.workPanel,
+    elements.ownerPanel, elements.lifePanel, elements.settingsPanel];
+}
+
 function focusIntoPanel(target) {
-  // Remember what opened the panel so closing can hand focus back.
-  state.panelTrigger = document.activeElement instanceof HTMLElement
-    ? document.activeElement
-    : null;
+  const trigger = document.activeElement;
+  const panel = target.closest(".panel");
+  const panels = workspacePanels();
+  // A sibling opened from the project list starts a new navigation path.
+  // Nested editors retain their parent and restore it when they close.
+  if (!panels.some((item) => item !== panel && item.contains(trigger))) {
+    state.panelTriggerStack = [];
+  }
+  state.panelTriggerStack.push(trigger instanceof HTMLElement ? trigger : null);
+  for (const sibling of panels) sibling.hidden = sibling !== panel;
   target.setAttribute("tabindex", "-1");
   target.focus();
 }
 
 function restorePanelTrigger() {
-  const trigger = state.panelTrigger;
-  state.panelTrigger = null;
-  if (trigger && document.contains(trigger) && !trigger.closest("[hidden]")) {
-    trigger.focus();
-  }
+  const trigger = state.panelTriggerStack.pop();
+  if (!trigger || !document.contains(trigger)) return;
+  const parent = trigger.closest(".panel");
+  if (workspacePanels().includes(parent)) parent.hidden = false;
+  if (!trigger.closest("[hidden]")) trigger.focus();
 }
 
 function formatLocalTime(value) {
@@ -496,6 +509,10 @@ function renderProjects() {
     const fragment = elements.rowTemplate.content.cloneNode(true);
     const row = fragment.querySelector("tr");
     row.dataset.projectId = project.projectId;
+    const headers = elements.table.querySelectorAll("th");
+    row.querySelectorAll("td").forEach((cell, index) => {
+      cell.dataset.label = headers[index].textContent;
+    });
     row.querySelector(".project-name").textContent = project.name;
     row.querySelector(".current-flag").hidden =
       project.projectId !== state.currentProjectId;
@@ -978,6 +995,7 @@ async function recoverProposal(proposal, mode) {
 
 elements.proposalsClose.addEventListener("click", () => {
   elements.proposalsPanel.hidden = true;
+  restorePanelTrigger();
   state.proposalsProject = null;
   announce("已关闭提案面板。");
 });
@@ -1220,6 +1238,7 @@ elements.assetsFilter.addEventListener("submit", (event) => {
 });
 elements.assetsClose.addEventListener("click", () => {
   elements.assetsPanel.hidden = true;
+  restorePanelTrigger();
   elements.assetPreviewFrame.hidden = true;
   elements.assetPreviewFrame.removeAttribute("src");
   state.assetsProject = null;
@@ -1545,6 +1564,7 @@ elements.instanceRender.addEventListener("click", renderInstance);
 elements.distillForm.addEventListener("submit", distillCandidate);
 elements.documentClose.addEventListener("click", () => {
   elements.documentPanel.hidden = true;
+  restorePanelTrigger();
   elements.instanceFrame.hidden = true;
   elements.instanceFrame.removeAttribute("src");
   state.documentProject = null;
@@ -1874,6 +1894,7 @@ elements.tokensDiffButton.addEventListener("click", loadTokenDiff);
 elements.tokensBaselineForm.addEventListener("submit", proposeBaseline);
 elements.tokensClose.addEventListener("click", () => {
   elements.tokensPanel.hidden = true;
+  restorePanelTrigger();
   elements.tokensPreviewFrame.hidden = true;
   elements.tokensPreviewFrame.removeAttribute("src");
   state.tokensProject = null;
@@ -2151,7 +2172,7 @@ function renderCanvas() {
   if (!board) return;
   elements.canvasStage.style.width = board.width + "px";
   elements.canvasStage.style.height = board.height + "px";
-  elements.canvasStage.style.background = board.background || "#ffffff";
+  elements.canvasStage.style.background = board.background || "var(--canvas-stage-bg)";
   elements.canvasStage.style.transform =
     `translate(${state.canvasView.x}px, ${state.canvasView.y}px) ` +
     `scale(${state.canvasView.scale})`;
@@ -2304,6 +2325,9 @@ function beginCanvasGesture(event) {
     elements.canvasViewport.setPointerCapture(event.pointerId);
     return;
   }
+  // Suppress native pointer focus on the node replaced by renderCanvas().
+  event.preventDefault();
+  elements.canvasViewport.focus({ preventScroll: true });
   const nodeId = target.dataset.nodeId;
   const additive = event.shiftKey || event.metaKey || event.ctrlKey;
   if (additive && !state.canvasSelection.includes(nodeId)) {
@@ -2525,7 +2549,7 @@ async function canvasUndoRedo(verb) {
 function canvasKeydown(event) {
   if (!state.canvas) return;
   const target = event.target;
-  if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+  if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
   const step = event.shiftKey ? 10 : 1;
   const key = event.key;
   if (key === "ArrowLeft") {
@@ -3068,7 +3092,7 @@ elements.canvasViewport.addEventListener("pointerdown", beginCanvasGesture);
 elements.canvasViewport.addEventListener("pointermove", updateCanvasGesture);
 elements.canvasViewport.addEventListener("pointerup", endCanvasGesture);
 elements.canvasViewport.addEventListener("pointercancel", endCanvasGesture);
-elements.canvasViewport.addEventListener("keydown", canvasKeydown);
+elements.canvasPanel.addEventListener("keydown", canvasKeydown);
 elements.canvasViewport.addEventListener("wheel", (event) => {
   if (!event.ctrlKey) return;
   event.preventDefault();
@@ -3081,6 +3105,7 @@ elements.canvasClose.addEventListener("click", async () => {
   }
   await flushCanvasQueue();
   elements.canvasPanel.hidden = true;
+  restorePanelTrigger();
   elements.canvasSnapshotFrame.hidden = true;
   elements.canvasSnapshotFrame.removeAttribute("src");
   state.canvasProject = null;
@@ -3819,6 +3844,7 @@ elements.workReject.addEventListener("click", rejectWork);
 elements.workCopyHandoff.addEventListener("click", copyHandoff);
 elements.workClose.addEventListener("click", () => {
   elements.workPanel.hidden = true;
+  restorePanelTrigger();
   state.workProject = null;
   state.workSelectedId = null;
   announce("已关闭 Agent 任务面板。");
@@ -4056,6 +4082,7 @@ elements.ownerRun.addEventListener("change", () => loadOwnerRun(elements.ownerRu
 elements.ownerReload.addEventListener("click", () => loadOwnerRuns());
 elements.ownerClose.addEventListener("click", () => {
   elements.ownerPanel.hidden = true;
+  restorePanelTrigger();
   state.ownerProject = null;
   announce("已关闭原 owner 验证面板。");
 });
@@ -4151,6 +4178,18 @@ function renderLifeList() {
 
 function selectLifeAsset(asset) {
   state.lifeSelected = asset;
+  const transitions = [
+    [elements.lifeArchive, ["draft", "published"]],
+    [elements.lifeUnarchive, ["archived"]],
+    [elements.lifeTrash, ["draft", "published", "archived"]],
+    [elements.lifeRestore, ["trashed"]],
+    [elements.lifeReferences, ["draft", "published", "archived", "trashed"]],
+    [elements.lifeDelete, ["draft", "published", "archived", "trashed"]],
+  ];
+  for (const [button, states] of transitions) {
+    button.hidden = !states.includes(asset.lifecycle);
+    button.disabled = button.hidden;
+  }
   elements.lifeDetail.hidden = false;
   elements.lifeDetailName.textContent = asset.name;
   elements.lifeDetailState.textContent =
@@ -4299,12 +4338,6 @@ elements.lifeRestore.addEventListener("click", () => {
 });
 elements.lifeReferences.addEventListener("click", loadLifeReferences);
 elements.lifeDelete.addEventListener("click", hardDeleteLifeAsset);
-// One delegated handler covers every panel close: it runs after the close
-// listener hid the panel, so focus returns to the real opener (R15).
-document.addEventListener("click", (event) => {
-  const target = event.target instanceof Element ? event.target : null;
-  if (target && target.closest("[id$='-close']")) restorePanelTrigger();
-});
 elements.lifeDeleteCancel.addEventListener("click", cancelHardDeleteLifeAsset);
 elements.lifeDeleteConfirmButton.addEventListener(
   "click",
@@ -4320,6 +4353,7 @@ elements.lifeProjectArchive.addEventListener("click", () => projectArchive(true)
 elements.lifeProjectUnarchive.addEventListener("click", () => projectArchive(false));
 elements.lifeClose.addEventListener("click", () => {
   elements.lifePanel.hidden = true;
+  restorePanelTrigger();
   state.lifeProject = null;
   announce("已关闭生命周期面板。");
 });
@@ -4433,6 +4467,7 @@ elements.backupVerify.addEventListener("click", verifyBackup);
 elements.restoreRun.addEventListener("click", restoreBackup);
 elements.settingsClose.addEventListener("click", () => {
   elements.settingsPanel.hidden = true;
+  restorePanelTrigger();
   announce("已关闭设置与备份。");
 });
 elements.settingsOpen.addEventListener("click", () => openSettings());

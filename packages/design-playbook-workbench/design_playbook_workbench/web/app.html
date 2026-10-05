@@ -471,12 +471,18 @@
       <label for="scheme-device">设备</label>
       <input id="scheme-device" type="text" maxlength="40" placeholder="desktop">
     </div>
-    <label for="scheme-rules">设计规则（每行一条，最多 20 条）</label>
-    <textarea id="scheme-rules" class="tokens-editor" rows="3" spellcheck="false"></textarea>
-    <label for="scheme-regions">可替换区域（节点 ID，逗号分隔）</label>
-    <input id="scheme-regions" type="text" spellcheck="false" placeholder="n_xxxx, n_yyyy">
-    <label for="scheme-acceptance">验收意图</label>
-    <textarea id="scheme-acceptance" class="tokens-editor" rows="2" spellcheck="false"></textarea>
+    <div class="row-form">
+      <label for="scheme-rules">设计规则（每行一条，最多 20 条）</label>
+      <textarea id="scheme-rules" class="tokens-editor tokens-editor-compact" rows="3" spellcheck="false"></textarea>
+    </div>
+    <div class="row-form">
+      <label for="scheme-regions">可替换区域（节点 ID，逗号分隔）</label>
+      <input id="scheme-regions" type="text" spellcheck="false" placeholder="n_xxxx, n_yyyy">
+    </div>
+    <div class="row-form">
+      <label for="scheme-acceptance">验收意图</label>
+      <textarea id="scheme-acceptance" class="tokens-editor tokens-editor-compact" rows="2" spellcheck="false"></textarea>
+    </div>
     <div class="preview-controls">
       <button type="button" id="scheme-save">保存方案约束</button>
       <button type="button" id="scheme-derive" class="secondary">派生方案</button>
