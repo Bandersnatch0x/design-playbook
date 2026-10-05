@@ -36,8 +36,29 @@ control.py's cssPath so selectors match the same-origin path.
 
 from __future__ import annotations
 
+import json
+
+from design_playbook.mcp.preview.i18n import ZH, _STRINGS
+
 BRIDGE_SCRIPT = r"""<script>
 (function () {
+  var labels = __DPB_VISUAL_LABELS__;
+  function text(key, values) {
+    var result = labels[key] || key;
+    Object.keys(values || {}).forEach(function (name) { result = result.replace("{" + name + "}", values[name]); });
+    return result;
+  }
+  function label(control, key) {
+    control.setAttribute("data-dpb-label", key);
+    control.setAttribute("aria-label", text(key, { handle: control.getAttribute("data-handle") || "" }));
+    if (control.hasAttribute("title")) control.title = control.getAttribute("aria-label");
+  }
+  function localize(values) {
+    if (!values || typeof values !== "object") return;
+    Object.keys(labels).forEach(function (key) { if (typeof values[key] === "string") labels[key] = values[key]; });
+    document.querySelectorAll("[data-dpb-label]").forEach(function (control) { label(control, control.getAttribute("data-dpb-label")); });
+    if (visualSelectedEl) updateOverlayPositions(visualSelectedEl);
+  }
   // Inject the pin highlight + badge CSS into the iframe document. The
   // parent's control-bar stylesheet does not cross the iframe boundary, so the
   // bridge brings its own copy of .dpb-pin-target / .dpb-pin-hover (the same
@@ -45,6 +66,8 @@ BRIDGE_SCRIPT = r"""<script>
   // badges (.dpb-pin-badge*, #57 scheme A) to render them in-frame.
   var style = document.createElement("style");
   style.textContent =
+    "#dpb-selection-overlay :focus-visible,#dpb-text-toolbar :focus-visible,#dpb-color-picker :focus-visible{outline:2px solid #2563eb!important;outline-offset:2px;box-shadow:0 0 0 2px white!important;}" +
+    ".dpb-pin-badge.dpb-resolved,.dpb-pin-badge-note.dpb-resolved{opacity:.5;text-decoration:line-through;}" +
     ".dpb-pin-target{outline:1.5px solid rgba(20,184,166,.9)!important;" +
     "outline-offset:1px!important;background-color:rgba(20,184,166,.06)!important;" +
     "cursor:crosshair!important}" +
@@ -410,7 +433,7 @@ BRIDGE_SCRIPT = r"""<script>
   function setupManipulation(control, handle) {
     control.tabIndex = 0;
     control.setAttribute("role", "slider");
-    control.setAttribute("aria-label", handle ? "Resize " + handle : "Move element");
+    label(control, handle ? "visual_resize" : "visual_move");
     control.setAttribute("aria-valuemin", "0");
     control.setAttribute("aria-valuenow", "0");
     control.addEventListener("keydown", function (e) {
@@ -610,7 +633,7 @@ BRIDGE_SCRIPT = r"""<script>
     });
     [svArea, hueSlider, alphaSlider].forEach(function (slider) {
       slider.tabIndex = 0; slider.setAttribute("role", "slider");
-      slider.setAttribute("aria-label", slider === svArea ? "Saturation and brightness" : slider === hueSlider ? "Hue" : "Alpha");
+      label(slider, slider === svArea ? "visual_saturation" : slider === hueSlider ? "visual_hue" : "visual_alpha");
       slider.setAttribute("aria-valuemin", "0"); slider.setAttribute("aria-valuemax", slider === hueSlider ? "360" : "100");
       slider.addEventListener("keydown", function (e) {
         if (!/^Arrow(Left|Right|Up|Down)$/.test(e.key)) return;
@@ -693,38 +716,38 @@ BRIDGE_SCRIPT = r"""<script>
     btnB.type = "button";
     btnB.className = "dpb-tb-btn dpb-tb-bold";
     btnB.setAttribute("data-action", "bold");
-    btnB.setAttribute("aria-label", "Bold");
-    btnB.title = "Bold";
+    btnB.title = "";
+    label(btnB, "visual_bold");
     btnB.innerHTML = "<b>B</b>";
 
     var btnI = document.createElement("button");
     btnI.type = "button";
     btnI.className = "dpb-tb-btn dpb-tb-italic";
     btnI.setAttribute("data-action", "italic");
-    btnI.setAttribute("aria-label", "Italic");
-    btnI.title = "Italic";
+    btnI.title = "";
+    label(btnI, "visual_italic");
     btnI.innerHTML = "<i>I</i>";
 
     var btnU = document.createElement("button");
     btnU.type = "button";
     btnU.className = "dpb-tb-btn dpb-tb-underline";
     btnU.setAttribute("data-action", "underline");
-    btnU.setAttribute("aria-label", "Underline");
-    btnU.title = "Underline";
+    btnU.title = "";
+    label(btnU, "visual_underline");
     btnU.innerHTML = "<u>U</u>";
 
     var btnS = document.createElement("button");
     btnS.type = "button";
     btnS.className = "dpb-tb-btn dpb-tb-strike";
     btnS.setAttribute("data-action", "strike");
-    btnS.setAttribute("aria-label", "Strikethrough");
-    btnS.title = "Strikethrough";
+    btnS.title = "";
+    label(btnS, "visual_strikethrough");
     btnS.innerHTML = "<s>S</s>";
 
     var selectSize = document.createElement("select");
     selectSize.className = "dpb-tb-select";
     selectSize.setAttribute("data-action", "font-size");
-    selectSize.setAttribute("aria-label", "Font size");
+    label(selectSize, "visual_fontSize");
     [12, 14, 16, 18, 20, 24, 32, 48].forEach(function (sz) {
       var opt = document.createElement("option");
       opt.value = String(sz);
@@ -736,8 +759,8 @@ BRIDGE_SCRIPT = r"""<script>
     colorBtn.type = "button";
     colorBtn.className = "dpb-tb-color-btn";
     colorBtn.setAttribute("data-action", "color");
-    colorBtn.setAttribute("aria-label", "Text color");
-    colorBtn.title = "Text color";
+    colorBtn.title = "";
+    label(colorBtn, "visual_color");
     colorBtn.innerHTML = "<span>A</span><span class=\"dpb-tb-color-bar\"></span>";
 
     colorPickerEl = document.createElement("div");
@@ -747,11 +770,12 @@ BRIDGE_SCRIPT = r"""<script>
       '<div class="dpb-cp-hue"><div class="dpb-cp-hue-thumb"></div></div>' +
       '<div class="dpb-cp-alpha"><div class="dpb-cp-alpha-thumb"></div></div>' +
       '<div class="dpb-cp-inputs">' +
-      '<input class="dpb-cp-hex" value="#000000" aria-label="Hex color" />' +
-      '<input class="dpb-cp-opacity" value="100%" aria-label="Opacity" />' +
+      '<input class="dpb-cp-hex" value="#000000" data-dpb-label="visual_hex" />' +
+      '<input class="dpb-cp-opacity" value="100%" data-dpb-label="visual_opacity" />' +
       '</div>' +
       '<div class="dpb-cp-swatches"></div>';
 
+    colorPickerEl.querySelectorAll("[data-dpb-label]").forEach(function (control) { label(control, control.getAttribute("data-dpb-label")); });
     var swatchesContainer = colorPickerEl.querySelector(".dpb-cp-swatches");
     var swatches = ["#000000", "#ffffff", "#ef4444", "#f59e0b", "#10b981", "#3b82f6", "#6366f1", "#8b5cf6"];
     swatches.forEach(function (c) {
@@ -833,8 +857,8 @@ BRIDGE_SCRIPT = r"""<script>
         control.setAttribute("aria-valuemin", handle ? 10 : Math.min(0, rect.x));
         control.setAttribute("aria-valuemax", Math.max(innerWidth, innerHeight, rect.width, rect.height, rect.x));
         control.setAttribute("aria-valuenow", Math.round(handle && /[ew]/.test(handle) ? rect.width : handle ? rect.height : rect.x));
-        control.setAttribute("aria-valuetext", handle ? Math.round(rect.width) + " by " + Math.round(rect.height) + " pixels" :
-          Math.round(rect.x) + ", " + Math.round(rect.y) + " pixels");
+        control.setAttribute("aria-valuetext", handle ? text("visual_size_value", { w: Math.round(rect.width), h: Math.round(rect.height) }) :
+          text("visual_position_value", { x: Math.round(rect.x), y: Math.round(rect.y) }));
       });
     }
   }
@@ -975,7 +999,7 @@ BRIDGE_SCRIPT = r"""<script>
       var el = findEl(item.selector);
       if (!el) return;
       var n = document.createElement("span");
-      n.className = "dpb-pin-badge" + (item.active ? " dpb-active" : "") + (item.fresh ? " dpb-pin-drop" : "");
+      n.className = "dpb-pin-badge" + (item.resolved ? " dpb-resolved" : "") + (item.active ? " dpb-active" : "") + (item.fresh ? " dpb-pin-drop" : "");
       n.setAttribute("aria-hidden", "true");
       n.textContent = String(item.n);
       if (item.fresh) {
@@ -983,7 +1007,7 @@ BRIDGE_SCRIPT = r"""<script>
       }
       body.appendChild(n);
       var note = document.createElement("div");
-      note.className = "dpb-pin-badge-note";
+      note.className = "dpb-pin-badge-note" + (item.resolved ? " dpb-resolved" : "");
       note.textContent = String(item.comment || "");
       note.style.display = item.comment ? "block" : "none";
       body.appendChild(note);
@@ -1039,6 +1063,8 @@ BRIDGE_SCRIPT = r"""<script>
     var d = document.documentElement;
     drawSvg.setAttribute("width", String(Math.max(d.scrollWidth, window.innerWidth)));
     drawSvg.setAttribute("height", String(Math.max(d.scrollHeight, window.innerHeight)));
+    drawSvg.setAttribute("viewBox", "0 0 " + drawSvg.getAttribute("width") + " " + drawSvg.getAttribute("height"));
+    drawSvg.setAttribute("preserveAspectRatio", "none");
   }
   window.addEventListener("resize", function () {
     if (drawSvg) { sizeDrawLayer(); renderDrawItems(lastAnchorEcho); }
@@ -1059,6 +1085,8 @@ BRIDGE_SCRIPT = r"""<script>
     var d = document.documentElement;
     rulerSvg.setAttribute("width", String(Math.max(d.scrollWidth, window.innerWidth)));
     rulerSvg.setAttribute("height", String(Math.max(d.scrollHeight, window.innerHeight)));
+    rulerSvg.setAttribute("viewBox", "0 0 " + rulerSvg.getAttribute("width") + " " + rulerSvg.getAttribute("height"));
+    rulerSvg.setAttribute("preserveAspectRatio", "none");
   }
   function clearRuler() {
     rulerPinnedPoint = null;
@@ -1223,12 +1251,16 @@ BRIDGE_SCRIPT = r"""<script>
 
   document.addEventListener("keydown", function (e) {
     var el = e.target;
-    if (e.isComposing || e.keyCode === 229 || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.isComposing || e.keyCode === 229 || e.repeat || e.altKey || e.defaultPrevented) return;
     if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
     var key = e.key === "Escape" ? e.key : e.key.toLowerCase();
-    if ((key === "Escape" && e.shiftKey) || ["Escape", "b", "d", "h", "p", "r", "v"].indexOf(key) < 0) return;
+    if (e.ctrlKey || e.metaKey) {
+      if (["enter", "z", "y"].indexOf(key) < 0) return;
+    } else if (["Escape", "b", "d", "h", "p", "r", "v", "l", "[", "]", "?", "j", "k", "s", "delete", "backspace", "=", "+", "-", "_", "0", "1", "2", "3"].indexOf(key) < 0) return;
     e.preventDefault();
-    parent.postMessage({ dpbToolShortcut: key }, "*");
+    // Only key metadata crosses; the parent's decision token never does.
+    parent.postMessage({ dpbReviewShortcut: { key: /^(enter|delete|backspace)$/.test(key) ? e.key : key,
+      ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey } }, "*");
   });
 
   window.addEventListener("message", function (e) {
@@ -1245,7 +1277,9 @@ BRIDGE_SCRIPT = r"""<script>
     }
     if (data.dpbVisualEdit) {
       var edit = data.dpbVisualEdit;
+      if (edit.type === "localize") { localize(edit.labels); return; }
       if (edit.type === "ping") {
+        localize(edit.labels);
         if (compactEditor !== !!edit.compact) {
           compactEditor = !!edit.compact;
           if (visualSelectedEl) updateOverlayPositions(visualSelectedEl);
@@ -1366,6 +1400,11 @@ BRIDGE_SCRIPT = r"""<script>
 })();
 </script>"""
 
+
+BRIDGE_SCRIPT = BRIDGE_SCRIPT.replace("__DPB_VISUAL_LABELS__", json.dumps(
+    {key: value for key, value in _STRINGS[ZH].items() if key.startswith("visual_")},
+    ensure_ascii=True,
+))
 
 def build_visual_edit_bridge_script() -> str:
     """Host opt-in: embed this script in the loopback page used as live_route_url.

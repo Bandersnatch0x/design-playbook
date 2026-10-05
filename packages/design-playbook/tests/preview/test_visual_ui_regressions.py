@@ -1037,6 +1037,8 @@ def test_narrow_host_docks_text_actions_outside_canvas_and_drawer(editor_page):
     page = editor_page
     page.set_viewport_size({"width": 320, "height": 900})
     target = select_interaction_target(page)
+    if page.locator("#dpb-root").get_attribute("lang").startswith("zh"):
+        page.locator("#dpb-language-toggle").click()
     dock = page.locator(".dpb-compact-text-toolbar")
     expect(dock).to_be_visible()
     expect(page.frame_locator("iframe.dpb-proto-frame").locator("#dpb-text-toolbar")).not_to_be_visible()
@@ -1048,3 +1050,222 @@ def test_narrow_host_docks_text_actions_outside_canvas_and_drawer(editor_page):
     box = button.bounding_box()
     feedback = page.locator("#dpb-feedback").bounding_box()
     assert box["y"] + box["height"] < feedback["y"]
+
+
+# IP-01..IP-13: full state, keyboard, localization and stable geometry.
+def set_review_locale(page, locale):
+    if page.locator("#dpb-root").get_attribute("lang").split("-")[0] != locale:
+        page.locator("#dpb-language-toggle").click()
+
+
+@pytest.mark.parametrize("locale", ["zh", "en"])
+def test_ip01_filtered_empty_guidance_and_ip02_resolved_badge(editor_page, locale):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    set_review_locale(page, locale)
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    proto.locator("#panel-title").evaluate("el => el.click()")
+    page.locator("#dpb-anno-input").fill("Review this title")
+    page.locator("#dpb-anno-input").press("Enter")
+    page.locator("#dpb-filter-resolved").click()
+    empty = page.locator(".dpb-anchor-empty")
+    expect(empty).to_be_visible()
+    expect(empty.locator("svg")).to_be_visible()
+    expect(empty).to_contain_text("当前筛选" if locale == "zh" else "match this filter")
+    page.locator("#dpb-filter-all").click()
+    expect(empty).to_have_count(0)
+    page.locator(".dpb-anchor-resolve").click()
+    badge = proto.locator(".dpb-pin-badge")
+    expect(badge).to_have_class(re.compile("dpb-resolved"))
+    expect(badge).to_have_css("opacity", "0.5")
+    page.locator(".dpb-anchor-resolve").click()
+    expect(badge).not_to_have_class(re.compile("dpb-resolved"))
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_ip03_all_review_and_bridge_controls_have_focus_rings(editor_page, theme):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    page.locator("#dpb-root").evaluate("(el, theme) => el.dataset.theme = theme", theme)
+    page.keyboard.press("Tab")
+    for selector in ("#dpb-roam-prev", "#dpb-roam-next", "#dpb-inspector-close",
+                     "#dpb-draft", "#dpb-abort", "#dpb-language-toggle", "#dpb-theme-toggle",
+                     "#dpb-drawer-toggle", "#dpb-shortcuts-btn", "#dpb-filter-all", "#dpb-btn-approve"):
+        button = page.locator(selector)
+        button.focus()
+        expect(button).to_have_css("outline-style", "solid")
+        expect(button).to_have_css("outline-width", "2px")
+    select_interaction_target(page)
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    for selector in (".dpb-tb-italic", ".dpb-handle-se"):
+        control = proto.locator(selector)
+        control.focus()
+        expect(control).to_have_css("outline-style", "solid")
+    proto.locator(".dpb-tb-color-btn").click()
+    page.keyboard.press("Tab")
+    for selector in (".dpb-cp-hue", ".dpb-cp-hex", ".dpb-cp-swatch"):
+        control = proto.locator(selector).first
+        control.focus()
+        expect(control).to_have_css("outline-style", "solid")
+
+
+def test_ip04_loading_until_bridge_ready_and_reduced_motion(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    expect(page.locator("#dpb-prototype-loading")).to_be_hidden()
+    page.locator("#dpb-tab-visual").click()
+    page.locator("iframe.dpb-proto-frame").evaluate("el => el.srcdoc = '<html><body>Loading route</body></html>'")
+    loading = page.locator("#dpb-prototype-loading")
+    expect(loading).to_be_visible()
+    expect(page.locator(".dpb-react-editor .dpb-loading")).to_be_visible()
+    expect(page.locator("#dpb-artboard-inner")).to_have_attribute("aria-busy", "true")
+    page.emulate_media(reduced_motion="reduce")
+    expect(loading.locator(".dpb-skeleton")).to_have_css("animation-name", "none")
+    page.reload()
+    expect(loading).to_be_hidden()
+    expect(page.locator("#dpb-artboard-inner")).to_have_attribute("aria-busy", "false")
+
+
+@pytest.mark.parametrize("modifier", ["Control", "Meta"])
+def test_ip05_frame_shortcuts_and_ip08_canvas_history(pending_visual_edit, modifier):
+    from playwright.sync_api import expect
+
+    page = pending_visual_edit
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    handle = proto.locator(".dpb-handle-se")
+    handle.focus()
+    page.keyboard.press(f"{modifier}+z")
+    expect(page.locator("#dpb-visual-count")).to_have_text("0")
+    page.keyboard.press(f"{modifier}+Shift+z")
+    expect(page.locator("#dpb-visual-count")).to_have_text("1")
+    old_lang = page.locator("#dpb-root").get_attribute("lang")
+    page.keyboard.press("l")
+    expect(page.locator("#dpb-root")).not_to_have_attribute("lang", old_lang)
+    page.keyboard.press("?")
+    expect(page.locator("#dpb-shortcut-close")).to_be_focused()
+    page.keyboard.press("Escape")
+    page.evaluate("""() => {
+      window.submitted = [];
+      document.querySelector('form').addEventListener('submit', e => {
+        e.preventDefault(); window.submitted.push(e.submitter.id);
+      });
+    }""")
+    handle.focus()
+    page.keyboard.press(f"{modifier}+Enter")
+    page.wait_for_function("window.submitted.includes('dpb-btn-approve')")
+    # Wait for the advisory floor's asynchronous focus before returning to the frame.
+    expect(page.locator("#dpb-feedback")).to_be_focused()
+    handle.focus()
+    expect(handle).to_be_focused()
+    page.keyboard.press("Shift+Escape")
+    page.wait_for_function("window.submitted.includes('dpb-btn-skip')")
+    proto.locator("body").evaluate("el => {const input=document.createElement('input'); input.id='ip-input'; el.append(input)}")
+    proto.locator("#ip-input").focus()
+    page.keyboard.press(f"{modifier}+Enter")
+    assert page.evaluate("window.submitted.length") == 2
+
+
+def test_skip_shortcut_submits_while_feedback_has_focus(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    page.evaluate("""() => {
+      window.submitted = [];
+      document.querySelector('form').addEventListener('submit', e => {
+        e.preventDefault(); window.submitted.push(e.submitter.id);
+      });
+    }""")
+    feedback = page.locator("#dpb-feedback")
+    feedback.focus()
+    expect(feedback).to_be_focused()
+    page.keyboard.press("Shift+Escape")
+    assert page.evaluate("window.submitted") == ["dpb-btn-skip"]
+
+
+def test_ip06_inspector_enter_is_local_and_ip07_abort_focus(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    select_interaction_target(page)
+    page.evaluate("document.querySelector('form').addEventListener('submit', e => {e.preventDefault(); window.leaked = true})")
+    field = page.locator('.dpb-react-field[data-property="width"] input')
+    field.fill("250px")
+    field.press("Control+Enter")
+    expect(page.locator("#dpb-visual-count")).to_have_text("1")
+    assert not page.evaluate("Boolean(window.leaked)")
+    page.locator("#dpb-abort").click()
+    expect(page.locator("#dpb-abort-cancel")).to_be_focused()
+    page.keyboard.press("Shift+Tab")
+    expect(page.locator("#dpb-abort-confirm")).to_be_focused()
+    page.keyboard.press("Tab")
+    expect(page.locator("#dpb-abort-cancel")).to_be_focused()
+    page.locator("#dpb-theme-toggle").click()
+    expect(page.locator("#dpb-abort")).to_be_focused()
+    expect(page.locator("#dpb-abort-popover")).to_be_hidden()
+    page.locator("#dpb-abort").click()
+    page.keyboard.press("Escape")
+    expect(page.locator("#dpb-abort")).to_be_focused()
+
+
+@pytest.mark.parametrize("locale", ["zh", "en"])
+def test_ip09_central_labels_render_in_inspector_and_bridge(editor_page, locale):
+    from playwright.sync_api import expect
+    from design_playbook.mcp.preview.i18n import EN, ZH, _STRINGS
+
+    page = editor_page
+    set_review_locale(page, locale)
+    select_interaction_target(page)
+    strings = _STRINGS[ZH if locale == "zh" else EN]
+    expect(page.locator('[data-section="typography"] strong')).to_have_text(strings["sec_typography"])
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    expect(proto.locator(".dpb-tb-italic")).to_have_attribute("aria-label", strings["visual_italic"])
+    expect(proto.locator(".dpb-handle-se")).to_have_attribute("aria-label", strings["visual_resize"].replace("{handle}", "se"))
+    proto.locator(".dpb-tb-color-btn").click()
+    expect(proto.locator(".dpb-cp-hue")).to_have_attribute("aria-label", strings["visual_hue"])
+    expect(proto.locator(".dpb-cp-hex")).to_have_attribute("aria-label", strings["visual_hex"])
+    page.locator("#dpb-language-toggle").click()
+    other = _STRINGS[EN if locale == "zh" else ZH]
+    expect(proto.locator(".dpb-tb-italic")).to_have_attribute("aria-label", other["visual_italic"])
+    assert "var LABELS" not in JS
+
+
+@pytest.mark.parametrize("locale", ["zh", "en"])
+def test_ip10_layout_and_ip11_ip13_stable_borders(editor_page, locale):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    set_review_locale(page, locale)
+    for width in (1024, 1280, 1440):
+        page.set_viewport_size({"width": width, "height": 900})
+        assert page.locator(".dpb-header").bounding_box()["height"] == 48
+        assert page.locator(".dpb-rail-head").bounding_box()["height"] == 48
+        assert page.locator("#dpb-inspector").bounding_box()["width"] == 320
+    kbd = page.locator("#dpb-btn-approve kbd")
+    before = kbd.bounding_box()["height"]
+    page.locator("#dpb-btn-approve").evaluate("el => {el.classList.remove('dpb-approve-muted'); el.classList.add('dpb-approve-ready')}")
+    expect(kbd).to_have_css("border-bottom-width", "2px")
+    assert kbd.bounding_box()["height"] == before
+    page.locator("#dpb-tab-visual").click()
+    header = page.locator(".dpb-section-header").first
+    before = header.bounding_box()["height"]
+    header.click()
+    expect(header).to_have_css("border-bottom-width", "1px")
+    assert header.bounding_box()["height"] == before
+
+
+def test_ip12_svg_coordinate_systems_follow_dimensions(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    page.locator("iframe.dpb-proto-frame").evaluate("""el => el.contentWindow.postMessage({
+      dpbPinAnchors: [{selector: '@draw:1', tag: 'draw', n: 1, points: [[10,10],[40,40]]}]
+    }, '*')""")
+    page.locator("#dpb-ruler-toggle").click()
+    proto.locator("#panel-title").hover()
+    expect(proto.locator("#dpb-ruler-layer")).to_be_attached()
+    for selector in (page.locator("#dpb-draw-layer"), proto.locator("#dpb-draw-layer"), proto.locator("#dpb-ruler-layer")):
+        assert selector.evaluate("el => el.getAttribute('viewBox') === '0 0 ' + el.getAttribute('width') + ' ' + el.getAttribute('height')")

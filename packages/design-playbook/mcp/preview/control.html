@@ -110,9 +110,14 @@
     <main class="dpb-canvas" id="dpb-canvas">
       <div class="dpb-artboard-wrap" id="dpb-artboard-wrap">
         <div class="dpb-artboard" id="dpb-artboard">
-          <div class="dpb-artboard-inner" id="dpb-artboard-inner"></div>
+          <div class="dpb-artboard-inner" id="dpb-artboard-inner" aria-busy="true">
+            <div id="dpb-prototype-loading" class="dpb-loading dpb-prototype-loading" role="status">
+              <span data-i18n="prototype_loading">{t_prototype_loading}</span>
+              <div class="dpb-skeleton" aria-hidden="true"></div>
+            </div>
+          </div>
         </div>
-        <svg class="dpb-draw-layer" id="dpb-draw-layer" aria-hidden="true"></svg>
+        <svg class="dpb-draw-layer" id="dpb-draw-layer" viewBox="0 0 1024 768" preserveAspectRatio="none" aria-hidden="true"></svg>
         <div class="dpb-pins-layer" id="dpb-pins-layer" aria-hidden="true"></div>
       </div>
     </main>

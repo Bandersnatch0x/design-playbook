@@ -24,11 +24,11 @@
       if (!liveSelectors[sel]) removeBubble(sel);
     });
     listEl.classList.toggle("has-items", anchors.length > 0);
-    if (!anchors.length) {
+    if (!visibleAnchors().length) {
       listEl.innerHTML = '<div class="dpb-anchor-empty">'
         + '<svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v11M2.5 8h11"/><circle cx="8" cy="8" r="5.5"/></svg>'
-        + '<div class="dpb-anchor-empty-title">' + esc(tt("drawer_empty_title")) + '</div>'
-        + '<p class="dpb-anchor-empty-desc">' + esc(tt("drawer_empty_desc")) + '</p>'
+        + '<div class="dpb-anchor-empty-title">' + esc(tt(anchors.length ? "filtered_empty_title" : "drawer_empty_title")) + '</div>'
+        + '<p class="dpb-anchor-empty-desc">' + esc(tt(anchors.length ? "filtered_empty_desc" : "drawer_empty_desc")) + '</p>'
         + '</div>';
       syncHidden();
       updateCounts();
@@ -295,7 +295,7 @@
     if (abortStatus) {
       abortStatus.textContent = (announceCancel && wasOpen) ? tt("abort_cancelled") : "";
     }
-    if (wasOpen && abortPopover.contains(document.activeElement) && abortBtn) abortBtn.focus();
+    if (wasOpen && abortBtn) abortBtn.focus();
   }
   if (abortBtn) abortBtn.addEventListener("click", function (e) {
     e.preventDefault();
@@ -467,6 +467,8 @@
       return;
     }
     var activeEl = document.activeElement;
+    // Property edits own Enter (including modifier variants), never a review decision.
+    if (isTextEditingTarget(activeEl) && activeEl.closest("#dpb-react-editor-root")) return;
     // Ctrl/Cmd+Enter is the global approve channel - it must fire even while
     // a textarea/input has focus (v9 keymap). An open draft with text is
     // committed first so Ctrl+Enter never silently discards a written note.
@@ -474,6 +476,13 @@
       e.preventDefault();
       if (draftPopoverOpen() && annoInput && annoInput.value.trim()) saveDraftAnchor();
       submitPrimary();
+      return;
+    }
+    // Skip shares approve's global channel, including focused feedback fields.
+    if (e.shiftKey && e.key === "Escape") {
+      e.preventDefault();
+      var skipBtn = document.getElementById("dpb-btn-skip");
+      if (skipBtn) form.requestSubmit(skipBtn);
       return;
     }
     if (isTextEditingTarget(activeEl)) {
@@ -492,10 +501,7 @@
     }
     if (e.key === "Escape") {
       e.preventDefault();
-      if (e.shiftKey) {
-        var skipBtn = document.getElementById("dpb-btn-skip");
-        if (skipBtn) form.requestSubmit(skipBtn);
-      } else if (draftPopoverOpen()) {
+      if (draftPopoverOpen()) {
         cancelDraft(true);
       } else if (!coachmark.hidden) {
         hideCoachmark(true);
@@ -504,13 +510,14 @@
       }
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && k === "z") {
+    if ((e.ctrlKey || e.metaKey) && (k === "z" || k === "y")) {
+      if (activeEl && activeEl.closest("#dpb-canvas") && document.getElementById("dpb-tab-visual").getAttribute("aria-selected") === "true") return;
       // Annotation history owns only annotation controls/canvas, not visual or review controls.
       if (!activeEl || !activeEl.closest(
         "#dpb-annotations-view, #dpb-anno-popover, #dpb-toolbar, #dpb-canvas, #dpb-tab-annotations"
       )) return;
       e.preventDefault();
-      if (e.shiftKey) redo(); else undo();
+      if (e.shiftKey || k === "y") redo(); else undo();
       return;
     }
     if (e.shiftKey && (e.key === "Delete" || e.key === "Backspace")) {
@@ -547,10 +554,13 @@
   window.addEventListener("message", function (e) {
     var frame = protoFrame();
     if (!frame || e.source !== frame.contentWindow) return;
-    var key = (e.data || {}).dpbToolShortcut;
-    // Only harmless tool keys cross the sandbox boundary, never review actions.
-    if (["Escape", "b", "d", "h", "p", "r", "v"].indexOf(key) < 0) return;
-    handleKeyDown(new KeyboardEvent("keydown", { key: key }));
+    var data = e.data || {}, shortcut = data.dpbReviewShortcut;
+    if (!shortcut) shortcut = { key: data.dpbToolShortcut };
+    var key = shortcut.key;
+    if (typeof key !== "string" || ["Escape", "Enter", "b", "d", "h", "p", "r", "v", "z", "y", "l", "[", "]", "?", "j", "k", "s", "Delete", "Backspace", "=", "+", "-", "_", "0", "1", "2", "3"].indexOf(key) < 0) return;
+    // Dispatch on the frame so review and visual history share the normal keymap.
+    frame.dispatchEvent(new KeyboardEvent("keydown", { key: key, bubbles: true, cancelable: true,
+      ctrlKey: shortcut.ctrlKey === true, metaKey: shortcut.metaKey === true, shiftKey: shortcut.shiftKey === true }));
   });
   document.addEventListener("keyup", function (e) {
     if (e.code === "Space") {

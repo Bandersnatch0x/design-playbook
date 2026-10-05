@@ -7,7 +7,12 @@
     var mount = document.getElementById("dpb-react-editor-root");
     var frame = document.querySelector("iframe.dpb-proto-frame");
     var root = document.getElementById("dpb-root");
-    if (!mount || !frame) return;
+    if (!mount) return;
+    if (!frame) {
+      document.getElementById("dpb-prototype-loading").hidden = true;
+      document.getElementById("dpb-artboard-inner").setAttribute("aria-busy", "false");
+      return;
+    }
     // The only CSS-property -> computed snapshot key mapping in the inspector.
     var FIELDS = [
       ["color", "color"], ["background-color", "backgroundColor"],
@@ -33,6 +38,13 @@
     function post(message) {
       frame.contentWindow.postMessage({ dpbVisualEdit: message }, "*");
     }
+    function bridgeLabels() {
+      var labels = {}, lang = root.lang.indexOf("zh") === 0 ? "zh" : "en";
+      Object.keys(window.DPB_I18N_DUAL).forEach(function (key) {
+        if (key.indexOf("visual_") === 0) labels[key] = window.DPB_I18N_DUAL[key][lang];
+      });
+      return labels;
+    }
     function syncDraft(values, property, value) {
       var next = Object.assign({}, values, { [property]: value });
       var match = /^(padding|margin)(?:-(top|right|bottom|left))?$/.exec(property);
@@ -56,7 +68,13 @@
       var [future, setFuture] = React.useState([]);
       var [drafts, setDrafts] = React.useState({});
       var [ready, setReady] = React.useState(false);
+      var [connecting, setConnecting] = React.useState(true);
       var [stale, setStale] = React.useState(false);
+      React.useEffect(function () {
+        var loading = document.getElementById("dpb-prototype-loading");
+        if (loading) loading.hidden = !connecting;
+        document.getElementById("dpb-artboard-inner").setAttribute("aria-busy", String(connecting));
+      }, [connecting]);
       var [diagnostic, setDiagnostic] = React.useState("visual_disconnected");
       var [busy, setBusy] = React.useState(false);
       var [webmcp, setWebmcp] = React.useState(false);
@@ -82,36 +100,10 @@
       var binding = window.DPB_VISUAL_BINDING || { sourceHash: "", routeUrl: "" };
       current.current = { selected: selected, pending: pending, history: history,
         future: future, ready: ready, stale: stale, drafts: drafts };
-      var LABELS = {
-        sec_typography: { zh: "排版 (Typography)", en: "Typography" },
-        sec_colors: { zh: "颜色 (Colors)", en: "Colors" },
-        sec_layout: { zh: "布局 (Layout)", en: "Layout" },
-        sec_spacing: { zh: "间距 (Spacing)", en: "Spacing" },
-        sec_border: { zh: "边框 (Border)", en: "Border" },
-        visual_fontFamily: { zh: "字体", en: "Font family" },
-        visual_letterSpacing: { zh: "字间距", en: "Letter spacing" },
-        visual_display: { zh: "显示", en: "Display" },
-        visual_position: { zh: "定位", en: "Position" },
-        visual_flexDirection: { zh: "排列方向", en: "Direction" },
-        visual_justifyContent: { zh: "主轴对齐", en: "Justify" },
-        visual_alignItems: { zh: "交叉轴对齐", en: "Align" },
-        visual_borderWidth: { zh: "边框粗细", en: "Border width" },
-        visual_borderColor: { zh: "边框颜色", en: "Border color" },
-        visual_transform: { zh: "变换", en: "Transform" },
-        visual_marginTop: { zh: "上外边距", en: "Margin Top" },
-        visual_marginRight: { zh: "右外边距", en: "Margin Right" },
-        visual_marginBottom: { zh: "下外边距", en: "Margin Bottom" },
-        visual_marginLeft: { zh: "左外边距", en: "Margin Left" },
-        visual_paddingTop: { zh: "上内边距", en: "Padding Top" },
-        visual_paddingRight: { zh: "右内边距", en: "Padding Right" },
-        visual_paddingBottom: { zh: "下内边距", en: "Padding Bottom" },
-        visual_paddingLeft: { zh: "左内边距", en: "Padding Left" }
-      };
       function t(key) {
         var table = window.DPB_I18N_DUAL;
         var isZh = (locale || "en").indexOf("zh") === 0;
         if (table && table[key]) return table[key][isZh ? "zh" : "en"] || key;
-        if (LABELS[key]) return LABELS[key][isZh ? "zh" : "en"] || key;
         return key;
       }
       function snapshot(selection) {
@@ -141,6 +133,7 @@
       }
       function disconnected() {
         setReady(false);
+        setConnecting(false);
         setSelected(null);
         setDrafts({});
         if (current.current.pending.length) setStale(true);
@@ -195,7 +188,7 @@
           if (url.protocol !== "http:" || ["127.0.0.1", "localhost", "[::1]"].indexOf(url.hostname) < 0 ||
               typeof token !== "string" || !/^[A-Za-z0-9_-]{32}$/.test(token)) return;
           if (!window.EventSource) { setPresenceStatus("unavailable"); return; }
-          var userId = crypto.randomUUID(), name = "User " + userId.slice(0, 6);
+          var userId = crypto.randomUUID(), name = t("presence_user") + " " + userId.slice(0, 6);
           url.searchParams.set("token", token);
           var postUrl = url.href;
           url.searchParams.set("user", userId); url.searchParams.set("name", name);
@@ -236,7 +229,8 @@
         function onHistoryKey(event) {
           if (event.key === "Escape") post({ type: "close-color-picker" });
           if (!(event.ctrlKey || event.metaKey) || event.altKey || event.isComposing ||
-              event.defaultPrevented || mount.offsetParent === null || !mount.contains(event.target)) return;
+              event.defaultPrevented || mount.offsetParent === null || !event.target.closest ||
+              !event.target.closest("#dpb-react-editor-root, #dpb-canvas, #dpb-artboard-wrap, #dpb-visual-view")) return;
           var key = event.key.toLowerCase();
           if (key !== "z" && key !== "y") return;
           var state = current.current;
@@ -253,12 +247,16 @@
         };
       }, []);
       React.useEffect(function () {
-        var nonce = 0, lastAck = 0;
+        post({ type: "localize", labels: bridgeLabels() });
+      }, [locale]);
+      React.useEffect(function () {
+        var nonce = 0, lastAck = 0, started = Date.now();
         function ping() {
           if (lastAck && Date.now() - lastAck > 2500) disconnected();
-          post({ type: "ping", nonce: ++nonce, compact: window.innerWidth <= 480 });
+          if (!lastAck && Date.now() - started > 2500) setConnecting(false);
+          post({ type: "ping", nonce: ++nonce, compact: window.innerWidth <= 480, labels: bridgeLabels() });
         }
-        function load() { lastAck = 0; disconnected(); ping(); }
+        function load() { lastAck = 0; started = Date.now(); disconnected(); setConnecting(true); ping(); }
         function onMessage(event) {
           if (event.source !== frame.contentWindow) return;
           var data = event.data || {};
@@ -268,7 +266,7 @@
             if (response.routeUrl !== (binding.routeUrl || "about:srcdoc")) {
               setStale(true); setReady(false); fail("visual_stale"); return;
             }
-            lastAck = Date.now(); setReady(true);
+            lastAck = Date.now(); setReady(true); setConnecting(false);
             if (!current.current.stale) setDiagnostic(function (old) { return old === "visual_disconnected" ? "" : old; });
           }
           if (data.dpbVisualEditSelection && lastAck) {
@@ -406,7 +404,9 @@
           h("button", { type: "button", disabled: !ready || stale || busy || !history.length, "aria-label": t("visual_undo"), onClick: function () { replay("undo"); } }, t("visual_undo")),
           h("button", { type: "button", disabled: !ready || stale || busy || !future.length, "aria-label": t("visual_redo"), onClick: function () { replay("redo"); } }, t("visual_redo")),
           h("span", { className: "dpb-react-pending-count" }, t("visual_pending").replace("{n}", pending.length))),
-        h("p", { className: "dpb-react-diagnostic", role: "status", "data-stale": stale }, stale ? t("visual_stale") : diagnostic ? t(diagnostic) : ""),
+        h("p", { className: "dpb-react-diagnostic", role: "status", "data-stale": stale }, stale ? t("visual_stale") : connecting ? "" : diagnostic ? t(diagnostic) : ""),
+        connecting && !stale && h("div", { className: "dpb-loading dpb-editor-loading", role: "status" },
+          h("span", null, t("visual_loading")), h("div", { className: "dpb-skeleton", "aria-hidden": true })),
         (function () {
           function handleInput(prop, val) {
             setDrafts(function (old) { return syncDraft(old, prop, val); });
@@ -418,7 +418,7 @@
             commit(prop, val, selected && selected.selector);
           }
           function handleKey(prop, val, e) {
-            if (e.key === "Enter") { e.preventDefault(); commit(prop, val, selected && selected.selector); }
+            if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); e.stopPropagation(); commit(prop, val, selected && selected.selector); }
           }
           function renderField(prop, label, kind, opts, unit) {
             var val = drafts[prop] || "";
@@ -458,7 +458,7 @@
                 h("span", null, label),
                 h("div", { className: "dpb-color-input-wrap" },
                   h("button", { type: "button", className: "dpb-color-swatch-preview", style: { backgroundColor: val || "transparent" },
-                    "aria-label": label + " color picker", disabled: !selected || !ready || stale,
+                    "aria-label": t("visual_color_picker").replace("{label}", label), disabled: !selected || !ready || stale,
                     onClick: function (e) { e.preventDefault(); post({ type: "open-color-picker", selector: selected.selector, property: prop }); } }),
                   h("input", {
                     value: val, disabled: !selected || !ready || stale,
@@ -501,6 +501,7 @@
                   h("em", { className: "dpb-quad-label" }, axis),
                   h("input", {
                     value: drafts[sProp] || "", disabled: !selected || !ready || stale,
+                    "aria-label": t("visual_" + sProp.replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); })),
                     placeholder: "0",
                     onChange: function (e) { handleInput(sProp, e.target.value); },
                     onBlur: function (e) { handleBlur(sProp, e.target.value); },
@@ -523,7 +524,7 @@
                 type: "button", className: "dpb-section-header", "aria-expanded": !isClosed,
                 onClick: function () { toggleSection(secId); }
               }, h("strong", null, title), isClosed && modified && h("span", {
-                className: "dpb-section-modified", "aria-label": locale === "zh" ? "已修改" : "Modified" }, "•"),
+                className: "dpb-section-modified", "aria-label": t("visual_modified") }, "•"),
                 h("span", { className: "dpb-section-chevron" }, isClosed ? "▸" : "▾")),
               !isClosed && h("div", { className: "dpb-section-body" }, children)
             );
@@ -543,10 +544,10 @@
             ]),
             renderSection("typography", t("sec_typography"), [
               compact && selected && selected.textEditable && h("div", { className: "dpb-compact-text-toolbar", key: "compact-text", role: "toolbar", "aria-label": t("sec_typography") },
-                [["B", "Bold", "font-weight", selected.style.fontWeight >= 600, "bold", "normal"],
-                  ["I", "Italic", "font-style", selected.style.fontStyle === "italic", "italic", "normal"],
-                  ["U", "Underline", "text-decoration", selected.style.textDecoration.indexOf("underline") >= 0, "underline", "none"],
-                  ["S", "Strikethrough", "text-decoration", selected.style.textDecoration.indexOf("line-through") >= 0, "line-through", "none"]].map(function (action) {
+                [["B", t("visual_bold"), "font-weight", selected.style.fontWeight >= 600, "bold", "normal"],
+                  ["I", t("visual_italic"), "font-style", selected.style.fontStyle === "italic", "italic", "normal"],
+                  ["U", t("visual_underline"), "text-decoration", selected.style.textDecoration.indexOf("underline") >= 0, "underline", "none"],
+                  ["S", t("visual_strikethrough"), "text-decoration", selected.style.textDecoration.indexOf("line-through") >= 0, "line-through", "none"]].map(function (action) {
                   return h("button", { key: action[1], type: "button", "aria-label": action[1], "aria-pressed": action[3],
                     disabled: !ready || stale || busy, onClick: function () { applyStyle(action[2], action[3] ? action[5] : action[4]); } }, action[0]);
                 })),

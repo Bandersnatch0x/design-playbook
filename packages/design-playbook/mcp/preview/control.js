@@ -504,7 +504,7 @@
     // #57 scheme A: mirror the anchor list into the iframe as numbered
     // badges; draw anchors carry stroke points for in-frame rendering.
     postToFrame({ dpbPinAnchors: anchors.map(function (a, i) {
-      var o = { selector: a.selector, n: i + 1, comment: a.comment || "" };
+      var o = { selector: a.selector, n: i + 1, comment: a.comment || "", resolved: !!resolvedSet[a.selector] };
       if (a.tag) o.tag = a.tag;
       if (a.points) o.points = a.points;
       if (a.rect) o.rect = a.rect;
