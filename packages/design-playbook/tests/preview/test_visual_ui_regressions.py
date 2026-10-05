@@ -636,3 +636,415 @@ def test_bridge_supports_resize_and_move_messages(editor_page):
         }, "*");
     }''')
     expect(target).to_have_css("transform", "matrix(1, 0, 0, 1, 15, 25)")
+
+
+# Independent interaction review: IR-01 through IR-19.
+def select_interaction_target(page, css=""):
+    from playwright.sync_api import expect
+
+    target = page.frame_locator("iframe.dpb-proto-frame").locator("#panel-title")
+    if css:
+        target.evaluate("(el, css) => el.style.cssText = css", css)
+    target.evaluate("el => el.click()")
+    page.keyboard.press("Escape")
+    page.locator("#dpb-tab-visual").click()
+    expect(page.locator('.dpb-react-field[data-property="width"] input')).to_be_enabled()
+    return target
+
+
+def drag_interaction(page, handle, dx, dy, release=True):
+    box = handle.bounding_box()
+    assert box is not None
+    x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    rect = handle.evaluate("el => ({width: el.getBoundingClientRect().width, height: el.getBoundingClientRect().height})")
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x + dx * box["width"] / rect["width"], y + dy * box["height"] / rect["height"], steps=3)
+    if release:
+        page.mouse.up()
+
+
+@pytest.mark.parametrize("edge", ["nw", "n", "ne", "e", "se", "s", "sw", "w"])
+def test_resize_anchors_opposite_edge_and_content_box(editor_page, edge):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    target = select_interaction_target(page,
+        "position:absolute;left:120px;top:100px;width:200px;height:100px;"
+        "padding:12px;border:3px solid black;margin:0;box-sizing:content-box")
+    before = target.evaluate("el => el.getBoundingClientRect().toJSON()")
+    initial_style = target.get_attribute("style")
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    dx = -20 if "w" in edge else 30 if "e" in edge else 0
+    dy = -15 if "n" in edge else 25 if "s" in edge else 0
+    drag_interaction(page, proto.locator(f'[data-handle="{edge}"]'), dx, dy)
+    after = target.evaluate("el => el.getBoundingClientRect().toJSON()")
+    assert after["width"] == pytest.approx(before["width"] + abs(dx), abs=1)
+    assert after["height"] == pytest.approx(before["height"] + abs(dy), abs=1)
+    assert after["x"] == pytest.approx(before["x"] + min(dx, 0), abs=1)
+    assert after["y"] == pytest.approx(before["y"] + min(dy, 0), abs=1)
+    page.locator(".dpb-react-actions button").first.click()
+    expect(page.locator("#dpb-visual-count")).to_have_text("0")
+    assert target.get_attribute("style") == initial_style
+
+
+@pytest.mark.parametrize("prop,value", [("font-size", "16px"), ("letter-spacing", "normal"), ("width", "auto"), ("line-height", "normal")])
+def test_units_never_duplicate_suffix_or_label_keywords(editor_page, prop, value):
+    from playwright.sync_api import expect
+
+    target = select_interaction_target(editor_page)
+    field = editor_page.locator(f'.dpb-react-field[data-property="{prop}"]')
+    field.locator("input").fill(value)
+    expect(field.locator(".dpb-unit-suffix")).to_have_count(0)
+    if prop == "font-size":
+        field.locator("input").fill("")
+        field.locator("input").press_sequentially("20")
+        expect(field.locator(".dpb-unit-suffix")).to_have_text("px")
+        field.locator("input").press_sequentially("px")
+        field.locator("input").press("Enter")
+        expect(target).to_have_css("font-size", "20px")
+        expect(field.locator(".dpb-unit-suffix")).to_have_count(0)
+
+
+def test_quad_shorthand_and_sides_stay_in_sync(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    target = select_interaction_target(page)
+    quad = page.locator('[data-quad="padding"]')
+    summary = quad.locator('[data-property="padding"] input')
+    summary.fill("4px 8px 12px 16px")
+    for axis, value in zip("TRBL", ["4px", "8px", "12px", "16px"]):
+        expect(quad.locator(f'[data-axis="{axis}"] input')).to_have_value(value)
+    summary.press("Enter")
+    expect(target).to_have_css("padding-left", "16px")
+    top = quad.locator('[data-axis="T"] input')
+    top.fill("20px")
+    expect(summary).to_have_value("20px 8px 12px 16px")
+    top.press("Enter")
+    expect(target).to_have_css("padding-top", "20px")
+    page.locator(".dpb-react-actions button").first.click()
+    expect(top).to_have_value("4px")
+    expect(summary).to_have_value("4px 8px 12px 16px")
+
+
+@pytest.mark.parametrize("prop", ["color", "background-color", "border-color"])
+def test_inspector_swatch_opens_shared_picker_for_its_property(editor_page, prop):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    target = select_interaction_target(page)
+    swatch = page.locator(f'[data-property="{prop}"] .dpb-color-swatch-preview')
+    expect(swatch).to_have_attribute("type", "button")
+    swatch.click()
+    picker = page.frame_locator("iframe.dpb-proto-frame").locator("#dpb-color-picker")
+    expect(picker).to_be_visible()
+    picker.locator('.dpb-cp-swatch[data-color="#ef4444"]').click()
+    expect(target).to_have_css(prop, "rgb(239, 68, 68)")
+    expect(page.locator("#dpb-visual-count")).to_have_text("1")
+
+
+def test_collapsed_header_indicates_pending_modifications(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    select_interaction_target(page)
+    section = page.locator('[data-section="typography"]')
+    section.locator('[data-property="font-size"] input').fill("30px")
+    expect(page.locator("#dpb-visual-count")).to_have_text("1")
+    section.locator(".dpb-section-header").click()
+    expect(section.locator(".dpb-section-modified")).to_be_visible()
+    page.locator(".dpb-react-actions button").first.click()
+    expect(section.locator(".dpb-section-modified")).to_have_count(0)
+
+
+@pytest.mark.parametrize("transform", ["translate(-50%, -50%)", "rotate(20deg) scale(1.2)", "matrix(1, 0.2, 0.1, 1, 4, 5)"])
+def test_move_preserves_stylesheet_transforms_and_undo(editor_page, transform):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    target = select_interaction_target(page, "position:absolute;left:200px;top:180px;width:180px;height:80px;margin:0")
+    target.evaluate("(el, value) => { const style = document.createElement('style'); style.textContent = '#panel-title {transform:' + value + '}'; document.head.append(style); }", transform)
+    target.evaluate("el => el.click()")
+    before = target.evaluate("el => {const m = new DOMMatrix(getComputedStyle(el).transform); return [m.a,m.b,m.c,m.d,m.e,m.f]}")
+    move = page.frame_locator("iframe.dpb-proto-frame").locator(".dpb-move-body")
+    drag_interaction(page, move, 20, 10)
+    after = target.evaluate("el => {const m = new DOMMatrix(getComputedStyle(el).transform); return [m.a,m.b,m.c,m.d,m.e,m.f]}")
+    assert after[:4] == pytest.approx(before[:4])
+    assert after[4:] == pytest.approx([before[4] + 20, before[5] + 10], abs=1)
+    page.locator(".dpb-react-actions button").first.click()
+    expect(page.locator("#dpb-visual-count")).to_have_text("0")
+    assert target.evaluate("el => el.style.transform") == ""
+
+
+def test_resize_hud_and_cached_raf_guides(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    target = select_interaction_target(page, "position:absolute;left:120px;top:100px;width:200px;height:100px;margin:0")
+    target.evaluate("""el => {
+      window.siblingReads = 0;
+      for (const sibling of el.parentElement.children) {
+        if (sibling === el || sibling.id === 'dpb-float-root') continue;
+        const read = sibling.getBoundingClientRect.bind(sibling);
+        sibling.getBoundingClientRect = () => { window.siblingReads++; return read(); };
+      }
+    }""")
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    drag_interaction(page, proto.locator('[data-handle="se"]'), 20, 10, release=False)
+    hud = proto.locator("#dpb-dimension-hud")
+    expect(hud).to_have_text("220 × 110")
+    reads = target.evaluate("() => window.siblingReads")
+    assert reads > 0
+    frames = target.evaluate("""el => {
+      let frames = 0;
+      const request = window.requestAnimationFrame;
+      window.requestAnimationFrame = callback => { frames++; return request(callback); };
+      const handle = document.querySelector('[data-handle="se"]');
+      const rect = handle.getBoundingClientRect();
+      for (let i = 0; i < 20; i++) handle.dispatchEvent(new PointerEvent('pointermove', {clientX:rect.x+i,clientY:rect.y+i}));
+      return frames;
+    }""")
+    assert frames == 1
+    handle_box = proto.locator('[data-handle="se"]').bounding_box()
+    page.mouse.move(handle_box["x"] + 10, handle_box["y"] + 10, steps=5)
+    assert target.evaluate("() => window.siblingReads") == reads
+    page.mouse.up()
+    expect(hud).not_to_be_visible()
+    assert 'requestAnimationFrame(draw)' in (PREVIEW / "pin_bridge.py").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("markup,visible", [("<span>Nested title</span>", False), ('<img alt="asset">', False), ("Direct title", True)])
+def test_toolbar_only_appears_for_direct_text(editor_page, markup, visible):
+    from playwright.sync_api import expect
+
+    target = select_interaction_target(editor_page)
+    target.evaluate("(el, html) => {el.innerHTML = html; el.click()}", markup)
+    toolbar = editor_page.frame_locator("iframe.dpb-proto-frame").locator("#dpb-text-toolbar")
+    if visible:
+        expect(toolbar).to_be_visible()
+    else:
+        expect(toolbar).not_to_be_visible()
+
+
+def test_toolbar_flips_below_top_text_and_italic_has_serifs(editor_page):
+    from playwright.sync_api import expect
+
+    target = select_interaction_target(editor_page, "position:absolute;top:0;left:0;margin:0;width:180px;height:30px")
+    toolbar = editor_page.frame_locator("iframe.dpb-proto-frame").locator("#dpb-text-toolbar")
+    top = toolbar.evaluate("el => el.getBoundingClientRect().top")
+    bottom = target.evaluate("el => el.getBoundingClientRect().bottom")
+    assert top >= bottom + 10
+    expect(toolbar.locator(".dpb-tb-italic")).to_have_css("font-family", re.compile("Georgia"))
+
+
+def test_picker_alpha_and_opacity_commit_once_per_gesture(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    target = select_interaction_target(page, "color:rgb(239,68,68)")
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    proto.locator(".dpb-tb-color-btn").click()
+    track = proto.locator(".dpb-cp-alpha")
+    box = track.bounding_box()
+    page.mouse.move(box["x"] + box["width"] / 4, box["y"] + box["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2, steps=3)
+    expect(target).to_have_css("color", "rgba(239, 68, 68, 0.5)")
+    expect(page.locator("#dpb-visual-count")).to_have_text("0")
+    page.mouse.up()
+    expect(page.locator("#dpb-visual-count")).to_have_text("1")
+    opacity = proto.locator(".dpb-cp-opacity")
+    opacity.fill("75")
+    expect(target).to_have_css("color", "rgba(239, 68, 68, 0.75)")
+    opacity.press("Enter")
+    expect(page.locator("#dpb-visual-count")).to_have_text("2")
+    page.locator(".dpb-react-actions button").first.click()
+    expect(target).to_have_css("color", "rgba(239, 68, 68, 0.5)")
+
+
+def test_picker_dismissal_active_ring_and_namespaced_root(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    select_interaction_target(page)
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    button = proto.locator(".dpb-tb-color-btn")
+    picker = proto.locator("#dpb-color-picker")
+    button.click()
+    swatch = picker.locator('[data-color="#ef4444"]')
+    swatch.click()
+    expect(swatch).to_have_attribute("aria-pressed", "true")
+    expect(swatch).to_have_css("outline-style", "solid")
+    swatch.press("Escape")
+    expect(picker).not_to_be_visible()
+    button.click()
+    proto.locator(".row").click(force=True)
+    expect(picker).not_to_be_visible()
+    root = proto.locator("#dpb-float-root")
+    assert root.locator("#dpb-selection-overlay").count() == 1
+    assert root.locator("#dpb-color-picker").count() == 1
+    assert root.evaluate("el => [...el.querySelectorAll('[id]')].every(node => node.id.startsWith('dpb-'))")
+
+
+@pytest.mark.parametrize("slider", ["sv", "hue", "alpha"])
+def test_picker_sliders_support_keyboard(editor_page, slider):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    target = select_interaction_target(page, "color:rgb(239,68,68)")
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    proto.locator(".dpb-tb-color-btn").click()
+    control = proto.locator(".dpb-cp-" + slider)
+    expect(control).to_have_attribute("role", "slider")
+    expect(control).to_have_attribute("tabindex", "0")
+    original = target.evaluate("el => getComputedStyle(el).color")
+    control.press("Shift+ArrowLeft" if slider != "hue" else "Shift+ArrowRight")
+    assert target.evaluate("el => getComputedStyle(el).color") != original
+    expect(control).to_have_css("outline-style", "solid")
+    expect(page.locator("#dpb-visual-count")).to_have_text("1")
+
+
+@pytest.mark.parametrize("control,step", [("[data-handle=nw]", 1), ("[data-handle=se]", 10), (".dpb-move-body", 10)])
+def test_canvas_handles_support_keyboard_steps(editor_page, control, step):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    target = select_interaction_target(page, "position:absolute;left:120px;top:100px;width:200px;height:100px;margin:0")
+    handle = page.frame_locator("iframe.dpb-proto-frame").locator(control)
+    expect(handle).to_have_attribute("role", "slider")
+    expect(handle).to_have_attribute("tabindex", "0")
+    handle.press("Shift+ArrowRight" if step == 10 else "ArrowRight")
+    expect(handle).to_have_css("outline-style", "solid")
+    rect = target.evaluate("el => el.getBoundingClientRect().toJSON()")
+    if control == ".dpb-move-body":
+        assert rect["x"] == 130
+    else:
+        assert rect["width"] == 199 if step == 1 else rect["width"] == 210
+    page.locator(".dpb-react-actions button").first.click()
+    expect(page.locator("#dpb-visual-count")).to_have_text("0")
+
+
+def test_gesture_receipt_does_not_settle_inflight_inspector_request(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    page.add_init_script("""
+      window.heldReceipts = []; window.gestureReceipts = [];
+      addEventListener('message', e => {
+        const payload = e.data.dpbVisualEditChange || e.data.dpbVisualEditSelection;
+        if (!payload || e.released) return;
+        if (typeof payload.requestId === 'number') {
+          e.stopImmediatePropagation(); window.heldReceipts.push(e);
+        } else if (e.data.dpbVisualEditChange) window.gestureReceipts.push(payload);
+      }, true);
+    """)
+    page.reload()
+    from preview_e2e_helpers import dismiss_onboarding
+
+    dismiss_onboarding(page)
+    target = select_interaction_target(page, "width:200px;height:100px")
+    field = page.locator('[data-property="color"] input')
+    field.fill("red")
+    field.press("Enter")
+    expect(target).to_have_css("color", "rgb(255, 0, 0)")
+    page.frame_locator("iframe.dpb-proto-frame").locator('[data-handle="se"]').press("Shift+ArrowRight")
+    expect(page.locator("#dpb-visual-count")).not_to_have_text("0")
+    expect(page.locator(".dpb-react-actions button").first).to_be_disabled()
+    receipts = page.evaluate("() => window.gestureReceipts")
+    assert len(receipts) == 1 and receipts[0]["requestId"].startswith("gesture-")
+    assert isinstance(receipts[0]["changes"], list)
+    page.evaluate("""() => { for (const e of heldReceipts) {
+      const receipt = new MessageEvent('message', {data:e.data,source:e.source});
+      receipt.released=true; dispatchEvent(receipt);
+    }}""")
+    expect(page.locator(".dpb-react-actions button").first).to_be_enabled()
+    assert any(edit["property"] == "color" for edit in page.evaluate("DPB_VISUAL_EDIT_BATCH.edits"))
+
+
+@pytest.mark.parametrize("width", [320, 375, 480])
+def test_narrow_toolbar_stays_inside_canvas_without_covering_handles(editor_page, width):
+    page = editor_page
+    page.locator("iframe.dpb-proto-frame").evaluate("(el, width) => el.style.width = width + 'px'", width)
+    target = select_interaction_target(page, "position:absolute;left:0;top:0;margin:0;width:300px;height:30px")
+    toolbar = page.frame_locator("iframe.dpb-proto-frame").locator("#dpb-text-toolbar")
+    rect = toolbar.evaluate("el => el.getBoundingClientRect().toJSON()")
+    assert rect["left"] >= 0 and rect["right"] <= width
+    assert rect["top"] >= target.evaluate("el => el.getBoundingClientRect().bottom") + 10
+
+
+def test_corner_resize_has_one_receipt_and_atomic_undo_redo(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    target = select_interaction_target(page, "width:200px;height:100px")
+    page.evaluate("""() => {window.receipts=[]; addEventListener('message', e => {
+      if(e.data.dpbVisualEditChange) receipts.push(e.data.dpbVisualEditChange);
+    });}""")
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    drag_interaction(page, proto.locator('[data-handle="se"]'), 20, 10)
+    expect(page.locator("#dpb-visual-count")).to_have_text("2")
+    receipts = page.evaluate("receipts")
+    assert len(receipts) == 1
+    assert receipts[0]["requestId"].startswith("gesture-")
+    assert {edit["property"] for edit in receipts[0]["changes"]} == {"width", "height"}
+    page.locator(".dpb-react-actions button").first.click()
+    expect(target).to_have_css("width", "200px")
+    expect(target).to_have_css("height", "100px")
+    expect(page.locator("#dpb-visual-count")).to_have_text("0")
+    page.locator(".dpb-react-actions button").nth(1).click()
+    expect(target).to_have_css("width", "220px")
+    expect(target).to_have_css("height", "110px")
+    expect(page.locator("#dpb-visual-count")).to_have_text("2")
+
+
+def test_batched_bridge_rejects_invalid_second_axis_without_partial_mutation(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    target = select_interaction_target(page, "width:200px;height:100px")
+    page.evaluate("""() => {window.rejections=[]; addEventListener('message', e => {
+      if(e.data.dpbVisualEditRejected) rejections.push(e.data.dpbVisualEditRejected);
+    });}""")
+    page.locator("iframe.dpb-proto-frame").evaluate("""el => el.contentWindow.postMessage({
+      dpbVisualEdit: {type:'set-style', requestId:991, selector:'#panel-title', changes:[
+        {property:'width',value:'300px'}, {property:'height',value:'broken-value'}
+      ]}}, '*')""")
+    page.wait_for_function("rejections.length === 1")
+    assert page.evaluate("rejections[0].code") == "visual_rejected"
+    expect(target).to_have_css("width", "200px")
+    expect(target).to_have_css("height", "100px")
+    expect(page.locator("#dpb-visual-count")).to_have_text("0")
+
+
+def test_cancelled_drag_restores_inline_values_without_pending_edits(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    target = select_interaction_target(page, "width:200px;height:100px")
+    original = target.get_attribute("style")
+    handle = page.frame_locator("iframe.dpb-proto-frame").locator('[data-handle="nw"]')
+    drag_interaction(page, handle, -20, -10, release=False)
+    handle.dispatch_event("pointercancel", {"pointerId": 1})
+    page.mouse.up()
+    assert target.get_attribute("style") == original
+    expect(page.locator("#dpb-visual-count")).to_have_text("0")
+
+
+def test_narrow_host_docks_text_actions_outside_canvas_and_drawer(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    page.set_viewport_size({"width": 320, "height": 900})
+    target = select_interaction_target(page)
+    dock = page.locator(".dpb-compact-text-toolbar")
+    expect(dock).to_be_visible()
+    expect(page.frame_locator("iframe.dpb-proto-frame").locator("#dpb-text-toolbar")).not_to_be_visible()
+    button = dock.get_by_role("button", name="Italic", exact=True)
+    button.click()
+    expect(target).to_have_css("font-style", "italic")
+    expect(page.locator("#dpb-visual-count")).to_have_text("1")
+    expect(button).to_have_attribute("aria-pressed", "true")
+    box = button.bounding_box()
+    feedback = page.locator("#dpb-feedback").bounding_box()
+    assert box["y"] + box["height"] < feedback["y"]

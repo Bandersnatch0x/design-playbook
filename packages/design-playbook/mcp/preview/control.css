@@ -961,8 +961,10 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   pointer-events: none;
 }
 .dpb-color-swatch-preview {
-  width: 14px;
-  height: 14px;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
   border-radius: 3px;
   border: 1px solid var(--dpb-line-strong);
   margin-right: 6px;
@@ -1017,3 +1019,12 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   /* Keep the last property reachable above the fixed feedback drawer. */
   #dpb-visual-view { padding-bottom: 80px; }
 }
+
+.dpb-color-swatch-preview:focus-visible { outline: 2px solid var(--dpb-accent); outline-offset: 2px; }
+.dpb-section-modified { color: var(--dpb-accent); margin-left: auto; margin-right: 6px; }
+
+.dpb-compact-text-toolbar { display: flex; flex-wrap: wrap; gap: 6px; }
+.dpb-compact-text-toolbar button { min-width: 30px; min-height: 30px; border: 1px solid var(--dpb-line); border-radius: 4px; background: var(--dpb-surface); color: var(--dpb-ink); cursor: pointer; }
+.dpb-compact-text-toolbar button[aria-pressed="true"] { border-color: var(--dpb-accent); color: var(--dpb-accent); }
+.dpb-compact-text-toolbar button[aria-label="Italic"] { font-family: Georgia, "Times New Roman", serif; font-style: italic; }
+.dpb-compact-text-toolbar button:focus-visible { outline: 2px solid var(--dpb-accent); outline-offset: 2px; }

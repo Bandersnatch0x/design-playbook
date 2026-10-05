@@ -33,6 +33,22 @@
     function post(message) {
       frame.contentWindow.postMessage({ dpbVisualEdit: message }, "*");
     }
+    function syncDraft(values, property, value) {
+      var next = Object.assign({}, values, { [property]: value });
+      var match = /^(padding|margin)(?:-(top|right|bottom|left))?$/.exec(property);
+      if (!match) return next;
+      var group = match[1], sides = ["top", "right", "bottom", "left"];
+      var style = document.createElement("div").style;
+      if (!match[2]) {
+        style.setProperty(group, value);
+        if (value && !style.getPropertyValue(group)) return next;
+        sides.forEach(function (side) { next[group + "-" + side] = style.getPropertyValue(group + "-" + side); });
+      } else {
+        sides.forEach(function (side) { style.setProperty(group + "-" + side, next[group + "-" + side] || "0px"); });
+        next[group] = style.getPropertyValue(group);
+      }
+      return next;
+    }
     function Editor() {
       var [selected, setSelected] = React.useState(null);
       var [pending, setPending] = React.useState([]);
@@ -52,6 +68,12 @@
       var sequence = React.useRef(0), draftTimers = React.useRef({});
       var accepted = React.useRef({});
       var [collapsed, setCollapsed] = React.useState({});
+      var [compact, setCompact] = React.useState(window.innerWidth <= 480);
+      React.useEffect(function () {
+        function resize() { setCompact(window.innerWidth <= 480); }
+        window.addEventListener("resize", resize);
+        return function () { window.removeEventListener("resize", resize); };
+      }, []);
       function toggleSection(sec) {
         setCollapsed(function (prev) {
           return Object.assign({}, prev, { [sec]: !prev[sec] });
@@ -132,16 +154,18 @@
           return Promise.resolve({ accepted: false, error: "visual_unavailable" });
         }
         var id = ++sequence.current;
-        var locator = entry ? entry.locator : state.selected.selector;
+        var locator = entry ? entry[0].locator : state.selected.selector;
         notifyPresence("user-editing-element", locator, property);
         setBusy(true);
         return new Promise(function (resolve) {
           request.current = { id: id, action: action || "edit", entry: entry, resolve: resolve,
             value: value, draft: state.drafts[property],
-            viewport: entry ? entry.viewport : window.DPB_ACTIVE_VIEWPORT || "any",
+            viewport: entry ? entry[0].viewport : window.DPB_ACTIVE_VIEWPORT || "any",
             timer: setTimeout(disconnected, 1500) };
           post({ type: "set-style", requestId: id, selector: locator, property: property,
-            value: value, replay: !!entry });
+            value: value, changes: entry && entry.map(function (item) {
+              return { property: item.property, value: action === "undo" ? item.oldValue : item.newValue };
+            }), replay: !!entry });
         });
       }
       function commit(property, value, selector) {
@@ -210,6 +234,7 @@
       }, []);
       React.useEffect(function () {
         function onHistoryKey(event) {
+          if (event.key === "Escape") post({ type: "close-color-picker" });
           if (!(event.ctrlKey || event.metaKey) || event.altKey || event.isComposing ||
               event.defaultPrevented || mount.offsetParent === null || !mount.contains(event.target)) return;
           var key = event.key.toLowerCase();
@@ -219,14 +244,19 @@
           event.preventDefault();
           replay(key === "y" || event.shiftKey ? "redo" : "undo");
         }
+        function dismissColor() { post({ type: "close-color-picker" }); }
         window.addEventListener("keydown", onHistoryKey);
-        return function () { window.removeEventListener("keydown", onHistoryKey); };
+        window.addEventListener("pointerdown", dismissColor);
+        return function () {
+          window.removeEventListener("keydown", onHistoryKey);
+          window.removeEventListener("pointerdown", dismissColor);
+        };
       }, []);
       React.useEffect(function () {
         var nonce = 0, lastAck = 0;
         function ping() {
           if (lastAck && Date.now() - lastAck > 2500) disconnected();
-          post({ type: "ping", nonce: ++nonce });
+          post({ type: "ping", nonce: ++nonce, compact: window.innerWidth <= 480 });
         }
         function load() { lastAck = 0; disconnected(); ping(); }
         function onMessage(event) {
@@ -245,8 +275,9 @@
             var selection = data.dpbVisualEditSelection;
             if (selection.requestId) {
               // A mutation snapshot is not a new user selection or draft.
-              if (request.current && selection.requestId === request.current.id &&
-                  current.current.selected && selection.selector === current.current.selected.selector) setSelected(selection);
+              if (current.current.selected && selection.selector === current.current.selected.selector &&
+                  ((request.current && selection.requestId === request.current.id) ||
+                    String(selection.requestId).indexOf("gesture-") === 0)) setSelected(selection);
             } else {
               Object.values(draftTimers.current).forEach(clearTimeout);
               setSelected(selection);
@@ -260,46 +291,47 @@
             if (rejected.code === "visual_target_missing") setStale(true);
             fail(rejected.code); return;
           }
-          var change = data.dpbVisualEditChange, operation = request.current;
-          if (!change) return;
-          if (operation && change.requestId && change.requestId !== operation.id) return;
-          notifyPresence("user-committed-edit", change.selector, change.property);
-          if (operation && (!change.requestId || change.requestId === operation.id)) {
+          var change = data.dpbVisualEditChange;
+          if (!change || !current.current.ready || current.current.stale) return;
+          // Canvas gestures have their own receipt IDs and never settle inspector requests.
+          var operation = request.current && change.requestId === request.current.id ? request.current : null;
+          if (!operation && !(typeof change.requestId === "string" && change.requestId.indexOf("gesture-") === 0)) return;
+          var changes = change.changes || [change];
+          notifyPresence("user-committed-edit", change.selector, changes.map(function (c) { return c.property; }).join(", "));
+          if (operation) {
             clearTimeout(operation.timer); request.current = null; setBusy(false); setDiagnostic("");
           }
           var state = current.current;
-          var edit = { kind: LAYOUT.indexOf(change.property) >= 0 ? "layout" : "style",
-            viewport: operation ? operation.viewport : (window.DPB_ACTIVE_VIEWPORT || "any"),
-            locator: change.selector, property: change.property,
-            oldValue: change.oldValue, newValue: change.newValue };
+          var edits = changes.filter(function (c) { return c.oldValue !== c.newValue; }).map(function (c) {
+            return { kind: LAYOUT.indexOf(c.property) >= 0 ? "layout" : "style",
+              viewport: operation ? operation.viewport : (window.DPB_ACTIVE_VIEWPORT || "any"),
+              locator: change.selector, property: c.property, oldValue: c.oldValue, newValue: c.newValue };
+          });
           if (operation && operation.action === "undo") {
             setHistory(state.history.slice(0, -1));
             setFuture(state.future.concat([operation.entry]));
-            setPending(state.pending.slice(0, -1));
+            setPending(state.pending.slice(0, -operation.entry.length));
           } else if (operation && operation.action === "redo") {
             setFuture(state.future.slice(0, -1));
             setHistory(state.history.concat([operation.entry]));
-            setPending(state.pending.concat([operation.entry]));
-          } else if (change.oldValue !== change.newValue) {
-            setPending(state.pending.concat([edit]));
-            setHistory(state.history.concat([edit])); setFuture([]);
+            setPending(state.pending.concat(operation.entry));
+          } else if (edits.length) {
+            setPending(function (previous) { return previous.concat(edits); });
+            setHistory(function (previous) { return previous.concat([edits]); }); setFuture([]);
           }
           if (state.selected && state.selected.selector === change.selector) {
-            var valToStore = operation ? operation.value : change.newValue;
-            accepted.current = Object.assign({}, accepted.current, { [change.property]: valToStore });
-            // A receipt may acknowledge an older keystroke. Never overwrite the
-            // newer draft (or another selection) while that request was in flight.
+            changes.forEach(function (c) { accepted.current = syncDraft(accepted.current, c.property, c.newValue); });
+            // Keep newer inspector keystrokes while acknowledging older requests.
             setDrafts(function (values) {
-              if (operation) {
-                return values[change.property] === operation.draft
-                  ? Object.assign({}, values, { [change.property]: operation.value }) : values;
-              }
-              return Object.assign({}, values, { [change.property]: valToStore });
+              changes.forEach(function (c) {
+                if (!operation || operation.entry || values[c.property] === operation.draft) {
+                  values = syncDraft(values, c.property, operation && !operation.entry ? operation.value : c.newValue);
+                }
+              });
+              return values;
             });
           }
-          if (operation && (!change.requestId || change.requestId === operation.id)) {
-            operation.resolve({ accepted: true, pending: change.oldValue !== change.newValue });
-          }
+          if (operation) operation.resolve({ accepted: true, pending: edits.length > 0 });
         }
         window.addEventListener("message", onMessage);
         frame.addEventListener("load", load);
@@ -354,7 +386,7 @@
         var state = current.current;
         var entries = action === "undo" ? state.history : state.future;
         var entry = entries[entries.length - 1];
-        if (entry) applyStyle(entry.property, action === "undo" ? entry.oldValue : entry.newValue, action, entry);
+        if (entry) applyStyle(entry[0].property, action === "undo" ? entry[0].oldValue : entry[0].newValue, action, entry);
       }
       return h("section", { className: "dpb-react-editor", "aria-label": t("visual_title") },
         h("div", { className: "dpb-react-editor-head" }, h("strong", null, t("visual_title")),
@@ -377,7 +409,7 @@
         h("p", { className: "dpb-react-diagnostic", role: "status", "data-stale": stale }, stale ? t("visual_stale") : diagnostic ? t(diagnostic) : ""),
         (function () {
           function handleInput(prop, val) {
-            setDrafts(function (old) { return Object.assign({}, old, { [prop]: val }); });
+            setDrafts(function (old) { return syncDraft(old, prop, val); });
             clearTimeout(draftTimers.current[prop]);
             var sel = selected && selected.selector;
             draftTimers.current[prop] = setTimeout(function () { commit(prop, val, sel); }, 200);
@@ -417,7 +449,7 @@
                     onBlur: function (e) { handleBlur(prop, e.target.value); },
                     onKeyDown: function (e) { handleKey(prop, e.target.value, e); }
                   }),
-                  unit ? h("span", { className: "dpb-unit-suffix" }, unit) : null
+                  unit && /^-?(?:\d+\.?\d*|\.\d+)$/.test(val) ? h("span", { className: "dpb-unit-suffix" }, unit) : null
                 )
               );
             }
@@ -425,7 +457,9 @@
               return h("label", { className: "dpb-react-field dpb-react-color-row", key: prop, "data-property": prop },
                 h("span", null, label),
                 h("div", { className: "dpb-color-input-wrap" },
-                  h("span", { className: "dpb-color-swatch-preview", style: { backgroundColor: val || "transparent" } }),
+                  h("button", { type: "button", className: "dpb-color-swatch-preview", style: { backgroundColor: val || "transparent" },
+                    "aria-label": label + " color picker", disabled: !selected || !ready || stale,
+                    onClick: function (e) { e.preventDefault(); post({ type: "open-color-picker", selector: selected.selector, property: prop }); } }),
                   h("input", {
                     value: val, disabled: !selected || !ready || stale,
                     onChange: function (e) { handleInput(prop, e.target.value); },
@@ -478,11 +512,19 @@
           }
           function renderSection(secId, title, children) {
             var isClosed = !!collapsed[secId];
+            var sectionProperties = { colors: /^(color|background-color)$/, typography: /^(font-|line-height|letter-spacing)/,
+              layout: /^(display|position|flex|justify|align|gap|width|height|transform)/,
+              spacing: /^(padding|margin)/, border: /^border-/ };
+            var modified = pending.some(function (edit) {
+              return selected && edit.locator === selected.selector && sectionProperties[secId].test(edit.property);
+            });
             return h("section", { className: "dpb-inspector-section" + (isClosed ? " is-collapsed" : " is-open"), key: secId, "data-section": secId },
               h("button", {
                 type: "button", className: "dpb-section-header", "aria-expanded": !isClosed,
                 onClick: function () { toggleSection(secId); }
-              }, h("strong", null, title), h("span", { className: "dpb-section-chevron" }, isClosed ? "▸" : "▾")),
+              }, h("strong", null, title), isClosed && modified && h("span", {
+                className: "dpb-section-modified", "aria-label": locale === "zh" ? "已修改" : "Modified" }, "•"),
+                h("span", { className: "dpb-section-chevron" }, isClosed ? "▸" : "▾")),
               !isClosed && h("div", { className: "dpb-section-body" }, children)
             );
           }
@@ -500,6 +542,14 @@
               renderField("background-color", t("visual_backgroundColor"), "color")
             ]),
             renderSection("typography", t("sec_typography"), [
+              compact && selected && selected.textEditable && h("div", { className: "dpb-compact-text-toolbar", key: "compact-text", role: "toolbar", "aria-label": t("sec_typography") },
+                [["B", "Bold", "font-weight", selected.style.fontWeight >= 600, "bold", "normal"],
+                  ["I", "Italic", "font-style", selected.style.fontStyle === "italic", "italic", "normal"],
+                  ["U", "Underline", "text-decoration", selected.style.textDecoration.indexOf("underline") >= 0, "underline", "none"],
+                  ["S", "Strikethrough", "text-decoration", selected.style.textDecoration.indexOf("line-through") >= 0, "line-through", "none"]].map(function (action) {
+                  return h("button", { key: action[1], type: "button", "aria-label": action[1], "aria-pressed": action[3],
+                    disabled: !ready || stale || busy, onClick: function () { applyStyle(action[2], action[3] ? action[5] : action[4]); } }, action[0]);
+                })),
               renderField("font-family", t("visual_fontFamily")),
               renderPair(
                 renderField("font-size", t("visual_fontSize"), "unit", null, "px"),

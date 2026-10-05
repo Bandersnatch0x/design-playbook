@@ -56,6 +56,11 @@ BRIDGE_SCRIPT = r"""<script>
     "border:1.5px solid #2563EB;border-radius:2px;pointer-events:none}" +
     ".dpb-move-body{position:absolute;inset:0;cursor:grab;pointer-events:auto;touch-action:none}" +
     ".dpb-move-body:active{cursor:grabbing}" +
+    "#dpb-float-root{position:static;pointer-events:none}" +
+    "#dpb-dimension-hud{position:absolute;top:calc(100% + 10px);left:50%;transform:translateX(-50%);" +
+    "padding:4px 8px;border-radius:4px;background:#0f172a;color:#fff;white-space:nowrap;font:12px/1.4 system-ui}" +
+    ".dpb-resize-handle:focus-visible,.dpb-move-body:focus-visible,#dpb-color-picker :focus-visible{" +
+    "outline:2px solid #f59e0b;outline-offset:3px}" +
     ".dpb-resize-handle{position:absolute;width:10px;height:10px;border-radius:50%;background:#fff;" +
     "border:2px solid #2563EB;box-shadow:0 1px 3px rgba(0,0,0,.25);pointer-events:auto;touch-action:none;" +
     "box-sizing:border-box;transition:transform 140ms ease}" +
@@ -71,19 +76,20 @@ BRIDGE_SCRIPT = r"""<script>
     ".dpb-guide-line{position:absolute;pointer-events:none;z-index:2147483005;display:none}" +
     ".dpb-guide-v{width:0;border-left:1.5px dashed #EF4444}" +
     ".dpb-guide-h{height:0;border-top:1.5px dashed #EF4444}" +
-    "#dpb-text-toolbar{position:absolute;z-index:2147483010;display:flex;align-items:center;gap:3px;" +
+    "#dpb-text-toolbar{max-width:calc(100vw - 16px);box-sizing:border-box;flex-wrap:wrap;position:absolute;z-index:2147483010;display:flex;align-items:center;gap:3px;" +
     "padding:3px 6px;border-radius:8px;background:#1e293b;color:#f8fafc;border:1px solid #334155;" +
     "box-shadow:0 4px 16px rgba(0,0,0,.3);pointer-events:auto;user-select:none;font:12px/1 system-ui,sans-serif}" +
     ".dpb-tb-btn{background:transparent;border:1px solid transparent;color:#e2e8f0;border-radius:4px;" +
     "width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0}" +
     ".dpb-tb-btn:hover{background:rgba(255,255,255,.1)}" +
     ".dpb-tb-btn.is-active{background:#2563EB;color:#fff}" +
+    ".dpb-tb-italic{font-family:Georgia,'Times New Roman',serif;font-style:italic}" +
     ".dpb-tb-select{height:24px;font-size:11px;background:#0f172a;color:#f8fafc;border:1px solid #334155;border-radius:4px;padding:0 3px}" +
     ".dpb-tb-color-btn{position:relative;width:24px;height:24px;display:inline-flex;flex-direction:column;" +
     "align-items:center;justify-content:center;background:transparent;border:1px solid transparent;color:#e2e8f0;border-radius:4px;cursor:pointer;padding:0;font-size:11px;font-weight:700}" +
     ".dpb-tb-color-bar{width:14px;height:3px;border-radius:1px;background:#2563EB;margin-top:1px}" +
     "#dpb-color-picker{position:absolute;top:calc(100% + 6px);left:0;background:#1e293b;border:1px solid #334155;" +
-    "border-radius:8px;padding:8px;box-shadow:0 8px 24px rgba(0,0,0,.4);display:none;flex-direction:column;gap:8px;width:190px;z-index:2147483015}" +
+    "border-radius:8px;padding:8px;box-shadow:0 8px 24px rgba(0,0,0,.4);display:none;flex-direction:column;gap:8px;width:190px;max-width:calc(100vw - 32px);pointer-events:auto;z-index:2147483015}" +
     "#dpb-color-picker.is-open{display:flex}" +
     ".dpb-cp-sv{position:relative;width:100%;height:90px;border-radius:6px;cursor:crosshair;background:#f00;" +
     "background-image:linear-gradient(to top,#000,rgba(0,0,0,0)),linear-gradient(to right,#fff,rgba(255,255,255,0));touch-action:none}" +
@@ -98,6 +104,7 @@ BRIDGE_SCRIPT = r"""<script>
     ".dpb-cp-hex{flex:1;min-width:0;padding:3px 5px;font-size:11px;font-family:monospace;border:1px solid #334155;border-radius:4px;background:#0f172a;color:#f8fafc}" +
     ".dpb-cp-opacity{width:44px;padding:3px 4px;font-size:11px;text-align:right;border:1px solid #334155;border-radius:4px;background:#0f172a;color:#f8fafc}" +
     ".dpb-cp-swatches{display:flex;flex-wrap:wrap;gap:4px}" +
+    ".dpb-cp-swatch.is-active{outline:2px solid #fff;outline-offset:2px;box-shadow:0 0 0 4px #2563eb}" +
     ".dpb-cp-swatch{width:16px;height:16px;border-radius:3px;border:1px solid rgba(255,255,255,.2);cursor:pointer;padding:0}" +
     ".dpb-pin-badge{position:absolute;z-index:2147483000;min-width:18px;height:18px;" +
     "padding:0 5px;border-radius:999px;background:#14b8a6;color:#042f2e;" +
@@ -237,9 +244,22 @@ BRIDGE_SCRIPT = r"""<script>
   }
   var overlayEl = null;
   var toolbarEl = null;
+  var compactEditor = false;
   var guideV = null;
   var guideH = null;
   var colorPickerEl = null;
+  var openColorPicker = null;
+  var closeColorPicker = null;
+  var dimensionHud = null;
+  var floatRoot = null;
+  function ensureFloatRoot() {
+    if (!floatRoot) {
+      floatRoot = document.createElement("div");
+      floatRoot.id = "dpb-float-root";
+      (document.body || document.documentElement).appendChild(floatRoot);
+    }
+    return floatRoot;
+  }
 
   function hsvToRgb(h, s, v) {
     var c = v * s;
@@ -262,13 +282,9 @@ BRIDGE_SCRIPT = r"""<script>
     }).join("");
   }
 
-  function checkGuides(targetRect) {
+  function checkGuides(targetRect, candidates) {
     if (!guideV || !guideH) return;
-    var candidates = Array.prototype.slice.call(document.body.querySelectorAll("*")).filter(function (cand) {
-      if (cand === visualSelectedEl) return false;
-      if (cand.id === "dpb-selection-overlay" || cand.closest("#dpb-selection-overlay, #dpb-text-toolbar, #dpb-draw-layer, #dpb-ruler-layer")) return false;
-      return cand.nodeType === 1 && cand.offsetWidth > 0 && cand.offsetHeight > 0;
-    });
+
 
     var matchV = null;
     var matchH = null;
@@ -277,7 +293,7 @@ BRIDGE_SCRIPT = r"""<script>
     var targetEdgesY = [targetRect.top, targetRect.top + targetRect.height / 2, targetRect.bottom];
 
     for (var i = 0; i < candidates.length; i++) {
-      var cr = candidates[i].getBoundingClientRect();
+      var cr = candidates[i];
       var candEdgesX = [cr.left, cr.left + cr.width / 2, cr.right];
       var candEdgesY = [cr.top, cr.top + cr.height / 2, cr.bottom];
 
@@ -325,104 +341,110 @@ BRIDGE_SCRIPT = r"""<script>
     if (guideH) guideH.style.display = "none";
   }
 
-  function setupHandleDrag() {
-    overlayEl.addEventListener("pointerdown", function (e) {
-      var handle = e.target.getAttribute("data-handle");
-      if (!handle || !visualSelectedEl) return;
-      e.preventDefault();
-      e.stopPropagation();
-      e.target.setPointerCapture(e.pointerId);
-
-      var el = visualSelectedEl;
-      var startX = e.clientX, startY = e.clientY;
-      var rect = el.getBoundingClientRect();
-      var startW = rect.width, startH = rect.height;
-      var oldW = el.style.width || window.getComputedStyle(el).width;
-      var oldH = el.style.height || window.getComputedStyle(el).height;
-
-      function onPointerMove(ev) {
-        ev.preventDefault();
-        var dx = ev.clientX - startX;
-        var dy = ev.clientY - startY;
-        var newW = startW, newH = startH;
-
-        if (handle === "e" || handle === "se" || handle === "ne") newW = startW + dx;
-        if (handle === "w" || handle === "sw" || handle === "nw") newW = startW - dx;
-        if (handle === "s" || handle === "se" || handle === "sw") newH = startH + dy;
-        if (handle === "n" || handle === "ne" || handle === "nw") newH = startH - dy;
-
-        newW = Math.max(10, Math.round(newW));
-        newH = Math.max(10, Math.round(newH));
-
-        el.style.width = newW + "px";
-        el.style.height = newH + "px";
-
-        updateOverlayPositions(el);
-        checkGuides(el.getBoundingClientRect());
-      }
-
-      function onPointerUp(ev) {
-        ev.preventDefault();
-        hideGuides();
-        e.target.removeEventListener("pointermove", onPointerMove);
-        e.target.removeEventListener("pointerup", onPointerUp);
-        try { e.target.releasePointerCapture(e.pointerId); } catch (err) {}
-
-        reportVisualSelection(el, false);
-        parent.postMessage({ dpbVisualEditChange: {
-          requestId: 0, selector: cssPath(el), property: "width",
-          oldValue: oldW, newValue: el.style.width
-        } }, "*");
-        parent.postMessage({ dpbVisualEditChange: {
-          requestId: 0, selector: cssPath(el), property: "height",
-          oldValue: oldH, newValue: el.style.height
-        } }, "*");
-      }
-
-      e.target.addEventListener("pointermove", onPointerMove);
-      e.target.addEventListener("pointerup", onPointerUp);
+  var gestureSequence = 0;
+  function inlineValues(el, properties) {
+    return properties.map(function (property) {
+      return { property: property, oldValue: el.style.getPropertyValue(property) };
     });
   }
-
-  function setupMoveDrag(moveBody) {
-    moveBody.addEventListener("pointerdown", function (e) {
-      if (!visualSelectedEl) return;
-      e.preventDefault();
-      e.stopPropagation();
-      moveBody.setPointerCapture(e.pointerId);
-
-      var el = visualSelectedEl;
-      var startX = e.clientX, startY = e.clientY;
-      var oldTransform = el.style.transform || window.getComputedStyle(el).transform;
-      var curMatch = (el.style.transform || "").match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/);
-      var initDx = curMatch ? parseFloat(curMatch[1]) : 0;
-      var initDy = curMatch ? parseFloat(curMatch[2]) : 0;
-
-      function onMove(ev) {
-        ev.preventDefault();
-        var dx = ev.clientX - startX;
-        var dy = ev.clientY - startY;
-        el.style.transform = "translate(" + Math.round(initDx + dx) + "px, " + Math.round(initDy + dy) + "px)";
-        updateOverlayPositions(el);
-        checkGuides(el.getBoundingClientRect());
+  function finishVisualChange(el, changes, requestId, replay) {
+    var id = requestId || "gesture-" + (++gestureSequence);
+    changes.forEach(function (change) { change.newValue = el.style.getPropertyValue(change.property); });
+    if (!requestId) changes = changes.filter(function (change) { return change.oldValue !== change.newValue; });
+    if (!requestId && !changes.length) return;
+    reportVisualSelection(el, replay, id);
+    parent.postMessage({ dpbVisualEditChange: {
+      requestId: id, selector: cssPath(el), changes: changes, replay: !!replay
+    } }, "*");
+  }
+  function translated(transform, dx, dy) {
+    return "translate(" + dx + "px, " + dy + "px)" +
+      (transform && transform !== "none" ? " " + transform : "");
+  }
+  function beginManipulation(el, handle) {
+    var rect = el.getBoundingClientRect(), computed = getComputedStyle(el);
+    var transform = el.style.transform || computed.transform;
+    var changes = inlineValues(el, handle ? ["width", "height", "transform"] : ["transform"]);
+    // Rect dimensions are border-box; CSS width/height may still be content-box.
+    var extraW = computed.boxSizing === "border-box" ? 0 :
+      parseFloat(computed.paddingLeft) + parseFloat(computed.paddingRight) +
+      parseFloat(computed.borderLeftWidth) + parseFloat(computed.borderRightWidth);
+    var extraH = computed.boxSizing === "border-box" ? 0 :
+      parseFloat(computed.paddingTop) + parseFloat(computed.paddingBottom) +
+      parseFloat(computed.borderTopWidth) + parseFloat(computed.borderBottomWidth);
+    var siblings = Array.from(el.parentElement.children).filter(function (candidate) {
+      return candidate !== el && !candidate.closest("#dpb-float-root");
+    }).map(function (candidate) { return candidate.getBoundingClientRect(); })
+      .filter(function (r) { return r.width > 0 && r.height > 0; });
+    function update(dx, dy) {
+      if (!dx && !dy) {
+        changes.forEach(function (c) { el.style.setProperty(c.property, c.oldValue); });
+        updateOverlayPositions(el); hideGuides(); dimensionHud.style.display = "none";
+        return;
       }
-
-      function onUp(ev) {
-        ev.preventDefault();
-        hideGuides();
-        moveBody.removeEventListener("pointermove", onMove);
-        moveBody.removeEventListener("pointerup", onUp);
-        try { moveBody.releasePointerCapture(e.pointerId); } catch (err) {}
-
-        reportVisualSelection(el, false);
-        parent.postMessage({ dpbVisualEditChange: {
-          requestId: 0, selector: cssPath(el), property: "transform",
-          oldValue: oldTransform, newValue: el.style.transform
-        } }, "*");
+      if (!handle) {
+        el.style.transform = translated(transform, Math.round(dx), Math.round(dy));
+      } else {
+        var west = handle.indexOf("w") >= 0, north = handle.indexOf("n") >= 0;
+        if (/[ew]/.test(handle)) el.style.width = Math.max(10, Math.round(rect.width + (west ? -dx : dx) - extraW)) + "px";
+        if (/[ns]/.test(handle)) el.style.height = Math.max(10, Math.round(rect.height + (north ? -dy : dy) - extraH)) + "px";
+        el.style.setProperty("transform", changes[2].oldValue);
+        var resized = el.getBoundingClientRect();
+        var offsetX = west ? rect.right - resized.right : rect.left - resized.left;
+        var offsetY = north ? rect.bottom - resized.bottom : rect.top - resized.top;
+        if (offsetX || offsetY) el.style.transform = translated(transform, offsetX, offsetY);
+        dimensionHud.textContent = Math.round(resized.width) + " × " + Math.round(resized.height);
+        dimensionHud.style.display = "block";
       }
-
-      moveBody.addEventListener("pointermove", onMove);
-      moveBody.addEventListener("pointerup", onUp);
+      updateOverlayPositions(el);
+      checkGuides(el.getBoundingClientRect(), siblings);
+    }
+    return { update: update, finish: function (cancel) {
+      if (cancel) changes.forEach(function (c) { el.style.setProperty(c.property, c.oldValue); });
+      else finishVisualChange(el, changes);
+      hideGuides();
+      dimensionHud.style.display = "none";
+      updateOverlayPositions(el);
+    } };
+  }
+  function setupManipulation(control, handle) {
+    control.tabIndex = 0;
+    control.setAttribute("role", "slider");
+    control.setAttribute("aria-label", handle ? "Resize " + handle : "Move element");
+    control.setAttribute("aria-valuemin", "0");
+    control.setAttribute("aria-valuenow", "0");
+    control.addEventListener("keydown", function (e) {
+      if (!visualSelectedEl || !/^Arrow(Left|Right|Up|Down)$/.test(e.key)) return;
+      e.preventDefault(); e.stopPropagation();
+      var step = e.shiftKey ? 10 : 1;
+      var dx = e.key === "ArrowRight" ? step : e.key === "ArrowLeft" ? -step : 0;
+      var dy = e.key === "ArrowDown" ? step : e.key === "ArrowUp" ? -step : 0;
+      var gesture = beginManipulation(visualSelectedEl, handle);
+      gesture.update(dx, dy); gesture.finish(false);
+    });
+    control.addEventListener("pointerdown", function (e) {
+      if (!visualSelectedEl || e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation(); control.focus();
+      control.setPointerCapture(e.pointerId);
+      var gesture = beginManipulation(visualSelectedEl, handle);
+      var frame = 0, dx = 0, dy = 0;
+      function draw() { frame = 0; gesture.update(dx, dy); }
+      function move(ev) {
+        dx = ev.clientX - e.clientX; dy = ev.clientY - e.clientY;
+        if (!frame) frame = requestAnimationFrame(draw);
+      }
+      function finish(ev) {
+        if (frame) cancelAnimationFrame(frame);
+        if (ev.type === "pointerup") { dx = ev.clientX - e.clientX; dy = ev.clientY - e.clientY; draw(); }
+        control.removeEventListener("pointermove", move);
+        control.removeEventListener("pointerup", finish);
+        control.removeEventListener("pointercancel", finish);
+        if (control.hasPointerCapture(e.pointerId)) control.releasePointerCapture(e.pointerId);
+        gesture.finish(ev.type === "pointercancel");
+      }
+      control.addEventListener("pointermove", move);
+      control.addEventListener("pointerup", finish);
+      control.addEventListener("pointercancel", finish);
     });
   }
 
@@ -430,13 +452,10 @@ BRIDGE_SCRIPT = r"""<script>
     function applyStyleChange(prop, val) {
       if (!visualSelectedEl) return;
       var el = visualSelectedEl;
-      var oldVal = el.style.getPropertyValue(prop) || window.getComputedStyle(el).getPropertyValue(prop);
+      if (!CSS.supports(prop, val)) return;
+      var changes = inlineValues(el, [prop]);
       el.style.setProperty(prop, val);
-      reportVisualSelection(el, false);
-      parent.postMessage({ dpbVisualEditChange: {
-        requestId: 0, selector: cssPath(el), property: prop,
-        oldValue: oldVal, newValue: val
-      } }, "*");
+      finishVisualChange(el, changes);
     }
 
     btnB.addEventListener("click", function (e) {
@@ -484,89 +503,148 @@ BRIDGE_SCRIPT = r"""<script>
       applyStyleChange("font-size", e.target.value + "px");
     });
 
+    var hexInput = colorPickerEl.querySelector(".dpb-cp-hex");
+    var opacityInput = colorPickerEl.querySelector(".dpb-cp-opacity");
+    var svArea = colorPickerEl.querySelector(".dpb-cp-sv");
+    var hueSlider = colorPickerEl.querySelector(".dpb-cp-hue");
+    var alphaSlider = colorPickerEl.querySelector(".dpb-cp-alpha");
+    var swatches = Array.from(colorPickerEl.querySelectorAll(".dpb-cp-swatch"));
+    var hue = 0, saturation = 0, brightness = 0, alpha = 1, property = "color";
+    var colorDraft = null, colorTarget = null, opener = null;
+    function clamp(value, max) { return Math.max(0, Math.min(max, value)); }
+    function readColor(value) {
+      if (!CSS.supports("color", value)) return false;
+      var canvas = document.createElement("canvas"); canvas.width = canvas.height = 1;
+      var context = canvas.getContext("2d");
+      context.fillStyle = value; context.fillRect(0, 0, 1, 1);
+      var rgba = context.getImageData(0, 0, 1, 1).data;
+      var r = rgba[0] / 255, g = rgba[1] / 255, b = rgba[2] / 255;
+      var max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min;
+      hue = delta === 0 ? 0 : max === r ? 60 * (((g - b) / delta + 6) % 6) :
+        max === g ? 60 * ((b - r) / delta + 2) : 60 * ((r - g) / delta + 4);
+      saturation = max === 0 ? 0 : delta / max; brightness = max; alpha = rgba[3] / 255;
+      return true;
+    }
+    function refreshColor() {
+      var rgb = hsvToRgb(hue, saturation, brightness), hex = rgbToHex(rgb[0], rgb[1], rgb[2]);
+      hexInput.value = hex;
+      opacityInput.value = Math.round(alpha * 100) + "%";
+      svArea.style.backgroundColor = "hsl(" + hue + ",100%,50%)";
+      svArea.firstElementChild.style.left = saturation * 100 + "%";
+      svArea.firstElementChild.style.top = (1 - brightness) * 100 + "%";
+      hueSlider.firstElementChild.style.left = hue / 360 * 100 + "%";
+      alphaSlider.firstElementChild.style.left = alpha * 100 + "%";
+      alphaSlider.style.background = "linear-gradient(to right, transparent, " + hex + ")";
+      svArea.setAttribute("aria-valuenow", Math.round(saturation * 100));
+      svArea.setAttribute("aria-valuetext", "Saturation " + Math.round(saturation * 100) + "%, brightness " + Math.round(brightness * 100) + "%");
+      hueSlider.setAttribute("aria-valuenow", Math.round(hue));
+      alphaSlider.setAttribute("aria-valuenow", Math.round(alpha * 100));
+      swatches.forEach(function (swatch) {
+        var active = alpha === 1 && swatch.dataset.color === hex;
+        swatch.classList.toggle("is-active", active); swatch.setAttribute("aria-pressed", String(active));
+      });
+      return alpha === 1 ? hex : "rgba(" + rgb.join(", ") + ", " + Number(alpha.toFixed(3)) + ")";
+    }
+    function previewColor() {
+      if (!colorTarget) return;
+      if (!colorDraft) colorDraft = inlineValues(colorTarget, [property]);
+      colorTarget.style.setProperty(property, refreshColor());
+      syncToolbarState(colorTarget);
+    }
+    function commitColor() {
+      if (!colorDraft) return;
+      var changes = colorDraft; colorDraft = null;
+      finishVisualChange(colorTarget, changes);
+    }
+    closeColorPicker = function (restoreFocus) {
+      if (colorDraft) colorTarget.style.setProperty(property, colorDraft[0].oldValue);
+      colorDraft = null;
+      colorPickerEl.classList.remove("is-open");
+      if (restoreFocus && opener) opener.focus();
+    };
+    openColorPicker = function (nextProperty, source) {
+      closeColorPicker(false);
+      colorTarget = visualSelectedEl; property = nextProperty; opener = source;
+      readColor(getComputedStyle(colorTarget).getPropertyValue(property)); refreshColor();
+      colorPickerEl.classList.add("is-open");
+      var rect = (source || colorTarget).getBoundingClientRect();
+      var width = colorPickerEl.offsetWidth, height = colorPickerEl.offsetHeight;
+      colorPickerEl.style.left = clamp(rect.left, Math.max(0, innerWidth - width - 8)) + scrollX + "px";
+      colorPickerEl.style.top = clamp(rect.bottom + 8 + height <= innerHeight ? rect.bottom + 8 : rect.top - height - 8,
+        Math.max(0, innerHeight - height - 8)) + scrollY + "px";
+      hexInput.focus();
+    };
     colorBtn.addEventListener("click", function (e) {
       e.stopPropagation();
-      colorPickerEl.classList.toggle("is-open");
+      if (colorPickerEl.classList.contains("is-open")) closeColorPicker(false);
+      else openColorPicker("color", colorBtn);
     });
-
-    var hexInput = colorPickerEl.querySelector(".dpb-cp-hex");
-    function commitHex(hex) {
-      if (!visualSelectedEl || !hex) return;
-      applyStyleChange("color", hex);
-      var bar = toolbarEl.querySelector(".dpb-tb-color-bar");
-      if (bar) bar.style.backgroundColor = hex;
+    document.addEventListener("pointerdown", function (e) {
+      if (!colorPickerEl.contains(e.target) && !colorBtn.contains(e.target)) closeColorPicker(false);
+    }, true);
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && colorPickerEl.classList.contains("is-open")) {
+        e.preventDefault(); closeColorPicker(true);
+      }
+    });
+    function commitHex() {
+      if (!readColor(hexInput.value)) { hexInput.setAttribute("aria-invalid", "true"); return; }
+      hexInput.removeAttribute("aria-invalid"); previewColor(); commitColor();
     }
-
-    hexInput.addEventListener("change", function (e) { commitHex(e.target.value); });
-    hexInput.addEventListener("keydown", function (e) {
-      if (e.key === "Enter") { e.preventDefault(); commitHex(e.target.value); }
+    hexInput.addEventListener("change", commitHex);
+    hexInput.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); commitHex(); } });
+    function updateOpacity() {
+      if (!/^\d+(?:\.\d+)?%?$/.test(opacityInput.value.trim())) {
+        opacityInput.setAttribute("aria-invalid", "true"); return;
+      }
+      opacityInput.removeAttribute("aria-invalid");
+      alpha = clamp(parseFloat(opacityInput.value) / 100, 1); previewColor();
+    }
+    opacityInput.addEventListener("input", updateOpacity);
+    opacityInput.addEventListener("change", function () { updateOpacity(); commitColor(); });
+    opacityInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); updateOpacity(); commitColor(); }
     });
-
-    var swatches = colorPickerEl.querySelectorAll(".dpb-cp-swatch");
-    for (var i = 0; i < swatches.length; i++) {
-      swatches[i].addEventListener("click", function (e) {
-        var c = this.getAttribute("data-color");
-        hexInput.value = c;
-        commitHex(c);
+    swatches.forEach(function (swatch) {
+      swatch.addEventListener("click", function () { readColor(swatch.dataset.color); previewColor(); commitColor(); });
+    });
+    [svArea, hueSlider, alphaSlider].forEach(function (slider) {
+      slider.tabIndex = 0; slider.setAttribute("role", "slider");
+      slider.setAttribute("aria-label", slider === svArea ? "Saturation and brightness" : slider === hueSlider ? "Hue" : "Alpha");
+      slider.setAttribute("aria-valuemin", "0"); slider.setAttribute("aria-valuemax", slider === hueSlider ? "360" : "100");
+      slider.addEventListener("keydown", function (e) {
+        if (!/^Arrow(Left|Right|Up|Down)$/.test(e.key)) return;
+        e.preventDefault();
+        var step = (e.shiftKey ? 10 : 1) * (/Right|Up/.test(e.key) ? 1 : -1);
+        if (slider === hueSlider) hue = clamp(hue + step, 360);
+        else if (slider === alphaSlider) alpha = clamp(alpha + step / 100, 1);
+        else if (/Left|Right/.test(e.key)) saturation = clamp(saturation + step / 100, 1);
+        else brightness = clamp(brightness + step / 100, 1);
+        previewColor(); commitColor();
       });
-    }
-
-    var svArea = colorPickerEl.querySelector(".dpb-cp-sv");
-    var svThumb = colorPickerEl.querySelector(".dpb-cp-sv-thumb");
-    var currentHue = 0;
-
-    function updateColorFromSV(x, y, w, h) {
-      var s = Math.max(0, Math.min(1, x / w));
-      var v = Math.max(0, Math.min(1, 1 - y / h));
-      var rgb = hsvToRgb(currentHue, s, v);
-      var hex = rgbToHex(rgb[0], rgb[1], rgb[2]);
-      hexInput.value = hex;
-      svThumb.style.left = (s * 100) + "%";
-      svThumb.style.top = ((1 - v) * 100) + "%";
-      commitHex(hex);
-    }
-
-    svArea.addEventListener("pointerdown", function (e) {
-      e.preventDefault();
-      var r = svArea.getBoundingClientRect();
-      updateColorFromSV(e.clientX - r.left, e.clientY - r.top, r.width, r.height);
-      function onMove(ev) {
-        updateColorFromSV(ev.clientX - r.left, ev.clientY - r.top, r.width, r.height);
-      }
-      function onUp() {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-      }
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
-    });
-
-    var hueSlider = colorPickerEl.querySelector(".dpb-cp-hue");
-    var hueThumb = colorPickerEl.querySelector(".dpb-cp-hue-thumb");
-    function updateHue(x, w) {
-      currentHue = Math.max(0, Math.min(360, (x / w) * 360));
-      hueThumb.style.left = (currentHue / 360 * 100) + "%";
-      var rgb = hsvToRgb(currentHue, 1, 1);
-      svArea.style.backgroundColor = "rgb(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ")";
-      var curS = parseFloat(svThumb.style.left || "100") / 100;
-      var curV = 1 - parseFloat(svThumb.style.top || "0") / 100;
-      var finalRgb = hsvToRgb(currentHue, curS, curV);
-      var hex = rgbToHex(finalRgb[0], finalRgb[1], finalRgb[2]);
-      hexInput.value = hex;
-      commitHex(hex);
-    }
-
-    hueSlider.addEventListener("pointerdown", function (e) {
-      e.preventDefault();
-      var r = hueSlider.getBoundingClientRect();
-      updateHue(e.clientX - r.left, r.width);
-      function onMove(ev) { updateHue(ev.clientX - r.left, r.width); }
-      function onUp() {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-      }
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
+      slider.addEventListener("pointerdown", function (e) {
+        e.preventDefault(); slider.focus(); slider.setPointerCapture(e.pointerId);
+        var rect = slider.getBoundingClientRect();
+        function move(ev) {
+          var x = clamp((ev.clientX - rect.left) / rect.width, 1);
+          if (slider === hueSlider) hue = x * 360;
+          else if (slider === alphaSlider) alpha = x;
+          else { saturation = x; brightness = 1 - clamp((ev.clientY - rect.top) / rect.height, 1); }
+          previewColor();
+        }
+        function finish(ev) {
+          slider.removeEventListener("pointermove", move);
+          slider.removeEventListener("pointerup", finish);
+          slider.removeEventListener("pointercancel", finish);
+          if (slider.hasPointerCapture(e.pointerId)) slider.releasePointerCapture(e.pointerId);
+          if (ev.type === "pointercancel") closeColorPicker(false);
+          else { move(ev); commitColor(); }
+        }
+        move(e);
+        slider.addEventListener("pointermove", move);
+        slider.addEventListener("pointerup", finish);
+        slider.addEventListener("pointercancel", finish);
+      });
     });
   }
 
@@ -585,6 +663,7 @@ BRIDGE_SCRIPT = r"""<script>
       handle.className = "dpb-resize-handle dpb-handle-" + h;
       handle.setAttribute("data-handle", h);
       overlayEl.appendChild(handle);
+      setupManipulation(handle, h);
     });
 
     guideV = document.createElement("div");
@@ -594,12 +673,14 @@ BRIDGE_SCRIPT = r"""<script>
     guideH.id = "dpb-guide-h";
     guideH.className = "dpb-guide-line dpb-guide-h";
 
-    (document.body || document.documentElement).appendChild(overlayEl);
-    (document.body || document.documentElement).appendChild(guideV);
-    (document.body || document.documentElement).appendChild(guideH);
-
-    setupHandleDrag();
-    setupMoveDrag(moveBody);
+    dimensionHud = document.createElement("output");
+    dimensionHud.id = "dpb-dimension-hud";
+    dimensionHud.style.display = "none";
+    overlayEl.appendChild(dimensionHud);
+    ensureFloatRoot().appendChild(overlayEl);
+    ensureFloatRoot().appendChild(guideV);
+    ensureFloatRoot().appendChild(guideH);
+    setupManipulation(moveBody, "");
   }
 
   function ensureTextToolbar() {
@@ -689,9 +770,9 @@ BRIDGE_SCRIPT = r"""<script>
     toolbarEl.appendChild(btnS);
     toolbarEl.appendChild(selectSize);
     toolbarEl.appendChild(colorBtn);
-    toolbarEl.appendChild(colorPickerEl);
+    ensureFloatRoot().appendChild(colorPickerEl);
 
-    (document.body || document.documentElement).appendChild(toolbarEl);
+    ensureFloatRoot().appendChild(toolbarEl);
     setupToolbarActions(btnB, btnI, btnU, btnS, selectSize, colorBtn, colorPickerEl);
   }
 
@@ -709,20 +790,26 @@ BRIDGE_SCRIPT = r"""<script>
     var btnS = toolbarEl.querySelector(".dpb-tb-strike");
     var sel = toolbarEl.querySelector(".dpb-tb-select");
     var bar = toolbarEl.querySelector(".dpb-tb-color-bar");
-    var hexInput = toolbarEl.querySelector(".dpb-cp-hex");
 
     if (btnB) btnB.classList.toggle("is-active", isBold);
     if (btnI) btnI.classList.toggle("is-active", isItalic);
     if (btnU) btnU.classList.toggle("is-active", hasU);
     if (btnS) btnS.classList.toggle("is-active", hasS);
     if (bar) bar.style.backgroundColor = computed.color;
-    if (hexInput) hexInput.value = computed.color;
     if (sel) {
       var pxVal = parseInt(computed.fontSize, 10);
       if (pxVal) sel.value = String(pxVal);
     }
   }
 
+  function isTextElement(el) {
+    var textKind = /^(P|SPAN|H[1-6]|A|BUTTON|LABEL|LI|BLOCKQUOTE|SMALL|STRONG|EM|B|I|U|S|TD|TH|DIV)$/;
+    var hasDirectText = Array.from(el.childNodes).some(function (node) { return node.nodeType === 3 && node.textContent.trim(); });
+    var hasBlockChildren = Array.from(el.children).some(function (child) {
+      return !/^(inline|contents)/.test(getComputedStyle(child).display);
+    });
+    return textKind.test(el.tagName) && hasDirectText && !hasBlockChildren;
+  }
   function updateOverlayPositions(el) {
     if (!el || !overlayEl) return;
     var rect = el.getBoundingClientRect();
@@ -733,11 +820,22 @@ BRIDGE_SCRIPT = r"""<script>
     overlayEl.style.display = "block";
 
     if (toolbarEl) {
-      toolbarEl.style.left = (window.scrollX + rect.left + rect.width / 2) + "px";
-      toolbarEl.style.top = Math.max(window.scrollY + 4, window.scrollY + rect.top - 42) + "px";
-      toolbarEl.style.transform = "translateX(-50%)";
-      toolbarEl.style.display = "flex";
-      syncToolbarState(el);
+      var textOnly = !compactEditor && isTextElement(el);
+      toolbarEl.style.display = textOnly ? "flex" : "none";
+      if (textOnly) {
+        var width = toolbarEl.offsetWidth, height = toolbarEl.offsetHeight;
+        toolbarEl.style.left = (scrollX + Math.max(8, Math.min(innerWidth - width - 8, rect.left + (rect.width - width) / 2))) + "px";
+        toolbarEl.style.top = (scrollY + (rect.top >= height + 12 ? rect.top - height - 12 : rect.bottom + 12)) + "px";
+        syncToolbarState(el);
+      }
+      overlayEl.querySelectorAll('[role="slider"]').forEach(function (control) {
+        var handle = control.getAttribute("data-handle");
+        control.setAttribute("aria-valuemin", handle ? 10 : Math.min(0, rect.x));
+        control.setAttribute("aria-valuemax", Math.max(innerWidth, innerHeight, rect.width, rect.height, rect.x));
+        control.setAttribute("aria-valuenow", Math.round(handle && /[ew]/.test(handle) ? rect.width : handle ? rect.height : rect.x));
+        control.setAttribute("aria-valuetext", handle ? Math.round(rect.width) + " by " + Math.round(rect.height) + " pixels" :
+          Math.round(rect.x) + ", " + Math.round(rect.y) + " pixels");
+      });
     }
   }
   function reportVisualSelection(el, replay, requestId) {
@@ -745,6 +843,7 @@ BRIDGE_SCRIPT = r"""<script>
     var selector = cssPath(el);
     if (!selector) return;
     if (visualSelectedEl && visualSelectedEl !== el) {
+      if (closeColorPicker) closeColorPicker(false);
       visualSelectedEl.classList.remove("dpb-visual-edit-selected");
     }
     visualSelectedEl = el;
@@ -753,7 +852,7 @@ BRIDGE_SCRIPT = r"""<script>
     ensureTextToolbar();
     updateOverlayPositions(el);
     parent.postMessage({ dpbVisualEditSelection: {
-      selector: selector, tag: el.tagName.toLowerCase(),
+      selector: selector, tag: el.tagName.toLowerCase(), textEditable: isTextElement(el),
       style: visualStyleSnapshot(el), replay: !!replay, requestId: requestId
     } }, "*");
   }
@@ -767,7 +866,7 @@ BRIDGE_SCRIPT = r"""<script>
     if (!pinOn) return;  // #56: no dashed hover outline outside pin mode
     var el = e.target;
     if (!el || el === document.body || el === document.documentElement ||
-        (el.closest && el.closest("#dpb-selection-overlay, #dpb-text-toolbar"))) {
+        (el.closest && el.closest("#dpb-float-root"))) {
       clearHover();
       return;
     }
@@ -783,7 +882,7 @@ BRIDGE_SCRIPT = r"""<script>
     if (!pinOn) return;
     var raw = e.target;
     if (!raw || raw === document.body || raw === document.documentElement) return;
-    if (raw.closest && raw.closest("#dpb-selection-overlay, #dpb-text-toolbar")) return;
+    if (raw.closest && raw.closest("#dpb-float-root")) return;
     var el = (hoverEl && hoverEl.contains(raw)) ? hoverEl : raw;
     e.preventDefault();
     e.stopPropagation();
@@ -1147,6 +1246,10 @@ BRIDGE_SCRIPT = r"""<script>
     if (data.dpbVisualEdit) {
       var edit = data.dpbVisualEdit;
       if (edit.type === "ping") {
+        if (compactEditor !== !!edit.compact) {
+          compactEditor = !!edit.compact;
+          if (visualSelectedEl) updateOverlayPositions(visualSelectedEl);
+        }
         parent.postMessage({ dpbVisualEditReady: { bridgeVersion: 1, nonce: edit.nonce, routeUrl: location.href } }, "*");
         return;
       }
@@ -1155,69 +1258,41 @@ BRIDGE_SCRIPT = r"""<script>
         if (selected) reportVisualSelection(selected, !!edit.replay);
         return;
       }
-      if (edit.type === "set-style") {
-        var target = edit.selector ? findEl(String(edit.selector)) : visualSelectedEl;
-        var property = String(edit.property || "");
-        var newValue = String(edit.value == null ? "" : edit.value);
-        var code = !target ? "visual_target_missing" : "visual_rejected";
-        if (!target || !/^[A-Za-z-]{1,64}$/.test(property) ||
-            (newValue !== "" && !CSS.supports(property, newValue))) {
-          parent.postMessage({ dpbVisualEditRejected: { requestId: edit.requestId, code: code } }, "*");
-          return;
-        }
-        var oldValue = target.style.getPropertyValue(property);
-        target.style.setProperty(property, newValue);
-        var acceptedValue = target.style.getPropertyValue(property);
-        reportVisualSelection(target, !!edit.replay, edit.requestId);
-        parent.postMessage({ dpbVisualEditChange: {
-          requestId: edit.requestId, selector: cssPath(target), property: property,
-          oldValue: oldValue, newValue: acceptedValue, replay: !!edit.replay
-        } }, "*");
-        return;
-      }
-      if (edit.type === "resize") {
-        var target = edit.selector ? findEl(String(edit.selector)) : visualSelectedEl;
-        if (!target) {
-          parent.postMessage({ dpbVisualEditRejected: { requestId: edit.requestId, code: "visual_target_missing" } }, "*");
-          return;
-        }
-        var oldW = target.style.width || window.getComputedStyle(target).width;
-        var oldH = target.style.height || window.getComputedStyle(target).height;
-        var newW = edit.width == null ? "" : String(edit.width);
-        var newH = edit.height == null ? "" : String(edit.height);
-        if (newW && !/px|%|em|rem|vw|vh|auto$/.test(newW)) newW += "px";
-        if (newH && !/px|%|em|rem|vw|vh|auto$/.test(newH)) newH += "px";
-        if (newW) target.style.setProperty("width", newW);
-        if (newH) target.style.setProperty("height", newH);
-        reportVisualSelection(target, !!edit.replay, edit.requestId);
-        if (newW) {
-          parent.postMessage({ dpbVisualEditChange: {
-            requestId: edit.requestId, selector: cssPath(target), property: "width",
-            oldValue: oldW, newValue: target.style.width, replay: !!edit.replay
-          } }, "*");
-        }
-        if (newH) {
-          parent.postMessage({ dpbVisualEditChange: {
-            requestId: edit.requestId, selector: cssPath(target), property: "height",
-            oldValue: oldH, newValue: target.style.height, replay: !!edit.replay
-          } }, "*");
+      if (edit.type === "close-color-picker") { if (closeColorPicker) closeColorPicker(false); return; }
+      if (edit.type === "open-color-picker") {
+        var colorTarget = findEl(String(edit.selector || ""));
+        if (colorTarget && ["color", "background-color", "border-color"].indexOf(edit.property) >= 0) {
+          if (visualSelectedEl !== colorTarget) reportVisualSelection(colorTarget, false);
+          openColorPicker(edit.property, null);
         }
         return;
       }
-      if (edit.type === "move") {
+      if (edit.type === "set-style" || edit.type === "resize" || edit.type === "move") {
         var target = edit.selector ? findEl(String(edit.selector)) : visualSelectedEl;
-        if (!target) {
-          parent.postMessage({ dpbVisualEditRejected: { requestId: edit.requestId, code: "visual_target_missing" } }, "*");
+        var mutations = edit.changes || [{ property: String(edit.property || ""), value: String(edit.value == null ? "" : edit.value) }];
+        if (edit.type === "resize") {
+          mutations = ["width", "height"].filter(function (p) { return edit[p] != null; }).map(function (p) {
+            var value = String(edit[p]);
+            return { property: p, value: /^-?(?:\d+\.?\d*|\.\d+)$/.test(value) ? value + "px" : value };
+          });
+        }
+        if (edit.type === "move") {
+          var dx = Number(edit.dx || 0), dy = Number(edit.dy || 0);
+          mutations = [{ property: "transform", value: Number.isFinite(dx) && Number.isFinite(dy) && target ?
+            translated(target.style.transform || getComputedStyle(target).transform, dx, dy) : "invalid" }];
+        }
+        var valid = Array.isArray(mutations) && mutations.length > 0 && mutations.length <= 32 && mutations.every(function (m) {
+          return m && typeof m.property === "string" && /^[A-Za-z-]{1,64}$/.test(m.property) &&
+            typeof m.value === "string" && (m.value === "" || CSS.supports(m.property, m.value));
+        });
+        if (!target || !valid) {
+          parent.postMessage({ dpbVisualEditRejected: { requestId: edit.requestId,
+            code: !target ? "visual_target_missing" : "visual_rejected" } }, "*");
           return;
         }
-        var oldTransform = target.style.transform || window.getComputedStyle(target).transform;
-        var newTransform = "translate(" + (edit.dx || 0) + "px, " + (edit.dy || 0) + "px)";
-        target.style.setProperty("transform", newTransform);
-        reportVisualSelection(target, !!edit.replay, edit.requestId);
-        parent.postMessage({ dpbVisualEditChange: {
-          requestId: edit.requestId, selector: cssPath(target), property: "transform",
-          oldValue: oldTransform, newValue: target.style.transform, replay: !!edit.replay
-        } }, "*");
+        var changes = inlineValues(target, mutations.map(function (m) { return m.property; }));
+        mutations.forEach(function (m) { target.style.setProperty(m.property, m.value); });
+        finishVisualChange(target, changes, edit.requestId, edit.replay);
         return;
       }
       return;
