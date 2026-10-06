@@ -224,3 +224,37 @@ boundary is unchanged. Authorization is NOT a completion claim. This is a
 bounded proof on one Next.js host on one machine, not a claim of support for
 all frameworks, bundlers, or platforms, and it does not satisfy the external
 trial gate. The ADR-0045 spend gate otherwise remains in force.
+
+## Amendment (2026-10-06): bounded self-use exception for the preview control-shell rework
+
+The maintainer explicitly authorized, on 2026-10-06, a bounded rework of the
+Preview control shell's button and mode surface. This is a rework of an
+already-shipped surface, not a new capability, and it is authorized as an
+exception to the spend gate rather than as evidence that `G-RO-TRIAL-PASS` has
+passed.
+
+The authorized boundary is:
+
+- the Preview control-shell surface only: `mcp/preview/control.html`,
+  `control.css`, `control.js`, `control.review.js`, `control.react.js`,
+  `i18n.py`, and the preview tests that pin that surface;
+- a pipeline of: consolidate two independent reviews of the current button and
+  mode surface; produce a complete page design (layout, interaction, and every
+  state) with the Stitch design tool invoked by the designated agent; pull the
+  design artifacts local; subject the design to two further independent
+  reviews; and implement only after those reviews pass;
+- no release, tag, publish, catalog submission, or recruitment.
+
+The exclusions are: any new skill, command, gate, collector, or adapter row
+(including new Stitch-related capability in the package); any second source of
+preview or review authority; any change to the ADR-0008 feedback-floor
+semantics; any new MCP server or runtime shipped in the package; any change to
+the G5 boundary or to the read-only live-route contract; Console, workbench, and
+evidence surfaces; and any work outside the files listed above.
+
+The plugin gains no source writer; `writesSource` stays false and the G5
+boundary is unchanged. Authorization to design and implement is NOT a completion
+claim: delivery requires both design reviews to pass, the full repository gates
+to be green, and the existing test assertions to remain unweakened. This bounded
+exception does not satisfy the external trial gate, and the ADR-0045 spend gate
+otherwise remains in force.
