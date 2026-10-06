@@ -411,6 +411,24 @@ def _build_parent_page(
 DEFAULT_PREVIEW_PORT = 4619
 
 
+class _PreviewHTTPServer(HTTPServer):
+    """Preview server whose bind is exclusive where reuse would alias a live peer.
+
+    ``http.server.HTTPServer`` sets ``allow_reuse_address`` (SO_REUSEADDR). On
+    POSIX that still refuses a port another socket is actively listening on, so
+    the documented ephemeral fallback in ``_bind_preview_server`` works. On
+    Windows SO_REUSEADDR *allows* that bind, so two concurrent previews silently
+    aliased one origin and both reported the same ``server_address[1]``: a
+    browser could then be served the other session's control shell, whose iframe
+    points at the other session's live route (observed as an adapter iframe-src
+    mismatch), and a submission could reach the wrong session. Disabling reuse on
+    Windows makes a taken port raise, so the fallback runs as documented; a port
+    still in TIME_WAIT also falls back there, which is the safe direction.
+    """
+
+    allow_reuse_address = os.name != "nt"
+
+
 def _bind_preview_server(handler: type) -> HTTPServer:
     """Bind the preview HTTP server (fixed default port, ephemeral fallback).
 
@@ -421,9 +439,9 @@ def _bind_preview_server(handler: type) -> HTTPServer:
     """
     port = int(os.environ.get("DESIGN_PLAYBOOK_PREVIEW_PORT", str(DEFAULT_PREVIEW_PORT)))
     try:
-        return HTTPServer(("127.0.0.1", port), handler)
+        return _PreviewHTTPServer(("127.0.0.1", port), handler)
     except OSError:
-        return HTTPServer(("127.0.0.1", 0), handler)
+        return _PreviewHTTPServer(("127.0.0.1", 0), handler)
 
 
 def collect_review(

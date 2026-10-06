@@ -25,6 +25,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -1296,6 +1297,43 @@ class PinAnnotationBridgeTests(unittest.TestCase):
         _run_collect("<html><body>x</body></html>", client, fake_adapter=fake)
         self.assertEqual(len(fake.opened_urls), 1)
         self.assertEqual(len(fake.closed_handles), 1)
+
+
+class PreviewServerBindIsolationTests(unittest.TestCase):
+    """Two live preview servers must never share one origin.
+
+    ``HTTPServer`` sets SO_REUSEADDR. On Windows that lets a second bind take a
+    port another server is actively listening on, so the documented ephemeral
+    fallback in ``_bind_preview_server`` never ran and both servers reported the
+    same port. A browser could then be served the other session's control shell
+    (its iframe points at the other session's live route) and a submission could
+    reach the wrong session. The bind must be exclusive where reuse would alias a
+    live peer.
+    """
+
+    def test_concurrent_binds_never_alias_one_port(self) -> None:
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args: Any) -> None:  # noqa: D102 - silence test logs
+                pass
+
+            def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler contract
+                self.send_response(204)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+        first = review_session._bind_preview_server(Handler)
+        try:
+            second = review_session._bind_preview_server(Handler)
+            try:
+                self.assertNotEqual(
+                    first.server_address[1], second.server_address[1],
+                    "a second preview server aliased a live port; the ephemeral "
+                    "fallback did not run",
+                )
+            finally:
+                second.server_close()
+        finally:
+            first.server_close()
 
 
 if __name__ == "__main__":
