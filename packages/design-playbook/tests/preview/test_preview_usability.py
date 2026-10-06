@@ -143,7 +143,7 @@ def test_drawer_approve_mirrors_header_dynamic_state(page):
     dismiss_intro(page)
     header_label = page.locator("#dpb-approve-label")
     drawer = page.locator("#dpb-approve-drawer")
-    expect(drawer).to_contain_text("写意见或点选标注后确认")
+    expect(drawer).to_contain_text("写意见或标注后确认")
     assert "dpb-approve-muted" in drawer.get_attribute("class")
     assert "dpb-approve-ready" not in drawer.get_attribute("class")
     save_anchor(page, "第一处")

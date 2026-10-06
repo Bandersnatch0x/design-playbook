@@ -1269,3 +1269,55 @@ def test_ip12_svg_coordinate_systems_follow_dimensions(editor_page):
     expect(proto.locator("#dpb-ruler-layer")).to_be_attached()
     for selector in (page.locator("#dpb-draw-layer"), proto.locator("#dpb-draw-layer"), proto.locator("#dpb-ruler-layer")):
         assert selector.evaluate("el => el.getAttribute('viewBox') === '0 0 ' + el.getAttribute('width') + ' ' + el.getAttribute('height')")
+
+
+def test_rail_tabs_put_visual_editor_second(editor_page) -> None:
+    """Rail order is annotations, visual editor, criteria.
+
+    The visual editor is a primary review surface, so it sits directly after the
+    annotations list instead of trailing the criteria tab.
+    """
+    ids = editor_page.evaluate(
+        "() => [...document.querySelectorAll('.dpb-rail-tabs > button')].map(b => b.id)"
+    )
+    assert ids == ["dpb-tab-annotations", "dpb-tab-visual", "dpb-tab-spec"]
+
+
+def test_criteria_chip_does_not_repeat_the_tab_label() -> None:
+    """The count chip sits beside the "验收准判" label, so it carries numbers only."""
+    from design_playbook.mcp.preview import i18n
+    from design_playbook.mcp.preview.control import _build_control
+
+    for locale in (i18n.ZH, i18n.EN):
+        assert i18n._STRINGS[locale]["criteria_count"] == "{checked}/{total}"
+
+    html = _build_control(
+        1, "criteria chip", ["Confirm"],
+        criteria=[{"id": "AC-1", "title": "Title", "then": "Visible"}],
+    )
+    short = i18n.t("criteria_title_short")
+    assert short in html
+    assert "0/1" in html
+    # "验收准判 验收准判 0/1" is the defect this pins.
+    assert f"{short}</span> <span class=\"dpb-filter-n\" id=\"dpb-criteria-count\">{short}" not in html
+
+
+def test_next_step_copy_names_the_decision_not_the_feedback_only() -> None:
+    """Visual edits ride along with the round decision, so the copy must say so.
+
+    Pending visual edits alone do not satisfy the ADR-0008 floor, so the muted
+    approve label still asks for a note or an annotation - and stays short,
+    because the 768px header test owns that budget. The ride-along fact and the
+    submit shortcut ride in the always-visible tooltip and the rendered
+    visual-panel help instead.
+    """
+    from design_playbook.mcp.preview import i18n
+
+    zh, en = i18n._STRINGS[i18n.ZH], i18n._STRINGS[i18n.EN]
+    # The visual-panel help is rendered (`dpb-react-help`) and names the action.
+    for table in (zh, en):
+        assert "Ctrl" in table["visual_help"]
+        assert "⌘" in table["visual_help"]
+    # The approve tooltip is always reachable and states that edits travel along.
+    assert "视觉编辑" in zh["confirm_desc"]
+    assert "visual edit" in en["confirm_desc"].lower()

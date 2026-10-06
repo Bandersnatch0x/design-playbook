@@ -359,7 +359,7 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                     )
                     self.assertEqual(
                         page.locator("#dpb-criteria-count").inner_text(),
-                        "准则 0/2",
+                        "0/2",
                     )
 
                     pane_text = page.locator("#dpb-spec-view").inner_text()
@@ -374,7 +374,7 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                     page.check('.dpb-criterion-check[data-criterion-id="L6.1"]')
                     self.assertEqual(
                         page.locator("#dpb-criteria-count").inner_text(),
-                        "准则 1/2",
+                        "1/2",
                     )
                     self.assertIn(
                         "dpb-checked",

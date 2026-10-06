@@ -218,8 +218,8 @@
     if (visualPanel) visualPanel.hidden = view !== "visual";
     [
       [tabAnnotations, "annotations"],
-      [criteriaToggle, "spec"],
       [tabVisual, "visual"],
+      [criteriaToggle, "spec"],
     ].forEach(function (pair) {
       var el = pair[0];
       if (!el) return;
