@@ -25,6 +25,13 @@ from preview_e2e_helpers import dismiss_onboarding  # noqa: E402
 from presence import Presence  # noqa: E402
 
 
+# Presence visibility depends on a loopback SSE join racing the browser under test.
+# The default 5s Playwright expect window is too tight when the suite runs under CPU
+# contention, so presence waits use a load-tolerant window. Assertions are unchanged;
+# only the time allowed for the same condition to become true is wider.
+PRESENCE_WAIT = 20000
+
+
 @pytest.fixture
 def presence_host(tmp_path):
     root = tmp_path / "source"
@@ -265,7 +272,7 @@ def test_two_browser_presence_no_style_sync_and_disconnect_recovery(presence_hos
                 first.goto(url, wait_until="domcontentloaded")
                 dismiss_onboarding(first)
                 first.locator("#dpb-tab-visual").click()
-                expect(first.locator(".dpb-react-presence li")).to_have_count(1)
+                expect(first.locator(".dpb-react-presence li")).to_have_count(1, timeout=PRESENCE_WAIT)
                 alice = first.locator(".dpb-react-presence li").get_attribute("data-user-id")
                 second_context = browser.new_context(viewport={"width": 1280, "height": 900})
                 second = second_context.new_page()
@@ -273,12 +280,12 @@ def test_two_browser_presence_no_style_sync_and_disconnect_recovery(presence_hos
                 dismiss_onboarding(second)
                 second.locator("#dpb-tab-visual").click()
                 for page in (first, second):
-                    expect(page.locator(".dpb-react-presence li")).to_have_count(2)
+                    expect(page.locator(".dpb-react-presence li")).to_have_count(2, timeout=PRESENCE_WAIT)
                     assert page.locator("iframe.dpb-proto-frame").get_attribute("sandbox") == "allow-scripts"
                 first.frame_locator("iframe").locator("#next-read").click(position={"x": 5, "y": 5})
                 first.locator('.dpb-react-field[data-property="padding"] input').fill("32px")
                 expect(first.locator("#dpb-visual-count")).to_have_text("1")
-                expect(second.locator(f'.dpb-react-presence [data-user-id="{alice}"]')).to_contain_text("#next-read · padding")
+                expect(second.locator(f'.dpb-react-presence [data-user-id="{alice}"]')).to_contain_text("#next-read · padding", timeout=PRESENCE_WAIT)
                 assert second.frame_locator("iframe").locator("#next-read").evaluate("el => el.style.padding") == ""
                 assert json.loads(second.locator("#dpb-visual-edits-json").input_value())["edits"] == []
                 evidence = os.environ.get("DPB_PRESENCE_EVIDENCE_DIR")
@@ -286,16 +293,16 @@ def test_two_browser_presence_no_style_sync_and_disconnect_recovery(presence_hos
                     second.screenshot(path=str(Path(evidence) / "f5-presence-two-users.png"))
                 print("BROWSER two users visible; remote preview style and batch unchanged")
                 first_context.close()
-                expect(second.locator(".dpb-react-presence li")).to_have_count(1, timeout=10000)
+                expect(second.locator(".dpb-react-presence li")).to_have_count(1, timeout=PRESENCE_WAIT)
                 second_context.set_offline(True)
                 second.frame_locator("iframe").locator("#next-read").click(position={"x": 5, "y": 5})
-                expect(second.locator(".dpb-react-presence")).to_have_attribute("data-state", "unavailable")
+                expect(second.locator(".dpb-react-presence")).to_have_attribute("data-state", "unavailable", timeout=PRESENCE_WAIT)
                 second.locator('.dpb-react-field[data-property="padding"] input').fill("40px")
                 expect(second.locator("#dpb-visual-count")).to_have_text("1")
                 second_context.set_offline(False)
                 second.locator('.dpb-react-field[data-property="padding"] input').fill("41px")
                 expect(second.locator("#dpb-visual-count")).to_have_text("2")
-                expect(second.locator(".dpb-react-presence")).to_have_attribute("data-state", "connected", timeout=10000)
+                expect(second.locator(".dpb-react-presence")).to_have_attribute("data-state", "connected", timeout=PRESENCE_WAIT)
                 print("BROWSER survivor edits normally after peer disconnect and presence POST outage; delivery recovers")
                 second.locator("#dpb-feedback").fill("Presence is advisory; source changes still need separate confirmation.")
                 with second.expect_response(lambda response: response.url.endswith("/decide")):

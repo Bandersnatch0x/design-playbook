@@ -75,6 +75,38 @@ class HostHandler(BaseHTTPRequestHandler):
         # Presence capability lives in the SSE URL; never put it in access logs.
         self.log_message("%s %s %s %s", self.command, urlsplit(self.path).path, code, size)
 
+    def _discard_request_body(self):
+        """Consume a bounded declared body before sending an early error response.
+
+        Error paths (403/404 on the presence endpoint) answer before the JSON body
+        is read. Leaving that body unread while the handler closes makes Windows
+        reset the connection, so the client sees a connection abort instead of the
+        status code the server actually sent. Draining first keeps the 4xx clean and
+        the capability check itself untouched.
+        """
+        if self.command not in ("POST", "PUT", "PATCH"):
+            return
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+        except (TypeError, ValueError):
+            return
+        remaining = min(max(size, 0), 65536)
+        if not remaining:
+            return
+        self.connection.settimeout(3)
+        while remaining > 0:
+            try:
+                chunk = self.rfile.read(min(remaining, 4096))
+            except OSError:
+                return
+            if not chunk:
+                return
+            remaining -= len(chunk)
+
+    def send_error(self, code, message=None, explain=None):
+        self._discard_request_body()
+        super().send_error(code, message, explain)
+
     def _presence_access(self, *, token=True):
         if self.headers.get("Host") != f"127.0.0.1:{self.server.server_port}":
             self.send_error(403, "presence requires the loopback host")
