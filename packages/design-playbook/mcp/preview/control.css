@@ -869,6 +869,14 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-react-field input:focus { outline: 2px solid var(--dpb-ring-accent); outline-offset: 1px; }
 .dpb-react-help { margin: 8px 0 0; color: var(--dpb-muted); font-size: 10px; line-height: 1.4; }
 
+/* The visual panel's own submit button: the user is working here, so the primary
+   action is local. It mirrors the header button's readiness state, which stays
+   owned by control.review.js. */
+.dpb-react-submit { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.dpb-react-submit-btn { width: 100%; }
+.dpb-react-submit-btn[disabled] { opacity: .55; cursor: not-allowed; }
+.dpb-react-submit-btn[disabled]:hover { box-shadow: none; transform: none; }
+
 .dpb-react-diagnostic { color: var(--dpb-soft); font-size: 12px; }
 .dpb-react-diagnostic[data-stale="true"] { color: var(--dpb-danger); }
 .dpb-react-diagnostic:empty { display: none; }

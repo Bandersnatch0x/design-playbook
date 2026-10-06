@@ -87,6 +87,24 @@
       var accepted = React.useRef({});
       var [collapsed, setCollapsed] = React.useState({});
       var [compact, setCompact] = React.useState(window.innerWidth <= 480);
+      // Review readiness is owned by control.review.js, which publishes it. The
+      // panel renders a local submit button and mirrors that state instead of
+      // re-deriving the floor; the seed covers a publish that landed early.
+      var [reviewGate, setReviewGate] = React.useState({ ready: false, label: "" });
+      React.useEffect(function () {
+        function onGate(event) {
+          var detail = (event && event.detail) || {};
+          setReviewGate({ ready: !!detail.ready, label: String(detail.label || "") });
+        }
+        document.addEventListener("dpbReviewReady", onGate);
+        var btn = document.getElementById("dpb-btn-approve");
+        var label = document.getElementById("dpb-approve-label");
+        setReviewGate({
+          ready: !!(btn && btn.classList.contains("dpb-approve-ready")),
+          label: (label && label.textContent) || "",
+        });
+        return function () { document.removeEventListener("dpbReviewReady", onGate); };
+      }, []);
       React.useEffect(function () {
         function resize() { setCompact(window.innerWidth <= 480); }
         window.addEventListener("resize", resize);
@@ -592,7 +610,19 @@
               )
             ])
           );
-        })(), h("p", { className: "dpb-react-help" }, t("visual_help")));
+        })(), h("div", { className: "dpb-react-submit" },
+          h("button", {
+            type: "button", id: "dpb-visual-submit",
+            className: "dpb-btn dpb-react-submit-btn" + (reviewGate.ready ? " dpb-btn-primary" : " dpb-btn-quiet"),
+            disabled: !reviewGate.ready || stale,
+            title: t("confirm_desc"),
+            onClick: function () {
+              document.dispatchEvent(new CustomEvent("dpbVisualSubmit"));
+            },
+          },
+            h("span", null, reviewGate.ready ? t("visual_submit") : (reviewGate.label || t("approve_not_ready"))),
+            h("kbd", null, "Ctrl/⌘↵")),
+          h("p", { className: "dpb-react-help" }, t("visual_help"))));
     }
     window.ReactDOM.createRoot(mount).render(h(Editor));
   }

@@ -81,6 +81,20 @@
     anchors.forEach(function (a) { delete a.__fresh; });
     if (persistDraft !== false) scheduleDraft();
   }
+  // ---- readiness publication (single owner) ----
+  // The visual editor panel renders its own submit button because that is where
+  // the user is working, but the panel must not re-derive readiness: the floor
+  // mirror lives here once. This publishes the state; the panel asks back
+  // through the dpbVisualSubmit event below.
+  var publishedGate = null;
+  function publishReviewGate(ready, readyLabel) {
+    var label = ready ? readyLabel : tt("approve_not_ready");
+    if (publishedGate && publishedGate.ready === ready && publishedGate.label === label) return;
+    publishedGate = { ready: ready, label: label };
+    document.dispatchEvent(new CustomEvent("dpbReviewReady", {
+      detail: { ready: ready, label: label },
+    }));
+  }
   function updateCounts() {
     var n = anchors.length;
     var pending = anchors.filter(function (a) { return !resolvedSet[a.selector]; }).length;
@@ -109,6 +123,7 @@
         btn.classList.toggle("dpb-approve-muted", !ready);
         if (label) label.textContent = ready ? readyLabel : tt("approve_not_ready");
       });
+    publishReviewGate(ready, readyLabel);
   }
 
   // list interactions (delegated)
@@ -242,6 +257,12 @@
   }
   function setReadiness() { updateStatus(); }
   if (field) field.addEventListener("input", function () { setReadiness(); scheduleDraft(); });
+  // The visual panel's local submit button routes through this event so the
+  // floor keeps exactly one owner; a not-ready request is refused here.
+  document.addEventListener("dpbVisualSubmit", function () {
+    if (!isSubstantive()) return;
+    submitPrimary();
+  });
 
   // ---- rail collapse (unified rail, REC-02) ----
   function setDrawer(open, quiet) {

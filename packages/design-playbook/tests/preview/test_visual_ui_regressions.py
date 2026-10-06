@@ -1321,3 +1321,41 @@ def test_next_step_copy_names_the_decision_not_the_feedback_only() -> None:
     # The approve tooltip is always reachable and states that edits travel along.
     assert "视觉编辑" in zh["confirm_desc"]
     assert "visual edit" in en["confirm_desc"].lower()
+
+
+def test_visual_panel_submit_is_the_header_channel_gated_by_the_floor(editor_page) -> None:
+    """The panel's own submit button mirrors the header state; one floor owner.
+
+    Pending visual edits alone do not satisfy the ADR-0008 floor, so the local
+    button must not re-derive readiness: it starts disabled with the shared
+    not-ready wording, a note enables it, and clicking it submits through the
+    same channel as the header button (submitter dpb-btn-approve).
+    """
+    from playwright.sync_api import expect
+
+    from design_playbook.mcp.preview import i18n
+
+    page = editor_page
+    page.locator("#dpb-tab-visual").click()
+    submit = page.locator("#dpb-visual-submit")
+    expect(submit).to_be_visible()
+    expect(submit).to_be_disabled()
+    expect(submit).to_contain_text(i18n.t("approve_not_ready"))
+
+    page.locator("#dpb-feedback").fill("Styles need a pass before this ships.")
+    expect(submit).to_be_enabled()
+    expect(submit).to_contain_text(i18n.t("visual_submit"))
+
+    page.evaluate("""() => {
+      window.dpbSubmitted = [];
+      document.querySelector('form').addEventListener('submit', e => {
+        e.preventDefault();
+        window.dpbSubmitted.push(e.submitter ? e.submitter.id : '(null)');
+      });
+    }""")
+    submit.click()
+    page.wait_for_function("window.dpbSubmitted.includes('dpb-btn-approve')")
+
+    # Withdrawing the note puts the whole gate back to not-ready.
+    page.locator("#dpb-feedback").fill("")
+    expect(submit).to_be_disabled()
