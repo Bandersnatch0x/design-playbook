@@ -1359,3 +1359,35 @@ def test_visual_panel_submit_is_the_header_channel_gated_by_the_floor(editor_pag
     # Withdrawing the note puts the whole gate back to not-ready.
     page.locator("#dpb-feedback").fill("")
     expect(submit).to_be_disabled()
+
+
+def test_visual_submit_bar_stays_inside_the_scrolling_panel(editor_page) -> None:
+    """The panel's primary action must never be something you scroll to find.
+
+    #dpb-visual-view is the scroll container and the panel is far taller than the
+    rail, so the submit bar is sticky to that scrollport and stays inside it at
+    every offset.
+    """
+    page = editor_page
+    page.locator("#dpb-tab-visual").click()
+    page.locator("#dpb-visual-submit").wait_for(state="visible")
+
+    def bar_state() -> dict:
+        return page.evaluate("""() => {
+          const view = document.getElementById('dpb-visual-view').getBoundingClientRect();
+          const bar = document.querySelector('.dpb-react-submit').getBoundingClientRect();
+          return {
+            inside: bar.top >= view.top - 1 && bar.bottom <= view.bottom + 1,
+            position: getComputedStyle(document.querySelector('.dpb-react-submit')).position,
+          };
+        }""")
+
+    top = bar_state()
+    assert top["position"] == "sticky", "the submit bar must ride the scrollport"
+    assert top["inside"]
+
+    page.evaluate(
+        "() => { const v = document.getElementById('dpb-visual-view'); v.scrollTop = v.scrollHeight; }"
+    )
+    page.wait_for_timeout(150)
+    assert bar_state()["inside"], "the submit bar left the scrollport after scrolling"

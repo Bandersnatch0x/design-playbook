@@ -871,8 +871,21 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 
 /* The visual panel's own submit button: the user is working here, so the primary
    action is local. It mirrors the header button's readiness state, which stays
-   owned by control.review.js. */
-.dpb-react-submit { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+   owned by control.review.js. #dpb-visual-view is the scroll container and the
+   panel is far taller than the rail, so the bar rides the bottom of that
+   scrollport: the primary action is never something you scroll to find. */
+.dpb-react-submit {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  margin-top: 10px;
+  padding: 8px 0 2px;
+  background: var(--dpb-elev);
+  border-top: 1px solid var(--dpb-line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .dpb-react-submit-btn { width: 100%; }
 .dpb-react-submit-btn[disabled] { opacity: .55; cursor: not-allowed; }
 .dpb-react-submit-btn[disabled]:hover { box-shadow: none; transform: none; }
