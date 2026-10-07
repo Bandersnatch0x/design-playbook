@@ -277,3 +277,24 @@ the same invariants (`writesSource` false, G5 intact, the ADR-0008 floor exact,
 a single readiness owner, no new skills, commands, gates, collectors, adapter
 rows, MCP servers or runtimes), and no release, tag, publish, catalog submission
 or recruitment. Authorization is not a completion claim.
+
+### Additional accepted field (2026-10-07): `inlineStyle` in selection snapshots
+
+A second pi session held this path concurrently and, before ownership was yielded
+and the paths frozen, added an `inlineStyle` field to the selection snapshot the
+bridge sends for each selected element in `pin_bridge.py`. That is a second field
+in the same border file, beyond the key allowlist named above.
+
+The maintainer accepted it on 2026-10-07 rather than reverting, because that
+session's reconnect fix depends on it: the child applies a style before sending
+its acknowledgment, and when the acknowledgment is lost the parent has no pending
+edit record, so on reconnect the child reports `31px -> 31px` and the existing
+no-op filter discards the edit. The snapshot must therefore carry the element's
+inline style so the parent can recover the original value.
+
+The boundary is unchanged in kind: still `mcp/preview/` only, still no new skill,
+command, gate, collector, adapter row, MCP server or runtime, still `writesSource`
+false and G5 intact, still no release or publication. The field was authored by a
+concurrent session whose work is uncommitted and unverified at suite level; it
+carries no acceptance claim of its own and must still pass independent review on
+the merged tree.
