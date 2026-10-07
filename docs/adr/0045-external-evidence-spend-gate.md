@@ -258,3 +258,22 @@ claim: delivery requires both design reviews to pass, the full repository gates
 to be green, and the existing test assertions to remain unweakened. This bounded
 exception does not satisfy the external trial gate, and the ADR-0045 spend gate
 otherwise remains in force.
+
+## Amendment (2026-10-07): scope extension for the sandbox shortcut allowlist
+
+The maintainer authorized, on 2026-10-07, extending the file list of the
+2026-10-06 amendment by exactly one file: `mcp/preview/pin_bridge.py`, and within
+it only the frame-side key allowlist (`FRAME_PASS_KEYS`) that decides which of
+the parent's shortcuts are forwarded across the sandbox boundary.
+
+Rationale: the reviewed work remapped the Select tool to `A` in the parent. The
+frame-side allowlist was never updated, so `A` works with focus in the parent and
+not with focus inside the sandboxed prototype - the reviewers reproduced the
+split both times. The split cannot be closed from the parent side, because the
+child's filter drops the key before the parent ever sees it.
+
+Everything else in the 2026-10-06 amendment is unchanged: the same exclusions,
+the same invariants (`writesSource` false, G5 intact, the ADR-0008 floor exact,
+a single readiness owner, no new skills, commands, gates, collectors, adapter
+rows, MCP servers or runtimes), and no release, tag, publish, catalog submission
+or recruitment. Authorization is not a completion claim.
