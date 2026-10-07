@@ -2475,3 +2475,228 @@ def test_bo04_retry_reconciliation_preserves_original_baseline_and_undo_restores
             assert len(page_errors) == 0
         finally:
             browser.close()
+
+
+def test_bo05_mb_f01_late_undo_receipt_after_new_edit_retains_newer_edit(tmp_path) -> None:
+    """MB-F-01 Repro A: late Undo receipt must not remove newer edit by position; admitted batch matches inline value."""
+    from playwright.sync_api import sync_playwright, expect
+    from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
+    from preview_e2e_helpers import dismiss_onboarding
+
+    control = review_session._build_control(1, "MB-F-01 repro A", ["Confirm"])
+    path = tmp_path / "preview_mb_f01_repro_a.html"
+    path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
+
+    INIT = """
+    window.__acks=[];window.__held=[];window.__hold=false;window.__blockReady=false;
+    window.addEventListener('message',e=>{
+        if(e.data && e.data.dpbVisualEditReady && window.__blockReady) e.stopImmediatePropagation();
+        if(!e.data || !e.data.dpbVisualEditChange || e.__released) return;
+        window.__acks.push(JSON.parse(JSON.stringify(e.data.dpbVisualEditChange)));
+        if(window.__hold){
+            e.stopImmediatePropagation();
+            window.__held.push({data:e.data,source:e.source});
+            window.__hold=false;
+        }
+    },true);
+    """
+    RELEASE = """
+    ()=>{
+        window.__held.forEach(x=>{
+            let e=new MessageEvent('message',x);
+            e.__released=true;
+            window.dispatchEvent(e);
+        });
+        window.__held=[];
+    }
+    """
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            page.set_default_timeout(UI_WAIT)
+            page_errors = []
+            page.on("pageerror", lambda err: page_errors.append(str(err)))
+            page.add_init_script(INIT)
+
+            page.goto(path.as_uri())
+            dismiss_onboarding(page)
+
+            target = page.frame_locator("iframe.dpb-proto-frame").locator("#panel-title")
+            target.evaluate("el => el.click()")
+            page.locator("#dpb-tab-visual").click()
+
+            field = page.locator('.dpb-react-field[data-property="background-color"] input')
+            expect(field).to_be_enabled()
+            page.locator("#dpb-feedback").fill("Approve inspected color changes")
+
+            page.evaluate("""() => {
+                window.__subs = [];
+                document.querySelector('form').addEventListener('submit', e => {
+                    if (!e.defaultPrevented) {
+                        window.__subs.push(JSON.parse(document.getElementById('dpb-visual-edits-json').value));
+                    }
+                    e.preventDefault();
+                });
+            }""")
+
+            # 1. Apply #123456 and receive acknowledgment
+            field.fill("#123456")
+            field.press("Enter")
+            page.wait_for_timeout(400)
+
+            # 2. Press Ctrl+Z, hold genuine Undo receipt past 1500ms deadline
+            page.evaluate("window.__hold = true")
+            field.focus()
+            page.keyboard.press("Control+z")
+            page.wait_for_timeout(1800)
+
+            # 3. Enter #abcdef and let its receipt be accepted
+            field.fill("#abcdef")
+            field.press("Enter")
+            page.wait_for_timeout(400)
+
+            # Prototype is now rgb(171, 205, 239)
+            current_inline = target.evaluate("el => el.style.backgroundColor")
+            assert current_inline == "rgb(171, 205, 239)"
+
+            # 4. Release earlier Undo receipt
+            page.evaluate(RELEASE)
+            page.wait_for_timeout(400)
+
+            # 5. Activate approve button
+            page.locator("#dpb-btn-approve").click()
+            page.wait_for_timeout(500)
+
+            subs = page.evaluate("() => window.__subs")
+            assert len(subs) == 1, f"Expected 1 submission, got {len(subs)}"
+            edits = subs[0].get("edits", [])
+            final_inline = target.evaluate("el => el.style.backgroundColor")
+
+            # Assert admitted batch describes the ACTUAL final inline value
+            bg_edits = [e for e in edits if e.get("property") == "background-color"]
+            assert len(bg_edits) >= 1, f"Expected background-color edit in batch, got: {edits}"
+            assert bg_edits[-1]["newValue"] == final_inline, (
+                f"Admitted batch final value {bg_edits[-1]['newValue']} does not match actual inline {final_inline}"
+            )
+            has_pending = page.evaluate("() => window.dpbHasPendingVisualEdits()")
+            assert not has_pending
+            assert len(page_errors) == 0
+        finally:
+            browser.close()
+
+
+def test_bo06_mb_f01_duplicate_undo_does_not_double_consume_history(tmp_path) -> None:
+    """MB-F-01 Repro B: repeated Undo after timeout must not double-consume history; admitted batch matches prototype."""
+    from playwright.sync_api import sync_playwright, expect
+    from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
+    from preview_e2e_helpers import dismiss_onboarding
+
+    control = review_session._build_control(1, "MB-F-01 repro B", ["Confirm"])
+    path = tmp_path / "preview_mb_f01_repro_b.html"
+    path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
+
+    INIT = """
+    window.__acks=[];window.__held=[];window.__hold=false;window.__blockReady=false;
+    window.addEventListener('message',e=>{
+        if(e.data && e.data.dpbVisualEditReady && window.__blockReady) e.stopImmediatePropagation();
+        if(!e.data || !e.data.dpbVisualEditChange || e.__released) return;
+        window.__acks.push(JSON.parse(JSON.stringify(e.data.dpbVisualEditChange)));
+        if(window.__hold){
+            e.stopImmediatePropagation();
+            window.__held.push({data:e.data,source:e.source});
+            window.__hold=false;
+        }
+    },true);
+    """
+    RELEASE = """
+    ()=>{
+        window.__held.forEach(x=>{
+            let e=new MessageEvent('message',x);
+            e.__released=true;
+            window.dispatchEvent(e);
+        });
+        window.__held=[];
+    }
+    """
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            page.set_default_timeout(UI_WAIT)
+            page_errors = []
+            page.on("pageerror", lambda err: page_errors.append(str(err)))
+            page.add_init_script(INIT)
+
+            page.goto(path.as_uri())
+            dismiss_onboarding(page)
+
+            target = page.frame_locator("iframe.dpb-proto-frame").locator("#panel-title")
+            target.evaluate("el => el.click()")
+            page.locator("#dpb-tab-visual").click()
+
+            field = page.locator('.dpb-react-field[data-property="background-color"] input')
+            expect(field).to_be_enabled()
+            page.locator("#dpb-feedback").fill("Approve inspected color changes")
+
+            page.evaluate("""() => {
+                window.__subs = [];
+                document.querySelector('form').addEventListener('submit', e => {
+                    if (!e.defaultPrevented) {
+                        window.__subs.push(JSON.parse(document.getElementById('dpb-visual-edits-json').value));
+                    }
+                    e.preventDefault();
+                });
+            }""")
+
+            # 1. Acknowledge #123456, then #abcdef
+            field.fill("#123456")
+            field.press("Enter")
+            page.wait_for_timeout(400)
+
+            field.fill("#abcdef")
+            field.press("Enter")
+            page.wait_for_timeout(400)
+
+            # 2. Undo second edit, hold receipt, wait for timeout
+            page.evaluate("window.__hold = true")
+            field.focus()
+            page.keyboard.press("Control+z")
+            page.wait_for_timeout(1800)
+
+            proto_bg_after_first_undo = target.evaluate("el => el.style.backgroundColor")
+            assert proto_bg_after_first_undo == "rgb(18, 52, 86)"
+
+            # 3. Press Ctrl+Z again
+            field.focus()
+            page.keyboard.press("Control+z")
+            page.wait_for_timeout(400)
+
+            # 4. Release first Undo receipt
+            page.evaluate(RELEASE)
+            page.wait_for_timeout(400)
+
+            # 5. Approve
+            page.locator("#dpb-btn-approve").click()
+            page.wait_for_timeout(500)
+
+            subs = page.evaluate("() => window.__subs")
+            assert len(subs) == 1, f"Expected 1 submission, got {len(subs)}"
+            edits = subs[0].get("edits", [])
+            final_inline = target.evaluate("el => el.style.backgroundColor")
+
+            # Must NOT be empty edits while prototype still has inline rgb(18, 52, 86)
+            assert final_inline == "rgb(18, 52, 86)"
+            bg_edits = [e for e in edits if e.get("property") == "background-color"]
+            assert len(bg_edits) == 1, f"Expected 1 background-color edit matching prototype, got: {edits}"
+            assert bg_edits[0]["newValue"] == final_inline, (
+                f"Admitted edit {bg_edits[0]['newValue']} does not match prototype {final_inline}"
+            )
+            has_pending = page.evaluate("() => window.dpbHasPendingVisualEdits()")
+            assert not has_pending
+            assert len(page_errors) == 0
+        finally:
+            browser.close()
+

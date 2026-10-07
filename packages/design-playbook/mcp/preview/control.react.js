@@ -61,6 +61,17 @@
       }
       return next;
     }
+    function getEntryId(item) {
+      if (!item) return null;
+      if (item._entryId !== undefined) return item._entryId;
+      if (Array.isArray(item) && item.length > 0) {
+        if (item._entryId !== undefined) return item._entryId;
+        if (item[0]._entryId !== undefined) return item[0]._entryId;
+        if (item[0]._seq !== undefined) return item[0]._seq;
+      }
+      if (item._seq !== undefined) return item._seq;
+      return null;
+    }
     function Editor() {
       var [selected, setSelected] = React.useState(null);
       var [pending, setPending] = React.useState([]);
@@ -85,7 +96,20 @@
       var current = React.useRef({}), request = React.useRef(null);
       var sequence = React.useRef(0), draftTimers = React.useRef({});
       var accepted = React.useRef({});
-      var [collapsed, setCollapsed] = React.useState({});
+      var pendingRef = React.useRef(pending);
+      pendingRef.current = pending;
+      var historyRef = React.useRef(history);
+      historyRef.current = history;
+      var futureRef = React.useRef(future);
+      futureRef.current = future;
+      var requestPromiseRef = React.useRef(null);
+      var isDrainingRef = React.useRef(false);
+      var dispatchedDrafts = React.useRef({});
+      var unackedRequests = React.useRef({});
+      var interruptedValues = React.useRef({});
+      var lastAcceptedSeq = React.useRef({});
+      var isPublishedRef = React.useRef(true);
+      var [collapsed, setCollapsed] = React.useState({ layout: true, spacing: true, border: true });
       var [compact, setCompact] = React.useState(window.innerWidth <= 480);
       // Review readiness is owned by control.review.js, which publishes it. The
       // panel renders a local submit button and mirrors that state instead of
@@ -136,6 +160,7 @@
           request.current.resolve({ accepted: false, error: code });
           request.current = null;
         }
+        requestPromiseRef.current = null;
         setBusy(false);
       }
       function notifyPresence(type, selector, property) {
@@ -152,10 +177,33 @@
       function disconnected() {
         setReady(false);
         setConnecting(false);
-        setSelected(null);
-        setDrafts({});
+        // Retain unresolved drafts across disconnect (§3.3)
         if (current.current.pending.length) setStale(true);
         Object.values(draftTimers.current).forEach(clearTimeout);
+        draftTimers.current = {};
+        var interrupted = Object.values(unackedRequests.current);
+        unackedRequests.current = {};
+        lastAcceptedSeq.current = {};
+        interrupted.forEach(function (operation) {
+          var key = operation.locator + ":" + operation.property;
+          if (!operation.entry && !Object.prototype.hasOwnProperty.call(interruptedValues.current, key)) {
+            interruptedValues.current[key] = operation.oldValue;
+          }
+          delete dispatchedDrafts.current[operation.property];
+        });
+        if (interrupted.length) {
+          var selection = current.current.selected;
+          setDrafts(function (values) {
+            var next = Object.assign({}, values);
+            interrupted.forEach(function (operation) {
+              if (!operation.entry && selection && operation.locator === selection.selector &&
+                  values[operation.property] === operation.draft) {
+                next = syncDraft(next, operation.property, operation.value);
+              }
+            });
+            return next;
+          });
+        }
         fail("visual_disconnected");
       }
       function applyStyle(property, value, action, entry) {
@@ -168,19 +216,48 @@
         var locator = entry ? entry[0].locator : state.selected.selector;
         notifyPresence("user-editing-element", locator, property);
         setBusy(true);
-        return new Promise(function (resolve) {
-          request.current = { id: id, action: action || "edit", entry: entry, resolve: resolve,
-            value: value, draft: state.drafts[property],
-            viewport: entry ? entry[0].viewport : window.DPB_ACTIVE_VIEWPORT || "any",
-            timer: setTimeout(disconnected, 1500) };
+        isPublishedRef.current = false;
+        var inlineStyle = document.createElement("div").style;
+        inlineStyle.cssText = state.selected.inlineStyle || "";
+        var unacked = { oldValue: inlineStyle.getPropertyValue(property), id: id, action: action || "edit", entry: entry,
+          value: value, draft: state.drafts[property], property: property,
+          viewport: entry ? entry[0].viewport : window.DPB_ACTIVE_VIEWPORT || "any",
+          locator: locator };
+        unackedRequests.current[id] = unacked;
+        var p = new Promise(function (resolve) {
+          request.current = Object.assign({ resolve: resolve,
+            timer: setTimeout(function () {
+              if (request.current && request.current.id === id) {
+                var req = request.current;
+                var prop = req.property;
+                if (prop && dispatchedDrafts.current) {
+                  delete dispatchedDrafts.current[prop];
+                }
+                request.current = null;
+                requestPromiseRef.current = null;
+                setBusy(false);
+                setDiagnostic("visual_drain_failed");
+                var resFn = req.resolve;
+                req.resolve = null;
+                if (typeof resFn === "function") {
+                  resFn({ accepted: false, error: "timeout" });
+                }
+              }
+            }, 1500) }, unacked);
           post({ type: "set-style", requestId: id, selector: locator, property: property,
             value: value, changes: entry && entry.map(function (item) {
               return { property: item.property, value: action === "undo" ? item.oldValue : item.newValue };
             }), replay: !!entry });
         });
+        requestPromiseRef.current = p;
+        p.finally(function () {
+          if (requestPromiseRef.current === p) requestPromiseRef.current = null;
+        });
+        return p;
       }
       function commit(property, value, selector) {
         clearTimeout(draftTimers.current[property]);
+        delete draftTimers.current[property];
         var state = current.current;
         if (!state.selected || state.selected.selector !== selector) return;
         // Serialize requests, not typing. A newer keystroke replaces this timer.
@@ -189,6 +266,7 @@
           return;
         }
         if (value === accepted.current[property]) return;
+        dispatchedDrafts.current[property] = value;
         applyStyle(property, value);
       }
       React.useEffect(function () {
@@ -299,6 +377,7 @@
               setSelected(selection);
               accepted.current = snapshot(selection);
               setDrafts(accepted.current);
+              dispatchedDrafts.current = Object.assign({}, accepted.current);
               notifyPresence("user-editing-element", selection.selector, "");
             }
           }
@@ -309,45 +388,146 @@
           }
           var change = data.dpbVisualEditChange;
           if (!change || !current.current.ready || current.current.stale) return;
-          // Canvas gestures have their own receipt IDs and never settle inspector requests.
-          var operation = request.current && change.requestId === request.current.id ? request.current : null;
+          var unacked = unackedRequests.current && unackedRequests.current[change.requestId];
+          var operation = (request.current && change.requestId === request.current.id ? request.current : null) || unacked;
           if (!operation && !(typeof change.requestId === "string" && change.requestId.indexOf("gesture-") === 0)) return;
-          var changes = change.changes || [change];
+          if (unacked) delete unackedRequests.current[change.requestId];
+          var changes = (change.changes || [change]).map(function (c) {
+            var key = change.selector + ":" + c.property;
+            if (!Object.prototype.hasOwnProperty.call(interruptedValues.current, key)) return c;
+            var recovered = Object.assign({}, c, { oldValue: interruptedValues.current[key] });
+            delete interruptedValues.current[key];
+            return recovered;
+          });
           notifyPresence("user-committed-edit", change.selector, changes.map(function (c) { return c.property; }).join(", "));
           if (operation) {
-            clearTimeout(operation.timer); request.current = null; setBusy(false); setDiagnostic("");
+            clearTimeout(operation.timer);
+            if (request.current && request.current.id === change.requestId) {
+              request.current = null; requestPromiseRef.current = null; setBusy(false); setDiagnostic("");
+            }
           }
+          var opSeq = operation ? (operation.id || ++sequence.current) : ++sequence.current;
           var state = current.current;
           var edits = changes.filter(function (c) { return c.oldValue !== c.newValue; }).map(function (c) {
             return { kind: LAYOUT.indexOf(c.property) >= 0 ? "layout" : "style",
               viewport: operation ? operation.viewport : (window.DPB_ACTIVE_VIEWPORT || "any"),
-              locator: change.selector, property: c.property, oldValue: c.oldValue, newValue: c.newValue };
+              locator: change.selector, property: c.property, oldValue: c.oldValue, newValue: c.newValue,
+              _seq: opSeq,
+              _entryId: opSeq };
           });
+          if (edits.length) edits._entryId = opSeq;
           if (operation && operation.action === "undo") {
-            setHistory(state.history.slice(0, -1));
-            setFuture(state.future.concat([operation.entry]));
-            setPending(state.pending.slice(0, -operation.entry.length));
+            var targetId = getEntryId(operation.entry);
+            var hist = historyRef.current || [];
+            var targetIdx = -1;
+            for (var i = hist.length - 1; i >= 0; i--) {
+              if (getEntryId(hist[i]) === targetId) {
+                targetIdx = i;
+                break;
+              }
+            }
+            if (targetIdx >= 0) {
+              var nextHist = hist.slice(0, targetIdx).concat(hist.slice(targetIdx + 1));
+              historyRef.current = nextHist;
+              setHistory(nextHist);
+              var fut = futureRef.current || [];
+              var alreadyInFut = fut.some(function (f) { return getEntryId(f) === targetId; });
+              var nextFut = alreadyInFut ? fut : fut.concat([operation.entry]);
+              futureRef.current = nextFut;
+              setFuture(nextFut);
+              var nextPending = (pendingRef.current || []).filter(function (e) {
+                return getEntryId(e) !== targetId;
+              });
+              pendingRef.current = nextPending;
+              setPending(nextPending);
+              publishBatch(nextPending, current.current.stale);
+            }
           } else if (operation && operation.action === "redo") {
-            setFuture(state.future.slice(0, -1));
-            setHistory(state.history.concat([operation.entry]));
-            setPending(state.pending.concat(operation.entry));
+            var targetId = getEntryId(operation.entry);
+            var fut = futureRef.current || [];
+            var targetIdx = -1;
+            for (var i = fut.length - 1; i >= 0; i--) {
+              if (getEntryId(fut[i]) === targetId) {
+                targetIdx = i;
+                break;
+              }
+            }
+            if (targetIdx >= 0) {
+              var nextFut = fut.slice(0, targetIdx).concat(fut.slice(targetIdx + 1));
+              futureRef.current = nextFut;
+              setFuture(nextFut);
+              var hist = historyRef.current || [];
+              var alreadyInHist = hist.some(function (h) { return getEntryId(h) === targetId; });
+              var nextHist = alreadyInHist ? hist : hist.concat([operation.entry]);
+              nextHist.sort(function (a, b) {
+                var aSeq = (a && a[0] && (a[0]._seq || a[0]._entryId)) || 0;
+                var bSeq = (b && b[0] && (b[0]._seq || b[0]._entryId)) || 0;
+                return aSeq - bSeq;
+              });
+              historyRef.current = nextHist;
+              setHistory(nextHist);
+              var curPending = pendingRef.current || [];
+              var alreadyInPending = curPending.some(function (e) { return getEntryId(e) === targetId; });
+              var nextPending = alreadyInPending ? curPending : curPending.concat(operation.entry);
+              nextPending.sort(function (a, b) {
+                return ((a._seq || a._entryId) || 0) - ((b._seq || b._entryId) || 0);
+              });
+              pendingRef.current = nextPending;
+              setPending(nextPending);
+              publishBatch(nextPending, current.current.stale);
+            }
           } else if (edits.length) {
-            setPending(function (previous) { return previous.concat(edits); });
-            setHistory(function (previous) { return previous.concat([edits]); }); setFuture([]);
+            var nextPending = (pendingRef.current || []).concat(edits);
+            nextPending.sort(function (a, b) { return (a._seq || 0) - (b._seq || 0); });
+            pendingRef.current = nextPending;
+            setPending(pendingRef.current);
+            var nextHist = (historyRef.current || []).concat([edits]);
+            nextHist.sort(function (a, b) {
+              var aSeq = (a && a[0] && a[0]._seq) || 0;
+              var bSeq = (b && b[0] && b[0]._seq) || 0;
+              return aSeq - bSeq;
+            });
+            historyRef.current = nextHist;
+            setHistory(nextHist);
+            var fut = futureRef.current || [];
+            var isOlderReceipt = fut.some(function (f) {
+              var fSeq = (f && f[0] && (f[0]._seq || f[0]._entryId)) || 0;
+              return opSeq < fSeq;
+            });
+            if (!isOlderReceipt) {
+              futureRef.current = [];
+              setFuture([]);
+            }
+            publishBatch(pendingRef.current, current.current.stale);
           }
           if (state.selected && state.selected.selector === change.selector) {
-            changes.forEach(function (c) { accepted.current = syncDraft(accepted.current, c.property, c.newValue); });
+            changes.forEach(function (c) {
+              var propKey = change.selector + ":" + c.property;
+              var lastSeq = lastAcceptedSeq.current[propKey] || 0;
+              if (opSeq >= lastSeq) {
+                lastAcceptedSeq.current[propKey] = opSeq;
+                accepted.current = syncDraft(accepted.current, c.property, c.newValue);
+              }
+            });
             // Keep newer inspector keystrokes while acknowledging older requests.
             setDrafts(function (values) {
               changes.forEach(function (c) {
-                if (!operation || operation.entry || values[c.property] === operation.draft) {
-                  values = syncDraft(values, c.property, operation && !operation.entry ? operation.value : c.newValue);
+                var propKey = change.selector + ":" + c.property;
+                var lastSeq = lastAcceptedSeq.current[propKey] || 0;
+                if (opSeq >= lastSeq) {
+                  if (!operation || operation.entry || values[c.property] === operation.draft) {
+                    values = syncDraft(values, c.property, operation && !operation.entry ? operation.value : c.newValue);
+                  }
                 }
               });
               return values;
             });
           }
-          if (operation) operation.resolve({ accepted: true, pending: edits.length > 0 });
+          if (operation && typeof operation.resolve === "function") {
+            var resFn = operation.resolve;
+            operation.resolve = null;
+            resFn({ accepted: true, pending: edits.length > 0 });
+          }
         }
         window.addEventListener("message", onMessage);
         frame.addEventListener("load", load);
@@ -361,13 +541,31 @@
           if (request.current) clearTimeout(request.current.timer);
         };
       }, []);
-      React.useEffect(function () {
-        window.DPB_VISUAL_EDIT_BATCH = { schemaVersion: 1, status: stale ? "stale" : "pending",
-          sourceHash: binding.sourceHash, routeUrl: binding.routeUrl, edits: pending.slice() };
+      function publishBatch(editsList, isStale) {
+        var list = editsList !== undefined ? editsList : (pendingRef.current || []);
+        var sorted = (list || []).slice().sort(function (a, b) { return (a._seq || 0) - (b._seq || 0); });
+        var cleanEdits = sorted.map(function (e) {
+          return { kind: e.kind, viewport: e.viewport, locator: e.locator,
+            property: e.property, oldValue: e.oldValue, newValue: e.newValue };
+        });
+        var batch = { schemaVersion: 1, status: isStale ? "stale" : "pending",
+          sourceHash: binding.sourceHash, routeUrl: binding.routeUrl, edits: cleanEdits };
+        window.DPB_VISUAL_EDIT_BATCH = batch;
         var hidden = document.getElementById("dpb-visual-edits-json");
-        hidden.value = JSON.stringify(window.DPB_VISUAL_EDIT_BATCH);
-        document.getElementById("dpb-visual-count").textContent = String(pending.length);
-        document.getElementById("dpb-tab-visual").classList.toggle("is-pending", pending.length > 0);
+        if (hidden) hidden.value = JSON.stringify(batch);
+        var countEl = document.getElementById("dpb-visual-count");
+        if (countEl) countEl.textContent = String(cleanEdits.length);
+        var tabEl = document.getElementById("dpb-tab-visual");
+        if (tabEl) tabEl.classList.toggle("is-pending", cleanEdits.length > 0);
+        isPublishedRef.current = true;
+        return batch;
+      }
+      React.useEffect(function () {
+        publishBatch(pending, stale);
+        var tabEl = document.getElementById("dpb-tab-visual");
+        if (tabEl) tabEl.classList.toggle("is-pending", pending.length > 0);
+        var countEl = document.getElementById("dpb-visual-count");
+        if (countEl) countEl.textContent = String(pending.length);
       }, [pending, stale]);
       React.useEffect(function () {
         var modelContext = navigator.modelContext;
@@ -398,9 +596,136 @@
           if (typeof modelContext.unregisterTool === "function") registered.forEach(function (name) { modelContext.unregisterTool(name); });
         };
       }, []);
-      function replay(action) {
+      function drain(timeoutMs) {
         var state = current.current;
-        var entries = action === "undo" ? state.history : state.future;
+        if (!state.ready || state.stale || !state.selected) {
+          if (hasPendingVisualEdits()) {
+            return Promise.resolve({ ok: false, error: "visual_unavailable" });
+          }
+          publishBatch(pendingRef.current, state.stale);
+          return Promise.resolve({ ok: true, batch: window.DPB_VISUAL_EDIT_BATCH });
+        }
+        isDrainingRef.current = true;
+        setBusy(true);
+
+        Object.keys(draftTimers.current).forEach(function (prop) {
+          clearTimeout(draftTimers.current[prop]);
+          delete draftTimers.current[prop];
+        });
+
+        var maxWait = typeof timeoutMs === "number" ? timeoutMs : 2000;
+
+        return new Promise(function (resolve) {
+          var finished = false;
+          var timer = setTimeout(function () {
+            if (finished) return;
+            finished = true;
+            isDrainingRef.current = false;
+            setBusy(false);
+            resolve({ ok: false, error: "timeout" });
+          }, maxWait);
+
+          function finish(ok, err) {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timer);
+            isDrainingRef.current = false;
+            setBusy(false);
+            if (!ok) {
+              resolve({ ok: false, error: err || "drain_failed" });
+              return;
+            }
+            var batch = publishBatch(pendingRef.current, current.current.stale);
+            resolve({ ok: true, batch: batch });
+          }
+
+          function step() {
+            if (finished) return;
+            var curReq = requestPromiseRef.current;
+            if (curReq) {
+              curReq.then(function (res) {
+                if (finished) return;
+                if (!res || !res.accepted) {
+                  finish(false, (res && res.error) || "rejected");
+                  return;
+                }
+                step();
+              }).catch(function (err) {
+                if (finished) return;
+                finish(false, String(err));
+              });
+              return;
+            }
+
+            var st = current.current;
+            var uncommittedProps = Object.keys(st.drafts).filter(function (p) {
+              return st.drafts[p] !== undefined && dispatchedDrafts.current[p] !== st.drafts[p];
+            });
+
+            if (uncommittedProps.length > 0) {
+              var nextProp = uncommittedProps[0];
+              var nextVal = st.drafts[nextProp];
+              dispatchedDrafts.current[nextProp] = nextVal;
+              applyStyle(nextProp, nextVal).then(function (res) {
+                if (finished) return;
+                if (!res || !res.accepted) {
+                  dispatchedDrafts.current[nextProp] = null;
+                  finish(false, (res && res.error) || "rejected");
+                  return;
+                }
+                step();
+              }).catch(function (err) {
+                if (finished) return;
+                dispatchedDrafts.current[nextProp] = null;
+                finish(false, String(err));
+              });
+              return;
+            }
+
+            if (unackedRequests.current && Object.keys(unackedRequests.current).length > 0) {
+              finish(false, "unresolved_edits");
+              return;
+            }
+
+            finish(true);
+          }
+
+          step();
+        });
+      }
+
+      function hasPendingVisualEdits() {
+        var state = current.current;
+        if (state.stale || !state.selected) return false;
+        if (!isPublishedRef.current) return true;
+        if (request.current || requestPromiseRef.current) return true;
+        if (unackedRequests.current && Object.keys(unackedRequests.current).length > 0) return true;
+        if (Object.keys(draftTimers.current).length > 0) return true;
+        return Object.keys(state.drafts).some(function (p) {
+          return state.drafts[p] !== undefined && dispatchedDrafts.current[p] !== state.drafts[p];
+        });
+      }
+      var hasPendingRef = React.useRef(hasPendingVisualEdits);
+      hasPendingRef.current = hasPendingVisualEdits;
+
+      var drainRef = React.useRef(drain);
+      drainRef.current = drain;
+      React.useEffect(function () {
+        window.dpbHasPendingVisualEdits = function () {
+          if (hasPendingRef.current) return hasPendingRef.current();
+          return false;
+        };
+        window.dpbDrainVisualEdits = function () {
+          if (drainRef.current) return drainRef.current();
+          return Promise.resolve({ ok: true, batch: window.DPB_VISUAL_EDIT_BATCH });
+        };
+        return function () {
+          window.dpbHasPendingVisualEdits = null;
+          window.dpbDrainVisualEdits = null;
+        };
+      }, []);
+      function replay(action) {
+        var entries = action === "undo" ? (historyRef.current || []) : (futureRef.current || []);
         var entry = entries[entries.length - 1];
         if (entry) applyStyle(entry[0].property, action === "undo" ? entry[0].oldValue : entry[0].newValue, action, entry);
       }
@@ -426,7 +751,10 @@
         connecting && !stale && h("div", { className: "dpb-loading dpb-editor-loading", role: "status" },
           h("span", null, t("visual_loading")), h("div", { className: "dpb-skeleton", "aria-hidden": true })),
         (function () {
+          var fieldDisabled = !selected || !ready || stale || isDrainingRef.current;
           function handleInput(prop, val) {
+            if (isDrainingRef.current) return;
+            isPublishedRef.current = false;
             setDrafts(function (old) { return syncDraft(old, prop, val); });
             clearTimeout(draftTimers.current[prop]);
             var sel = selected && selected.selector;
@@ -444,7 +772,7 @@
               return h("label", { className: "dpb-react-field dpb-react-dropdown", key: prop, "data-property": prop },
                 h("span", null, label),
                 h("select", {
-                  value: val, disabled: !selected || !ready || stale,
+                  value: val, disabled: fieldDisabled,
                   onChange: function (e) {
                     var v = e.target.value;
                     handleInput(prop, v);
@@ -462,7 +790,7 @@
                 h("span", null, label),
                 h("div", { className: "dpb-unit-input-wrap" },
                   h("input", {
-                    value: val, disabled: !selected || !ready || stale,
+                    value: val, disabled: fieldDisabled,
                     onChange: function (e) { handleInput(prop, e.target.value); },
                     onBlur: function (e) { handleBlur(prop, e.target.value); },
                     onKeyDown: function (e) { handleKey(prop, e.target.value, e); }
@@ -476,10 +804,10 @@
                 h("span", null, label),
                 h("div", { className: "dpb-color-input-wrap" },
                   h("button", { type: "button", className: "dpb-color-swatch-preview", style: { backgroundColor: val || "transparent" },
-                    "aria-label": t("visual_color_picker").replace("{label}", label), disabled: !selected || !ready || stale,
+                    "aria-label": t("visual_color_picker").replace("{label}", label), disabled: fieldDisabled,
                     onClick: function (e) { e.preventDefault(); post({ type: "open-color-picker", selector: selected.selector, property: prop }); } }),
                   h("input", {
-                    value: val, disabled: !selected || !ready || stale,
+                    value: val, disabled: fieldDisabled,
                     onChange: function (e) { handleInput(prop, e.target.value); },
                     onBlur: function (e) { handleBlur(prop, e.target.value); },
                     onKeyDown: function (e) { handleKey(prop, e.target.value, e); }
@@ -490,7 +818,7 @@
             return h("label", { className: "dpb-react-field", key: prop, "data-property": prop },
               h("span", null, label),
               h("input", {
-                value: val, disabled: !selected || !ready || stale,
+                value: val, disabled: fieldDisabled,
                 onChange: function (e) { handleInput(prop, e.target.value); },
                 onBlur: function (e) { handleBlur(prop, e.target.value); },
                 onKeyDown: function (e) { handleKey(prop, e.target.value, e); }
@@ -506,7 +834,7 @@
               h("label", { className: "dpb-react-field", "data-property": prop },
                 h("span", null, label),
                 h("input", {
-                  value: drafts[prop] || "", disabled: !selected || !ready || stale,
+                  value: drafts[prop] || "", disabled: fieldDisabled,
                   placeholder: "0px",
                   onChange: function (e) { handleInput(prop, e.target.value); },
                   onBlur: function (e) { handleBlur(prop, e.target.value); },
@@ -518,7 +846,7 @@
                 return h("div", { className: "dpb-quad-cell", key: axis, "data-axis": axis, "data-property": sProp },
                   h("em", { className: "dpb-quad-label" }, axis),
                   h("input", {
-                    value: drafts[sProp] || "", disabled: !selected || !ready || stale,
+                    value: drafts[sProp] || "", disabled: fieldDisabled,
                     "aria-label": t("visual_" + sProp.replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); })),
                     placeholder: "0",
                     onChange: function (e) { handleInput(sProp, e.target.value); },
