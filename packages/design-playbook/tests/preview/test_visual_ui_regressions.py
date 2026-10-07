@@ -1,8 +1,21 @@
 """UI review regressions for the preview-only visual editor."""
 from pathlib import Path
+
+from .conftest import expand_inspector_section
 import re
 
 import pytest
+
+# Browser-test wait window. These suites drive real Chromium and assert on state that
+# propagates through a debounce plus a cross-frame postMessage round trip. The
+# product's default 5s (and 3s in the usability suite) probe window is too tight when
+# the machine is busy, and the resulting failures are timeouts on a condition that is
+# merely slow, not wrong. Measured: under three concurrent full preview suites the
+# visual-count assertion below timed out at 5000ms and passed once given room, while
+# the same tests pass 4/4 in isolation. Assertions are unchanged - only the time
+# allowed for the same condition to become true is wider.
+UI_WAIT = 20000
+
 
 PREVIEW = Path(__file__).resolve().parents[2] / "mcp" / "preview"
 CSS = (PREVIEW / "control.css").read_text(encoding="utf-8")
@@ -23,7 +36,7 @@ def editor_page(tmp_path):
         browser = pw.chromium.launch()
         try:
             page = browser.new_page(viewport={"width": 1280, "height": 900})
-            page.set_default_timeout(5000)
+            page.set_default_timeout(UI_WAIT)
             page.goto(path.as_uri())
             dismiss_onboarding(page)
             yield page
@@ -134,7 +147,7 @@ def console_page():
             browser = pw.chromium.launch()
             try:
                 page = browser.new_page(viewport={"width": 1280, "height": 900})
-                page.set_default_timeout(5000)
+                page.set_default_timeout(UI_WAIT)
                 page.goto(console.url(f"#token={console.token}"))
                 expect(page.locator("#view-ready")).to_be_visible()
                 yield page
@@ -276,7 +289,7 @@ def test_rendered_editor_state_changes(tmp_path, webmcp):
         browser = pw.chromium.launch()
         try:
             page = browser.new_page(viewport={"width": 1280, "height": 900})
-            page.set_default_timeout(5000)
+            page.set_default_timeout(UI_WAIT)
             if webmcp:
                 page.add_init_script("""document.modelContext = {
                     registerTool() {}, unregisterTool() {}
@@ -340,8 +353,9 @@ def test_round3_narrow_visual_inspector_has_one_column_and_clearance(editor_page
     assert len(grid.evaluate("el => getComputedStyle(el).gridTemplateColumns").split()) == 1
     expect(page.locator("#dpb-visual-view")).to_have_css("padding-bottom", "80px")
     for prop in ("line-height", "margin", "padding"):
+        expand_inspector_section(page, prop)
         field = page.locator(f'.dpb-react-field[data-property="{prop}"] input')
-        field.scroll_into_view_if_needed()
+        field.evaluate("el => el.scrollIntoView({ block: 'center' })")
         assert field.evaluate("el => { const r = el.getBoundingClientRect(); "
                               "return r.left >= 0 && r.right <= innerWidth && "
                               "document.elementFromPoint(r.x + r.width / 2, "
@@ -501,6 +515,26 @@ def test_n1_annotation_history_stays_in_its_context(pending_visual_edit, modifie
     expect(count).to_have_text("1")
     expect(page.locator("#dpb-visual-count")).to_have_text("1")
 
+def test_inspector_layout_spacing_and_border_default_to_collapsed(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    page.locator("#dpb-tab-visual").click()
+    for section_id in ("layout", "spacing", "border"):
+        section = page.locator(f'.dpb-inspector-section[data-section="{section_id}"]')
+        expect(section).to_have_class(re.compile(r"\bis-collapsed\b"))
+        expect(section.locator(".dpb-section-header")).to_have_attribute("aria-expanded", "false")
+        expect(section.locator(".dpb-section-chevron")).to_have_text("▸")
+        expect(section.locator(".dpb-section-body")).to_have_count(0)
+    for section_id in ("colors", "typography"):
+        section = page.locator(f'.dpb-inspector-section[data-section="{section_id}"]')
+        expect(section.locator(".dpb-section-header")).to_have_attribute("aria-expanded", "true")
+        expect(section.locator(".dpb-section-body")).to_be_visible()
+    expand_inspector_section(page, "padding")
+    expand_inspector_section(page, "padding-top")
+    expect(page.locator('[data-property="padding"] input')).to_be_visible()
+
+
 def test_section_collapse_expand(editor_page):
     from playwright.sync_api import expect
 
@@ -530,6 +564,7 @@ def test_quad_row_trbl_input(editor_page):
     target.evaluate("el => el.click()")
     page.keyboard.press("Escape")
     page.locator("#dpb-tab-visual").click()
+    expand_inspector_section(page, "padding")
 
     quad_cell_top = page.locator('.dpb-react-quad-row[data-quad="padding"] .dpb-quad-cell[data-axis="T"] input')
     expect(quad_cell_top).to_be_enabled()
@@ -648,6 +683,7 @@ def select_interaction_target(page, css=""):
     target.evaluate("el => el.click()")
     page.keyboard.press("Escape")
     page.locator("#dpb-tab-visual").click()
+    expand_inspector_section(page, "width")
     expect(page.locator('.dpb-react-field[data-property="width"] input')).to_be_enabled()
     return target
 
@@ -711,6 +747,7 @@ def test_quad_shorthand_and_sides_stay_in_sync(editor_page):
 
     page = editor_page
     target = select_interaction_target(page)
+    expand_inspector_section(page, "padding")
     quad = page.locator('[data-quad="padding"]')
     summary = quad.locator('[data-property="padding"] input')
     summary.fill("4px 8px 12px 16px")
@@ -734,6 +771,7 @@ def test_inspector_swatch_opens_shared_picker_for_its_property(editor_page, prop
 
     page = editor_page
     target = select_interaction_target(page)
+    expand_inspector_section(page, prop)
     swatch = page.locator(f'[data-property="{prop}"] .dpb-color-swatch-preview')
     expect(swatch).to_have_attribute("type", "button")
     swatch.click()
@@ -1391,3 +1429,1049 @@ def test_visual_submit_bar_stays_inside_the_scrolling_panel(editor_page) -> None
     )
     page.wait_for_timeout(150)
     assert bar_state()["inside"], "the submit bar left the scrollport after scrolling"
+
+
+def test_bo01_drain_barrier_immediate_confirm_contains_last_edit(editor_page) -> None:
+    """M1/BO-01: Confirming immediately after typing flushes pending visual edits.
+
+    Before M1, property changes were debounced (~180ms) and asynchronously
+    bridged. Typing a property value and immediately clicking approve submitted
+    a snapshot missing that edit. With the drain barrier:
+    1. The editor exposes window.dpbHasPendingVisualEdits and window.dpbDrainVisualEdits.
+    2. Form submission intercepts when pending edits exist and awaits the drain.
+    3. The submitted snapshot (dpb-visual-edits-json) contains the edit.
+    4. The real submitter (dpb-btn-approve, name="choice") is preserved.
+    """
+    import json
+    from playwright.sync_api import expect
+
+    page = editor_page
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    target = proto.locator("#panel-title")
+    target.evaluate("el => el.click()")
+
+    page.locator("#dpb-tab-visual").click()
+    field = page.locator('.dpb-react-field[data-property="background-color"] input')
+    expect(field).to_be_enabled()
+
+    # Satisfy ADR-0008 floor so approve is enabled
+    page.locator("#dpb-feedback").fill("Approved with background color edit")
+
+    # Set up listener to record admitted submission events
+    page.evaluate("""() => {
+        window.__admittedSubmissions = [];
+        document.querySelector('form').addEventListener('submit', (e) => {
+            window.__admittedSubmissions.push({
+                defaultPrevented: e.defaultPrevented,
+                submitterId: e.submitter ? e.submitter.id : '(null)',
+                submitterName: e.submitter ? e.submitter.name : '',
+                submitterValue: e.submitter ? e.submitter.value : '',
+                editsJson: document.getElementById('dpb-visual-edits-json').value,
+            });
+            // Prevent actual browser navigation in test
+            e.preventDefault();
+        });
+    }""")
+
+    # Type hex color value and immediately click approve without waiting for debounce
+    # Bridge normalizes #123456 to rgb(18, 52, 86)
+    field.fill("#123456")
+    page.locator("#dpb-btn-approve").click()
+
+    # Wait for the submission event
+    page.wait_for_function("window.__admittedSubmissions && window.__admittedSubmissions.length > 0")
+
+    submissions = page.evaluate("() => window.__admittedSubmissions")
+    # Must be EXACTLY ONE admitted submission (no cancel-then-resubmit loops)
+    assert len(submissions) == 1
+    sub = submissions[0]
+    assert sub["defaultPrevented"] is False
+    assert sub["submitterId"] == "dpb-btn-approve"
+    assert sub["submitterName"] == "choice"
+    assert sub["submitterValue"] == "Confirm"
+
+    edits_batch = json.loads(sub["editsJson"])
+    assert "edits" in edits_batch
+    assert len(edits_batch["edits"]) >= 1
+    # Convergence must correctly match normalized bridge output rgb(18, 52, 86)
+    found_edit = any(
+        e.get("property") == "background-color" and "rgb(18, 52, 86)" in e.get("newValue", "")
+        for e in edits_batch["edits"]
+    )
+    assert found_edit, f"Expected normalized edit rgb(18, 52, 86) in batch, got: {edits_batch}"
+
+
+def test_bo01_slow_bridge_timeout_prevents_empty_submission_and_allows_retry(tmp_path) -> None:
+    """M1: Slow bridge (>1500ms) times out visibly, does NOT submit empty data, retains draft, and allows retry."""
+    import json
+    from playwright.sync_api import expect, sync_playwright
+    from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
+    from preview_e2e_helpers import dismiss_onboarding
+    from design_playbook.mcp.preview import i18n
+
+    control = review_session._build_control(1, "Round 2 regression", ["Confirm"])
+    path = tmp_path / "preview_slow_bridge.html"
+    path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            page.set_default_timeout(UI_WAIT)
+            page.add_init_script("""
+                window.__heldBridgeMessages = [];
+                window.__slowBridgeActive = false;
+                window.addEventListener('message', (e) => {
+                    if (e.data && e.data.dpbVisualEditChange) {
+                        if (window.__slowBridgeActive) {
+                            e.stopImmediatePropagation();
+                            window.__heldBridgeMessages.push(e.data);
+                        }
+                    }
+                }, true);
+            """)
+            page.goto(path.as_uri())
+            dismiss_onboarding(page)
+
+            proto = page.frame_locator("iframe.dpb-proto-frame")
+            target = proto.locator("#panel-title")
+            target.evaluate("el => el.click()")
+
+            page.locator("#dpb-tab-visual").click()
+            field = page.locator('.dpb-react-field[data-property="background-color"] input')
+            expect(field).to_be_enabled()
+
+            # Satisfy ADR-0008 floor so approve is enabled
+            page.locator("#dpb-feedback").fill("Approved with background color edit")
+
+            # Set up listener to record admitted submissions
+            page.evaluate("""() => {
+                window.__admittedSubmissions = [];
+                document.querySelector('form').addEventListener('submit', (e) => {
+                    window.__admittedSubmissions.push({
+                        defaultPrevented: e.defaultPrevented,
+                        submitterId: e.submitter ? e.submitter.id : '(null)',
+                        editsJson: document.getElementById('dpb-visual-edits-json').value,
+                    });
+                    e.preventDefault();
+                });
+            }""")
+
+            # Activate slow bridge to hold response beyond the 1500ms deadline
+            page.evaluate("() => { window.__slowBridgeActive = true; }")
+
+            # Fill field and click approve
+            field.fill("#334455")
+            page.locator("#dpb-btn-approve").click()
+
+            # Wait for the timeout to occur (>1500ms) and toast to appear
+            toast = page.locator(".dpb-toast")
+            expect(toast).to_be_visible(timeout=5000)
+            toast_text = toast.inner_text()
+            assert "visual_drain_failed" not in toast_text
+            assert i18n.t("visual_drain_failed") in toast_text
+
+            # Verify NO submission was admitted
+            submissions = page.evaluate("() => window.__admittedSubmissions")
+            assert len(submissions) == 0
+
+            # Verify draft was retained in the input field
+            assert field.input_value() == "#334455"
+
+            # Release held messages and disable slow bridge mode
+            page.evaluate("""() => {
+                window.__slowBridgeActive = false;
+                const frame = document.querySelector('iframe.dpb-proto-frame');
+                window.__heldBridgeMessages.forEach(data => {
+                    window.dispatchEvent(new MessageEvent('message', { data: data, source: frame.contentWindow }));
+                });
+                window.__heldBridgeMessages = [];
+            }""")
+
+            # Click approve again (retry)
+            page.locator("#dpb-btn-approve").click()
+            page.wait_for_function("window.__admittedSubmissions && window.__admittedSubmissions.length > 0", timeout=5000)
+
+            submissions = page.evaluate("() => window.__admittedSubmissions")
+            assert len(submissions) == 1
+            assert submissions[0]["defaultPrevented"] is False
+            batch = json.loads(submissions[0]["editsJson"])
+            assert len(batch["edits"]) >= 1
+        finally:
+            browser.close()
+
+
+def test_bo02_visual_panel_authority_and_label_truth(editor_page) -> None:
+    """M2/BO-02: Visual panel submit truthfully mirrors readiness and delegates.
+
+    The visual panel's submit button must not claim independent authority:
+    1. It reflects the single review gate: disabled when ADR-0008 floor is unmet.
+    2. Its label truthfully states '确认通过并提交' / 'Approve and submit' rather
+       than claiming a partial/visual-only submit.
+    3. Clicking it delegates to #dpb-btn-approve as the single decision owner.
+    4. Pending visual edits alone do not enable it.
+    """
+    from playwright.sync_api import expect
+    from design_playbook.mcp.preview import i18n
+
+    page = editor_page
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    target = proto.locator("#panel-title")
+    target.evaluate("el => el.click()")
+
+    page.locator("#dpb-tab-visual").click()
+    field = page.locator('.dpb-react-field[data-property="background-color"] input')
+    expect(field).to_be_enabled()
+    field.fill("rgb(10, 20, 30)")
+
+    submit = page.locator("#dpb-visual-submit")
+    expect(submit).to_be_visible()
+    # Edits exist, but floor note is missing -> MUST be disabled
+    expect(submit).to_be_disabled()
+    expect(submit).to_contain_text(i18n.t("approve_not_ready"))
+
+    # Header approve button is also muted
+    expect(page.locator("#dpb-btn-approve")).to_have_class(re.compile(r"dpb-approve-muted"))
+
+    # Now satisfy floor
+    page.locator("#dpb-feedback").fill("Floor satisfied note")
+    expect(submit).to_be_enabled()
+    expect(submit).to_contain_text(i18n.t("visual_submit"))
+    assert i18n.t("visual_submit") in ("确认通过并提交", "Approve and submit")
+
+    # Click panel submit -> routed through #dpb-btn-approve
+    page.evaluate("""() => {
+        window.__panelSubmitted = [];
+        document.querySelector('form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            window.__panelSubmitted.push(e.submitter ? e.submitter.id : '(null)');
+        });
+    }""")
+    submit.click()
+    page.wait_for_function("window.__panelSubmitted && window.__panelSubmitted.includes('dpb-btn-approve')")
+
+
+def test_bo03_mode_tool_shortcuts_and_preview_passivity(editor_page) -> None:
+    """M3/BO-03: Mode/tool shortcuts resolve P/V collision and preview is passive.
+
+    Key bindings:
+    - [A]: Select tool (dpb-pin-toggle)
+    - [D]: Draw tool (dpb-draw-toggle)
+    - [B]: Box tool (dpb-box-toggle)
+    - [R]: Ruler tool (dpb-ruler-toggle)
+    - [H]: Hand tool (dpb-hand-toggle)
+    - [V]: Mode Preview (dpb-mode-preview)
+    - [P]: Mode Annotate (dpb-mode-annotate)
+    In Preview mode, the exit pill is visible and canvas interaction is passive.
+    """
+    from playwright.sync_api import expect
+
+    page = editor_page
+    page.locator("#dpb-header").click()
+
+    # Tool shortcuts
+    page.keyboard.press("d")
+    expect(page.locator("#dpb-draw-toggle")).to_have_attribute("aria-pressed", "true")
+    page.keyboard.press("b")
+    expect(page.locator("#dpb-box-toggle")).to_have_attribute("aria-pressed", "true")
+    page.keyboard.press("r")
+    expect(page.locator("#dpb-ruler-toggle")).to_have_attribute("aria-pressed", "true")
+    page.keyboard.press("h")
+    expect(page.locator("#dpb-hand-toggle")).to_have_attribute("aria-pressed", "true")
+    page.keyboard.press("a")
+    expect(page.locator("#dpb-pin-toggle")).to_have_attribute("aria-pressed", "true")
+
+    # Switch to Preview mode via [V]
+    page.keyboard.press("v")
+    expect(page.locator("#dpb-mode-preview")).to_have_attribute("aria-pressed", "true")
+    exit_pill = page.locator("#dpb-preview-exit-pill")
+    expect(exit_pill).to_be_visible()
+
+    # Return to Annotate mode via exit button
+    page.locator("#dpb-exit-preview-btn").click()
+    expect(page.locator("#dpb-mode-annotate")).to_have_attribute("aria-pressed", "true")
+    expect(exit_pill).to_be_hidden()
+
+    # Switch to Preview mode via [V] again, then return via [P]
+    page.keyboard.press("v")
+    expect(page.locator("#dpb-mode-preview")).to_have_attribute("aria-pressed", "true")
+    expect(exit_pill).to_be_visible()
+
+    page.keyboard.press("p")
+    expect(page.locator("#dpb-mode-annotate")).to_have_attribute("aria-pressed", "true")
+    expect(exit_pill).to_be_hidden()
+
+    # Switch to Preview mode via [V] again, then return via [Escape] (IM-F-06)
+    page.keyboard.press("v")
+    expect(page.locator("#dpb-mode-preview")).to_have_attribute("aria-pressed", "true")
+    expect(exit_pill).to_be_visible()
+
+    page.keyboard.press("Escape")
+    expect(page.locator("#dpb-mode-annotate")).to_have_attribute("aria-pressed", "true")
+    expect(exit_pill).to_be_hidden()
+
+
+@pytest.mark.parametrize("locale", ["zh-CN", "en"])
+def test_m4_responsive_geometry_and_rail_close_unclipped(tmp_path, monkeypatch, locale) -> None:
+    """M4: #dpb-btn-approve visible at 1024 and 768, and 320px rail close unclipped.
+
+    Verifies real Chromium layout bounds across 1440px, 1024px, and 768px in both locales
+    with criteria present (all 3 rail tabs visible: annotations, visual, criteria):
+    1. #dpb-btn-approve has right margin >= 16px to viewport edge.
+    2. #dpb-btn-approve is fully visible (not clipped, rect.left >= 0, rect.right <= width).
+    3. The 320px rail close button is completely inside the rail with right margin >= 8px.
+    4. Hit test on close button center hits the button (no clipping/obstruction).
+    """
+    from playwright.sync_api import sync_playwright
+    from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
+    from preview_e2e_helpers import dismiss_onboarding
+
+    monkeypatch.setenv("DPB_PREVIEW_LANG", locale)
+    control = review_session._build_control(
+        1, "Round 2 regression", ["Confirm"],
+        criteria=[{"id": "AC-1", "title": "Title", "then": "Visible"}]
+    )
+    path = tmp_path / f"preview_{locale}.html"
+    path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 1440, "height": 900})
+            page.set_default_timeout(UI_WAIT)
+            page.goto(path.as_uri())
+            dismiss_onboarding(page)
+
+            inspector = page.locator("#dpb-inspector")
+            if "dpb-collapsed" in (inspector.get_attribute("class") or ""):
+                page.locator("#dpb-drawer-toggle").click()
+
+            for width in (1440, 1024, 768):
+                page.set_viewport_size({"width": width, "height": 900})
+                btn_box = page.locator("#dpb-btn-approve").bounding_box()
+                assert btn_box is not None
+                assert btn_box["x"] >= 0, f"Approve button overflowed left at width {width}"
+                btn_right = btn_box["x"] + btn_box["width"]
+                right_margin = width - btn_right
+                assert right_margin >= 16.0, f"Approve button right margin {right_margin}px < 16px at width {width} in {locale}"
+
+                rail_box = page.locator("#dpb-inspector").bounding_box()
+                close_box = page.locator("#dpb-inspector-close").bounding_box()
+                assert rail_box is not None
+                assert close_box is not None
+                assert abs(rail_box["width"] - 320) < 5
+                rail_right = rail_box["x"] + rail_box["width"]
+                close_right = close_box["x"] + close_box["width"]
+                assert close_box["x"] >= rail_box["x"], f"Close button outside rail on left at width {width} in {locale}"
+                assert close_right <= rail_right, f"Close button clipped outside rail on right at width {width} in {locale}"
+                rail_close_margin = rail_right - close_right
+                assert rail_close_margin >= 8.0, f"Rail close button right margin {rail_close_margin}px < 8px at width {width} in {locale}"
+
+                hit = page.evaluate("""() => {
+                    const btn = document.getElementById('dpb-inspector-close');
+                    const rect = btn.getBoundingClientRect();
+                    const el = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+                    return btn.contains(el);
+                }""")
+                assert hit, f"Close button hit test failed at width {width} in {locale}"
+        finally:
+            browser.close()
+
+
+def test_bo01_retry_before_release_reconciles_and_releases_without_error(tmp_path) -> None:
+    """R2-F-01 / R2-F-05: Late first receipt held past deadline, retry before receipt reconciles edit,
+
+    and releasing late receipt afterward does not throw TypeError or create duplicate submissions.
+    """
+    import json
+    import time
+    from playwright.sync_api import expect, sync_playwright
+    from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
+    from preview_e2e_helpers import dismiss_onboarding
+    from design_playbook.mcp.preview import i18n
+
+    control = review_session._build_control(1, "R2-F-01 regression", ["Confirm"])
+    path = tmp_path / "preview_retry_before_release.html"
+    path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            page.set_default_timeout(UI_WAIT)
+            page_errors = []
+            page.on("pageerror", lambda err: page_errors.append(str(err)))
+
+            # Hook message events to hold the first receipt only
+            page.add_init_script("""
+                window.__receiptCount = 0;
+                window.__heldFirstReceipt = null;
+                window.addEventListener('message', (e) => {
+                    if (e.data && e.data.dpbVisualEditChange) {
+                        window.__receiptCount++;
+                        if (window.__receiptCount === 1) {
+                            e.stopImmediatePropagation();
+                            window.__heldFirstReceipt = e.data;
+                        }
+                    }
+                }, true);
+            """)
+            page.goto(path.as_uri())
+            dismiss_onboarding(page)
+
+            proto = page.frame_locator("iframe.dpb-proto-frame")
+            target = proto.locator("#panel-title")
+            target.evaluate("el => el.click()")
+
+            page.locator("#dpb-tab-visual").click()
+            field = page.locator('.dpb-react-field[data-property="background-color"] input')
+            expect(field).to_be_enabled()
+
+            # Fill feedback to meet review floor
+            page.locator("#dpb-feedback").fill("Approved substantive feedback")
+
+            page.evaluate("""() => {
+                window.__admittedSubmissions = [];
+                document.querySelector('form').addEventListener('submit', (e) => {
+                    window.__admittedSubmissions.push({
+                        defaultPrevented: e.defaultPrevented,
+                        submitterId: e.submitter ? e.submitter.id : '(null)',
+                        choice: e.submitter ? e.submitter.value : '',
+                        editsJson: document.getElementById('dpb-visual-edits-json').value,
+                    });
+                    e.preventDefault();
+                });
+            }""")
+
+            # 1. First edit: enter #123456 and click approve
+            field.fill("#123456")
+            page.locator("#dpb-btn-approve").click()
+
+            # Wait for first request to time out (>1500ms)
+            toast = page.locator(".dpb-toast")
+            expect(toast).to_be_visible(timeout=5000)
+            assert i18n.t("visual_drain_failed") in toast.inner_text()
+
+            # 0 submissions admitted on timeout
+            submissions = page.evaluate("() => window.__admittedSubmissions")
+            assert len(submissions) == 0
+
+            # 2. Retry before releasing the first receipt: stays blocked because receipt 1 is unresolved
+            page.locator("#dpb-btn-approve").click()
+            time.sleep(0.5)
+            submissions = page.evaluate("() => window.__admittedSubmissions")
+            assert len(submissions) == 0, "Submission must stay blocked while earlier receipt is unresolved"
+
+            # 3. Now release the first held receipt (R2-F-05) - exercises the resolver guard without error
+            page.evaluate("""() => {
+                if (window.__heldFirstReceipt) {
+                    const frame = document.querySelector('iframe.dpb-proto-frame');
+                    window.dispatchEvent(new MessageEvent('message', {
+                        data: window.__heldFirstReceipt,
+                        source: frame.contentWindow
+                    }));
+                }
+            }""")
+
+            time.sleep(0.5)
+
+            # Assert no page errors (no TypeError: operation.resolve is not a function)
+            assert len(page_errors) == 0, f"Page errors observed: {page_errors}"
+
+            # 4. Now approve again after release reconciles the edit
+            page.locator("#dpb-btn-approve").click()
+            page.wait_for_function("window.__admittedSubmissions && window.__admittedSubmissions.length > 0", timeout=5000)
+
+            submissions = page.evaluate("() => window.__admittedSubmissions")
+            assert len(submissions) == 1
+            assert submissions[0]["defaultPrevented"] is False
+            assert submissions[0]["choice"] == "Confirm"
+            batch = json.loads(submissions[0]["editsJson"])
+            assert len(batch["edits"]) >= 1
+            found_edit = any(
+                e.get("property") == "background-color" and "rgb(18, 52, 86)" in e.get("newValue", "")
+                for e in batch["edits"]
+            )
+            assert found_edit, f"Expected rgb(18, 52, 86) edit in batch, got: {batch}"
+            assert batch["edits"][0].get("oldValue") == "", f"Expected empty inline oldValue, got: {batch['edits'][0]}"
+        finally:
+            browser.close()
+
+
+def test_bo03_secondary_revise_drains_pending_visual_edits(tmp_path) -> None:
+    """R2-F-03: Secondary choice buttons (Revise) also drain pending visual edits."""
+    import json
+    from playwright.sync_api import expect, sync_playwright
+    from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
+    from preview_e2e_helpers import dismiss_onboarding
+
+    control = review_session._build_control(1, "R2-F-03 secondary revise", ["Confirm", "Revise"])
+    path = tmp_path / "preview_secondary_revise.html"
+    path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            page.set_default_timeout(UI_WAIT)
+            page_errors = []
+            page.on("pageerror", lambda err: page_errors.append(str(err)))
+
+            # Hold change receipt until released
+            page.add_init_script("""
+                window.__heldBridgeMessages = [];
+                window.__slowBridgeActive = true;
+                window.addEventListener('message', (e) => {
+                    if (e.data && e.data.dpbVisualEditChange) {
+                        if (window.__slowBridgeActive) {
+                            e.stopImmediatePropagation();
+                            window.__heldBridgeMessages.push(e.data);
+                        }
+                    }
+                }, true);
+            """)
+            page.goto(path.as_uri())
+            dismiss_onboarding(page)
+
+            proto = page.frame_locator("iframe.dpb-proto-frame")
+            target = proto.locator("#panel-title")
+            target.evaluate("el => el.click()")
+
+            page.locator("#dpb-tab-visual").click()
+            field = page.locator('.dpb-react-field[data-property="background-color"] input')
+            expect(field).to_be_enabled()
+
+            # Substantive feedback
+            page.locator("#dpb-feedback").fill("Requesting revisions with color tweak")
+
+            page.evaluate("""() => {
+                window.__admittedSubmissions = [];
+                document.querySelector('form').addEventListener('submit', (e) => {
+                    window.__admittedSubmissions.push({
+                        defaultPrevented: e.defaultPrevented,
+                        submitterId: e.submitter ? e.submitter.id : '(null)',
+                        choice: e.submitter ? e.submitter.value : '',
+                        editsJson: document.getElementById('dpb-visual-edits-json').value,
+                    });
+                    e.preventDefault();
+                });
+            }""")
+
+            # Type color edit and immediately click Revise secondary button
+            field.fill("#123456")
+            revise_btn = page.locator('button[name="choice"][value="Revise"]')
+            revise_btn.click()
+
+            # Release held messages
+            import time
+            time.sleep(0.2)
+            page.evaluate("""() => {
+                window.__slowBridgeActive = false;
+                const frame = document.querySelector('iframe.dpb-proto-frame');
+                window.__heldBridgeMessages.forEach(data => {
+                    window.dispatchEvent(new MessageEvent('message', { data: data, source: frame.contentWindow }));
+                });
+                window.__heldBridgeMessages = [];
+            }""")
+
+            page.wait_for_function("window.__admittedSubmissions && window.__admittedSubmissions.length > 0", timeout=5000)
+
+            submissions = page.evaluate("() => window.__admittedSubmissions")
+            assert len(submissions) == 1
+            assert submissions[0]["defaultPrevented"] is False
+            assert submissions[0]["choice"] == "Revise"
+            batch = json.loads(submissions[0]["editsJson"])
+            assert len(batch["edits"]) >= 1
+            found_edit = any(
+                e.get("property") == "background-color" and "rgb(18, 52, 86)" in e.get("newValue", "")
+                for e in batch["edits"]
+            )
+            assert found_edit, f"Expected visual edit in Revise submission, got: {batch}"
+            assert len(page_errors) == 0
+        finally:
+            browser.close()
+
+
+def test_bo03_native_request_submit_drains_pending_visual_edits(tmp_path) -> None:
+    """R2-F-03: Programmatic form.requestSubmit(realApproveButton) during debounce drains visual edits."""
+    import json
+    from playwright.sync_api import expect, sync_playwright
+    from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
+    from preview_e2e_helpers import dismiss_onboarding
+
+    control = review_session._build_control(1, "R2-F-03 native submit", ["Confirm"])
+    path = tmp_path / "preview_native_submit.html"
+    path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            page.set_default_timeout(UI_WAIT)
+            page_errors = []
+            page.on("pageerror", lambda err: page_errors.append(str(err)))
+
+            page.goto(path.as_uri())
+            dismiss_onboarding(page)
+
+            proto = page.frame_locator("iframe.dpb-proto-frame")
+            target = proto.locator("#panel-title")
+            target.evaluate("el => el.click()")
+
+            page.locator("#dpb-tab-visual").click()
+            field = page.locator('.dpb-react-field[data-property="background-color"] input')
+            expect(field).to_be_enabled()
+
+            # Substantive feedback
+            page.locator("#dpb-feedback").fill("Approved substantive feedback")
+
+            page.evaluate("""() => {
+                window.__admittedSubmissions = [];
+                document.querySelector('form').addEventListener('submit', (e) => {
+                    window.__admittedSubmissions.push({
+                        defaultPrevented: e.defaultPrevented,
+                        submitterId: e.submitter ? e.submitter.id : '(null)',
+                        choice: e.submitter ? e.submitter.value : '',
+                        editsJson: document.getElementById('dpb-visual-edits-json').value,
+                    });
+                    e.preventDefault();
+                });
+            }""")
+
+            # Type color edit and invoke native form.requestSubmit(approveBtn) immediately
+            field.fill("#123456")
+            page.evaluate("""() => {
+                const form = document.getElementById('dpb-decide-form');
+                const btn = document.getElementById('dpb-btn-approve');
+                form.requestSubmit(btn);
+            }""")
+
+            page.wait_for_function("window.__admittedSubmissions && window.__admittedSubmissions.some(s => !s.defaultPrevented)", timeout=5000)
+
+            submissions = page.evaluate("() => window.__admittedSubmissions")
+            admitted = [s for s in submissions if not s["defaultPrevented"]]
+            assert len(admitted) == 1
+            assert admitted[0]["submitterId"] == "dpb-btn-approve"
+            assert admitted[0]["choice"] == "Confirm"
+            batch = json.loads(admitted[0]["editsJson"])
+            assert len(batch["edits"]) >= 1
+            found_edit = any(
+                e.get("property") == "background-color" and "rgb(18, 52, 86)" in e.get("newValue", "")
+                for e in batch["edits"]
+            )
+            assert found_edit, f"Expected visual edit in native requestSubmit, got: {batch}"
+            assert len(page_errors) == 0
+        finally:
+            browser.close()
+
+
+def test_preview_exit_pill_visual_styling_and_interaction(tmp_path) -> None:
+    """R2-V-01: Pure preview exit pill is correctly styled, fixed bottom-center, and functional."""
+    from playwright.sync_api import expect, sync_playwright
+    from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
+    from preview_e2e_helpers import dismiss_onboarding
+
+    control = review_session._build_control(1, "R2-V-01 exit pill", ["Confirm"])
+    path = tmp_path / "preview_exit_pill.html"
+    path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 1440, "height": 900})
+            page.set_default_timeout(UI_WAIT)
+            page.goto(path.as_uri())
+            dismiss_onboarding(page)
+
+            # Switch to Preview mode via [V]
+            page.keyboard.press("v")
+            pill = page.locator("#dpb-preview-exit-pill")
+            expect(pill).to_be_visible()
+
+            # Check styles: fixed position, bottom 24px, display inline-flex
+            styles = pill.evaluate("""el => {
+                const cs = getComputedStyle(el);
+                const rect = el.getBoundingClientRect();
+                return {
+                    position: cs.position,
+                    display: cs.display,
+                    bottom: cs.bottom,
+                    zIndex: cs.zIndex,
+                    y: rect.y,
+                    width: rect.width,
+                    height: rect.height,
+                };
+            }""")
+            assert styles["position"] == "fixed"
+            assert styles["display"] in ("flex", "inline-flex")
+            assert styles["zIndex"] == "100"
+            assert styles["bottom"] == "24px"
+            assert styles["width"] >= 150  # Must not be squashed to 29px
+
+            # Inspector should be hidden in preview mode
+            inspector_display = page.locator("#dpb-inspector").evaluate("el => getComputedStyle(el).display")
+            assert inspector_display == "none"
+
+            # Click exit button to return to Annotate mode
+            exit_btn = page.locator("#dpb-exit-preview-btn")
+            exit_btn.click()
+            expect(pill).to_be_hidden()
+            expect(page.locator("#dpb-mode-annotate")).to_have_attribute("aria-pressed", "true")
+        finally:
+            browser.close()
+
+
+def test_bo01_receipt_synchronously_publishes_to_hidden_input(tmp_path) -> None:
+    """R2-F-02: Hidden input is published synchronously upon receipt, never admitting empty batch."""
+    import json
+    from playwright.sync_api import expect, sync_playwright
+    from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
+    from preview_e2e_helpers import dismiss_onboarding
+
+    control = review_session._build_control(1, "R2-F-02 sync publish", ["Confirm"])
+    path = tmp_path / "preview_sync_publish.html"
+    path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            page.set_default_timeout(UI_WAIT)
+            page_errors = []
+            page.on("pageerror", lambda err: page_errors.append(str(err)))
+
+            page.goto(path.as_uri())
+            dismiss_onboarding(page)
+
+            proto = page.frame_locator("iframe.dpb-proto-frame")
+            target = proto.locator("#panel-title")
+            target.evaluate("el => el.click()")
+
+            page.locator("#dpb-tab-visual").click()
+            field = page.locator('.dpb-react-field[data-property="background-color"] input')
+            expect(field).to_be_enabled()
+
+            # Fill feedback to satisfy review floor
+            page.locator("#dpb-feedback").fill("Approved substantive feedback")
+
+            # Capture form submissions
+            page.evaluate("""() => {
+                window.__admittedSubmissions = [];
+                document.querySelector('form').addEventListener('submit', (e) => {
+                    window.__admittedSubmissions.push({
+                        defaultPrevented: e.defaultPrevented,
+                        submitterId: e.submitter ? e.submitter.id : '(null)',
+                        choice: e.submitter ? e.submitter.value : '',
+                        editsJson: document.getElementById('dpb-visual-edits-json').value,
+                    });
+                    e.preventDefault();
+                });
+            }""")
+
+            # Install publication observer AFTER editor initialization so it runs
+            # immediately after control.react.js onMessage in the same receipt event.
+            page.evaluate("""() => {
+                window.__syncCheckResults = [];
+                window.addEventListener('message', (e) => {
+                    if (e.data && e.data.dpbVisualEditChange) {
+                        const hidden = document.getElementById('dpb-visual-edits-json');
+                        const hasPending = typeof window.dpbHasPendingVisualEdits === 'function'
+                            ? window.dpbHasPendingVisualEdits()
+                            : null;
+                        window.__syncCheckResults.push({
+                            hiddenVal: hidden ? hidden.value : '',
+                            hasPending: hasPending,
+                        });
+                        // Trigger admission directly from inside the receipt event tick
+                        const btn = document.getElementById('dpb-btn-approve');
+                        if (btn) btn.click();
+                    }
+                });
+            }""")
+
+            field.fill("#123456")
+            field.press("Enter")  # Commit immediately
+
+            page.wait_for_function("window.__syncCheckResults && window.__syncCheckResults.length > 0", timeout=5000)
+            results = page.evaluate("() => window.__syncCheckResults")
+            assert len(results) >= 1
+            last_check = results[-1]
+            batch = json.loads(last_check["hiddenVal"])
+            assert len(batch["edits"]) >= 1, f"Expected synchronously populated edits in receipt event, got: {batch}"
+            found_edit = any(
+                e.get("property") == "background-color" and "rgb(18, 52, 86)" in e.get("newValue", "")
+                for e in batch["edits"]
+            )
+            assert found_edit, f"Expected synchronous publish in hidden input, got: {batch}"
+            assert last_check["hasPending"] is False, "dpbHasPendingVisualEdits must be false in receipt event"
+
+            # Check that immediate activation admitted the populated batch
+            page.wait_for_function("window.__admittedSubmissions && window.__admittedSubmissions.length > 0", timeout=5000)
+            submissions = page.evaluate("() => window.__admittedSubmissions")
+            assert len(submissions) == 1
+            assert submissions[0]["defaultPrevented"] is False
+            assert submissions[0]["choice"] == "Confirm"
+            admitted_batch = json.loads(submissions[0]["editsJson"])
+            assert len(admitted_batch["edits"]) >= 1
+            assert any(
+                e.get("property") == "background-color" and "rgb(18, 52, 86)" in e.get("newValue", "")
+                for e in admitted_batch["edits"]
+            )
+            assert len(page_errors) == 0
+        finally:
+            browser.close()
+
+
+def test_bo02_late_receipt_different_value_preserves_authored_order_and_final_color(tmp_path) -> None:
+    """R3-F-02: Late receipt with newer edit preserves authored timeline order; last author value wins."""
+    import json
+    import time
+    from playwright.sync_api import expect, sync_playwright
+    from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
+    from preview_e2e_helpers import dismiss_onboarding
+    from design_playbook.mcp.preview.visual_batch import normalize_visual_batch
+
+    control = review_session._build_control(1, "R3-F-02 authored timeline", ["Confirm"])
+    path = tmp_path / "preview_authored_timeline.html"
+    path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            page.set_default_timeout(UI_WAIT)
+            page_errors = []
+            page.on("pageerror", lambda err: page_errors.append(str(err)))
+
+            # Hold the first receipt only
+            page.add_init_script("""
+                window.__receiptCount = 0;
+                window.__heldFirstReceipt = null;
+                window.addEventListener('message', (e) => {
+                    if (e.data && e.data.dpbVisualEditChange) {
+                        window.__receiptCount++;
+                        if (window.__receiptCount === 1) {
+                            e.stopImmediatePropagation();
+                            window.__heldFirstReceipt = e.data;
+                        }
+                    }
+                }, true);
+            """)
+            page.goto(path.as_uri())
+            dismiss_onboarding(page)
+
+            proto = page.frame_locator("iframe.dpb-proto-frame")
+            target = proto.locator("#panel-title")
+            target.evaluate("el => el.click()")
+
+            page.locator("#dpb-tab-visual").click()
+            field = page.locator('.dpb-react-field[data-property="background-color"] input')
+            expect(field).to_be_enabled()
+
+            # Fill feedback to meet review floor
+            page.locator("#dpb-feedback").fill("Approved substantive feedback")
+
+            page.evaluate("""() => {
+                window.__admittedSubmissions = [];
+                document.querySelector('form').addEventListener('submit', (e) => {
+                    window.__admittedSubmissions.push({
+                        defaultPrevented: e.defaultPrevented,
+                        submitterId: e.submitter ? e.submitter.id : '(null)',
+                        choice: e.submitter ? e.submitter.value : '',
+                        editsJson: document.getElementById('dpb-visual-edits-json').value,
+                    });
+                    e.preventDefault();
+                });
+            }""")
+
+            # 1. First edit: enter #123456 and commit/approve
+            field.fill("#123456")
+            page.locator("#dpb-btn-approve").click()
+
+            # Wait for first request to time out (>1500ms)
+            time.sleep(1.8)
+            submissions = page.evaluate("() => window.__admittedSubmissions")
+            assert len(submissions) == 0
+
+            # 2. Before releasing receipt 1, change field to #abcdef and retry
+            field.fill("#abcdef")
+            field.press("Enter")
+            time.sleep(0.3)
+
+            # Attempt to approve stays blocked while receipt 1 is unresolved
+            page.locator("#dpb-btn-approve").click()
+            time.sleep(0.3)
+            submissions = page.evaluate("() => window.__admittedSubmissions")
+            assert len(submissions) == 0, "Approval must stay blocked while receipt 1 is unresolved"
+
+            # 3. Now release receipt 1
+            page.evaluate("""() => {
+                if (window.__heldFirstReceipt) {
+                    const frame = document.querySelector('iframe.dpb-proto-frame');
+                    window.dispatchEvent(new MessageEvent('message', {
+                        data: window.__heldFirstReceipt,
+                        source: frame.contentWindow
+                    }));
+                }
+            }""")
+            time.sleep(0.5)
+
+            # 4. Now approve again
+            page.locator("#dpb-btn-approve").click()
+            page.wait_for_function("window.__admittedSubmissions && window.__admittedSubmissions.length > 0", timeout=5000)
+
+            submissions = page.evaluate("() => window.__admittedSubmissions")
+            assert len(submissions) == 1
+            batch = json.loads(submissions[0]["editsJson"])
+            edits = batch["edits"]
+            assert len(edits) == 2, f"Expected 2 edits describing authored timeline, got: {edits}"
+
+            # Must be in authored dispatch timeline order: edit 1 (#123456) then edit 2 (#abcdef)
+            assert edits[0]["property"] == "background-color"
+            assert edits[0]["oldValue"] == ""
+            assert edits[0]["newValue"] == "rgb(18, 52, 86)"
+
+            assert edits[1]["property"] == "background-color"
+            assert edits[1]["oldValue"] == "rgb(18, 52, 86)"
+            assert edits[1]["newValue"] == "rgb(171, 205, 239)"
+
+            # Last author value wins! Final color is #abcdef (rgb(171, 205, 239))
+            assert edits[-1]["newValue"] == "rgb(171, 205, 239)"
+
+            # Python backend normalization preserves this canonical shape
+            norm = normalize_visual_batch(batch, source_hash=batch["sourceHash"], route_url=batch.get("routeUrl", ""))
+            assert norm["edits"][-1]["newValue"] == "rgb(171, 205, 239)"
+            assert len(page_errors) == 0
+        finally:
+            browser.close()
+
+
+def test_bo03_shortcut_a_crosses_sandboxed_iframe_with_real_focus(tmp_path) -> None:
+    """R3-F-03: Advertised [A] shortcut for Select tool works when sandboxed iframe body is focused."""
+    from playwright.sync_api import expect, sync_playwright
+    from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
+    from preview_e2e_helpers import dismiss_onboarding
+
+    control = review_session._build_control(1, "R3-F-03 iframe shortcut A", ["Confirm"])
+    path = tmp_path / "preview_shortcut_a.html"
+    path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            page.set_default_timeout(UI_WAIT)
+            page.goto(path.as_uri())
+            dismiss_onboarding(page)
+
+            # 1. Activate Draw tool
+            draw_btn = page.locator("#dpb-draw-toggle")
+            draw_btn.click()
+            expect(draw_btn).to_have_attribute("aria-pressed", "true")
+            select_btn = page.locator("#dpb-pin-toggle")
+            expect(select_btn).to_have_attribute("aria-pressed", "false")
+
+            # 2. Focus the sandboxed iframe body directly
+            proto_frame = page.frame_locator("iframe.dpb-proto-frame")
+            proto_frame.locator("body").evaluate("el => { el.tabIndex = 0; el.focus(); }")
+
+            # Confirm parent activeElement is the iframe
+            active_tag = page.evaluate("() => document.activeElement ? document.activeElement.tagName : ''")
+            assert active_tag == "IFRAME", f"Expected active element to be IFRAME, got: {active_tag}"
+
+            # 3. Press 'a' while iframe body is focused
+            page.keyboard.press("a")
+
+            # 4. Verify Select becomes active and Draw becomes inactive
+            expect(select_btn).to_have_attribute("aria-pressed", "true")
+            expect(draw_btn).to_have_attribute("aria-pressed", "false")
+        finally:
+            browser.close()
+
+
+def test_bo04_retry_reconciliation_preserves_original_baseline_and_undo_restores_empty(tmp_path) -> None:
+    """R3-F-01: Retry reconciliation does not adopt selection highlight into author styles; Undo restores empty."""
+    import json
+    import time
+    from playwright.sync_api import sync_playwright
+    from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
+    from preview_e2e_helpers import dismiss_onboarding
+
+    control = review_session._build_control(1, "R3-F-01 undo baseline", ["Confirm"])
+    path = tmp_path / "preview_undo_baseline.html"
+    path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            page.set_default_timeout(UI_WAIT)
+            page_errors = []
+            page.on("pageerror", lambda err: page_errors.append(str(err)))
+
+            # Hold receipt 1 past deadline
+            page.add_init_script("""
+                window.__receiptCount = 0;
+                window.__heldFirstReceipt = null;
+                window.addEventListener('message', (e) => {
+                    if (e.data && e.data.dpbVisualEditChange) {
+                        window.__receiptCount++;
+                        if (window.__receiptCount === 1) {
+                            e.stopImmediatePropagation();
+                            window.__heldFirstReceipt = e.data;
+                        }
+                    }
+                }, true);
+            """)
+            page.goto(path.as_uri())
+            dismiss_onboarding(page)
+
+            proto = page.frame_locator("iframe.dpb-proto-frame")
+            target = proto.locator("#panel-title")
+            target.evaluate("el => el.click()")
+
+            page.locator("#dpb-tab-visual").click()
+            field = page.locator('.dpb-react-field[data-property="background-color"] input')
+            field.fill("#123456")
+            field.press("Enter")
+
+            # Wait for request 1 to time out
+            time.sleep(1.8)
+
+            # Retry same value before releasing receipt 1
+            field.press("Enter")
+            time.sleep(0.3)
+
+            # Release receipt 1
+            page.evaluate("""() => {
+                if (window.__heldFirstReceipt) {
+                    const frame = document.querySelector('iframe.dpb-proto-frame');
+                    window.dispatchEvent(new MessageEvent('message', {
+                        data: window.__heldFirstReceipt,
+                        source: frame.contentWindow
+                    }));
+                }
+            }""")
+            time.sleep(0.5)
+
+            # Check batch: oldValue must be "" (author inline baseline), NEVER selection highlight rgba(20, 184, 166, 0.06)
+            batch_val = page.evaluate("() => document.getElementById('dpb-visual-edits-json').value")
+            batch = json.loads(batch_val)
+            assert len(batch["edits"]) == 1
+            edit = batch["edits"][0]
+            assert edit["oldValue"] == "", f"Expected empty inline oldValue, got: {edit['oldValue']}"
+            assert "rgba(20, 184, 166" not in edit["oldValue"]
+            assert edit["newValue"] == "rgb(18, 52, 86)"
+
+            # Press Ctrl+Z (Undo)
+            field.focus()
+            page.keyboard.press("Control+z")
+            time.sleep(0.5)
+
+            # The inline style on the prototype element must be restored to empty (""),
+            # NOT the selection highlight overlay!
+            inline_bg = target.evaluate("el => el.style.backgroundColor")
+            assert inline_bg == "", f"Expected empty inline backgroundColor after undo, got: {inline_bg}"
+            assert len(page_errors) == 0
+        finally:
+            browser.close()

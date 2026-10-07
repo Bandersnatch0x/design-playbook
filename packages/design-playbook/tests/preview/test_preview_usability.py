@@ -8,6 +8,7 @@ textarea; this file keeps the same lockstep patterns against the new DOM.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -23,6 +24,17 @@ from design_playbook.mcp.preview import i18n  # noqa: E402
 from design_playbook.mcp.preview.control import _build_control  # noqa: E402
 from design_playbook.mcp.preview.review_session import _build_parent_page  # noqa: E402
 
+# Browser-test wait window. These suites drive real Chromium and assert on state that
+# propagates through a debounce plus a cross-frame postMessage round trip. The
+# product's default 5s (and 3s in the usability suite) probe window is too tight when
+# the machine is busy, and the resulting failures are timeouts on a condition that is
+# merely slow, not wrong. Measured: under three concurrent full preview suites the
+# visual-count assertion below timed out at 5000ms and passed once given room, while
+# the same tests pass 4/4 in isolation. Assertions are unchanged - only the time
+# allowed for the same condition to become true is wider.
+UI_WAIT = 20000
+
+
 
 @pytest.fixture(scope="module")
 def browser():
@@ -36,7 +48,7 @@ def browser():
 def page(browser, tmp_path, monkeypatch):
     monkeypatch.setenv("DPB_PREVIEW_LANG", "zh-CN")
     page = browser.new_page(viewport={"width": 1440, "height": 900})
-    page.set_default_timeout(3000)
+    page.set_default_timeout(UI_WAIT)
     page.goto(_write_control_page(tmp_path, []))
     page.evaluate("""() => {
       window.submittedChoices = [];
@@ -72,6 +84,46 @@ def save_anchor(page, text, selector="#prototype h1"):
     page.keyboard.press("Enter")
     expect(page.locator("#dpb-anno-popover")).to_be_hidden()
     expect(page.locator("#dpb-anchors .dpb-anchor")).to_have_count(1)
+
+
+@pytest.mark.parametrize("selector,choice", [
+    ("#dpb-btn-approve", "确认通过"),
+    ("#dpb-approve-drawer", "确认通过"),
+    ('button[name="choice"][value="需要修改"]', "需要修改"),
+])
+def test_choice_clicks_use_submit_handler_and_wait_for_visual_drain(page, selector, choice):
+    dismiss_intro(page)
+    open_popover(page).fill("Keep the pending draft anchor")
+    page.evaluate("""() => {
+        window.pendingVisualEdit = true;
+        window.drainCalls = 0;
+        window.capturedChoices = [];
+        window.dpbHasPendingVisualEdits = () => window.pendingVisualEdit;
+        window.dpbDrainVisualEdits = () => {
+            window.drainCalls++;
+            return new Promise(resolve => { window.finishVisualDrain = resolve; });
+        };
+        document.getElementById('dpb-decide-form').addEventListener('submit', e => {
+            window.capturedChoices.push(e.submitter.value);
+        }, true);
+    }""")
+    button = page.locator(selector)
+    button.click()
+    assert page.evaluate("window.capturedChoices") == [choice]
+    assert page.evaluate("window.submittedChoices") == []
+    assert page.evaluate("window.drainCalls") == 1
+    expect(button).to_have_class(re.compile(r"\bdpb-btn-loading\b"))
+    anchors = json.loads(page.locator("#dpb-anchors-json").input_value())
+    assert len(anchors) == 1
+    assert anchors[0]["comment"] == "Keep the pending draft anchor"
+    page.evaluate("""() => {
+        window.pendingVisualEdit = false;
+        window.finishVisualDrain({ok: true});
+    }""")
+    page.wait_for_function("window.submittedChoices.length === 1")
+    assert page.evaluate("window.submittedChoices") == [choice]
+    assert page.evaluate("window.capturedChoices") == [choice, choice]
+    assert page.evaluate("window.drainCalls") == 1
 
 
 def test_mouse_approve_folds_open_draft_and_submits_anchor(page):
@@ -304,7 +356,8 @@ def test_live_language_updates_chrome_accessibility_not_choice_values(page):
     assert page.locator("#dpb-btn-approve").get_attribute("value") == "确认通过"
     expect(page.locator("#dpb-feedback")).to_have_value("Keep user text 中文 unchanged")
     assert "without confirming approval" in page.locator("#dpb-btn-skip").get_attribute("title")
-    assert "[P]" in page.locator("#dpb-pin-toggle").get_attribute("title")
+    # [A] is the Select tool shortcut (remapped from [P] which now toggles Annotate mode)
+    assert "[A]" in page.locator("#dpb-pin-toggle").get_attribute("title")
     page.locator("#dpb-shortcuts-btn").click()
     assert "滚轮" not in page.locator("#dpb-shortcut-modal").inner_text()
     page.keyboard.press("Escape")
