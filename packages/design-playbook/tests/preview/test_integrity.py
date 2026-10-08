@@ -260,7 +260,7 @@ class PreviewIntegritySnapshotTests(unittest.TestCase):
 
 
 class PreviewLedgerGateTests(unittest.TestCase):
-    """T-086/DEF-2: run-external ledger union + orphan round INVALID."""
+    """T-086: run-external ledger union + orphan round INVALID."""
 
     def test_ledger_orphan_round_is_invalid_not_silent_pass(self) -> None:
         # Simulate the gate-wash attempt: move the round artifacts out of

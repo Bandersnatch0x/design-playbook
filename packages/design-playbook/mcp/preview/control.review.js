@@ -196,7 +196,7 @@
   // ---- focus / roam (J/K) ----
   function focusAnchor(idx) {
     if (idx < 0 || idx >= anchors.length) return;
-    // DEF-03: roaming or locating an anchor must surface its card — jump
+    // Roaming or locating an anchor must surface its card — jump
     // back to the annotations view when the criteria tab holds the rail.
     if (specViewActive()) setSpecPanel(false);
     activeIdx = idx;
@@ -240,7 +240,7 @@
     if (b) b.addEventListener("click", function () { setFilter(k); });
   });
 
-  // REC-05: the free-note drawer input is gone — element comments are typed
+  // The free-note drawer input is gone — element comments are typed
   // in the in-context popover (control.js) and this drawer keeps only the
   // optional overall feedback field. No detached @note anchors can be created.
 
@@ -305,7 +305,7 @@
   // on its own (ADR-0008 amendment 2026-10-08).
   document.addEventListener("dpbVisualEditsChanged", function () { updateStatus(); });
 
-  // ---- rail collapse (unified rail, REC-02) ----
+  // ---- rail collapse (unified rail) ----
   function setDrawer(open, quiet) {
     inspector.classList.toggle("dpb-collapsed", !open);
     inspector.inert = !open;
@@ -553,7 +553,7 @@
   }
 
   form.addEventListener("submit", function (e) {
-    // DEF-01: a mouse click on any submit trigger must not silently drop an
+    // A mouse click on any submit trigger must not silently drop an
     // uncommitted draft — fold it first (same defense as the Ctrl+Enter path).
     if (draftPopoverOpen() && annoInput && annoInput.value.trim()) saveDraftAnchor();
     syncCriteriaHidden();
@@ -601,14 +601,14 @@
     announce(tt("field_hint"));
     setDrawer(true, true);
     setSpecPanel(false);
-    // REC-04: the muted trigger shakes too — the blocked click explains why.
+    // The muted trigger shakes too — the blocked click explains why.
     if (approveBtn) {
       approveBtn.classList.remove("is-shaking");
       void approveBtn.offsetWidth;
       approveBtn.classList.add("is-shaking");
     }
   });
-  // REC-05 amendment: the standalone "keep notes, decide later" action is gone —
+  // The standalone "keep notes, decide later" action is gone —
   // annotation drafts keep autosaving (scheduleDraft) and the rail now carries a
   // single fixed submission action instead of two competing ones.
 
@@ -715,7 +715,7 @@
     if (e.key === "=" || e.key === "+") { e.preventDefault(); handleZoom(0.1); return; }
     if (e.key === "-" || e.key === "_") { e.preventDefault(); handleZoom(-0.1); return; }
     if (e.key === "0") { e.preventDefault(); fitCanvas(); return; }
-    // REC-07: direct viewport switching (1 desktop / 2 tablet / 3 mobile).
+    // Direct viewport switching (1 desktop / 2 tablet / 3 mobile).
     if (e.key === "1") { e.preventDefault(); setViewport("desktop"); return; }
     if (e.key === "2") { e.preventDefault(); setViewport("tablet"); return; }
     if (e.key === "3") { e.preventDefault(); setViewport("mobile"); return; }
@@ -744,7 +744,7 @@
     }
   });
 
-  // ---- coachmark (REC-03/R9: non-blocking, persistent until the first
+  // ---- coachmark (non-blocking, persistent until the first
   // anchor is created — never timed out, never modal) ----
   var ONBOARDING_KEY = "dpb.onboarding.v1";
   var coachmark = document.getElementById("dpb-coachmark");

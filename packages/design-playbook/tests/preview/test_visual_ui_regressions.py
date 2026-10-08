@@ -673,7 +673,7 @@ def test_bridge_supports_resize_and_move_messages(editor_page):
     expect(target).to_have_css("transform", "matrix(1, 0, 0, 1, 15, 25)")
 
 
-# Independent interaction review: IR-01 through IR-19.
+# Independent interaction review of the interaction surface.
 def select_interaction_target(page, css=""):
     from playwright.sync_api import expect
 
@@ -1211,7 +1211,7 @@ def test_narrow_host_docks_text_actions_outside_canvas_and_drawer(editor_page):
     assert box["y"] + box["height"] < feedback["y"]
 
 
-# IP-01..IP-13: full state, keyboard, localization and stable geometry.
+# Full state, keyboard, localization and stable geometry.
 def set_review_locale(page, locale):
     if page.locator("#dpb-root").get_attribute("lang").split("-")[0] != locale:
         page.locator("#dpb-language-toggle").click()
@@ -1835,7 +1835,7 @@ def test_visual_submit_bar_stays_inside_the_scrolling_panel(editor_page) -> None
 
 
 def test_bo01_drain_barrier_immediate_confirm_contains_last_edit(editor_page) -> None:
-    """M1/BO-01: Confirming immediately after typing flushes pending visual edits.
+    """Confirming immediately after typing flushes pending visual edits.
 
     Before M1, property changes were debounced (~180ms) and asynchronously
     bridged. Typing a property value and immediately clicking approve submitted
@@ -2005,7 +2005,7 @@ def test_bo01_slow_bridge_timeout_prevents_empty_submission_and_allows_retry(tmp
 
 
 def test_bo02_visual_panel_authority_and_label_truth(editor_page) -> None:
-    """M2/BO-02: Visual panel submit truthfully mirrors readiness and delegates.
+    """The visual panel reports readiness and delegates the decision.
 
     The visual panel's submit button must not claim independent authority:
     1. It reflects the single review gate: disabled when ADR-0008 floor is unmet.
@@ -2060,7 +2060,7 @@ def test_bo02_visual_panel_authority_and_label_truth(editor_page) -> None:
 
 
 def test_bo03_mode_tool_shortcuts_and_preview_passivity(editor_page) -> None:
-    """M3/BO-03: Mode/tool shortcuts resolve P/V collision and preview is passive.
+    """Mode/tool shortcuts resolve the P/V collision and preview is passive.
 
     Key bindings:
     - [A]: Select tool (dpb-pin-toggle)
@@ -2187,7 +2187,7 @@ def test_m4_responsive_geometry_and_rail_close_unclipped(tmp_path, monkeypatch, 
 
 
 def test_bo01_retry_before_release_reconciles_and_releases_without_error(tmp_path) -> None:
-    """R2-F-01 / R2-F-05: Late first receipt held past deadline, retry before receipt reconciles edit,
+    """Late first receipt held past deadline, retry before receipt reconciles edit,
 
     and releasing late receipt afterward does not throw TypeError or create duplicate submissions.
     """
@@ -2198,7 +2198,7 @@ def test_bo01_retry_before_release_reconciles_and_releases_without_error(tmp_pat
     from preview_e2e_helpers import dismiss_onboarding
     from design_playbook.mcp.preview import i18n
 
-    control = review_session._build_control(1, "R2-F-01 regression", ["Confirm"])
+    control = review_session._build_control(1, "late first receipt regression", ["Confirm"])
     path = tmp_path / "preview_retry_before_release.html"
     path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
 
@@ -2270,7 +2270,7 @@ def test_bo01_retry_before_release_reconciles_and_releases_without_error(tmp_pat
             submissions = page.evaluate("() => window.__admittedSubmissions")
             assert len(submissions) == 0, "Submission must stay blocked while earlier receipt is unresolved"
 
-            # 3. Now release the first held receipt (R2-F-05) - exercises the resolver guard without error
+            # 3. Now release the first held receipt - exercises the resolver guard without error
             page.evaluate("""() => {
                 if (window.__heldFirstReceipt) {
                     const frame = document.querySelector('iframe.dpb-proto-frame');
@@ -2307,13 +2307,13 @@ def test_bo01_retry_before_release_reconciles_and_releases_without_error(tmp_pat
 
 
 def test_bo03_secondary_revise_drains_pending_visual_edits(tmp_path) -> None:
-    """R2-F-03: Secondary choice buttons (Revise) also drain pending visual edits."""
+    """Secondary choice buttons (Revise) also drain pending visual edits."""
     import json
     from playwright.sync_api import expect, sync_playwright
     from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
     from preview_e2e_helpers import dismiss_onboarding
 
-    control = review_session._build_control(1, "R2-F-03 secondary revise", ["Confirm", "Revise"])
+    control = review_session._build_control(1, "secondary revise", ["Confirm", "Revise"])
     path = tmp_path / "preview_secondary_revise.html"
     path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
 
@@ -2401,13 +2401,13 @@ def test_bo03_secondary_revise_drains_pending_visual_edits(tmp_path) -> None:
 
 
 def test_bo03_native_request_submit_drains_pending_visual_edits(tmp_path) -> None:
-    """R2-F-03: Programmatic form.requestSubmit(realApproveButton) during debounce drains visual edits."""
+    """Programmatic form.requestSubmit(realApproveButton) during debounce drains visual edits."""
     import json
     from playwright.sync_api import expect, sync_playwright
     from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
     from preview_e2e_helpers import dismiss_onboarding
 
-    control = review_session._build_control(1, "R2-F-03 native submit", ["Confirm"])
+    control = review_session._build_control(1, "native submit", ["Confirm"])
     path = tmp_path / "preview_native_submit.html"
     path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
 
@@ -2530,13 +2530,13 @@ def test_preview_exit_pill_visual_styling_and_interaction(tmp_path) -> None:
 
 
 def test_bo01_receipt_synchronously_publishes_to_hidden_input(tmp_path) -> None:
-    """R2-F-02: Hidden input is published synchronously upon receipt, never admitting empty batch."""
+    """Hidden input is published synchronously upon receipt, never admitting an empty batch."""
     import json
     from playwright.sync_api import expect, sync_playwright
     from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
     from preview_e2e_helpers import dismiss_onboarding
 
-    control = review_session._build_control(1, "R2-F-02 sync publish", ["Confirm"])
+    control = review_session._build_control(1, "sync publish", ["Confirm"])
     path = tmp_path / "preview_sync_publish.html"
     path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
 
@@ -2631,7 +2631,7 @@ def test_bo01_receipt_synchronously_publishes_to_hidden_input(tmp_path) -> None:
 
 
 def test_bo02_late_receipt_different_value_preserves_authored_order_and_final_color(tmp_path) -> None:
-    """R3-F-02: Late receipt with newer edit preserves authored timeline order; last author value wins."""
+    """Late receipt with newer edit preserves authored timeline order; last author value wins."""
     import json
     import time
     from playwright.sync_api import expect, sync_playwright
@@ -2639,7 +2639,7 @@ def test_bo02_late_receipt_different_value_preserves_authored_order_and_final_co
     from preview_e2e_helpers import dismiss_onboarding
     from design_playbook.mcp.preview.visual_batch import normalize_visual_batch
 
-    control = review_session._build_control(1, "R3-F-02 authored timeline", ["Confirm"])
+    control = review_session._build_control(1, "authored timeline", ["Confirm"])
     path = tmp_path / "preview_authored_timeline.html"
     path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
 
@@ -2755,12 +2755,12 @@ def test_bo02_late_receipt_different_value_preserves_authored_order_and_final_co
 
 
 def test_bo03_shortcut_a_crosses_sandboxed_iframe_with_real_focus(tmp_path) -> None:
-    """R3-F-03: Advertised [A] shortcut for Select tool works when sandboxed iframe body is focused."""
+    """Advertised [A] shortcut for Select tool works when sandboxed iframe body is focused."""
     from playwright.sync_api import expect, sync_playwright
     from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
     from preview_e2e_helpers import dismiss_onboarding
 
-    control = review_session._build_control(1, "R3-F-03 iframe shortcut A", ["Confirm"])
+    control = review_session._build_control(1, "iframe shortcut A", ["Confirm"])
     path = tmp_path / "preview_shortcut_a.html"
     path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
 
@@ -2798,14 +2798,14 @@ def test_bo03_shortcut_a_crosses_sandboxed_iframe_with_real_focus(tmp_path) -> N
 
 
 def test_bo04_retry_reconciliation_preserves_original_baseline_and_undo_restores_empty(tmp_path) -> None:
-    """R3-F-01: Retry reconciliation does not adopt selection highlight into author styles; Undo restores empty."""
+    """Retry reconciliation does not adopt selection highlight into author styles; Undo restores empty."""
     import json
     import time
     from playwright.sync_api import sync_playwright
     from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
     from preview_e2e_helpers import dismiss_onboarding
 
-    control = review_session._build_control(1, "R3-F-01 undo baseline", ["Confirm"])
+    control = review_session._build_control(1, "undo baseline", ["Confirm"])
     path = tmp_path / "preview_undo_baseline.html"
     path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
 
@@ -2886,12 +2886,12 @@ def test_bo04_retry_reconciliation_preserves_original_baseline_and_undo_restores
 
 
 def test_bo05_mb_f01_late_undo_receipt_after_new_edit_retains_newer_edit(tmp_path) -> None:
-    """MB-F-01 Repro A: late Undo receipt must not remove newer edit by position; admitted batch matches inline value."""
+    """Repro A: a late Undo receipt must not remove a newer edit by position; the admitted batch matches the inline value."""
     from playwright.sync_api import sync_playwright, expect
     from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
     from preview_e2e_helpers import dismiss_onboarding
 
-    control = review_session._build_control(1, "MB-F-01 repro A", ["Confirm"])
+    control = review_session._build_control(1, "repro A", ["Confirm"])
     path = tmp_path / "preview_mb_f01_repro_a.html"
     path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
 
@@ -2996,12 +2996,12 @@ def test_bo05_mb_f01_late_undo_receipt_after_new_edit_retains_newer_edit(tmp_pat
 
 
 def test_bo06_mb_f01_duplicate_undo_does_not_double_consume_history(tmp_path) -> None:
-    """MB-F-01 Repro B: repeated Undo after timeout must not double-consume history; admitted batch matches prototype."""
+    """Repro B: repeated Undo after timeout must not double-consume history; the admitted batch matches the prototype."""
     from playwright.sync_api import sync_playwright, expect
     from tests.preview.test_visual_edit_acceptance import PROTOTYPE, review_session
     from preview_e2e_helpers import dismiss_onboarding
 
-    control = review_session._build_control(1, "MB-F-01 repro B", ["Confirm"])
+    control = review_session._build_control(1, "repro B", ["Confirm"])
     path = tmp_path / "preview_mb_f01_repro_b.html"
     path.write_text(review_session._build_parent_page(PROTOTYPE, control), encoding="utf-8")
 

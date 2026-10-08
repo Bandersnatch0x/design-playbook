@@ -202,7 +202,7 @@
     if (criteriaToggle) criteriaToggle.hidden = items.length === 0;
     syncCriteriaCards();
   }
-  // REC-02 + T-106: the unified rail hosts three mutually exclusive views —
+  // T-106: the unified rail hosts three mutually exclusive views —
   // annotations, spec criteria, and the React visual editor. Exactly one is
   // visible, so no view can overlap (or steal pointer events from) another.
   function railViewActive() {
@@ -599,7 +599,7 @@
         return;
       }
     }
-    // REC-01: two-phase commit — the click only opens the in-context draft
+    // Two-phase commit — the click only opens the in-context draft
     // popover; the anchor enters the list on Enter with a non-empty comment.
     var r = el.getBoundingClientRect();
     openDraft({
@@ -1072,7 +1072,7 @@
   });
 
   // Geometry tools (draw/box/free pin) stage their shape into a draft and
-  // open the same in-context popover; the anchor lands on Enter (REC-01).
+  // open the same in-context popover; the anchor lands on Enter.
   function stageDraft(kind, geometry, anchorRect) {
     openDraft({ kind: kind, geometry: geometry, rect: anchorRect });
   }
@@ -1105,7 +1105,7 @@
     });
   }
 
-  // ---- in-context draft popover (REC-01: two-phase anchor commit) ----
+  // ---- in-context draft popover (two-phase anchor commit) ----
   // The popover exists only while a draft is unsaved; anchors enter the list
   // exclusively via saveDraftAnchor() with a non-empty comment, so an empty
   // anchor can never reach the ADR-0008 floor (frontend mirror or server).
@@ -1276,7 +1276,7 @@
       // Ctrl/Cmd+Enter falls through to the global approve channel.
     });
   }
-  // DEF-02: the popover is a role=dialog — Tab cycles its own controls
+  // The popover is a role=dialog — Tab cycles its own controls
   // (textarea ↔ tag buttons) instead of escaping to background chrome.
   // Esc is handled per-target (input) or by the global keymap (tag buttons),
   // and both paths return focus to the canvas via cancelDraft(true).

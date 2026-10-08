@@ -1,8 +1,8 @@
 """Browser regressions for locale changes and non-destructive keyboard review.
 
 T-083 notes: the v10 shell replaces the blocking onboarding modal with a
-non-modal coachmark (REC-03/R9) and the drawer free-note input with an
-in-context popover (REC-01). The IME guard (R2) now lives on the popover
+non-modal coachmark and the drawer free-note input with an
+in-context popover. The IME guard (R2) now lives on the popover
 textarea; this file keeps the same lockstep patterns against the new DOM.
 """
 from __future__ import annotations
@@ -57,7 +57,7 @@ def page(browser, tmp_path, monkeypatch):
         window.submittedChoices.push(e.submitter && e.submitter.value);
       });
     }""")
-    # REC-03: the coachmark is non-blocking; assert it is present for first
+    # The coachmark is non-blocking; assert it is present for first
     # use, then close it so scenarios start from a quiet shell.
     expect(page.locator("#dpb-coachmark")).to_be_visible()
     yield page
@@ -72,7 +72,7 @@ def dismiss_intro(page):
 
 
 def open_popover(page, selector="#prototype h1"):
-    """REC-01 helper: pick an element and land on the in-context popover."""
+    """Helper: pick an element and land on the in-context popover."""
     page.click(selector)
     expect(page.locator("#dpb-anno-popover")).to_be_visible()
     return page.locator("#dpb-anno-input")
@@ -126,7 +126,7 @@ def test_choice_clicks_use_submit_handler_and_wait_for_visual_drain(page, select
 
 
 def test_mouse_approve_folds_open_draft_and_submits_anchor(page):
-    # DEF-01 (P1), form A: with the only review content sitting uncommitted in
+    # Form A: with the only review content sitting uncommitted in
     # the popover, a mouse click on Approve must fold the draft into an anchor
     # and submit it — not misfire the "no substantive feedback" shake.
     dismiss_intro(page)
@@ -139,7 +139,7 @@ def test_mouse_approve_folds_open_draft_and_submits_anchor(page):
 
 
 def test_mouse_approve_folds_draft_alongside_existing_anchor(page):
-    # DEF-01 (P1), form B: an existing anchor must not let the submit path
+    # Form B: an existing anchor must not let the submit path
     # silently drop the second, not-yet-Enter'd popover note.
     dismiss_intro(page)
     page.evaluate("""() => {
@@ -159,7 +159,7 @@ def test_mouse_approve_folds_draft_alongside_existing_anchor(page):
 
 
 def test_popover_traps_tab_inside_and_esc_returns_focus_to_canvas(page):
-    # DEF-02: the role=dialog popover owns Tab — it cycles input ↔ tag buttons
+    # The role=dialog popover owns Tab — it cycles input ↔ tag buttons
     # in both directions instead of escaping to the coachmark/body; Esc closes
     # and hands focus back to the canvas (R4 rhythm intact).
     dismiss_intro(page)
@@ -175,7 +175,7 @@ def test_popover_traps_tab_inside_and_esc_returns_focus_to_canvas(page):
 
 
 def test_roaming_from_spec_view_switches_back_to_annotations(page, tmp_path):
-    # DEF-03: J/K roaming (and anchor focus) must surface the focused card —
+    # J/K roaming (and anchor focus) must surface the focused card —
     # the rail leaves the criteria tab for the annotations list.
     page.goto(_write_control_page(tmp_path, [{"id": "A1", "title": "Real criterion"}]))
     dismiss_intro(page)
@@ -316,7 +316,7 @@ def test_enter_saves_returns_focus_and_next_click_reopens(page):
 
 
 def test_escape_cancels_empty_draft_without_anchor(page):
-    # REC-01 guard: an untyped draft self-destructs; no ghost anchor lands.
+    # An untyped draft self-destructs; no ghost anchor lands.
     dismiss_intro(page)
     open_popover(page)
     page.keyboard.press("Escape")
@@ -479,7 +479,7 @@ def test_english_header_actions_remain_inside_window(page, tmp_path, width):
 
 
 def test_compact_workspace_keeps_canvas_usable_and_rail_reachable(page, tmp_path):
-    # REC-02: one rail owns criteria AND annotations, so the canvas keeps its
+    # One rail owns criteria AND annotations, so the canvas keeps its
     # width even on compact screens; the rail stays collapsible.
     page.set_viewport_size({"width": 768, "height": 900})
     page.goto(_write_control_page(tmp_path, [{"id": "A1", "title": "Real criterion"}]))

@@ -457,7 +457,7 @@ SKIP_LABELS: set[str] = {
 }
 
 # Union of confirm labels across ALL locales. New CTA wording ("确认通过" /
-# "Approve", T-083 REC-08) plus every historical label callers may have copied
+# "Approve", T-083) plus every historical label callers may have copied
 # from older docs — old submitted values keep classifying as confirms.
 CONFIRM_LABELS: set[str] = {
     _STRINGS[ZH]["confirm"], _STRINGS[EN]["confirm"],

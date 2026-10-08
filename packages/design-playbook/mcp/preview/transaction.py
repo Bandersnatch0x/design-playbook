@@ -764,7 +764,7 @@ def valid_entries(preview_dir: Path) -> list[dict[str, Any]]:
 
 
 def _ledger_record(entry: dict[str, Any]) -> dict[str, Any]:
-    """T-086/DEF-2: the run-external registration for one committed round."""
+    """T-086: the run-external registration for one committed round."""
     binding = entry["binding"]
     outcome = entry["outcome"]
     return {
@@ -965,7 +965,7 @@ def _run_locked(
                 retryable=False, round_n=round_n,
                 decision_id=str(existing["decision_id"]), artifact=str(entry_path),
             )
-        # T-086/DEF-2: repair the run-external registration if a crash landed
+        # T-086: repair the run-external registration if a crash landed
         # between the entry write and the ledger append (append-only, idempotent).
         ledger.append_record(preview_dir, _ledger_record(existing))
         confirm_path = _commit_projections(preview_dir, existing)
@@ -1008,7 +1008,7 @@ def _run_locked(
     visual_edits_effective = bool(visual_handoff) and has_effective_visual_edits(visual_edits)
     rejected = bool(submission.get("rejected"))
     aborted = bool(submission.get("aborted"))
-    # T-086/DEF-5: a collect timeout is a system state, never user feedback —
+    # T-086: a collect timeout is a system state, never user feedback —
     # it must not be fed to the ADR-0008 floor (the "timeout waiting for
     # user" text previously passed the floor as if the user wrote it).
     timed_out = bool(submission.get("timeout"))
@@ -1073,7 +1073,7 @@ def _run_locked(
     if criteria_review:
         entry["outcome"]["criteria_review"] = criteria_review
     atomic_write(entry_path, json_text(entry))
-    # T-086/DEF-2: register the committed round outside the run tree so the
+    # T-086: register the committed round outside the run tree so the
     # G5 gate survives records being moved/renamed/deleted from preview/.
     ledger.append_record(preview_dir, _ledger_record(entry))
     confirm_path = _commit_projections(preview_dir, entry)

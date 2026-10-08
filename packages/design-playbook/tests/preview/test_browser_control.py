@@ -316,7 +316,7 @@ class ControlResourceAssemblyTests(unittest.TestCase):
             r'<button type="submit" name="choice" value="Needs changes"[^>]*class="[^"]*dpb-btn-secondary[^"]*"',
         )
         # v10 shell chrome: dynamic approve trigger + anno popover + coachmark
-        # + rail + feedback field + announce region (REC-01/02/03/04).
+        # + rail + feedback field + announce region.
         self.assertIn('id="dpb-btn-approve"', control)
         self.assertIn('id="dpb-anno-popover"', control)
         self.assertIn('id="dpb-coachmark"', control)
@@ -342,7 +342,7 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                     page.wait_for_selector("#dpb-spec-view", state="attached")
                     dismiss_onboarding(page)
 
-                    # REC-02: criteria live in the unified rail as a tab; the
+                    # Criteria live in the unified rail as a tab; the
                     # annotations list is the default view.
                     self.assertFalse(
                         page.locator("#dpb-spec-view").is_visible())
@@ -446,7 +446,7 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                     self.assertIn("还没有批注", empty.inner_text())
                     self.assertIn("点选元素添加行内意见", empty.inner_text())
 
-                    # REC-01: pick an element, type in the in-context popover,
+                    # Pick an element, type in the in-context popover,
                     # Enter commits the anchor (two-phase, no ghost anchors).
                     page.click("#prototype h1")
                     page.wait_for_selector("#dpb-anno-popover")
@@ -556,7 +556,7 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                                 page.goto(url, wait_until="domcontentloaded")
                                 page.wait_for_selector("#dpb-root")
                                 dismiss_onboarding(page)
-                                page.click("#dpb-tab-spec")  # REC-02: criteria live in the rail tab
+                                page.click("#dpb-tab-spec")  # criteria live in the rail tab
                                 page.check(
                                     '.dpb-criterion-check[data-criterion-id="L6.2"]'
                                 )
@@ -627,7 +627,7 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                                 page.mouse.down()
                                 page.mouse.move(x2, y2, steps=4)
                                 page.mouse.up()
-                                # REC-01: the drag opens the in-context draft;
+                                # The drag opens the in-context draft;
                                 # the box anchor lands on Enter with a comment.
                                 page.wait_for_selector("#dpb-anno-popover")
                                 page.fill("#dpb-anno-input", "highlight this area")

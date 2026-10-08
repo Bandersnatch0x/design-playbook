@@ -1,4 +1,4 @@
-"""Run-external, append-only Preview round ledger (T-086 / DEF-2).
+"""Run-external, append-only Preview round ledger (T-086).
 
 Every committed Preview decision appends one JSON line here, outside the
 run tree, so moving/renaming/deleting ``preview/`` cannot wash the G5 gate:

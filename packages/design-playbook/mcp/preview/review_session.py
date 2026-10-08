@@ -211,7 +211,7 @@ def _parse_anchors(raw: str, round_n: int = 0) -> list[dict[str, Any]]:
             "comment": str(item.get("comment") or "").strip()[:500],
             "tag": tag,
         }
-        # T-083 REC-01: element anchors classify via the reviewer's category
+        # T-083: element anchors classify via the reviewer's category
         # chip in `tag`; the real DOM tag rides along as `dom_tag` so the
         # reconnect hint below keeps pointing at the element kind.
         dom_tag = str(item.get("dom_tag") or "").strip()[:40]
@@ -659,7 +659,7 @@ def collect_review(
                 {
                     "choice": "",
                     "feedback": "timeout waiting for user",
-                    # T-086/DEF-5: mark the timeout so the transaction never
+                    # T-086: mark the timeout so the transaction never
                     # evaluates this system text against the ADR-0008 floor.
                     "timeout": True,
                     "aborted": True,

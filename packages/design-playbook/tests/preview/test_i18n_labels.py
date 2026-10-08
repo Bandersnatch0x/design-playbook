@@ -25,7 +25,7 @@ class LabelSetTests(unittest.TestCase):
         self.assertFalse(i18n.SKIP_LABELS & i18n.CONFIRM_LABELS)
 
     def test_confirm_labels_keep_new_and_historical_cta_labels(self) -> None:
-        # R7 lockstep (T-083 REC-08): the active-locale CTA wording was renamed
+        # R7 lockstep (T-083): the active-locale CTA wording was renamed
         # to "确认通过"/"Approve"; the union must carry BOTH the new labels and
         # every historical one so older submitted options still classify.
         self.assertIn("确认签署决策", i18n.CONFIRM_LABELS)
@@ -65,7 +65,7 @@ class LabelSetTests(unittest.TestCase):
             "box_label",
             "ruler_size",
             "ruler_distance",
-            # T-083 REC-01/03/04/05/07 keys
+            # T-083 keys
             "popover_placeholder",
             "popover_save",
             "tab_annotations",
@@ -84,7 +84,7 @@ class LabelSetTests(unittest.TestCase):
                 )
 
     def test_approve_ready_uses_english_singular_for_one_note(self) -> None:
-        # DEF-06: EN "1 notes" is ungrammatical — the ready label branches on
+        # EN "1 notes" is ungrammatical — the ready label branches on
         # count; zh has no plural so both keys carry the same wording.
         self.assertEqual(i18n._STRINGS[i18n.EN]["approve_ready_one"], "Approve (1 note)")
         self.assertEqual(i18n._STRINGS[i18n.EN]["approve_ready"], "Approve ({n} notes)")
@@ -102,7 +102,7 @@ class LabelSetTests(unittest.TestCase):
 
     def test_control_page_renders_v10_shell_chrome(self) -> None:
         # v10 app shell: header actions + mini-dock + unified rail + popover +
-        # coachmark + dual i18n (REC-01..04).
+        # coachmark + dual i18n.
         html = preview_control._build_control(
             round_n=1, summary="评审", options=["确认通过", "需要修改"]
         )

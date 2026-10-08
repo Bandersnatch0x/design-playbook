@@ -54,7 +54,7 @@
 #dpb-root[data-theme="dark"],
 #dpb-float-root[data-theme="dark"],
 .dpb-toasts[data-theme="dark"] {
-  /* REC-06: 4-level neutral dark elevation — cold gray-black, no blue cast */
+  /* 4-level neutral dark elevation — cold gray-black, no blue cast */
   --dpb-bg: #090B0E;                 /* Surface-0 workspace floor */
   --dpb-surface: #12151B;            /* Surface-1 rail/header */
   --dpb-elev: #1A1E26;               /* Surface-2 cards/inputs */
@@ -226,7 +226,7 @@ body.dpb-shell { overflow: hidden; height: 100vh; }
 .dpb-popover-msg { margin: 0 0 8px; font-size: 12px; color: var(--dpb-ink); }
 .dpb-popover-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
-/* ---- unified right rail (REC-02) ---- */
+/* ---- unified right rail ---- */
 .dpb-workspace { flex: 1 1 auto; display: flex; min-width: 0; position: relative; overflow: hidden; }
 .dpb-rail {
   width: var(--dpb-rail-w); flex: 0 0 auto; display: flex; flex-direction: column;
@@ -332,7 +332,7 @@ body.dpb-shell { overflow: hidden; height: 100vh; }
   flex: 1 1 auto; position: relative; overflow: auto;
   display: flex; align-items: center; justify-content: center; padding: 48px;
   background-color: var(--dpb-bg);
-  /* REC-06: whisper-faint alignment grid — the prototype is the focal point */
+  /* whisper-faint alignment grid — the prototype is the focal point */
   background-image: radial-gradient(var(--dpb-grid-dot) 1px, transparent 1px);
   background-size: 24px 24px;
   outline: none;
@@ -403,7 +403,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   border: 2px solid var(--dpb-ring-accent); animation: dpb-pulse-ring 1.8s var(--dpb-ease-pulse) infinite;
 }
 
-/* ---- left mini-dock (REC-02: canvas is no longer sandwiched) ---- */
+/* ---- left mini-dock (canvas is no longer sandwiched) ---- */
 .dpb-toolbar {
   position: absolute; left: 16px; top: 16px; z-index: 40;
   width: 48px; padding: 10px 0; border-radius: 12px;
@@ -440,7 +440,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 }
 .dpb-toolbar-hint { font: 500 9px/1 ui-monospace, Consolas, monospace; color: var(--dpb-muted); }
 
-/* ---- dynamic decision trigger (REC-04: one authoritative button) ---- */
+/* ---- dynamic decision trigger (one authoritative button) ---- */
 .dpb-approve-btn {
   background: var(--dpb-elev); color: var(--dpb-muted);
   border: 1px solid var(--dpb-line);
@@ -458,7 +458,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   flex: 1 1 auto;
   min-width: 0;
 }
-/* DEF-04: the drawer trigger carries .dpb-btn-primary too, which would paint
+/* the drawer trigger carries .dpb-btn-primary too, which would paint
    the muted state accent — re-assert the shared muted look at 2-class weight. */
 .dpb-approve-btn.dpb-approve-muted { background: var(--dpb-elev); color: var(--dpb-muted); border-color: var(--dpb-line); box-shadow: none; }
 .dpb-approve-btn.dpb-approve-muted:hover { background: var(--dpb-elev-hover); color: var(--dpb-ink); transform: none; }
@@ -591,7 +591,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-anchor-resolve:hover { color: var(--dpb-success); background: var(--dpb-success-wash); }
 .dpb-anchor-id { font: 500 9px/1 ui-monospace, Consolas, monospace; color: var(--dpb-muted); }
 
-/* ---- comment form (REC-05: overall feedback only — element notes are typed
+/* ---- comment form (overall feedback only — element notes are typed
    in the in-context popover) ---- */
 .dpb-comment-form {
   flex: 0 0 auto; padding: 12px; border-top: 1px solid var(--dpb-line);
@@ -853,7 +853,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 @keyframes dpb-ping {
   75%, 100% { transform: scale(2.2); opacity: 0; }
 }
-/* ---- in-context annotation popover (REC-01) ---- */
+/* ---- in-context annotation popover ---- */
 .dpb-anno-popover {
   max-height: calc(100vh - 24px); overflow-y: auto;
   position: fixed; z-index: 1200; width: 280px;
@@ -896,7 +896,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   to { transform: translateY(0) scale(1); opacity: 1; }
 }
 
-/* ---- non-blocking coachmark (REC-03/R9) ---- */
+/* ---- non-blocking coachmark ---- */
 .dpb-coachmark {
   position: fixed; left: 64px; bottom: 56px; z-index: 1100; max-width: 300px;
   pointer-events: none;

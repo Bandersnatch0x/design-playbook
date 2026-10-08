@@ -236,7 +236,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
         self.assertIn("- rejection: invalid_token", log)
 
     def test_timeout_submission_fails_floor_without_self_feed(self) -> None:
-        # T-086/DEF-5: the collect-timeout system text must never pass the
+        # T-086: the collect-timeout system text must never pass the
         # ADR-0008 floor as if the user wrote it — floor is explicitly false.
         result, confirm, log = self._run_submission(
             {
