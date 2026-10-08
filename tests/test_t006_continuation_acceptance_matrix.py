@@ -298,8 +298,6 @@ class MatrixCompletedJourneyTest(unittest.TestCase):
             _confirm_preview(root)
             before = _tree_digest(root)
 
-            # Leg 1: run-status reports completion with no false Pass and
-            # no side effect (no launch, no artifact write).
             with (
                 _no_launch_patches()[0],
                 _no_launch_patches()[1],
@@ -340,8 +338,6 @@ class MatrixCompletedJourneyTest(unittest.TestCase):
                 "action.stop-after-pass",
             )
 
-            # Leg 3: the derived Repair Packet keeps the verdict honest and
-            # shows gaps, not invented repair.
             packet = derive_repair_packet(snapshot)
             self.assertEqual(packet["intent"]["availability"], "known")
             self.assertEqual(packet["verdict"]["value"], "Pass")
@@ -373,7 +369,6 @@ class MatrixCompletedJourneyTest(unittest.TestCase):
             self.assertEqual(result.authority, "confirmed-user")
             self.assertEqual(result.confirmation_source, "confirm-record")
             payload = json.loads(result.json_path.read_text(encoding="utf-8"))
-            # The wrapper reports exactly what the disclosure payload says.
             self.assertEqual(payload["verdict"], result.verdict)
             self.assertEqual(payload["authority"], result.authority)
             self.assertEqual(payload["confirmationSource"], result.confirmation_source)
@@ -431,8 +426,6 @@ class MatrixBlockedJourneyTest(unittest.TestCase):
                 "action.repair-after-recirculate",
             )
             self.assertEqual(continuation["next_action"]["owner"]["actor"], "agent")
-            # T-008: the owner emits one exact copyable agent command for
-            # the blocked repair path; run-status preserves it verbatim.
             self.assertEqual(
                 continuation["next_action"]["kind"], "agent-command"
             )
@@ -471,11 +464,6 @@ class MatrixBlockedJourneyTest(unittest.TestCase):
             self.assertEqual(
                 packet["recaptureRequirement"]["availability"], "known"
             )
-            # T-008: the owner now emits the repair command, and the
-            # snapshot/packet preserve it verbatim — neither synthesizes,
-            # parses, executes, nor mutates anything. The command carries
-            # no path, so the document stays inside the parity S19
-            # path-free boundary.
             primary_result = snapshot["nextActions"]["primary"]["result"]
             self.assertEqual(primary_result["kind"], "agent-command")
             snapshot_command = primary_result["copyableAgentCommand"]
@@ -486,8 +474,6 @@ class MatrixBlockedJourneyTest(unittest.TestCase):
             )
             self.assertEqual(packet["nextCommand"]["value"], snapshot_command)
             self.assertIn(snapshot_command, packet["copyText"])
-            # The primary journey advances past the copy step: the known
-            # owner command is copy-eligible under the closed UI rule.
             self.assertTrue(
                 copy_command_is_eligible("known", snapshot_command)
             )
@@ -506,11 +492,9 @@ class MatrixBlockedJourneyTest(unittest.TestCase):
             _declare_fill(root)
             before = _tree_digest(root)
             result = _handoff(root)
-            # The blocked run never yields a Pass at the handoff seam...
             self.assertNotEqual(result.verdict, "Pass")
             payload = json.loads(result.json_path.read_text(encoding="utf-8"))
             self.assertNotEqual(payload["verdict"], "Pass")
-            # ...and the wrapper reports exactly what the disclosure says.
             self.assertEqual(payload["verdict"], result.verdict)
             self.assertEqual(payload["authority"], result.authority)
             self.assertEqual(payload["confirmationSource"], result.confirmation_source)
@@ -573,8 +557,6 @@ class MatrixStaleStateTest(unittest.TestCase):
             base = Path(tmp).resolve()
             root = _make_matrix_run(base, "run-mismatch")
             _declare_fill(root)
-            # Tamper the prototype AFTER the confirm record was written: the
-            # confirm's digest no longer matches the artifact on disk.
             _confirm_preview(root)
             (root / "preview" / "round-1.html").write_text(
                 "<html>tampered</html>", encoding="utf-8"
@@ -638,8 +620,6 @@ class MatrixStaleStateTest(unittest.TestCase):
             self.assertEqual(Path(continuation["open_console"]["argv"][2]), root)
             self.assertEqual(continuation["capability"]["fallback"]["kind"], "evidence-gap")
             self.assertIn("G-RO-TRIAL-PASS", continuation["capability"]["fallback"]["detail"])
-            # The Console marks the run degraded and shows the owning
-            # assertion as inconsistent (never silently current).
             session = RunConsoleSession(
                 run_root=root, now_fn=lambda: "2026-08-25T10:00:00Z"
             )
@@ -741,22 +721,17 @@ class MatrixPendingHandoffTest(unittest.TestCase):
             base = Path(tmp).resolve()
             root = _make_matrix_run(base, "run-pending")
             _declare_fill(root)
-            # No confirm record: the verdict must be exactly Pending
-            # (unsubstantiated) — never Pass, and never a hedged maybe.
             before = _tree_digest(root)
             result = _handoff(root)
             self.assertEqual(result.verdict, "Pending")
             payload = json.loads(result.json_path.read_text(encoding="utf-8"))
-            # The wrapper reports exactly what the disclosure payload says.
             self.assertEqual(payload["verdict"], result.verdict)
             self.assertEqual(payload["authority"], result.authority)
             self.assertEqual(payload["confirmationSource"], result.confirmation_source)
             self.assertEqual(payload["authority"], "pending-user")
             self.assertEqual(payload["confirmationSource"], "unsubstantiated")
             self.assertIn("no confirm record", payload["confirmationNote"])
-            # The gate is never reported passed while the run is Pending.
             self.assertEqual(payload["gateStatus"], "pending")
-            # Honest outputs exist even while Pending (spec story 42).
             self.assertTrue(result.index_html.is_file())
             self.assertTrue(result.deliverable_html.is_file())
             # No acceptance write: the point-back owner text is unchanged,
@@ -839,8 +814,6 @@ class MatrixSafetyTest(unittest.TestCase):
 
             conn = http.client.HTTPConnection(server.bind_host, server.port, timeout=10)
             try:
-                # Read API: snapshot + a refresh (the only POST action) —
-                # neither may touch the run tree.
                 conn.request(
                     "GET",
                     "/api/v1/snapshot",
@@ -977,7 +950,6 @@ class MatrixOwnerCommandAsymmetryTest(unittest.TestCase):
     """
 
     def test_stop_branch_stop_after_pass_projects_no_owner_command(self) -> None:
-        # An earned Pass: the stop owns the run's end; nothing is copied.
         with tempfile.TemporaryDirectory() as tmp:
             root = _make_matrix_run(Path(tmp).resolve(), "run-owner-cmd-stop")
             payload = _run_status_payload(root)
@@ -985,7 +957,6 @@ class MatrixOwnerCommandAsymmetryTest(unittest.TestCase):
             self.assertEqual(next_action["action_id"], "action.stop-after-pass")
             self.assertEqual(next_action["kind"], "stop")
             self.assertIsNone(next_action["copyable_agent_command"])
-            # The stop owns no blocker either: nothing is copied or run.
             self.assertIsNone(payload["continuation"]["blocker"])
 
     def test_stage_resume_branch_after_plan_projects_no_owner_command(self) -> None:
@@ -1035,8 +1006,6 @@ class MatrixOwnerCommandAsymmetryTest(unittest.TestCase):
             )
             self.assertEqual(next_action["kind"], "human-decision")
             self.assertIsNone(next_action["copyable_agent_command"])
-            # The HITL blocker repeats the action dict; it must stay
-            # command-free too.
             self.assertIsNone(
                 payload["continuation"]["blocker"]["copyable_agent_command"]
             )

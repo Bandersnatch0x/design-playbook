@@ -82,12 +82,6 @@ def run_meta(run_dir: Path, root: Path) -> dict[str, str | None]:
         effort = rel.parts[0] if rel.parts else None
     except ValueError:
         pass
-    # T-014: basenames collide (e.g. two PR trees both carrying dogfood/run);
-    # the id is the repo-relative path so cross-run derivations never merge
-    # distinct runs. The resolve() retry absorbs prefix-form drift (Windows
-    # temp short-names, resolved roots); junction scan paths keep their
-    # unresolved in-repo form, and out-of-root overrides fall back to the
-    # basename.
     try:
         run_id = run_dir.relative_to(root).as_posix()
     except ValueError:
@@ -158,9 +152,6 @@ def gate_status(run_dir: Path, run_facts: RunFacts | None = None) -> dict[str, s
 
 
 def normalize(text: str) -> str:
-    # Sync with packages/design-playbook/commands/run-review.md (SSOT) and
-    # tests/test_normalize_lockstep.py: casefold + collapse whitespace,
-    # then char-for-char equality. Repeat count is distinct runs (OPP-21).
     return " ".join(text.casefold().split())
 
 
@@ -318,8 +309,6 @@ def markdown_view(payload: dict) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
-    # regardless of the host code page. See scripts/stdio_encoding.py.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packages" / "design-playbook"))
     from design_playbook.scripts.stdio_encoding import configure_piped_utf8
 

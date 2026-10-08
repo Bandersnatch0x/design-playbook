@@ -99,7 +99,6 @@ const COMMAND_NAMES = [
 ]
 
 exports.apply = function (ctx) {
-  // ---- skills provider (P1) ----
   if (fs.existsSync(SKILLS_DIR)) {
     ctx.skills.registerProvider(() => {
       const candidates = fs
@@ -141,11 +140,6 @@ exports.apply = function (ctx) {
     })
   }
 
-  // ---- commands (P2) ----
-  // Each command loads its prompt from commands/<name>.md, substitutes
-  // $ARGUMENTS, and injects the result as a user-role follow-up turn. The
-  // handler returns a CommandResult immediately — the actual model work
-  // happens in the turn opened by agent.followup().
   if (ctx.commands && fs.existsSync(COMMANDS_DIR)) {
     for (const name of COMMAND_NAMES) {
       const filePath = path.join(COMMANDS_DIR, `${name}.md`)

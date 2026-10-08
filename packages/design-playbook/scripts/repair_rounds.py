@@ -153,7 +153,6 @@ def check_rounds(
 
     errs: list[Finding] = []
 
-    # close_reason enum (only when the line exists).
     if facts.close_reason is not None and facts.close_reason not in CLOSE_REASONS:
         errs.append(finding(
             "G4.close_reason_invalid",
@@ -166,7 +165,6 @@ def check_rounds(
                    "(narration state, never a third verdict value)",
         ))
 
-    # Round values: findings non-negative integers, invalidated positive.
     for issue, count in facts.rounds_by_issue:
         if count < 0:
             errs.append(finding(

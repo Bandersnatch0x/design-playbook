@@ -570,10 +570,6 @@ class ProbeSidecarTests(unittest.TestCase):
             self.assertNotEqual(payload.get("probe_artifact", ""), "evidence/x.probe.json")
 
     def test_sidecar_write_oserror_uses_failed_payload_not_mcp_error(self) -> None:
-        # A3-002 / R2-S3: a sidecar write failure (disk full, permission,
-        # path-is-a-directory) must reach the orchestrator through the same
-        # {result:"failed"} channel as the main capture — escaping to MCP
-        # isError loses the structured echo. Guards the except OSError arm.
         fake = _ProbingFake()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1045,9 +1041,6 @@ class SkillLockstepTests(unittest.TestCase):
 
 
     def test_capture_bytes_and_run_root_hatch_are_documented(self) -> None:
-        # DEF-4 / DEF-6 (T-087): the prose the orchestrator copies must match
-        # what the Provider writes (trace ZIP, aria_snapshot envelope) and what
-        # it accepts (per-call run_root).
         orch = ORCH.read_text(encoding="utf-8")
         observe = (
             PKG / "skills" / "design-playbook" / "references" / "observe-ops.md"

@@ -117,7 +117,6 @@ def _ledger_has_evidence_binding(
         observed_rows: list[tuple[str, str]] | None = None) -> bool:
     rows = observed_rows if observed_rows is not None else ledger_observed(pointback_text)
     for _criterion, observed in rows:
-        # Match check_evidence: case-insensitive evidence/ prefix (LOW-3).
         if observed.casefold().startswith(EVIDENCE_PREFIX):
             return True
     return False

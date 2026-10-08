@@ -47,14 +47,7 @@ def _check(name: str, ok: bool, repair: str, *, required: bool = True) -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
-# Adapter lifecycle (CONTEXT.md "Adapter lifecycle check", 2026-09-19).
-# Report-only: drift means re-running `npx design-playbook init <agent>` with
-# the installed package would change the file. Never writes; never blocks.
-# ---------------------------------------------------------------------------
 
-# Marker protocol (T-039): owned by adapter_markers; this module consumes
-# markers.* and never re-derives the regexes.
 _MARKER_RE = markers.MARKER_RE
 _MARKER_NORM_RE = markers.MARKER_NORM_RE
 
@@ -387,7 +380,6 @@ def run_checks(
     # than omitting the check entirely (uniform skip entry).
     checks.append(_adapter_lifecycle_check(preference_root, version))
 
-    # Optional: Playwright for evidence capture.
     playwright_ok = importlib.util.find_spec("playwright") is not None
     checks.append(_check(
         "dependency:playwright",
@@ -465,8 +457,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
-    # regardless of the host code page. See scripts/stdio_encoding.py.
     for _candidate in Path(__file__).resolve().parents:
         if (_candidate / "design_playbook.py").is_file():
             sys.path.insert(0, str(_candidate))

@@ -268,7 +268,6 @@ class DesignBaselineInterfaceTests(unittest.TestCase):
             rejection = outcome["baseline_rejection"]
             self.assertEqual(rejection["path"], "DESIGN.md")
             self.assertIn("frontmatter", rejection["reason"])
-            # The rejected authority stays untouched until an explicit accept.
             self.assertEqual(
                 (project / "DESIGN.md").read_text(encoding="utf-8"), handwritten
             )

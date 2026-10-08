@@ -529,8 +529,6 @@ class TextProjectionFixLineTests(unittest.TestCase):
         self.assertIn("  FAIL  G1 spec: no L6 criteria", out)
 
     def test_g11_findings_render_their_repair_in_text(self) -> None:
-        # Sampled rule (review advisory): the G11 gate's findings must show
-        # their structured repair in the default text projection.
         legacy = "# pb\n\n## Evidence ledger\n\n(ledger rows only)\n"
         findings = g11_coverage.check_coverage(legacy, required=True)
         self.assertTrue(findings)
@@ -711,10 +709,6 @@ class FixtureRunGateTests(unittest.TestCase):
 
 
     def test_strict_mode_also_passes(self) -> None:
-        # --strict adds --require-coverage; the six-block report satisfies it
-        # and bound evidence satisfies --require-evidence. Preview absence
-        # still fails --require-preview (G5 cannot fire on a static fixture),
-        # so strict-preview is asserted separately below.
         result = self._validate("--require-evidence", "--require-coverage")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 

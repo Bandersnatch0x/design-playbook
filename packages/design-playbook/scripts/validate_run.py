@@ -371,9 +371,6 @@ def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
         pointback_text, len(_l6_items(spec_text)), ed, rr,
         observed_rows=observed_rows, entries=entries,
     )
-    # G6 method semantics (vNext S3): the optional five keys are validated
-    # where they live (the manifest); pass rows must not rest on unusable
-    # human-subject evidence. Old manifests without the keys stay silent.
     method_rows = [
         (values[0].split()[0], row.values("result")[0], row.artifact_token)
         for row in facts.ledger.rows
@@ -657,8 +654,6 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
-    # regardless of the host code page. See scripts/stdio_encoding.py.
     for _candidate in Path(__file__).resolve().parents:
         if (_candidate / "design_playbook.py").is_file():
             sys.path.insert(0, str(_candidate))

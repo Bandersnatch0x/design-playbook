@@ -174,7 +174,6 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
         except OSError:
             pass
 
-    # -- dispatch ------------------------------------------------------
 
     def do_GET(self) -> None:  # noqa: N802
         self._dispatch()
@@ -243,7 +242,6 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
         except Exception:
             self.close_connection = True
 
-    # -- policy pipeline -------------------------------------------------
 
     def _process(self) -> None:
         session = self.server.session
@@ -279,9 +277,6 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
             return
         path = split.path
         if path == REFRESH_ROUTE:
-            # The one typed action route (RCV1-009). Names live in the
-            # closed allowlist; dispatch stays here. Every other name
-            # under /api/v1/actions/ stays routeless (the 404 below).
             if self.command != "POST":
                 self._drain_body()
                 self._send_error(
@@ -314,7 +309,6 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
                 )
                 return
             if split.query:
-                # The snapshot read accepts no request parameters.
                 self._send_error(ACTION_PAYLOAD_INVALID)
                 return
             self._serve_snapshot(session)
@@ -373,7 +367,6 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
                 return
             remaining -= len(chunk)
 
-    # -- routes ---------------------------------------------------------
 
     def _maybe_serve_ui(self, path: str, query: str) -> bool:
         """Serve the immutable static UI shell (RCV1-007).
@@ -441,7 +434,6 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
         document does not change.
         """
         if query:
-            # The typed action accepts no request parameters.
             self._send_error(ACTION_PAYLOAD_INVALID)
             return
         if not content_type_is_json(self._single_header("Content-Type")):
@@ -492,7 +484,6 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
         """
         is_write = path == DIAGNOSTIC_EXPORT_WRITE_ROUTE
         if query:
-            # The typed action accepts no request parameters.
             self._send_error(ACTION_PAYLOAD_INVALID)
             return
         if not content_type_is_json(self._single_header("Content-Type")):
@@ -633,7 +624,6 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
         }
         self._send_json(200, payload)
 
-    # -- responses --------------------------------------------------------
 
     def _send_error(
         self, code: str, *, message: str | None = None, extra_headers=None

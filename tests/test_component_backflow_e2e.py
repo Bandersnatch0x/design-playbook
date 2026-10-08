@@ -71,7 +71,6 @@ class ClosedLoopTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             project, run = _baseline_project(tmp)
 
-            # 1. Distill (T-067): 4 runs / 4 scenes reuse the same component.
             runs = {f"run-{i}": _report(scene) for i, scene in enumerate(
                 ["console", "list", "settings", "dashboard"], 1)}
             for run_id, report in runs.items():
@@ -85,14 +84,12 @@ class ClosedLoopTests(unittest.TestCase):
             self.assertEqual(cand["component"], COMPONENT)
             self.assertTrue(cand["qualifies"])
 
-            # 2. Proposal (T-069) renders it for adjudication, with a slot.
             proposal = cc.render_proposal(
                 view, included=sorted(runs), skipped=[])
             self.assertIn("component-distill/v1", proposal)
             self.assertIn(COMPONENT, proposal)
             self.assertIn("[ ] promote", proposal)
 
-            # 3. User adjudicates (T-068): record the promote decision.
             pg.append_event(project / "promotion-governance.jsonl", {
                 "id": "evt-dogfood-1", "event": "promotion_decided",
                 "decided_by": "user", "confirmed_at": TS, "kind": "component",
@@ -100,7 +97,6 @@ class ClosedLoopTests(unittest.TestCase):
                 "rationale": "recurs across 4 runs / 4 scenes; stable",
             })
 
-            # 4. Promote (T-070): durable incremental merge into DESIGN.md.
             before = (project / "DESIGN.md").read_text(encoding="utf-8")
             result = design_baseline.promote(
                 project, run, COMPONENT,
@@ -108,17 +104,14 @@ class ClosedLoopTests(unittest.TestCase):
             self.assertEqual(result["status"], "ready")
             after = (project / "DESIGN.md").read_text(encoding="utf-8")
 
-            # Merged incrementally: pre-section content byte-identical.
             self.assertEqual(before.split("## Component Stylings")[0],
                              after.split("## Component Stylings")[0])
             # 5. Closed loop: the promoted path now sits in Component Stylings,
             #    which ui-picker's existing read path collects (no change).
             section = after.split("## Component Stylings")[1]
             self.assertIn(COMPONENT, section)
-            # Backup of the prior authority exists (reversible).
             self.assertTrue(
                 (run / "design-baseline" / "previous-DESIGN.md").is_file())
-            # Verify passes against the promoted baseline (provenance intact).
             verified = design_baseline.verify(project, run)
             self.assertEqual(verified["status"], "ready")
             self.assertEqual(verified["baseline"]["sha256"],
@@ -132,7 +125,6 @@ class ClosedLoopTests(unittest.TestCase):
                 ["a", "b", "c"], 1)}
             view = cc.candidate_view(runs)
             cc.render_proposal(view, included=sorted(runs), skipped=[])
-            # No governance event -> promote refuses; DESIGN.md untouched.
             before = (project / "DESIGN.md").read_bytes()
             with self.assertRaises(design_baseline.BaselineError):
                 design_baseline.promote(project, run, COMPONENT, "x")

@@ -355,7 +355,6 @@ class SourceRegistry:
         self._session_id = session_id
         self._bindings: dict[str, LocatorBinding] = {}
 
-    # -- identity -----------------------------------------------------
 
     @property
     def selected_root(self) -> Path:
@@ -369,7 +368,6 @@ class SourceRegistry:
     def session_id(self) -> str:
         return self._session_id
 
-    # -- fixed table --------------------------------------------------
 
     @property
     def keys(self) -> tuple[str, ...]:
@@ -413,7 +411,6 @@ class SourceRegistry:
             _target_allowed(relpath, source) for source in _FIXED_SOURCES
         )
 
-    # -- derived evidence-artifact sources ----------------------------
 
     def derive_evidence_artifact_source(self, name: str) -> RegisteredSource:
         """Derive the allowlisted source for one contained artifact.
@@ -443,7 +440,6 @@ class SourceRegistry:
             anchored=True,
         )
 
-    # -- locators -----------------------------------------------------
 
     def _resolve_issuable_source(self, ref: object) -> RegisteredSource:
         if not isinstance(ref, str) or _SOURCE_REF_PATTERN.fullmatch(ref) is None:
@@ -460,7 +456,6 @@ class SourceRegistry:
         else:
             raise SourceRegistryError(LOCATOR_INPUT_INVALID)
         if not source.viewable:
-            # Gate and non-viewable keys can never hold a locator.
             raise SourceRegistryError(LOCATOR_INPUT_INVALID)
         return source
 

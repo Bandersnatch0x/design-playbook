@@ -51,8 +51,6 @@ class StagesRegistryTests(unittest.TestCase):
         ])
 
     def test_markers_use_shared_constants(self) -> None:
-        # The table and the constants cannot disagree: overlapping markers
-        # must be the exact shared constants.
         self.assertEqual(_markers("spec"), (SPEC_MD,))
         self.assertEqual(_markers("decision"), (DECISION_REPORT,))
         self.assertEqual(_markers("evidence"), (EVIDENCE_MANIFEST,))
@@ -64,7 +62,6 @@ class StagesRegistryTests(unittest.TestCase):
         self.assertEqual(POINT_BACK, "point-back.md")
         self.assertEqual(DECISION_REPORT, "decision-report.md")
         self.assertEqual(SPEC_MD, "spec.md")
-        # Prefix relationship: the manifest lives under evidence/.
         self.assertTrue(EVIDENCE_MANIFEST.startswith(EVIDENCE_PREFIX))
 
     def test_regular_stages_declare_resume_actions(self) -> None:

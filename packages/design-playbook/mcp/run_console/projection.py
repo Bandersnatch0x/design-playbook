@@ -106,7 +106,6 @@ def resolve_source_excerpt(
         raise SourceViewError(SOURCE_LOCATOR_INVALID)
     data = _read_bound_source(registry, package_root, binding)
     if data is None:
-        # The bound target cannot be read through containment today.
         raise SourceViewError(SOURCE_LOCATOR_INVALID)
     if binding.source_ref.startswith("source.evidence-artifact."):
         # Evidence artifacts are the one byte-hashed source family: the

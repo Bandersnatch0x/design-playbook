@@ -168,7 +168,6 @@ class CandidateDerivationTests(unittest.TestCase):
         self.assertEqual(view["below_threshold"], [])
 
     def test_unspecified_contexts_are_conservative(self) -> None:
-        # contexts not supplied -> one unspecified context -> cannot qualify
         history = [
             _occurrence(f"run-{index}", "") for index in range(4)
         ]
@@ -530,7 +529,6 @@ class SeverityNewAxisOnlyTests(unittest.TestCase):
             self.assertNotIn("G2.s3_needs_disposition", rules)
 
     def test_legacy_blocking_no_longer_closes(self) -> None:
-        # the removed alias must not resurrect G4 blocking behaviour
         text = (
             "# pb\n\n## Findings\n\n```text\nissue: probe\nsource: s\n"
             "fix: f\nseverity: high (blocking)\n```\n\n## Verdict\n\n"
@@ -549,7 +547,6 @@ class SeverityNewAxisOnlyTests(unittest.TestCase):
                          self._probe("S3", "blocking"))
 
     def test_migrated_pass_fixture_still_validates(self) -> None:
-        # the S0-era fixture carries the migrated axis values end to end
         text = (FIXTURE_PASS / "point-back.md").read_text(encoding="utf-8")
         self.assertEqual(check_pointback(text, 5), [])
 
@@ -601,7 +598,6 @@ class AggregateCandidatesTests(unittest.TestCase):
         finding = f"issue: {SIGNAL}\nsource: components\nfix: f\nseverity: S2\n"
         for name in ("2026-01-01-001", "2026-01-02-002", "2026-01-03-003"):
             self._make_run(name, finding)
-        # without contexts: conservative — the context gap is reported
         payload = self._aggregate()
         self.assertEqual(payload["learning_candidates"]["qualifying"], [])
         below = payload["learning_candidates"]["below_threshold"]
@@ -609,8 +605,6 @@ class AggregateCandidatesTests(unittest.TestCase):
             "distinct_task_contexts 1 < 2" in candidate["gaps"]
             for candidate in below))
 
-        # with the context map (contract/spec/manifest provenance): qualifies
-        # (T-014: keys are the path-form run ids)
         contexts = self.cwd / "contexts.json"
         contexts.write_text(json.dumps({
             ".scratch/s5-effort/dogfood/2026-01-01-001": "data-export",

@@ -84,8 +84,6 @@ class RunFacts:
     # fill: lines inside fenced blocks are ignored by declaration parsing;
     # kept as a fact so run-status can name them instead of hiding the skip.
     fenced_fill_declarations: tuple[str, ...] = ()
-    # The manifest file exactly as captured (T-042, spec D8): hashed by the
-    # snapshot builder from this owner capture instead of a parallel re-read.
     manifest_raw_text: str = ""
 
     @property

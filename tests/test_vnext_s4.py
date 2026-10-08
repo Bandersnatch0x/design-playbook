@@ -105,8 +105,6 @@ class RepairRoundsTests(unittest.TestCase):
         self.assertEqual(check_rounds(STOP_PB), [])
 
     def test_upgrade_fixture_rounds_ride_the_normal_chain(self) -> None:
-        # one repair round -> closure -> Pass: the existing chain keeps
-        # working with the round annotation present.
         facts = parse_round_facts(UPGRADE_PB)
         self.assertEqual(facts.rounds_by_issue, (("空数据集导出无反馈且不产出文件", 1),))
         self.assertEqual(facts.max_rounds, 1)
@@ -469,7 +467,6 @@ class FixtureWalkthroughTests(unittest.TestCase):
         result = self._validate(UPGRADE_RUN)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("RUN OK", result.stdout)
-        # the recorded escalation narrates through the warnings channel
         self.assertIn("escalation E5 -> P2 recorded", result.stdout)
         self.assertIn("escalation E1 -> P2 recorded", result.stdout)
 

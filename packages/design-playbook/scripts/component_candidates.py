@@ -75,7 +75,7 @@ class ComponentCandidate:
     """One derived candidate (qualifying or still below the threshold)."""
 
     candidate_id: str
-    kind: str            # component (token extraction lands in T-072)
+    kind: str          
     component: str       # the referenced path (the candidate identity)
     references: list[ComponentReference] = field(default_factory=list)
     distinct_runs: int = 0
@@ -169,14 +169,11 @@ def parse_component_references(text: str, run: str) -> list[ComponentReference]:
                     for segment in inline.split(";"):
                         _consume(segment)
             continue
-        # Inside the components block: a new top-level key ends it.
         if line[:1] not in (" ", "\t"):
             in_components = False
             continue
         if not stripped:
             continue
-        # Block entries may be indented; each line carries one entry, and the
-        # inline form may chain several with `;`.
         for segment in stripped.split(";"):
             _consume(segment)
     return refs

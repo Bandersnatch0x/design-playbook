@@ -36,9 +36,6 @@ import adapter_markers as markers  # noqa: E402
 from adapter_matrix import MATRIX, AgentRow, get_agent  # noqa: E402
 
 
-# ---------------------------------------------------------------------------
-# Template loader
-# ---------------------------------------------------------------------------
 
 
 def _tmpl(name: str) -> str:
@@ -46,9 +43,6 @@ def _tmpl(name: str) -> str:
     return (_TEMPLATES_DIR / name).read_text(encoding="utf-8")
 
 
-# ---------------------------------------------------------------------------
-# Canonical-source readers
-# ---------------------------------------------------------------------------
 
 
 def _read_claude_plugin() -> dict:
@@ -120,9 +114,6 @@ def _strip_leading_h1(body: str) -> str:
     return body
 
 
-# ---------------------------------------------------------------------------
-# MCP server path helpers
-# ---------------------------------------------------------------------------
 
 
 def _digest_head(skills: list[dict]) -> list[str]:
@@ -208,9 +199,6 @@ def _mcp_servers_abs() -> dict[str, dict]:
     }
 
 
-# ---------------------------------------------------------------------------
-# Merge-safe JSON helper
-# ---------------------------------------------------------------------------
 
 
 def _deep_merge(base: dict, overlay: dict) -> dict:
@@ -252,9 +240,6 @@ def merge_json_str(existing_text: str | None, our_data: dict) -> str:
     return json.dumps(_deep_merge(base, our_data), indent=2, ensure_ascii=False) + "\n"
 
 
-# ---------------------------------------------------------------------------
-# Markdown marker-block helper (for files that may pre-exist in user projects)
-# ---------------------------------------------------------------------------
 
 _BLOCK_BEGIN = markers.BLOCK_BEGIN
 _BLOCK_END = markers.BLOCK_END
@@ -286,22 +271,15 @@ def apply_marker_block(existing_text: str | None, version: str, block_content: s
         end_idx = existing_text.index(_BLOCK_END, begin_idx) + len(_BLOCK_END)
         return existing_text[:begin_idx] + block + existing_text[end_idx:]
 
-    # File exists but has no markers — append
     return existing_text.rstrip("\n") + "\n\n" + block + "\n"
 
 
-# ---------------------------------------------------------------------------
-# SHA-256 helper
-# ---------------------------------------------------------------------------
 
 
 def _sha256(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
-# ---------------------------------------------------------------------------
-# Codex renderer (Tier 1)
-# ---------------------------------------------------------------------------
 
 _CODEX_PLUGIN_EXTRA = {
     "author_url": "https://github.com/Bandersnatch0x",
@@ -381,9 +359,6 @@ def _codex_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     ]
 
 
-# ---------------------------------------------------------------------------
-# Frontmatter-aware generated-by placement (issue #115)
-# ---------------------------------------------------------------------------
 
 _FM_BLOCK_RE = re.compile(r"\A---\n.*?\n---\n", re.DOTALL)
 
@@ -408,9 +383,6 @@ def _header_after_frontmatter(content: str, header: str) -> str:
     return content[: m.end()] + header + content[m.end():]
 
 
-# ---------------------------------------------------------------------------
-# Cursor renderer (Tier 2)
-# ---------------------------------------------------------------------------
 
 def _cursor_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     files: list[tuple[str, str]] = []
@@ -418,7 +390,6 @@ def _cursor_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     commands = _read_commands()
     header = markers.generated_by_html(version)
 
-    # One .mdc rule file per skill
     for skill in skills:
         always_apply = "true" if skill["dirname"] == "design-playbook" else "false"
         content = _header_after_frontmatter(
@@ -454,7 +425,6 @@ def _cursor_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     files.append((".cursor/rules/design-playbook-mcp.mdc",
                   _header_after_frontmatter(_tmpl("cursor-mcp-note.mdc"), header)))
 
-    # Actual .cursor/mcp.json — merge-safe with any existing config
     mcp_servers = _mcp_servers_abs()
     cursor_servers = {
         name: _mcp_entry(srv, stdio_type=True, env_policy="omit_when_empty")
@@ -468,9 +438,6 @@ def _cursor_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     return files
 
 
-# ---------------------------------------------------------------------------
-# Gemini CLI renderer (Tier 2)
-# ---------------------------------------------------------------------------
 
 
 def _gemini_cli_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
@@ -492,7 +459,6 @@ def _gemini_cli_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
         )
         files.append((f".gemini/commands/{cmd['name']}.toml", content))
 
-    # .gemini/settings.json — merge-safe mcpServers
     mcp_servers = _mcp_servers_abs()
     gemini_servers = {
         name: _mcp_entry(srv, stdio_type=False, env_policy="keep")
@@ -506,9 +472,6 @@ def _gemini_cli_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     return files
 
 
-# ---------------------------------------------------------------------------
-# OpenCode renderer (Tier 2)
-# ---------------------------------------------------------------------------
 
 
 def _opencode_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
@@ -527,7 +490,6 @@ def _opencode_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
         block_parts.append(f"### /{cmd['name']}\n\n{cmd['description']}\n\n{_strip_leading_h1(cmd['body'])}\n")
     files.append(_marker_entry(out_dir, "AGENTS.md", version, "".join(block_parts)))
 
-    # opencode.json — merge-safe mcp key
     mcp_servers = _mcp_servers_abs()
     opencode_mcp = {
         name: _mcp_entry(srv, stdio_type=False, env_policy="keep")
@@ -538,9 +500,6 @@ def _opencode_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     return files
 
 
-# ---------------------------------------------------------------------------
-# Windsurf renderer (Tier 2)
-# ---------------------------------------------------------------------------
 
 
 def _windsurf_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
@@ -549,7 +508,6 @@ def _windsurf_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     commands = _read_commands()
     header = markers.generated_by_html(version)
 
-    # One .md rule file per skill
     for skill in skills:
         content = (
             f"{header}"
@@ -576,9 +534,6 @@ def _windsurf_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     return files
 
 
-# ---------------------------------------------------------------------------
-# GitHub Copilot renderer (Tier 2)
-# ---------------------------------------------------------------------------
 
 
 def _github_copilot_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
@@ -619,10 +574,6 @@ def _github_copilot_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     return files
 
 
-# ---------------------------------------------------------------------------
-# AGENTS.md floor renderer — shared fallback for every matrix agent without a
-# dedicated renderer (today: all Tier-3 rows)
-# ---------------------------------------------------------------------------
 
 
 def _agents_md_floor_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
@@ -636,7 +587,6 @@ def _agents_md_floor_files(version: str, out_dir: Path) -> list[tuple[str, str]]
 
     block_parts: list[str] = _digest_head(skills)
 
-    # Commands as copy-paste prompt equivalents
     block_parts.append("\n## Commands\n\n")
     block_parts.append(
         "The following design-playbook commands are available as copy-paste "
@@ -645,7 +595,6 @@ def _agents_md_floor_files(version: str, out_dir: Path) -> list[tuple[str, str]]
     for cmd in commands:
         block_parts.append(f"### /{cmd['name']}\n\n{cmd['description']}\n\n{_strip_leading_h1(cmd['body'])}\n")
 
-    # Inline MCP install guide
     block_parts.append(
         "## MCP install guide\n\n"
         "Two optional MCP servers enable preview (G5) and evidence (G6) gates.\n"
@@ -678,9 +627,6 @@ def _agents_md_floor_files(version: str, out_dir: Path) -> list[tuple[str, str]]
     return [_marker_entry(out_dir, "AGENTS.md", version, "".join(block_parts))]
 
 
-# ---------------------------------------------------------------------------
-# Zed renderer (Tier 2)
-# ---------------------------------------------------------------------------
 
 # Zed reads project-root rules via a first-match priority list with `.rules`
 # on top, then `.cursorrules`, `.windsurfrules`, `.clinerules`,
@@ -730,9 +676,6 @@ def _zed_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     return files
 
 
-# ---------------------------------------------------------------------------
-# Renderer dispatch
-# ---------------------------------------------------------------------------
 
 # Dedicated renderers for agents whose platform surface rises above the
 # AGENTS.md floor (Tier 1/2 today).  Tier membership lives in the matrix, not
@@ -814,9 +757,6 @@ def render(agent: str, out_dir: Path | None = None, *, dry_run: bool = False) ->
     return manifest
 
 
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
 
 
 def _list_agents() -> None:
@@ -877,8 +817,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
-    # regardless of the host code page. See scripts/stdio_encoding.py.
     for _candidate in Path(__file__).resolve().parents:
         if (_candidate / "design_playbook.py").is_file():
             sys.path.insert(0, str(_candidate))

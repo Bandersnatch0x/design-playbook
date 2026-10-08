@@ -3,7 +3,6 @@
    subtle diffused shadows, optical alignment, and zero layout shift. */
 
 :root {
-  /* Hallmark Light Theme */
   --dpb-bg: #F8FAFC;
   --dpb-surface: #F1F5F9;
   --dpb-elev: #FFFFFF;
@@ -115,7 +114,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* --- Primitive a11y & keycaps ------------------------------------------- */
 
 .sr-only {
   position: absolute;
@@ -168,7 +166,6 @@ kbd {
   border-bottom-width: 2px;
 }
 
-/* --- Header / Brand styling --------------------------------------------- */
 
 .app-header {
   background: color-mix(in srgb, var(--surface) 95%, transparent);
@@ -264,7 +261,6 @@ kbd {
   max-width: 76ch;
 }
 
-/* --- Buttons ------------------------------------------------------------ */
 
 .button {
   font: inherit;
@@ -333,7 +329,6 @@ kbd {
   box-shadow: none;
 }
 
-/* --- Main layout -------------------------------------------------------- */
 
 main {
   padding: 24px clamp(12px, 4vw, 32px) 36px;
@@ -441,7 +436,6 @@ main {
   }
 }
 
-/* --- ITEM 1: Build-state status chip & popover -------------------------- */
 
 .build-state-wrapper {
   position: relative;
@@ -538,7 +532,6 @@ main {
   color: var(--text-dim);
 }
 
-/* --- Fact cards (At a glance) — Visual Apex (RCV1-R1) ------------------ */
 
 .facts-section {
   display: flex;
@@ -600,7 +593,6 @@ main {
   transform: translateY(-2px);
 }
 
-/* Stitch Apex Top-Seam Accents */
 .fact:nth-child(1) { border-top: 3.5px solid var(--accent); }
 .fact:nth-child(2) { border-top: 3.5px solid var(--ok); }
 .fact:nth-child(3) { border-top: 3.5px solid var(--warn); }
@@ -632,7 +624,6 @@ main {
   overflow: hidden;
 }
 
-/* ITEM 4: Intent Card First-Sentence Visual Lead */
 .fact-intent-body {
   display: flex;
   flex-direction: column;
@@ -653,7 +644,6 @@ main {
   line-height: 1.45;
 }
 
-/* ITEM 3: Emphasize Owner in Fact 4 */
 .fact-action-value {
   display: flex;
   flex-direction: column;
@@ -696,7 +686,6 @@ main {
   cursor: default;
 }
 
-/* --- ITEM 5: Section Jump Links ----------------------------------------- */
 
 .section-jump-nav {
   display: flex;
@@ -753,7 +742,6 @@ main {
   font-weight: 700;
 }
 
-/* --- Badges & Indicators --------------------------------------------------- */
 
 .badge {
   display: inline-flex;
@@ -798,7 +786,6 @@ main {
   font-style: italic;
 }
 
-/* --- Flexbox Detail Sections (Stitch Tailoring) ---------------------------- */
 
 #detail-sections {
   display: flex;
@@ -849,7 +836,6 @@ main {
   min-width: 0;
 }
 
-/* Flexible row for paired sub-cards */
 .sub-cards-row {
   display: flex;
   flex-wrap: wrap;
@@ -961,7 +947,6 @@ main {
   overflow-wrap: anywhere;
 }
 
-/* stage list with Stitch flex item */
 .stage-list {
   list-style: none;
   padding: 0;
@@ -1027,7 +1012,6 @@ main {
   overflow-wrap: anywhere;
 }
 
-/* outcome chips */
 .outcome {
   font-weight: 700;
   display: inline-flex;
@@ -1056,7 +1040,6 @@ main {
   border: 1px solid var(--line);
 }
 
-/* --- Action / unavailable controls ------------------------------------------ */
 
 .action-card {
   background: var(--surface-dim);
@@ -1166,7 +1149,6 @@ main {
   width: 100%;
 }
 
-/* --- Sources ------------------------------------------------------------------ */
 
 details.source {
   border: 1px solid var(--line);

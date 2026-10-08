@@ -141,8 +141,6 @@ def preflight_entry(request: object, entry: int) -> list[PreflightFact]:
         elif isinstance(capture_type, str) and (
             name_error := trace_artifact_error(capture_type, artifact)
         ):
-            # Same rule the Provider rejects with (path_syntax), reported here
-            # before a browser starts (DEF-6).
             facts.append(_error("bad_artifact_extension", name_error, entry,
                                 expected=f"name ending in {TRACE_SUFFIX}",
                                 actual=artifact))
@@ -215,15 +213,10 @@ def _bad_artifact_path(artifact: str) -> str | None:
 
 
 def _bad_action(action: object, entry: int, index: int) -> list[PreflightFact]:
-    # 0-based label matches the runtime's `_run_actions` so preflight and
-    # provider report the same position for the same action (FIX-03).
     label = f"actions[{index}]"
     if not isinstance(action, dict):
         return [_error("bad_action", f"{label} must be an object", entry,
                        expected="object", actual=type(action).__name__)]
-    # Canonicalize the verb through the SAME normalizer the runtime uses so
-    # "Click" / " click " / "FILL" preflight as cleanly as they execute
-    # (FIX-03 shared action dialect; do not ban case by doc).
     do = normalize_action_do(action.get("do"))
     if not do or do not in KNOWN_DOS:
         return [_error(
@@ -304,8 +297,6 @@ def preflight_plan(plan: object) -> list[PreflightFact]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
-    # regardless of the host code page. See scripts/stdio_encoding.py.
     for _candidate in Path(__file__).resolve().parents:
         if (_candidate / "design_playbook.py").is_file():
             sys.path.insert(0, str(_candidate))

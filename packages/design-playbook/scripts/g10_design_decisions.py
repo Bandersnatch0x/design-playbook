@@ -49,11 +49,6 @@ from design_playbook.scripts.dd_entries import (  # noqa: E402
 )
 from design_playbook.scripts.rules_registry import RULES_PATH_PARTS, parse_registry  # noqa: E402
 
-# Registry id/version facts come from the shared parser (T-041): one answer
-# to "what is a legal entry" — the same one behind the G8 gates.
-# rules.md ships inside the package (read-only protocol consumption); the
-# bundled file is referenced lazily so the gate still runs when the skill
-# payload is not installed.
 _REGISTRY_PARTS = RULES_PATH_PARTS
 RULE_REF = re.compile(r"^([A-Z][A-Z0-9]*-[0-9]{2})@([0-9]+)$")
 
@@ -607,7 +602,6 @@ def _supersedes_checks(entries: list[DDEntry]) -> list[Finding]:
                 repair=f"Retire {target} (invalidated/superseded) — do not "
                        "rewrite its recorded decision",
             ))
-    # cycles
     graph = {
         entry.id: local_dd_id(entry.supersedes_ref)
         for entry in entries if entry.supersedes_ref
@@ -1050,8 +1044,6 @@ def _sibling_text(path: Path) -> str:
 
 
 if __name__ == "__main__":
-    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
-    # regardless of the host code page. See scripts/stdio_encoding.py.
     for _candidate in Path(__file__).resolve().parents:
         if (_candidate / "design_playbook.py").is_file():
             sys.path.insert(0, str(_candidate))

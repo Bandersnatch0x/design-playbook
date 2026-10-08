@@ -154,7 +154,6 @@ class DDEntryParseTests(unittest.TestCase):
                          ["DD-0001", "DD-0002"])
         record, compare = entries
         self.assertEqual(record.tier, "record")
-        # R-tier minimal form: single-line flow-map selection parses
         self.assertEqual(record.selection["candidate"], "Button (icon + label)")
         self.assertTrue(record.selection["rationale"])
         self.assertEqual(record.supersedes_ref, "")
@@ -240,13 +239,9 @@ class DDEntryParseTests(unittest.TestCase):
             "     summary: fixed name plus stamp, deviations: none,"
             " assets: []}\n",
         )
-        # positive: the comma-kept fold at the same break parses clean
         self.assertEqual(_rules(_report(kept)), set())
-        # negative: dropping the comma at the break is a named error
         rules = _rules(_report(dropped))
         self.assertIn("G10.fold_break_not_comma", rules)
-        # and the mis-merge is visible, not silent: the continuation's key
-        # was swallowed into the previous value
         candidate_b = parse_dd_entries(_report(dropped))[0].candidates[1]
         self.assertNotIn("summary", candidate_b)
         self.assertIn("summary:", candidate_b["fidelity"])
@@ -274,8 +269,6 @@ class DDEntryParseTests(unittest.TestCase):
         findings = check_g10(_report(broken))
         rule_ids = [f.rule_id for f in findings]
         self.assertIn("G10.fold_unterminated", rule_ids)
-        # both named fold errors lead the report, ahead of the indirect
-        # missing_*/bad_candidate findings the swallowed block causes
         self.assertTrue(
             all(rule.startswith("G10.fold_") for rule in rule_ids[:2]),
             rule_ids)
@@ -455,7 +448,6 @@ class PositiveDDFieldTests(unittest.TestCase):
     def test_dd_on_s0_is_a_structural_error(self) -> None:
         rules = _rules(_report(R_BLOCK), pointback_text=self._pointback("S0"))
         self.assertIn("G10.dd_on_positive_finding", rules)
-        # the misread challenge face no longer fires alongside the error
         self.assertNotIn("G10.dd_challenge_unresolved", rules)
 
     def test_dd_on_non_positive_still_reads_as_challenge(self) -> None:
@@ -540,7 +532,6 @@ class StaleReviewTests(unittest.TestCase):
     def test_drift_state_comparison(self) -> None:
         state = {"status": "ready",
                  "baseline": {"sha256": OTHER_SHA}}
-        # entry pins SHA, binding is OTHER_SHA, no stale mark -> flagged
         rules = _rules(_report(_e_block()),
                        baseline_state=state)
         self.assertIn("G10.stale_unmarked", rules)
@@ -591,7 +582,6 @@ class PreviewRidingTests(unittest.TestCase):
             _rules(P3_REPORT, preview_dir=preview,
                    pointback_text=P3_POINTBACK),
             set())
-        # break only DD-0004's link: wrong decision_id in via
         did2 = parse_dd_entries(P3_REPORT)[1].preview_link[1]
         broken = P3_REPORT.replace(f"decision_id:{did2}",
                                    "decision_id:" + "0" * len(did2))

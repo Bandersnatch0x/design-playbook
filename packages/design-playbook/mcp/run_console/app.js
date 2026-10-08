@@ -20,7 +20,6 @@
   ];
   var CLAMP_LIMIT = 200;
 
-  /* Centralized i18n dictionary: complete coverage of zh-CN and en-US */
   var I18N = {
     "en-US": {
       lang_name: "English",
@@ -591,11 +590,9 @@
     return str;
   }
 
-  /* ---------------------------------------------------------------- */
   /* DOM helpers — the only node factory. Data always lands through    */
   /* textContent / setAttribute, so snapshot strings can never become  */
   /* markup, handlers, or URLs.                                        */
-  /* ---------------------------------------------------------------- */
 
   function el(tag, attrs) {
     var node = document.createElement(tag);
@@ -789,9 +786,7 @@
     }
   }
 
-  /* ---------------------------------------------------------------- */
   /* Session token: fragment only, stripped immediately.               */
-  /* ---------------------------------------------------------------- */
 
   function readTokenFromFragment() {
     var match = /^#token=([A-Za-z0-9_-]+)/.exec(window.location.hash);
@@ -802,10 +797,8 @@
     return token;
   }
 
-  /* ---------------------------------------------------------------- */
   /* Authenticated read requests — the only network access, plus the  */
   /* one typed action POST from the closed allowlist (RCV1-009).      */
-  /* ---------------------------------------------------------------- */
 
   function parseJsonResponse(response) {
     return response.text().then(function (text) {
@@ -911,9 +904,6 @@
     renderSnapshot(body);
   }
 
-  /* ---------------------------------------------------------------- */
-  /* Assertion rendering — the availability state machine.             */
-  /* ---------------------------------------------------------------- */
 
   function badge(availability) {
     var key = "avail_" + String(availability);
@@ -982,9 +972,6 @@
     return nodes;
   }
 
-  /* ---------------------------------------------------------------- */
-  /* The four comprehension facts, in snapshot order.                   */
-  /* ---------------------------------------------------------------- */
 
   function factCard(index, title, contentNodes, metaNode) {
     var card = el(
@@ -1031,11 +1018,9 @@
     var grid = document.getElementById("fact-grid");
     clear(grid);
 
-    /* 1 — Intent with deterministic split lead / detail. */
     var intentNodes = assertionNodes(snapshot.intent.summary, splitIntentSummary);
     grid.appendChild(factCard(1, t("fact_intent"), intentNodes));
 
-    /* 2 — Verdict. */
     var verdictNodes = assertionNodes(snapshot.evaluation.verdict, function (result) {
       var text = String(result);
       var extra = text === "Pass" ? " badge-verdict-pass" : " badge-verdict-recirculate";
@@ -1045,7 +1030,6 @@
     });
     grid.appendChild(factCard(2, t("fact_verdict"), verdictNodes));
 
-    /* 3 — Blocker source / limitation. */
     var blockerNodes = [];
     var blocking = [];
     (snapshot.evaluation.findings || []).forEach(function (finding) {
@@ -1081,7 +1065,6 @@
     }
     grid.appendChild(factCard(3, t("fact_blocker"), blockerNodes));
 
-    /* 4 — Next owner / action. Owner in primary weight in fact-value, action next to it. */
     var primary = snapshot.nextActions.primary;
     var actionNodes = assertionNodes(primary, function (result) {
       var owner = result.owner || {};
@@ -1135,9 +1118,6 @@
     });
   }
 
-  /* ---------------------------------------------------------------- */
-  /* Detail sections.                                                   */
-  /* ---------------------------------------------------------------- */
 
   function section(id, headingText, children) {
     var sectionNode = el("section", { class: "detail-section", id: id },
@@ -1422,9 +1402,6 @@
     details.appendChild(section("section-evaluation", t("section_evaluation"), children));
   }
 
-  /* ---------------------------------------------------------------- */
-  /* Next actions, copy control, and unavailable role/export controls.  */
-  /* ---------------------------------------------------------------- */
 
   function copyPlainText(text, statusNode) {
     function report(ok) {
@@ -1515,9 +1492,7 @@
         el("span", { class: "unavailable-reason", id: "unavailable-role-reason", text: roleReason })));
   }
 
-  /* ---------------------------------------------------------------- */
   /* Diagnostic export (ADR-0044): preview, participant review, write.  */
-  /* ---------------------------------------------------------------- */
 
   var EXPORT_PREVIEW_PATH = "/api/v1/actions/diagnostic-export/preview";
   var EXPORT_WRITE_PATH = "/api/v1/actions/diagnostic-export/write";
@@ -1824,9 +1799,6 @@
     details.appendChild(section("section-limitations", t("section_limitations"), [list]));
   }
 
-  /* ---------------------------------------------------------------- */
-  /* Sources with on-demand text excerpts.                              */
-  /* ---------------------------------------------------------------- */
 
   function excerptErrorMessage(code) {
     if (code === "SOURCE_HASH_MISMATCH") {
@@ -1926,9 +1898,7 @@
     ]));
   }
 
-  /* ---------------------------------------------------------------- */
   /* Derived Repair Packet — display/copy only, no new authority.       */
-  /* ---------------------------------------------------------------- */
 
   var PACKET_NOT_PRODUCED = "not-produced";
   var PACKET_MSG_ABSENT = "This assertion is absent from the snapshot.";
@@ -2405,9 +2375,6 @@
     details.appendChild(sectionNode);
   }
 
-  /* ---------------------------------------------------------------- */
-  /* Snapshot rendering entry point.                                    */
-  /* ---------------------------------------------------------------- */
 
   function renderSnapshot(snapshot) {
     renderBuildState(snapshot);
@@ -2441,9 +2408,6 @@
     }
   }
 
-  /* ---------------------------------------------------------------- */
-  /* Bootstrap.                                                         */
-  /* ---------------------------------------------------------------- */
 
   function init() {
     var reloadBtn = document.getElementById("reload-button");
@@ -2499,7 +2463,6 @@
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (isRefresh) {
-        /* The refresh control exists only while a snapshot is rendered. */
         var readyView = document.getElementById("view-ready");
         if (!readyView || readyView.hidden) return;
         e.preventDefault();

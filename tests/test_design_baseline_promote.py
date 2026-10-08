@@ -125,10 +125,8 @@ class PromoteTests(unittest.TestCase):
 
             after = (project / "DESIGN.md").read_text(encoding="utf-8")
             self.assertIn(COMPONENT, after)
-            # Everything before the promoted section is byte-identical.
             self.assertEqual(before.split("## Component Stylings")[0],
                              after.split("## Component Stylings")[0])
-            # The pre-existing entry is preserved alongside the new one.
             self.assertIn("existing-card: Card.tsx baseline styling", after)
 
     def test_missing_section_is_created(self):
@@ -136,7 +134,6 @@ class PromoteTests(unittest.TestCase):
             project = Path(tmp) / "product"
             run = project / ".scratch" / "run-1"
             _ready_baseline(project, run, seed_component=False)
-            # Remove the generated Component Stylings section entirely.
             design = project / "DESIGN.md"
             text = design.read_text(encoding="utf-8")
             start = text.index("## Component Stylings")
@@ -255,7 +252,6 @@ class PromoteTests(unittest.TestCase):
             project = Path(tmp) / "product"
             run = project / ".scratch" / "run-1"
             project.mkdir(parents=True)
-            # No DESIGN.md / no prepared state -> not ready.
             _write_event(project / "promotion-governance.jsonl",
                          _promote_event())
             with self.assertRaises(design_baseline.BaselineError):
@@ -305,7 +301,6 @@ class PromoteTests(unittest.TestCase):
             design_baseline.promote(project, run, COMPONENT,
                                     f"primary-action: {COMPONENT}")
             after = design.read_text(encoding="utf-8")
-            # Both survive: the sibling bullet is not substring-replaced.
             self.assertIn("src/ui/ButtonGroup.tsx (a different component)",
                           after)
             self.assertIn(f"primary-action: {COMPONENT}", after)
@@ -360,9 +355,7 @@ class PromoteTests(unittest.TestCase):
                          _promote_event())
             design_baseline.promote(project, run, COMPONENT,
                                     f"primary-action: {COMPONENT}")
-            # Baseline verify passes right after promotion.
             design_baseline.verify(project, run)
-            # Drift the promoted source -> verify must now refuse.
             src.write_text("export function Button(){return <b/>;}\n",
                            encoding="utf-8")
             with self.assertRaises(design_baseline.BaselineError):
@@ -393,7 +386,6 @@ class TokenPromoteTests(unittest.TestCase):
             after = (project / "DESIGN.md").read_text(encoding="utf-8")
             self.assertIn("## Design Tokens (Promoted)", after)
             self.assertIn("--color-primary: #2457d6", after)
-            # Extraction-template color section is untouched.
             self.assertEqual(before.split("## Color Palette & Roles")[1]
                              .split("##")[0],
                              after.split("## Color Palette & Roles")[1]

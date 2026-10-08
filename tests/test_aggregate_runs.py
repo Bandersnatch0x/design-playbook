@@ -19,7 +19,6 @@ BLOCKED_OBSERVED = "Prototype has filter controls but no live filtering implemen
 BLOCKED_OBSERVED_VARIANT = "  prototype HAS filter controls but NO live filtering implemented  "
 OTHER_BLOCKED = "empty class defined but no demo markup"
 
-# T-014: run ids are repo-relative paths (basenames collide across efforts).
 EFFORT_DIR = ".scratch/aggregate-test-effort/dogfood"
 ID_PASS = f"{EFFORT_DIR}/2026-01-01-001-pass"
 ID_BLOCK = f"{EFFORT_DIR}/2026-01-02-002-block"
@@ -192,7 +191,6 @@ class AggregateUnauditedTest(unittest.TestCase):
         self.assertIn(f"{EFFORT_DIR}/2026-01-04-004-skeleton", by_id)
         self.assertFalse(by_id[f"{EFFORT_DIR}/2026-01-04-004-skeleton"]["audited"])
         self.assertTrue(by_id[ID_PASS]["audited"])
-        # Per-run detail keeps the ledger rows for presentation.
         self.assertTrue(by_id[f"{EFFORT_DIR}/2026-01-04-004-skeleton"]["ledger"])
 
     def test_verdict_statistics_exclude_skeleton_runs(self) -> None:

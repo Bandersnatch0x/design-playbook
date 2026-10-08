@@ -295,8 +295,4 @@ def perform_refresh(session: RunConsoleSession) -> dict:
     """
     if session.closed:
         raise RunConsoleSessionError(SESSION_CLOSED)
-    # Keep invalidation and publication in one session-level critical
-    # section.  Otherwise a second HTTP worker can rebuild between these two
-    # calls and publish a document whose locators do not match the registry
-    # currently used by source reads.
     return session.rebuild_snapshot()

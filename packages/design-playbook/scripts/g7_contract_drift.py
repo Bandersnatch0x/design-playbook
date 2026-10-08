@@ -194,7 +194,6 @@ def check_g7(project_dir: Path, run_dir: Path) -> list[Finding]:
                 repair=f"Append a user-confirmed decision for {path} or restore the bound value",
             ))
             continue
-        # Ensure some decision targets this field.
         if not any(item.get("field") == path for item in decisions):
             findings.append(finding(
                 "G7.unrecorded_field_change",
@@ -245,8 +244,6 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
-    # regardless of the host code page. See scripts/stdio_encoding.py.
     for _candidate in Path(__file__).resolve().parents:
         if (_candidate / "design_playbook.py").is_file():
             sys.path.insert(0, str(_candidate))

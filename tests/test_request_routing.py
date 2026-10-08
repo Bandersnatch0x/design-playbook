@@ -445,9 +445,6 @@ class AdaptiveRoutingSkillContractTests(unittest.TestCase):
         self.assertIn("run_profile.py route", section)
 
     def test_entry_routing_cli_example_runs_as_written(self) -> None:
-        # DEF-3 (T-087): the documented route example is the only CLI sample the
-        # orchestrator copies, so its flags must exist on the real parser — an
-        # invented --repo-root/--request costs the run two failed calls.
         section = _heading_section(
             MAIN_SKILL.read_text(encoding="utf-8"),
             "### 1. Entry routing",
@@ -498,8 +495,6 @@ class AdaptiveRoutingSkillContractTests(unittest.TestCase):
         self.assertTrue({"--intent", "--consequence"} <= documented)
 
     def test_design_baseline_waiver_needs_this_run_user(self) -> None:
-        # DEF-1 (T-087): a waive may be recommended, but only this run's user
-        # can grant it — a stored/historical ruling is not consent.
         section = _heading_section(
             BASELINE_SKILL.read_text(encoding="utf-8"),
             "### 3. Confirm or waive",

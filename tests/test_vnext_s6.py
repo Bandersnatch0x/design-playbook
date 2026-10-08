@@ -148,8 +148,6 @@ class P3ChainWalkthroughTests(unittest.TestCase):
             self.assertIn("sampling matrix", result.stdout)
 
     def test_effective_tier_after_recorded_upgrade_demands_matrix(self) -> None:
-        # Declared P2 with a recorded E3 upgrade -> P3: the run walks the
-        # new tier's obligations (escalate-and-rewalk), matrix included.
         with tempfile.TemporaryDirectory() as tmp:
             run, project = _copy_fixture(P3_BASE, tmp)
             plan = (run / "plan.md").read_text(encoding="utf-8")

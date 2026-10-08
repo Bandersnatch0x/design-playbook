@@ -119,7 +119,6 @@ class RunConsoleSession:
         self._document: dict | None = None
         self._registry = None
 
-    # -- identity ------------------------------------------------------
 
     @property
     def run_root(self) -> Path:
@@ -169,7 +168,6 @@ class RunConsoleSession:
                 raise RunConsoleSessionError(SESSION_CLOSED)
             yield
 
-    # -- lifecycle -----------------------------------------------------
 
     def build_snapshot(self) -> dict:
         """Build the snapshot once and keep serving that document.
@@ -221,8 +219,6 @@ class RunConsoleSession:
             self._built = False
             self._document = None
             self._registry = None
-            # Keep this call indirect so callers/tests that replace the
-            # public build seam still observe the rebuild attempt.
             return self.build_snapshot()
 
     def resolve_source(

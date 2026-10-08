@@ -60,8 +60,6 @@ class WriteBackTests(unittest.TestCase):
             self.assertIsNone(prefs.observe)
             self.assertIsNone(prefs.ui_evaluator)
             self.assertIs(prefs.asked, True)
-            # Round trip: the written default now resolves from the repo
-            # layer and the one-time question is consumed.
             effective = _resolve(repo)
         self.assertFalse(effective.craft_guard.runs)
         self.assertEqual(effective.craft_guard.source, "repo")
@@ -94,8 +92,6 @@ class WriteBackTests(unittest.TestCase):
         self.assertIs(prefs.asked, True)
 
     def test_write_back_overwrites_corrupt_file_with_clean_record(self) -> None:
-        # Fail-closed reads treat damage as absent; write-back recovers the
-        # layer with a clean locked-schema record.
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
             _write_prefs(repo, "observe: [broken\n")
@@ -113,7 +109,6 @@ class WriteBackTests(unittest.TestCase):
             audit_preferences.write_back(
                 repo, {"craft_guard": False}, this_run_only=True)
             effective = _resolve(repo)
-        # The one-off exception never rewrites the remembered default.
         self.assertTrue(effective.craft_guard.runs)
         self.assertEqual(effective.craft_guard.source, "repo")
         self.assertTrue(effective.asked)
@@ -149,7 +144,6 @@ class WriteBackTests(unittest.TestCase):
                 audit_preferences.LOCAL_GITIGNORE_ENTRY,
                 gitignore.splitlines(),
             )
-            # The shared default under version control is untouched.
             repo_prefs = audit_preferences.load_preferences_file(
                 repo / ".design-playbook" / "preferences.yaml")
             effective = _resolve(repo)
@@ -252,8 +246,6 @@ class FirstAskProjectionTests(unittest.TestCase):
         self.assertFalse(audit_preferences.needs_first_ask(effective))
 
     def test_corrupt_file_retriggers_the_first_ask(self) -> None:
-        # Damage destroys the asked record along with everything else:
-        # treated as absent, the orchestrator must ask again.
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
             _write_prefs(repo, "asked: true\ncraft_guard: maybe\n")

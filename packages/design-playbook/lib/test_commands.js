@@ -37,7 +37,6 @@ for (const name of COMMAND_NAMES) {
 }
 
 console.log('== $ARGUMENTS substitution ==')
-// design-io.md is known to contain $ARGUMENTS — load, substitute, verify.
 const designIoPath = path.join(COMMANDS_DIR, 'design-io.md')
 const designIoParsed = parseSkillFile(designIoPath)
 check(designIoParsed !== null, 'design-io prompt parses')

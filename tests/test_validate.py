@@ -61,12 +61,10 @@ class ValidateGateTests(unittest.TestCase):
             ROOT / ".agents" / "plugins" / "marketplace.json",
             self.root / ".agents" / "plugins" / "marketplace.json",
         )
-        # The capability-claim alignment gate (ADR-0043 / T-005) reads the
+        # The capability-claim alignment gate (ADR-0043) reads the
         # root README badges and their Run Console maturity vocabulary.
         shutil.copy2(ROOT / "README.md", self.root / "README.md")
         shutil.copy2(ROOT / "README-zh.md", self.root / "README-zh.md")
-        # The agent-count gate (T-040) derives published counts from the
-        # capability matrix and checks AGENTS.md's matrix claim too.
         shutil.copy2(ROOT / "AGENTS.md", self.root / "AGENTS.md")
 
     def tearDown(self) -> None:
@@ -168,9 +166,6 @@ class ValidateGateTests(unittest.TestCase):
             path.write_text(text.replace(old, new), encoding="utf-8")
 
     def test_skill_pin_version_drift_fails(self) -> None:
-        # T-041 pin gate: a skill-surface ID@ver pin that no longer matches
-        # the registry's current version fails the gate (the registry's
-        # history discipline forces bumps; prose must follow).
         craft = (
             self.root / "packages" / "design-playbook" / "skills"
             / "craft-guard" / "references" / "craft.md"
@@ -249,7 +244,6 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("revision decision", result.stdout)
 
     def test_matrix_breadth_freeze_fails_on_added_row(self) -> None:
-        # A 31st row fails both the derived-count lockstep and the freeze.
         self._mutate_matrix(
             '    "trae",\n    "generic",\n)',
             '    "trae",\n    "generic",\n    "one-more",\n)',
@@ -261,8 +255,6 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("adapter matrix breadth is frozen", result.stdout)
 
     def test_stale_run_console_claim_fails(self) -> None:
-        # T-005: the Run Console ships locally, so a current public surface
-        # describing it as planned / not shipped is a stale capability claim.
         readme = self.root / "README.md"
         text = readme.read_text(encoding="utf-8")
         self.assertIn("Run Console", text)
@@ -282,7 +274,7 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("planned", result.stdout)
 
     def test_command_badge_count_drift_fails(self) -> None:
-        # T-005: the public command-count badge must equal the shipped
+        # the public command-count badge must equal the shipped
         # commands/ inventory (ADR-0015 stable main).
         readme = self.root / "README.md"
         text = readme.read_text(encoding="utf-8")
@@ -300,7 +292,7 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("Commands badge count 99 matches shipped inventory", result.stdout)
 
     def test_run_console_promoted_claim_fails(self) -> None:
-        # T-005 / ADR-0043: the current Run Console claim is experimental
+        # ADR-0043: the current Run Console claim is experimental
         # and trial-gated. Promoting it to stable / public-ready on a
         # current surface is a maturity disagreement the gate must reject
         # even though the Console itself is implemented and shipped — the
@@ -457,8 +449,6 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("VALIDATION FAILED", result.stdout)
 
     def test_registry_enum_drift_fails(self) -> None:
-        # G8 product-level: an invalid enum value on any registry entry must
-        # fail the static gate (rules-prototype §8.2 machine face).
         registry = (
             self.root / "packages" / "design-playbook" / "skills"
             / "design-playbook" / "references" / "rules.md"
@@ -655,7 +645,6 @@ class ValidateGateTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("9.9.9", result.stdout)
-        # FAIL line names both sides so the drift is visible at a glance.
         self.assertIn("matches Claude plugin.json", result.stdout)
 
     def test_codex_short_description_drift_fails(self) -> None:
@@ -741,7 +730,7 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("source.path exists", result.stdout)
         self.assertIn("./packages/nonexistent", result.stdout)
     def test_extra_command_without_version_admission_fails(self) -> None:
-        # OPP-01 / ADR-0015: main must never expose unreleased capability
+        # ADR-0015: main must never expose unreleased capability
         # under a released version. A 4th command while plugin.json still
         # declares 0.9.x must fail the gate.
         fake = (
@@ -776,9 +765,6 @@ class ValidateGateTests(unittest.TestCase):
         self.assertNotIn(f"ruff=={_checks.RUFF_VERSION}", ci)
 
     def test_windows_job_runs_frontend_review_under_windows_paths(self) -> None:
-        # P2-4: the review resolves drive letters, backslashes and
-        # case-insensitive paths, so an ubuntu-only run cannot see a Windows
-        # regression. The Windows job must install pytest before using it.
         ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         windows = ci.split("powershell-quoting:", 1)[1]
         self.assertIn("runs-on: windows-latest", windows)

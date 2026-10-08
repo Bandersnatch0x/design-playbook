@@ -59,7 +59,6 @@ class ReferenceIntakeFixtureTests(unittest.TestCase):
             for marker in REQUIRED_CONSTRAINT_MARKERS:
                 self.assertIn(marker, contract, f"{case_dir.name} missing {marker}")
             for section in ("## Keep", "## Change", "## Do not copy"):
-                # Third-party fixtures must not leave Keep/Change/Do not copy empty.
                 idx = contract.index(section)
                 rest = contract[idx + len(section) :]
                 next_h = rest.find("\n## ")

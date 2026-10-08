@@ -182,7 +182,6 @@ def check_method_semantics(
                        "binding site (append a newer entry; latest wins)",
             ))
 
-    # Pass rows must not rest on unusable evidence (#29-Q2 linkage).
     for criterion, result, observed in ledger_rows:
         if result.casefold() != "pass":
             continue
@@ -196,9 +195,6 @@ def check_method_semantics(
         ]
         if not bound:
             continue  # binding itself is G6.no_binding's diagnostic
-        # Latest by ts instant, not by string order (P2-3). An unusable ts
-        # leaves no latest to judge here; the hard G6 binding gate reports it
-        # as G6.binding_conflict for this same criterion/artifact pair.
         latest = latest_by_instant(bound)
         if latest is None:
             continue

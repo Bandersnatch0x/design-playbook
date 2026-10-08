@@ -177,7 +177,6 @@ class MergePrecedenceTests(unittest.TestCase):
             effective = _resolve(repo)
         self.assertFalse(effective.craft_guard.runs)
         self.assertEqual(effective.craft_guard.source, "local")
-        # untouched key still falls through to the repo layer
         self.assertTrue(effective.observe.runs)
         self.assertEqual(effective.observe.source, "repo")
 
@@ -194,7 +193,6 @@ class MergePrecedenceTests(unittest.TestCase):
         self.assertEqual(effective.observe.source, "run")
         self.assertFalse(effective.ui_evaluator.runs)
         self.assertEqual(effective.ui_evaluator.source, "run")
-        # asked is repository state; a per-run declaration never touches it
         self.assertTrue(effective.asked)
 
     def test_partial_declaration_falls_through_per_stage(self) -> None:

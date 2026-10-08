@@ -34,8 +34,6 @@ if (!python) {
   process.exit(1)
 }
 
-// Strip leading "init" if invoked as `design-playbook init <agent>` so both
-// forms are equivalent:  `design-playbook init codex` == `design-playbook codex`
 const rawArgs = process.argv.slice(2)
 const args = rawArgs[0] === 'init' ? rawArgs.slice(1) : rawArgs
 

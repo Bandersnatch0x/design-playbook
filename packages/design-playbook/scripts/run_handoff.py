@@ -146,8 +146,6 @@ def run_handoff(
         raise RunHandoffError(f"not a directory: {run_root}")
     run_root = run_root.resolve()
     facts = capture_run_facts(run_root=run_root)
-    # RunFacts captures the authoritative plan declaration once. Do not copy
-    # that parser here: the handoff layer only selects among captured facts.
     selected = _select_declared_fill(facts.plan_fill_declarations, fill)
     fill_path = resolve_declared_fill(run_root, selected)
     if fill_path is None:
@@ -254,8 +252,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
-    # regardless of the host code page. See scripts/stdio_encoding.py.
     for _candidate in Path(__file__).resolve().parents:
         if (_candidate / "design_playbook.py").is_file():
             sys.path.insert(0, str(_candidate))

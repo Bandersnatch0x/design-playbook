@@ -184,7 +184,7 @@ def check_evidence(
     errs: list[Finding] = []
     rows = observed_rows if observed_rows is not None else ledger_observed(pointback_text)
     for criterion, observed in rows:
-        # LOW-3: case-insensitive prefix. The write boundary treats paths
+        # Case-insensitive prefix. The write boundary treats paths
         # case-insensitively on case-insensitive filesystems (Windows), so
         # ``EVIDENCE/<x>`` lands in the evidence/ subtree on disk; the read
         # side must match the same way or uppercase rows skip G6 entirely.
@@ -374,8 +374,6 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
-    # regardless of the host code page. See scripts/stdio_encoding.py.
     for _candidate in Path(__file__).resolve().parents:
         if (_candidate / "design_playbook.py").is_file():
             sys.path.insert(0, str(_candidate))

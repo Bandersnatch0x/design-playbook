@@ -26,7 +26,6 @@ _PKG_ROOT = Path(__file__).resolve().parents[1]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
-# Preview integrity lives with the bundled Preview runtime.
 from design_playbook.mcp.preview.integrity import PreviewSnapshot, inspect_preview  # noqa: E402
 
 # Stage registry and shared artifact names live in the packaged scripts dir

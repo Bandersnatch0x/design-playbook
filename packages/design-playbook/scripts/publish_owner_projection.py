@@ -80,7 +80,6 @@ class ProjectionPublishError(ValueError):
     """Rejected publish: the inputs cannot be transcribed faithfully."""
 
 
-# -- pure helpers --------------------------------------------------------
 
 
 def check_run_id(run_id: object) -> str:
@@ -426,8 +425,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry
-    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
-    # regardless of the host code page. See scripts/stdio_encoding.py.
     from design_playbook.scripts.stdio_encoding import configure_piped_utf8
 
     configure_piped_utf8()

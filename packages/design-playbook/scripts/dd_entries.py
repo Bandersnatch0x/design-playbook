@@ -66,7 +66,6 @@ from typing import Any
 
 from design_playbook.scripts.finding_syntax import parse_findings
 
-# --- closed enums (design-prototype 4.1 machine face) -----------------------
 
 DD_TIERS = frozenset({"record", "compare", "explore"})
 DD_STATUSES = frozenset({
@@ -93,7 +92,6 @@ AGENT_VIA = re.compile(r"^agent-record$")
 BATCH_VIA = re.compile(r"^report-batch")
 ADAPTER_HANDLE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
-# --- R/C/E trigger table (design-prototype 1.2; ◆ = machine-judgeable) ------
 
 E_CRITERIA: tuple[tuple[str, str, bool], ...] = (
     ("identity", "candidate deviates from the bound baseline's visual "
@@ -138,7 +136,6 @@ class DDEntry:
     fold_issues: tuple["FoldIssue", ...] = ()
     block: str = ""
 
-    # -- convenience accessors ------------------------------------------
 
     @property
     def tier(self) -> str:
@@ -211,7 +208,6 @@ class ESignals:
     baseline_changed: bool = False
 
 
-# --- parsing helpers ---------------------------------------------------------
 
 def _scalar(value: str) -> str:
     value = value.strip()

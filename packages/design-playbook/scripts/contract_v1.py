@@ -199,7 +199,6 @@ def decision_log_sha(path: Path | None = None, records: Iterable[Mapping[str, An
             raise ContractError("decision_log_sha requires path or records")
         records = load_decisions(path)
     normalized = [_normalize_decision(item) for item in records]
-    # Preserve append order; do not sort — order is the authority trail.
     payload = [_json_canonical(item) for item in normalized]
     return _sha256_text("\n".join(payload) + ("\n" if payload else ""))
 
@@ -266,7 +265,6 @@ def promote_fields(
     for path, entry in fields.items():
         if not isinstance(entry, Mapping):
             raise ContractError(f"promote field {path} must be an object")
-        # Accepting a whole spec must not silently invent decided.
         if entry.get("resolution") == "decided":
             raise ContractError(
                 f"field {path}: promote_fields cannot create decided; "
@@ -535,7 +533,6 @@ def verify_contract(
         try:
             records = [_normalize_decision(item) for item in decisions]
             apply_decisions(normalized, records)
-            # Detect non-append identity collisions inside the provided list.
             ids = [item["id"] for item in records]
             if len(ids) != len(set(ids)):
                 errors.append("decision log contains duplicate ids (not append-only)")
@@ -554,8 +551,6 @@ def validate_decision_ids(ids: Iterable[str]) -> None:
 
 
 if __name__ == "__main__":
-    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
-    # regardless of the host code page. See scripts/stdio_encoding.py.
     for _candidate in Path(__file__).resolve().parents:
         if (_candidate / "design_playbook.py").is_file():
             sys.path.insert(0, str(_candidate))

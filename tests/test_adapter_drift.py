@@ -44,7 +44,6 @@ class CompareSnapshotTests(unittest.TestCase):
         self.assertEqual(agents, set(adapter_matrix.TIER1_SNAPSHOT_AGENTS))
 
     def test_missing_snapshot(self) -> None:
-        # A nonexistent root: every committed snapshot reads as missing.
         with tempfile.TemporaryDirectory() as tmp:
             rows = adapter_drift.compare_snapshots(Path(tmp) / "no-such-root")
         missing = {r["path"] for r in rows if r["status"] == "missing"}

@@ -14,11 +14,9 @@ from __future__ import annotations
 
 import re
 
-# Marker-block tags around generator-owned regions in shared markdown files.
 BLOCK_BEGIN = "<!-- design-playbook:begin -->"
 BLOCK_END = "<!-- design-playbook:end -->"
 
-# The marker text itself, as it appears inside every comment form.
 MARKER_TEXT = "generated-by design-playbook"
 
 

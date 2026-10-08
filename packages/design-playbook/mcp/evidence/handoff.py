@@ -49,10 +49,6 @@ from design_playbook.mcp.evidence.disclosure import (
     disclosure_json,
 )
 
-# Conditional gates (validate_run.py header; CONTEXT.md G5/G6/G7): a gate whose
-# precondition never occurred produces no finding - "not triggered" must not be
-# read as "passed". G7 additionally needs contract paths the handoff does not
-# wire, so it stays not-applicable until they are.
 CONDITIONAL_GATES: tuple[int, ...] = (5, 6, 7, 8)
 
 _GATE_RULE = re.compile(r"^G([1-8])(?:\.|$)")
@@ -520,8 +516,6 @@ def _capture_screenshot_path(item: Any, name: str, snap_dir: Path) -> Path | Non
     try:
         base = snap_dir.resolve()
         filename = f"viewport-{name}.png"
-        # ``name`` normally comes from the fixed viewport contract. Keep this
-        # helper defensive if it is ever called with an untrusted value.
         if Path(filename).name != filename:
             return None
         expected = base / filename
@@ -785,7 +779,6 @@ def build_static_handoff(
     # afterwards would be one this run manufactured for itself.
     preconditions = _gate_preconditions(run_root)
 
-    # --- capture: the deliverable itself, never any review chrome ---
     capture_status = "captured"
     capture_error = ""
     matrix: dict[str, Any] = {}
@@ -803,7 +796,6 @@ def build_static_handoff(
         capture_status = "blocked"
         capture_error = str(exc)
 
-    # --- gates: canonical validation + honest conditionality ---
     try:
         gate = _normalise_gate_result(gate_runner(run_root))
     except Exception as exc:  # noqa: BLE001 - disclose blocked gates
@@ -831,7 +823,6 @@ def build_static_handoff(
     # carried by `authority`/`verdict` instead. ADR-0034 §7 scopes this count to
     # gates evaluated *and* passed - `not-applicable` never counts.
 
-    # --- confirmation: the durable record, never re-derived ---
     confirmed, confirmation_reason = _confirmation_from_record(run_root, round_n)
 
     capture_complete = capture_status == "captured"
@@ -874,7 +865,6 @@ def build_static_handoff(
         gates_passed=gates_passed,
         viewport_metrics=metrics,
     )
-    # Operational state for the page; JSON and ZIP consume this same object.
     payload["captureStatus"] = capture_status
     if capture_error:
         payload["captureError"] = capture_error
@@ -887,7 +877,6 @@ def build_static_handoff(
     if gate_error:
         payload["gateError"] = gate_error
 
-    # --- write the artifact set ---
     out_dir.mkdir(parents=True, exist_ok=True)
     json_path = out_dir / "disclosure-review.json"
     json_path.write_text(disclosure_json(payload), encoding="utf-8")
@@ -909,8 +898,6 @@ def build_static_handoff(
     build_handoff_zip(
         payload,
         artifact_files=artifacts,
-        # spec §4.1: the handoff ships "snapshots and prototype code". PNGs
-        # alone do not let the recipient rebuild the reviewed page.
         text_members={"deliverable.html": deliverable_text},
         zip_target=str(zip_path),
     )

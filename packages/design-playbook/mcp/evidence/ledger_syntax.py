@@ -26,7 +26,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-# Evidence ledger field names (canonical lowercase).
 EVIDENCE_FIELDS = ("criterion", "required", "observed", "result")
 
 # One ``field: value`` line. ``[ \t]*`` (not ``\s*``) after the colon keeps the

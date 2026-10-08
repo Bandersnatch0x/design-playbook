@@ -281,10 +281,6 @@ def _apply_freeze(page: Any, freeze: dict[str, Any]) -> None:
 _RUN_MARKERS = ("plan.md", "point-back.md")
 _warned_run_root = False
 
-# Per-call run root (DEF-4): a `--plugin-dir` dev host cannot edit the shipped
-# DESIGN_PLAYBOOK_RUN_ROOT after the MCP process starts, so
-# `execute_capture_plan` accepts a `run_root` argument that binds the
-# resolution for the duration of one call and nothing longer.
 _CALL_RUN_ROOT: ContextVar["Path | None"] = ContextVar(
     "design_playbook_call_run_root", default=None
 )
@@ -669,7 +665,6 @@ def _write_interaction_trace(
     context: Any, page: Any, path: Path, actions: list[dict[str, Any]]
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    # Restart tracing for this capture only.
     try:
         context.tracing.stop()
     except Exception:  # noqa: BLE001 — may not have started
@@ -1033,13 +1028,6 @@ def _capture(
                 abs_written,
                 request=request,
             )
-        # OSError (disk full / permission / path-is-a-directory) must reach the
-        # orchestrator via the same {result:"failed"} channel as the main
-        # capture — escaping to MCP isError loses the structured echo (A3-002).
-        # ValueError stays for containment/path-shape sidecar rejection and
-        # keeps its full message (debug info, not raw exception text). We do
-        # NOT write a clean sidecar; the failure carries written_path (the
-        # non-secret absolute artifact path).
         try:
             wrote_probe = _write_probe_sidecar(probe_rel, probe_payload)
         except ValueError as exc:
@@ -1068,9 +1056,6 @@ def _capture(
     )
 
 
-# --------------------------------------------------------------------------- #
-# Stage 9 delivery matrix: five-viewport capture + fold/overflow metrics       #
-# --------------------------------------------------------------------------- #
 
 
 def matrix_viewport(name: str) -> dict[str, Any]:

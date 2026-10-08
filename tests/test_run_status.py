@@ -844,7 +844,6 @@ class RunStatusPreviewRoundTests(unittest.TestCase):
             self.assertIn("floor", nxt, payload["next"])
 
     def test_confirmed_with_floor_pass_resumes_at_fill(self) -> None:
-        # Regression guard: the legitimate decided-positive path still resumes.
         with tempfile.TemporaryDirectory() as tmp:
             run_root = Path(tmp) / "run"
             run_root.mkdir()
@@ -945,7 +944,6 @@ class RunStatusVnextTests(unittest.TestCase):
             result.stdout)
 
     def test_run_without_vnext_artifacts_has_no_narration(self) -> None:
-        # Backward compatibility: a plain run reports no run-profile/shaping.
         with tempfile.TemporaryDirectory() as tmp:
             run_root = Path(tmp) / "run-plain"
             run_root.mkdir()
@@ -969,7 +967,6 @@ class RunStatusFillStageTests(unittest.TestCase):
             (run_root / "plan.md").write_text(
                 "# plan\n\nfill: surface.html\n", encoding="utf-8")
 
-            # declared but absent: the fill stage stays unchecked
             result = _run(str(run_root), "--json")
             self.assertEqual(result.returncode, 0,
                              result.stdout + result.stderr)
@@ -1035,7 +1032,6 @@ class RunStatusFillStageTests(unittest.TestCase):
             by_key = {s["key"]: s for s in payload["stages"]}
             self.assertFalse(by_key["fill"]["present"])
 
-            # control: the same line, unfenced, is the declaration
             (run_root / "plan.md").write_text(
                 "# plan\n\nfill: spec.md\n", encoding="utf-8")
             result = _run(str(run_root), "--json")

@@ -217,8 +217,6 @@ def append_event(log_path: Path, event_type: str, **kwargs: Any) -> None:
 
 
 if __name__ == "__main__":
-    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
-    # regardless of the host code page. See scripts/stdio_encoding.py.
     for _candidate in Path(__file__).resolve().parents:
         if (_candidate / "design_playbook.py").is_file():
             sys.path.insert(0, str(_candidate))
@@ -246,7 +244,6 @@ if __name__ == "__main__":
         log_path = Path(sys.argv[2])
         args = sys.argv[3:]
 
-        # Parse --key value pairs
         event_data = {}
         i = 0
         while i < len(args):
@@ -261,8 +258,6 @@ if __name__ == "__main__":
             else:
                 i += 1
 
-        # D-2 (2026-09-22 rerun): G9 requires projected.mappings as a real
-        # JSON list[dict], which string-only --key pairs cannot express.
         mapping_json = event_data.pop("mapping-json", None)
         if mapping_json is not None:
             import json as _json

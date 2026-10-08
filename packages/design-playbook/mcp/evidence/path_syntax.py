@@ -33,7 +33,7 @@ def probe_sidecar_rel(artifact_rel: str) -> str:
     return artifact_rel + ".probe.json"
 
 
-# On-disk shape of an interaction trace (DEF-6): ``tracing.stop(path=...)``
+# On-disk shape of an interaction trace: ``tracing.stop(path=...)``
 # writes a Playwright trace ZIP, so any other extension mislabels binary bytes.
 TRACE_SUFFIX = ".zip"
 TRACE_EXAMPLE = "evidence/<criterion>.trace.zip"

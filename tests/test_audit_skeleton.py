@@ -110,10 +110,7 @@ class SkeletonLockstepTests(unittest.TestCase):
         skeleton = audit_preferences.skeleton_pointback(SKELETON_SPEC)
         n = len(_l6_items(SKELETON_SPEC))
         self.assertEqual(n, 3)
-        # G2/G3/G4 accept the skeleton wholesale.
         self.assertEqual(check_pointback(skeleton, n), [])
-        # Verdict facts: exactly one anchored heading, exactly one value,
-        # canonical Recirculate (never a forged Pass).
         facts = parse_verdict(skeleton)
         self.assertEqual(facts.heading_count, 1)
         self.assertEqual(facts.value_count, 1)
@@ -123,7 +120,6 @@ class SkeletonLockstepTests(unittest.TestCase):
         self.assertIn("## Limitations statement", skeleton)
         self.assertEqual(check_coverage(skeleton), [])
         self.assertEqual(check_coverage(skeleton, required=True), [])
-        # Ledger shape: one n/a row per L6 criterion, no evidence/ binding.
         rows = parse_ledger(skeleton).rows
         self.assertEqual(len(rows), n)
         for index, row in enumerate(rows, 1):
@@ -135,7 +131,6 @@ class SkeletonLockstepTests(unittest.TestCase):
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0]["severity"], ["S0"])
         self.assertEqual(findings[0]["disposition"], ["info"])
-        # Fixed limitation sentence and marker are part of the template.
         self.assertIn(audit_preferences.SKELETON_LIMITATION_SENTENCE, skeleton)
         self.assertIn("audited: false", skeleton)
 

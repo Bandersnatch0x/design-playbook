@@ -251,8 +251,6 @@ def trial_export_write_target(filename: str, run_root: Path) -> ContainmentResul
         return ContainmentResult(None, REASON_RESERVED_NAME)
     if filename in _TRIAL_EXPORT_RESERVED_NAMES:
         return ContainmentResult(None, REASON_RESERVED_NAME)
-    # Bare-filename precondition: any separator, drive, or traversal form
-    # fails before the generic resolver can even see it.
     if (
         PurePosixPath(filename).is_absolute()
         or PureWindowsPath(filename).is_absolute()
@@ -288,9 +286,6 @@ def trial_export_write_target(filename: str, run_root: Path) -> ContainmentResul
         run_root / TRIAL_EXPORT_SUBDIR,
         require_existing_file=False,
     )
-    # The generic resolver also folds "." segments; a name like "a/." or
-    # "a.." is a file name here, but a name that Path normalizes to
-    # something other than itself inside the subtree must not pass.
     if result.ok and result.path is not None and result.path.name != filename:
         return ContainmentResult(None, REASON_RESERVED_NAME)
     return result

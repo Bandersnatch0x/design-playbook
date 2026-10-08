@@ -168,8 +168,6 @@ class MethodSemanticsGateTests(unittest.TestCase):
         self.assertIn("G6.method_unusable_pass", _rules(errs))
 
     def test_latest_bound_entry_uses_instant_not_string_order(self) -> None:
-        # P2-3: the older +08:00 stamp sorts above the newer Z stamp as text,
-        # so a string max would judge the usable row and miss the newer one.
         older_usable = {**self.USERTEST, "ethics": "consented",
                         "ts": "2026-09-24T12:00:00+08:00"}
         newer_unusable = {**self.USERTEST, "ts": "2026-09-24T10:00:00Z"}
@@ -409,9 +407,6 @@ class G8RunRegistryTests(unittest.TestCase):
             "G8.run_row", _rules(check_g8_run(broken, self.entries, "P2")))
 
     def test_row_level_error_lifts_structured_fields(self) -> None:
-        # Review advisory R4: validate_craft_rows errors arrive structured
-        # (RegistryError) and the run-level finding carries their
-        # expected/actual/repair face, not just the message.
         broken = P2_CRAFT.replace("| CRAFT-01@1 |", "| CRAFT-01@9 |")
         row_finding = next(
             f for f in check_g8_run(broken, self.entries, "P2")
@@ -458,8 +453,6 @@ class G8RunRegistryTests(unittest.TestCase):
         self.assertIn("G8 OK", result.stdout)
 
     def test_missing_row_finding_renders_repair_in_text(self) -> None:
-        # Review advisory R4 (sampled G8 rule): the default text projection
-        # shows the structured repair under the FAIL line.
         from design_playbook.scripts._diagnostics import render_text
 
         broken = P2_CRAFT.replace(
