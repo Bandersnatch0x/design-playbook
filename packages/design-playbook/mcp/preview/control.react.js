@@ -740,12 +740,21 @@
           if (hasPendingRef.current) return hasPendingRef.current();
           return false;
         };
+        // Whether the editor can still flush at all. The readiness mirror must
+        // not promise a submission while the bridge is offline, but the drain
+        // decision must still see the unpublished work so it fails closed
+        // instead of dropping it, so the two questions are answered separately.
+        window.dpbVisualEditorState = function () {
+          var state = current.current;
+          return { ready: !!state.ready, stale: !!state.stale };
+        };
         window.dpbDrainVisualEdits = function () {
           if (drainRef.current) return drainRef.current();
           return Promise.resolve({ ok: true, batch: window.DPB_VISUAL_EDIT_BATCH });
         };
         return function () {
           window.dpbHasPendingVisualEdits = null;
+          window.dpbVisualEditorState = null;
           window.dpbDrainVisualEdits = null;
         };
       }, []);

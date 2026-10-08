@@ -248,9 +248,20 @@
 
   // ---- readiness (I4 floor mirror) ----
   function feedbackValue() { return field ? field.value : ""; }
-  function hasPendingVisualEdits() {
+  function hasUnflushedVisualEdits() {
+    // Offline-agnostic on purpose: this is what decides whether a drain is
+    // needed, and a drain while the bridge is down must fail closed rather than
+    // be skipped, which would silently drop the edit.
     return typeof window.dpbHasPendingVisualEdits === "function" &&
       !!window.dpbHasPendingVisualEdits();
+  }
+  function editorCanFlush() {
+    // The readiness mirror must not promise a submission the editor cannot
+    // perform. An offline bridge or a stale route makes the flush impossible,
+    // so the round is not ready however many drafts are sitting there.
+    var state = typeof window.dpbVisualEditorState === "function"
+      ? window.dpbVisualEditorState() : null;
+    return !!(state && state.ready && !state.stale);
   }
   function hasEffectiveVisualEdits() {
     // Mirror of the adapter floor (integrity.evaluate_feedback): the batch the
@@ -287,7 +298,7 @@
       });
     }
     return feedbackValue().trim() !== "" || hasEffectiveVisualEdits() ||
-      hasPendingVisualEdits();
+      (editorCanFlush() && hasUnflushedVisualEdits());
   }
   function setReadiness() { updateStatus(); }
   if (field) field.addEventListener("input", function () { setReadiness(); scheduleDraft(); });
@@ -447,30 +458,35 @@
     hint.classList.toggle("is-on", !!on);
   }
   var isFlushingVisualEdits = false;
-  function executeApprovedSubmit(triggerBtn) {
+  function executeApprovedSubmit(triggerBtn, opts) {
+    // Skip is an explicit non-confirm disposition, so it drains the pending
+    // batch but must not be held to the confirm floor.
+    var requireSubstantive = !opts || opts.requireSubstantive !== false;
     var submitter = triggerBtn || approveBtn;
-    if (draftPopoverOpen() && annoInput && annoInput.value.trim()) saveDraftAnchor();
-    if (!isSubstantive()) {
-      if (field) {
-        field.setAttribute("aria-invalid", "true");
-        field.classList.remove("is-shaking");
-        void field.offsetWidth;
-        field.classList.add("is-shaking");
-        setTimeout(function () { field.focus(); }, 0);
+    if (requireSubstantive) {
+      if (draftPopoverOpen() && annoInput && annoInput.value.trim()) saveDraftAnchor();
+      if (!isSubstantive()) {
+        if (field) {
+          field.setAttribute("aria-invalid", "true");
+          field.classList.remove("is-shaking");
+          void field.offsetWidth;
+          field.classList.add("is-shaking");
+          setTimeout(function () { field.focus(); }, 0);
+        }
+        setHintGate(true);
+        announce(tt("field_hint"));
+        setDrawer(true, true);
+        setSpecPanel(false);
+        if (submitter) {
+          submitter.classList.remove("is-shaking");
+          void submitter.offsetWidth;
+          submitter.classList.add("is-shaking");
+        }
+        return;
       }
-      setHintGate(true);
-      announce(tt("field_hint"));
-      setDrawer(true, true);
-      setSpecPanel(false);
-      if (submitter) {
-        submitter.classList.remove("is-shaking");
-        void submitter.offsetWidth;
-        submitter.classList.add("is-shaking");
-      }
-      return;
     }
 
-    var hasPending = typeof window.dpbHasPendingVisualEdits === "function" && window.dpbHasPendingVisualEdits();
+    var hasPending = hasUnflushedVisualEdits();
     if (!hasPending) {
       if (submitter) form.requestSubmit(submitter); else form.requestSubmit();
       return;
@@ -512,7 +528,7 @@
       }
       // Re-evaluate after the drain: an edit that turned out to be a no-op must
       // not become a doomed submit. The mirror now sees the published batch.
-      if (!isSubstantive()) {
+      if (requireSubstantive && !isSubstantive()) {
         setHintGate(true);
         announce(tt("field_hint"));
         setDrawer(true, true);
@@ -533,8 +549,7 @@
 
   function submitPrimary() {
     var targetBtn = document.getElementById("dpb-btn-approve");
-    var hasPending = typeof window.dpbHasPendingVisualEdits === "function" && window.dpbHasPendingVisualEdits();
-    if (hasPending && isSubstantive()) {
+    if (hasUnflushedVisualEdits() && isSubstantive()) {
       executeApprovedSubmit(targetBtn || approveBtn);
     } else {
       if (draftPopoverOpen() && annoInput && annoInput.value.trim()) saveDraftAnchor();
@@ -554,6 +569,13 @@
       if (field) field.removeAttribute("aria-invalid");
       setHintGate(false);
       clearDraft();
+      // Skip must still drain. Returning here dropped an in-flight visual edit
+      // silently, because the hidden batch only holds what was already published.
+      if (hasUnflushedVisualEdits()) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        executeApprovedSubmit(submitter, { requireSubstantive: false });
+      }
       return;
     }
     if (isSubstantive()) {
@@ -618,6 +640,15 @@
       return;
     }
     var activeEl = document.activeElement;
+    // Skip is a global channel and must survive a focused property field. A
+    // property edit has no use for Shift+Escape, so this runs before the
+    // editor-field isolation below, which otherwise swallowed it.
+    if (e.shiftKey && e.key === "Escape") {
+      e.preventDefault();
+      var skipBtn = document.getElementById("dpb-btn-skip");
+      if (skipBtn) form.requestSubmit(skipBtn);
+      return;
+    }
     // Property edits own Enter (including modifier variants), never a review decision.
     if (isTextEditingTarget(activeEl) && activeEl.closest("#dpb-react-editor-root")) return;
     // Ctrl/Cmd+Enter is the global approve channel - it must fire even while
@@ -630,12 +661,6 @@
       return;
     }
     // Skip shares approve's global channel, including focused feedback fields.
-    if (e.shiftKey && e.key === "Escape") {
-      e.preventDefault();
-      var skipBtn = document.getElementById("dpb-btn-skip");
-      if (skipBtn) form.requestSubmit(skipBtn);
-      return;
-    }
     if (isTextEditingTarget(activeEl)) {
       return;
     }

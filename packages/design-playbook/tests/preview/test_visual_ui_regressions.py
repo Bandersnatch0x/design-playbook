@@ -1487,6 +1487,95 @@ def test_next_step_copy_names_the_decision_not_the_feedback_only() -> None:
     assert "ride along" in en["confirm_desc"].lower()
 
 
+def test_skip_drains_pending_visual_edits_instead_of_dropping_them(editor_page) -> None:
+    """Skip is a non-confirm disposition, but it must not drop an in-flight edit.
+
+    Independent review finding 5: the skip branch returned before draining, so
+    the hidden batch only held what was already published and the reviewer's
+    last edit vanished with no warning.
+    """
+    from playwright.sync_api import expect
+
+    from preview_e2e_helpers import dismiss_onboarding
+
+    page = editor_page
+    page.add_init_script("""
+        window.holdReceipts = true;
+        window.addEventListener('message', event => {
+            if (!window.holdReceipts) return;
+            if (!event.data || !event.data.dpbVisualEditChange) return;
+            if (event.source !== document.querySelector('iframe.dpb-proto-frame').contentWindow) return;
+            event.stopImmediatePropagation();
+        }, true);
+    """)
+    page.reload()
+    dismiss_onboarding(page)
+    target = page.frame_locator("iframe.dpb-proto-frame").locator("#panel-title")
+    target.evaluate("el => el.click()")
+    page.keyboard.press("Escape")
+    page.locator("#dpb-tab-visual").click()
+    field = page.locator('.dpb-react-field[data-property="background-color"] input')
+    expect(field).to_be_enabled()
+    field.fill("#123456")
+    field.press("Enter")
+    assert page.evaluate("window.dpbHasPendingVisualEdits()") is True
+
+    page.evaluate("""() => {
+      window.__drains = 0;
+      window.__submitted = [];
+      const realDrain = window.dpbDrainVisualEdits;
+      window.dpbDrainVisualEdits = function () { window.__drains++; return realDrain(); };
+      document.querySelector('form').addEventListener('submit', e => {
+        window.__submitted.push(e.submitter ? e.submitter.id : '(null)');
+        e.preventDefault();
+      });
+    }""")
+
+    # Skip while the edit is unresolved must try to drain, must tell the user,
+    # and must not submit a batch that is missing the edit. A dropped receipt
+    # leaves the edit permanently unacknowledged, so failing closed is correct.
+    page.keyboard.press("Shift+Escape")
+    page.wait_for_function("""() => Object.values(window.DPB_I18N_DUAL.visual_drain_failed)
+        .some(text => document.getElementById('dpb-toasts').textContent.includes(text))""")
+    assert page.evaluate("window.__drains") >= 1, "skip must attempt the drain"
+    assert page.evaluate("window.__submitted") == [], (
+        "an unresolved edit must fail closed, not submit without it"
+    )
+
+
+def test_readiness_is_not_claimed_while_the_bridge_cannot_flush(editor_page) -> None:
+    """Independent review finding 4: the mirror promised a submission it could not make.
+
+    An offline bridge cannot flush, so the round is not ready however much
+    unpublished work is waiting. The drain decision still sees that work, which
+    is what makes it fail closed instead of dropping it.
+    """
+    from playwright.sync_api import expect
+
+    from design_playbook.mcp.preview import i18n
+
+    page = editor_page
+    page.locator("#dpb-tab-visual").click()
+    submit = page.locator("#dpb-approve-drawer")
+    expect(submit).to_contain_text(i18n.t("submit_not_ready"))
+
+    page.evaluate("""() => {
+      window.DPB_VISUAL_EDIT_BATCH = {schemaVersion: 1, status: 'pending',
+        sourceHash: 'x', routeUrl: '', edits: []};
+      window.dpbHasPendingVisualEdits = function () { return true; };
+      window.dpbVisualEditorState = function () { return {ready: false, stale: false}; };
+      document.dispatchEvent(new CustomEvent('dpbVisualEditsChanged'));
+    }""")
+    expect(submit).to_contain_text(i18n.t("submit_not_ready"))
+
+    # The same pending work with the editor connected is submittable again.
+    page.evaluate("""() => {
+      window.dpbVisualEditorState = function () { return {ready: true, stale: false}; };
+      document.dispatchEvent(new CustomEvent('dpbVisualEditsChanged'));
+    }""")
+    expect(submit).to_contain_text(i18n.t("submit_ready"))
+
+
 def test_f4_stale_batch_does_not_read_as_ready(editor_page) -> None:
     """A batch the transaction will refuse must not look submittable.
 
@@ -3001,7 +3090,6 @@ def test_bo07_mb_f01_late_undo_after_replacement_and_redo_matches_admitted_batch
     submissions = page.evaluate("window.admittedBatches")
     final_inline = target.evaluate("el => el.style.backgroundColor")
     has_pending = page.evaluate("window.dpbHasPendingVisualEdits()")
-    print("BO07 admitted:", submissions, "inline:", final_inline, "pending:", has_pending)
     assert len(submissions) == 1
     edits = submissions[0]["edits"]
     assert final_inline == final_color
