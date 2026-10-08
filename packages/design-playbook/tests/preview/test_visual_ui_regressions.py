@@ -1421,9 +1421,12 @@ def test_next_step_copy_names_the_decision_not_the_feedback_only() -> None:
     for table in (zh, en):
         assert "Ctrl" in table["visual_help"]
         assert "⌘" in table["visual_help"]
-    # The approve tooltip is always reachable and states that edits travel along.
-    assert "视觉编辑" in zh["confirm_desc"]
+    # The approve tooltip is always reachable and states that pending edits
+    # travel along with the decision, in both locales.
+    assert "视觉修改" in zh["confirm_desc"]
+    assert "一并提交" in zh["confirm_desc"]
     assert "visual edit" in en["confirm_desc"].lower()
+    assert "ride along" in en["confirm_desc"].lower()
 
 
 def test_f4_stale_batch_does_not_read_as_ready(editor_page) -> None:

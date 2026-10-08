@@ -22,6 +22,14 @@ from design_playbook.mcp.preview.i18n import (
 HERE = Path(__file__).resolve().parent
 
 
+def _first_text(*values: object) -> str:
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
 def _normalise_criteria(criteria: list[dict[str, Any]] | None) -> list[dict[str, str]]:
     items: list[dict[str, str]] = []
     for criterion in criteria or []:
@@ -32,10 +40,27 @@ def _normalise_criteria(criteria: list[dict[str, Any]] | None) -> list[dict[str,
         ).strip()
         if not criterion_id:
             continue
+        # Criteria copy is authored by the run, so a bilingual run supplies both
+        # languages and a single-language run keeps working: each locale falls
+        # back to the plain field and then to the other locale.
+        title = _first_text(criterion.get("title"))
+        then = _first_text(criterion.get("then"))
         items.append({
             "id": criterion_id,
-            "title": str(criterion.get("title") or "").strip(),
-            "then": str(criterion.get("then") or "").strip(),
+            "title": title,
+            "then": then,
+            "title_zh": _first_text(
+                criterion.get("title_zh"), title, criterion.get("title_en")
+            ),
+            "title_en": _first_text(
+                criterion.get("title_en"), title, criterion.get("title_zh")
+            ),
+            "then_zh": _first_text(
+                criterion.get("then_zh"), then, criterion.get("then_en")
+            ),
+            "then_en": _first_text(
+                criterion.get("then_en"), then, criterion.get("then_zh")
+            ),
         })
     return items
 
@@ -50,17 +75,23 @@ def _render_criteria_cards(criteria: list[dict[str, str]]) -> str:
     cards: list[str] = []
     for criterion in criteria:
         criterion_id = criterion["id"]
-        title = criterion["title"]
-        label = f"{criterion_id}: {title}" if title else criterion_id
+        label_zh = (
+            f"{criterion_id}: {criterion['title_zh']}" if criterion["title_zh"] else criterion_id
+        )
+        label_en = (
+            f"{criterion_id}: {criterion['title_en']}" if criterion["title_en"] else criterion_id
+        )
         cards.append(
             '<article class="dpb-spec-card">'
             '<label class="dpb-spec-check-row">'
             '<input type="checkbox" class="dpb-criterion-check" '
             f'data-criterion-id="{html_lib.escape(criterion_id, quote=True)}" '
-            f'data-criterion-title="{html_lib.escape(title, quote=True)}" />'
-            f'<span>{html_lib.escape(label)}</span>'
+            f'data-criterion-title="{html_lib.escape(criterion["title"], quote=True)}" />'
+            f'<span class="dpb-crit-zh">{html_lib.escape(label_zh)}</span>'
+            f'<span class="dpb-crit-en">{html_lib.escape(label_en)}</span>'
             '</label>'
-            f'<p>{html_lib.escape(criterion["then"])}</p>'
+            f'<p><span class="dpb-crit-zh">{html_lib.escape(criterion["then_zh"])}</span>'
+            f'<span class="dpb-crit-en">{html_lib.escape(criterion["then_en"])}</span></p>'
             '</article>'
         )
     return "\n".join(cards)

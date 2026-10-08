@@ -109,7 +109,8 @@ def test_disconnect_mid_edit_reconnect_submit_preserves_pending_edits(
     }""", disconnect)
     expect(padding).to_be_disabled()
     expect(padding).to_have_value(expected_padding)
-    expect(width).to_have_value("333px")
+    # The unit renders beside the field now, so the input holds the number.
+    expect(width).to_have_value("333")
     if edit_source == "offline-submit":
         page.locator("#dpb-btn-approve").click()
         page.wait_for_function("""() => window.__submissions.length ||
@@ -118,7 +119,7 @@ def test_disconnect_mid_edit_reconnect_submit_preserves_pending_edits(
         assert page.evaluate("window.__submissions") == []
         assert page.evaluate("window.dpbHasPendingVisualEdits()")
         expect(padding).to_have_value(expected_padding)
-        expect(width).to_have_value("333px")
+        expect(width).to_have_value("333")
         expect(page.locator("#dpb-toasts .dpb-toast")).to_have_count(0)
     target.evaluate("() => { window.__dropRequest = false; }")
     page.evaluate("() => { window.__dropAck = false; window.__blockReady = false; }")

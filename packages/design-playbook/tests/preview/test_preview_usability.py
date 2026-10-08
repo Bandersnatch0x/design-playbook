@@ -197,16 +197,16 @@ def test_drawer_approve_mirrors_header_dynamic_state(page):
     dismiss_intro(page)
     header_label = page.locator("#dpb-approve-label")
     drawer = page.locator("#dpb-approve-drawer")
-    expect(drawer).to_contain_text("写意见、标注或修改后提交")
+    expect(drawer).to_contain_text("添加批注、意见或修改后可提交")
     assert "dpb-approve-muted" in drawer.get_attribute("class")
     assert "dpb-approve-ready" not in drawer.get_attribute("class")
     save_anchor(page, "第一处")
     expect(header_label).to_have_text("确认通过 (1 处批注)")
-    expect(drawer).to_contain_text("提交修改与反馈")
+    expect(drawer).to_contain_text("提交修改")
     assert "dpb-approve-ready" in drawer.get_attribute("class")
     page.locator("#dpb-language-toggle").click()
     expect(header_label).to_have_text("Approve (1 note)")
-    expect(drawer).to_contain_text("Submit edits & feedback")
+    expect(drawer).to_contain_text("Submit changes")
 
 
 def test_coachmark_persists_until_first_anchor_not_timed_out(page):
