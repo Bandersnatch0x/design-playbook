@@ -410,9 +410,21 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 }
 .dpb-toolbar button {
   appearance: none; cursor: pointer; border: 0; background: transparent;
-  width: 32px; height: 32px; border-radius: 8px;
+  width: 32px; height: 32px; border-radius: 8px; position: relative;
   display: flex; align-items: center; justify-content: center;
   color: var(--dpb-soft); transition: all var(--dpb-duration-spring) var(--dpb-ease-spring);
+}
+/* The shortcut badge rides the button's corner. Without a rule it fell back to
+   inline flow and sat on top of the icon; the global #dpb-root kbd padding and
+   border then inflated it past the 32px button, so both are reset here. */
+.dpb-tool-kbd {
+  position: absolute; right: 0; bottom: 0;
+  pointer-events: none;
+  font: 600 8px/1 ui-monospace, Consolas, monospace;
+  color: var(--dpb-muted); opacity: .85;
+}
+#dpb-root .dpb-tool-kbd kbd {
+  font: inherit; background: none; border: 0; padding: 0; min-width: 0; height: auto;
 }
 .dpb-toolbar button:hover { background: var(--dpb-surface); color: var(--dpb-ink); transform: translateY(-1px); }
 .dpb-toolbar button[aria-pressed="true"] { background: var(--dpb-accent-wash); color: var(--dpb-accent); }

@@ -194,7 +194,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "zoom_out_t": "缩小",
         "drawer_toggle": "收起/展开批注抽屉",
         "criteria_title": "验收准则 (Spec Matrix)",
-        "criteria_title_short": "验收准则",
+        "criteria_title_short": "标准",
         "criteria_count": "{checked}/{total}",
         "criteria_empty": "无 spec 判据来源（独立预览时属正常；随 /design-io 运行会自动载入）",
         "criteria_toggle_title": "查看/隐藏验收准则（S）",
