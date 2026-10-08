@@ -352,7 +352,7 @@ def test_round3_narrow_visual_inspector_has_one_column_and_clearance(editor_page
     grid = page.locator(".dpb-react-fields")
     assert len(grid.evaluate("el => getComputedStyle(el).gridTemplateColumns").split()) == 1
     expect(page.locator("#dpb-visual-view")).to_have_css("padding-bottom", "80px")
-    for prop in ("line-height", "margin", "padding"):
+    for prop in ("width", "margin", "padding"):
         expand_inspector_section(page, prop)
         field = page.locator(f'.dpb-react-field[data-property="{prop}"] input')
         field.evaluate("el => el.scrollIntoView({ block: 'center' })")
@@ -724,22 +724,82 @@ def test_resize_anchors_opposite_edge_and_content_box(editor_page, edge):
     assert target.get_attribute("style") == initial_style
 
 
-@pytest.mark.parametrize("prop,value", [("font-size", "16px"), ("letter-spacing", "normal"), ("width", "auto"), ("line-height", "normal")])
-def test_units_never_duplicate_suffix_or_label_keywords(editor_page, prop, value):
+@pytest.mark.parametrize("prop,unit", [
+    ("width", "px"), ("height", "px"), ("gap", "px"),
+    ("border-radius", "px"), ("border-width", "px"),
+])
+def test_unit_fields_keep_the_unit_out_of_the_input(editor_page, prop, unit):
+    """The unit renders beside the field, never inside it, and never twice.
+
+    font-size, font-weight, line-height, letter-spacing and font-family are
+    enums now, so the numeric-plus-unit contract is pinned on the fields that
+    still take a number.
+    """
     from playwright.sync_api import expect
 
     target = select_interaction_target(editor_page)
+    expand_inspector_section(editor_page, prop)
     field = editor_page.locator(f'.dpb-react-field[data-property="{prop}"]')
-    field.locator("input").fill(value)
+    style_value = f"el => el.style.getPropertyValue('{prop}')"
+
+    def wait_applied(expected: str) -> None:
+        # The Enter commit races the input debounce, so wait for the applied value
+        # rather than reading it once.
+        for _ in range(60):
+            if target.evaluate(style_value) == expected:
+                return
+            editor_page.wait_for_timeout(50)
+        raise AssertionError(
+            f"{prop} never reached {expected!r}; saw {target.evaluate(style_value)!r}"
+        )
+
+    # A pasted value that already carries its unit shows as number plus suffix.
+    field.locator("input").fill(f"16{unit}")
+    expect(field.locator("input")).to_have_value("16")
+    expect(field.locator(".dpb-unit-suffix")).to_have_text(unit)
+    field.locator("input").press("Enter")
+    wait_applied(f"16{unit}")
+    expect(field.locator("input")).to_have_value("16")
+
+    # Typing the bare number keeps the unit and must not double it.
+    field.locator("input").fill("")
+    field.locator("input").press_sequentially("20")
+    expect(field.locator(".dpb-unit-suffix")).to_have_text(unit)
+    field.locator("input").press("Enter")
+    wait_applied(f"20{unit}")
+
+    # A keyword value carries no suffix at all.
+    field.locator("input").fill("auto")
     expect(field.locator(".dpb-unit-suffix")).to_have_count(0)
-    if prop == "font-size":
-        field.locator("input").fill("")
-        field.locator("input").press_sequentially("20")
-        expect(field.locator(".dpb-unit-suffix")).to_have_text("px")
-        field.locator("input").press_sequentially("px")
-        field.locator("input").press("Enter")
-        expect(target).to_have_css("font-size", "20px")
-        expect(field.locator(".dpb-unit-suffix")).to_have_count(0)
+    field.locator("input").press("Enter")
+    expect(field.locator("input")).to_have_value("auto")
+
+
+def test_typography_enums_are_dropdowns_that_keep_the_current_value(editor_page) -> None:
+    """The five typography fields are enums, and an enum never hides its value."""
+    from playwright.sync_api import expect
+
+    page = editor_page
+    select_interaction_target(page)
+    page.locator("#dpb-tab-visual").click()
+    expand_inspector_section(page, "font-size")
+    for prop in ("font-family", "font-size", "font-weight", "line-height", "letter-spacing"):
+        field = page.locator(f'.dpb-react-field[data-property="{prop}"]')
+        expect(field.locator("select")).to_have_count(1)
+        expect(field.locator("input")).to_have_count(0)
+
+    # The element's own value is offered as an option even when the list omits it.
+    # The snapshot reports computed style, so the injected value must survive as
+    # computed: a px value does, and 3px is deliberately absent from the enum.
+    target = page.frame_locator("iframe.dpb-proto-frame").locator("#panel-title")
+    target.evaluate("el => { el.style.letterSpacing = '3px'; }")
+    target.evaluate("el => el.click()")
+    page.keyboard.press("Escape")
+    page.locator("#dpb-tab-visual").click()
+    expand_inspector_section(page, "letter-spacing")
+    select = page.locator('.dpb-react-field[data-property="letter-spacing"] select')
+    expect(select).to_have_value("3px")
+    assert "3px" in select.evaluate("el => [...el.options].map(o => o.value)")
 
 
 def test_quad_shorthand_and_sides_stay_in_sync(editor_page):
@@ -787,8 +847,11 @@ def test_collapsed_header_indicates_pending_modifications(editor_page):
 
     page = editor_page
     select_interaction_target(page)
-    section = page.locator('[data-section="typography"]')
-    section.locator('[data-property="font-size"] input').fill("30px")
+    # layout is collapsed by default, so open it before typing and collapse it
+    # again to observe the modified marker on a closed header.
+    expand_inspector_section(page, "width")
+    section = page.locator('[data-section="layout"]')
+    section.locator('[data-property="width"] input').fill("30px")
     expect(page.locator("#dpb-visual-count")).to_have_text("1")
     section.locator(".dpb-section-header").click()
     expect(section.locator(".dpb-section-modified")).to_be_visible()

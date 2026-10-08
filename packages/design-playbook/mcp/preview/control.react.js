@@ -791,9 +791,33 @@
           function handleKey(prop, val, e) {
             if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); e.stopPropagation(); commit(prop, val, selected && selected.selector); }
           }
+          // A unit belongs beside the field, not inside it. The number and its
+          // unit are split for display and rejoined on commit, so a reviewer
+          // never types "px" and never sees it in the box.
+          function splitUnit(value, fallbackUnit) {
+            var raw = String(value == null ? "" : value).trim();
+            var match = /^(-?(?:\d+\.?\d*|\.\d+))([a-z%]*)$/i.exec(raw);
+            if (!match) return { number: raw, unit: "" };
+            return { number: match[1], unit: match[2] || (fallbackUnit || "") };
+          }
+          function joinUnit(number, unit) {
+            var raw = String(number == null ? "" : number).trim();
+            return /^-?(?:\d+\.?\d*|\.\d+)$/.test(raw) ? raw + (unit || "") : raw;
+          }
           function renderField(prop, label, kind, opts, unit) {
             var val = drafts[prop] || "";
             if (kind === "select") {
+              // An enum must not hide a value it does not list, so the element's
+              // current value is injected as an option. Switching a field to a
+              // dropdown must never silently rewrite the selection.
+              var options = (opts || []).map(function (opt) {
+                return typeof opt === "string"
+                  ? { value: opt, label: opt || "–" }
+                  : { value: opt.value, label: opt.label };
+              });
+              if (val && !options.some(function (opt) { return opt.value === val; })) {
+                options = [{ value: val, label: val }].concat(options);
+              }
               return h("label", { className: "dpb-react-field dpb-react-dropdown", key: prop, "data-property": prop },
                 h("span", null, label),
                 h("select", {
@@ -803,24 +827,23 @@
                     handleInput(prop, v);
                     commit(prop, v, selected && selected.selector);
                   }
-                }, (opts || []).map(function (opt) {
-                  var oval = typeof opt === "string" ? opt : opt.value;
-                  var olbl = typeof opt === "string" ? (opt || "–") : opt.label;
-                  return h("option", { key: oval, value: oval }, olbl);
+                }, options.map(function (opt) {
+                  return h("option", { key: opt.value, value: opt.value }, opt.label);
                 }))
               );
             }
             if (kind === "unit") {
+              var parts = splitUnit(val, unit);
               return h("label", { className: "dpb-react-field dpb-react-unit", key: prop, "data-property": prop },
                 h("span", null, label),
                 h("div", { className: "dpb-unit-input-wrap" },
                   h("input", {
-                    value: val, disabled: fieldDisabled,
-                    onChange: function (e) { handleInput(prop, e.target.value); },
-                    onBlur: function (e) { handleBlur(prop, e.target.value); },
-                    onKeyDown: function (e) { handleKey(prop, e.target.value, e); }
+                    value: parts.number, placeholder: "0", disabled: fieldDisabled,
+                    onChange: function (e) { handleInput(prop, joinUnit(e.target.value, parts.unit)); },
+                    onBlur: function (e) { handleBlur(prop, joinUnit(e.target.value, parts.unit)); },
+                    onKeyDown: function (e) { handleKey(prop, joinUnit(e.target.value, parts.unit), e); }
                   }),
-                  unit && /^-?(?:\d+\.?\d*|\.\d+)$/.test(val) ? h("span", { className: "dpb-unit-suffix" }, unit) : null
+                  parts.unit ? h("span", { className: "dpb-unit-suffix" }, parts.unit) : null
                 )
               );
             }
@@ -901,7 +924,18 @@
             );
           }
 
-          var weightOpts = ["", "normal", "bold", "100", "200", "300", "400", "500", "600", "700", "800", "900"];
+          var fontFamilyOpts = ["", "system-ui", "-apple-system", "Segoe UI", "Roboto",
+            "Helvetica Neue", "Arial", "Georgia", "Times New Roman", "ui-monospace",
+            "Consolas", "Courier New", "PingFang SC", "Microsoft YaHei", "sans-serif",
+            "serif", "monospace"];
+          var fontSizeOpts = ["", "12px", "13px", "14px", "15px", "16px", "18px", "20px",
+            "22px", "24px", "28px", "32px", "40px", "48px", "64px"];
+          var fontWeightOpts = ["", "normal", "bold", "100", "200", "300", "400", "500",
+            "600", "700", "800", "900"];
+          var lineHeightOpts = ["", "normal", "1", "1.15", "1.25", "1.4", "1.5", "1.6",
+            "1.75", "2", "2.5", "3"];
+          var letterSpacingOpts = ["", "normal", "-0.03em", "-0.02em", "-0.01em", "0",
+            "0.01em", "0.02em", "0.03em", "0.05em", "0.1em"];
           var displayOpts = ["", "block", "inline", "inline-block", "flex", "inline-flex", "grid", "inline-grid", "none"];
           var positionOpts = ["", "static", "relative", "absolute", "fixed", "sticky"];
           var flexDirOpts = ["", "row", "column", "row-reverse", "column-reverse"];
@@ -922,15 +956,15 @@
                   return h("button", { key: action[1], type: "button", "aria-label": action[1], "aria-pressed": action[3],
                     disabled: !ready || stale || busy, onClick: function () { applyStyle(action[2], action[3] ? action[5] : action[4]); } }, action[0]);
                 })),
-              renderField("font-family", t("visual_fontFamily")),
+              renderField("font-family", t("visual_fontFamily"), "select", fontFamilyOpts),
               renderPair(
-                renderField("font-size", t("visual_fontSize"), "unit", null, "px"),
-                renderField("font-weight", t("visual_fontWeight"), "text"),
+                renderField("font-size", t("visual_fontSize"), "select", fontSizeOpts),
+                renderField("font-weight", t("visual_fontWeight"), "select", fontWeightOpts),
                 "pair-font"
               ),
               renderPair(
-                renderField("line-height", t("visual_lineHeight"), "unit", null, ""),
-                renderField("letter-spacing", t("visual_letterSpacing"), "unit", null, "px"),
+                renderField("line-height", t("visual_lineHeight"), "select", lineHeightOpts),
+                renderField("letter-spacing", t("visual_letterSpacing"), "select", letterSpacingOpts),
                 "pair-metrics"
               )
             ]),

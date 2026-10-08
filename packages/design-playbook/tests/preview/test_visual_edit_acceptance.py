@@ -547,7 +547,8 @@ class VisualEditorRegressionTests(unittest.TestCase):
     def test_paused_numeric_typing_keeps_focus_across_debounce(self) -> None:
         self.open_editor()
         self.select("#a")
-        field = self.page.locator('[data-property="font-weight"] input')
+        expand_inspector_section(self.page, "width")
+        field = self.page.locator('[data-property="width"] input')
         field.click()
         self.page.keyboard.press("Control+a")
         self.page.keyboard.type("7")
@@ -557,35 +558,40 @@ class VisualEditorRegressionTests(unittest.TestCase):
         observed = {
             "draft": field.input_value(),
             "focused": field.evaluate("el => el === document.activeElement"),
-            "weight": self.frame.locator("#a").evaluate("el => el.style.fontWeight"),
+            "width": self.frame.locator("#a").evaluate("el => el.style.width"),
         }
         print("RP-1 paused numeric:", observed)
-        self.assertEqual(observed, {"draft": "700", "focused": True, "weight": "700"})
+        self.assertEqual(observed, {"draft": "700", "focused": True, "width": "700px"})
 
-    def test_paused_font_size_preserves_draft_until_units_are_valid(self) -> None:
+    def test_font_size_enum_applies_the_selected_size(self) -> None:
+        """font-size is an enum now (maintainer request), not a free-text unit field.
+
+        This replaces test_paused_font_size_preserves_draft_until_units_are_valid,
+        whose premise was typing a bare number and then appending "px" by hand.
+        The unit is no longer typed at all, so the contract to pin is that the
+        enum offers the element's current size and applies a chosen one.
+        """
         self.open_editor()
         self.select("#a")
-        field = self.page.locator('[data-property="font-size"] input')
-        field.click()
-        self.page.keyboard.press("Control+a")
-        self.page.keyboard.type("7")
-        self.page.wait_for_timeout(450)
-        self.page.keyboard.type("00")
-        self.page.wait_for_timeout(450)
-        self.assertEqual(field.input_value(), "700")
-        self.assertTrue(field.evaluate("el => el === document.activeElement"))
-        self.assertEqual(self.edits(), [])
-        self.assertTrue(self.page.locator(".dpb-react-diagnostic").inner_text())
-        self.page.keyboard.type("px")
-        self.page.wait_for_timeout(450)
-        self.assertEqual(self.frame.locator("#a").evaluate("el => el.style.fontSize"), "700px")
-        self.assertEqual(len(self.edits()), 1)
-        print("RP-1 font-size: 7 + pause + 00 => 700 (focused); + px => 700px, pending=1")
+        expand_inspector_section(self.page, "font-size")
+        field = self.page.locator('[data-property="font-size"]')
+        self.assertEqual(field.locator("select").count(), 1)
+        self.assertEqual(field.locator("input").count(), 0)
+        select = field.locator("select")
+        current = self.frame.locator("#a").evaluate("el => getComputedStyle(el).fontSize")
+        self.assertEqual(select.input_value(), current)
+        select.select_option("32px")
+        self.page.wait_for_function(
+            "document.querySelector('[data-property=\"font-size\"] select').value === '32px'")
+        self.assertEqual(self.frame.locator("#a").evaluate("el => el.style.fontSize"), "32px")
+        self.assertEqual([edit["newValue"] for edit in self.edits()], ["32px"])
+        print("font-size enum: current", current, "-> selected 32px, pending=1")
 
     def test_inflight_receipt_preserves_newer_draft(self) -> None:
         self.open_editor(delayed_receipts=True)
         self.select("#a")
-        field = self.page.locator('[data-property="font-weight"] input')
+        expand_inspector_section(self.page, "width")
+        field = self.page.locator('[data-property="width"] input')
         field.click()
         self.page.keyboard.press("Control+a")
         self.page.keyboard.type("7")
@@ -597,9 +603,9 @@ class VisualEditorRegressionTests(unittest.TestCase):
         self.assertTrue(field.evaluate("el => el === document.activeElement"))
         self.page.wait_for_timeout(850)
         self.assertEqual(field.input_value(), "700")
-        self.assertEqual(self.frame.locator("#a").evaluate("el => el.style.fontWeight"), "700")
-        self.assertEqual([edit["newValue"] for edit in self.edits()], ["7", "700"])
-        print("RP-1 delayed receipt: draft=700, focus retained, accepted edits=['7', '700']")
+        self.assertEqual(self.frame.locator("#a").evaluate("el => el.style.width"), "700px")
+        self.assertEqual([edit["newValue"] for edit in self.edits()], ["7px", "700px"])
+        print("RP-1 delayed receipt: draft=700, focus retained, accepted edits=['7px', '700px']")
 
     def test_tab_after_accepted_edit_does_not_append_noop(self) -> None:
         self.open_editor()
