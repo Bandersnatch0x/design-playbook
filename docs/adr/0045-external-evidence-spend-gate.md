@@ -301,6 +301,22 @@ unchanged. Console and evidence surfaces and unrelated shared-tree work remain
 excluded. No version bump, push, tag, publish, catalog submission, recruitment,
 or external-trial pass is authorized. Authorization is not a completion claim.
 
+### Follow-on (2026-10-08): the rail action is removed, not merely consolidated
+
+The consolidation above first reduced three rail actions to one. An independent
+evaluation then found that the surviving rail action was unsafe rather than
+merely redundant: it shared `name="choice"` and the confirm value with the header
+button while its label promised a submission, so a reviewer who wrote critical
+feedback and clicked it approved the round. The maintainer's instruction to
+consolidate covers removing that control; the header becomes the only decision
+surface and the rail footer becomes a readiness line that names the action.
+
+This extends the same amendment rather than creating a new one, and the ADR-0008
+text is corrected in the same change because it still described the removed rail
+action. No other boundary moves: the authorized files, the exclusions and the
+invariants listed above are unchanged, and authorization is still not a
+completion claim.
+
 ## Amendment (2026-10-07): scope extension for the sandbox shortcut allowlist
 
 The maintainer authorized, on 2026-10-07, extending the file list of the
@@ -366,6 +382,17 @@ runtime. No change to G5 token semantics, first-decision-wins, the ADR-0008 floo
 itself, `writesSource`, Console or evidence surfaces, or any other function in
 `transaction.py`. No release, tag, publish, catalog submission or recruitment.
 Authorization is not a completion claim.
+
+Boundary correction (2026-10-08, same day). The exclusions above say "no other
+function in `transaction.py`", and a later change in this same bounded effort did
+add cases to `transaction.self_check_floor`, which is another function. An
+independent review flagged the conflict. The earlier edit-only amendment
+authorizes the existing Preview modules "solely to implement the amended ADR-0008
+floor", which is what those cases do, so the change is covered; this paragraph
+records which of the two statements governs rather than leaving them to conflict.
+The authorization is additive and limited to the case list: `self_check_floor`
+asserts the floor, it does not implement it, and no other function in
+`transaction.py` is opened by this correction.
 
 Evidence. A differential check ran the pre-extraction decision block, taken
 verbatim from the previous revision, against `_floor_verdict` over 480

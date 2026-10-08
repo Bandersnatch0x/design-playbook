@@ -1568,8 +1568,29 @@ def test_readiness_is_not_claimed_while_the_bridge_cannot_flush(editor_page) -> 
     }""")
     expect(status).to_contain_text(i18n.t("rail_status_waiting"))
 
+    # The other disjunct: an effective batch that is already published. The
+    # bridge being offline does not make the round unready here, because there is
+    # nothing left to flush and the batch is complete.
+    page.evaluate("""() => {
+      window.DPB_VISUAL_EDIT_BATCH = {schemaVersion: 1, status: 'pending', sourceHash: 'x',
+        routeUrl: '', edits: [{kind: 'style', viewport: 'desktop', locator: '#panel-title',
+        property: 'background-color', oldValue: '', newValue: 'rgb(1, 2, 3)'}]};
+      window.dpbHasPendingVisualEdits = function () { return false; };
+      window.dpbVisualEditorState = function () { return {ready: false, stale: false}; };
+      document.dispatchEvent(new CustomEvent('dpbVisualEditsChanged'));
+    }""")
+    expect(status).to_have_attribute("data-ready", "true")
+
+    # A batch the transaction will refuse is not ready, however complete it looks.
+    page.evaluate("""() => {
+      window.DPB_VISUAL_EDIT_BATCH.status = 'stale';
+      document.dispatchEvent(new CustomEvent('dpbVisualEditsChanged'));
+    }""")
+    expect(status).to_have_attribute("data-ready", "false")
+
     # The same pending work with the editor connected is ready again.
     page.evaluate("""() => {
+      window.DPB_VISUAL_EDIT_BATCH.status = 'pending';
       window.dpbVisualEditorState = function () { return {ready: true, stale: false}; };
       document.dispatchEvent(new CustomEvent('dpbVisualEditsChanged'));
     }""")
@@ -1656,6 +1677,74 @@ def test_f5_first_edit_is_submittable_while_its_receipt_is_in_flight(editor_page
     dismiss_onboarding(page)
     page.locator("#dpb-tab-visual").click()
     expect(status).to_contain_text(i18n.t("rail_status_waiting"))
+
+
+def test_a_stale_bridge_still_sees_an_unpublished_draft(editor_page) -> None:
+    """Review F1: stale must not make the drain decision blind to unpublished work.
+
+    A disconnect sets stale whenever work is pending, so a predicate that
+    short-circuits on stale reports "nothing pending" exactly when something is,
+    and the round then submits without the draft and with no warning. This drives
+    the real path: an accepted edit, then a draft, then a frame reload, which runs
+    load() and therefore disconnected().
+    """
+    from playwright.sync_api import expect
+
+    from preview_e2e_helpers import dismiss_onboarding
+
+    page = editor_page
+    page.add_init_script("""
+        window.holdReceipts = false;
+        window.addEventListener('message', event => {
+            if (!window.holdReceipts) return;
+            if (!event.data || !event.data.dpbVisualEditChange) return;
+            if (event.source !== document.querySelector('iframe.dpb-proto-frame').contentWindow) return;
+            event.stopImmediatePropagation();
+        }, true);
+    """)
+    page.reload()
+    dismiss_onboarding(page)
+    target = page.frame_locator("iframe.dpb-proto-frame").locator("#panel-title")
+    target.evaluate("el => el.click()")
+    page.keyboard.press("Escape")
+    page.locator("#dpb-tab-visual").click()
+    field = page.locator('.dpb-react-field[data-property="background-color"] input')
+    expect(field).to_be_enabled()
+    field.fill("#123456")
+    field.press("Enter")
+    expect(page.locator("#dpb-visual-count")).to_have_text("1")
+
+    # A second value, typed but not committed. It stays a draft, so it differs
+    # from what was dispatched and is genuinely unpublished.
+    page.evaluate("window.holdReceipts = true")
+    field.fill("#abcdef")
+    page.wait_for_timeout(300)
+
+    # A note makes the round ready, so the click reaches the drain decision
+    # rather than being refused by the floor.
+    page.locator("#dpb-feedback").fill("Keep the pending colour change.")
+
+    # Break the bridge. The frame reload runs load(), which calls disconnected(),
+    # which sets stale only because an accepted edit is already pending.
+    page.locator("iframe.dpb-proto-frame").evaluate("el => { el.srcdoc = el.srcdoc; }")
+    page.wait_for_function("window.dpbVisualEditorState().stale === true")
+    assert page.evaluate("window.dpbHasPendingVisualEdits()") is True, (
+        "the uncommitted draft must still count as unpublished work"
+    )
+
+    page.evaluate("""() => {
+      window.__submitted = [];
+      document.querySelector('form').addEventListener('submit', e => {
+        window.__submitted.push(e.submitter ? e.submitter.id : '(null)');
+        e.preventDefault();
+      });
+    }""")
+    page.locator("#dpb-btn-approve").click()
+    page.wait_for_function("""() => Object.values(window.DPB_I18N_DUAL.visual_drain_failed)
+        .some(text => document.getElementById('dpb-toasts').textContent.includes(text))""")
+    assert page.evaluate("window.__submitted") == [], (
+        "an unpublished draft must not be submitted without it"
+    )
 
 
 def test_rail_reports_readiness_and_the_header_owns_the_decision(editor_page) -> None:

@@ -108,8 +108,9 @@ Preview confirmation remains separate from source-write authorization. Valid
 edit-only confirms carry the same `floor_pass` and source-bound agent handoff;
 `writesSource` remains false, and G5 token/first-decision authority is unchanged.
 The frontend drains outstanding edits before evaluating its advisory mirror.
-The right rail has one fixed submission action shared by all tabs; header
-submission remains an equivalent shortcut when the rail is collapsed. Annotation
+The header is the only decision surface, and it stays reachable when the rail is
+collapsed, so no second submission control exists anywhere in the shell. The rail
+reports readiness and names the action instead of offering one. Annotation
 drafts retain automatic persistence without a second decision-like draft button.
 
 ## Amendment: skip disposition (2026-08-22)

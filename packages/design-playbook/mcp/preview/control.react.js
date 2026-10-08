@@ -118,19 +118,15 @@
       // Review readiness is owned by control.review.js, which publishes it. The
       // panel renders a local submit button and mirrors that state instead of
       // re-deriving the floor; the seed covers a publish that landed early.
-      var [reviewGate, setReviewGate] = React.useState({ ready: false, label: "" });
+      var [reviewGate, setReviewGate] = React.useState(false);
       React.useEffect(function () {
         function onGate(event) {
           var detail = (event && event.detail) || {};
-          setReviewGate({ ready: !!detail.ready, label: String(detail.label || "") });
+          setReviewGate(!!detail.ready);
         }
         document.addEventListener("dpbReviewReady", onGate);
         var btn = document.getElementById("dpb-btn-approve");
-        var label = document.getElementById("dpb-approve-label");
-        setReviewGate({
-          ready: !!(btn && btn.classList.contains("dpb-approve-ready")),
-          label: (label && label.textContent) || "",
-        });
+        setReviewGate(!!(btn && btn.classList.contains("dpb-approve-ready")));
         return function () { document.removeEventListener("dpbReviewReady", onGate); };
       }, []);
       React.useEffect(function () {
@@ -721,7 +717,12 @@
 
       function hasPendingVisualEdits() {
         var state = current.current;
-        if (state.stale || !state.selected) return false;
+        // Do NOT short-circuit on stale. A disconnect sets stale whenever work is
+        // pending, so treating stale as "nothing pending" made the drain decision
+        // blind to an unpublished draft and let the round submit without it. Only
+        // an absent selection makes drafts irrelevant. Callers that need to know
+        // whether a flush is possible ask dpbVisualEditorState, not this.
+        if (!state.selected) return false;
         if (!isPublishedRef.current) return true;
         if (request.current || requestPromiseRef.current) return true;
         if (unackedRequests.current && Object.keys(unackedRequests.current).length > 0) return true;
@@ -1020,11 +1021,11 @@
             ])
           );
         })(), h("div", { className: "dpb-react-submit" },
-          // The rail owns the single fixed submission action, so the panel shows
-          // the next step instead of rendering a second, competing button.
+          // The header owns the decision, so the panel shows the next step rather
+          // than a second, competing button.
           h("p", { className: "dpb-react-next", role: "status",
-            "data-ready": reviewGate.ready ? "true" : "false" },
-            reviewGate.ready ? t("visual_next_ready") : t("visual_next_waiting")),
+            "data-ready": reviewGate ? "true" : "false" },
+            reviewGate ? t("visual_next_ready") : t("visual_next_waiting")),
           h("p", { className: "dpb-react-help" }, t("visual_help"))));
     }
     window.ReactDOM.createRoot(mount).render(h(Editor));

@@ -169,18 +169,44 @@ def self_check_floor() -> None:
     # whose net effect changes a value. Every case above calls the floor with
     # has_visual_edits defaulted to False, so the branch the amendment added was
     # not covered by this check at all.
+    #
+    # Only one case below is sensitive to the flag. The floor returns before it
+    # consults the flag whenever an anchor is incomplete or absent, so a case that
+    # pairs the flag with an incomplete anchor asserts the anchor rule again and
+    # covers nothing new; those live in the list above instead.
     edit_cases = [
         ("validated edits alone pass", "", [], True),
-        ("edits do not rescue an incomplete anchor", "",
-         [{"selector": "h2", "comment": ""}], False),
-        ("edits do not rescue an empty-selector anchor", "",
-         [{"selector": "", "comment": "x"}], False),
-        ("edits with complete anchors still pass", "",
-         [{"selector": "h2", "comment": "x"}], True),
     ]
     for label, fb, anc, want in edit_cases:
         got = evaluate_feedback_floor(fb, anc, has_visual_edits=True).passed
         assert got == want, f"{label} (with edits): want {want}, got {got}"
+    # The flag itself is decided elsewhere, so the substance of the amendment is
+    # only checked if that decision is checked. It is passed as a literal above.
+    from design_playbook.mcp.preview.visual_batch import normalize_visual_batch
+    for label, edits, want in [
+        ("a real change counts",
+         [{"locator": "#a", "property": "color", "oldValue": "", "newValue": "red"}], True),
+        ("a no-op does not count",
+         [{"locator": "#a", "property": "color", "oldValue": "red", "newValue": "red"}], False),
+        ("a chain undone to its baseline does not count", [
+            {"locator": "#a", "property": "color", "oldValue": "", "newValue": "red"},
+            {"locator": "#a", "property": "color", "oldValue": "red", "newValue": ""},
+        ], False),
+        ("a change and its reversal under two viewport labels do not count", [
+            {"kind": "style", "viewport": "desktop", "locator": "#a",
+             "property": "color", "oldValue": "", "newValue": "red"},
+            {"kind": "style", "viewport": "mobile", "locator": "#a",
+             "property": "color", "oldValue": "red", "newValue": ""},
+        ], False),
+        ("one surviving change beside an undone chain counts", [
+            {"locator": "#a", "property": "color", "oldValue": "", "newValue": "red"},
+            {"locator": "#a", "property": "color", "oldValue": "red", "newValue": ""},
+            {"locator": "#a", "property": "padding", "oldValue": "8px", "newValue": "16px"},
+        ], True),
+    ]:
+        batch = normalize_visual_batch({"edits": edits}, source_hash="self-check")
+        got = has_effective_visual_edits(batch)
+        assert got == want, f"{label}: want {want}, got {got}"
     print("FLOOR SELF-CHECK PASSED")
 
 

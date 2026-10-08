@@ -82,17 +82,15 @@
     if (persistDraft !== false) scheduleDraft();
   }
   // ---- readiness publication (single owner) ----
-  // The visual editor panel renders its own submit button because that is where
-  // the user is working, but the panel must not re-derive readiness: the floor
-  // mirror lives here once. This publishes the state; the panel asks back
-  // through the dpbVisualSubmit event below.
+  // The visual editor panel shows the next step rather than a submit button, so
+  // it must not re-derive readiness: the floor mirror lives here once and is
+  // published. The panel reads only the ready flag.
   var publishedGate = null;
-  function publishReviewGate(ready, readyLabel) {
-    var label = ready ? readyLabel : tt("approve_not_ready");
-    if (publishedGate && publishedGate.ready === ready && publishedGate.label === label) return;
-    publishedGate = { ready: ready, label: label };
+  function publishReviewGate(ready) {
+    if (publishedGate === ready) return;
+    publishedGate = ready;
     document.dispatchEvent(new CustomEvent("dpbReviewReady", {
-      detail: { ready: ready, label: label },
+      detail: { ready: ready },
     }));
   }
   function updateCounts() {
@@ -128,7 +126,7 @@
       status.setAttribute("data-ready", ready ? "true" : "false");
       status.textContent = ready ? tt("rail_status_ready") : tt("rail_status_waiting");
     }
-    publishReviewGate(ready, headerLabel);
+    publishReviewGate(ready);
   }
 
   // list interactions (delegated)
