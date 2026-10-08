@@ -234,7 +234,7 @@ def validate_registry(
     machine-enforced entries, so the wired check stays dormant until the
     first promotion lands.
     """
-    errors: list[str] = []
+    errors: list[RegistryError] = []
     seen: dict[str, RuleEntry] = {}
     promotions = (
         rules_governance.promote_adjudications(governance_events)
@@ -242,208 +242,253 @@ def validate_registry(
     )
 
     for entry in entries:
-        label = entry.id
-        if not ID_PATTERN.match(label):
-            errors.append(RegistryError(
-                f"{label}: entry id fails ^[A-Z][A-Z0-9]*-[0-9]{2}$",
-                rule=label,
-                expected="^[A-Z][A-Z0-9]*-[0-9]{2}$",
-                actual=label,
-                repair="Rename the entry heading and id to the SCHEMA-NN "
-                       "pattern",
-            ))
-        if label in seen:
-            errors.append(RegistryError(
-                f"{label}: duplicate registry id",
-                rule=label,
-                expected="unique registry ids",
-                actual=f"second entry with id {label}",
-                repair="Merge the duplicate entries or renumber one",
-            ))
-        seen[label] = entry
+        _validate_entry_fields(entry, seen, errors)
+        _validate_applicability(entry, errors)
+        _validate_placeholder(entry, errors)
+        _validate_governance(entry, governance_events, promotions, errors)
+        _validate_owner(entry, errors)
+        _validate_evidence_layers(entry, errors)
 
-        for key in REQUIRED_KEYS:
-            if not entry.fields.get(key, "").strip():
-                errors.append(RegistryError(
-                    f"{label}: missing required field {key}",
-                    rule=label,
-                    expected=f"{key}: <value>",
-                    actual="missing",
-                    repair=f"Add the {key} line to the entry's fenced block",
-                ))
+    _validate_references(entries, seen, errors)
+    _validate_overrides(entries, errors)
+    _validate_history(entries, errors)
+    return errors
 
-        version = entry.fields.get("version", "")
-        if not version.isdigit() or int(version) < 1:
+
+def _validate_entry_fields(
+    entry: RuleEntry,
+    seen: dict[str, RuleEntry],
+    errors: list[RegistryError],
+) -> None:
+    label = entry.id
+    if not ID_PATTERN.match(label):
+        errors.append(RegistryError(
+            f"{label}: entry id fails ^[A-Z][A-Z0-9]*-[0-9]{2}$",
+            rule=label,
+            expected="^[A-Z][A-Z0-9]*-[0-9]{2}$",
+            actual=label,
+            repair="Rename the entry heading and id to the SCHEMA-NN "
+                   "pattern",
+        ))
+    if label in seen:
+        errors.append(RegistryError(
+            f"{label}: duplicate registry id",
+            rule=label,
+            expected="unique registry ids",
+            actual=f"second entry with id {label}",
+            repair="Merge the duplicate entries or renumber one",
+        ))
+    seen[label] = entry
+
+    for key in REQUIRED_KEYS:
+        if not entry.fields.get(key, "").strip():
             errors.append(RegistryError(
-                f"{label}: version must be a positive integer, got {version!r}",
+                f"{label}: missing required field {key}",
                 rule=label,
-                expected="positive integer",
-                actual=version,
-                repair="Set the next integer version and append a matching "
-                       "history line",
-            ))
-
-        enum_checks = (
-            ("capability-domain", CAPABILITY_DOMAINS),
-            ("executes-in", EXECUTES_IN),
-            ("authority", AUTHORITIES),
-            ("provenance", PROVENANCES),
-            ("status", STATUSES),
-            ("check-type", CHECK_TYPES),
-        )
-        for key, allowed in enum_checks:
-            value = entry.fields.get(key, "")
-            if value and value not in allowed:
-                errors.append(RegistryError(
-                    f"{label}: {key} {value!r} not in "
-                    f"{{{'|'.join(sorted(allowed))}}}",
-                    rule=label,
-                    expected="|".join(sorted(allowed)),
-                    actual=value,
-                    repair=f"Set {key} to one of the allowed values",
-                ))
-
-        severity = entry.fields.get("severity-default", "")
-        if severity and not SEVERITY_PATTERN.match(severity):
-            errors.append(RegistryError(
-                f"{label}: severity-default must be S3|S2|S1|S0 "
-                f"(optionally '/ fact' or '/ judgment'), got {severity!r}",
-                rule=label,
-                expected="S3|S2|S1|S0 (optionally '/ fact' or '/ judgment')",
-                actual=severity,
-                repair="Rewrite onto the consequence axis (ADR-0028 records "
-                       "the former alias mapping)",
+                expected=f"{key}: <value>",
+                actual="missing",
+                repair=f"Add the {key} line to the entry's fenced block",
             ))
 
-        for key in APPLICABILITY_KEYS:
-            if key == "applicability-blocked":
-                continue  # advisory entries may have no blocked exit; placeholders must
-            value = entry.fields.get(key, "")
-            if value and not value.strip():
+    version = entry.fields.get("version", "")
+    if not version.isdigit() or int(version) < 1:
+        errors.append(RegistryError(
+            f"{label}: version must be a positive integer, got {version!r}",
+            rule=label,
+            expected="positive integer",
+            actual=version,
+            repair="Set the next integer version and append a matching "
+                   "history line",
+        ))
+
+    enum_checks = (
+        ("capability-domain", CAPABILITY_DOMAINS),
+        ("executes-in", EXECUTES_IN),
+        ("authority", AUTHORITIES),
+        ("provenance", PROVENANCES),
+        ("status", STATUSES),
+        ("check-type", CHECK_TYPES),
+    )
+    for key, allowed in enum_checks:
+        value = entry.fields.get(key, "")
+        if value and value not in allowed:
+            errors.append(RegistryError(
+                f"{label}: {key} {value!r} not in "
+                f"{{{'|'.join(sorted(allowed))}}}",
+                rule=label,
+                expected="|".join(sorted(allowed)),
+                actual=value,
+                repair=f"Set {key} to one of the allowed values",
+            ))
+
+    severity = entry.fields.get("severity-default", "")
+    if severity and not SEVERITY_PATTERN.match(severity):
+        errors.append(RegistryError(
+            f"{label}: severity-default must be S3|S2|S1|S0 "
+            f"(optionally '/ fact' or '/ judgment'), got {severity!r}",
+            rule=label,
+            expected="S3|S2|S1|S0 (optionally '/ fact' or '/ judgment')",
+            actual=severity,
+            repair="Rewrite onto the consequence axis (ADR-0028 records "
+                   "the former alias mapping)",
+        ))
+
+
+def _validate_applicability(entry: RuleEntry, errors: list[RegistryError]) -> None:
+    label = entry.id
+    for key in APPLICABILITY_KEYS:
+        if key == "applicability-blocked":
+            continue  # advisory entries may have no blocked exit; placeholders must
+        value = entry.fields.get(key, "")
+        if value and not value.strip():
+            errors.append(RegistryError(
+                f"{label}: {key} is blank",
+                rule=label,
+                expected=f"{key}: observable predicate wording",
+                actual="blank",
+                repair=f"State the {key} predicate",
+            ))
+
+
+def _validate_placeholder(entry: RuleEntry, errors: list[RegistryError]) -> None:
+    label = entry.id
+    # Placeholder entries need the full three-state predicate + blocked exit.
+    if entry.provenance == "placeholder":
+        missing = [
+            key for key in APPLICABILITY_KEYS
+            if not entry.fields.get(key, "").strip()
+        ]
+        if missing:
+            errors.append(RegistryError(
+                f"{label}: placeholder entry lacks applicability predicate "
+                f"or blocked exit: {missing}",
+                rule=label,
+                expected="all three applicability keys + blocked exit",
+                actual=f"missing {missing}",
+                repair="Write the three-state predicate and the blocked "
+                       "exit",
+            ))
+
+
+def _validate_governance(
+    entry: RuleEntry,
+    governance_events: list[dict] | None,
+    promotions: dict[str, dict],
+    errors: list[RegistryError],
+) -> None:
+    # machine-enforced entries need a governance adjudication reference.
+    if entry.status != "machine-enforced":
+        return
+    label = entry.id
+    ref = entry.fields.get("governance-ref", "")
+    if not ref.strip():
+        errors.append(RegistryError(
+            f"{label}: machine-enforced entry requires a governance "
+            "adjudication reference (governance-ref)",
+            rule=label,
+            expected="governance-ref: <adjudication event id>",
+            actual="missing",
+            repair="Reference the promote -> machine-enforced "
+                   "adjudication event",
+        ))
+        return
+    if governance_events is None:
+        return
+    event = promotions.get(label)
+    if event is None or event.get("id") != ref.strip():
+        errors.append(RegistryError(
+            f"{label}: governance-ref {ref!r} does not resolve "
+            "to a promote -> machine-enforced adjudication for "
+            f"{label} in the governance log",
+            rule=label,
+            expected=f"promote adjudication for {label}",
+            actual=ref,
+            repair="Point governance-ref at the rule's promotion "
+                   "event in rules-governance.jsonl",
+        ))
+        return
+    target_version = event.get("target_version")
+    if (isinstance(target_version, int)
+            and not isinstance(target_version, bool)
+            and target_version != entry.version):
+        errors.append(RegistryError(
+            f"{label}: governance-ref pins {label}@"
+            f"{target_version} but the registry version is "
+            f"v{entry.version}",
+            rule=label,
+            expected=f"{label}@{entry.version}",
+            actual=f"{label}@{target_version}",
+            repair="Re-pin the adjudication or bump the entry "
+                   "in lockstep",
+        ))
+
+def _validate_owner(entry: RuleEntry, errors: list[RegistryError]) -> None:
+    label = entry.id
+    owner = entry.fields.get("owner", "")
+    if owner:
+        for hop, routes in _parse_owner(owner):
+            if hop not in OWNER_FIRST_HOPS:
                 errors.append(RegistryError(
-                    f"{label}: {key} is blank",
+                    f"{label}: owner first hop {hop!r} not in "
+                    "spec|domain|craft|design|components|template|"
+                    "native-craft|reference|baseline",
                     rule=label,
-                    expected=f"{key}: observable predicate wording",
-                    actual="blank",
-                    repair=f"State the {key} predicate",
+                    expected="spec|domain|craft|design|components|"
+                             "template|native-craft|reference|baseline",
+                    actual=hop,
+                    repair="Use one of the eight first-hop artifacts",
+                ))
+            for route in routes:
+                if route not in OWNER_SECOND_HOPS:
+                    errors.append(RegistryError(
+                        f"{label}: owner second hop {route!r} not in R1-R5",
+                        rule=label,
+                        expected="R1-R5",
+                        actual=route,
+                        repair="Route the hop to R1-R5",
+                    ))
+            if hop in OWNER_FIRST_HOPS and not routes:
+                errors.append(RegistryError(
+                    f"{label}: owner hop {hop!r} has no R1-R5 route",
+                    rule=label,
+                    expected="at least one R1-R5 route",
+                    actual=f"{hop} has no route",
+                    repair="Append '-> R<n>' to the hop",
                 ))
 
-        # Placeholder entries need the full three-state predicate + blocked exit.
-        if entry.provenance == "placeholder":
-            missing = [
-                key for key in APPLICABILITY_KEYS
-                if not entry.fields.get(key, "").strip()
-            ]
-            if missing:
+
+def _validate_evidence_layers(entry: RuleEntry, errors: list[RegistryError]) -> None:
+    label = entry.id
+    layers = entry.fields.get("evidence-layers", "")
+    if layers:
+        for token in layers.split(","):
+            token = token.strip()
+            name, _, count = token.partition(">=")
+            if name.strip() not in EVIDENCE_LAYERS:
                 errors.append(RegistryError(
-                    f"{label}: placeholder entry lacks applicability predicate "
-                    f"or blocked exit: {missing}",
+                    f"{label}: evidence layer {name.strip()!r} not in "
+                    "source|rendered|interaction|measurement|decision",
                     rule=label,
-                    expected="all three applicability keys + blocked exit",
-                    actual=f"missing {missing}",
-                    repair="Write the three-state predicate and the blocked "
-                           "exit",
+                    expected="source|rendered|interaction|measurement"
+                             "|decision",
+                    actual=name.strip(),
+                    repair="Use a declared evidence layer name",
+                ))
+            elif not count.strip().isdigit() or int(count.strip()) < 1:
+                errors.append(RegistryError(
+                    f"{label}: evidence layer {token!r} needs count >= 1",
+                    rule=label,
+                    expected="<layer>>=1",
+                    actual=token,
+                    repair="State a count >= 1 for the layer",
                 ))
 
-        # machine-enforced entries need a governance adjudication reference.
-        if entry.status == "machine-enforced":
-            ref = entry.fields.get("governance-ref", "")
-            if not ref.strip():
-                errors.append(RegistryError(
-                    f"{label}: machine-enforced entry requires a governance "
-                    "adjudication reference (governance-ref)",
-                    rule=label,
-                    expected="governance-ref: <adjudication event id>",
-                    actual="missing",
-                    repair="Reference the promote -> machine-enforced "
-                           "adjudication event",
-                ))
-            elif governance_events is not None:
-                event = promotions.get(label)
-                if event is None or event.get("id") != ref.strip():
-                    errors.append(RegistryError(
-                        f"{label}: governance-ref {ref!r} does not resolve "
-                        "to a promote -> machine-enforced adjudication for "
-                        f"{label} in the governance log",
-                        rule=label,
-                        expected=f"promote adjudication for {label}",
-                        actual=ref,
-                        repair="Point governance-ref at the rule's promotion "
-                               "event in rules-governance.jsonl",
-                    ))
-                else:
-                    target_version = event.get("target_version")
-                    if (isinstance(target_version, int)
-                            and not isinstance(target_version, bool)
-                            and target_version != entry.version):
-                        errors.append(RegistryError(
-                            f"{label}: governance-ref pins {label}@"
-                            f"{target_version} but the registry version is "
-                            f"v{entry.version}",
-                            rule=label,
-                            expected=f"{label}@{entry.version}",
-                            actual=f"{label}@{target_version}",
-                            repair="Re-pin the adjudication or bump the entry "
-                                   "in lockstep",
-                        ))
 
-        owner = entry.fields.get("owner", "")
-        if owner:
-            for hop, routes in _parse_owner(owner):
-                if hop not in OWNER_FIRST_HOPS:
-                    errors.append(RegistryError(
-                        f"{label}: owner first hop {hop!r} not in "
-                        "spec|domain|craft|design|components|template|"
-                        "native-craft|reference|baseline",
-                        rule=label,
-                        expected="spec|domain|craft|design|components|"
-                                 "template|native-craft|reference|baseline",
-                        actual=hop,
-                        repair="Use one of the eight first-hop artifacts",
-                    ))
-                for route in routes:
-                    if route not in OWNER_SECOND_HOPS:
-                        errors.append(RegistryError(
-                            f"{label}: owner second hop {route!r} not in R1-R5",
-                            rule=label,
-                            expected="R1-R5",
-                            actual=route,
-                            repair="Route the hop to R1-R5",
-                        ))
-                if hop in OWNER_FIRST_HOPS and not routes:
-                    errors.append(RegistryError(
-                        f"{label}: owner hop {hop!r} has no R1-R5 route",
-                        rule=label,
-                        expected="at least one R1-R5 route",
-                        actual=f"{hop} has no route",
-                        repair="Append '-> R<n>' to the hop",
-                    ))
-
-        layers = entry.fields.get("evidence-layers", "")
-        if layers:
-            for token in layers.split(","):
-                token = token.strip()
-                name, _, count = token.partition(">=")
-                if name.strip() not in EVIDENCE_LAYERS:
-                    errors.append(RegistryError(
-                        f"{label}: evidence layer {name.strip()!r} not in "
-                        "source|rendered|interaction|measurement|decision",
-                        rule=label,
-                        expected="source|rendered|interaction|measurement"
-                                 "|decision",
-                        actual=name.strip(),
-                        repair="Use a declared evidence layer name",
-                    ))
-                elif not count.strip().isdigit() or int(count.strip()) < 1:
-                    errors.append(RegistryError(
-                        f"{label}: evidence layer {token!r} needs count >= 1",
-                        rule=label,
-                        expected="<layer>>=1",
-                        actual=token,
-                        repair="State a count >= 1 for the layer",
-                    ))
-
-    # Reference existence + pinned versions (related / overrides / supersedes).
+def _validate_references(
+    entries: list[RuleEntry],
+    seen: dict[str, RuleEntry],
+    errors: list[RegistryError],
+) -> None:
     for entry in entries:
         for key in ("related", "overrides", "supersedes"):
             value = entry.fields.get(key, "")
@@ -472,7 +517,8 @@ def validate_registry(
                             repair=f"Re-pin {key} to {ref_id}@{target.version}",
                         ))
 
-    # Overrides graph must be acyclic.
+
+def _validate_overrides(entries: list[RuleEntry], errors: list[RegistryError]) -> None:
     graph = {
         entry.id: [ref_id for ref_id, _ in _parse_refs(entry.fields.get("overrides", ""))]
         for entry in entries
@@ -497,7 +543,8 @@ def validate_registry(
             visited.add(node)
             stack.extend(graph.get(node, ()))
 
-    # History versions must increase and end at the current version.
+
+def _validate_history(entries: list[RuleEntry], errors: list[RegistryError]) -> None:
     for entry in entries:
         history = entry.fields.get("history", "")
         versions: list[int] = []
@@ -523,7 +570,6 @@ def validate_registry(
                     actual=f"history ends at v{versions[-1]}",
                     repair=f"Append a v{entry.version} history line",
                 ))
-    return errors
 
 
 @dataclass

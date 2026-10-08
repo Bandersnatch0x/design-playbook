@@ -18,7 +18,7 @@ from pathlib import Path, PurePosixPath
 # Bump here only; ci.yml reads this constant instead of a second literal.
 RUFF_VERSION = "0.15.12"
 
-# Version line → exact shipped command set (ADR-0015 stable main / OPP-01).
+# Version line → exact shipped command set (ADR-0015 stable main).
 # main is the public install surface, so unreleased capability must never
 # ship under a released version: a new command requires a version entry
 # that admits it, and a version entry requires its inventory on disk.

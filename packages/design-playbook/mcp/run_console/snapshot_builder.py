@@ -65,6 +65,7 @@ from design_playbook.scripts.run_metadata import (
 )
 from design_playbook.scripts.run_profile import validate_run_profile
 from design_playbook.scripts.status_projection import (
+    StageState,
     inspect_run,
     inspect_vnext,
     project_next_action,
@@ -114,10 +115,6 @@ _RETAINED_FIELDS = (
     "freshness",
 )
 
-# G6 owner rule ids that make a ledger-referenced artifact unbindable for
-# the Snapshot (the Manifest binding is missing or escapes containment).
-# Capture-contract quality findings (G6.capture_*) do not unbind evidence
-# at this boundary.
 _UNBINDABLE_RULES = frozenset(
     {"G6.artifact_missing", "G6.escape", "G6.no_binding", "G6.unknown_criterion",
      "G6.binding_conflict"}
@@ -343,7 +340,6 @@ class _Builder:
         self._artifact_hashes_observed: dict[str, str | None] = {}
         self._artifact_hashes_verified: dict[str, str | None] = {}
 
-    # -- orchestration ------------------------------------------------
 
     def build(self, mid_build_hook: Callable[[], None] | None) -> dict[str, Any]:
         capture = self._capture()
@@ -356,11 +352,9 @@ class _Builder:
             for relpath in self._artifact_sources
         }
         document = self._assemble(capture, verify, projection)
-        # The build is atomic: it returns only a contract-valid document.
         validate_snapshot(document)
         return document
 
-    # -- capture ------------------------------------------------------
 
     def _capture(self) -> _Capture:
         facts = capture_run_facts(run_root=self._run_root)
@@ -393,7 +387,6 @@ class _Builder:
             return None
         return _digest_bytes(data)
 
-    # -- read states --------------------------------------------------
 
     def _manifest_state(self, facts: RunFacts, projection: _Projection) -> str:
         if projection.manifest_degraded:
@@ -407,13 +400,27 @@ class _Builder:
                 return "unreadable" if error.code == "unreadable" else "malformed"
         return facts.artifact_state("manifest")
 
-    # -- projection (owner seams over captured inputs) -----------------
 
     def _project(self, capture: _Capture) -> _Projection:
         facts = capture.facts
         acc = _ProjectionAcc()
+        self._project_identity(capture)
+        spec_criteria = self._project_intent(facts)
+        self._project_contract(capture)
+        states = self._project_progress(facts)
+        self._project_preview(facts)
+        pointback_state = self._project_repair(facts)
+        self._project_evaluation(facts, pointback_state, spec_criteria, acc)
+        self._project_next_action(facts, states)
+        # The owner emits no alternatives; the empty list is owner-known.
+        return _Projection(
+            manifest_degraded=acc.manifest_degraded,
+            limitations=acc.limitations,
+            limitations_digest=acc.limitations_digest,
+        )
 
-        # identity.run: the selected-session fact from the registry.
+    def _project_identity(self, capture: _Capture) -> None:
+        facts = capture.facts
         self._draft(
             "identity.run",
             (_REF_SELECTED_RUN,),
@@ -438,7 +445,6 @@ class _Builder:
                 product.reason or "source-missing",
             )
 
-        # identity.profile: run-profile owner over the captured plan text.
         plan_state = facts.artifact_state("plan")
         if plan_state == "missing":
             self._draft_unknown("identity.profile", (_REF_PROFILE,), "source-missing")
@@ -470,7 +476,7 @@ class _Builder:
                     },
                 )
 
-        # intent: specification owner over the captured spec text.
+    def _project_intent(self, facts: RunFacts) -> tuple[Any, ...]:
         spec_state = facts.artifact_state("spec")
         spec_summary: str | None = None
         spec_criteria: tuple[Any, ...] = ()
@@ -504,11 +510,9 @@ class _Builder:
                     "then": criterion.then,
                 },
             )
+        return spec_criteria
 
-        # intent.contract: the captured contract-bind authority record.
-        self._project_contract(capture)
-
-        # execution.progress: stage registry over the captured facts.
+    def _project_progress(self, facts: RunFacts) -> list[StageState]:
         states = inspect_run(
             self._run_root, preview_snapshot=facts.preview, run_facts=facts
         )
@@ -540,8 +544,9 @@ class _Builder:
             "known",
             {"observedStages": observed_stages, "latestObservedStage": latest},
         )
+        return states
 
-        # execution.preview: preview integrity owner.
+    def _project_preview(self, facts: RunFacts) -> None:
         snapshot = facts.preview
         if snapshot is None or not snapshot.occurred:
             preview_result: dict[str, Any] = {"state": "absent", "round": None}
@@ -572,7 +577,7 @@ class _Builder:
             }
         self._draft("execution.preview", (_REF_PREVIEW,), "known", preview_result)
 
-        # execution.repair: repair narration owner.
+    def _project_repair(self, facts: RunFacts) -> str:
         pointback_state = facts.artifact_state("point_back")
         if pointback_state == "missing":
             self._draft_unknown("execution.repair", (_REF_REPAIR,), "source-missing")
@@ -602,11 +607,9 @@ class _Builder:
                 "known",
                 repair_result,
             )
+        return pointback_state
 
-        # evaluation: point-back owner over the captured point-back text.
-        self._project_evaluation(facts, pointback_state, spec_criteria, acc)
-
-        # nextActions: next-action owner over the same captured facts.
+    def _project_next_action(self, facts: RunFacts, states: list[StageState]) -> None:
         action = project_next_action(
             states,
             self._run_root,
@@ -636,12 +639,6 @@ class _Builder:
             (_REF_STATUS,),
             "known",
             action_result,
-        )
-        # The owner emits no alternatives; the empty list is owner-known.
-        return _Projection(
-            manifest_degraded=acc.manifest_degraded,
-            limitations=acc.limitations,
-            limitations_digest=acc.limitations_digest,
         )
 
     def _project_contract(self, capture: _Capture) -> None:
@@ -895,7 +892,6 @@ class _Builder:
         except (json.JSONDecodeError, TypeError):
             return []
 
-    # -- drafts --------------------------------------------------------
 
     def _draft(
         self,
@@ -935,7 +931,6 @@ class _Builder:
             return value
         return None
 
-    # -- observations and records --------------------------------------
 
     def _preview_digest(self, snapshot: Any) -> dict[str, Any]:
         if snapshot is None:
@@ -1114,7 +1109,6 @@ class _Builder:
                 "verifiedAt": verified_at,
             }
 
-    # -- assembly ------------------------------------------------------
 
     def _finalize_reason(self, skeleton: _ReasonSkeleton) -> dict[str, Any]:
         refs = sorted(set(skeleton.refs))
@@ -1206,8 +1200,6 @@ class _Builder:
         assertions = self._finalize_assertions()
         items = [self._records[ref] for ref in sorted(self._records)]
         source_set_hash = _records_digest(items)
-        # The contract derives buildState solely from the document state: any
-        # non-current source record or non-known assertion degrades it.
         degraded = any(
             record["freshness"] != "current" for record in items
         ) or any(

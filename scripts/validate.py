@@ -16,19 +16,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-# T-081 family: under a pipe the Windows default stdout codec is the locale
-# code page (cp936 on a zh-CN host), so any non-GBK byte in the report -- an em
-# dash, CJK -- crashes the caller's UTF-8 reader thread. release.py read a green
-# child as "validate.py failed (exit 0)" that way. Emit UTF-8 deterministically
-# when the streams are not terminals. Guarded by __main__ so an in-process
-# import cannot re-encode the importer's stdout.
-if __name__ == "__main__":
-    # One pipe-encoding seam (T-105): UTF-8 on piped stdout/stderr
-    # regardless of the host code page. See scripts/stdio_encoding.py.
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packages" / "design-playbook"))
-    from design_playbook.scripts.stdio_encoding import configure_piped_utf8
-
-    configure_piped_utf8()
 
 # scripts/ must resolve even when validate.py is imported in-process rather
 # than run as `python scripts/validate.py` (mirrors doctor.py's guard).
@@ -74,932 +61,6 @@ def _read_json(path: Path) -> dict:
         return {}
 
 
-print("== JSON manifests ==")
-plugin_json = PKG / ".claude-plugin" / "plugin.json"
-market_json = ROOT / ".claude-plugin" / "marketplace.json"
-pj = json.loads(plugin_json.read_text(encoding="utf-8")) if plugin_json.exists() else {}
-mj = json.loads(market_json.read_text(encoding="utf-8")) if market_json.exists() else {}
-check(bool(pj), f"plugin.json present: {plugin_json}")
-check(bool(mj), f"marketplace.json present at repo root: {market_json}")
-check(bool(pj.get("version")), "plugin.json has explicit semver version")
-check(bool(pj.get("name")), "plugin.json has name")
-check(bool(pj.get("description")), "plugin.json has description")
-package_manifest = _read_json(PKG / "package.json")
-check(
-    bool(pj.get("description"))
-    and package_manifest.get("description") == pj.get("description"),
-    "package.json description matches plugin.json",
-)
-catalog_plugins = mj.get("plugins", [])
-catalog_plugin = next(
-    (entry for entry in catalog_plugins
-     if isinstance(entry, dict) and entry.get("name") == pj.get("name")),
-    {},
-)
-check(
-    bool(pj.get("description"))
-    and catalog_plugin.get("description") == pj.get("description"),
-    "marketplace description matches plugin.json",
-)
-
-print("== Plugin-root layout (ADR-0006) ==")
-check((PKG / "skills").is_dir(), "skills/ at plugin root")
-check((PKG / "commands").is_dir(), "commands/ at plugin root")
-check(not (PKG / ".claude-plugin" / "skills").exists(), "no skills/ inside .claude-plugin/")
-check(not (PKG / ".claude-plugin" / "commands").exists(), "no commands/ inside .claude-plugin/")
-check(not (PKG / ".claude-plugin" / "marketplace.json").exists(),
-      "no in-package marketplace.json (catalog lives at repo root)")
-
-print("== Bundled MCP adapters (marketplace install path) ==")
-mcp_json = PKG / ".mcp.json"
-check(mcp_json.is_file(), "plugin .mcp.json present")
-if mcp_json.is_file():
-    try:
-        mcp = json.loads(mcp_json.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        mcp = {}
-        check(False, f"plugin .mcp.json is valid JSON: {exc}")
-    else:
-        servers = mcp.get("mcpServers", {}) if isinstance(mcp, dict) else {}
-        check(isinstance(servers, dict) and "design-playbook-preview" in servers,
-              "plugin .mcp.json registers design-playbook-preview")
-        check(isinstance(servers, dict) and "design-playbook-evidence" in servers,
-              "plugin .mcp.json registers design-playbook-evidence")
-        raw = mcp_json.read_text(encoding="utf-8")
-        check("${CLAUDE_PLUGIN_ROOT}" in raw,
-              "plugin .mcp.json uses ${CLAUDE_PLUGIN_ROOT}")
-check((PKG / "mcp" / "preview" / "server.py").is_file(),
-      "bundled preview runtime at mcp/preview/server.py")
-check((PKG / "mcp" / "preview" / "integrity.py").is_file(),
-      "bundled preview integrity module at mcp/preview/integrity.py")
-for resource_name in ("control.html", "control.css", "control.js", "control.review.js"):
-    check((PKG / "mcp" / "preview" / resource_name).is_file(),
-          f"bundled preview frontend resource at mcp/preview/{resource_name}")
-check((PKG / "mcp" / "evidence" / "server.py").is_file(),
-      "bundled evidence runtime at mcp/evidence/server.py")
-
-print("== Marketplace catalog ==")
-if mj:
-    plugins = mj.get("plugins", [])
-    check(bool(plugins), "marketplace lists >=1 plugin")
-    if plugins:
-        src = plugins[0].get("source", "")
-        check(src.endswith("packages/design-playbook"),
-              f"marketplace plugin source points at package (got {src!r})")
-
-print("== Codex manifest (ADR-0009 dual-publish) ==")
-# The Codex marketplace install path ships its own plugin.json + mcp.json
-# under packages/design-playbook/.codex-plugin/, plus a separate catalog at
-# .agents/plugins/marketplace.json. None of these are read by the Claude
-# plugin loader, so a static gate is the only thing catching drift between
-# the two publish surfaces. See issue 07 (secure-ship-0.4.4).
-codex_plugin_json = PKG / ".codex-plugin" / "plugin.json"
-codex_mcp_json = PKG / ".codex-plugin" / "mcp.json"
-agents_market_json = ROOT / ".agents" / "plugins" / "marketplace.json"
-cpj = _read_json(codex_plugin_json)
-cmcp = _read_json(codex_mcp_json)
-amj = _read_json(agents_market_json)
-check(bool(cpj), f".codex-plugin/plugin.json present: {codex_plugin_json.relative_to(ROOT)}")
-check(bool(cmcp), f".codex-plugin/mcp.json present: {codex_mcp_json.relative_to(ROOT)}")
-check(bool(amj), f".agents marketplace.json present: {agents_market_json.relative_to(ROOT)}")
-
-# 1) Codex plugin.json version must equal the Claude plugin.json version.
-#    A bump that touches only the Claude side leaves the Codex marketplace
-#    shipping a stale version — fail-fast here so the gate catches it.
-codex_version = cpj.get("version") if isinstance(cpj, dict) else None
-claude_version = pj.get("version") if isinstance(pj, dict) else None
-check(bool(codex_version), ".codex-plugin/plugin.json has explicit semver version")
-check(
-    bool(codex_version) and codex_version == claude_version,
-    f".codex-plugin/plugin.json version matches Claude plugin.json "
-    f"(codex={codex_version!r}, claude={claude_version!r})",
-)
-
-# 2) The Codex picker copy is a leading truncation of the canonical description
-#    (ADR-0040 positioning). `description` is pinned across Claude/package/
-#    catalog above, but the Codex `interface.shortDescription` is a second
-#    publish surface: without this check it silently kept a pre-0.24 framing
-#    after the other three moved. A short form may truncate, never rephrase.
-codex_interface = cpj.get("interface") if isinstance(cpj, dict) else None
-codex_short = (codex_interface.get("shortDescription")
-               if isinstance(codex_interface, dict) else None)
-canonical_description = pj.get("description") if isinstance(pj, dict) else None
-check(
-    bool(codex_short) and bool(canonical_description)
-    and canonical_description.startswith(codex_short),
-    ".codex-plugin/plugin.json interface.shortDescription is a prefix of the "
-    f"canonical description (short={codex_short!r})",
-)
-
-# 3) Codex mcp.json preview/evidence target files exist on disk. The Codex
-#    adapter resolves these relative to its install cwd, so a missing file
-#    would surface only at runtime in a foreign agent.
-if isinstance(cmcp, dict):
-    codex_servers = cmcp.get("mcpServers", {})
-    codex_servers = codex_servers if isinstance(codex_servers, dict) else {}
-    for codex_server_name in ("design-playbook-preview", "design-playbook-evidence"):
-        entry = codex_servers.get(codex_server_name)
-        if not isinstance(entry, dict):
-            check(False, f".codex-plugin/mcp.json registers {codex_server_name}")
-            continue
-        check(True, f".codex-plugin/mcp.json registers {codex_server_name}")
-        raw_args = entry.get("args", [])
-        args_list = raw_args if isinstance(raw_args, list) else []
-        target_arg = args_list[0] if args_list and isinstance(args_list[0], str) else ""
-        if not target_arg:
-            check(False, f".codex-plugin/mcp.json {codex_server_name} has args[0] path")
-            continue
-        target_path = PKG / target_arg
-        check(target_path.is_file(),
-              f".codex-plugin/mcp.json {codex_server_name} target exists on disk: {target_arg}")
-
-# 4) .agents marketplace plugins[0].source.path must resolve to a real dir.
-#    Unlike the Claude marketplace, the .agents catalog intentionally has no
-#    version field (issue 07); only the source path is verified here.
-if isinstance(amj, dict):
-    agents_plugins = amj.get("plugins", [])
-    agents_plugins = agents_plugins if isinstance(agents_plugins, list) else []
-    check(bool(agents_plugins), ".agents marketplace lists >=1 plugin")
-    if agents_plugins and isinstance(agents_plugins[0], dict):
-        agents_src = agents_plugins[0].get("source", "")
-        agents_path = ""
-        if isinstance(agents_src, dict):
-            raw_path = agents_src.get("path", "")
-            agents_path = raw_path if isinstance(raw_path, str) else ""
-        elif isinstance(agents_src, str):
-            agents_path = agents_src
-        check(bool(agents_path), ".agents marketplace plugins[0].source.path present")
-        if agents_path:
-            check((ROOT / agents_path).is_dir(),
-                  f".agents marketplace plugins[0].source.path exists: {agents_path}")
-
-print("== Adapter generator drift gate (ADR-0042) ==")
-# Tier-1 snapshot agents have committed artifacts that must exactly match
-# what the generator would produce. The compare algorithm lives in the
-# packaged adapter_drift module — one implementation shared with the
-# read-only doctor report; this gate keeps only its blocking semantics
-# (T-038). Any mismatch means the snapshot is stale — run the repair
-# command below and commit the updated files.
-_gen_script = PKG / "scripts" / "generate_adapter.py"
-check(_gen_script.is_file(), "adapter generator script present at scripts/generate_adapter.py")
-if _gen_script.is_file():
-    for _row in adapter_drift.compare_snapshots(PKG):
-        _ok = _row["status"] == "clean"
-        _text = _row["message"]
-        if not _ok and _row["repair"]:
-            _text += f": run `{_row['repair']}` to refresh"
-        check(_ok, _text)
-
-print("== npm / pi publish manifest ==")
-# packages/design-playbook/package.json is the third publish surface: pi has
-# no marketplace, and the pi.dev gallery indexes npm for the `pi-package`
-# keyword. Drop the keyword and the package silently vanishes from the
-# gallery while `pi install` keeps working — no runtime symptom to catch it.
-npm_json = PKG / "package.json"
-npmj = _read_json(npm_json)
-check(bool(npmj), f"package.json present: {npm_json.relative_to(ROOT)}")
-if isinstance(npmj, dict) and npmj:
-    npm_version = npmj.get("version")
-    check(
-        bool(npm_version) and npm_version == claude_version,
-        f"package.json version matches Claude plugin.json "
-        f"(npm={npm_version!r}, claude={claude_version!r})",
-    )
-    keywords = npmj.get("keywords", [])
-    keywords = keywords if isinstance(keywords, list) else []
-    check("pi-package" in keywords,
-          "package.json keywords include 'pi-package' (pi.dev gallery indexing)")
-
-    # pi resolves these relative to the package root; a stale path means the
-    # installed package loads zero skills with no error at install time.
-    pi_manifest = npmj.get("pi", {})
-    pi_manifest = pi_manifest if isinstance(pi_manifest, dict) else {}
-    check(bool(pi_manifest), "package.json has a 'pi' manifest")
-    for pi_key, expected_dir in (("skills", "skills"), ("prompts", "commands")):
-        entries = pi_manifest.get(pi_key, [])
-        entries = entries if isinstance(entries, list) else []
-        check(bool(entries), f"package.json pi.{pi_key} declared")
-        for entry in entries:
-            if not isinstance(entry, str):
-                check(False, f"package.json pi.{pi_key} entry is a string")
-                continue
-            check((PKG / entry).is_dir(),
-                  f"package.json pi.{pi_key} target exists on disk: {entry}")
-        check(any(isinstance(e, str) and e.rstrip("/").endswith(expected_dir)
-                  for e in entries),
-              f"package.json pi.{pi_key} points at {expected_dir}/")
-
-    # The npm tarball is the only surface pi users ever see. Keep its public
-    # instructions and the inventory that backs them in lockstep.
-    files_field = npmj.get("files", [])
-    files_field = files_field if isinstance(files_field, list) else []
-    for shipped in ("skills", "commands", "mcp", "scripts", "examples"):
-        check(shipped in files_field, f"package.json files[] ships {shipped}/")
-    check(
-        _checks.package_file_is_published("design_playbook.py", files_field),
-        "package.json files[] ships design_playbook.py",
-    )
-
-    # dsh reads the overlay by path inside the installed package, so a patch
-    # that is declared but not published kills profile composition outright
-    # (`failed to read overlay ... cordis.patch.yml: ENOENT`) with no install
-    # time symptom. The bundle is not named by any shipped Markdown, so
-    # discover_package_references cannot see it — check it explicitly.
-    dsh_bundle = npmj.get("dsh", {})
-    dsh_bundle = dsh_bundle if isinstance(dsh_bundle, dict) else {}
-    dsh_patch = dsh_bundle.get("bundle", {})
-    dsh_patch = dsh_patch.get("patch") if isinstance(dsh_patch, dict) else None
-    check(dsh_patch == "./cordis.patch.yml",
-          f"package.json declares dsh.bundle.patch (got {dsh_patch!r})")
-    if isinstance(dsh_patch, str):
-        target = dsh_patch.lstrip("./")
-        check(
-            _checks.package_file_is_published(target, files_field),
-            f"package.json files[] ships the declared dsh bundle patch: {target}",
-        )
-
-    # DSH STORE derives installability from this block alone. Dropping it while
-    # editing package.json has no local symptom — the catalog entry just flips
-    # to `unlisted` — so the shape is gated here.
-    compat_errors = _checks.dsh_compatibility_errors(npmj)
-    for message in compat_errors:
-        check(False, message)
-    if not compat_errors:
-        check(True, "package.json declares dsh.compatibility.dshReleases")
-
-    for reference in _checks.discover_package_references(PKG):
-        target = PKG / reference.target
-        label = f"{reference.surface} -> {reference.target}"
-        exists = target.exists()
-        check(exists, f"public package reference target exists: {label}")
-        if exists:
-            check(
-                _checks.package_file_is_published(reference.target, files_field),
-                f"public package reference included by package.json files[]: {label}",
-            )
-
-    # A reference that leaves the package root resolves for the monorepo
-    # checkout but never for a reader of the published surface (npmjs.com and
-    # the pi.dev gallery both resolve relative links against the package root,
-    # so `../../README.md` becomes https://cdn.jsdelivr.net/README.md -- 400).
-    # Three such links shipped in v0.25.1 and were found only by rendering the
-    # gallery page; nothing local could see them.
-    escaping = _checks.discover_escaping_package_references(PKG)
-    if escaping:
-        for reference in escaping:
-            check(
-                False,
-                f"public package reference escapes the package root: "
-                f"{reference.surface} -> {reference.target}",
-            )
-    else:
-        check(True, "no public package reference escapes the package root")
-
-print("== Skill frontmatter ==")
-for skill_dir in sorted((PKG / "skills").iterdir()):
-    sm = skill_dir / "SKILL.md"
-    check(sm.is_file(), f"{skill_dir.name}/SKILL.md exists")
-    if sm.is_file():
-        txt = sm.read_text(encoding="utf-8")
-        fm = txt.split("---", 2)
-        head = fm[1] if len(fm) >= 3 else ""
-        check(bool(re.search(r"^name:\s*\S", head, re.M)), f"{skill_dir.name} has name frontmatter")
-        check(bool(re.search(r"^description:\s*\S", head, re.M)), f"{skill_dir.name} has description frontmatter")
-
-print("== Command frontmatter ==")
-for cmd in sorted((PKG / "commands").glob("*.md")):
-    txt = cmd.read_text(encoding="utf-8")
-    fm = txt.split("---", 2)
-    head = fm[1] if len(fm) >= 3 else ""
-    check(bool(re.search(r"^description:\s*\S", head, re.M)), f"{cmd.name} has description frontmatter")
-
-print("== Release identity (ADR-0015): version vs command inventory ==")
-# Stable-main invariant enforced from the shared policy module
-# (scripts/_checks.py): the plugin version must admit exactly the shipped
-# command set. main is the public install surface, so unreleased capability
-# must never ship under a released version (OPP-01).
-version_text = pj.get("version", "")
-shipped_commands = frozenset(p.stem for p in (PKG / "commands").glob("*.md"))
-expected = _checks.expected_commands(version_text)
-if expected is not None:
-    check(
-        shipped_commands == expected,
-        f"version {version_text} expects commands {sorted(expected)}, "
-        f"shipped {sorted(shipped_commands)} (ADR-0015 stable main)",
-    )
-else:
-    check(
-        False,
-        f"version {version_text} has no declared command inventory "
-        f"(ADR-0015); add an entry to COMMAND_INVENTORY in scripts/_checks.py",
-    )
-
-print("== Capability claim alignment (ADR-0043 / T-005) ==")
-# Current public claim surfaces must agree with the shipped inventory and
-# the shared maturity vocabulary. Historical records (docs/releases,
-# docs/specs, docs/adr, CONTEXT.md dated entries, the phase table) are
-# deliberately NOT scanned: this gate polices current claims only and never
-# rewrites history.
-_skill_dirs = [d for d in (PKG / "skills").iterdir() if d.is_dir()]
-_command_files = list((PKG / "commands").glob("*.md"))
-for readme in (ROOT / "README.md", ROOT / "README-zh.md"):
-    rel = readme.relative_to(ROOT).as_posix()
-    if not readme.is_file():
-        check(False, f"{rel} present for capability-claim alignment")
-        continue
-    text = readme.read_text(encoding="utf-8")
-    for label, expected, pattern in (
-        ("Skills", len(_skill_dirs), r"badge/Skills-(\d+)-"),
-        ("Commands", len(_command_files), r"badge/Commands-(\d+)-"),
-    ):
-        badge = re.search(pattern, text)
-        if badge is None:
-            check(False, f"{rel}: no {label} count badge found")
-        else:
-            check(
-                int(badge.group(1)) == expected,
-                f"{rel}: {label} badge count {badge.group(1)} matches "
-                f"shipped inventory ({expected})",
-            )
-
-# Adapter agent counts in published docs are derived from the capability
-# matrix, not hand-bumped (T-040; same pattern as the badge counts above).
-_agent_total = len(adapter_matrix.MATRIX)
-for _surf, _pat, _label in (
-    (ROOT / "README.md", r"(\d+) supported agents", "root README agent count"),
-    (ROOT / "README-zh.md", r"(\d+) 个受支持的 agent", "zh README agent count"),
-    (ROOT / "AGENTS.md", r"(\d+)-agent 三层矩阵", "AGENTS.md agent count"),
-    (PKG / "README.md", r"all (\d+) agents", "package README --list count"),
-):
-    _rel = _surf.relative_to(ROOT).as_posix()
-    if not _surf.is_file():
-        check(False, f"{_rel}: present for agent-count alignment")
-        continue
-    _m = re.search(_pat, _surf.read_text(encoding="utf-8"))
-    if _m is None:
-        check(False, f"{_rel}: no agent-count claim found ({_label})")
-    else:
-        check(
-            int(_m.group(1)) == _agent_total,
-            f"{_rel}: agent count {_m.group(1)} matches capability matrix ({_agent_total})",
-        )
-
-# Matrix breadth freeze (ADR-0042 amendment, 2026-09-22; ADR-0045): the
-# published breadth is policy-frozen at 30 rows (2 Tier-1 + 6 Tier-2 +
-# 22 Tier-3, including the `generic` fallback). The lockstep gate above
-# derives the count, so it would silently follow a 31st row; this freeze
-# gate fails closed on any row-count or tier-decomposition change so a
-# matrix edit without a revision decision cannot ship.
-_FROZEN_BREADTH = (2, 6, 22)
-_frozen_tiers = tuple(
-    sum(1 for row in adapter_matrix.MATRIX if row.tier == tier)
-    for tier in (1, 2, 3)
-)
-check(
-    _frozen_tiers == _FROZEN_BREADTH,
-    "adapter matrix breadth is frozen at "
-    f"{_FROZEN_BREADTH[0]}+{_FROZEN_BREADTH[1]}+{_FROZEN_BREADTH[2]} = "
-    f"{sum(_FROZEN_BREADTH)} rows (ADR-0042 amendment); current tiers "
-    f"{_frozen_tiers} — adding/removing/re-tiering a row requires a "
-    "revision decision first",
-)
-check(
-    _agent_total == sum(_FROZEN_BREADTH),
-    "adapter matrix total matches the frozen breadth "
-    f"({sum(_FROZEN_BREADTH)}; got {_agent_total})",
-)
-
-# The Run Console is implemented and ships with the package (v0.21.0+), so a
-# current public surface must not still describe it as planned or not
-# shipped. Its public claim stays local / experimental / trial-gated until
-# the separately authorized trial gate passes (ADR-0043).
-_CONSOLE_STALE_CLAIMS = ("planned", "not shipped", "尚未发布", "规划中")
-# Mirror contract (ADR-0043): the same surfaces must not promote the Run
-# Console past that claim either — replacing "experimental" with "stable" or
-# public-release wording is a maturity disagreement the stale-claim check
-# above cannot see. Word-boundary phrases only, so the receipt field name
-# `publicClaim` and ADR-0015 "stable main" wording on unrelated lines do not
-# trip it. Bare "public release" is deliberately absent: negated mentions
-# ("no public release until the trial gate passes") state the current
-# interpretation and must not fail; "publicly released" stays banned because
-# it only appears as an affirmative promotion. Historical records inherit
-# the same exclusion via _claim_surfaces.
-_CONSOLE_PROMOTED_CLAIMS = re.compile(
-    r"\bstable\b|\bpublic[ -]beta\b|\bpublicly released\b"
-    r"|\bpublic-ready\b|\bgenerally available\b|公测|正式发布|稳定",
-    re.I,
-)
-# Negation exemption, symmetric across both directions: a line that
-# explicitly negates the claim it carries states the current interpretation
-# ("nothing is planned for the Console", "the Console must not be called
-# stable", "没有规划中的新能力，也不得称为稳定") and must not fail either
-# gate. Markers are whole phrases that never occur inside a claim phrase
-# above — bare "not"/"尚未" would self-exempt "not shipped"/"尚未发布" and
-# re-legalize stale claims, so they stay out. Fail-closed: affirmative
-# claims keep failing.
-_CONSOLE_NEGATED_CLAIMS = (
-    "nothing", "no longer", "must not", "should not", "shall not",
-    "cannot", "can't", "won't", "will not", "not yet",
-    "不再", "没有", "不得", "并非", "并无", "不会",
-)
-
-
-def _console_claim_is_negated(line: str) -> bool:
-    folded = line.lower()
-    return any(marker in folded for marker in _CONSOLE_NEGATED_CLAIMS)
-
-
-_claim_surfaces = [
-    ROOT / "README.md",
-    ROOT / "README-zh.md",
-    PKG / "README.md",
-    *_command_files,
-]
-for surface in _claim_surfaces:
-    if not surface.is_file():
-        continue
-    rel = surface.relative_to(ROOT).as_posix()
-    lines = surface.read_text(encoding="utf-8").splitlines()
-    stale = [
-        line
-        for line in lines
-        if "console" in line.lower()
-        and any(phrase in line.lower() for phrase in _CONSOLE_STALE_CLAIMS)
-        and not _console_claim_is_negated(line)
-    ]
-    check(
-        not stale,
-        f"{rel}: Run Console claim uses current maturity vocabulary"
-        + (f" (stale: {stale[0].strip()[:80]})" if stale else ""),
-    )
-    promoted = [
-        line
-        for line in lines
-        if "console" in line.lower()
-        and _CONSOLE_PROMOTED_CLAIMS.search(line)
-        and not _console_claim_is_negated(line)
-    ]
-    check(
-        not promoted,
-        f"{rel}: Run Console public claim stays experimental/trial-gated (ADR-0043)"
-        + (f" (promoted: {promoted[0].strip()[:80]})" if promoted else ""),
-    )
-
-print("== design-playbook commands (P2 Cordis plugin registration) ==")
-# lib/index.js must register every shipped slash command from commands/*.md.
-# A drift between COMMAND_NAMES and the shipped .md files would surface
-# only at DSH runtime — fail-fast here.
-lib_index = PKG / "lib" / "index.js"
-check(lib_index.is_file(), "lib/index.js present (Cordis plugin entry)")
-if lib_index.is_file():
-    lib_src = lib_index.read_text(encoding="utf-8")
-    # The plugin must declare both injected services.
-    check("'skills'" in lib_src and "'commands'" in lib_src,
-          "lib/index.js injects skills + commands")
-    # Each shipped command must be registered.
-    for cmd_file in sorted((PKG / "commands").glob("*.md")):
-        cmd_name = cmd_file.stem
-        check(f"'{cmd_name}'" in lib_src,
-              f"lib/index.js registers /{cmd_name}")
-    # The handler must use agent.followup (not inject/steer) — slash commands
-    # are explicit user actions that open a turn.
-    check("agent.followup" in lib_src or "invocation.agent.followup" in lib_src,
-          "lib/index.js command handler uses agent.followup")
-    # $ARGUMENTS substitution must be present.
-    check("$ARGUMENTS" in lib_src,
-          "lib/index.js substitutes $ARGUMENTS in command prompts")
-    # Test file must be excluded from the npm tarball.
-    files_field_v2 = npmj.get("files", []) if isinstance(npmj, dict) else []
-    files_field_v2 = files_field_v2 if isinstance(files_field_v2, list) else []
-    check("!lib/test_commands.js" in files_field_v2,
-          "package.json files[] excludes lib/test_commands.js from tarball")
-
-print("== dsh-design-playbook thin bundle (P2 MCP bridge) ==")
-BUNDLE = ROOT / "packages" / "dsh-design-playbook"
-bundle_pkg = _read_json(BUNDLE / "package.json")
-check(bool(bundle_pkg), f"dsh-design-playbook package.json present: {BUNDLE.relative_to(ROOT)}")
-if isinstance(bundle_pkg, dict) and bundle_pkg:
-    check(bundle_pkg.get("name") == "dsh-design-playbook",
-          f"dsh-design-playbook package name is correct (got {bundle_pkg.get('name')!r})")
-    release_group_errors = _checks.release_group_errors(npmj, bundle_pkg)
-    if release_group_errors:
-        for message in release_group_errors:
-            check(False, message)
-    else:
-        check(
-            True,
-            "npm release group versions and dsh-design-playbook dependency match",
-        )
-    bundle_dsh = bundle_pkg.get("dsh", {})
-    bundle_dsh = bundle_dsh if isinstance(bundle_dsh, dict) else {}
-    bundle_patch = bundle_dsh.get("bundle", {})
-    bundle_patch = bundle_patch if isinstance(bundle_patch, dict) else {}
-    patch_rel = bundle_patch.get("patch")
-    check(patch_rel == "./cordis.patch.yml",
-          f"dsh-design-playbook declares dsh.bundle.patch (got {patch_rel!r})")
-    bundle_patch_file = BUNDLE / "cordis.patch.yml"
-    check(bundle_patch_file.is_file(), "dsh-design-playbook cordis.patch.yml present")
-    # Same failure mode as the main package's dsh gate: dsh reads the overlay
-    # by path inside the installed package, so a declared-but-unpublished
-    # patch kills profile composition at install time.
-    bundle_files = bundle_pkg.get("files", [])
-    bundle_files = bundle_files if isinstance(bundle_files, list) else []
-    check(
-        _checks.package_file_is_published("cordis.patch.yml", bundle_files),
-        "dsh-design-playbook files[] ships cordis.patch.yml",
-    )
-    # Same catalog contract as the main package: this manifest is listed
-    # separately, so it needs its own declaration.
-    bundle_compat_errors = _checks.dsh_compatibility_errors(bundle_pkg)
-    for message in bundle_compat_errors:
-        check(False, message)
-    if not bundle_compat_errors:
-        check(True, "dsh-design-playbook declares dsh.compatibility.dshReleases")
-    if bundle_patch_file.is_file():
-        patch_text = bundle_patch_file.read_text(encoding="utf-8")
-        # The patch must bridge both MCP servers, not the skills provider
-        # (P1 lives in the main design-playbook package).
-        check("design-playbook-preview-mcp" in patch_text,
-              "dsh-design-playbook patch bridges preview MCP")
-        check("design-playbook-evidence-mcp" in patch_text,
-              "dsh-design-playbook patch bridges evidence MCP")
-        check("@deepseek-ai/dsh-mcp-client" in patch_text,
-              "dsh-design-playbook patch uses dsh-mcp-client")
-        # Resolution must use createRequire(baseUrl), not the unavailable
-        # global require (the !!js scope has no require — see research.md §11).
-        check("process.getBuiltinModule('node:module')" in patch_text
-              and "createRequire(baseUrl)" in patch_text,
-              "dsh-design-playbook patch resolves via createRequire(baseUrl)")
-        check("require.resolve(" not in patch_text,
-              "dsh-design-playbook patch does not use unavailable global require")
-        # The resolved .py targets must exist inside the design-playbook dep.
-        check("design-playbook/mcp/preview/server.py" in patch_text,
-              "dsh-design-playbook patch resolves preview server.py")
-        check("design-playbook/mcp/evidence/server.py" in patch_text,
-              "dsh-design-playbook patch resolves evidence server.py")
-        check((PKG / "mcp" / "preview" / "server.py").is_file(),
-              "design-playbook preview server.py exists for bundle resolution")
-        check((PKG / "mcp" / "evidence" / "server.py").is_file(),
-              "design-playbook evidence server.py exists for bundle resolution")
-
-print("== Clean runtime surface (no upstream/vendor residue) ==")
-# Attribution files (README, NOTICE) legitimately credit sources; scan runtime only.
-# This residue scan keeps its vendor-only face: the runtime surface (e.g.
-# codex/AGENTS.md routing, README attribution) legitimately names external
-# dependencies. The third-party source-name ban is a registry-content rule
-# and lives below (banned_external_sources, G8 content lint).
-banned = re.compile(r"cloudai|阿里云|alibaba-cloud-design|\bACD\b|\bECS\b|演示附件|manuscript|#636AF1", re.I)
-attribution = {"readme.md", "notice", "license"}
-hits = []
-for f in PKG.rglob("*"):
-    if not f.is_file() or f.suffix not in {".md", ".json", ".mjs", ".py"}:
-        continue
-    if f.name.lower() in attribution:
-        continue  # required attribution, not residue
-    try:
-        if banned.search(f.read_text(encoding="utf-8")):
-            hits.append(str(f.relative_to(ROOT)))
-    except Exception:
-        pass
-check(not hits, f"no vendor residue in runtime surface (found in: {hits})" if hits else "no vendor residue in runtime surface")
-
-print("== Reference intake (ADR-0011) ==")
-ref_skill = PKG / "skills" / "reference-intake" / "SKILL.md"
-ref_template = PKG / "skills" / "reference-intake" / "references" / "contract-template.md"
-check(ref_skill.is_file(), "reference-intake skill present")
-check(ref_template.is_file(), "reference-intake contract template present")
-ref_body = ref_skill.read_text(encoding="utf-8") if ref_skill.is_file() else ""
-check(
-    "Keep" in ref_body and "Do not copy" in ref_body and "manifest.json" in ref_body,
-    "reference-intake names Keep/Do not copy and manifest.json",
-)
-playbook_for_ref = (PKG / "skills" / "design-playbook" / "SKILL.md").read_text(encoding="utf-8")
-check(
-    "reference-intake?" in playbook_for_ref and "ADR-0011" in playbook_for_ref,
-    "orchestrator data flow includes reference-intake? (ADR-0011)",
-)
-check(
-    (PKG / "examples" / "reference-intake" / "screenshot" / "contract.md").is_file()
-    and (PKG / "examples" / "reference-intake" / "url" / "manifest.json").is_file()
-    and (PKG / "examples" / "reference-intake" / "product-analogy" / "contract.md").is_file(),
-    "reference-intake examples cover screenshot/url/product-analogy",
-)
-ux_for_ref = (PKG / "skills" / "ux-spec" / "SKILL.md").read_text(encoding="utf-8")
-picker_for_ref = (PKG / "skills" / "ui-picker" / "SKILL.md").read_text(encoding="utf-8")
-eval_for_ref = (PKG / "skills" / "ui-evaluator" / "SKILL.md").read_text(encoding="utf-8")
-check(
-    "reference/contract.md" in ux_for_ref and "always/ask/never" in ux_for_ref,
-    "ux-spec consumes reference/contract.md before L1",
-)
-check(
-    "reference/contract.md" in picker_for_ref and "Visual cues" in picker_for_ref,
-    "ui-picker consumes reference visual cues",
-)
-check(
-    "reference/contract.md" in eval_for_ref
-    and "never" in eval_for_ref.lower()
-    and "L6 proof" in eval_for_ref,
-    "ui-evaluator may cite reference but not as L6 proof",
-)
-check(
-    "reference/assets" in playbook_for_ref and "reference/example.html" in playbook_for_ref,
-    "orchestrator Fill hard-boundary bans reference assets/example.html",
-)
-check(
-    "always / ask / never hints:" in ref_template.read_text(encoding="utf-8")
-    if ref_template.is_file()
-    else False,
-    "reference contract template includes always/ask/never hints",
-)
-
-print("== Native-desktop routing ==")
-orchestrator = (PKG / "skills" / "design-playbook" / "SKILL.md").read_text(encoding="utf-8")
-codex = (PKG / "codex" / "AGENTS.md").read_text(encoding="utf-8")
-expected_order = (
-    "ux-spec",
-    "native-craft",
-    "ui-picker",
-    "fill",
-    "craft-guard",
-    "ui-evaluator",
-)
-
-
-def native_order(text: str) -> tuple[str, ...] | None:
-    lines = [line for line in text.splitlines() if line.startswith("Native desktop order:")]
-    if len(lines) != 1:
-        return None
-    seq = lines[0].split(".", 1)[0]
-    return tuple(re.findall(r"`([^`]+)`", seq))
-
-
-orchestrator_order = native_order(orchestrator)
-check(orchestrator_order == expected_order, "orchestrator owns conditional native route")
-codex_load_order = re.search(r"(?ms)^## Load order\n(.*?)(?=^## |\Z)", codex)
-check(
-    codex_load_order is not None
-    and all(
-        marker in codex_load_order.group(1)
-        for marker in (
-            "`skills/design-playbook/SKILL.md`",
-            "**Run profile**",
-            "**Steps**",
-            "sole authority",
-            "`run_profile.py route`",
-        )
-    ),
-    "Codex adapter delegates routing to the orchestrator",
-)
-check(
-    "Standard order:" not in codex and "Native desktop order:" not in codex,
-    "Codex adapter does not duplicate stage order",
-)
-web_skip = "Web and mobile Web skip `native-craft`"
-check(web_skip in orchestrator, "orchestrator skips native-craft for Web targets")
-
-# G8 content-ban face (advisory finding, R4): the registry lint used to
-# carry only the upstream vendor residue terms, so any third-party source
-# name outside that list slipped past the machine check. The terms below
-# are the third-party sources this product explicitly does not credit as
-# rule provenance — the detector needs the literals; they must appear
-# nowhere in the shipped registry. Full-name, word-boundary matches keep
-# abstract wording honest: "external reference samples" as a category, or
-# common words like "taste"/"stitch" on their own, do not hit.
-banned_external_sources = re.compile(
-    r"\bui-ux-pro-max\b|\bimpeccable\b|\bstitch-loop\b|\btaste-skill\b",
-    re.I,
-)
-
-print("== Registry entries (G8) ==")
-# First-party UX rule registry (rules-prototype §8.2, decision Q6=A): the
-# product-level G8 self-check replaces the former "Craft detector protocol"
-# section. Machine face: id/version/enums/owner hops/references/history;
-# placeholder entries need the full three-state predicate + blocked exit.
-registry_path = PKG.joinpath(*rules_registry.RULES_PATH_PARTS)
-check(registry_path.is_file(), f"registry present: {registry_path.relative_to(ROOT)}")
-registry_text = registry_path.read_text(encoding="utf-8") if registry_path.exists() else ""
-registry_entries = rules_registry.parse_registry(registry_text)
-registry_errors = rules_registry.validate_registry(registry_entries)
-# CRAFT ids derive from the registry (T-041) — adding CRAFT-11 extends
-# the fixture gates automatically instead of silently sitting outside them.
-_registry_craft_ids = tuple(
-    entry.id for entry in registry_entries if entry.id.startswith("CRAFT-")
-)
-expected_registry_ids = tuple(
-    list(_registry_craft_ids[:8])
-    + ["A11Y-01", "RESP-01", "I18N-01", "PERF-01", "SEC-01"]
-    # Issue #102 batch: copy family, keyboard focus, source-craft pair,
-    # decision hygiene — appended after SEC-01 in registration order.
-    + ["COPY-01", "COPY-02", "COPY-03", "A11Y-02"]
-    + list(_registry_craft_ids[8:])
-    + ["DECIDE-01"]
-    # 2026-09-19 batch: state-completeness family (pending / zero-data /
-    # failure feedback) — appended in registration order.
-    + ["STATE-01", "STATE-02", "STATE-03"]
-)
-registry_ids = tuple(entry.id for entry in registry_entries)
-check(
-    registry_ids == expected_registry_ids,
-    f"G8 registry has the {len(expected_registry_ids)} expected entries "
-    f"in order (got {len(registry_entries)})",
-)
-for entry in registry_entries:
-    entry_errors = [
-        error for error in registry_errors if error.startswith(f"{entry.id}:")
-    ]
-    check(
-        not entry_errors,
-        f"G8 {entry.id} entry valid (v{entry.version}, "
-        f"{entry.status}/{entry.provenance}){'' if not entry_errors else ': ' + '; '.join(entry_errors)}",
-    )
-check(
-    not registry_errors,
-    "G8 registry cross-entry checks (references, pinned versions, override cycles)",
-)
-check(
-    not banned.search(registry_text)
-    and not banned_external_sources.search(registry_text),
-    "G8 registry content lint (no external product names or third-party rule text)",
-)
-
-# Skill-surface version pins must match the registry (T-041): any
-# "ID@ver" pin outside rules.md is a claim about the registry's current
-# version, and the registry's history discipline forces bumps — so every
-# pin is re-checked here instead of drifting in agent-facing prose.
-_skill_pin_re = re.compile(r"\b([A-Z]+-[0-9]{2}(?:/[0-9]{2})*)@([0-9]+)\b")
-_registry_versions = {entry.id: entry.version for entry in registry_entries}
-for _surf in sorted((PKG / "skills").rglob("*.md")):
-    if _surf.resolve() == registry_path.resolve():
-        continue
-    _text = _surf.read_text(encoding="utf-8")
-    for _pin_m in _skill_pin_re.finditer(_text):
-        _pin_group, _pin_ver = _pin_m.group(1), int(_pin_m.group(2))
-        # Slash shorthand (COPY-01/02/03@1): bare segments inherit the
-        # family prefix of the first segment.
-        _pin_parts = _pin_group.split("/")
-        _pin_family = _pin_parts[0].rsplit("-", 1)[0]
-        _pin_ids = [
-            part if "-" in part else f"{_pin_family}-{part}"
-            for part in _pin_parts
-        ]
-        for _pin_id in _pin_ids:
-            _line_no = _text.count(chr(10), 0, _pin_m.start()) + 1
-            _rel = _surf.relative_to(ROOT).as_posix()
-            if _pin_id not in _registry_versions:
-                check(False, f"{_rel}:{_line_no}: pin {_pin_id}@{_pin_ver} "
-                             "references an unknown registry id")
-            else:
-                check(
-                    _registry_versions[_pin_id] == _pin_ver,
-                    f"{_rel}:{_line_no}: pin {_pin_id}@{_pin_ver} matches "
-                    f"registry version ({_registry_versions[_pin_id]})",
-                )
-
-# Thin reference layer: the eight detector six-field blocks moved to the
-# registry; detectors.md now only carries the execution protocol.
-detector_catalog = PKG / "skills" / "craft-guard" / "references" / "detectors.md"
-detector_text = detector_catalog.read_text(encoding="utf-8") if detector_catalog.exists() else ""
-seven_column_header = (
-    "| ID@ver | Applicability | Predicate reason / missing proof | Result "
-    "| Rendered evidence | Source evidence | Exception check | Positive fix |"
-)
-check(
-    "../design-playbook/references/rules.md" in detector_text
-    and seven_column_header in detector_text,
-    "craft-guard detector reference is a thin layer over the registry",
-)
-craft_skill_text = (
-    PKG / "skills" / "craft-guard" / "SKILL.md"
-).read_text(encoding="utf-8")
-check(
-    "../design-playbook/references/rules.md" in craft_skill_text
-    and "Applicability" in craft_skill_text
-    and seven_column_header in craft_skill_text,
-    "craft-guard skill consumes the registry and the seven-column row format",
-)
-
-# The example fixtures audit the CRAFT family; the covered set derives
-# from the registry, so CRAFT-09/10 must either appear in the fixtures or
-# be explicitly recorded as not covered below (they are: the fixtures
-# predate the family's extension and the registry gates their validity;
-# recorded in T-041).
-detector_ids = _registry_craft_ids[:8]
-check(
-    _registry_craft_ids[8:] == ("CRAFT-09", "CRAFT-10"),
-    "CRAFT fixtures cover CRAFT-01..08; CRAFT-09/10 recorded as "
-    "registry-gated without example-fixture coverage",
-)
-
-saas_fixture = PKG / "examples" / "craft-detectors" / "saas-dashboard.md"
-saas_text = saas_fixture.read_text(encoding="utf-8") if saas_fixture.exists() else ""
-saas_rows = rules_registry.parse_craft_rows(saas_text)
-check(
-    tuple(row.entry_id for row in saas_rows) == detector_ids,
-    "SaaS craft ledger has all eight registry IDs exactly once",
-)
-check(
-    not rules_registry.validate_craft_rows(saas_rows, registry_entries),
-    "SaaS craft ledger seven-column rows valid against the registry",
-)
-check(
-    any(row.applicability == "not-applicable" and row.reason for row in saas_rows),
-    "SaaS craft ledger demonstrates not-applicable with an observable reason",
-)
-check(
-    any(row.applicability == "blocked" for row in saas_rows),
-    "SaaS craft ledger demonstrates blocked",
-)
-
-composition_fixture = PKG / "examples" / "craft-detectors" / "composition-contrast.md"
-composition_text = (
-    composition_fixture.read_text(encoding="utf-8")
-    if composition_fixture.exists() else ""
-)
-composition_rows = rules_registry.parse_craft_rows(
-    composition_text, with_case_column=True)
-check(
-    not rules_registry.validate_craft_rows(composition_rows, registry_entries),
-    "composition contrast seven-column rows valid against the registry",
-)
-for detector_id in detector_ids[:5]:
-    results = [
-        row.result for row in composition_rows
-        if row.entry_id == detector_id and row.applicability == "applicable"
-    ]
-    check(
-        results == ["hit", "clear"],
-        f"{detector_id} contrast has hit and clear",
-    )
-check(
-    any(row.applicability == "not-applicable" and row.reason for row in composition_rows),
-    "composition contrast demonstrates not-applicable with an observable reason",
-)
-check(
-    any(row.applicability == "blocked" for row in composition_rows),
-    "composition contrast demonstrates blocked",
-)
-
-landing_fixture = PKG / "examples" / "craft-detectors" / "landing-product-contrast.md"
-landing_text = landing_fixture.read_text(encoding="utf-8") if landing_fixture.exists() else ""
-landing_rows = rules_registry.parse_craft_rows(
-    landing_text, with_case_column=True)
-check(
-    not rules_registry.validate_craft_rows(landing_rows, registry_entries),
-    "landing contrast seven-column rows valid against the registry",
-)
-for detector_id in detector_ids[5:]:
-    results = [
-        row.result for row in landing_rows
-        if row.entry_id == detector_id and row.applicability == "applicable"
-    ]
-    check(
-        results == ["hit", "clear"],
-        f"{detector_id} contrast has hit and clear",
-    )
-check(
-    any(row.applicability == "not-applicable" and row.reason for row in landing_rows),
-    "landing contrast demonstrates not-applicable with an observable reason",
-)
-check(
-    any(row.applicability == "blocked" for row in landing_rows),
-    "landing contrast demonstrates blocked",
-)
-
-brand_fixture = PKG / "examples" / "craft-detectors" / "existing-brand-contrast.md"
-brand_text = brand_fixture.read_text(encoding="utf-8") if brand_fixture.exists() else ""
-brand_rows = rules_registry.parse_craft_rows(brand_text)
-check(
-    not rules_registry.validate_craft_rows(brand_rows, registry_entries),
-    "existing-brand contrast seven-column rows valid against the registry",
-)
-check(
-    any(row.applicability == "not-applicable" and row.reason for row in brand_rows),
-    "existing-brand contrast demonstrates not-applicable with an observable reason",
-)
-check(
-    any(row.applicability == "blocked" for row in brand_rows),
-    "existing-brand contrast demonstrates blocked",
-)
-check(
-    all(phrase in brand_text for phrase in (
-        "binding status is `ready`",
-        "Baseline disposition: clear",
-        "verified project choice wins generic detector taste",
-    )),
-    "verified baseline wins generic detector taste",
-)
-check(
-    all(phrase in brand_text for phrase in (
-        "Override disposition: hit",
-        "safety, usability, and explicit dangerous-action declarations override baseline consistency",
-        "Positive fix:",
-    )),
-    "safety usability and declarations override baseline",
-)
-
-print("== Dogfood 004 regression guards ==")
-
-
 PROSE_PHRASES: dict[str, list[str]] = {
     "ui-evaluator blocks unattended acceptance": [
         "only after an explicit user decision",
@@ -1018,7 +79,7 @@ PROSE_PHRASES: dict[str, list[str]] = {
     ],
     "L4 implementation constraints name L5 exceptions": [
         "L4 declares control behavior only",
-        "reuse / no-internal-change constraints must name exceptions",
+        "Reuse and no-internal-change constraints must name exceptions",
         "conflict with L5",
     ],
     "orchestrator names all five run-contract controls": [
@@ -1026,7 +87,7 @@ PROSE_PHRASES: dict[str, list[str]] = {
     ],
     "orchestrator defines confirmation and stop boundaries": [
         "external, destructive, costly, or scope-expanding",
-        "same blocking finding survives two repair -> re-evaluate cycles",
+        "same blocking finding survives two repair and re-evaluate cycles",
         "smallest next decision",
     ],
     "ux-spec binds each success criterion to required evidence": [
@@ -1092,126 +153,1091 @@ def section_between(text: str, start: str, end: str) -> str:
     return parts[0] if len(parts) > 1 else ""
 
 
-evaluator = (PKG / "skills" / "ui-evaluator" / "SKILL.md").read_text(encoding="utf-8")
-verdict = section_between(evaluator, "### 4. Verdict", "## Recirculate map")
-check_skill_prose(verdict, "ui-evaluator blocks unattended acceptance", anchor="### 4. Verdict")
-
-playbook = (PKG / "skills" / "design-playbook" / "SKILL.md").read_text(encoding="utf-8")
-accept = section_between(playbook, "### 5. Accept", "## Recirculate")
-check_skill_prose(
-    accept,
-    "orchestrator points to the authoritative evaluator verdict",
-    extra="explicitly accepted" not in accept,
-    anchor="### 5. Accept",
-)
-
-fill = section_between(playbook, "### 3. Fill", "### 4. Craft")
-check_skill_prose(fill, "fill routes reused-component L5 conflicts back to spec", anchor="### 3. Fill")
-
-spec_template = (
-    PKG / "skills" / "ux-spec" / "references" / "spec-template.md"
-).read_text(encoding="utf-8")
-l4 = section_between(spec_template, "## L4", "## L5")
-check_skill_prose(l4, "L4 implementation constraints name L5 exceptions", anchor="## L4")
-
-print("== Outcome-first run contract ==")
-run_contract = section_between(playbook, "## Run contract", "## Steps")
-check_skill_prose(run_contract, "orchestrator names all five run-contract controls", anchor="## Run contract")
-check_skill_prose(run_contract, "orchestrator defines confirmation and stop boundaries", anchor="## Run contract")
-
-ux_spec = (PKG / "skills" / "ux-spec" / "SKILL.md").read_text(encoding="utf-8")
-# End anchor is the worked-snippet heading, not the old lone `---` rule:
-# spec-schema 2 adds L2/L5 tables whose separator rows are also `---`,
-# and section_between requires the end anchor to be unique in the file.
-l6 = section_between(spec_template, "## L6", "## Worked snippet")
-check_skill_prose(
-    f"{l6}\n{ux_spec}",
-    "ux-spec binds each success criterion to required evidence",
-    extra=bool(l6),
-    anchor="## L6",
-)
-
-run_checks = section_between(evaluator, "### 2. Run checks", "### 3. Emit point-back findings")
-check_skill_prose(
-    run_checks,
-    "ui-evaluator requires an evidence ledger and blocks missing proof",
-    anchor="### 2. Run checks",
-)
-check_skill_prose(run_checks, "ui-evaluator consumes craft registry audit rows", anchor="### 2. Run checks")
-check_skill_prose(verdict, "ui-evaluator pass requires all evidence rows", anchor="### 4. Verdict")
-
-print("== Test executability (no tracked test file is unreachable) ==")
-# A tracked test file runs one of two ways: pytest collects it (needs a test_*
-# function) or ci.yml invokes it as a script. A file with neither never runs
-# anywhere and "passes" by being absent — the shape that let the v9 rewrite of
-# test_pin_bridge_frontend ship unverified. This gate bans that state; it does
-# not opine on which of the two mechanisms a given file should use.
-_all_tracked_python = _checks.git_tracked_python_files(ROOT)
-if _all_tracked_python is None:
-    print("  info  test-executability gate skipped (no git inventory in this tree)")
-else:
-    _ci_yml = ROOT / ".github" / "workflows" / "ci.yml"
-    _ci_text = _ci_yml.read_text(encoding="utf-8") if _ci_yml.is_file() else ""
-    _unreachable = sorted(
-        path
-        for path in _all_tracked_python
-        if Path(path).name.startswith("test_")
-        # fixtures/ is test data, not a suite; showcase ships a node harness.
-        and "/fixtures/" not in path
-        and not path.startswith("packages/design-playbook/showcase/")
-        and path not in _ci_text
-        and "def test_" not in (ROOT / path).read_text(encoding="utf-8", errors="replace")
+def validate_json_manifests():
+    print("== JSON manifests ==")
+    plugin_json = PKG / ".claude-plugin" / "plugin.json"
+    market_json = ROOT / ".claude-plugin" / "marketplace.json"
+    pj = json.loads(plugin_json.read_text(encoding="utf-8")) if plugin_json.exists() else {}
+    mj = json.loads(market_json.read_text(encoding="utf-8")) if market_json.exists() else {}
+    check(bool(pj), f"plugin.json present: {plugin_json}")
+    check(bool(mj), f"marketplace.json present at repo root: {market_json}")
+    check(bool(pj.get("version")), "plugin.json has explicit semver version")
+    check(bool(pj.get("name")), "plugin.json has name")
+    check(bool(pj.get("description")), "plugin.json has description")
+    package_manifest = _read_json(PKG / "package.json")
+    check(
+        bool(pj.get("description"))
+        and package_manifest.get("description") == pj.get("description"),
+        "package.json description matches plugin.json",
+    )
+    catalog_plugins = mj.get("plugins", [])
+    catalog_plugin = next(
+        (entry for entry in catalog_plugins
+         if isinstance(entry, dict) and entry.get("name") == pj.get("name")),
+        {},
     )
     check(
-        not _unreachable,
-        "every tracked test file is reachable by pytest or ci.yml"
-        + (f" (unreachable: {', '.join(_unreachable)})" if _unreachable else ""),
+        bool(pj.get("description"))
+        and catalog_plugin.get("description") == pj.get("description"),
+        "marketplace description matches plugin.json",
+    )
+    return pj, mj
+
+
+def validate_plugin_layout() -> None:
+    print("== Plugin-root layout (ADR-0006) ==")
+    check((PKG / "skills").is_dir(), "skills/ at plugin root")
+    check((PKG / "commands").is_dir(), "commands/ at plugin root")
+    check(not (PKG / ".claude-plugin" / "skills").exists(), "no skills/ inside .claude-plugin/")
+    check(not (PKG / ".claude-plugin" / "commands").exists(), "no commands/ inside .claude-plugin/")
+    check(not (PKG / ".claude-plugin" / "marketplace.json").exists(),
+          "no in-package marketplace.json (catalog lives at repo root)")
+
+
+def validate_bundled_mcp() -> None:
+    print("== Bundled MCP adapters (marketplace install path) ==")
+    mcp_json = PKG / ".mcp.json"
+    check(mcp_json.is_file(), "plugin .mcp.json present")
+    if mcp_json.is_file():
+        try:
+            mcp = json.loads(mcp_json.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            mcp = {}
+            check(False, f"plugin .mcp.json is valid JSON: {exc}")
+        else:
+            servers = mcp.get("mcpServers", {}) if isinstance(mcp, dict) else {}
+            check(isinstance(servers, dict) and "design-playbook-preview" in servers,
+                  "plugin .mcp.json registers design-playbook-preview")
+            check(isinstance(servers, dict) and "design-playbook-evidence" in servers,
+                  "plugin .mcp.json registers design-playbook-evidence")
+            raw = mcp_json.read_text(encoding="utf-8")
+            check("${CLAUDE_PLUGIN_ROOT}" in raw,
+                  "plugin .mcp.json uses ${CLAUDE_PLUGIN_ROOT}")
+    check((PKG / "mcp" / "preview" / "server.py").is_file(),
+          "bundled preview runtime at mcp/preview/server.py")
+    check((PKG / "mcp" / "preview" / "integrity.py").is_file(),
+          "bundled preview integrity module at mcp/preview/integrity.py")
+    for resource_name in ("control.html", "control.css", "control.js", "control.review.js"):
+        check((PKG / "mcp" / "preview" / resource_name).is_file(),
+              f"bundled preview frontend resource at mcp/preview/{resource_name}")
+    check((PKG / "mcp" / "evidence" / "server.py").is_file(),
+          "bundled evidence runtime at mcp/evidence/server.py")
+
+
+def validate_marketplace_catalog(mj: dict) -> None:
+    print("== Marketplace catalog ==")
+    if mj:
+        plugins = mj.get("plugins", [])
+        check(bool(plugins), "marketplace lists >=1 plugin")
+        if plugins:
+            src = plugins[0].get("source", "")
+            check(src.endswith("packages/design-playbook"),
+                  f"marketplace plugin source points at package (got {src!r})")
+
+
+def validate_codex_manifest(pj: dict):
+    print("== Codex manifest (ADR-0009 dual-publish) ==")
+    # The Codex marketplace install path ships its own plugin.json + mcp.json
+    # under packages/design-playbook/.codex-plugin/, plus a separate catalog at
+    # .agents/plugins/marketplace.json. None of these are read by the Claude
+    # plugin loader, so a static gate is the only thing catching drift between
+    # the two publish surfaces. See issue 07 (secure-ship-0.4.4).
+    codex_plugin_json = PKG / ".codex-plugin" / "plugin.json"
+    codex_mcp_json = PKG / ".codex-plugin" / "mcp.json"
+    agents_market_json = ROOT / ".agents" / "plugins" / "marketplace.json"
+    cpj = _read_json(codex_plugin_json)
+    cmcp = _read_json(codex_mcp_json)
+    amj = _read_json(agents_market_json)
+    check(bool(cpj), f".codex-plugin/plugin.json present: {codex_plugin_json.relative_to(ROOT)}")
+    check(bool(cmcp), f".codex-plugin/mcp.json present: {codex_mcp_json.relative_to(ROOT)}")
+    check(bool(amj), f".agents marketplace.json present: {agents_market_json.relative_to(ROOT)}")
+
+    # 1) Codex plugin.json version must equal the Claude plugin.json version.
+    #    A bump that touches only the Claude side leaves the Codex marketplace
+    #    shipping a stale version — fail-fast here so the gate catches it.
+    codex_version = cpj.get("version") if isinstance(cpj, dict) else None
+    claude_version = pj.get("version") if isinstance(pj, dict) else None
+    check(bool(codex_version), ".codex-plugin/plugin.json has explicit semver version")
+    check(
+        bool(codex_version) and codex_version == claude_version,
+        f".codex-plugin/plugin.json version matches Claude plugin.json "
+        f"(codex={codex_version!r}, claude={claude_version!r})",
     )
 
-print("== Ruff (tracked Python, issue #78) ==")
-tracked_python = _checks.git_tracked_python_files(ROOT)
-if tracked_python is None:
-    print("  info  ruff skipped (no git inventory in this tree)")
-else:
-    ruff_errors = _checks.ruff_check_errors(ROOT)
-    if ruff_errors:
-        for message in ruff_errors:
+    # 2) The Codex picker copy is a leading truncation of the canonical description
+    #    (ADR-0040 positioning). `description` is pinned across Claude/package/
+    #    catalog above, but the Codex `interface.shortDescription` is a second
+    #    publish surface: without this check it silently kept a pre-0.24 framing
+    #    after the other three moved. A short form may truncate, never rephrase.
+    codex_interface = cpj.get("interface") if isinstance(cpj, dict) else None
+    codex_short = (codex_interface.get("shortDescription")
+                   if isinstance(codex_interface, dict) else None)
+    canonical_description = pj.get("description") if isinstance(pj, dict) else None
+    check(
+        bool(codex_short) and bool(canonical_description)
+        and canonical_description.startswith(codex_short),
+        ".codex-plugin/plugin.json interface.shortDescription is a prefix of the "
+        f"canonical description (short={codex_short!r})",
+    )
+
+    # 3) Codex mcp.json preview/evidence target files exist on disk. The Codex
+    #    adapter resolves these relative to its install cwd, so a missing file
+    #    would surface only at runtime in a foreign agent.
+    if isinstance(cmcp, dict):
+        codex_servers = cmcp.get("mcpServers", {})
+        codex_servers = codex_servers if isinstance(codex_servers, dict) else {}
+        for codex_server_name in ("design-playbook-preview", "design-playbook-evidence"):
+            entry = codex_servers.get(codex_server_name)
+            if not isinstance(entry, dict):
+                check(False, f".codex-plugin/mcp.json registers {codex_server_name}")
+                continue
+            check(True, f".codex-plugin/mcp.json registers {codex_server_name}")
+            raw_args = entry.get("args", [])
+            args_list = raw_args if isinstance(raw_args, list) else []
+            target_arg = args_list[0] if args_list and isinstance(args_list[0], str) else ""
+            if not target_arg:
+                check(False, f".codex-plugin/mcp.json {codex_server_name} has args[0] path")
+                continue
+            target_path = PKG / target_arg
+            check(target_path.is_file(),
+                  f".codex-plugin/mcp.json {codex_server_name} target exists on disk: {target_arg}")
+
+    # 4) .agents marketplace plugins[0].source.path must resolve to a real dir.
+    #    Unlike the Claude marketplace, the .agents catalog intentionally has no
+    #    version field (issue 07); only the source path is verified here.
+    if isinstance(amj, dict):
+        agents_plugins = amj.get("plugins", [])
+        agents_plugins = agents_plugins if isinstance(agents_plugins, list) else []
+        check(bool(agents_plugins), ".agents marketplace lists >=1 plugin")
+        if agents_plugins and isinstance(agents_plugins[0], dict):
+            agents_src = agents_plugins[0].get("source", "")
+            agents_path = ""
+            if isinstance(agents_src, dict):
+                raw_path = agents_src.get("path", "")
+                agents_path = raw_path if isinstance(raw_path, str) else ""
+            elif isinstance(agents_src, str):
+                agents_path = agents_src
+            check(bool(agents_path), ".agents marketplace plugins[0].source.path present")
+            if agents_path:
+                check((ROOT / agents_path).is_dir(),
+                      f".agents marketplace plugins[0].source.path exists: {agents_path}")
+    return claude_version
+
+
+def validate_adapter_drift() -> None:
+    print("== Adapter generator drift gate (ADR-0042) ==")
+    _gen_script = PKG / "scripts" / "generate_adapter.py"
+    check(_gen_script.is_file(), "adapter generator script present at scripts/generate_adapter.py")
+    if _gen_script.is_file():
+        for _row in adapter_drift.compare_snapshots(PKG):
+            _ok = _row["status"] == "clean"
+            _text = _row["message"]
+            if not _ok and _row["repair"]:
+                _text += f": run `{_row['repair']}` to refresh"
+            check(_ok, _text)
+
+
+def validate_publish_manifest(claude_version: str | None):
+    print("== npm / pi publish manifest ==")
+    # packages/design-playbook/package.json is the third publish surface: pi has
+    # no marketplace, and the pi.dev gallery indexes npm for the `pi-package`
+    # keyword. Drop the keyword and the package silently vanishes from the
+    # gallery while `pi install` keeps working — no runtime symptom to catch it.
+    npm_json = PKG / "package.json"
+    npmj = _read_json(npm_json)
+    check(bool(npmj), f"package.json present: {npm_json.relative_to(ROOT)}")
+    if isinstance(npmj, dict) and npmj:
+        npm_version = npmj.get("version")
+        check(
+            bool(npm_version) and npm_version == claude_version,
+            f"package.json version matches Claude plugin.json "
+            f"(npm={npm_version!r}, claude={claude_version!r})",
+        )
+        keywords = npmj.get("keywords", [])
+        keywords = keywords if isinstance(keywords, list) else []
+        check("pi-package" in keywords,
+              "package.json keywords include 'pi-package' (pi.dev gallery indexing)")
+
+        # pi resolves these relative to the package root; a stale path means the
+        # installed package loads zero skills with no error at install time.
+        pi_manifest = npmj.get("pi", {})
+        pi_manifest = pi_manifest if isinstance(pi_manifest, dict) else {}
+        check(bool(pi_manifest), "package.json has a 'pi' manifest")
+        for pi_key, expected_dir in (("skills", "skills"), ("prompts", "commands")):
+            entries = pi_manifest.get(pi_key, [])
+            entries = entries if isinstance(entries, list) else []
+            check(bool(entries), f"package.json pi.{pi_key} declared")
+            for entry in entries:
+                if not isinstance(entry, str):
+                    check(False, f"package.json pi.{pi_key} entry is a string")
+                    continue
+                check((PKG / entry).is_dir(),
+                      f"package.json pi.{pi_key} target exists on disk: {entry}")
+            check(any(isinstance(e, str) and e.rstrip("/").endswith(expected_dir)
+                      for e in entries),
+                  f"package.json pi.{pi_key} points at {expected_dir}/")
+
+        # The npm tarball is the only surface pi users ever see. Keep its public
+        # instructions and the inventory that backs them in lockstep.
+        files_field = npmj.get("files", [])
+        files_field = files_field if isinstance(files_field, list) else []
+        for shipped in ("skills", "commands", "mcp", "scripts", "examples"):
+            check(shipped in files_field, f"package.json files[] ships {shipped}/")
+        check(
+            _checks.package_file_is_published("design_playbook.py", files_field),
+            "package.json files[] ships design_playbook.py",
+        )
+
+        # dsh reads the overlay by path inside the installed package, so a patch
+        # that is declared but not published kills profile composition outright
+        # (`failed to read overlay ... cordis.patch.yml: ENOENT`) with no install
+        # time symptom. The bundle is not named by any shipped Markdown, so
+        # discover_package_references cannot see it — check it explicitly.
+        dsh_bundle = npmj.get("dsh", {})
+        dsh_bundle = dsh_bundle if isinstance(dsh_bundle, dict) else {}
+        dsh_patch = dsh_bundle.get("bundle", {})
+        dsh_patch = dsh_patch.get("patch") if isinstance(dsh_patch, dict) else None
+        check(dsh_patch == "./cordis.patch.yml",
+              f"package.json declares dsh.bundle.patch (got {dsh_patch!r})")
+        if isinstance(dsh_patch, str):
+            target = dsh_patch.lstrip("./")
+            check(
+                _checks.package_file_is_published(target, files_field),
+                f"package.json files[] ships the declared dsh bundle patch: {target}",
+            )
+
+        # DSH STORE derives installability from this block alone. Dropping it while
+        # editing package.json has no local symptom — the catalog entry just flips
+        # to `unlisted` — so the shape is gated here.
+        compat_errors = _checks.dsh_compatibility_errors(npmj)
+        for message in compat_errors:
             check(False, message)
+        if not compat_errors:
+            check(True, "package.json declares dsh.compatibility.dshReleases")
+
+        for reference in _checks.discover_package_references(PKG):
+            target = PKG / reference.target
+            label = f"{reference.surface} -> {reference.target}"
+            exists = target.exists()
+            check(exists, f"public package reference target exists: {label}")
+            if exists:
+                check(
+                    _checks.package_file_is_published(reference.target, files_field),
+                    f"public package reference included by package.json files[]: {label}",
+                )
+
+        # A reference that leaves the package root resolves for the monorepo
+        # checkout but never for a reader of the published surface (npmjs.com and
+        # the pi.dev gallery both resolve relative links against the package root,
+        # so `../../README.md` becomes https://cdn.jsdelivr.net/README.md -- 400).
+        # Three such links shipped in v0.25.1 and were found only by rendering the
+        # gallery page; nothing local could see them.
+        escaping = _checks.discover_escaping_package_references(PKG)
+        if escaping:
+            for reference in escaping:
+                check(
+                    False,
+                    f"public package reference escapes the package root: "
+                    f"{reference.surface} -> {reference.target}",
+                )
+        else:
+            check(True, "no public package reference escapes the package root")
+    return npmj
+
+
+def validate_skill_frontmatter() -> None:
+    print("== Skill frontmatter ==")
+    for skill_dir in sorted((PKG / "skills").iterdir()):
+        sm = skill_dir / "SKILL.md"
+        check(sm.is_file(), f"{skill_dir.name}/SKILL.md exists")
+        if sm.is_file():
+            txt = sm.read_text(encoding="utf-8")
+            fm = txt.split("---", 2)
+            head = fm[1] if len(fm) >= 3 else ""
+            check(bool(re.search(r"^name:\s*\S", head, re.M)), f"{skill_dir.name} has name frontmatter")
+            check(bool(re.search(r"^description:\s*\S", head, re.M)), f"{skill_dir.name} has description frontmatter")
+
+
+def validate_command_frontmatter() -> None:
+    print("== Command frontmatter ==")
+    for cmd in sorted((PKG / "commands").glob("*.md")):
+        txt = cmd.read_text(encoding="utf-8")
+        fm = txt.split("---", 2)
+        head = fm[1] if len(fm) >= 3 else ""
+        check(bool(re.search(r"^description:\s*\S", head, re.M)), f"{cmd.name} has description frontmatter")
+
+
+def validate_release_identity(pj: dict) -> None:
+    print("== Release identity (ADR-0015): version vs command inventory ==")
+    version_text = pj.get("version", "")
+    shipped_commands = frozenset(p.stem for p in (PKG / "commands").glob("*.md"))
+    expected = _checks.expected_commands(version_text)
+    if expected is not None:
+        check(
+            shipped_commands == expected,
+            f"version {version_text} expects commands {sorted(expected)}, "
+            f"shipped {sorted(shipped_commands)} (ADR-0015 stable main)",
+        )
     else:
         check(
-            True,
-            f"ruff=={_checks.RUFF_VERSION} clean ({len(tracked_python)} files)",
+            False,
+            f"version {version_text} has no declared command inventory "
+            f"(ADR-0015); add an entry to COMMAND_INVENTORY in scripts/_checks.py",
         )
 
-print("== Run aggregate (v0.9) ==")
-# Smoke only runs where a dogfood corpus exists. Fixture copies (e.g.
-# tests/test_validate.py: scripts + package + catalogs, no .scratch) are
-# legitimate static-gate inputs, so an absent corpus is a skip, not a FAIL.
-if not any((ROOT / ".scratch").glob("**/dogfood/*/point-back.md")):
-    print("  info  no dogfood runs under .scratch - aggregate smoke skipped")
-else:
-    try:
-        agg_env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
-        agg = subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "aggregate_runs.py"), "--top", "5"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            cwd=ROOT, env=agg_env, timeout=180,
-        )
-        agg_data = json.loads(agg.stdout) if agg.returncode == 0 else None
-        if agg_data is None:
-            check(False, f"aggregate_runs exited {agg.returncode}: "
-                         f"{(agg.stdout + agg.stderr).strip()[-200:]}")
+
+def validate_capability_claims() -> None:
+    print("== Capability claim alignment (ADR-0043 / T-005) ==")
+    # Current public claim surfaces must agree with the shipped inventory and
+    # the shared maturity vocabulary. Historical records (docs/releases,
+    # docs/specs, docs/adr, CONTEXT.md dated entries, the phase table) are
+    # deliberately NOT scanned: this gate polices current claims only and never
+    # rewrites history.
+    _skill_dirs = [d for d in (PKG / "skills").iterdir() if d.is_dir()]
+    _command_files = list((PKG / "commands").glob("*.md"))
+    for readme in (ROOT / "README.md", ROOT / "README-zh.md"):
+        rel = readme.relative_to(ROOT).as_posix()
+        if not readme.is_file():
+            check(False, f"{rel} present for capability-claim alignment")
+            continue
+        text = readme.read_text(encoding="utf-8")
+        for label, expected, pattern in (
+            ("Skills", len(_skill_dirs), r"badge/Skills-(\d+)-"),
+            ("Commands", len(_command_files), r"badge/Commands-(\d+)-"),
+        ):
+            badge = re.search(pattern, text)
+            if badge is None:
+                check(False, f"{rel}: no {label} count badge found")
+            else:
+                check(
+                    int(badge.group(1)) == expected,
+                    f"{rel}: {label} badge count {badge.group(1)} matches "
+                    f"shipped inventory ({expected})",
+                )
+
+    _agent_total = len(adapter_matrix.MATRIX)
+    for _surf, _pat, _label in (
+        (ROOT / "README.md", r"(\d+) supported agents", "root README agent count"),
+        (ROOT / "README-zh.md", r"(\d+) 个受支持的 agent", "zh README agent count"),
+        (ROOT / "AGENTS.md", r"(\d+)-agent 三层矩阵", "AGENTS.md agent count"),
+        (PKG / "README.md", r"all (\d+) agents", "package README --list count"),
+    ):
+        _rel = _surf.relative_to(ROOT).as_posix()
+        if not _surf.is_file():
+            check(False, f"{_rel}: present for agent-count alignment")
+            continue
+        _m = re.search(_pat, _surf.read_text(encoding="utf-8"))
+        if _m is None:
+            check(False, f"{_rel}: no agent-count claim found ({_label})")
         else:
-            total = agg_data.get("runs_total", 0)
-            repeat = len(agg_data.get("repeat_blockers", []))
-            check(total >= 1, f"aggregate_runs discovers >=1 dogfood run ({total})")
-            print(f"  info  runs={total} repeat_blockers={repeat} "
-                  f"rollup={agg_data.get('rollup', {}).get('by_result', {})}")
-    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
-        check(False, f"aggregate_runs smoke failed: {exc}")
+            check(
+                int(_m.group(1)) == _agent_total,
+                f"{_rel}: agent count {_m.group(1)} matches capability matrix ({_agent_total})",
+            )
 
-print()
-if failures:
-    print(f"VALIDATION FAILED: {len(failures)} issue(s)")
-    sys.exit(1)
-print("VALIDATION PASSED")
+    # Matrix breadth freeze (ADR-0042 amendment, 2026-09-22; ADR-0045): the
+    # published breadth is policy-frozen at 30 rows (2 Tier-1 + 6 Tier-2 +
+    # 22 Tier-3, including the `generic` fallback). The lockstep gate above
+    # derives the count, so it would silently follow a 31st row; this freeze
+    # gate fails closed on any row-count or tier-decomposition change so a
+    # matrix edit without a revision decision cannot ship.
+    _FROZEN_BREADTH = (2, 6, 22)
+    _frozen_tiers = tuple(
+        sum(1 for row in adapter_matrix.MATRIX if row.tier == tier)
+        for tier in (1, 2, 3)
+    )
+    check(
+        _frozen_tiers == _FROZEN_BREADTH,
+        "adapter matrix breadth is frozen at "
+        f"{_FROZEN_BREADTH[0]}+{_FROZEN_BREADTH[1]}+{_FROZEN_BREADTH[2]} = "
+        f"{sum(_FROZEN_BREADTH)} rows (ADR-0042 amendment); current tiers "
+        f"{_frozen_tiers} — adding/removing/re-tiering a row requires a "
+        "revision decision first",
+    )
+    check(
+        _agent_total == sum(_FROZEN_BREADTH),
+        "adapter matrix total matches the frozen breadth "
+        f"({sum(_FROZEN_BREADTH)}; got {_agent_total})",
+    )
+
+    # The Run Console is implemented and ships with the package (v0.21.0+), so a
+    # current public surface must not still describe it as planned or not
+    # shipped. Its public claim stays local / experimental / trial-gated until
+    # the separately authorized trial gate passes (ADR-0043).
+    _CONSOLE_STALE_CLAIMS = ("planned", "not shipped", "尚未发布", "规划中")
+    # Mirror contract (ADR-0043): the same surfaces must not promote the Run
+    # Console past that claim either — replacing "experimental" with "stable" or
+    # public-release wording is a maturity disagreement the stale-claim check
+    # above cannot see. Word-boundary phrases only, so the receipt field name
+    # `publicClaim` and ADR-0015 "stable main" wording on unrelated lines do not
+    # trip it. Bare "public release" is deliberately absent: negated mentions
+    # ("no public release until the trial gate passes") state the current
+    # interpretation and must not fail; "publicly released" stays banned because
+    # it only appears as an affirmative promotion. Historical records inherit
+    # the same exclusion via _claim_surfaces.
+    _CONSOLE_PROMOTED_CLAIMS = re.compile(
+        r"\bstable\b|\bpublic[ -]beta\b|\bpublicly released\b"
+        r"|\bpublic-ready\b|\bgenerally available\b|公测|正式发布|稳定",
+        re.I,
+    )
+    _CONSOLE_NEGATED_CLAIMS = (
+        "nothing", "no longer", "must not", "should not", "shall not",
+        "cannot", "can't", "won't", "will not", "not yet",
+        "不再", "没有", "不得", "并非", "并无", "不会",
+    )
+
+
+    def _console_claim_is_negated(line: str) -> bool:
+        folded = line.lower()
+        return any(marker in folded for marker in _CONSOLE_NEGATED_CLAIMS)
+
+
+    _claim_surfaces = [
+        ROOT / "README.md",
+        ROOT / "README-zh.md",
+        PKG / "README.md",
+        *_command_files,
+    ]
+    for surface in _claim_surfaces:
+        if not surface.is_file():
+            continue
+        rel = surface.relative_to(ROOT).as_posix()
+        lines = surface.read_text(encoding="utf-8").splitlines()
+        stale = [
+            line
+            for line in lines
+            if "console" in line.lower()
+            and any(phrase in line.lower() for phrase in _CONSOLE_STALE_CLAIMS)
+            and not _console_claim_is_negated(line)
+        ]
+        check(
+            not stale,
+            f"{rel}: Run Console claim uses current maturity vocabulary"
+            + (f" (stale: {stale[0].strip()[:80]})" if stale else ""),
+        )
+        promoted = [
+            line
+            for line in lines
+            if "console" in line.lower()
+            and _CONSOLE_PROMOTED_CLAIMS.search(line)
+            and not _console_claim_is_negated(line)
+        ]
+        check(
+            not promoted,
+            f"{rel}: Run Console public claim stays experimental/trial-gated (ADR-0043)"
+            + (f" (promoted: {promoted[0].strip()[:80]})" if promoted else ""),
+        )
+
+
+def validate_cordis_commands(npmj: dict) -> None:
+    print("== design-playbook commands (P2 Cordis plugin registration) ==")
+    # lib/index.js must register every shipped slash command from commands/*.md.
+    # A drift between COMMAND_NAMES and the shipped .md files would surface
+    # only at DSH runtime — fail-fast here.
+    lib_index = PKG / "lib" / "index.js"
+    check(lib_index.is_file(), "lib/index.js present (Cordis plugin entry)")
+    if lib_index.is_file():
+        lib_src = lib_index.read_text(encoding="utf-8")
+        check("'skills'" in lib_src and "'commands'" in lib_src,
+              "lib/index.js injects skills + commands")
+        for cmd_file in sorted((PKG / "commands").glob("*.md")):
+            cmd_name = cmd_file.stem
+            check(f"'{cmd_name}'" in lib_src,
+                  f"lib/index.js registers /{cmd_name}")
+        # The handler must use agent.followup (not inject/steer) — slash commands
+        # are explicit user actions that open a turn.
+        check("agent.followup" in lib_src or "invocation.agent.followup" in lib_src,
+              "lib/index.js command handler uses agent.followup")
+        check("$ARGUMENTS" in lib_src,
+              "lib/index.js substitutes $ARGUMENTS in command prompts")
+        files_field_v2 = npmj.get("files", []) if isinstance(npmj, dict) else []
+        files_field_v2 = files_field_v2 if isinstance(files_field_v2, list) else []
+        check("!lib/test_commands.js" in files_field_v2,
+              "package.json files[] excludes lib/test_commands.js from tarball")
+
+
+def validate_dsh_bundle(npmj: dict) -> None:
+    print("== dsh-design-playbook thin bundle (P2 MCP bridge) ==")
+    BUNDLE = ROOT / "packages" / "dsh-design-playbook"
+    bundle_pkg = _read_json(BUNDLE / "package.json")
+    check(bool(bundle_pkg), f"dsh-design-playbook package.json present: {BUNDLE.relative_to(ROOT)}")
+    if isinstance(bundle_pkg, dict) and bundle_pkg:
+        check(bundle_pkg.get("name") == "dsh-design-playbook",
+              f"dsh-design-playbook package name is correct (got {bundle_pkg.get('name')!r})")
+        release_group_errors = _checks.release_group_errors(npmj, bundle_pkg)
+        if release_group_errors:
+            for message in release_group_errors:
+                check(False, message)
+        else:
+            check(
+                True,
+                "npm release group versions and dsh-design-playbook dependency match",
+            )
+        bundle_dsh = bundle_pkg.get("dsh", {})
+        bundle_dsh = bundle_dsh if isinstance(bundle_dsh, dict) else {}
+        bundle_patch = bundle_dsh.get("bundle", {})
+        bundle_patch = bundle_patch if isinstance(bundle_patch, dict) else {}
+        patch_rel = bundle_patch.get("patch")
+        check(patch_rel == "./cordis.patch.yml",
+              f"dsh-design-playbook declares dsh.bundle.patch (got {patch_rel!r})")
+        bundle_patch_file = BUNDLE / "cordis.patch.yml"
+        check(bundle_patch_file.is_file(), "dsh-design-playbook cordis.patch.yml present")
+        # Same failure mode as the main package's dsh gate: dsh reads the overlay
+        # by path inside the installed package, so a declared-but-unpublished
+        # patch kills profile composition at install time.
+        bundle_files = bundle_pkg.get("files", [])
+        bundle_files = bundle_files if isinstance(bundle_files, list) else []
+        check(
+            _checks.package_file_is_published("cordis.patch.yml", bundle_files),
+            "dsh-design-playbook files[] ships cordis.patch.yml",
+        )
+        # Same catalog contract as the main package: this manifest is listed
+        # separately, so it needs its own declaration.
+        bundle_compat_errors = _checks.dsh_compatibility_errors(bundle_pkg)
+        for message in bundle_compat_errors:
+            check(False, message)
+        if not bundle_compat_errors:
+            check(True, "dsh-design-playbook declares dsh.compatibility.dshReleases")
+        if bundle_patch_file.is_file():
+            patch_text = bundle_patch_file.read_text(encoding="utf-8")
+            # The patch must bridge both MCP servers, not the skills provider
+            # (P1 lives in the main design-playbook package).
+            check("design-playbook-preview-mcp" in patch_text,
+                  "dsh-design-playbook patch bridges preview MCP")
+            check("design-playbook-evidence-mcp" in patch_text,
+                  "dsh-design-playbook patch bridges evidence MCP")
+            check("@deepseek-ai/dsh-mcp-client" in patch_text,
+                  "dsh-design-playbook patch uses dsh-mcp-client")
+            # Resolution must use createRequire(baseUrl), not the unavailable
+            # global require (the !!js scope has no require — see research.md §11).
+            check("process.getBuiltinModule('node:module')" in patch_text
+                  and "createRequire(baseUrl)" in patch_text,
+                  "dsh-design-playbook patch resolves via createRequire(baseUrl)")
+            check("require.resolve(" not in patch_text,
+                  "dsh-design-playbook patch does not use unavailable global require")
+            check("design-playbook/mcp/preview/server.py" in patch_text,
+                  "dsh-design-playbook patch resolves preview server.py")
+            check("design-playbook/mcp/evidence/server.py" in patch_text,
+                  "dsh-design-playbook patch resolves evidence server.py")
+            check((PKG / "mcp" / "preview" / "server.py").is_file(),
+                  "design-playbook preview server.py exists for bundle resolution")
+            check((PKG / "mcp" / "evidence" / "server.py").is_file(),
+                  "design-playbook evidence server.py exists for bundle resolution")
+
+
+def validate_runtime_surface():
+    print("== Clean runtime surface (no upstream/vendor residue) ==")
+    # Attribution files (README, NOTICE) legitimately credit sources; scan runtime only.
+    # This residue scan keeps its vendor-only face: the runtime surface (e.g.
+    # codex/AGENTS.md routing, README attribution) legitimately names external
+    # dependencies. The third-party source-name ban is a registry-content rule
+    # and lives below (banned_external_sources, G8 content lint).
+    banned = re.compile(r"cloudai|阿里云|alibaba-cloud-design|\bACD\b|\bECS\b|演示附件|manuscript|#636AF1", re.I)
+    attribution = {"readme.md", "notice", "license"}
+    hits = []
+    for f in PKG.rglob("*"):
+        if not f.is_file() or f.suffix not in {".md", ".json", ".mjs", ".py"}:
+            continue
+        if f.name.lower() in attribution:
+            continue  # required attribution, not residue
+        try:
+            if banned.search(f.read_text(encoding="utf-8")):
+                hits.append(str(f.relative_to(ROOT)))
+        except Exception:
+            pass
+    check(not hits, f"no vendor residue in runtime surface (found in: {hits})" if hits else "no vendor residue in runtime surface")
+    return banned
+
+
+def validate_reference_intake() -> None:
+    print("== Reference intake (ADR-0011) ==")
+    ref_skill = PKG / "skills" / "reference-intake" / "SKILL.md"
+    ref_template = PKG / "skills" / "reference-intake" / "references" / "contract-template.md"
+    check(ref_skill.is_file(), "reference-intake skill present")
+    check(ref_template.is_file(), "reference-intake contract template present")
+    ref_body = ref_skill.read_text(encoding="utf-8") if ref_skill.is_file() else ""
+    check(
+        "Keep" in ref_body and "Do not copy" in ref_body and "manifest.json" in ref_body,
+        "reference-intake names Keep/Do not copy and manifest.json",
+    )
+    playbook_for_ref = (PKG / "skills" / "design-playbook" / "SKILL.md").read_text(encoding="utf-8")
+    check(
+        "reference-intake?" in playbook_for_ref and "ADR-0011" in playbook_for_ref,
+        "orchestrator data flow includes reference-intake? (ADR-0011)",
+    )
+    check(
+        (PKG / "examples" / "reference-intake" / "screenshot" / "contract.md").is_file()
+        and (PKG / "examples" / "reference-intake" / "url" / "manifest.json").is_file()
+        and (PKG / "examples" / "reference-intake" / "product-analogy" / "contract.md").is_file(),
+        "reference-intake examples cover screenshot/url/product-analogy",
+    )
+    ux_for_ref = (PKG / "skills" / "ux-spec" / "SKILL.md").read_text(encoding="utf-8")
+    picker_for_ref = (PKG / "skills" / "ui-picker" / "SKILL.md").read_text(encoding="utf-8")
+    eval_for_ref = (PKG / "skills" / "ui-evaluator" / "SKILL.md").read_text(encoding="utf-8")
+    check(
+        "reference/contract.md" in ux_for_ref and "always/ask/never" in ux_for_ref,
+        "ux-spec consumes reference/contract.md before L1",
+    )
+    check(
+        "reference/contract.md" in picker_for_ref and "Visual cues" in picker_for_ref,
+        "ui-picker consumes reference visual cues",
+    )
+    check(
+        "reference/contract.md" in eval_for_ref
+        and "never" in eval_for_ref.lower()
+        and "L6 proof" in eval_for_ref,
+        "ui-evaluator may cite reference but not as L6 proof",
+    )
+    check(
+        "reference/assets" in playbook_for_ref and "reference/example.html" in playbook_for_ref,
+        "orchestrator Fill hard-boundary bans reference assets/example.html",
+    )
+    check(
+        "always / ask / never hints:" in ref_template.read_text(encoding="utf-8")
+        if ref_template.is_file()
+        else False,
+        "reference contract template includes always/ask/never hints",
+    )
+
+
+def native_order(text: str) -> tuple[str, ...] | None:
+    lines = [line for line in text.splitlines() if line.startswith("Native desktop order:")]
+    if len(lines) != 1:
+        return None
+    seq = lines[0].split(".", 1)[0]
+    return tuple(re.findall(r"`([^`]+)`", seq))
+
+
+def validate_native_routing() -> None:
+    print("== Native-desktop routing ==")
+    orchestrator = (PKG / "skills" / "design-playbook" / "SKILL.md").read_text(encoding="utf-8")
+    codex = (PKG / "codex" / "AGENTS.md").read_text(encoding="utf-8")
+    expected_order = (
+        "ux-spec",
+        "native-craft",
+        "ui-picker",
+        "fill",
+        "craft-guard",
+        "ui-evaluator",
+    )
+
+
+
+
+    orchestrator_order = native_order(orchestrator)
+    check(orchestrator_order == expected_order, "orchestrator owns conditional native route")
+    codex_load_order = re.search(r"(?ms)^## Load order\n(.*?)(?=^## |\Z)", codex)
+    check(
+        codex_load_order is not None
+        and all(
+            marker in codex_load_order.group(1)
+            for marker in (
+                "`skills/design-playbook/SKILL.md`",
+                "**Run profile**",
+                "**Steps**",
+                "sole authority",
+                "`run_profile.py route`",
+            )
+        ),
+        "Codex adapter delegates routing to the orchestrator",
+    )
+    check(
+        "Standard order:" not in codex and "Native desktop order:" not in codex,
+        "Codex adapter does not duplicate stage order",
+    )
+    web_skip = "Web and mobile Web skip `native-craft`"
+    check(web_skip in orchestrator, "orchestrator skips native-craft for Web targets")
+
+
+def validate_registry(banned: re.Pattern[str]) -> None:
+
+    banned_external_sources = re.compile(
+        r"\bui-ux-pro-max\b|\bimpeccable\b|\bstitch-loop\b|\btaste-skill\b",
+        re.I,
+    )
+
+    print("== Registry entries (G8) ==")
+    # First-party UX rule registry (rules-prototype §8.2, decision Q6=A): the
+    # product-level G8 self-check replaces the former "Craft detector protocol"
+    # section. Machine face: id/version/enums/owner hops/references/history;
+    # placeholder entries need the full three-state predicate + blocked exit.
+    registry_path = PKG.joinpath(*rules_registry.RULES_PATH_PARTS)
+    check(registry_path.is_file(), f"registry present: {registry_path.relative_to(ROOT)}")
+    registry_text = registry_path.read_text(encoding="utf-8") if registry_path.exists() else ""
+    registry_entries = rules_registry.parse_registry(registry_text)
+    registry_errors = rules_registry.validate_registry(registry_entries)
+    _registry_craft_ids = tuple(
+        entry.id for entry in registry_entries if entry.id.startswith("CRAFT-")
+    )
+    expected_registry_ids = tuple(
+        list(_registry_craft_ids[:8])
+        + ["A11Y-01", "RESP-01", "I18N-01", "PERF-01", "SEC-01"]
+        # Issue #102 batch: copy family, keyboard focus, source-craft pair,
+        # decision hygiene — appended after SEC-01 in registration order.
+        + ["COPY-01", "COPY-02", "COPY-03", "A11Y-02"]
+        + list(_registry_craft_ids[8:])
+        + ["DECIDE-01"]
+        # 2026-09-19 batch: state-completeness family (pending / zero-data /
+        # failure feedback) — appended in registration order.
+        + ["STATE-01", "STATE-02", "STATE-03"]
+    )
+    registry_ids = tuple(entry.id for entry in registry_entries)
+    check(
+        registry_ids == expected_registry_ids,
+        f"G8 registry has the {len(expected_registry_ids)} expected entries "
+        f"in order (got {len(registry_entries)})",
+    )
+    for entry in registry_entries:
+        entry_errors = [
+            error for error in registry_errors if error.startswith(f"{entry.id}:")
+        ]
+        check(
+            not entry_errors,
+            f"G8 {entry.id} entry valid (v{entry.version}, "
+            f"{entry.status}/{entry.provenance}){'' if not entry_errors else ': ' + '; '.join(entry_errors)}",
+        )
+    check(
+        not registry_errors,
+        "G8 registry cross-entry checks (references, pinned versions, override cycles)",
+    )
+    check(
+        not banned.search(registry_text)
+        and not banned_external_sources.search(registry_text),
+        "G8 registry content lint (no external product names or third-party rule text)",
+    )
+
+    _skill_pin_re = re.compile(r"\b([A-Z]+-[0-9]{2}(?:/[0-9]{2})*)@([0-9]+)\b")
+    _registry_versions = {entry.id: entry.version for entry in registry_entries}
+    for _surf in sorted((PKG / "skills").rglob("*.md")):
+        if _surf.resolve() == registry_path.resolve():
+            continue
+        _text = _surf.read_text(encoding="utf-8")
+        for _pin_m in _skill_pin_re.finditer(_text):
+            _pin_group, _pin_ver = _pin_m.group(1), int(_pin_m.group(2))
+            # Slash shorthand (COPY-01/02/03@1): bare segments inherit the
+            # family prefix of the first segment.
+            _pin_parts = _pin_group.split("/")
+            _pin_family = _pin_parts[0].rsplit("-", 1)[0]
+            _pin_ids = [
+                part if "-" in part else f"{_pin_family}-{part}"
+                for part in _pin_parts
+            ]
+            for _pin_id in _pin_ids:
+                _line_no = _text.count(chr(10), 0, _pin_m.start()) + 1
+                _rel = _surf.relative_to(ROOT).as_posix()
+                if _pin_id not in _registry_versions:
+                    check(False, f"{_rel}:{_line_no}: pin {_pin_id}@{_pin_ver} "
+                                 "references an unknown registry id")
+                else:
+                    check(
+                        _registry_versions[_pin_id] == _pin_ver,
+                        f"{_rel}:{_line_no}: pin {_pin_id}@{_pin_ver} matches "
+                        f"registry version ({_registry_versions[_pin_id]})",
+                    )
+
+    # Thin reference layer: the eight detector six-field blocks moved to the
+    # registry; detectors.md now only carries the execution protocol.
+    detector_catalog = PKG / "skills" / "craft-guard" / "references" / "detectors.md"
+    detector_text = detector_catalog.read_text(encoding="utf-8") if detector_catalog.exists() else ""
+    seven_column_header = (
+        "| ID@ver | Applicability | Predicate reason / missing proof | Result "
+        "| Rendered evidence | Source evidence | Exception check | Positive fix |"
+    )
+    check(
+        "../design-playbook/references/rules.md" in detector_text
+        and seven_column_header in detector_text,
+        "craft-guard detector reference is a thin layer over the registry",
+    )
+    craft_skill_text = (
+        PKG / "skills" / "craft-guard" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    check(
+        "../design-playbook/references/rules.md" in craft_skill_text
+        and "Applicability" in craft_skill_text
+        and seven_column_header in craft_skill_text,
+        "craft-guard skill consumes the registry and the seven-column row format",
+    )
+
+    detector_ids = _registry_craft_ids[:8]
+    check(
+        _registry_craft_ids[8:] == ("CRAFT-09", "CRAFT-10"),
+        "CRAFT fixtures cover CRAFT-01..08; CRAFT-09/10 recorded as "
+        "registry-gated without example-fixture coverage",
+    )
+
+    saas_fixture = PKG / "examples" / "craft-detectors" / "saas-dashboard.md"
+    saas_text = saas_fixture.read_text(encoding="utf-8") if saas_fixture.exists() else ""
+    saas_rows = rules_registry.parse_craft_rows(saas_text)
+    check(
+        tuple(row.entry_id for row in saas_rows) == detector_ids,
+        "SaaS craft ledger has all eight registry IDs exactly once",
+    )
+    check(
+        not rules_registry.validate_craft_rows(saas_rows, registry_entries),
+        "SaaS craft ledger seven-column rows valid against the registry",
+    )
+    check(
+        any(row.applicability == "not-applicable" and row.reason for row in saas_rows),
+        "SaaS craft ledger demonstrates not-applicable with an observable reason",
+    )
+    check(
+        any(row.applicability == "blocked" for row in saas_rows),
+        "SaaS craft ledger demonstrates blocked",
+    )
+
+    composition_fixture = PKG / "examples" / "craft-detectors" / "composition-contrast.md"
+    composition_text = (
+        composition_fixture.read_text(encoding="utf-8")
+        if composition_fixture.exists() else ""
+    )
+    composition_rows = rules_registry.parse_craft_rows(
+        composition_text, with_case_column=True)
+    check(
+        not rules_registry.validate_craft_rows(composition_rows, registry_entries),
+        "composition contrast seven-column rows valid against the registry",
+    )
+    for detector_id in detector_ids[:5]:
+        results = [
+            row.result for row in composition_rows
+            if row.entry_id == detector_id and row.applicability == "applicable"
+        ]
+        check(
+            results == ["hit", "clear"],
+            f"{detector_id} contrast has hit and clear",
+        )
+    check(
+        any(row.applicability == "not-applicable" and row.reason for row in composition_rows),
+        "composition contrast demonstrates not-applicable with an observable reason",
+    )
+    check(
+        any(row.applicability == "blocked" for row in composition_rows),
+        "composition contrast demonstrates blocked",
+    )
+
+    landing_fixture = PKG / "examples" / "craft-detectors" / "landing-product-contrast.md"
+    landing_text = landing_fixture.read_text(encoding="utf-8") if landing_fixture.exists() else ""
+    landing_rows = rules_registry.parse_craft_rows(
+        landing_text, with_case_column=True)
+    check(
+        not rules_registry.validate_craft_rows(landing_rows, registry_entries),
+        "landing contrast seven-column rows valid against the registry",
+    )
+    for detector_id in detector_ids[5:]:
+        results = [
+            row.result for row in landing_rows
+            if row.entry_id == detector_id and row.applicability == "applicable"
+        ]
+        check(
+            results == ["hit", "clear"],
+            f"{detector_id} contrast has hit and clear",
+        )
+    check(
+        any(row.applicability == "not-applicable" and row.reason for row in landing_rows),
+        "landing contrast demonstrates not-applicable with an observable reason",
+    )
+    check(
+        any(row.applicability == "blocked" for row in landing_rows),
+        "landing contrast demonstrates blocked",
+    )
+
+    brand_fixture = PKG / "examples" / "craft-detectors" / "existing-brand-contrast.md"
+    brand_text = brand_fixture.read_text(encoding="utf-8") if brand_fixture.exists() else ""
+    brand_rows = rules_registry.parse_craft_rows(brand_text)
+    check(
+        not rules_registry.validate_craft_rows(brand_rows, registry_entries),
+        "existing-brand contrast seven-column rows valid against the registry",
+    )
+    check(
+        any(row.applicability == "not-applicable" and row.reason for row in brand_rows),
+        "existing-brand contrast demonstrates not-applicable with an observable reason",
+    )
+    check(
+        any(row.applicability == "blocked" for row in brand_rows),
+        "existing-brand contrast demonstrates blocked",
+    )
+    check(
+        all(phrase in brand_text for phrase in (
+            "binding status is `ready`",
+            "Baseline disposition: clear",
+            "verified project choice wins generic detector taste",
+        )),
+        "verified baseline wins generic detector taste",
+    )
+    check(
+        all(phrase in brand_text for phrase in (
+            "Override disposition: hit",
+            "safety, usability, and explicit dangerous-action declarations override baseline consistency",
+            "Positive fix:",
+        )),
+        "safety usability and declarations override baseline",
+    )
+
+
+def validate_skill_contracts() -> None:
+    print("== Dogfood 004 regression guards ==")
+
+
+
+
+    evaluator = (PKG / "skills" / "ui-evaluator" / "SKILL.md").read_text(encoding="utf-8")
+    verdict = section_between(evaluator, "### 4. Verdict", "## Recirculate map")
+    check_skill_prose(verdict, "ui-evaluator blocks unattended acceptance", anchor="### 4. Verdict")
+
+    playbook = (PKG / "skills" / "design-playbook" / "SKILL.md").read_text(encoding="utf-8")
+    accept = section_between(playbook, "### 5. Accept", "## Recirculate")
+    check_skill_prose(
+        accept,
+        "orchestrator points to the authoritative evaluator verdict",
+        extra="explicitly accepted" not in accept,
+        anchor="### 5. Accept",
+    )
+
+    fill = section_between(playbook, "### 3. Fill", "### 4. Craft")
+    check_skill_prose(fill, "fill routes reused-component L5 conflicts back to spec", anchor="### 3. Fill")
+
+    spec_template = (
+        PKG / "skills" / "ux-spec" / "references" / "spec-template.md"
+    ).read_text(encoding="utf-8")
+    l4 = section_between(spec_template, "## L4", "## L5")
+    check_skill_prose(l4, "L4 implementation constraints name L5 exceptions", anchor="## L4")
+
+    print("== Outcome-first run contract ==")
+    run_contract = section_between(playbook, "## Run contract", "## Steps")
+    check_skill_prose(run_contract, "orchestrator names all five run-contract controls", anchor="## Run contract")
+    check_skill_prose(run_contract, "orchestrator defines confirmation and stop boundaries", anchor="## Run contract")
+
+    ux_spec = (PKG / "skills" / "ux-spec" / "SKILL.md").read_text(encoding="utf-8")
+    # End anchor is the worked-snippet heading, not the old lone `---` rule:
+    # spec-schema 2 adds L2/L5 tables whose separator rows are also `---`,
+    # and section_between requires the end anchor to be unique in the file.
+    l6 = section_between(spec_template, "## L6", "## Worked snippet")
+    check_skill_prose(
+        f"{l6}\n{ux_spec}",
+        "ux-spec binds each success criterion to required evidence",
+        extra=bool(l6),
+        anchor="## L6",
+    )
+
+    run_checks = section_between(evaluator, "### 2. Run checks", "### 3. Emit point-back findings")
+    check_skill_prose(
+        run_checks,
+        "ui-evaluator requires an evidence ledger and blocks missing proof",
+        anchor="### 2. Run checks",
+    )
+    check_skill_prose(run_checks, "ui-evaluator consumes craft registry audit rows", anchor="### 2. Run checks")
+    check_skill_prose(verdict, "ui-evaluator pass requires all evidence rows", anchor="### 4. Verdict")
+
+
+def validate_test_executability() -> None:
+    print("== Test executability (no tracked test file is unreachable) ==")
+    # A tracked test file runs one of two ways: pytest collects it (needs a test_*
+    # function) or ci.yml invokes it as a script. A file with neither never runs
+    # anywhere and "passes" by being absent — the shape that let the v9 rewrite of
+    # test_pin_bridge_frontend ship unverified. This gate bans that state; it does
+    # not opine on which of the two mechanisms a given file should use.
+    _all_tracked_python = _checks.git_tracked_python_files(ROOT)
+    if _all_tracked_python is None:
+        print("  info  test-executability gate skipped (no git inventory in this tree)")
+    else:
+        _ci_yml = ROOT / ".github" / "workflows" / "ci.yml"
+        _ci_text = _ci_yml.read_text(encoding="utf-8") if _ci_yml.is_file() else ""
+        _unreachable = sorted(
+            path
+            for path in _all_tracked_python
+            if Path(path).name.startswith("test_")
+            # fixtures/ is test data, not a suite; showcase ships a node harness.
+            and "/fixtures/" not in path
+            and not path.startswith("packages/design-playbook/showcase/")
+            and path not in _ci_text
+            and "def test_" not in (ROOT / path).read_text(encoding="utf-8", errors="replace")
+        )
+        check(
+            not _unreachable,
+            "every tracked test file is reachable by pytest or ci.yml"
+            + (f" (unreachable: {', '.join(_unreachable)})" if _unreachable else ""),
+        )
+
+
+def validate_ruff() -> None:
+    print("== Ruff (tracked Python, issue #78) ==")
+    tracked_python = _checks.git_tracked_python_files(ROOT)
+    if tracked_python is None:
+        print("  info  ruff skipped (no git inventory in this tree)")
+    else:
+        ruff_errors = _checks.ruff_check_errors(ROOT)
+        if ruff_errors:
+            for message in ruff_errors:
+                check(False, message)
+        else:
+            check(
+                True,
+                f"ruff=={_checks.RUFF_VERSION} clean ({len(tracked_python)} files)",
+            )
+
+
+def validate_run_aggregate() -> None:
+    print("== Run aggregate (v0.9) ==")
+    # Smoke only runs where a dogfood corpus exists. Fixture copies (e.g.
+    # tests/test_validate.py: scripts + package + catalogs, no .scratch) are
+    # legitimate static-gate inputs, so an absent corpus is a skip, not a FAIL.
+    if not any((ROOT / ".scratch").glob("**/dogfood/*/point-back.md")):
+        print("  info  no dogfood runs under .scratch - aggregate smoke skipped")
+    else:
+        try:
+            agg_env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+            agg = subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "aggregate_runs.py"), "--top", "5"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                cwd=ROOT, env=agg_env, timeout=180,
+            )
+            agg_data = json.loads(agg.stdout) if agg.returncode == 0 else None
+            if agg_data is None:
+                check(False, f"aggregate_runs exited {agg.returncode}: "
+                             f"{(agg.stdout + agg.stderr).strip()[-200:]}")
+            else:
+                total = agg_data.get("runs_total", 0)
+                repeat = len(agg_data.get("repeat_blockers", []))
+                check(total >= 1, f"aggregate_runs discovers >=1 dogfood run ({total})")
+                print(f"  info  runs={total} repeat_blockers={repeat} "
+                      f"rollup={agg_data.get('rollup', {}).get('by_result', {})}")
+        except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
+            check(False, f"aggregate_runs smoke failed: {exc}")
+
+
+def main() -> int:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packages" / "design-playbook"))
+    from design_playbook.scripts.stdio_encoding import configure_piped_utf8
+
+    configure_piped_utf8()
+    failures.clear()
+    pj, mj = validate_json_manifests()
+    validate_plugin_layout()
+    validate_bundled_mcp()
+    validate_marketplace_catalog(mj)
+    claude_version = validate_codex_manifest(pj)
+    validate_adapter_drift()
+    npmj = validate_publish_manifest(claude_version)
+    validate_skill_frontmatter()
+    validate_command_frontmatter()
+    validate_release_identity(pj)
+    validate_capability_claims()
+    validate_cordis_commands(npmj)
+    validate_dsh_bundle(npmj)
+    banned = validate_runtime_surface()
+    validate_reference_intake()
+    validate_native_routing()
+    validate_registry(banned)
+    validate_skill_contracts()
+    validate_test_executability()
+    validate_ruff()
+    validate_run_aggregate()
+    print()
+    if failures:
+        print(f"VALIDATION FAILED: {len(failures)} issue(s)")
+        return 1
+    print("VALIDATION PASSED")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
