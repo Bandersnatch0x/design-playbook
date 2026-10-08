@@ -867,6 +867,28 @@ def run_preview_transaction(
         ) from exc
 
 
+def _floor_verdict(
+    *, rejected: bool, submission: dict[str, Any], timed_out: bool, is_skip: bool,
+    raw_feedback: str, anchors: list[dict[str, Any]], has_visual_edits: bool,
+) -> tuple[bool, str]:
+    """The ADR-0008 floor decision for one submission: (floor_pass, floor_failure).
+
+    Rejected and timed-out submissions never pass; a skip is an explicit exempt
+    pass; anything else goes through the authoritative floor, where a validated
+    visual batch that really changes a value can stand in for notes.
+    """
+    if rejected:
+        return False, str(submission.get("floor_failure") or "")
+    if timed_out:
+        return False, "preview timed out waiting for user input"
+    if is_skip:
+        return True, ""
+    floor = evaluate_feedback_floor(
+        raw_feedback, anchors, has_visual_edits=has_visual_edits
+    )
+    return floor.passed, floor.reason
+
+
 def _run_locked(
     *, path_arg: str | None, html: str | None, summary: str, round_n: int,
     report_ref: str, options: list[str], collect: BrowserCollector,
@@ -960,20 +982,15 @@ def _run_locked(
     user_confirmed = (
         not aborted and not rejected and choice.casefold() in confirm_labels
     )
-    if rejected:
-        floor_pass = False
-        floor_failure = str(submission.get("floor_failure") or "")
-    elif timed_out:
-        floor_pass = False
-        floor_failure = "preview timed out waiting for user input"
-    elif is_skip:
-        floor_pass = True
-        floor_failure = ""
-    else:
-        floor = evaluate_feedback_floor(
-            raw_feedback, anchors, has_visual_edits=visual_edits_effective
-        )
-        floor_pass, floor_failure = floor.passed, floor.reason
+    floor_pass, floor_failure = _floor_verdict(
+        rejected=rejected,
+        submission=submission,
+        timed_out=timed_out,
+        is_skip=is_skip,
+        raw_feedback=raw_feedback,
+        anchors=anchors,
+        has_visual_edits=visual_edits_effective,
+    )
     confirmed = user_confirmed and floor_pass
 
     served_hash = str(submission.get("prototype_html_hash") or prototype_hash)

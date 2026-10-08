@@ -340,3 +340,35 @@ false and G5 intact, still no release or publication. The field was authored by 
 concurrent session whose work is uncommitted and unverified at suite level; it
 carries no acceptance claim of its own and must still pass independent review on
 the merged tree.
+
+## Amendment (2026-10-08): scope extension for the transaction floor verdict
+
+The maintainer authorized, on 2026-10-08, extending the file list of the
+2026-10-06 amendment by exactly one file: `mcp/preview/transaction.py`, and within
+it only the extraction of the floor, skip and timeout decision out of `_run_locked`
+into a new `_floor_verdict`.
+
+Rationale. An audit measured `_run_locked` at 146 lines and 29 branches at the
+audit revision and named the four-way decision at its centre as the one part worth
+extracting, because the rest of the function is linear and readable. That decision
+is the ADR-0008 floor applied to a single submission, and it is the part a reader
+most needs to find by name rather than by reading a branch chain.
+
+Boundary. Only these are authorized: adding `_floor_verdict`, and replacing the
+in-line `if/elif` chain with a call to it. The helper takes the facts the caller
+has already decided (rejected, timed out, skip) rather than re-deriving them, so
+there remains exactly one derivation of each and the helper is a pure function of
+decided facts. The four outcomes, their order and their exact strings are
+unchanged.
+
+Exclusions. No new skill, command, gate, collector, adapter row, MCP server or
+runtime. No change to G5 token semantics, first-decision-wins, the ADR-0008 floor
+itself, `writesSource`, Console or evidence surfaces, or any other function in
+`transaction.py`. No release, tag, publish, catalog submission or recruitment.
+Authorization is not a completion claim.
+
+Evidence. A differential check ran the pre-extraction decision block, taken
+verbatim from the previous revision, against `_floor_verdict` over 480
+combinations of the six inputs: zero mismatches. `transaction.self_check_floor()`
+passes, and the transaction, integrity and visual-batch modules pass 80 tests with
+19 subtests. `validate.py` exits 0 with `repeat_blockers=0`.
