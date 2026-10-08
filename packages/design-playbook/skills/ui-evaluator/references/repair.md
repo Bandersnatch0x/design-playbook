@@ -12,17 +12,17 @@ After Recirculate, change the **smallest owning declaration**, re-evaluate only 
 | Capture contract / viewport mismatch | observe* seam | Recapture those artifacts (overwrite or revision name) |
 | Stale screenshot after Fill change | Fill + observe* | Invalidate bound criteria whose observed UI changed |
 
-## Second hop: declaration -> R1-R5
+## Second hop: declaration then R1-R5
 
-Routing is two hops (first hop above; second hop picks the repair target). Repair order follows declaration-layer dependency R1 -> R2 -> R3 -> R4; R5 (evidence plan) may append after any layer. Take the **minimum owning set**; multi-layer findings may carry multiple `source:` values.
+Routing is two hops (first hop above; second hop picks the repair target). Repair order follows declaration-layer dependency R1 then R2 then R3 then R4; R5 (evidence plan) may append after any layer. Take the **minimum owning set**. Multi-layer findings may carry multiple `source:` values.
 
 | Route | Repair target | Trigger (finding features) | Landing action |
 | --- | --- | --- | --- |
-| R1 | requirement (reopen shaping subtree) | No owning declaration exists (ownerless finding); criterion unjudgeable (Given/When/Then gap); an `assumed` field falsified; non-goal boundary disputed | Reopen only the falsified subtree via a new shaping session (`superseded_by`); revise decisions via `supersedes`; never invent product requirements in review |
-| R2 | interaction model (`spec` L2-L5 structured fields) | Five-state missing; path break; decision point / return-preservation unmodeled; page duty missing | Patch the structured spec rows; re-evaluate affected L6 |
-| R3 | design decision (decision report) | Direction-level assumption failed; trade-off unrecorded; visual direction conflicts with baseline | Revise / append the decision report; re-confirm preview when it applies (G5) |
-| R4 | implementation (Fill) | Implementation deviates from the confirmed model: action missing, wrong state, token scatter, component misuse | Fix the implementation; resume from the step consuming the declaration |
-| R5 | evidence plan (observe* seam) | Method cannot answer the criterion (capture seed mismatch); provider absent; sample/environment mismatch; evidence insufficient while implementation is right | Fix the capture plan / provider / recapture; implementation and declarations untouched |
+| R1 | requirement (reopen shaping subtree) | No owning declaration exists (ownerless finding). Criterion unjudgeable (Given, When, and Then gap). An `assumed` field falsified. Non-goal boundary disputed | Reopen only the falsified subtree via a new shaping session (`superseded_by`). Revise decisions via `supersedes`. Never invent product requirements in review |
+| R2 | interaction model (`spec` L2-L5 structured fields) | Five-state missing. Path break. Decision point / return-preservation unmodeled. Page duty missing | Patch the structured spec rows. Re-evaluate affected L6 |
+| R3 | design decision (decision report) | Direction-level assumption failed. Trade-off unrecorded. Visual direction conflicts with baseline | Revise / append the decision report. Re-confirm preview when it applies (G5) |
+| R4 | implementation (Fill) | Implementation deviates from the confirmed model: action missing, wrong state, token scatter, component misuse | Fix the implementation. Resume from the step consuming the declaration |
+| R5 | evidence plan (observe* seam) | Method cannot answer the criterion (capture seed mismatch). Provider absent. Sample and environment mismatch. Evidence insufficient while implementation is right | Fix the capture plan / provider / recapture. Implementation and declarations untouched |
 
 Session `storage_state` blocked (next owner is always the operator, never an auto-login):
 
@@ -31,18 +31,18 @@ Session `storage_state` blocked (next owner is always the operator, never an aut
 | path (escape, absolute, bad shape) | Correct the run-root-relative `.json` path | Recapture the same Then |
 | file (missing, unreadable, non-object JSON) | Provide a readable Playwright storage_state object | Recapture |
 | expired / wrong page (`observed_state` is login or `#app` missing) | Refresh the authorized local session | Recapture with target selector |
-| unsupported mechanism | Choose a supported local session file; do not invent login | Recapture or mark blocked |
+| unsupported mechanism | Choose a supported local session file. Do not invent login | Recapture or mark blocked |
 
 ## Evidence freshness
 
 - Fill changes that can affect a bound criterion **invalidate** prior evidence for that criterion.
-- Replacement artifacts use `overwrite=true` or a new revision filename; the latest manifest entry wins.
-- If the ledger still cites a superseded artifact name, emit a **warning** (not a hard Pass) with owner/expected/actual/repair — then recapture or update the ledger.
+- Replacement artifacts use `overwrite=true` or a new revision filename. The latest manifest entry wins.
+- If the ledger still cites a superseded artifact name, emit a **warning** (not a hard Pass) with owner, expected, actual, and repair. Then recapture or update the ledger.
 - Unaffected criteria keep their evidence.
 
 ## Invalidated evidence set (`invalidated:` block)
 
-Record the minimal invalidated set in `point-back.md` when recirculating. The set is computable: directly affected criteria plus criteria derived from a falsified contract field (via its `notes` source chain); everything else keeps its evidence. History is preserved — superseded artifacts keep overwrite/revision naming and the latest manifest entry wins.
+Record the minimal invalidated set in `point-back.md` when recirculating. The set is computable: directly affected criteria plus criteria derived from a falsified contract field (via its `notes` source chain). Everything else keeps its evidence. History is preserved, superseded artifacts keep overwrite or revision naming and the latest manifest entry wins.
 
 ```text
 invalidated:
@@ -54,4 +54,4 @@ invalidated:
     reason: capture provider session loss; R5 capture-plan revision, no artifacts existed
 ```
 
-Re-evaluation runs the invalidated set plus adjacent primary-path nodes only (minimum repair); the two-cycle stop policy for a repeated blocker stays in force.
+Re-evaluation runs the invalidated set plus adjacent primary-path nodes only (minimum repair). The two-cycle stop policy for a repeated blocker stays in force.

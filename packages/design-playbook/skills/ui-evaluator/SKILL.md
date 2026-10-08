@@ -11,14 +11,14 @@ description: Run evidence-backed UI acceptance. Use after generating a page, or 
 
 ### 1. Bind declarations
 
-Identify which of these apply to this surface (repo files, prior turns, or design-playbook defaults):  
+Identify which of these apply to this surface (repo files, prior turns, or design-playbook defaults):
 `spec` · `domain` · `craft` · `design` · `components` · `template`.
 
-When a verified `.scratch/<run>/design-baseline/state.json` binds a baseline (`status: ready`, path from `baseline.path`), include it as the project-specific visual declaration. It can support design-drift findings but is never L6 runtime proof by itself. An explicit `status: waived` disables baseline-drift checks for that run; it does not waive `spec`, accessibility, or craft checks.
+When a verified `.scratch/<run>/design-baseline/state.json` binds a baseline (`status: ready`, path from `baseline.path`), include it as the project-specific visual declaration. It can support design-drift findings but is never L6 runtime proof by itself. An explicit `status: waived` disables baseline-drift checks for that run. It does not waive `spec`, accessibility, or craft checks.
 
-When `.scratch/<run>/reference/contract.md` exists (ADR-0011), you **may** use it as supporting context for findings about copied brand chrome, distinctive illustration, or other **Do not copy** breaches (`source` = `reference` or the owning declaration). It is **never** L6 proof and never a Pass/Fail gate by itself.
+When `.scratch/<run>/reference/contract.md` exists (ADR-0011), you **may** use it as supporting context for **Do not copy** findings. These include copied brand chrome, distinctive illustration, or other breaches. Set `source` to `reference` or the owning declaration. It is **never** L6 proof and never a Pass or Fail gate by itself.
 
-**Done when:** the check set is named; if `spec` L6 exists, every criterion and its required proof are on the list.
+**Done when:** the check set is named. If `spec` L6 exists, every criterion and its required proof are on the list.
 
 ### 2. Run checks
 
@@ -29,18 +29,18 @@ Walk every applicable row (exhaustive for bound declarations):
 | Empty / loading / error / permission | `spec` |
 | Risk color, secrets, dangerous ops | `domain` |
 | AI slop, hierarchy, purposeless motion | `craft` |
-| New surface drifts from confirmed project visual roles/patterns | bound `<binding.path>` |
+| New surface drifts from confirmed project visual roles and patterns | bound `<binding.path>` |
 | Raw hex / px / ms (unlogged) | `design` |
-| Badge/Tag, Dialog/Drawer, … | `components` |
+| Badge and Tag, Dialog and Drawer, … | `components` |
 | Shell matches scene | `template` |
 | Each L6 acceptance item | `spec` |
 | Required proof exists for each L6 item | `spec` |
 
 Dimension selection, recirculate examples, the preview-seam health check (required when the run produced `preview/` artifacts), and the **observe\* mirror-surface** finding (required when any manifest capture notes `surface: mirror`): [`references/rubric.md`](references/rubric.md).
 
-When L6 proof includes an `a11y tree` artifact, interpret it with [`references/a11y-tree.md`](references/a11y-tree.md) (names, roles, states, keyboard path, focus, material omissions). Record accessibility evidence on the owning user-risk criterion; do not invent separate taste standards.
+When L6 proof includes an `a11y tree` artifact, interpret it with [`references/a11y-tree.md`](references/a11y-tree.md) (names, roles, states, keyboard path, focus, material omissions). Record accessibility evidence on the owning user-risk criterion. Do not invent separate taste standards.
 
-When `.scratch/<run>/craft-guard.md` exists, consume exactly one seven-column audit row for every registry craft entry whose applicability predicate evaluates to `applicable` (full catalog, or every **enabled** subset row when the contract declares a smaller set — registry: [`../design-playbook/references/rules.md`](../design-playbook/references/rules.md)). Summarize the applicable count, and warn when every evaluated entry is `not-applicable`, any `not-applicable` row lacks an observable reason, or the `blocked` rate is abnormal. Audit rows are advisory: verify their rendered/source evidence and exception checks, then use the authoritative recirculate map below to choose declaration source and assign severity. A detector never decides source, severity, or verdict. Carry every `blocked` row into evaluation as a craft proof gap. Implemented UI cannot claim complete craft Pass while required rendered or source proof is blocked; planning-only work records an explicit `not-applicable` reason without claiming rendered inspection. Keep craft detector rows out of the G6 manifest and L6 evidence ledger: they are craft-stage audit records, not runtime artifacts or criterion results.
+When `.scratch/<run>/craft-guard.md` exists, consume exactly one seven-column audit row for every registry craft entry whose applicability predicate evaluates to `applicable`. Use the full catalog, or every **enabled** subset row when the contract declares a smaller set. Registry: [`../design-playbook/references/rules.md`](../design-playbook/references/rules.md). Summarize the applicable count, and warn when every evaluated entry is `not-applicable`, any `not-applicable` row lacks an observable reason, or the `blocked` rate is abnormal. Audit rows are advisory. Verify their rendered and source evidence and exception checks. Use the authoritative recirculate map below to choose declaration source and assign severity. A detector never decides source, severity, or verdict. Carry every `blocked` row into evaluation as a craft proof gap. Implemented UI cannot claim complete craft Pass while required rendered or source proof is blocked. Planning-only work records an explicit `not-applicable` reason without claiming rendered inspection. Keep craft detector rows out of the G6 manifest and L6 evidence ledger: they are craft-stage audit records, not runtime artifacts or criterion results.
 
 Record an evidence ledger before writing findings. Every L6 criterion has exactly one row:
 
@@ -51,15 +51,15 @@ observed:  <artifact path, interaction, check result, or missing>
 result:    pass|fail|blocked|N/A
 ```
 
-`observed` is either an **artifact path** (relative to the run root, e.g. `evidence/L6.3-error.png`) when a runtime capture was bound by a manifest, or **free-text** describing a manual observation. Both are legitimate; the machine seam (G6) only validates artifact-path references. When using an artifact path, keep the path as the **leading token** of the line (e.g. `observed: evidence/L6.3-error.png`); trailing commentary is tolerated by G6 — it reads the leading token, breaking on whitespace, `(` / `（`, or `,` / `，` / `:` / `：`. Other punctuation (em dash, slashes, etc.) will be treated as part of the path, so put elaboration on a separate `note:` line for clarity when unsure.
+`observed` is either an **artifact path** (relative to the run root, e.g. `evidence/L6.3-error.png`) when a runtime capture was bound by a manifest, or **free-text** describing a manual observation. Both are legitimate. The machine seam (G6) only validates artifact-path references. When using an artifact path, keep the path as the **leading token** of the line (e.g. `observed: evidence/L6.3-error.png`). Trailing commentary is tolerated by G6, it reads the leading token, breaking on whitespace, `(` / `（`, or `,` / `，` / `:` / `：`. Other punctuation (em dash, slashes, etc.) will be treated as part of the path, so put elaboration on a separate `note:` line for clarity when unsure.
 
-Evidence is captured, not judged. A manifest entry records that an artifact was collected at a state — it does not say the criterion passed. `pass`/`fail` is this evaluator's verdict against `required` vs `observed`; a screenshot can prove a criterion false. Three ledgers, each one authority: `spec` L6 names **what to prove**; the manifest records **what happened**; this ledger decides **what it means**. Providers produce artifacts; the manifest binds them to criteria; the evaluator decides. For a `page-probe/v1` sidecar, read `layout.measurement_status`, `defects.measurement_status`, and `console.measurement_status` **before** interpreting `leaks` / `tapFails` / `consoleErrors`; `blocked` or `unmeasured` is ledger `blocked`, never a clean pass. Those arrays are candidate observations, not automatic blocking. A fail or blocked L6×viewport pair is not rescued by another viewport's pass. `captured`/`ok` is not proof the declared target page was reached.
+Evidence is captured, not judged. A manifest entry records that an artifact was collected at a state, it does not say the criterion passed. `pass`/`fail` is this evaluator's verdict against `required` vs `observed`. A screenshot can prove a criterion false. Three ledgers, each one authority: `spec` L6 names **what to prove**. The manifest records **what happened**. This ledger decides **what it means**. Providers produce artifacts. The manifest binds them to criteria. The evaluator decides. For a `page-probe/v1` sidecar, read `layout.measurement_status`, `defects.measurement_status`, and `console.measurement_status` **before** interpreting `leaks` / `tapFails` / `consoleErrors`; `blocked` or `unmeasured` is ledger `blocked`, never a clean pass. Those arrays are candidate observations, not automatic blocking. A fail or blocked L6×viewport pair is not rescued by another viewport's pass. `captured`/`ok` is not proof the declared target page was reached.
 
-For implemented UI, visible-state proof is a rendered inspection at the declared target viewport; behavior proof is an interaction trace or automated check; code-health proof is the relevant available test, type/lint, or affected build result. Planning-only proof is declaration coverage and must not claim a render or test occurred. Non-L6 declaration checks may be supporting observations or findings; they do not enter the machine ledger.
+For implemented UI, visible-state proof is a rendered inspection at the declared target viewport. Behavior proof is an interaction trace or automated check. Code-health proof is the relevant available test, type and lint, or affected build result. Planning-only proof is declaration coverage and must not claim a render or test occurred. Non-L6 declaration checks may be supporting observations or findings. They do not enter the machine ledger.
 
-The host model may have no vision (text-only input). Reading a screenshot would break such a session — never make viewing an artifact a review action. Render artifacts stay bound as path references (manifest + ledger `observed`), and machine assertions judge the **text face**: HTML/CSS source, `a11y tree` text, and the action records inside the interaction trace (a Playwright trace **ZIP**; unzip before reading, the artifact is not JSON). A no-vision run reviews this way end to end without degrading the protocol; note it once in the Limitations statement ("this run was reviewed on text-face evidence").
+The host model may have no vision (text-only input). Reading a screenshot would break such a session, never make viewing an artifact a review action. Render artifacts stay bound as path references (manifest + ledger `observed`). Machine assertions judge the **text face**: HTML and CSS source, `a11y tree` text, and interaction-trace action records. An interaction trace is a Playwright trace **ZIP**. Unzip before reading; the artifact is not JSON. A no-vision run reviews this way end to end without degrading the protocol. Note it once in the Limitations statement ("this run was reviewed on text-face evidence").
 
-**Done when:** every bound row was considered; every L6 criterion has exactly one non-empty `criterion / required / observed / result` row keyed as `L6.<n>`; results use only `pass|fail|blocked|N/A`; unavailable required proof is `blocked`, not skipped.
+**Done when:** every bound row was considered. Every L6 criterion has exactly one non-empty `criterion / required / observed / result` row keyed as `L6.<n>`. Results use only `pass|fail|blocked|N/A`. Any unavailable required proof is `blocked`, not skipped.
 
 ### 3. Emit point-back findings
 
@@ -71,40 +71,40 @@ severity: S3|S2|S1|S0
 track:    product|interaction|cross-cutting
 ```
 
-Severity is the **consequence axis** (S3 blocking-severity / S2 major / S1 minor / S0 positive or info), graded by user-visible impact and referencing the affected L6 / primary-path node. The legacy values `high (blocking)|high|med|low` are **no longer legal** (alias period ended, v0.20.0 breaking change): they are structural errors at G2 — write the axis values directly (`high (blocking)`→S3 + `disposition: blocking`, `high`→S2, `med`/`low`→S1).
+Severity is the **consequence axis**: S3 blocking-severity, S2 major, S1 minor, or S0 positive or info. Grade by user-visible impact and reference the affected L6 or primary-path node. The legacy values `high (blocking)|high|med|low` are **no longer legal** (alias period ended, v0.20.0 breaking change). They are structural errors at G2. Write the axis values directly: `high (blocking)` maps to S3 + `disposition: blocking`, `high` to S2, and `med` or `low` to S1.
 
-`track` is required: every finding declares which review track produced it — `product` (per-L6 acceptance), `interaction` (primary-path walkthrough dimensions), or `cross-cutting` (applicability-matrix families). The machine seam is unchanged (G2 validates the value only when the line is present), so an omitted track is a review defect to fix here, not a structural error.
+`track` is required: every finding declares which review track produced it, `product` (per-L6 acceptance), `interaction` (primary-path walkthrough dimensions), or `cross-cutting` (applicability-matrix families). The machine seam is unchanged (G2 validates the value only when the line is present). An omitted track is a review defect to fix here, not a structural error.
 
 Additional field lines (machine-tolerated; validated when present) complete the review axis:
 
 ```text
 confidence:  high|medium|low   (evidence layers x reproducibility x judging subject)
 disposition: blocking|advisory|info   (severity x fact/judgment class x confidence)
-evidence:    <artifact path or source ref — may repeat>
+evidence:    <artifact path or source ref, may repeat>
 assumes:     <assumed contract field paths the finding depends on, if any>
 rule:        <registry ID@version refs, when a registry rule is involved>
-dd:          <decision-report entry ref, when a design decision is challenged — never on positive (S0) findings>
+dd:          <decision-report entry ref, when a design decision is challenged, never on positive (S0) findings>
 id:          <run-unique token>
 status:      open|resolved|new|regression  (optional; omit = no re-review annotation, not a second closure authority)
 ```
 
 On a **new P2/P3 observe\*** blocking finding, assign a non-empty run-unique `id` on first write and **reuse it** when the issue text is rewritten. Older reports without `id` stay legal; G2 does not backfill them. `status` never overrides a current `- closes:` line.
 
-When a previously closed blocker **regresses**: keep the same `id`, move the old `- closes:` line into `history:` (must not match `CLOSURE_LINE`), put the stale artifact on `invalidated:`, recapture new evidence, and write **exactly one** current `- closes:` against that new artifact before Pass.
+When a previously closed blocker **regresses**, keep the same `id`. Move the old `- closes:` line into `history:`, where it must not match `CLOSURE_LINE`. Put the stale artifact on `invalidated:` and recapture new evidence. Before Pass, write **exactly one** current `- closes:` against that new artifact.
 
-Probe arrays may contain secrets (cookie/token/session text in `leaks` or `consoleErrors`). In point-back and any shareable summary write `seen, omitted` — do not copy the secret string. The sidecar file stays the fact store.
+Probe arrays may contain secrets (cookie, token, and session text in `leaks` or `consoleErrors`). In point-back and any shareable summary write `seen, omitted`, do not copy the secret string. The sidecar file stays the fact store.
 
-Severity and disposition are **two axes**: a judgment-class S3 (subjective / semantic / representativeness) is never directly blocking — list it in the Limitations "pending user adjudication" sub-block with the three options (change declaration / accept risk / promote to the rule-registry queue). Only fact-class S3 (reproducible, evidence-bound) takes `disposition: blocking` and enters G4 closure.
+Severity and disposition are **two axes**. A judgment-class S3 (subjective, semantic, or representativeness) is never directly blocking. List it in the Limitations "pending user adjudication" sub-block. Offer three options: change declaration, accept risk, or promote to the rule-registry queue. Only fact-class S3 (reproducible, evidence-bound) takes `disposition: blocking` and enters G4 closure.
 
 Order: **blocking** first (broken L5/L6, unsafe dangerous ops, removed focus rings), then polish.
 
-**Done when:** every finding has all five fields (track included); no “generally improve the design” lines; additional fields use only their declared value sets.
+**Done when:** every finding has all five fields (track included). No “generally improve the design” lines. Additional fields use only their declared value sets.
 
 ### 4. Verdict
 
 - Emit exactly one `## Verdict` section containing exactly one anchored verdict: `Pass` or `Recirculate`.
-- **Pass:** zero blocking; every L6 criterion has exactly one evidence row; every required evidence row passes (every evidence result is `pass`); token gaps are logged or fixed.
-- **Recirculate:** each blocking `source` names the step/declaration to reopen in design-playbook; `fail` or `blocked` evidence remains visible.
+- **Pass.** zero blocking. Every L6 criterion has exactly one evidence row. For Pass, every required evidence row passes (every evidence result is `pass`). Token gaps are logged or fixed.
+- **Recirculate.** each blocking `source` names the step and declaration to reopen in design-playbook; `fail` or `blocked` evidence remains visible.
 
 For a repaired blocker, record exactly one closure line whose target is the finding `id` when present, otherwise the issue text (same normalisation as G4):
 
@@ -112,11 +112,11 @@ For a repaired blocker, record exactly one closure line whose target is the find
 - closes: <id or exact issue value> -> recirculate -> fix -> re-eval -> 0 blocking
 ```
 
-**Done when:** the explicit verdict is structurally unique; blocking sources are non-empty; every blocking finding has exactly one matching closure before `Pass`. A blocking finding cannot be waived inside a Pass artifact. Without a user in the loop, blocking findings remain in recirculate and the run requests a decision; only after an explicit user decision that updates the owning declaration or severity — recorded against the user's statement or decision record — may the evaluator re-evaluate; the final Pass artifact contains no blocking severity.
+**Done when:** the explicit verdict is structurally unique. Blocking sources are non-empty. Every blocking finding has exactly one matching closure before `Pass`. A blocking finding cannot be waived inside a Pass artifact. Without a user in the loop, blocking findings remain in recirculate and the run requests a decision. Re-evaluate only after an explicit user decision updates the owning declaration or severity. Record it against the user's statement or decision record. The final Pass artifact contains no blocking severity.
 
 ### 5. Six-block report structure
 
-The report artifact remains `point-back.md` (no new file). The machine face is unchanged — four-field findings, four-field ledger rows, closure lines, verdict semantics — and existing parsers tolerate the new blocks. The full structure:
+The report artifact remains `point-back.md` (no new file). The machine face is unchanged, four-field findings, four-field ledger rows, closure lines, verdict semantics, and existing parsers tolerate the new blocks. The full structure:
 
 ```text
 ## Evidence ledger          (one row per L6; required rows may note assumed deps)
@@ -133,40 +133,43 @@ The report artifact remains `point-back.md` (no new file). The machine face is u
 ## Verdict                  (exactly one Pass|Recirculate + closure lines)
 ```
 
-An empty Findings block is a fact, not an omission: keep the `## Findings` heading and write the single literal marker line `findings: none` inside it. Never transcribe a placeholder ('none blocking', 'n/a') into finding field values — a placeholder is not a finding, and cross-run derivation groups field values verbatim.
+An empty Findings block is a fact, not an omission: keep the `## Findings` heading and write the single literal marker line `findings: none` inside it. Never transcribe a placeholder ('none blocking', 'not applicable') into finding field values, a placeholder is not a finding, and cross-run derivation groups field values verbatim.
 
-Coverage levels: **exhaustive** (primary path + required rare paths + per-page five-state matrix — no exceptions), **sampled** (edge cases by five-state x page matrix, reasons recorded), **explicit unreviewed** (everything else — never defaults to pass). Unreviewed is not pass: it produces no pass contribution.
+Coverage levels:
+- **exhaustive**: primary path, required rare paths, and per-page five-state matrix, with no exceptions.
+- **sampled**: edge cases by five-state x page matrix, with reasons recorded.
+- **explicit unreviewed**: everything else, never defaults to pass. Unreviewed is not pass: it produces no pass contribution.
 
-Positive findings are the acceptance-evidence face, not decoration: every L6 `pass` on implemented UI requires at least one bound rendered or interaction artifact (measurement/source corroborate but never carry a pass alone); planning-only passes rest on declaration coverage and must not claim a render or test occurred. Missing evidence is `blocked` (unverifiable), never `fail` — "not tested" and "tested and failed" are different facts.
+Positive findings are acceptance evidence, not decoration. Every L6 `pass` on implemented UI requires at least one bound rendered or interaction artifact. Measurement and source corroborate but never carry a pass alone. Planning-only passes rest on declaration coverage and must not claim a render or test occurred. Missing evidence is `blocked` (unverifiable), never `fail`, "not tested" and "tested and failed" are different facts.
 
-**Done when:** all six blocks are present; the Coverage statement names the exhaustive completion status and the explicit unreviewed list (G11); every pass row cites bound evidence; limitations name the judgment-class dimensions and assumed dependencies. Machine check right after writing point-back.md: `python scripts/g2_g4_pointback.py .scratch/<run>/point-back.md` — do not wait for the end-of-run `validate_run.py` sweep.
+**Done when:** all six blocks are present. The Coverage statement names the exhaustive completion status and the explicit unreviewed list (G11). Every pass row cites bound evidence. Limitations name the judgment-class dimensions and assumed dependencies. Machine check right after writing point-back.md: `python scripts/g2_g4_pointback.py .scratch/<run>/point-back.md`, do not wait for the end-of-run `validate_run.py` sweep.
 
 After Recirculate, use [`references/repair.md`](references/repair.md) for the smallest owning declaration, the R1-R5 second-hop route, and which evidence to invalidate.
 
-The artifact shape behind this verdict is machine-checkable: `scripts/validate_run.py` gates L1-L6, ordered `Given -> When -> Then` in every top-level L6 item, one non-empty four-field evidence row per `L6.<n>`, allowed evidence results, all-pass evidence for `Pass`, four non-empty finding fields, one explicit verdict, and one exact issue-linked closure per blocking finding. These checks are the completion criteria above, not extra prose.
+The artifact shape behind this verdict is machine-checkable. `scripts/validate_run.py` gates L1-L6 and ordered `Given, then When, then Then` in every top-level L6 item. It requires one non-empty four-field evidence row per `L6.<n>`, allowed evidence results, and all-pass evidence for `Pass`. It also requires four non-empty finding fields, one explicit verdict, and one exact issue-linked closure per blocking finding. These checks are the completion criteria above, not extra prose.
 
 After Recirculate, use [`references/repair.md`](references/repair.md) for the smallest owning declaration and which evidence to invalidate.
 
 ## Recirculate map (authoritative)
 
-Single source of truth for the observable -> declaration routing. The orchestrator and other skills point here; do not duplicate it. Routing is two hops: first hop observable -> declaration artifact, second hop declaration artifact -> R1-R5 repair target (see [`references/repair.md`](references/repair.md) for the full second-hop table and the `invalidated:` evidence-set block).
+Single source of truth for routing an observable to its declaration. The orchestrator and other skills point here. Do not duplicate it. Routing has two hops. First map the observable to a declaration artifact. Then map the declaration artifact to an R1-R5 repair target. See [`references/repair.md`](references/repair.md) for the full second-hop table and the `invalidated:` evidence-set block.
 
 | Observable | Declaration | Second hop (default) |
 | --- | --- | --- |
-| Happy path only; empty/fail/auth missing | `spec` | R2 (interaction model: five-state / path rows) |
+| Happy path only. Empty, fail, and auth missing | `spec` | R2 (interaction model: five-state / path rows) |
 | Wrong business meaning / risk / secrets | `domain` | R1 (requirement subtree reopen when undeclared) |
 | AI slop, flat hierarchy, purposeless motion | `craft` | R4 (implementation) |
 | New UI visually conflicts with confirmed existing-product baseline | bound `<binding.path>` | R3 (design decision) |
-| Scattered hex/px/ms | `design` | R4 |
+| Scattered hex, px, and ms | `design` | R4 |
 | Badge↔Tag, Dialog↔Drawer mixups | `components` | R4 |
 | Wrong page shell (e.g. list as card wall) | `template` | R4 |
 | Desktop app feels like a web page / wrong seam | `native-craft` | R4 |
-| Copied third-party brand / Do not copy breach | `reference` (supporting) → fix in Fill / re-intake | R4 |
+| Copied third-party brand / Do not copy breach | `reference` (supporting) belongs to fix in Fill / re-intake | R4 |
 | Undeclared product requirement / unjudgeable criterion / falsified assumption | re-open `ux-spec` shaping | R1 |
 | Capture plan cannot answer the criterion / provider absent | observe* seam | R5 (evidence plan) |
-| Critique with no owner | re-run `ui-evaluator` | — |
+| Critique with no owner | re-run `ui-evaluator` |, |
 
-Fix only the owning layer (minimum owning set; repair order R1→R2→R3→R4, R5 may append after any layer), then resume from the pipeline step that consumes it.
+Fix only the owning layer (minimum owning set). Repair in order R1, R2, R3, then R4; R5 may append after any layer. Resume from the pipeline step that consumes it.
 
 ## Guard
 

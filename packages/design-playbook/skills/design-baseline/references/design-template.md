@@ -18,40 +18,40 @@ colors:
 
 ### Foundation
 
-- `<token or value>` — <background/surface role>
+- `<token or value>`, <background and surface role>
 
 ### Interactive and Functional
 
-- `<token or value>` — <primary/success/warning/error role>
+- `<token or value>`, <primary, success, warning, and error role>
 
 ### Text Hierarchy
 
-- `<token or value>` — <primary/secondary/muted role>
+- `<token or value>`, <primary, secondary, and muted role>
 
 ## Typography Rules
 
 - Font families: <families and fallbacks>
-- Hierarchy: <display/heading/body/label sizes, weights, and line heights>
+- Hierarchy: <display, heading, body, and label sizes, weights, and line heights>
 - Usage: <where each role appears>
 
 ## Component Stylings
 
 - Buttons: <shape, variants, states, spacing>
-- Containers/cards: <radius, border, elevation, padding>
+- Containers and cards: <radius, border, elevation, padding>
 - Navigation: <layout and active states>
 - Inputs: <shape, focus, validation, touch target>
-- Domain primitives: <project-specific components>
+- Domain components: <project-specific components>
 
 ## Layout Principles
 
-- Container/grid: <width, columns, alignment>
+- Container and grid: <width, columns, alignment>
 - Spacing: <base unit and density>
 - Responsive behavior: <breakpoints and collapse rules>
 
 ## Motion & Interaction
 
-- Timing/easing: <tokens or observed values>
-- State transitions: <hover/focus/pressed/loading>
+- Timing and easing: <tokens or observed values>
+- State transitions: <hover, focus, pressed, and loading>
 - Reduced motion: <behavior>
 
 ## Accessibility
@@ -64,7 +64,7 @@ colors:
 
 - path: `src/path/to/high-signal-file`
   sha256: `<64-lowercase-hex-digest>`
-  captures: <tokens/theme/layout/components>
+  captures: <tokens, theme, layout, and components>
   confidence: <high|medium|low>
 
 ## Known Gaps & Exceptions

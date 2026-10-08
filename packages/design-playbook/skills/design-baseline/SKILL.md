@@ -1,6 +1,6 @@
 ---
 name: design-baseline
-description: Discover, validate, or draft a project-owned DESIGN.md before adding or revising UI in an existing frontend. Use during design-playbook initialization when a repository already has pages, components, themes, tokens, or styles; when new UI looks inconsistent with existing surfaces; when DESIGN.md may be missing, incomplete, conflicting, or stale; or when the user asks to generate a design system from existing frontend source. Produces a provenance-backed draft and requires confirmation before creating or replacing the durable baseline.
+description: Discover, validate, or draft a project-owned DESIGN.md before adding or revising UI in an existing frontend. Use during design-playbook initialization when a repository already has pages, components, themes, tokens, or styles. When new UI looks inconsistent with existing surfaces. When DESIGN.md may be missing, incomplete, conflicting, or stale. Or when the user asks to generate a design system from existing frontend source. Produces a provenance-backed draft and requires confirmation before creating or replacing the durable baseline.
 ---
 
 # design-baseline
@@ -12,11 +12,11 @@ Establish one project-owned visual authority before UI decisions or Fill. Treat 
 | This skill owns | Does not own |
 | --- | --- |
 | Discovering and structurally validating project `DESIGN.md` | Functional success criteria (`spec` L1–L6) |
-| Extracting a draft from first-party frontend source | Third-party reference Keep/Change/Do not copy (`reference-intake`) |
-| Source hashes, observed/inferred labels, confidence, unresolved gaps | Component/template selection (`ui-picker`) |
-| Confirmation before a durable baseline write | Pass/Fail verdict (`ui-evaluator`) |
+| Extracting a draft from first-party frontend source | Third-party reference Keep, Change, and Do not copy (`reference-intake`) |
+| Source hashes, observed and inferred labels, confidence, unresolved gaps | Component and template selection (`ui-picker`) |
+| Confirmation before a durable baseline write | Pass or Fail verdict (`ui-evaluator`) |
 
-Canonical authority is `<project-root>/DESIGN.md`. Accept `.stitch/DESIGN.md` as a compatibility candidate only. If both exist with different content, stop for an explicit user choice; never merge them silently.
+Canonical authority is `<project-root>/DESIGN.md`. Accept `.stitch/DESIGN.md` as a compatibility candidate only. If both exist with different content, stop for an explicit user choice. Never merge them silently.
 
 ## Deep module (SSOT for deterministic work)
 
@@ -40,16 +40,16 @@ python scripts/design_baseline.py confirm <project_root> <run_root> --decision a
 python scripts/design_baseline.py verify  <project_root> <run_root>
 ```
 
-On Windows, non-ASCII `--reason` text can be mangled between shell and Python (ANSI code page, e.g. GBK on zh-CN). When argv carries undecodable bytes, `confirm` refuses with an error instead of persisting mojibake; prefer the module API (`confirm(project_root, run_root, decision, reason=...)`) or ASCII text for CLI `--reason` with non-ASCII content.
+On Windows, non-ASCII `--reason` text can be mangled between shell and Python (ANSI code page, e.g. GBK on zh-CN). When argv carries undecodable bytes, `confirm` refuses with an error instead of persisting mojibake. Prefer the module API (`confirm(project_root, run_root, decision, reason=...)`) or ASCII text for CLI `--reason` with non-ASCII content.
 
 State is a cache, not authority. Every public call resolves paths against the supplied project root. `verify` re-hashes the bound baseline and its first-party sources before returning a downstream binding. Fill and other consumers may only use a binding that just passed `verify`.
 
 | `status` | Meaning |
 | --- | --- |
 | `ready` | Bound baseline (`decision.kind` = `existing` or `accepted`) |
-| `needs_confirmation` | Provenance-backed draft awaits accept/waive; `baseline_rejection` records why an existing candidate was not bound (`null` when none existed) |
+| `needs_confirmation` | Provenance-backed draft awaits accept or waive; `baseline_rejection` records why an existing candidate was not bound (`null` when none existed) |
 | `waived` | Explicit waiver confirmed by this run's user, carrying that user's non-empty reason |
-| `ambiguous` | Conflicting candidates; human choice required |
+| `ambiguous` | Conflicting candidates. Human choice required |
 
 ## Workflow
 
@@ -65,55 +65,55 @@ Run `prepare(project_root, run_root)`. Deterministic code:
 
 - discovers `DESIGN.md` / `.stitch/DESIGN.md` (rejects escaping symlinks);
 - validates a complete existing baseline in place;
-- or scans first-party theme/token/style/component/page sources, writes `evidence.json` + `DESIGN.draft.md`, and returns `needs_confirmation`;
+- or scans first-party theme, token, style, component, and page sources, writes `evidence.json` + `DESIGN.draft.md`, and returns `needs_confirmation`;
 - writes `.scratch/<run>/design-baseline/state.json` (`schema: design-baseline/v1`).
 
 Agent work after prepare:
 
-- if `status` is `ready` → cite path + sha256 and continue;
-- if `ambiguous` → stop for the smallest user decision; never invent a third authority;
-- if `needs_confirmation` → review the draft; optionally enrich only material claims with `[inferred confidence=…]` **in the draft file**, then re-run prepare if structure/sources changed (do not hand-edit hashes). When `baseline_rejection` is set, an existing `DESIGN.md` was rejected for the stated reason — accepting the draft **replaces** it (a backup is kept; see Confirm).
+- if `status` is `ready` then cite path + sha256 and continue;
+- if `ambiguous` then stop for the smallest user decision. Never invent a third authority;
+- if `needs_confirmation` then review the draft. Optionally enrich only material claims with `[inferred confidence=…]` **in the draft file**, then re-run prepare if structure and sources changed (do not hand-edit hashes). When `baseline_rejection` is set, an existing `DESIGN.md` was rejected for the stated reason, accepting the draft **replaces** it (a backup is kept; see Confirm).
 
 Never write or overwrite project `DESIGN.md` in this step.
 
-**Done when:** `state.json` exists with one of the four statuses above; drafts carry source paths + SHA-256 and observed/inferred labels.
+**Done when:** `state.json` exists with one of the four statuses above. Drafts carry source paths + SHA-256 and observed and inferred labels.
 
 ### 3. Confirm or waive (`confirm`)
 
-Show a compact summary: atmosphere, core tokens, typography, layout, primitives, conflicting evidence, inferred claims. Ask before the durable write.
+Show a compact summary: atmosphere, core tokens, typography, layout, shared components, conflicting evidence, inferred claims. Ask before the durable write.
 
-- **Accept:** `confirm(..., decision="accept")` atomically writes canonical `<project-root>/DESIGN.md` from the bound draft and returns a `ready` state. If a differing `DESIGN.md` already exists, the previous content is backed up byte-exact first and the state records it as `replaced_baseline` (`path`, `sha256`, `backup`); the CLI prints an overwrite warning with the backup path.
-- **Waive:** `confirm(..., decision="waive", reason=<user reason>)` does not write `DESIGN.md`. Existing-product Fill may continue only after this explicit waiver. A waiver belongs to the user, not the agent: recommending it is allowed, but **the first waiver of a run must be put to this run's user and answered there**, and `reason` carries what that user actually said. A waiver or ruling from an earlier run, another agent, or a surviving `state.json` is provenance, not this user's consent — the same boundary ADR-0033 draws for repository-stored preferences. Never call `confirm(..., "waive")` before this run's user has answered.
-- **Revise:** edit only the draft (or fix sources), then `prepare` again.
+- **Accept.** `confirm(..., decision="accept")` atomically writes canonical `<project-root>/DESIGN.md` from the bound draft and returns a `ready` state. If a differing `DESIGN.md` already exists, the previous content is backed up byte-exact first and the state records it as `replaced_baseline` (`path`, `sha256`, `backup`). The CLI prints an overwrite warning with the backup path.
+- **Waive.** `confirm(..., decision="waive", reason=<user reason>)` does not write `DESIGN.md`. Existing-product Fill may continue only after this explicit waiver. A waiver belongs to the user, not the agent. Recommending it is allowed, but the first waiver of a run must be put to this run's user and answered there. The `reason` carries what that user actually said. A waiver or ruling from an earlier run, another agent, or a surviving `state.json` is provenance, not this user's consent. ADR-0033 draws the same boundary for repository-stored preferences. Never call `confirm(..., "waive")` before this run's user has answered.
+- **Revise.** edit only the draft (or fix sources), then `prepare` again.
 
-Never infer acceptance from silence. Never replace a valid baseline merely because extraction found different implementation details; report the drift for a decision.
+Never infer acceptance from silence. Never replace a valid baseline merely because extraction found different implementation details. Report the drift for a decision.
 
 **Done when:** `state.json` is `ready` (existing or accepted) or `waived` with a non-empty reason given by **this run's user**.
 
 ### 3a. Promote an adjudicated component (`promote`)
 
-A component promotion requires both a user `promotion_decided/promote` governance event and a fresh execution-time check: the source must be a real project-relative file and the current `.scratch/<run>/decision-report.md` history must still meet the component threshold. The governance event alone is not a durable bypass for stale or fabricated candidates. Token promotion remains governed separately because token candidate extraction is a different input seam.
+A component promotion requires a user `promotion_decided/promote` governance event and a fresh execution-time check. The source must be a real project-relative file. The current `.scratch/<run>/decision-report.md` history must still meet the component threshold. The governance event alone is not a durable bypass for stale or fabricated candidates. Token promotion remains governed separately because token candidate extraction is a different input seam.
 
 ### 4. Verify before Fill (`verify`)
 
 Immediately before Fill (and any time a consumer needs a binding), call `verify(project_root, run_root)`.
 
-- Re-checks path containment, baseline hash, source freshness, and provenance alignment. Promoted component sources are bound by `source_sha256`; source drift fails closed and requires a fresh adjudication/promotion rather than silently updating the binding.
+- Re-checks path containment, baseline hash, source freshness, and provenance alignment. Promoted component sources are bound by `source_sha256`. Source drift fails closed and requires a fresh adjudication and promotion rather than silently updating the binding.
 - Rejects forged `state.json`, stale sources, candidate conflicts, and symlink escape.
 - On success, returns the binding: baseline path + sha256 (or an explicit waiver).
 
-Downstream may only consume this verified result — not a hand-edited confirm file and not a draft.
+Downstream may only consume this verified result, not a hand-edited confirm file and not a draft.
 
-**Done when:** `verify` returns without error; the decision report can cite `design-baseline: <path> sha256:<digest>` or `waived:<reason>`.
+**Done when:** `verify` returns without error. The decision report can cite `design-baseline: <path> sha256:<digest>` or `waived:<reason>`.
 
 ### 5. Bind downstream consumers
 
 | Consumer | Required behavior |
 | --- | --- |
-| `ui-picker` | Cite the verified baseline in the decision report; preserve visual roles, density, layout, and component conventions unless a declared change is approved |
-| Fill | Use project tokens and primitives; log missing roles instead of inventing raw values; gate on successful `verify` |
+| `ui-picker` | Cite the verified baseline in the decision report. Preserve visual roles, density, layout, and component conventions unless a declared change is approved |
+| Fill | Use project tokens and shared components. Log missing roles instead of inventing raw values. Gate on successful `verify` |
 | `craft-guard` | Treat obvious baseline drift as a craft failure, not merely personal taste |
-| `ui-evaluator` | Point observable drift back to `DESIGN.md`; the baseline is supporting declaration evidence, never L6 runtime proof by itself |
+| `ui-evaluator` | Point observable drift back to `DESIGN.md`. The baseline is supporting declaration evidence, never L6 runtime proof by itself |
 
 Third-party or sample `DESIGN.md` files remain `reference-intake` inputs. They never become project authority automatically.
 
@@ -127,13 +127,13 @@ Third-party or sample `DESIGN.md` files remain `reference-intake` inputs. They n
 .scratch/<run>/design-baseline/previous-DESIGN.md   # backup of a replaced DESIGN.md (when overwritten)
 ```
 
-The deep module `prepare`/`confirm`/`verify` is the sole gate surface. An adopted existing `DESIGN.md` only needs to carry verifiable source provenance (path + SHA-256 under `## Source Evidence & Confidence`) to be bound; the other section names in [`references/design-template.md`](references/design-template.md) are draft guidance, not a structural contract imposed on hand-written baselines.
+The deep module `prepare`/`confirm`/`verify` is the sole gate surface. An adopted existing `DESIGN.md` only needs to carry verifiable source provenance (path + SHA-256 under `## Source Evidence & Confidence`) to be bound. The other section names in [`references/design-template.md`](references/design-template.md) are draft guidance, not a structural contract imposed on hand-written baselines.
 
 ## Scope fence
 
-| In | Out → |
+| In | Out of scope |
 | --- | --- |
-| First-party visual baseline and provenance | Functional behavior → `ux-spec` |
-| Existing-source extraction | External inspiration → `reference-intake` |
-| Confirmation before durable write | Scene/template/component decision → `ui-picker` |
-| Baseline drift source for point-back | Runtime evidence judgment → `ui-evaluator` |
+| First-party visual baseline and provenance | Functional behavior belongs to `ux-spec` |
+| Existing-source extraction | External inspiration belongs to `reference-intake` |
+| Confirmation before durable write | Scene, template, and component decision belongs to `ui-picker` |
+| Baseline drift source for point-back | Runtime evidence judgment belongs to `ui-evaluator` |

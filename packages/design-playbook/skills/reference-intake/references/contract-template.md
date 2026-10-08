@@ -12,7 +12,7 @@ Emit as `.scratch/<run>/reference/contract.md`. Headings are required.
 
 - ...
 
-No-vision filling rule: observed rows ride **only text the session can cite** â€” user-provided notes (including a requested written description of a screenshot), URL page text, file facts. A host without vision never derives observed claims from image bytes; visual points nobody can verify move to **Inferred (labeled)** or **Unresolved questions**.
+No-vision filling rule: observed rows use **only text the session can cite**. Sources include user-provided notes, URL page text, and file facts. Notes may include a requested written description of a screenshot. A host without vision never derives observed claims from image bytes. Visual points nobody can verify move to **Inferred (labeled)** or **Unresolved questions**.
 
 ## Inferred (labeled)
 
@@ -44,7 +44,7 @@ No-vision filling rule: observed rows ride **only text the session can cite** â€
 - Region weight / hierarchy:
 - Explicit exclusions:
 
-No-vision filling rule: fill each cue only from cited text (user notes describing the reference, URL page text); leave an item blank-and-noted or move it to **Inferred (labeled)** / **Unresolved questions** when nobody can verify it. Never invent cues from image bytes.
+No-vision filling rule: fill each cue only from cited text (user notes describing the reference, URL page text). Leave an item blank-and-noted or move it to **Inferred (labeled)** / **Unresolved questions** when nobody can verify it. Never invent cues from image bytes.
 
 ## License / brand risks
 
@@ -86,7 +86,7 @@ Write beside this contract as `.scratch/<run>/reference/manifest.json`:
 Rules:
 
 - `kind` is one of: `screenshot`, `url`, `design_file`, `product_analogy`, `other`
-- copied ephemeral raster locators are run-root-relative under `reference/assets/`; existing authored fixtures may retain `assets/...` relative to the reference directory
+- copied ephemeral raster locators are run-root-relative under `reference/assets/`. Existing authored fixtures may retain `assets/...` relative to the reference directory
 - URL locators are absolute strings; `sha256` is null for pure URLs and product analogies
 - `storage` is `copied`, `linked`, `remote`, or `symbolic`; `acquired_via` is `attachment`, `local-file`, `host-tool`, `export`, `url`, or `analogy`
 - `media_type`, `provider`, and source-level `captured_at` are optional additive fields; `provider` is a non-path label and never changes core routing

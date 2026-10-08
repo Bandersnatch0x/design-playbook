@@ -4,26 +4,26 @@ Use source precedence to separate intended design rules from accidental one-offs
 
 ## 1. Discover the frontend shape
 
-Identify framework and styling signals from manifests and configuration. Map pages/routes, shared components, global styles, themes/tokens, fonts, assets, and stories/screenshots. Ignore generated output, dependencies, caches, and vendored UI.
+Identify framework and styling signals from manifests and configuration. Map pages and routes, shared components, global styles, themes and tokens, fonts, assets, and stories/screenshots. Ignore generated output, dependencies, caches, and vendored UI.
 
-Classify the project as existing-product only when meaningful first-party UI exists. A dependency on React/Vue/Svelte alone is not enough.
+Classify the project as existing-product only when meaningful first-party UI exists. A dependency on React, Vue, or Svelte alone is not enough.
 
 ## 2. Read sources in precedence order
 
 1. Explicit tokens and theme files.
-2. Global CSS variables, Tailwind/theme configuration, font declarations.
-3. Shared primitives: buttons, inputs, cards, navigation, dialogs.
+2. Global CSS variables, Tailwind and theme configuration, font declarations.
+3. Shared components: buttons, inputs, cards, navigation, dialogs.
 4. Two to five representative pages covering dominant and edge-case layouts.
 5. Rendered evidence when the app can be inspected safely.
 
-Higher-precedence sources express intent. Lower-precedence sources prove what shipped. Record conflicts; do not hide them by averaging values.
+Higher-precedence sources express intent. Lower-precedence sources prove what shipped. Record conflicts. Do not hide them by averaging values.
 
 ## 3. Extract by functional role
 
 - Colors: background, surface, text hierarchy, interaction, semantic state.
 - Typography: family, scale, weight, line height, letter spacing, usage.
 - Layout: container width, grid, density, spacing unit, responsive collapse.
-- Components: shape, variants, states, focus, elevation, domain primitives.
+- Components: shape, variants, states, focus, elevation, domain components.
 - Motion: duration, easing, state change, reduced-motion handling.
 - Accessibility: contrast intent, focus visibility, keyboard, touch targets.
 

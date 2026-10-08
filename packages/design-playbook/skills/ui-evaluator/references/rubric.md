@@ -5,7 +5,7 @@
 - **Landing page**: design quality / originality / craft / function
 - **Console**: design quality / usability / information density / craft / consistency
 
-Dimensions are read from the scene; no hardcoded list. **Every criterion must point back to a declaration.**
+Dimensions are read from the scene. No hardcoded list. **Every criterion must point back to a declaration.**
 
 ## Recirculate examples
 
@@ -18,7 +18,7 @@ Dimensions are read from the scene; no hardcoded list. **Every criterion must po
 
 ## Prohibited
 
-- "Could be improved overall" with no specific pointer — not valid
+- "Could be improved overall" with no specific pointer, not valid
 - Changing CSS only without pointing back to the declaration
 - Overwriting underspecified L5 with new aesthetic terminology
 
@@ -26,10 +26,10 @@ Dimensions are read from the scene; no hardcoded list. **Every criterion must po
 
 If this run produced `preview*` artifacts (`.scratch/<run>/preview/log.md` + `confirm-round-*.json` exist), list it as a supporting finding:
 
-- Read `preview/log.md` + confirm json: did feedback drive a revision, or did empty / unannotated anchors slide past the structural floor? `decision-round-*.json` is for audit / recovery only — it is not a confirmation authority or a second semantic input (ADR-0013).
-- The structural floor (adapter, G5) only blocks empty feedback / unannotated anchors; **semantic** problems — e.g. example (zh): 「安师大」, a valid CJK string unrelated to the annotated element — cannot be blocked by the structural floor; catch them here.
-- `source` is `preview* seam` (the orchestrator's preview-step contract), not UI source — use this when the defect is in the adapter loop contract rather than the generated UI itself.
-- Process gaps (seam contract) are recorded separately from product findings (UI); do not mix them into the recirculate closure trail.
+- Read `preview/log.md` + confirm json: did feedback drive a revision, or did empty / unannotated anchors slide past the structural floor? `decision-round-*.json` is for audit / recovery only, it is not a confirmation authority or a second semantic input (ADR-0013).
+- The structural floor (adapter, G5) only blocks empty feedback / unannotated anchors; **semantic** problems, e.g. example (zh): 「安师大」, a valid CJK string unrelated to the annotated element, cannot be blocked by the structural floor. Catch them here.
+- `source` is `preview* seam` (the orchestrator's preview-step contract), not UI source, use this when the defect is in the adapter loop contract rather than the generated UI itself.
+- Process gaps (seam contract) are recorded separately from product findings (UI). Do not mix them into the recirculate closure trail.
 
 ## observe* mirror surface (supporting)
 

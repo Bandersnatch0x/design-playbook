@@ -2,7 +2,7 @@
 
 ## Intent (defaults)
 
-- CJK-first; console density priority; brand color restrained; neutral colors carry hierarchy.
+- CJK-first. Console density priority. Brand color restrained. Neutral colors carry hierarchy.
 
 ## Role examples
 
@@ -15,7 +15,7 @@
 ## Three execution rules
 
 1. All visual values via `var(--*)`
-2. hover/active/disabled/selected derived from base tokens
+2. hover, active, disabled, and selected derived from base tokens
 3. Token not found: log `gaps.log` + valid fallback, or refuse to generate that detail
 
-Do not write bare hex, arbitrary px/ms/cubic-bezier literals that bypass the system.
+Do not write bare hex, arbitrary px, ms, and cubic-bezier literals that bypass the system.

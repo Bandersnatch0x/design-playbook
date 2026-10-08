@@ -5,9 +5,9 @@ description: Native-feel declaration for desktop apps. Use when a cross-platform
 
 # native-craft
 
-**Native-feel** is a Design I/O **platform declaration**: it fixes the render-surface seam and the native conventions before any web shell is picked. It is the native-desktop twin of `craft-guard` (which owns web craft); the two do not overlap.
+**Native-feel** is a Design I/O **platform declaration**: it fixes the render-surface seam and the native conventions before any web shell is picked. It is the native-desktop twin of `craft-guard` (which owns web craft). The two do not overlap.
 
-Inspired by yetone/native-feel-skill (MIT) - see `NOTICE`. Depth lives in [`references/native-feel.md`](references/native-feel.md); do not load it until this skill applies.
+Inspired by yetone/native-feel-skill (MIT) - see `NOTICE`. Depth lives in [`references/native-feel.md`](references/native-feel.md). Do not load it until this skill applies.
 
 ## When to apply / skip
 
@@ -21,15 +21,15 @@ The cross-platform boundary is drawn at the **WebView surface**, nowhere else.
 - **Below the seam** - windowing, hotkeys, materials, file dialogs, tray, a11y, input methods, context menu - **native**, written twice in idiomatic Swift / C#. No abstraction is fast or correct enough.
 - **Above the seam** - React tree, business logic, extension API, AI orchestration - **shared**, written once in TS.
 
-Test every platform decision: *is this above or below the rendering surface?* Below -> write it twice. Above -> write it once. Refuse to draw the line elsewhere.
+Test every platform decision: *is this above or below the rendering surface?* Below then write it twice. Above then write it once. Refuse to draw the line elsewhere.
 
 ## Native-feel tenets (cite by short name when advising)
 
 - **Seam at render surface** - the boundary altitude where neither side can mimic the other.
-- **Adopt the platform, don't compete** - the OS draws blur, scrollbars, dark mode, focus rings better than you. "Let the OS do it" *is* the implementation; custom is last resort.
+- **Adopt the platform, don't compete** - the OS draws blur, scrollbars, dark mode, focus rings better than you. "Let the OS do it" *is* the implementation. Custom is last resort.
 - **Perception is performance** - users feel promises kept (keystroke, frame, latency), not MB/FPS. Define the perception target before optimizing.
 - **Cross boundaries intentionally** - every IPC is a design decision: async, batched, schema-typed, observable. Never treat IPC like a function call.
-- **Iteration loop is the product** - hot-reload (~200 ms) vs native recompile (~30 s) is 150x; the cross-platform tax buys this, protect it.
+- **Iteration loop is the product** - hot-reload (~200 ms) vs native recompile (~30 s) is 150x. The cross-platform tax buys this, protect it.
 
 ## Pipeline integration
 
@@ -56,4 +56,4 @@ Test every platform decision: *is this above or below the rendering surface?* Be
 | Slow perception despite low memory | `native-craft` perception tenet |
 | Used this stack for a one-OS / Electron-fine / <100ms app | `native-craft` decision gate (rule out) |
 
-Depth: decision gate + native-conventions audit -> [`references/native-feel.md`](references/native-feel.md). Full evidence (WebView survival, IPC contract, memory truths) -> original `native-feel-skill` (user installs separately).
+Depth: decision gate + native-conventions audit then [`references/native-feel.md`](references/native-feel.md). Full evidence (WebView survival, IPC contract, memory truths) then original `native-feel-skill` (user installs separately).
