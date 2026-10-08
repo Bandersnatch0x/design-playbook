@@ -214,6 +214,11 @@
         }
         var id = ++sequence.current;
         if (entry) entry._replayId = id;
+        // Record what this dispatch sends. Typing already set this in commit(),
+        // but the replay paths (undo/redo) did not, so drafts and dispatched
+        // values stayed permanently unequal and the editor reported a pending
+        // edit forever - which the readiness mirror now reads as "submittable".
+        dispatchedDrafts.current[property] = value;
         var locator = entry ? entry[0].locator : state.selected.selector;
         notifyPresence("user-editing-element", locator, property);
         setBusy(true);
@@ -572,6 +577,13 @@
         var countEl = document.getElementById("dpb-visual-count");
         if (countEl) countEl.textContent = String(pending.length);
       }, [pending, stale]);
+      React.useEffect(function () {
+        // The rail's mirror also depends on work that is in flight (an edit whose
+        // acknowledgement has not arrived) and on unsent keystrokes, which do not
+        // change the published batch. Tell it whenever those move, so the first
+        // edit is submittable immediately instead of only after its receipt.
+        document.dispatchEvent(new CustomEvent("dpbVisualEditsChanged"));
+      }, [busy, pending, drafts]);
       React.useEffect(function () {
         var modelContext = navigator.modelContext;
         if (!modelContext || typeof modelContext.registerTool !== "function") modelContext = document.modelContext;

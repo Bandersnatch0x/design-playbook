@@ -248,13 +248,20 @@
 
   // ---- readiness (I4 floor mirror) ----
   function feedbackValue() { return field ? field.value : ""; }
+  function hasPendingVisualEdits() {
+    return typeof window.dpbHasPendingVisualEdits === "function" &&
+      !!window.dpbHasPendingVisualEdits();
+  }
   function hasEffectiveVisualEdits() {
     // Mirror of the adapter floor (integrity.evaluate_feedback): the batch the
-    // editor published is substantive only when its NET effect changes a value,
-    // so a no-op edit or a chain undone back to its baseline cannot stand in
-    // for notes. Readiness stays owned here; the editor only publishes state.
+    // editor published is substantive only when it is still pending (a stale
+    // batch is refused by the transaction, so readiness must not claim
+    // otherwise) and its NET effect changes a value - a no-op edit or a chain
+    // undone back to its baseline cannot stand in for notes. Readiness stays
+    // owned here; the editor only publishes state.
     var batch = window.DPB_VISUAL_EDIT_BATCH;
-    if (!batch || !batch.edits || !batch.edits.length) return false;
+    if (!batch || batch.status !== "pending") return false;
+    if (!batch.edits || !batch.edits.length) return false;
     var net = {};
     batch.edits.forEach(function (e) {
       var key = [e.kind, e.viewport, e.locator, e.property].join("\u0000");
@@ -277,7 +284,8 @@
           String(a.comment || "").trim() !== "";
       });
     }
-    return feedbackValue().trim() !== "" || hasEffectiveVisualEdits();
+    return feedbackValue().trim() !== "" || hasEffectiveVisualEdits() ||
+      hasPendingVisualEdits();
   }
   function setReadiness() { updateStatus(); }
   if (field) field.addEventListener("input", function () { setReadiness(); scheduleDraft(); });
@@ -500,7 +508,21 @@
         toast(tt("visual_drain_failed"));
         return;
       }
-      if (submitter) form.requestSubmit(submitter); else form.requestSubmit();
+      // Re-evaluate after the drain: an edit that turned out to be a no-op must
+      // not become a doomed submit. The mirror now sees the published batch.
+      if (!isSubstantive()) {
+        setHintGate(true);
+        announce(tt("field_hint"));
+        setDrawer(true, true);
+        setSpecPanel(false);
+        return;
+      }
+      // Defer past the in-flight submit event: submitting from inside the
+      // promise that the same event is awaiting lets the browser drop it, which
+      // made a collapsed-rail header click need a second press.
+      setTimeout(function () {
+        if (submitter) form.requestSubmit(submitter); else form.requestSubmit();
+      }, 0);
     }).catch(function () {
       finishLoading();
       toast(tt("visual_drain_failed"));

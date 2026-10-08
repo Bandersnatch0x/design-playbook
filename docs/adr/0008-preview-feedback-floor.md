@@ -68,11 +68,33 @@ viewport, kind, and property; no-op edits and chains undone to their baseline do
 not qualify.
 
 Every supplied anchor still needs a non-empty selector and comment, regardless
-of edits or overall feedback. The transaction validates the visual batch against
-the current source/route and its canonical hash before treating it as substantive.
-Malformed, stale, or unresolved edits do not qualify and cannot produce a
-confirmation. An empty round remains blocked, with an actionable on-click hint
-rather than a disabled submission control.
+of edits or overall feedback. An empty round remains blocked, with an actionable
+on-click hint rather than a disabled submission control. The editor's readiness
+mirror follows the same rule: a stale batch does not read as ready, and an edit
+whose receipt has not arrived yet counts as pending so the first edit is
+submittable.
+
+What "validated" does and does not mean (recorded after an independent review
+tried to break the rule):
+
+- It means the batch has a canonical shape, is bound to the current source and
+  route, and its canonical hash matches. It does **not** mean the transaction can
+  prove that a DOM edit actually happened: the batch is trusted input from the
+  parent control shell, exactly as free-text feedback is. A user who can rewrite
+  the hidden batch field can therefore stage a fabricated edit; that was already
+  true of feedback, and the floor has never been a semantic or anti-forgery
+  control. Requiring a `batchHash` raises the effort but cannot close this,
+  because the client is not a trust boundary.
+- A malformed, stale, or hash-mismatched batch cannot **itself** satisfy the
+  floor. It does not poison a round that also supplies non-empty feedback or a
+  complete anchor: such a round still confirms, and the batch error is recorded
+  in `visual_edits_error` and surfaced on the response page. Tightening that is
+  a separate decision, not part of this amendment.
+- The "every supplied anchor is complete" rule is enforced over the anchors the
+  adapter parser retains. `review_session._parse_anchors` currently drops an
+  anchor whose selector is empty instead of failing the round, so a hand-crafted
+  POST can bypass that check; `review_session.py` is outside this amendment's
+  authorized file list and hardening it needs its own authorization.
 
 Preview confirmation remains separate from source-write authorization. Valid
 edit-only confirms carry the same `floor_pass` and source-bound agent handoff;

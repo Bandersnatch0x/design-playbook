@@ -1363,6 +1363,85 @@ def test_next_step_copy_names_the_decision_not_the_feedback_only() -> None:
     assert "visual edit" in en["confirm_desc"].lower()
 
 
+def test_f4_stale_batch_does_not_read_as_ready(editor_page) -> None:
+    """A batch the transaction will refuse must not look submittable.
+
+    Independent review F4: the readiness mirror looked only at value
+    differences, so a batch the backend refuses (status stale) still read as
+    ready and the user got an unexplained refusal after clicking.
+    """
+    from playwright.sync_api import expect
+
+    from design_playbook.mcp.preview import i18n
+
+    page = editor_page
+    page.locator("#dpb-tab-visual").click()
+    submit = page.locator("#dpb-approve-drawer")
+    expect(submit).to_contain_text(i18n.t("submit_not_ready"))
+
+    page.evaluate("""() => {
+      window.DPB_VISUAL_EDIT_BATCH = {schemaVersion: 1, status: 'stale', sourceHash: 'x',
+        routeUrl: '', edits: [{kind: 'style', viewport: 'desktop', locator: '#panel-title',
+        property: 'background-color', oldValue: '', newValue: 'rgb(1, 2, 3)'}]};
+      document.dispatchEvent(new CustomEvent('dpbVisualEditsChanged'));
+    }""")
+    expect(submit).to_contain_text(i18n.t("submit_not_ready"))
+
+    # The same edits with a pending status are substantive, so readiness flips.
+    page.evaluate("""() => {
+      window.DPB_VISUAL_EDIT_BATCH.status = 'pending';
+      document.dispatchEvent(new CustomEvent('dpbVisualEditsChanged'));
+    }""")
+    expect(submit).to_contain_text(i18n.t("submit_ready"))
+
+
+def test_f5_first_edit_is_submittable_while_its_receipt_is_in_flight(editor_page) -> None:
+    """An edit whose acknowledgement has not arrived still counts as pending.
+
+    Independent review F5: the drain branch was reachable only after the mirror
+    was already satisfied, so the very first edit had no published entry yet and
+    the click was refused as an empty round even though the canvas had changed.
+    """
+    from playwright.sync_api import expect
+
+    from design_playbook.mcp.preview import i18n
+    from preview_e2e_helpers import dismiss_onboarding
+
+    page = editor_page
+    page.add_init_script("""
+        window.holdReceipts = false;
+        window.addEventListener('message', event => {
+            if (!window.holdReceipts) return;
+            if (!event.data || !event.data.dpbVisualEditChange) return;
+            if (event.source !== document.querySelector('iframe.dpb-proto-frame').contentWindow) return;
+            event.stopImmediatePropagation();
+        }, true);
+    """)
+    page.reload()
+    dismiss_onboarding(page)
+    target = page.frame_locator("iframe.dpb-proto-frame").locator("#panel-title")
+    target.evaluate("el => el.click()")
+    page.keyboard.press("Escape")
+    page.locator("#dpb-tab-visual").click()
+    field = page.locator('.dpb-react-field[data-property="background-color"] input')
+    expect(field).to_be_enabled()
+    submit = page.locator("#dpb-approve-drawer")
+    expect(submit).to_contain_text(i18n.t("submit_not_ready"))
+
+    page.evaluate("window.holdReceipts = true")
+    field.fill("#123456")
+    field.press("Enter")
+    assert page.evaluate("window.dpbHasPendingVisualEdits()") is True
+    expect(submit).to_contain_text(i18n.t("submit_ready"))
+
+    # Delivering the receipt keeps it substantive, now from the published batch.
+    page.evaluate("window.holdReceipts = false")
+    page.reload()
+    dismiss_onboarding(page)
+    page.locator("#dpb-tab-visual").click()
+    expect(submit).to_contain_text(i18n.t("submit_not_ready"))
+
+
 def test_visual_panel_submit_is_the_header_channel_gated_by_the_floor(editor_page) -> None:
     """The rail's single action mirrors the header state; one floor owner.
 
@@ -1647,12 +1726,18 @@ def test_bo02_visual_panel_authority_and_label_truth(editor_page) -> None:
     expect(submit).to_be_enabled()
     expect(submit).to_contain_text(i18n.t("submit_ready"))
     expect(page.locator("#dpb-btn-approve")).to_have_class(re.compile(r"dpb-approve-ready"))
+    # Wait for the debounced edit to actually land before replaying it: readiness
+    # now also counts an in-flight edit, so the label alone does not prove commit.
+    expect(page.locator("#dpb-visual-count")).to_have_text("1")
+    expect(field).to_be_enabled()
 
     # An edit undone back to its baseline is not an effective change: the floor
     # must close again rather than accept a no-op as a substitute for notes.
     field.press("Control+z")
+    expect(page.locator("#dpb-visual-count")).to_have_text("0")
     expect(submit).to_contain_text(i18n.t("submit_not_ready"))
     field.press("Control+Shift+z")
+    expect(page.locator("#dpb-visual-count")).to_have_text("1")
     expect(submit).to_contain_text(i18n.t("submit_ready"))
 
     page.evaluate("""() => {
