@@ -12,6 +12,8 @@ import sys
 import threading
 from contextlib import contextmanager
 from pathlib import Path
+
+from .conftest import expand_inspector_section
 from urllib.parse import urlencode
 from unittest.mock import patch
 
@@ -283,6 +285,7 @@ def test_two_browser_presence_no_style_sync_and_disconnect_recovery(presence_hos
                     expect(page.locator(".dpb-react-presence li")).to_have_count(2, timeout=PRESENCE_WAIT)
                     assert page.locator("iframe.dpb-proto-frame").get_attribute("sandbox") == "allow-scripts"
                 first.frame_locator("iframe").locator("#next-read").click(position={"x": 5, "y": 5})
+                expand_inspector_section(first, "padding")
                 first.locator('.dpb-react-field[data-property="padding"] input').fill("32px")
                 expect(first.locator("#dpb-visual-count")).to_have_text("1")
                 expect(second.locator(f'.dpb-react-presence [data-user-id="{alice}"]')).to_contain_text("#next-read · padding", timeout=PRESENCE_WAIT)
@@ -297,6 +300,7 @@ def test_two_browser_presence_no_style_sync_and_disconnect_recovery(presence_hos
                 second_context.set_offline(True)
                 second.frame_locator("iframe").locator("#next-read").click(position={"x": 5, "y": 5})
                 expect(second.locator(".dpb-react-presence")).to_have_attribute("data-state", "unavailable", timeout=PRESENCE_WAIT)
+                expand_inspector_section(second, "padding")
                 second.locator('.dpb-react-field[data-property="padding"] input').fill("40px")
                 expect(second.locator("#dpb-visual-count")).to_have_text("1")
                 second_context.set_offline(False)

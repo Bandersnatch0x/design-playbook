@@ -21,6 +21,8 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+
+from .conftest import expand_inspector_section
 from collections.abc import Callable
 
 _PKG_ROOT = Path(__file__).resolve().parents[2]
@@ -797,6 +799,7 @@ class VisualEditorRegressionTests(unittest.TestCase):
         self.assertEqual(surface, {"secure": True, "documentContext": "undefined", "navigatorContext": "undefined"})
         self.assertIn(self.page.locator(".dpb-react-badge").inner_text(), ("Bridge", "页面桥接"))
         self.select("#a")
+        expand_inspector_section(self.page, "padding")
         self.page.locator('[data-property="padding"] input').fill("19px")
         self.page.wait_for_function("window.DPB_VISUAL_EDIT_BATCH.edits.length === 1")
         self.assertEqual(self.frame.locator("#a").evaluate("el => el.style.padding"), "19px")

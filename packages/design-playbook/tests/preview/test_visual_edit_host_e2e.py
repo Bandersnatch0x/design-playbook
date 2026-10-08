@@ -14,6 +14,8 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+
+from .conftest import expand_inspector_section
 from unittest.mock import patch
 
 PACKAGE = Path(__file__).resolve().parents[2]
@@ -81,6 +83,7 @@ class LiveReviewBrowser:
                     for index, (selector, property_name, value) in enumerate(EDITS, 1):
                         frame.locator(selector).click(position={"x": 5, "y": 5})
                         expect(page.locator(".dpb-react-selection")).to_have_text(selector)
+                        expand_inspector_section(page, property_name)
                         field = page.locator(
                             f'.dpb-react-field[data-property="{property_name}"] input')
                         field.fill(value)

@@ -877,7 +877,7 @@ BRIDGE_SCRIPT = r"""<script>
     updateOverlayPositions(el);
     parent.postMessage({ dpbVisualEditSelection: {
       selector: selector, tag: el.tagName.toLowerCase(), textEditable: isTextElement(el),
-      style: visualStyleSnapshot(el), replay: !!replay, requestId: requestId
+      style: visualStyleSnapshot(el), inlineStyle: el.style.cssText, replay: !!replay, requestId: requestId
     } }, "*");
   }
   function clearHover() {
@@ -1256,7 +1256,7 @@ BRIDGE_SCRIPT = r"""<script>
     var key = e.key === "Escape" ? e.key : e.key.toLowerCase();
     if (e.ctrlKey || e.metaKey) {
       if (["enter", "z", "y"].indexOf(key) < 0) return;
-    } else if (["Escape", "b", "d", "h", "p", "r", "v", "l", "[", "]", "?", "j", "k", "s", "delete", "backspace", "=", "+", "-", "_", "0", "1", "2", "3"].indexOf(key) < 0) return;
+    } else if (["Escape", "a", "b", "d", "h", "p", "r", "v", "l", "[", "]", "?", "j", "k", "s", "delete", "backspace", "=", "+", "-", "_", "0", "1", "2", "3"].indexOf(key) < 0) return;
     e.preventDefault();
     // Only key metadata crosses; the parent's decision token never does.
     parent.postMessage({ dpbReviewShortcut: { key: /^(enter|delete|backspace)$/.test(key) ? e.key : key,

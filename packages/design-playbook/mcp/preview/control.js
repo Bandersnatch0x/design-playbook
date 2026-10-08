@@ -226,6 +226,21 @@
       var on = pair[1] === view;
       el.classList.toggle("is-on", on);
       el.setAttribute("aria-selected", on ? "true" : "false");
+      el.setAttribute("tabindex", on ? "0" : "-1");
+    });
+  }
+  var railTabsList = document.querySelector(".dpb-rail-tabs");
+  if (railTabsList) {
+    railTabsList.addEventListener("keydown", function (e) {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      var tabs = Array.from(railTabsList.querySelectorAll('.dpb-rail-tab:not([hidden])'));
+      var idx = tabs.indexOf(document.activeElement);
+      if (idx < 0) return;
+      e.preventDefault();
+      var nextIdx = e.key === "ArrowRight" ? (idx + 1) % tabs.length : (idx - 1 + tabs.length) % tabs.length;
+      var targetTab = tabs[nextIdx];
+      targetTab.focus();
+      targetTab.click();
     });
   }
   function setSpecPanel(open) {
@@ -432,6 +447,8 @@
     if (drawLayer) drawLayer.style.opacity = show ? "" : "0";
     if (pinsLayer) pinsLayer.style.opacity = show ? "" : "0";
     root.classList.toggle("dpb-preview-mode", !show);
+    var exitPill = document.getElementById("dpb-preview-exit-pill");
+    if (exitPill) exitPill.hidden = show;
     // mode gates the pick channel (pinOn = select tool + annotate mode) —
     // the bridge must learn the new state immediately.
     syncPinToFrame();
@@ -440,6 +457,8 @@
   }
   modePreviewBtn.addEventListener("click", function () { setMode("preview"); setTool("select", true); });
   modeAnnotateBtn.addEventListener("click", function () { setMode("annotate"); });
+  var exitPreviewBtn = document.getElementById("dpb-exit-preview-btn");
+  if (exitPreviewBtn) exitPreviewBtn.addEventListener("click", function () { setMode("annotate"); });
 
   // ---- tools ----
   function setTool(t, quiet) {
@@ -636,7 +655,7 @@
       if (p.rect) a.rect = p.rect;
       if (p.resolved) resolvedSet[p.selector] = true;
       return a;
-    }).filter(function (a) { return a.selector; });
+    }).filter(function (a) { return a && a.selector && String(a.selector).trim() !== ""; });
     anchors.forEach(function (a) { if (a.el) a.el.classList.add("dpb-pin-target"); });
   }
   function undo() {

@@ -23,3 +23,26 @@ if not os.environ.get(LEDGER_ENV_VAR):
     os.environ[LEDGER_ENV_VAR] = str(
         Path(tempfile.mkdtemp(prefix="dpb-preview-ledger-")).resolve()
     )
+
+
+_INSPECTOR_SECTIONS = {
+    prop: section
+    for section, properties in {
+        "colors": "color background-color",
+        "typography": "font-family font-size font-weight line-height letter-spacing",
+        "layout": "display position flex-direction justify-content align-items gap width height transform",
+        "spacing": "margin padding margin-top margin-right margin-bottom margin-left padding-top padding-right padding-bottom padding-left",
+        "border": "border-radius border-width border-color",
+    }.items()
+    for prop in properties.split()
+}
+
+
+def expand_inspector_section(page, property_name: str) -> None:
+    """Open a property's inspector section without toggling an already-open one."""
+    section = _INSPECTOR_SECTIONS[property_name]
+    header = page.locator(
+        f'.dpb-inspector-section[data-section="{section}"] .dpb-section-header'
+    )
+    if header.get_attribute("aria-expanded") == "false":
+        header.click()
