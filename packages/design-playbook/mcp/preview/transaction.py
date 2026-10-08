@@ -27,6 +27,7 @@ from design_playbook.mcp.preview.control import _format_feedback
 from design_playbook.mcp.preview.i18n import CONFIRM_LABELS, SKIP_LABELS
 from design_playbook.mcp.preview.live_route import observe_visual_source, validate_live_route_url
 from design_playbook.mcp.preview.visual_handoff import build_agent_handoff
+from design_playbook.mcp.preview.visual_batch import has_effective_visual_edits
 from design_playbook.mcp.preview.integrity import (
     compute_binding_digest,
     confirm_name,
@@ -937,6 +938,10 @@ def _run_locked(
             )
         except (ValueError, OSError) as exc:
             visual_edits_error = str(exc)
+    # ADR-0008 amendment (2026-10-08): only a batch that validated against the
+    # current source/route and whose net effect actually changes a value can
+    # stand in for notes. A no-op or fully undone chain must not confirm.
+    visual_edits_effective = bool(visual_handoff) and has_effective_visual_edits(visual_edits)
     rejected = bool(submission.get("rejected"))
     aborted = bool(submission.get("aborted"))
     # T-086/DEF-5: a collect timeout is a system state, never user feedback —
@@ -965,7 +970,9 @@ def _run_locked(
         floor_pass = True
         floor_failure = ""
     else:
-        floor = evaluate_feedback_floor(raw_feedback, anchors)
+        floor = evaluate_feedback_floor(
+            raw_feedback, anchors, has_visual_edits=visual_edits_effective
+        )
         floor_pass, floor_failure = floor.passed, floor.reason
     confirmed = user_confirmed and floor_pass
 

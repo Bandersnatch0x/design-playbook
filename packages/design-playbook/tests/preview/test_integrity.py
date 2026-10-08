@@ -72,6 +72,29 @@ class PreviewIntegrityFloorTests(unittest.TestCase):
         )
         self.assertTrue(result.passed)
 
+    def test_validated_visual_edits_alone_satisfy_the_floor(self) -> None:
+        """ADR-0008 amendment (2026-10-08): edit-only rounds may confirm.
+
+        The transaction only passes has_visual_edits for a batch that validated
+        against the current source/route and whose net effect changes a value.
+        """
+        result = evaluate_feedback_floor("", [], has_visual_edits=True)
+        self.assertTrue(result.passed)
+        self.assertEqual(result.reason, "")
+
+    def test_incomplete_anchor_still_fails_with_visual_edits(self) -> None:
+        # Edits never rescue a supplied-but-incomplete anchor: the
+        # "every anchor complete" rule is independent of the new trigger.
+        result = evaluate_feedback_floor(
+            "", [{"selector": "h2", "comment": ""}], has_visual_edits=True
+        )
+        self.assertFalse(result.passed)
+        self.assertIn("anchor missing non-empty selector and comment", result.reason)
+
+    def test_empty_round_without_visual_edits_still_fails(self) -> None:
+        result = evaluate_feedback_floor("", [], has_visual_edits=False)
+        self.assertFalse(result.passed)
+
 
 class PreviewIntegritySnapshotTests(unittest.TestCase):
     def test_snapshot_selects_current_round_and_verifies_prototype(self) -> None:

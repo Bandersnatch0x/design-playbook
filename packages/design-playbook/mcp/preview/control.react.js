@@ -560,6 +560,9 @@
         var tabEl = document.getElementById("dpb-tab-visual");
         if (tabEl) tabEl.classList.toggle("is-pending", cleanEdits.length > 0);
         isPublishedRef.current = true;
+        // The rail owns readiness; tell it the published batch changed so it can
+        // re-evaluate the floor mirror (an effective edit alone can now satisfy it).
+        document.dispatchEvent(new CustomEvent("dpbVisualEditsChanged"));
         return batch;
       }
       React.useEffect(function () {
@@ -941,17 +944,11 @@
             ])
           );
         })(), h("div", { className: "dpb-react-submit" },
-          h("button", {
-            type: "button", id: "dpb-visual-submit",
-            className: "dpb-btn dpb-react-submit-btn" + (reviewGate.ready ? " dpb-btn-primary" : " dpb-btn-quiet"),
-            disabled: !reviewGate.ready || stale,
-            title: t("confirm_desc"),
-            onClick: function () {
-              document.dispatchEvent(new CustomEvent("dpbVisualSubmit"));
-            },
-          },
-            h("span", null, reviewGate.ready ? t("visual_submit") : (reviewGate.label || t("approve_not_ready"))),
-            h("kbd", null, "Ctrl/⌘↵")),
+          // The rail owns the single fixed submission action, so the panel shows
+          // the next step instead of rendering a second, competing button.
+          h("p", { className: "dpb-react-next", role: "status",
+            "data-ready": reviewGate.ready ? "true" : "false" },
+            reviewGate.ready ? t("visual_next_ready") : t("visual_next_waiting")),
           h("p", { className: "dpb-react-help" }, t("visual_help"))));
     }
     window.ReactDOM.createRoot(mount).render(h(Editor));

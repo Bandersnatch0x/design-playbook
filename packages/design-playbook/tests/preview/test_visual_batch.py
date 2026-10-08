@@ -6,6 +6,7 @@ from design_playbook.mcp.preview.visual_batch import (
     VisualBatchError,
     batch_digest,
     confirm_visual_batch,
+    has_effective_visual_edits,
     normalize_visual_batch,
     validate_batch_current,
 )
@@ -83,6 +84,33 @@ def test_confirmation_marks_batch_without_changing_source_hash() -> None:
 def test_rejects_unsafe_batches(raw: dict) -> None:
     with pytest.raises(VisualBatchError):
         normalize_visual_batch(raw, source_hash="v1")
+
+
+def test_effective_edits_exclude_no_ops_and_undone_chains() -> None:
+    """ADR-0008 amendment (2026-10-08): only a net change substitutes for notes."""
+    def effective(edits: list[dict]) -> bool:
+        return has_effective_visual_edits(
+            normalize_visual_batch({"edits": edits}, source_hash="v1")
+        )
+
+    assert effective(
+        [{"locator": "#a", "property": "color", "oldValue": "", "newValue": "red"}]
+    )
+    # A single edit that changes nothing is not substantive.
+    assert not effective(
+        [{"locator": "#a", "property": "color", "oldValue": "red", "newValue": "red"}]
+    )
+    # A chain that ends where it started is not substantive either.
+    assert not effective([
+        {"locator": "#a", "property": "color", "oldValue": "", "newValue": "red"},
+        {"locator": "#a", "property": "color", "oldValue": "red", "newValue": ""},
+    ])
+    # One surviving change is enough, even beside an undone chain.
+    assert effective([
+        {"locator": "#a", "property": "color", "oldValue": "", "newValue": "red"},
+        {"locator": "#a", "property": "color", "oldValue": "red", "newValue": ""},
+        {"locator": "#a", "property": "padding", "oldValue": "8px", "newValue": "16px"},
+    ])
 
 
 def test_bound_batch_cannot_be_resigned_or_moved_to_another_route() -> None:

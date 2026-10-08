@@ -259,6 +259,22 @@ to be green, and the existing test assertions to remain unweakened. This bounded
 exception does not satisfy the external trial gate, and the ADR-0045 spend gate
 otherwise remains in force.
 
+## Amendment (2026-10-08): edit-only submission and one rail action
+
+The maintainer explicitly requested that effective visual edits can be submitted
+without annotations, that submission buttons remain clickable, and that the
+three competing actions in the right rail be consolidated. This authorizes the
+control-shell work plus the existing Preview integrity/transaction/visual-batch
+modules and their preview tests solely to implement the amended ADR-0008 floor.
+It supersedes the earlier requirement to preserve the old feedback-only trigger
+for this bounded change; supplied anchors must still all be complete.
+
+No new skill, command, gate, collector, adapter, server, or runtime is authorized.
+G5, source/route/hash binding, first-decision-wins, and `writesSource: false` remain
+unchanged. Console and evidence surfaces and unrelated shared-tree work remain
+excluded. No version bump, push, tag, publish, catalog submission, recruitment,
+or external-trial pass is authorized. Authorization is not a completion claim.
+
 ## Amendment (2026-10-07): scope extension for the sandbox shortcut allowlist
 
 The maintainer authorized, on 2026-10-07, extending the file list of the

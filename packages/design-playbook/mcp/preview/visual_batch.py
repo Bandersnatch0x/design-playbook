@@ -133,6 +133,16 @@ def normalize_visual_batch(
     return batch
 
 
+def has_effective_visual_edits(batch: dict[str, Any]) -> bool:
+    """Read net change from a validated batch, excluding no-ops and undone chains."""
+    values: dict[tuple[str, str, str, str], tuple[str, str]] = {}
+    for edit in batch.get("edits", []):
+        key = (edit["kind"], edit["viewport"], edit["locator"], edit["property"])
+        original = values[key][0] if key in values else edit["oldValue"]
+        values[key] = (original, edit["newValue"])
+    return any(original != final for original, final in values.values())
+
+
 def validate_batch_current(
     batch: dict[str, Any], current_source_hash: str, *, current_route_url: str | None = None,
 ) -> None:

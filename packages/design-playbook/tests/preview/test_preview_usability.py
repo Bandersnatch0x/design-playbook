@@ -189,22 +189,24 @@ def test_roaming_from_spec_view_switches_back_to_annotations(page, tmp_path):
 
 
 def test_drawer_approve_mirrors_header_dynamic_state(page):
-    # DEF-04: the drawer footer trigger shares the header button's dynamic
-    # count/muted/ready state (REC-04 dual entry, one truth). DEF-06 rides the
-    # same label: English singular for exactly one note.
+    # DEF-04: the rail's single footer trigger shares the header button's dynamic
+    # muted/ready state (REC-04 dual entry, one truth). Since the 2026-10-08
+    # amendment the two name different jobs, so only the state is shared: the
+    # header confirms the round (note count), the rail action submits this
+    # round's edits and feedback.
     dismiss_intro(page)
     header_label = page.locator("#dpb-approve-label")
     drawer = page.locator("#dpb-approve-drawer")
-    expect(drawer).to_contain_text("写意见或标注后确认")
+    expect(drawer).to_contain_text("写意见、标注或修改后提交")
     assert "dpb-approve-muted" in drawer.get_attribute("class")
     assert "dpb-approve-ready" not in drawer.get_attribute("class")
     save_anchor(page, "第一处")
     expect(header_label).to_have_text("确认通过 (1 处批注)")
-    expect(drawer).to_contain_text("确认通过 (1 处批注)")
+    expect(drawer).to_contain_text("提交修改与反馈")
     assert "dpb-approve-ready" in drawer.get_attribute("class")
     page.locator("#dpb-language-toggle").click()
     expect(header_label).to_have_text("Approve (1 note)")
-    expect(drawer).to_contain_text("Approve (1 note)")
+    expect(drawer).to_contain_text("Submit edits & feedback")
 
 
 def test_coachmark_persists_until_first_anchor_not_timed_out(page):
@@ -531,13 +533,6 @@ def test_english_approve_pills_stay_single_line(browser, tmp_path, monkeypatch):
       };
       pill('dpb-approve-label', 'dpb-btn-approve');
       pill('dpb-approve-label-drawer', 'dpb-approve-drawer');
-      const draft = document.getElementById('dpb-draft');
-      const range = document.createRange();
-      range.selectNodeContents(draft);
-      out.dpbDraft = {
-        lines: range.getClientRects().length,
-        overflowY: draft.scrollHeight - draft.clientHeight,
-      };
       return out;
     }""",
         label,
@@ -549,5 +544,3 @@ def test_english_approve_pills_stay_single_line(browser, tmp_path, monkeypatch):
         assert row["lines"] == 1, f"{btn_id} label folded to {row['lines']} lines"
         assert row["overflowY"] <= 0, f"{btn_id} content overflowed its box"
         assert not row["kbdCut"], f"{btn_id} shortcut badge is clipped"
-    assert facts["dpbDraft"]["lines"] == 1, "draft button label folded"
-    assert facts["dpbDraft"]["overflowY"] <= 0, "draft button overflowed its box"

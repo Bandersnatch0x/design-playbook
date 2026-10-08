@@ -57,6 +57,31 @@ No schema-version field is added (manifest/confirm schema structural fields rema
 5. ✅ `ui-evaluator` rubric — preview-seam-health supporting finding, `source = preview* seam`.
 6. ✅ Regression: dogfood 0015's pre-ADR confirm (no `floor_pass`) now fails G5 by design; new confirms with substantive feedback + `floor_pass=true` pass.
 
+## Amendment (2026-10-08): effective visual edits may confirm without notes
+
+The maintainer explicitly requested edit-only submission and clickable submission
+buttons. This supersedes the original trigger for rounds carrying visual edits:
+non-empty feedback, at least one complete anchor, **or a validated visual-edit
+batch with an effective change** satisfies the structural floor. An effective
+change has a different final value from its original value for the same locator,
+viewport, kind, and property; no-op edits and chains undone to their baseline do
+not qualify.
+
+Every supplied anchor still needs a non-empty selector and comment, regardless
+of edits or overall feedback. The transaction validates the visual batch against
+the current source/route and its canonical hash before treating it as substantive.
+Malformed, stale, or unresolved edits do not qualify and cannot produce a
+confirmation. An empty round remains blocked, with an actionable on-click hint
+rather than a disabled submission control.
+
+Preview confirmation remains separate from source-write authorization. Valid
+edit-only confirms carry the same `floor_pass` and source-bound agent handoff;
+`writesSource` remains false, and G5 token/first-decision authority is unchanged.
+The frontend drains outstanding edits before evaluating its advisory mirror.
+The right rail has one fixed submission action shared by all tabs; header
+submission remains an equivalent shortcut when the rail is collapsed. Annotation
+drafts retain automatic persistence without a second decision-like draft button.
+
 ## Amendment: skip disposition (2026-08-22)
 
 The control UI gains an explicit **skip** choice (drawer quiet button, locale

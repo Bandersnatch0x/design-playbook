@@ -1129,7 +1129,7 @@ def test_ip03_all_review_and_bridge_controls_have_focus_rings(editor_page, theme
     page.locator("#dpb-root").evaluate("(el, theme) => el.dataset.theme = theme", theme)
     page.keyboard.press("Tab")
     for selector in ("#dpb-roam-prev", "#dpb-roam-next", "#dpb-inspector-close",
-                     "#dpb-draft", "#dpb-abort", "#dpb-language-toggle", "#dpb-theme-toggle",
+                     "#dpb-approve-drawer", "#dpb-abort", "#dpb-language-toggle", "#dpb-theme-toggle",
                      "#dpb-drawer-toggle", "#dpb-shortcuts-btn", "#dpb-filter-all", "#dpb-btn-approve"):
         button = page.locator(selector)
         button.focus()
@@ -1194,8 +1194,10 @@ def test_ip05_frame_shortcuts_and_ip08_canvas_history(pending_visual_edit, modif
     handle.focus()
     page.keyboard.press(f"{modifier}+Enter")
     page.wait_for_function("window.submitted.includes('dpb-btn-approve')")
-    # Wait for the advisory floor's asynchronous focus before returning to the frame.
-    expect(page.locator("#dpb-feedback")).to_be_focused()
+    # The pending effective edit satisfies the floor (ADR-0008 amendment
+    # 2026-10-08), so Ctrl+Enter is admitted here instead of bouncing the user
+    # to the note field, and the frame keeps working afterwards.
+    assert page.evaluate("window.submitted") == ['dpb-btn-approve']
     handle.focus()
     expect(handle).to_be_focused()
     page.keyboard.press("Shift+Escape")
@@ -1362,12 +1364,11 @@ def test_next_step_copy_names_the_decision_not_the_feedback_only() -> None:
 
 
 def test_visual_panel_submit_is_the_header_channel_gated_by_the_floor(editor_page) -> None:
-    """The panel's own submit button mirrors the header state; one floor owner.
+    """The rail's single action mirrors the header state; one floor owner.
 
-    Pending visual edits alone do not satisfy the ADR-0008 floor, so the local
-    button must not re-derive readiness: it starts disabled with the shared
-    not-ready wording, a note enables it, and clicking it submits through the
-    same channel as the header button (submitter dpb-btn-approve).
+    The action is never disabled: an empty round is refused on click with the
+    shared not-ready wording, and a satisfied round submits through the same
+    channel as the header button. The panel itself renders no second button.
     """
     from playwright.sync_api import expect
 
@@ -1375,28 +1376,42 @@ def test_visual_panel_submit_is_the_header_channel_gated_by_the_floor(editor_pag
 
     page = editor_page
     page.locator("#dpb-tab-visual").click()
-    submit = page.locator("#dpb-visual-submit")
+    submit = page.locator("#dpb-approve-drawer")
     expect(submit).to_be_visible()
-    expect(submit).to_be_disabled()
-    expect(submit).to_contain_text(i18n.t("approve_not_ready"))
-
-    page.locator("#dpb-feedback").fill("Styles need a pass before this ships.")
+    # ADR-0008 amendment (2026-10-08): the submission control is never disabled;
+    # an empty round explains itself on click instead of greying the action out.
     expect(submit).to_be_enabled()
-    expect(submit).to_contain_text(i18n.t("visual_submit"))
+    expect(submit).to_contain_text(i18n.t("submit_not_ready"))
 
     page.evaluate("""() => {
       window.dpbSubmitted = [];
       document.querySelector('form').addEventListener('submit', e => {
+        // Record the product's decision before suppressing real navigation.
+        window.dpbSubmitted.push({
+          id: e.submitter ? e.submitter.id : '(null)',
+          prevented: e.defaultPrevented,
+        });
         e.preventDefault();
-        window.dpbSubmitted.push(e.submitter ? e.submitter.id : '(null)');
       });
     }""")
     submit.click()
-    page.wait_for_function("window.dpbSubmitted.includes('dpb-btn-approve')")
+    page.wait_for_timeout(200)
+    blocked = page.evaluate("window.dpbSubmitted")
+    assert blocked and all(item["prevented"] for item in blocked), (
+        "an empty round must be refused, not submitted"
+    )
+
+    page.locator("#dpb-feedback").fill("Styles need a pass before this ships.")
+    expect(submit).to_contain_text(i18n.t("submit_ready"))
+    page.evaluate("window.dpbSubmitted = []")
+    submit.click()
+    page.wait_for_function(
+        "window.dpbSubmitted.some(i => i.id === 'dpb-approve-drawer' && !i.prevented)"
+    )
 
     # Withdrawing the note puts the whole gate back to not-ready.
     page.locator("#dpb-feedback").fill("")
-    expect(submit).to_be_disabled()
+    expect(submit).to_contain_text(i18n.t("submit_not_ready"))
 
 
 def test_visual_submit_bar_stays_inside_the_scrolling_panel(editor_page) -> None:
@@ -1408,7 +1423,7 @@ def test_visual_submit_bar_stays_inside_the_scrolling_panel(editor_page) -> None
     """
     page = editor_page
     page.locator("#dpb-tab-visual").click()
-    page.locator("#dpb-visual-submit").wait_for(state="visible")
+    page.locator(".dpb-react-submit").wait_for(state="visible")
 
     def bar_state() -> dict:
         return page.evaluate("""() => {
@@ -1624,22 +1639,22 @@ def test_bo02_visual_panel_authority_and_label_truth(editor_page) -> None:
     expect(field).to_be_enabled()
     field.fill("rgb(10, 20, 30)")
 
-    submit = page.locator("#dpb-visual-submit")
+    # ADR-0008 amendment (2026-10-08): an effective visual edit alone satisfies
+    # the floor, so a round carrying edits and no note is ready, and the single
+    # rail action is never disabled.
+    submit = page.locator("#dpb-approve-drawer")
     expect(submit).to_be_visible()
-    # Edits exist, but floor note is missing -> MUST be disabled
-    expect(submit).to_be_disabled()
-    expect(submit).to_contain_text(i18n.t("approve_not_ready"))
-
-    # Header approve button is also muted
-    expect(page.locator("#dpb-btn-approve")).to_have_class(re.compile(r"dpb-approve-muted"))
-
-    # Now satisfy floor
-    page.locator("#dpb-feedback").fill("Floor satisfied note")
     expect(submit).to_be_enabled()
-    expect(submit).to_contain_text(i18n.t("visual_submit"))
-    assert i18n.t("visual_submit") in ("确认通过并提交", "Approve and submit")
+    expect(submit).to_contain_text(i18n.t("submit_ready"))
+    expect(page.locator("#dpb-btn-approve")).to_have_class(re.compile(r"dpb-approve-ready"))
 
-    # Click panel submit -> routed through #dpb-btn-approve
+    # An edit undone back to its baseline is not an effective change: the floor
+    # must close again rather than accept a no-op as a substitute for notes.
+    field.press("Control+z")
+    expect(submit).to_contain_text(i18n.t("submit_not_ready"))
+    field.press("Control+Shift+z")
+    expect(submit).to_contain_text(i18n.t("submit_ready"))
+
     page.evaluate("""() => {
         window.__panelSubmitted = [];
         document.querySelector('form').addEventListener('submit', (e) => {
@@ -1648,7 +1663,7 @@ def test_bo02_visual_panel_authority_and_label_truth(editor_page) -> None:
         });
     }""")
     submit.click()
-    page.wait_for_function("window.__panelSubmitted && window.__panelSubmitted.includes('dpb-btn-approve')")
+    page.wait_for_function("window.__panelSubmitted && window.__panelSubmitted.includes('dpb-approve-drawer')")
 
 
 def test_bo03_mode_tool_shortcuts_and_preview_passivity(editor_page) -> None:

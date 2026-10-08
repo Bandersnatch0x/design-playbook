@@ -959,6 +959,96 @@ class PreviewVisualEditHandoffTests(unittest.TestCase):
         self.assertNotIn("visual_edits_error", result)
         self.assertNotIn("visual_handoff", confirm or {})
 
+    def test_effective_edit_only_confirm_satisfies_the_floor(self) -> None:
+        """ADR-0008 amendment (2026-10-08): no notes needed when edits are real."""
+        source_hash = prototype_html_digest(self.PROTOTYPE.encode("utf-8"))
+        batch = self._batch(source_hash=source_hash)
+        result, confirm, preview_dir = self._run({
+            "choice": "确认通过",
+            "feedback": "",
+            "anchors": [],
+            "aborted": False,
+            "visual_edits": batch,
+        })
+        entry = json.loads(
+            (preview_dir / "decision-round-1.json").read_text(encoding="utf-8")
+        )["outcome"]
+
+        self.assertTrue(result["confirmed"])
+        self.assertTrue(result["floor_pass"])
+        self.assertTrue(entry["floor_pass"])
+        self.assertEqual(entry["floor_failure"], "")
+        self.assertEqual(confirm["floor_pass"], True)
+        # Edit-only confirmation still never authorizes a source write.
+        self.assertFalse(confirm["visual_handoff"]["writesSource"])
+        self.assertTrue(confirm["visual_handoff"]["requiresUserConfirmation"])
+
+    def test_no_op_edit_only_confirm_fails_the_floor(self) -> None:
+        # A batch whose net effect changes nothing is a valid batch but not a
+        # substantive one, so it must not stand in for notes.
+        source_hash = prototype_html_digest(self.PROTOTYPE.encode("utf-8"))
+        batch = normalize_visual_batch(
+            {"schemaVersion": 1, "edits": [{
+                "locator": "#hero", "property": "padding",
+                "oldValue": "16px", "newValue": "16px",
+            }]},
+            source_hash=source_hash,
+            route_url="",
+        )
+        result, confirm, preview_dir = self._run({
+            "choice": "确认通过",
+            "feedback": "",
+            "anchors": [],
+            "aborted": False,
+            "visual_edits": batch,
+        })
+        entry = json.loads(
+            (preview_dir / "decision-round-1.json").read_text(encoding="utf-8")
+        )["outcome"]
+
+        self.assertFalse(result["confirmed"])
+        self.assertFalse(result["floor_pass"])
+        self.assertIn("no substantive feedback", entry["floor_failure"])
+        # The batch is still recorded and still projects a review-only handoff.
+        self.assertEqual(result["visual_handoff"]["status"], "pending-review")
+        self.assertFalse(confirm["confirmed"])
+
+    def test_incomplete_anchor_blocks_even_with_effective_edits(self) -> None:
+        source_hash = prototype_html_digest(self.PROTOTYPE.encode("utf-8"))
+        batch = self._batch(source_hash=source_hash)
+        result, _confirm, preview_dir = self._run({
+            "choice": "确认通过",
+            "feedback": "",
+            "anchors": [{"selector": "#hero", "comment": ""}],
+            "aborted": False,
+            "visual_edits": batch,
+        })
+        entry = json.loads(
+            (preview_dir / "decision-round-1.json").read_text(encoding="utf-8")
+        )["outcome"]
+
+        self.assertFalse(result["confirmed"])
+        self.assertIn("anchor missing", entry["floor_failure"])
+
+    def test_skip_never_confirms_even_with_effective_edits(self) -> None:
+        # G5 must stay unreachable through Skip regardless of the new trigger.
+        source_hash = prototype_html_digest(self.PROTOTYPE.encode("utf-8"))
+        batch = self._batch(source_hash=source_hash)
+        result, confirm, preview_dir = self._run({
+            "choice": "跳过",
+            "feedback": "",
+            "anchors": [],
+            "aborted": False,
+            "visual_edits": batch,
+        })
+        entry = json.loads(
+            (preview_dir / "decision-round-1.json").read_text(encoding="utf-8")
+        )["outcome"]
+
+        self.assertFalse(result["confirmed"])
+        self.assertFalse(entry["user_confirmed"])
+        self.assertIsNone(confirm)
+
 
 if __name__ == "__main__":
     unittest.main()

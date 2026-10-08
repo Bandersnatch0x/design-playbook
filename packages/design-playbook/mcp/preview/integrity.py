@@ -97,11 +97,11 @@ class PreviewSnapshot:
 
 
 def evaluate_feedback_floor(
-    feedback: str, anchors: list[object]
+    feedback: str, anchors: list[object], *, has_visual_edits: bool = False,
 ) -> FloorResult:
-    """Apply ADR-0008 structural feedback-floor authority."""
+    """Apply ADR-0008; visual intent must already be validated by the transaction."""
     feedback = (feedback or "").strip()
-    if not feedback and not anchors:
+    if not feedback and not anchors and not has_visual_edits:
         return FloorResult(
             False,
             "confirm with no substantive feedback: empty feedback and no anchor",

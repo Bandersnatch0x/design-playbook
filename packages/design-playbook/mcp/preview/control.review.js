@@ -109,21 +109,26 @@
     updateStatus();
   }
   function updateStatus() {
-    // REC-04: the approve triggers double as the readiness indicator — the
-    // header button AND the drawer footer button share one dynamic state
-    // (count label, muted/ready classes, pulse dot; DEF-04).
+    // REC-04: the approve triggers double as the readiness indicator. Both the
+    // header CTA (needed when the rail is collapsed) and the rail's single
+    // fixed footer action share one readiness state, but they name different
+    // jobs: the header confirms the round, the rail action submits this
+    // round's edits and feedback.
     var ready = isSubstantive();
-    var readyLabel = ttN(anchors.length === 1 ? "approve_ready_one" : "approve_ready", anchors.length);
-    [["dpb-btn-approve", "dpb-approve-label"], ["dpb-approve-drawer", "dpb-approve-label-drawer"]]
+    var noteLabel = ttN(anchors.length === 1 ? "approve_ready_one" : "approve_ready", anchors.length);
+    var headerLabel = ready ? (anchors.length ? noteLabel : tt("approve_ready_plain")) : tt("approve_not_ready");
+    var railLabel = ready ? tt("submit_ready") : tt("submit_not_ready");
+    [["dpb-btn-approve", "dpb-approve-label", headerLabel],
+     ["dpb-approve-drawer", "dpb-approve-label-drawer", railLabel]]
       .forEach(function (pair) {
         var btn = document.getElementById(pair[0]);
         var label = document.getElementById(pair[1]);
         if (!btn) return;
         btn.classList.toggle("dpb-approve-ready", ready);
         btn.classList.toggle("dpb-approve-muted", !ready);
-        if (label) label.textContent = ready ? readyLabel : tt("approve_not_ready");
+        if (label) label.textContent = pair[2];
       });
-    publishReviewGate(ready, readyLabel);
+    publishReviewGate(ready, railLabel);
   }
 
   // list interactions (delegated)
@@ -243,26 +248,43 @@
 
   // ---- readiness (I4 floor mirror) ----
   function feedbackValue() { return field ? field.value : ""; }
+  function hasEffectiveVisualEdits() {
+    // Mirror of the adapter floor (integrity.evaluate_feedback): the batch the
+    // editor published is substantive only when its NET effect changes a value,
+    // so a no-op edit or a chain undone back to its baseline cannot stand in
+    // for notes. Readiness stays owned here; the editor only publishes state.
+    var batch = window.DPB_VISUAL_EDIT_BATCH;
+    if (!batch || !batch.edits || !batch.edits.length) return false;
+    var net = {};
+    batch.edits.forEach(function (e) {
+      var key = [e.kind, e.viewport, e.locator, e.property].join("\u0000");
+      var original = Object.prototype.hasOwnProperty.call(net, key) ? net[key][0] : e.oldValue;
+      net[key] = [original, e.newValue];
+    });
+    return Object.keys(net).some(function (k) { return net[k][0] !== net[k][1]; });
+  }
   function isSubstantive() {
-    // Mirror of the adapter floor (integrity.evaluate_feedback):
-    // when ANY anchor exists, every anchor must carry a non-empty comment
-    // (feedback alone cannot compensate); with no anchors, non-empty
-    // feedback is substantive. No minimum length (ADR-0008).
+    // Mirror of the adapter floor (integrity.evaluate_feedback_floor):
+    // when ANY anchor exists, every anchor must carry a non-empty trimmed
+    // selector and comment (feedback alone cannot compensate, and an
+    // incomplete anchor also cannot be rescued by visual edits); with no
+    // anchors, non-empty feedback OR an effective visual edit is substantive.
+    // No minimum length (ADR-0008, amended 2026-10-08).
     if (anchors.length) {
       return anchors.every(function (a) {
-        return String(a.comment || "").trim() !== "";
+        return Boolean(a && typeof a === "object") &&
+          String(a.selector || "").trim() !== "" &&
+          String(a.comment || "").trim() !== "";
       });
     }
-    return feedbackValue().trim() !== "";
+    return feedbackValue().trim() !== "" || hasEffectiveVisualEdits();
   }
   function setReadiness() { updateStatus(); }
   if (field) field.addEventListener("input", function () { setReadiness(); scheduleDraft(); });
-  // The visual panel's local submit button routes through this event so the
-  // floor keeps exactly one owner; a not-ready request is refused here.
-  document.addEventListener("dpbVisualSubmit", function () {
-    if (!isSubstantive()) return;
-    submitPrimary();
-  });
+  // The editor publishes the pending batch; readiness still re-evaluates here,
+  // in the single owner, because an effective visual edit can satisfy the floor
+  // on its own (ADR-0008 amendment 2026-10-08).
+  document.addEventListener("dpbVisualEditsChanged", function () { updateStatus(); });
 
   // ---- rail collapse (unified rail, REC-02) ----
   function setDrawer(open, quiet) {
@@ -414,10 +436,88 @@
     if (!hint) return;
     hint.classList.toggle("is-on", !!on);
   }
+  var isFlushingVisualEdits = false;
+  function executeApprovedSubmit(triggerBtn) {
+    var submitter = triggerBtn || approveBtn;
+    if (draftPopoverOpen() && annoInput && annoInput.value.trim()) saveDraftAnchor();
+    if (!isSubstantive()) {
+      if (field) {
+        field.setAttribute("aria-invalid", "true");
+        field.classList.remove("is-shaking");
+        void field.offsetWidth;
+        field.classList.add("is-shaking");
+        setTimeout(function () { field.focus(); }, 0);
+      }
+      setHintGate(true);
+      announce(tt("field_hint"));
+      setDrawer(true, true);
+      setSpecPanel(false);
+      if (submitter) {
+        submitter.classList.remove("is-shaking");
+        void submitter.offsetWidth;
+        submitter.classList.add("is-shaking");
+      }
+      return;
+    }
+
+    var hasPending = typeof window.dpbHasPendingVisualEdits === "function" && window.dpbHasPendingVisualEdits();
+    if (!hasPending) {
+      if (submitter) form.requestSubmit(submitter); else form.requestSubmit();
+      return;
+    }
+
+    if (isFlushingVisualEdits) return;
+    isFlushingVisualEdits = true;
+
+    if (approveBtn) approveBtn.classList.add("dpb-btn-loading");
+    var drawerApprove = document.getElementById("dpb-approve-drawer");
+    if (drawerApprove) drawerApprove.classList.add("dpb-btn-loading");
+    if (submitter && submitter !== approveBtn && submitter !== drawerApprove) {
+      submitter.classList.add("dpb-btn-loading");
+    }
+    var artInner = document.getElementById("dpb-artboard-inner");
+    if (artInner) artInner.setAttribute("aria-busy", "true");
+    announce(tt("visual_draining"));
+
+    function finishLoading() {
+      isFlushingVisualEdits = false;
+      if (approveBtn) approveBtn.classList.remove("dpb-btn-loading");
+      if (drawerApprove) drawerApprove.classList.remove("dpb-btn-loading");
+      if (submitter && submitter !== approveBtn && submitter !== drawerApprove) {
+        submitter.classList.remove("dpb-btn-loading");
+      }
+      if (artInner) artInner.setAttribute("aria-busy", "false");
+      announce("");
+    }
+
+    var drainPromise = typeof window.dpbDrainVisualEdits === "function"
+      ? window.dpbDrainVisualEdits()
+      : Promise.resolve({ ok: true });
+
+    drainPromise.then(function (res) {
+      finishLoading();
+      if (!res || res.ok === false) {
+        toast(tt("visual_drain_failed"));
+        return;
+      }
+      if (submitter) form.requestSubmit(submitter); else form.requestSubmit();
+    }).catch(function () {
+      finishLoading();
+      toast(tt("visual_drain_failed"));
+    });
+  }
+
   function submitPrimary() {
     var targetBtn = document.getElementById("dpb-btn-approve");
-    if (targetBtn) form.requestSubmit(targetBtn); else form.requestSubmit();
+    var hasPending = typeof window.dpbHasPendingVisualEdits === "function" && window.dpbHasPendingVisualEdits();
+    if (hasPending && isSubstantive()) {
+      executeApprovedSubmit(targetBtn || approveBtn);
+    } else {
+      if (draftPopoverOpen() && annoInput && annoInput.value.trim()) saveDraftAnchor();
+      if (targetBtn) form.requestSubmit(targetBtn); else form.requestSubmit();
+    }
   }
+
   form.addEventListener("submit", function (e) {
     // DEF-01: a mouse click on any submit trigger must not silently drop an
     // uncommitted draft — fold it first (same defense as the Ctrl+Enter path).
@@ -433,6 +533,14 @@
       return;
     }
     if (isSubstantive()) {
+      var hasPending = typeof window.dpbHasPendingVisualEdits === "function" && window.dpbHasPendingVisualEdits();
+      if (hasPending) {
+        e.preventDefault();
+        // Downstream submit listeners must see only the drained, admitted event.
+        e.stopImmediatePropagation();
+        executeApprovedSubmit(submitter);
+        return;
+      }
       if (field) field.removeAttribute("aria-invalid");
       setHintGate(false);
       // Anchor comments are folded into the feedback block by the Python
@@ -459,11 +567,9 @@
       approveBtn.classList.add("is-shaking");
     }
   });
-  var draftBtn = document.getElementById("dpb-draft");
-  if (draftBtn) draftBtn.addEventListener("click", function () {
-    saveDraft();
-    setDrawer(false);
-  });
+  // REC-05 amendment: the standalone "keep notes, decide later" action is gone —
+  // annotation drafts keep autosaving (scheduleDraft) and the rail now carries a
+  // single fixed submission action instead of two competing ones.
 
   // ---- keyboard map (v10) ----
   function isTextEditingTarget(el) {
@@ -561,6 +667,7 @@
     if (k === "b") { e.preventDefault(); setTool(tool === "box" ? "select" : "box"); return; }
     if (k === "r") { e.preventDefault(); setTool(tool === "ruler" ? "select" : "ruler"); return; }
     if (k === "p") { e.preventDefault(); setTool("select"); setMode("annotate"); return; }
+    if (k === "a") { e.preventDefault(); setTool("select"); return; }
     if (e.key === "=" || e.key === "+") { e.preventDefault(); handleZoom(0.1); return; }
     if (e.key === "-" || e.key === "_") { e.preventDefault(); handleZoom(-0.1); return; }
     if (e.key === "0") { e.preventDefault(); fitCanvas(); return; }
@@ -581,7 +688,7 @@
     var data = e.data || {}, shortcut = data.dpbReviewShortcut;
     if (!shortcut) shortcut = { key: data.dpbToolShortcut };
     var key = shortcut.key;
-    if (typeof key !== "string" || ["Escape", "Enter", "b", "d", "h", "p", "r", "v", "z", "y", "l", "[", "]", "?", "j", "k", "s", "Delete", "Backspace", "=", "+", "-", "_", "0", "1", "2", "3"].indexOf(key) < 0) return;
+    if (typeof key !== "string" || ["Escape", "Enter", "a", "b", "d", "h", "p", "r", "v", "z", "y", "l", "[", "]", "?", "j", "k", "s", "Delete", "Backspace", "=", "+", "-", "_", "0", "1", "2", "3"].indexOf(key) < 0) return;
     // Dispatch on the frame so review and visual history share the normal keymap.
     frame.dispatchEvent(new KeyboardEvent("keydown", { key: key, bubbles: true, cancelable: true,
       ctrlKey: shortcut.ctrlKey === true, metaKey: shortcut.metaKey === true, shiftKey: shortcut.shiftKey === true }));
