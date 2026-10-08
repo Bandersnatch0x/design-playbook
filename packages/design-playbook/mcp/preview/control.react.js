@@ -109,6 +109,10 @@
       var interruptedValues = React.useRef({});
       var lastAcceptedSeq = React.useRef({});
       var isPublishedRef = React.useRef(true);
+      // The drain timeout outlives the effect that created it, so it needs its
+      // own ref: the unmount cleanup must clear it, or an unmount mid-drain
+      // leaves a 2s timer that later touches unmounted state.
+      var drainTimerRef = React.useRef(null);
       var [collapsed, setCollapsed] = React.useState({ layout: true, spacing: true, border: true });
       var [compact, setCompact] = React.useState(window.innerWidth <= 480);
       // Review readiness is owned by control.review.js, which publishes it. The
@@ -546,6 +550,7 @@
           frame.removeEventListener("load", load);
           Object.values(draftTimers.current).forEach(clearTimeout);
           if (request.current) clearTimeout(request.current.timer);
+          if (drainTimerRef.current) clearTimeout(drainTimerRef.current);
         };
       }, []);
       function publishBatch(editsList, isStale) {
@@ -637,15 +642,18 @@
           var timer = setTimeout(function () {
             if (finished) return;
             finished = true;
+            drainTimerRef.current = null;
             isDrainingRef.current = false;
             setBusy(false);
             resolve({ ok: false, error: "timeout" });
           }, maxWait);
+          drainTimerRef.current = timer;
 
           function finish(ok, err) {
             if (finished) return;
             finished = true;
             clearTimeout(timer);
+            drainTimerRef.current = null;
             isDrainingRef.current = false;
             setBusy(false);
             if (!ok) {
