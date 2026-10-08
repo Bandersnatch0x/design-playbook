@@ -60,6 +60,12 @@ def test_disconnect_mid_edit_reconnect_submit_preserves_pending_edits(
         target.evaluate("el => { el.style.padding = '9px'; }")
     original_padding = target.evaluate("el => el.style.padding")
     original_width = target.evaluate("el => el.style.width")
+    # A load-disconnect reloads the iframe below, so for four of the seven
+    # parametrisations these baselines are empty strings and the two assertions
+    # at the end cannot distinguish a correct baseline from an empty one. That
+    # is structural, not a missing fixture style: the reload re-parses the
+    # prototype and the element's inline styles are gone. Recorded rather than
+    # papered over with a baseline that does not survive the reload.
     target.evaluate("el => el.click()")
     page.locator("#dpb-tab-visual").click()
     page.locator("#dpb-feedback").fill("Keep the requested spacing and width changes.")
@@ -120,7 +126,15 @@ def test_disconnect_mid_edit_reconnect_submit_preserves_pending_edits(
         assert page.evaluate("window.dpbHasPendingVisualEdits()")
         expect(padding).to_have_value(expected_padding)
         expect(width).to_have_value("333")
-        expect(page.locator("#dpb-toasts .dpb-toast")).to_have_count(0)
+        # The refusal must be visible. The old assertion here required zero
+        # toasts, which contradicted the wait above and the no-submission
+        # assertion, so it could not pass through the branch it was testing.
+        failure_labels = page.evaluate("Object.values(window.DPB_I18N_DUAL.visual_drain_failed)")
+        toast_text = page.locator("#dpb-toasts").text_content()
+        assert any(label in toast_text for label in failure_labels), toast_text
+        # Clear the toasts so the retry assertion below measures the retry and
+        # not this deliberate failure, which would otherwise still be on screen.
+        page.evaluate("() => { document.getElementById('dpb-toasts').textContent = ''; }")
     target.evaluate("() => { window.__dropRequest = false; }")
     page.evaluate("() => { window.__dropAck = false; window.__blockReady = false; }")
     expect(padding).to_be_enabled()
