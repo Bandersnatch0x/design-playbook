@@ -984,6 +984,59 @@ class PreviewVisualEditHandoffTests(unittest.TestCase):
         self.assertEqual(result["visual_handoff"]["status"], "pending-review")
         self.assertFalse(confirm["visual_handoff"]["writesSource"])
 
+    def test_stale_source_with_empty_feedback_fails_the_floor(self) -> None:
+        """A batch the transaction refuses cannot carry the round on its own.
+
+        The batch is validated against the current source before it is treated as
+        substantive, so a stale one leaves the round with no feedback, no anchor
+        and no effective edit. It must fail rather than confirm on a batch the
+        handoff already rejected.
+        """
+        stale = self._batch(source_hash="stale-source-hash")
+        result, confirm, preview_dir = self._run({
+            "choice": "确认通过",
+            "feedback": "",
+            "anchors": [],
+            "aborted": False,
+            "visual_edits": stale,
+        })
+        entry = json.loads(
+            (preview_dir / "decision-round-1.json").read_text(encoding="utf-8")
+        )["outcome"]
+
+        self.assertFalse(result["confirmed"])
+        self.assertFalse(entry["floor_pass"])
+        self.assertIn("no substantive feedback", entry["floor_failure"])
+        self.assertIn("stale", result["visual_edits_error"])
+        # A failed floor still writes the audited attempt, so the record exists
+        # and records the refusal rather than being absent.
+        self.assertFalse(confirm["confirmed"])
+        self.assertFalse(confirm["floor_pass"])
+
+    def test_empty_batch_inside_a_submission_keeps_the_old_behaviour(self) -> None:
+        """An empty edits array is not an edit, so it must not satisfy the floor."""
+        source_hash = prototype_html_digest(self.PROTOTYPE.encode("utf-8"))
+        empty = normalize_visual_batch(
+            {"schemaVersion": 1, "edits": []}, source_hash=source_hash, route_url=""
+        )
+        result, confirm, preview_dir = self._run({
+            "choice": "确认通过",
+            "feedback": "",
+            "anchors": [],
+            "aborted": False,
+            "visual_edits": empty,
+        })
+        entry = json.loads(
+            (preview_dir / "decision-round-1.json").read_text(encoding="utf-8")
+        )["outcome"]
+
+        self.assertFalse(result["confirmed"])
+        self.assertFalse(entry["floor_pass"])
+        self.assertIn("no substantive feedback", entry["floor_failure"])
+        self.assertNotIn("visual_handoff", result)
+        self.assertFalse(confirm["confirmed"])
+        self.assertFalse(confirm["floor_pass"])
+
     def test_absent_batch_keeps_previous_behavior(self) -> None:
         result, confirm, _preview_dir = self._run({
             "choice": "确认通过",

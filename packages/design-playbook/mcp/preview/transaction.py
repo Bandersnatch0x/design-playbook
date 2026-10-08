@@ -165,6 +165,22 @@ def self_check_floor() -> None:
     for label, fb, anc, want in cases:
         got = evaluate_feedback_floor(fb, anc).passed
         assert got == want, f"{label}: want {want}, got {got}"
+    # The 2026-10-08 amendment added a third trigger, a validated visual batch
+    # whose net effect changes a value. Every case above calls the floor with
+    # has_visual_edits defaulted to False, so the branch the amendment added was
+    # not covered by this check at all.
+    edit_cases = [
+        ("validated edits alone pass", "", [], True),
+        ("edits do not rescue an incomplete anchor", "",
+         [{"selector": "h2", "comment": ""}], False),
+        ("edits do not rescue an empty-selector anchor", "",
+         [{"selector": "", "comment": "x"}], False),
+        ("edits with complete anchors still pass", "",
+         [{"selector": "h2", "comment": "x"}], True),
+    ]
+    for label, fb, anc, want in edit_cases:
+        got = evaluate_feedback_floor(fb, anc, has_visual_edits=True).passed
+        assert got == want, f"{label} (with edits): want {want}, got {got}"
     print("FLOOR SELF-CHECK PASSED")
 
 
