@@ -259,6 +259,32 @@ to be green, and the existing test assertions to remain unweakened. This bounded
 exception does not satisfy the external trial gate, and the ADR-0045 spend gate
 otherwise remains in force.
 
+## Amendment (2026-10-08): scope extension for the anchor parser
+
+The maintainer authorized, on 2026-10-08, extending the file list of the
+2026-10-08 edit-only amendment by exactly one file: `mcp/preview/review_session.py`,
+and within it only `_parse_anchors` and the `do_POST` branch that handles its
+failure.
+
+Rationale. The amended ADR-0008 floor states that every supplied anchor needs a
+non-empty selector and comment. `_parse_anchors` silently dropped an item whose
+selector was empty, so the anchor never reached the floor and a round carrying
+valid feedback or an effective visual edit confirmed anyway. An independent
+review found this by crafting a real POST. This extension exists to make that
+path fail closed, and for nothing else.
+
+Boundary. Only these are authorized: raising `AnchorParseError` instead of
+returning a shorter list, and refusing the round before the one-time token is
+spent so a malformed submission cannot burn a reviewer's session. The parser
+must still retain an anchor that has a selector and an empty comment, because
+that is a supplied but incomplete anchor and the floor is what reports it.
+
+Exclusions. No new skill, command, gate, collector, adapter row, MCP server or
+runtime. No change to G5 token semantics, first-decision-wins, the ADR-0008
+floor itself, `writesSource`, Console or evidence surfaces, or any other
+function in `review_session.py`. No release, tag, publish, catalog submission or
+recruitment. Authorization is not a completion claim.
+
 ## Amendment (2026-10-08): edit-only submission and one rail action
 
 The maintainer explicitly requested that effective visual edits can be submitted

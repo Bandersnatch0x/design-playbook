@@ -91,10 +91,13 @@ tried to break the rule):
   in `visual_edits_error` and surfaced on the response page. Tightening that is
   a separate decision, not part of this amendment.
 - The "every supplied anchor is complete" rule is enforced over the anchors the
-  adapter parser retains. `review_session._parse_anchors` currently drops an
-  anchor whose selector is empty instead of failing the round, so a hand-crafted
-  POST can bypass that check; `review_session.py` is outside this amendment's
-  authorized file list and hardening it needs its own authorization.
+  adapter parser retains. `review_session._parse_anchors` used to drop an anchor
+  whose selector was empty instead of failing the round, which let a hand-crafted
+  POST bypass the check. Fixed on 2026-10-08 under an ADR-0045 scope extension:
+  the parser now raises and `do_POST` refuses the round before the one-time token
+  is spent, so a malformed submission cannot burn a reviewer's session. An anchor
+  with a selector and an empty comment is still retained, because that is a
+  supplied but incomplete anchor and the floor is what reports it.
 
 Preview confirmation remains separate from source-write authorization. Valid
 edit-only confirms carry the same `floor_pass` and source-bound agent handoff;

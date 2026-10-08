@@ -175,22 +175,35 @@ def _anchor_features(item: dict, tag: str) -> dict[str, Any]:
 _DRAW_POINTS_MAX = 512
 
 
+class AnchorParseError(ValueError):
+    """Raised when a submitted anchor list cannot be trusted as supplied.
+
+    The floor rule is "every supplied anchor carries a selector and a comment".
+    Dropping an unusable item would shrink the supplied set before the floor
+    ever sees it, so an anchor without a selector fails the round instead of
+    disappearing. A selector with an empty comment is NOT an error here: it is
+    a supplied but incomplete anchor, which the floor must report itself.
+    """
+
+
 def _parse_anchors(raw: str, round_n: int = 0) -> list[dict[str, Any]]:
     if not raw or not raw.strip():
         return []
     try:
         data = json.loads(raw)
-    except json.JSONDecodeError:
-        return []
+    except json.JSONDecodeError as exc:
+        raise AnchorParseError("anchor list is not valid JSON") from exc
     if not isinstance(data, list):
-        return []
+        raise AnchorParseError("anchor list is not an array")
     out: list[dict[str, Any]] = []
     for index, item in enumerate(data):
         if not isinstance(item, dict):
-            continue
+            raise AnchorParseError(f"anchor {index + 1} is not an object")
         selector = str(item.get("selector") or "").strip()
         if not selector:
-            continue
+            raise AnchorParseError(
+                f"anchor {index + 1} has no selector; refusing to drop it"
+            )
         tag = str(item.get("tag") or "").strip()[:40]
         anchor: dict[str, Any] = {
             "selector": selector,
@@ -525,9 +538,14 @@ def collect_review(
                 posted_round = int((form.get("dpb_round") or [""])[0])
             except (ValueError, TypeError):
                 posted_round = -1
-            anchors = _parse_anchors(
-                (form.get("anchors_json") or ["[]"])[0], posted_round
-            )
+            anchors: list[dict[str, Any]] = []
+            anchors_error = ""
+            try:
+                anchors = _parse_anchors(
+                    (form.get("anchors_json") or ["[]"])[0], posted_round
+                )
+            except AnchorParseError as exc:
+                anchors_error = str(exc)
             criteria_review = _parse_criteria_review(
                 (form.get("criteria_json") or ["[]"])[0]
             )
@@ -543,12 +561,29 @@ def collect_review(
                 )
             except (VisualBatchError, OSError) as exc:
                 visual_edits_error = str(exc)
-            # G5: validate the one-time decision token before trusting choice.
-            # A sandboxed prototype cannot read the hidden token, so a forged
-            # fetch('/decide', ...) arrives without it and fails closed.
+            # An unusable anchor list must fail closed BEFORE the one-time token
+            # is spent. validate() consumes the session on a valid token, so
+            # checking anchors afterwards would burn the round and leave the
+            # reviewer with no way to retry from the real form.
             posted_token = (form.get("dpb_token") or [None])[0]
-            validated = session.validate(posted_round, posted_token)
-            if not validated:
+            validated = False if anchors_error else session.validate(posted_round, posted_token)
+            if anchors_error:
+                if not session.locked:
+                    result = with_prototype_hash(
+                        {
+                            "choice": "",
+                            "feedback": feedback,
+                            "aborted": False,
+                            "anchors": anchors,
+                            "criteria_review": criteria_review,
+                            "visual_edits": visual_edits,
+                            "visual_edits_error": visual_edits_error,
+                            "rejected": True,
+                            "rejection": anchors_error,
+                            "floor_failure": anchors_error,
+                        }
+                    )
+            elif not validated:
                 # Fail closed: missing / reused / mismatched token -> NOT confirmed.
                 # First-decision-wins also guards the shared ``result`` slot:
                 # once a valid POST owns the result, a later rejected POST (replay,
@@ -584,10 +619,10 @@ def collect_review(
                     }
                 )
             reply = _done_page_html()
-            if visual_edits_error:
+            if visual_edits_error or anchors_error:
                 # Keep a rejection visible; the successful response auto-closes.
                 reply = ('<!doctype html><meta charset="utf-8"><h1>' + t("visual_stale") +
-                         '</h1><p role="alert">' + html.escape(visual_edits_error) + "</p>").encode("utf-8")
+                         '</h1><p role="alert">' + html.escape(visual_edits_error or anchors_error) + "</p>").encode("utf-8")
             self.close_connection = True
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
