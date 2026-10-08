@@ -948,6 +948,42 @@ class PreviewVisualEditHandoffTests(unittest.TestCase):
         self.assertIn("stale", result["visual_edits_error"])
         self.assertNotIn("visual_handoff", confirm or {})
 
+    def test_undone_to_baseline_batch_does_not_satisfy_the_floor(self) -> None:
+        """The transaction-level counterpart of the net-effect rule.
+
+        A round whose only change is reversed, even under a different viewport
+        label, has no net effect and must not confirm on it.
+        """
+        source_hash = prototype_html_digest(self.PROTOTYPE.encode("utf-8"))
+        batch = normalize_visual_batch(
+            {"schemaVersion": 1, "edits": [
+                {"kind": "style", "viewport": "desktop", "locator": "#hero",
+                 "property": "padding", "oldValue": "8px", "newValue": "16px"},
+                {"kind": "style", "viewport": "mobile", "locator": "#hero",
+                 "property": "padding", "oldValue": "16px", "newValue": "8px"},
+            ]},
+            source_hash=source_hash,
+            route_url="",
+        )
+        result, confirm, preview_dir = self._run({
+            "choice": "确认通过",
+            "feedback": "",
+            "anchors": [],
+            "aborted": False,
+            "visual_edits": batch,
+        })
+        entry = json.loads(
+            (preview_dir / "decision-round-1.json").read_text(encoding="utf-8")
+        )["outcome"]
+
+        self.assertFalse(result["confirmed"])
+        self.assertFalse(entry["floor_pass"])
+        self.assertIn("no substantive feedback", entry["floor_failure"])
+        self.assertFalse(confirm["confirmed"])
+        # The batch is still recorded, and it still never authorizes a write.
+        self.assertEqual(result["visual_handoff"]["status"], "pending-review")
+        self.assertFalse(confirm["visual_handoff"]["writesSource"])
+
     def test_absent_batch_keeps_previous_behavior(self) -> None:
         result, confirm, _preview_dir = self._run({
             "choice": "确认通过",

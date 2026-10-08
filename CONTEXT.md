@@ -17,14 +17,17 @@ criteria. The 30-day checkpoint is approximately 2026-10-22; the original
 Day-90 review is approximately 2026-11-23. Neither date automatically resumes
 activity.
 
-[ADR-0045](docs/adr/0045-external-evidence-spend-gate.md) currently contains
-two bounded self-use exceptions: the read-only frontend scope report and the
-single-maintainer, loopback-only local asset workbench authorized on
-2026-09-26. The workbench exception authorizes implementation and local
-validation only within its recorded authority and distribution boundary; it
-does not claim that the workbench exists, passes acceptance, or has been
-released. It does not reopen catalog submission, recruitment, adapter breadth,
-or unrelated capability work.
+[ADR-0045](docs/adr/0045-external-evidence-spend-gate.md) carries the spend gate
+plus a growing set of bounded, dated self-use exceptions. The ADR is the only
+authority for that list; this file does not restate a count, because the number
+changes whenever an exception is added and a stale count here would read as
+authority it does not have. Two of them are worth naming for orientation: the
+read-only frontend scope report, and the single-maintainer, loopback-only local
+asset workbench authorized on 2026-09-26. The workbench exception authorizes
+implementation and local validation only within its recorded authority and
+distribution boundary; it does not claim that the workbench exists, passes
+acceptance, or has been released. No exception reopens catalog submission,
+recruitment, adapter breadth, or unrelated capability work.
 
 Current repository release baseline: `v0.25.1`, per
 [release record](docs/releases/v0.25.1.md). Later source fixes are not thereby
