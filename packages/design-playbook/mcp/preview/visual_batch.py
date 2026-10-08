@@ -134,10 +134,17 @@ def normalize_visual_batch(
 
 
 def has_effective_visual_edits(batch: dict[str, Any]) -> bool:
-    """Read net change from a validated batch, excluding no-ops and undone chains."""
-    values: dict[tuple[str, str, str, str], tuple[str, str]] = {}
+    """Read net change from a validated batch, excluding no-ops and undone chains.
+
+    The net-effect key deliberately omits ``viewport``. The editor has one shared
+    DOM, so a change made while "desktop" is selected and its reversal while
+    "mobile" is selected act on the same element; keying by viewport would count
+    that round trip as two effective changes and let a zero-net-change round
+    confirm. Viewport stays on each edit as provenance, not as identity.
+    """
+    values: dict[tuple[str, str, str], tuple[str, str]] = {}
     for edit in batch.get("edits", []):
-        key = (edit["kind"], edit["viewport"], edit["locator"], edit["property"])
+        key = (edit["kind"], edit["locator"], edit["property"])
         original = values[key][0] if key in values else edit["oldValue"]
         values[key] = (original, edit["newValue"])
     return any(original != final for original, final in values.values())

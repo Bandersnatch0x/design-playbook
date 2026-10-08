@@ -63,9 +63,14 @@ The maintainer explicitly requested edit-only submission and clickable submissio
 buttons. This supersedes the original trigger for rounds carrying visual edits:
 non-empty feedback, at least one complete anchor, **or a validated visual-edit
 batch with an effective change** satisfies the structural floor. An effective
-change has a different final value from its original value for the same locator,
-viewport, kind, and property; no-op edits and chains undone to their baseline do
-not qualify.
+change has a different final value from its original value for the same `kind`,
+`locator`, and `property`; no-op edits and chains undone to their baseline do
+not qualify. `viewport` is deliberately **not** part of that key: the editor has
+one shared DOM, so a change made while one viewport is selected and its reversal
+under another act on the same element. Keying by viewport would count that round
+trip as two effective changes and let a zero-net-change round confirm, which is
+the hole an independent review found and this wording closes. Viewport stays on
+each edit as provenance.
 
 Every supplied anchor still needs a non-empty selector and comment, regardless
 of edits or overall feedback. An empty round remains blocked, with an actionable

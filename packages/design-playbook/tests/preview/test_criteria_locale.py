@@ -6,11 +6,15 @@ keep rendering the text it was given in both locales.
 """
 from __future__ import annotations
 
+import json
 import os
+import re
 import sys
 import tempfile
 import threading
 from pathlib import Path
+from urllib import parse as urlparse
+from urllib import request as urlrequest
 
 import pytest
 
@@ -89,8 +93,16 @@ def test_criteria_follow_the_one_existing_language_switcher() -> None:
             report_ref='r.md', options=['确认通过', '需要修改'], collect=collect,
         )
 
-    threading.Thread(target=run, name='criteria-locale', daemon=True).start()
+    thread = threading.Thread(target=run, name='criteria-locale', daemon=True)
+    thread.start()
     assert adapter.ready.wait(30), 'the preview session never came up'
+
+    token = re.search(
+        r'name="dpb_token"[^>]*value="([^"]+)"',
+        urlrequest.build_opener(urlrequest.ProxyHandler({})).open(
+            adapter.url, timeout=20).read().decode('utf-8'),
+    )
+    assert token, 'the served page must carry the one-time token'
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
@@ -129,6 +141,22 @@ def test_criteria_follow_the_one_existing_language_switcher() -> None:
             assert 'No translation supplied' in page.locator('#dpb-spec-view').inner_text()
         finally:
             browser.close()
+
+    # End the session. A transaction that never receives a decision keeps its
+    # heartbeat thread alive past this test, and that thread then collides with
+    # another test's global os.replace mock.
+    opener = urlrequest.build_opener(urlrequest.ProxyHandler({}))
+    opener.open(urlrequest.Request(
+        adapter.url + 'decide',
+        data=urlparse.urlencode({
+            'choice': '确认通过', 'feedback': 'criteria locale', 'anchors_json': '[]',
+            'criteria_json': '[]', 'visual_edits_json': '', 'dpb_round': '1',
+            'dpb_token': token.group(1),
+        }).encode(),
+        method='POST',
+    ), timeout=30).read()
+    thread.join(40)
+    assert box.get('result', {}).get('confirmed') is True, 'the session must end cleanly'
 
 
 class _PrintOnlyAdapter:

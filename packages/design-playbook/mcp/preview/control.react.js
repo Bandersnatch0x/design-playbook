@@ -794,15 +794,24 @@
           // A unit belongs beside the field, not inside it. The number and its
           // unit are split for display and rejoined on commit, so a reviewer
           // never types "px" and never sees it in the box.
+          var UNITS = ["px", "em", "rem", "%", "vh", "vw", "pt", "ch", "ex", "fr"];
           function splitUnit(value, fallbackUnit) {
             var raw = String(value == null ? "" : value).trim();
             var match = /^(-?(?:\d+\.?\d*|\.\d+))([a-z%]*)$/i.exec(raw);
             if (!match) return { number: raw, unit: "" };
+            var typed = match[2].toLowerCase();
+            // A partial unit is still being typed. Stripping "p" out of "70p"
+            // moves it into the suffix, so the next keystroke appends to the
+            // number again and the unit never accumulates. Show it raw until it
+            // is a unit we recognise.
+            if (typed && UNITS.indexOf(typed) < 0) return { number: raw, unit: "" };
             return { number: match[1], unit: match[2] || (fallbackUnit || "") };
           }
           function joinUnit(number, unit) {
             var raw = String(number == null ? "" : number).trim();
-            return /^-?(?:\d+\.?\d*|\.\d+)$/.test(raw) ? raw + (unit || "") : raw;
+            if (!/^-?(?:\d+\.?\d*|\.\d+)[a-z%]*$/i.test(raw)) return raw;
+            // Already carries a unit: keep it as typed rather than doubling it.
+            return /[a-z%]/i.test(raw) ? raw : raw + (unit || "");
           }
           function renderField(prop, label, kind, opts, unit) {
             var val = drafts[prop] || "";
@@ -839,7 +848,11 @@
                 h("div", { className: "dpb-unit-input-wrap" },
                   h("input", {
                     value: parts.number, placeholder: "0", disabled: fieldDisabled,
-                    onChange: function (e) { handleInput(prop, joinUnit(e.target.value, parts.unit)); },
+                    // Keystrokes stay raw so the debounce never commits a
+                    // half-typed number. A bare 7 would otherwise apply as 7px
+                    // and collapse the element mid-typing. The unit is appended
+                    // at an explicit commit, Enter or blur.
+                    onChange: function (e) { handleInput(prop, e.target.value); },
                     onBlur: function (e) { handleBlur(prop, joinUnit(e.target.value, parts.unit)); },
                     onKeyDown: function (e) { handleKey(prop, joinUnit(e.target.value, parts.unit), e); }
                   }),

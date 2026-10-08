@@ -429,6 +429,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 }
 #dpb-root .dpb-tool-kbd kbd {
   font: inherit; background: none; border: 0; padding: 0; min-width: 0; height: auto;
+  color: inherit;
 }
 .dpb-toolbar button:hover { background: var(--dpb-surface); color: var(--dpb-ink); transform: translateY(-1px); }
 .dpb-toolbar button[aria-pressed="true"] { background: var(--dpb-accent-wash); color: var(--dpb-accent); }

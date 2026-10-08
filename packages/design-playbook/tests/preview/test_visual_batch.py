@@ -113,6 +113,27 @@ def test_effective_edits_exclude_no_ops_and_undone_chains() -> None:
     ])
 
 
+def test_net_effect_ignores_the_viewport_label() -> None:
+    """One shared DOM: a change and its reversal under two labels net to zero."""
+    def effective(edits: list[dict]) -> bool:
+        return has_effective_visual_edits(
+            normalize_visual_batch({"edits": edits}, source_hash="v1")
+        )
+
+    assert not effective([
+        {"kind": "style", "viewport": "desktop", "locator": "#a",
+         "property": "background-color", "oldValue": "", "newValue": "#123456"},
+        {"kind": "style", "viewport": "mobile", "locator": "#a",
+         "property": "background-color", "oldValue": "#123456", "newValue": ""},
+    ]), "a round trip across viewport labels is not an effective change"
+    assert effective([
+        {"kind": "style", "viewport": "desktop", "locator": "#a",
+         "property": "background-color", "oldValue": "", "newValue": "#123456"},
+        {"kind": "style", "viewport": "mobile", "locator": "#a",
+         "property": "background-color", "oldValue": "#123456", "newValue": "#654321"},
+    ])
+
+
 def test_bound_batch_cannot_be_resigned_or_moved_to_another_route() -> None:
     batch = normalize_visual_batch({"edits": [{"locator": "#a", "property": "color", "newValue": "red"}]},
                                    source_hash="v1", route_url="http://127.0.0.1:5173/a")

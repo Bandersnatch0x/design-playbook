@@ -257,14 +257,16 @@
     // editor published is substantive only when it is still pending (a stale
     // batch is refused by the transaction, so readiness must not claim
     // otherwise) and its NET effect changes a value - a no-op edit or a chain
-    // undone back to its baseline cannot stand in for notes. Readiness stays
-    // owned here; the editor only publishes state.
+    // undone back to its baseline cannot stand in for notes. The net-effect key
+    // omits viewport on purpose: the editor has one shared DOM, so a change and
+    // its reversal under different viewport labels touch the same element.
+    // Readiness stays owned here; the editor only publishes state.
     var batch = window.DPB_VISUAL_EDIT_BATCH;
     if (!batch || batch.status !== "pending") return false;
     if (!batch.edits || !batch.edits.length) return false;
     var net = {};
     batch.edits.forEach(function (e) {
-      var key = [e.kind, e.viewport, e.locator, e.property].join("\u0000");
+      var key = [e.kind, e.locator, e.property].join("\u0000");
       var original = Object.prototype.hasOwnProperty.call(net, key) ? net[key][0] : e.oldValue;
       net[key] = [original, e.newValue];
     });

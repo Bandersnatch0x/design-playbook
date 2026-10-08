@@ -545,6 +545,12 @@ class VisualEditorRegressionTests(unittest.TestCase):
         self.assertEqual(observed, {"draft": "red", "focused": True, "background": "red", "pending": 1})
 
     def test_paused_numeric_typing_keeps_focus_across_debounce(self) -> None:
+        """A pause mid-number must not commit, and must not steal focus.
+
+        A unit field needs an explicit commit. A bare 7 is not a CSS width, and
+        applying it as 7px on the debounce collapsed the element mid-typing, so
+        the draft is held until Enter or blur.
+        """
         self.open_editor()
         self.select("#a")
         expand_inspector_section(self.page, "width")
@@ -555,13 +561,14 @@ class VisualEditorRegressionTests(unittest.TestCase):
         self.page.wait_for_timeout(450)
         self.page.keyboard.type("00")
         self.page.wait_for_timeout(450)
-        observed = {
-            "draft": field.input_value(),
-            "focused": field.evaluate("el => el === document.activeElement"),
-            "width": self.frame.locator("#a").evaluate("el => el.style.width"),
-        }
-        print("RP-1 paused numeric:", observed)
-        self.assertEqual(observed, {"draft": "700", "focused": True, "width": "700px"})
+        self.assertEqual(field.input_value(), "700")
+        self.assertTrue(field.evaluate("el => el === document.activeElement"))
+        self.assertEqual(self.frame.locator("#a").evaluate("el => el.style.width"), "")
+        self.assertEqual(self.edits(), [])
+        field.press("Enter")
+        self.page.wait_for_timeout(400)
+        self.assertEqual(self.frame.locator("#a").evaluate("el => el.style.width"), "700px")
+        self.assertEqual([edit["newValue"] for edit in self.edits()], ["700px"])
 
     def test_font_size_enum_applies_the_selected_size(self) -> None:
         """font-size is an enum now (maintainer request), not a free-text unit field.
@@ -595,6 +602,7 @@ class VisualEditorRegressionTests(unittest.TestCase):
         field.click()
         self.page.keyboard.press("Control+a")
         self.page.keyboard.type("7")
+        field.press("Enter")
         self.page.wait_for_timeout(250)
         self.assertEqual(self.edits(), [])  # The real first receipt is still held.
         self.page.keyboard.type("00")
@@ -603,6 +611,9 @@ class VisualEditorRegressionTests(unittest.TestCase):
         self.assertTrue(field.evaluate("el => el === document.activeElement"))
         self.page.wait_for_timeout(850)
         self.assertEqual(field.input_value(), "700")
+        field.press("Enter")
+        # Every receipt is held for 500ms by the harness, so allow for that.
+        self.page.wait_for_timeout(1200)
         self.assertEqual(self.frame.locator("#a").evaluate("el => el.style.width"), "700px")
         self.assertEqual([edit["newValue"] for edit in self.edits()], ["7px", "700px"])
         print("RP-1 delayed receipt: draft=700, focus retained, accepted edits=['7px', '700px']")

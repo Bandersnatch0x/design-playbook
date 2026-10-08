@@ -842,6 +842,64 @@ def test_inspector_swatch_opens_shared_picker_for_its_property(editor_page, prop
     expect(page.locator("#dpb-visual-count")).to_have_text("1")
 
 
+def test_typed_unit_is_kept_and_a_half_typed_number_waits(editor_page) -> None:
+    """Typing the unit by hand must not corrupt it, and a bare number must wait.
+
+    Two regressions an independent review found in the first unit split: typing
+    "20px" key by key produced "20x", and a bare "7" was applied on the debounce
+    as "7px", collapsing the element mid-typing.
+    """
+    from playwright.sync_api import expect
+
+    target = select_interaction_target(editor_page)
+    expand_inspector_section(editor_page, "width")
+    field = editor_page.locator('.dpb-react-field[data-property="width"] input')
+    style_value = "el => el.style.getPropertyValue('width')"
+
+    field.click()
+    field.fill("")
+    field.press_sequentially("7")
+    editor_page.wait_for_timeout(600)
+    assert target.evaluate(style_value) == "", "a half-typed number must not be applied"
+
+    field.press_sequentially("0px")
+    field.press("Enter")
+    for _ in range(60):
+        if target.evaluate(style_value) == "70px":
+            break
+        editor_page.wait_for_timeout(50)
+    assert target.evaluate(style_value) == "70px", (
+        f"a hand-typed unit must survive; saw {target.evaluate(style_value)!r}"
+    )
+    expect(field).to_have_value("70")
+    expect(field.locator("xpath=..").locator(".dpb-unit-suffix")).to_have_text("px")
+
+
+def test_toolbar_shortcut_badge_never_covers_its_icon(editor_page) -> None:
+    """The badge had no CSS at all, so it sat on top of the icon."""
+    geometry = editor_page.evaluate("""() => {
+      const btn = document.getElementById('dpb-pin-toggle');
+      const svg = btn.querySelector('svg').getBoundingClientRect();
+      const kbd = btn.querySelector('.dpb-tool-kbd').getBoundingClientRect();
+      const box = btn.getBoundingClientRect();
+      const color = getComputedStyle(btn.querySelector('.dpb-tool-kbd')).color;
+      return {
+        overlaps: !(kbd.right <= svg.left || kbd.left >= svg.right ||
+                    kbd.bottom <= svg.top || kbd.top >= svg.bottom),
+        inside: kbd.left >= box.left - 0.5 && kbd.right <= box.right + 0.5 &&
+                kbd.top >= box.top - 0.5 && kbd.bottom <= box.bottom + 0.5,
+        color,
+        muted: getComputedStyle(document.getElementById('dpb-root'))
+          .getPropertyValue('--dpb-muted').trim(),
+      };
+    }""")
+    assert geometry["inside"], "the badge must stay inside its button"
+    assert not geometry["overlaps"], "the badge must not cover the icon"
+    # The global #dpb-root kbd rule used to win the colour, so the reset must
+    # inherit rather than declare a value the global rule overrides.
+    assert geometry["color"], "the badge must render a colour"
+
+
 def test_collapsed_header_indicates_pending_modifications(editor_page):
     from playwright.sync_api import expect
 
