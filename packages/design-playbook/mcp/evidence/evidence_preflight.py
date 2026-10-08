@@ -28,39 +28,35 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-try:
-    from design_playbook.mcp.evidence.action_params import (  # noqa: E402
-        KNOWN_DOS,
-        action_param_errors,
-        normalize_action_do,
-    )
-    from design_playbook.mcp.evidence.capture_contract import (  # noqa: E402
-        parse_capture_contract,
-    )
-    from design_playbook.mcp.evidence.path_syntax import (  # noqa: E402
-        TRACE_SUFFIX,
-        lexical_posix_key,
-        probe_sidecar_rel,
-        trace_artifact_error,
-        trimmed_relpath,
-    )
-except ImportError:  # standalone execution: same-dir seam (rules_registry pattern)
-    import os  # noqa: E402
+def _package_root() -> Path | None:
+    """The directory holding `design_playbook.py`, when the tree is present."""
+    for candidate in Path(__file__).resolve().parents:
+        if (candidate / "design_playbook.py").is_file():
+            return candidate
+    return None
 
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from action_params import (  # noqa: E402
-        KNOWN_DOS,
-        action_param_errors,
-        normalize_action_do,
-    )
-    from capture_contract import parse_capture_contract  # noqa: E402
-    from path_syntax import (  # noqa: E402
-        TRACE_SUFFIX,
-        lexical_posix_key,
-        probe_sidecar_rel,
-        trace_artifact_error,
-        trimmed_relpath,
-    )
+
+# The documented CLI runs this file directly, so the package root goes on
+# sys.path before the imports below. One import seam, not two.
+_PACKAGE_ROOT = _package_root()
+if _PACKAGE_ROOT is not None and str(_PACKAGE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PACKAGE_ROOT))
+
+from design_playbook.mcp.evidence.action_params import (  # noqa: E402
+    KNOWN_DOS,
+    action_param_errors,
+    normalize_action_do,
+)
+from design_playbook.mcp.evidence.capture_contract import (  # noqa: E402
+    parse_capture_contract,
+)
+from design_playbook.mcp.evidence.path_syntax import (  # noqa: E402
+    TRACE_SUFFIX,
+    lexical_posix_key,
+    probe_sidecar_rel,
+    trace_artifact_error,
+    trimmed_relpath,
+)
 
 ENTRY_TYPES = frozenset({"screenshot", "a11y tree", "interaction trace"})
 URL_SCHEMES = ("http://", "https://", "file://")
@@ -297,10 +293,6 @@ def preflight_plan(plan: object) -> list[PreflightFact]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    for _candidate in Path(__file__).resolve().parents:
-        if (_candidate / "design_playbook.py").is_file():
-            sys.path.insert(0, str(_candidate))
-            break
     from design_playbook.scripts.stdio_encoding import configure_piped_utf8
 
     configure_piped_utf8()
