@@ -301,6 +301,19 @@ unchanged. Console and evidence surfaces and unrelated shared-tree work remain
 excluded. No version bump, push, tag, publish, catalog submission, recruitment,
 or external-trial pass is authorized. Authorization is not a completion claim.
 
+### Push authorization (2026-10-08): the feature branch only
+
+The exclusion above says no push is authorized by this exception. The maintainer
+separately authorized, on 2026-10-08, pushing this round's work to the feature
+branch `feat/preview-control-shell-consolidation` on `origin`. The authorization
+is limited to that branch and the commits it carries.
+
+It does not authorize a push to `main`, a tag, a release, a catalog submission or
+recruitment, and it does not move the `stable main` invariant: `origin/main` stays
+on the commit that matches the latest formal release, and the unreleased work waits
+on the branch for review. Pushing a branch is not a completion claim and not
+evidence that the work passed any gate beyond the ones recorded above.
+
 ### Follow-on (2026-10-08): the rail action is removed, not merely consolidated
 
 The consolidation above first reduced three rail actions to one. An independent
