@@ -51,8 +51,9 @@ class ControlDedupTests(unittest.TestCase):
 
     def test_custom_primary_not_duplicated_in_secondary_row(self) -> None:
         html = _build_control(1, "s", ["确认方向", "需要修改"])
-        # header approve + drawer foot = the two primary slots, no more.
-        self.assertEqual(html.count('value="确认方向"'), 2)
+        # The header approve is the only primary slot. The rail reports readiness
+        # and carries no submit of its own, so the promoted option appears once.
+        self.assertEqual(html.count('value="确认方向"'), 1)
         self.assertEqual(html.count('value="需要修改"'), 1)
 
     def test_default_options_unchanged(self) -> None:
@@ -64,7 +65,7 @@ class ControlDedupTests(unittest.TestCase):
         html = _build_control(1, "s", options)
         confirm_val = html_lib.escape(options[0], quote=True)
         revise_val = html_lib.escape(options[1], quote=True)
-        self.assertEqual(html.count(f'value="{confirm_val}"'), 2)
+        self.assertEqual(html.count(f'value="{confirm_val}"'), 1)
         self.assertEqual(html.count(f'value="{revise_val}"'), 1)
 
 

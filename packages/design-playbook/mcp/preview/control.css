@@ -624,6 +624,16 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   box-shadow: 0 0 0 3px var(--dpb-ring-danger) !important;
 }
 .dpb-foot-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+/* The rail reports readiness; it does not submit. */
+.dpb-rail-status {
+  margin: 0; width: 100%; padding: 8px 10px; border-radius: 8px;
+  font: 600 11.5px/1.45 inherit; text-align: left;
+  background: var(--dpb-surface); color: var(--dpb-soft); border: 1px solid var(--dpb-line);
+}
+.dpb-rail-status[data-ready="true"] {
+  background: var(--dpb-accent-wash); color: var(--dpb-accent);
+  border-color: var(--dpb-accent-chip-border);
+}
 .dpb-btn {
   appearance: none; cursor: pointer; height: 32px; padding: 0 14px; border-radius: 8px;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;

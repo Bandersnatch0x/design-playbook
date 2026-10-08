@@ -109,26 +109,26 @@
     updateStatus();
   }
   function updateStatus() {
-    // REC-04: the approve triggers double as the readiness indicator. Both the
-    // header CTA (needed when the rail is collapsed) and the rail's single
-    // fixed footer action share one readiness state, but they name different
-    // jobs: the header confirms the round, the rail action submits this
-    // round's edits and feedback.
+    // Decision authority lives in the header bar and nowhere else. The rail
+    // reports whether the round is ready and names the action to take, which is
+    // what removes the wrong-submit trap a second identically-valued submit
+    // created: its label promised a change request while its value approved.
     var ready = isSubstantive();
     var noteLabel = ttN(anchors.length === 1 ? "approve_ready_one" : "approve_ready", anchors.length);
     var headerLabel = ready ? (anchors.length ? noteLabel : tt("approve_ready_plain")) : tt("approve_not_ready");
-    var railLabel = ready ? tt("submit_ready") : tt("submit_not_ready");
-    [["dpb-btn-approve", "dpb-approve-label", headerLabel],
-     ["dpb-approve-drawer", "dpb-approve-label-drawer", railLabel]]
-      .forEach(function (pair) {
-        var btn = document.getElementById(pair[0]);
-        var label = document.getElementById(pair[1]);
-        if (!btn) return;
-        btn.classList.toggle("dpb-approve-ready", ready);
-        btn.classList.toggle("dpb-approve-muted", !ready);
-        if (label) label.textContent = pair[2];
-      });
-    publishReviewGate(ready, railLabel);
+    var btn = document.getElementById("dpb-btn-approve");
+    var label = document.getElementById("dpb-approve-label");
+    if (btn) {
+      btn.classList.toggle("dpb-approve-ready", ready);
+      btn.classList.toggle("dpb-approve-muted", !ready);
+    }
+    if (label) label.textContent = headerLabel;
+    var status = document.getElementById("dpb-rail-status");
+    if (status) {
+      status.setAttribute("data-ready", ready ? "true" : "false");
+      status.textContent = ready ? tt("rail_status_ready") : tt("rail_status_waiting");
+    }
+    publishReviewGate(ready, headerLabel);
   }
 
   // list interactions (delegated)
@@ -496,9 +496,7 @@
     isFlushingVisualEdits = true;
 
     if (approveBtn) approveBtn.classList.add("dpb-btn-loading");
-    var drawerApprove = document.getElementById("dpb-approve-drawer");
-    if (drawerApprove) drawerApprove.classList.add("dpb-btn-loading");
-    if (submitter && submitter !== approveBtn && submitter !== drawerApprove) {
+    if (submitter && submitter !== approveBtn) {
       submitter.classList.add("dpb-btn-loading");
     }
     var artInner = document.getElementById("dpb-artboard-inner");
@@ -508,8 +506,7 @@
     function finishLoading() {
       isFlushingVisualEdits = false;
       if (approveBtn) approveBtn.classList.remove("dpb-btn-loading");
-      if (drawerApprove) drawerApprove.classList.remove("dpb-btn-loading");
-      if (submitter && submitter !== approveBtn && submitter !== drawerApprove) {
+      if (submitter && submitter !== approveBtn) {
         submitter.classList.remove("dpb-btn-loading");
       }
       if (artInner) artInner.setAttribute("aria-busy", "false");

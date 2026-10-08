@@ -218,10 +218,11 @@
           <textarea name="feedback" id="dpb-feedback" rows="3" data-i18n-aria-label="field_label" aria-label="{t_field_label}" data-i18n-placeholder="field_placeholder" placeholder="{t_field_placeholder}"></textarea>
         </div>
         <div class="dpb-foot-actions">
-          <button type="submit" name="choice" value="{primary_val}" id="dpb-approve-drawer" class="dpb-btn dpb-btn-primary dpb-approve-btn dpb-approve-muted" data-i18n-title="confirm_desc" title="{t_confirm_desc}">
-            <span class="dpb-approve-dot" aria-hidden="true"></span>
-            <span id="dpb-approve-label-drawer"{primary_i18n}>{primary_label}</span><kbd>Ctrl/⌘↵</kbd>
-          </button>
+          <!-- The rail does not submit. Decision authority is the header bar, so
+               this reports readiness and points at it instead of offering a
+               second, identically-valued submit that a reviewer could mistake
+               for a request-changes action. -->
+          <p class="dpb-rail-status" id="dpb-rail-status" role="status" data-ready="false" data-i18n="rail_status_waiting">{t_rail_status_waiting}</p>
         </div>
       </div>
     </aside>

@@ -1250,7 +1250,7 @@ def test_ip03_all_review_and_bridge_controls_have_focus_rings(editor_page, theme
     page.locator("#dpb-root").evaluate("(el, theme) => el.dataset.theme = theme", theme)
     page.keyboard.press("Tab")
     for selector in ("#dpb-roam-prev", "#dpb-roam-next", "#dpb-inspector-close",
-                     "#dpb-approve-drawer", "#dpb-abort", "#dpb-language-toggle", "#dpb-theme-toggle",
+                     "#dpb-abort", "#dpb-language-toggle", "#dpb-theme-toggle",
                      "#dpb-drawer-toggle", "#dpb-shortcuts-btn", "#dpb-filter-all", "#dpb-btn-approve"):
         button = page.locator(selector)
         button.focus()
@@ -1556,8 +1556,8 @@ def test_readiness_is_not_claimed_while_the_bridge_cannot_flush(editor_page) -> 
 
     page = editor_page
     page.locator("#dpb-tab-visual").click()
-    submit = page.locator("#dpb-approve-drawer")
-    expect(submit).to_contain_text(i18n.t("submit_not_ready"))
+    status = page.locator("#dpb-rail-status")
+    expect(status).to_contain_text(i18n.t("rail_status_waiting"))
 
     page.evaluate("""() => {
       window.DPB_VISUAL_EDIT_BATCH = {schemaVersion: 1, status: 'pending',
@@ -1566,14 +1566,15 @@ def test_readiness_is_not_claimed_while_the_bridge_cannot_flush(editor_page) -> 
       window.dpbVisualEditorState = function () { return {ready: false, stale: false}; };
       document.dispatchEvent(new CustomEvent('dpbVisualEditsChanged'));
     }""")
-    expect(submit).to_contain_text(i18n.t("submit_not_ready"))
+    expect(status).to_contain_text(i18n.t("rail_status_waiting"))
 
-    # The same pending work with the editor connected is submittable again.
+    # The same pending work with the editor connected is ready again.
     page.evaluate("""() => {
       window.dpbVisualEditorState = function () { return {ready: true, stale: false}; };
       document.dispatchEvent(new CustomEvent('dpbVisualEditsChanged'));
     }""")
-    expect(submit).to_contain_text(i18n.t("submit_ready"))
+    expect(status).to_have_attribute("data-ready", "true")
+    expect(status).to_contain_text(i18n.t("rail_status_ready"))
 
 
 def test_f4_stale_batch_does_not_read_as_ready(editor_page) -> None:
@@ -1589,8 +1590,8 @@ def test_f4_stale_batch_does_not_read_as_ready(editor_page) -> None:
 
     page = editor_page
     page.locator("#dpb-tab-visual").click()
-    submit = page.locator("#dpb-approve-drawer")
-    expect(submit).to_contain_text(i18n.t("submit_not_ready"))
+    status = page.locator("#dpb-rail-status")
+    expect(status).to_contain_text(i18n.t("rail_status_waiting"))
 
     page.evaluate("""() => {
       window.DPB_VISUAL_EDIT_BATCH = {schemaVersion: 1, status: 'stale', sourceHash: 'x',
@@ -1598,14 +1599,15 @@ def test_f4_stale_batch_does_not_read_as_ready(editor_page) -> None:
         property: 'background-color', oldValue: '', newValue: 'rgb(1, 2, 3)'}]};
       document.dispatchEvent(new CustomEvent('dpbVisualEditsChanged'));
     }""")
-    expect(submit).to_contain_text(i18n.t("submit_not_ready"))
+    expect(status).to_contain_text(i18n.t("rail_status_waiting"))
 
     # The same edits with a pending status are substantive, so readiness flips.
     page.evaluate("""() => {
       window.DPB_VISUAL_EDIT_BATCH.status = 'pending';
       document.dispatchEvent(new CustomEvent('dpbVisualEditsChanged'));
     }""")
-    expect(submit).to_contain_text(i18n.t("submit_ready"))
+    expect(status).to_have_attribute("data-ready", "true")
+    expect(status).to_contain_text(i18n.t("rail_status_ready"))
 
 
 def test_f5_first_edit_is_submittable_while_its_receipt_is_in_flight(editor_page) -> None:
@@ -1638,29 +1640,31 @@ def test_f5_first_edit_is_submittable_while_its_receipt_is_in_flight(editor_page
     page.locator("#dpb-tab-visual").click()
     field = page.locator('.dpb-react-field[data-property="background-color"] input')
     expect(field).to_be_enabled()
-    submit = page.locator("#dpb-approve-drawer")
-    expect(submit).to_contain_text(i18n.t("submit_not_ready"))
+    status = page.locator("#dpb-rail-status")
+    expect(status).to_contain_text(i18n.t("rail_status_waiting"))
 
     page.evaluate("window.holdReceipts = true")
     field.fill("#123456")
     field.press("Enter")
     assert page.evaluate("window.dpbHasPendingVisualEdits()") is True
-    expect(submit).to_contain_text(i18n.t("submit_ready"))
+    expect(status).to_have_attribute("data-ready", "true")
+    expect(status).to_contain_text(i18n.t("rail_status_ready"))
 
     # Delivering the receipt keeps it substantive, now from the published batch.
     page.evaluate("window.holdReceipts = false")
     page.reload()
     dismiss_onboarding(page)
     page.locator("#dpb-tab-visual").click()
-    expect(submit).to_contain_text(i18n.t("submit_not_ready"))
+    expect(status).to_contain_text(i18n.t("rail_status_waiting"))
 
 
-def test_visual_panel_submit_is_the_header_channel_gated_by_the_floor(editor_page) -> None:
-    """The rail's single action mirrors the header state; one floor owner.
+def test_rail_reports_readiness_and_the_header_owns_the_decision(editor_page) -> None:
+    """The rail carries no submit control; decision authority is the header bar.
 
-    The action is never disabled: an empty round is refused on click with the
-    shared not-ready wording, and a satisfied round submits through the same
-    channel as the header button. The panel itself renders no second button.
+    agy's consolidation verdict. The removed rail button shared name="choice" and
+    value="确认通过" with the header approve button while its label promised a
+    submit, so a reviewer who wrote critical feedback and clicked it approved the
+    round. The rail now reports readiness and names the action instead.
     """
     from playwright.sync_api import expect
 
@@ -1668,17 +1672,19 @@ def test_visual_panel_submit_is_the_header_channel_gated_by_the_floor(editor_pag
 
     page = editor_page
     page.locator("#dpb-tab-visual").click()
-    submit = page.locator("#dpb-approve-drawer")
-    expect(submit).to_be_visible()
-    # ADR-0008 amendment (2026-10-08): the submission control is never disabled;
-    # an empty round explains itself on click instead of greying the action out.
-    expect(submit).to_be_enabled()
-    expect(submit).to_contain_text(i18n.t("submit_not_ready"))
+    status = page.locator("#dpb-rail-status")
+    expect(status).to_be_visible()
+    # Exactly one submit-capable control carries the confirm value in the rail,
+    # and it is none of them.
+    assert page.locator("#dpb-approve-drawer").count() == 0
+    assert page.evaluate(
+        "() => [...document.querySelectorAll('#dpb-inspector button[type=submit]')].length") == 0
+    expect(status).to_contain_text(i18n.t("rail_status_waiting"))
 
+    approve = page.locator("#dpb-btn-approve")
     page.evaluate("""() => {
       window.dpbSubmitted = [];
       document.querySelector('form').addEventListener('submit', e => {
-        // Record the product's decision before suppressing real navigation.
         window.dpbSubmitted.push({
           id: e.submitter ? e.submitter.id : '(null)',
           prevented: e.defaultPrevented,
@@ -1686,7 +1692,7 @@ def test_visual_panel_submit_is_the_header_channel_gated_by_the_floor(editor_pag
         e.preventDefault();
       });
     }""")
-    submit.click()
+    approve.click()
     page.wait_for_timeout(200)
     blocked = page.evaluate("window.dpbSubmitted")
     assert blocked and all(item["prevented"] for item in blocked), (
@@ -1694,16 +1700,17 @@ def test_visual_panel_submit_is_the_header_channel_gated_by_the_floor(editor_pag
     )
 
     page.locator("#dpb-feedback").fill("Styles need a pass before this ships.")
-    expect(submit).to_contain_text(i18n.t("submit_ready"))
+    expect(status).to_have_attribute("data-ready", "true")
     page.evaluate("window.dpbSubmitted = []")
-    submit.click()
+    approve.click()
     page.wait_for_function(
-        "window.dpbSubmitted.some(i => i.id === 'dpb-approve-drawer' && !i.prevented)"
+        "window.dpbSubmitted.some(i => i.id === 'dpb-btn-approve' && !i.prevented)"
     )
 
     # Withdrawing the note puts the whole gate back to not-ready.
     page.locator("#dpb-feedback").fill("")
-    expect(submit).to_contain_text(i18n.t("submit_not_ready"))
+    expect(status).to_have_attribute("data-ready", "false")
+    expect(status).to_contain_text(i18n.t("rail_status_waiting"))
 
 
 def test_visual_submit_bar_stays_inside_the_scrolling_panel(editor_page) -> None:
@@ -1932,12 +1939,11 @@ def test_bo02_visual_panel_authority_and_label_truth(editor_page) -> None:
     field.fill("rgb(10, 20, 30)")
 
     # ADR-0008 amendment (2026-10-08): an effective visual edit alone satisfies
-    # the floor, so a round carrying edits and no note is ready, and the single
-    # rail action is never disabled.
-    submit = page.locator("#dpb-approve-drawer")
-    expect(submit).to_be_visible()
-    expect(submit).to_be_enabled()
-    expect(submit).to_contain_text(i18n.t("submit_ready"))
+    # the floor, so a round carrying edits and no note is ready, and the header
+    # action is never disabled. The rail reports that state; it does not submit.
+    status = page.locator("#dpb-rail-status")
+    expect(status).to_have_attribute("data-ready", "true")
+    expect(status).to_contain_text(i18n.t("rail_status_ready"))
     expect(page.locator("#dpb-btn-approve")).to_have_class(re.compile(r"dpb-approve-ready"))
     # Wait for the debounced edit to actually land before replaying it: readiness
     # now also counts an in-flight edit, so the label alone does not prove commit.
@@ -1948,10 +1954,10 @@ def test_bo02_visual_panel_authority_and_label_truth(editor_page) -> None:
     # must close again rather than accept a no-op as a substitute for notes.
     field.press("Control+z")
     expect(page.locator("#dpb-visual-count")).to_have_text("0")
-    expect(submit).to_contain_text(i18n.t("submit_not_ready"))
+    expect(status).to_have_attribute("data-ready", "false")
     field.press("Control+Shift+z")
     expect(page.locator("#dpb-visual-count")).to_have_text("1")
-    expect(submit).to_contain_text(i18n.t("submit_ready"))
+    expect(status).to_have_attribute("data-ready", "true")
 
     page.evaluate("""() => {
         window.__panelSubmitted = [];
@@ -1960,8 +1966,8 @@ def test_bo02_visual_panel_authority_and_label_truth(editor_page) -> None:
             window.__panelSubmitted.push(e.submitter ? e.submitter.id : '(null)');
         });
     }""")
-    submit.click()
-    page.wait_for_function("window.__panelSubmitted && window.__panelSubmitted.includes('dpb-approve-drawer')")
+    page.locator("#dpb-btn-approve").click()
+    page.wait_for_function("window.__panelSubmitted && window.__panelSubmitted.includes('dpb-btn-approve')")
 
 
 def test_bo03_mode_tool_shortcuts_and_preview_passivity(editor_page) -> None:

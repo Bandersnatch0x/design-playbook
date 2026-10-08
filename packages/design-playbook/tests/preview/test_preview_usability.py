@@ -88,7 +88,6 @@ def save_anchor(page, text, selector="#prototype h1"):
 
 @pytest.mark.parametrize("selector,choice", [
     ("#dpb-btn-approve", "确认通过"),
-    ("#dpb-approve-drawer", "确认通过"),
     ('button[name="choice"][value="需要修改"]', "需要修改"),
 ])
 def test_choice_clicks_use_submit_handler_and_wait_for_visual_drain(page, selector, choice):
@@ -188,25 +187,25 @@ def test_roaming_from_spec_view_switches_back_to_annotations(page, tmp_path):
     expect(page.locator("#dpb-spec-view")).to_be_hidden()
 
 
-def test_drawer_approve_mirrors_header_dynamic_state(page):
-    # DEF-04: the rail's single footer trigger shares the header button's dynamic
-    # muted/ready state (REC-04 dual entry, one truth). Since the 2026-10-08
-    # amendment the two name different jobs, so only the state is shared: the
-    # header confirms the round (note count), the rail action submits this
-    # round's edits and feedback.
+def test_rail_status_mirrors_header_readiness(page):
+    # The rail no longer submits. Decision authority is the header bar, and the
+    # rail reports the same readiness state so the reviewer knows when it is
+    # actionable and which action to take. agy's consolidation verdict removed
+    # the second submit because its label promised a submit while its value
+    # approved the round.
     dismiss_intro(page)
     header_label = page.locator("#dpb-approve-label")
-    drawer = page.locator("#dpb-approve-drawer")
-    expect(drawer).to_contain_text("添加批注、意见或修改后可提交")
-    assert "dpb-approve-muted" in drawer.get_attribute("class")
-    assert "dpb-approve-ready" not in drawer.get_attribute("class")
+    status = page.locator("#dpb-rail-status")
+    expect(status).to_contain_text("待补充意见、批注或修改")
+    expect(status).to_have_attribute("data-ready", "false")
+    assert page.locator("#dpb-approve-drawer").count() == 0
     save_anchor(page, "第一处")
     expect(header_label).to_have_text("确认通过 (1 处批注)")
-    expect(drawer).to_contain_text("提交修改")
-    assert "dpb-approve-ready" in drawer.get_attribute("class")
+    expect(status).to_have_attribute("data-ready", "true")
+    expect(status).to_contain_text("已就绪")
     page.locator("#dpb-language-toggle").click()
     expect(header_label).to_have_text("Approve (1 note)")
-    expect(drawer).to_contain_text("Submit changes")
+    expect(status).to_contain_text("Ready")
 
 
 def test_coachmark_persists_until_first_anchor_not_timed_out(page):
@@ -532,13 +531,12 @@ def test_english_approve_pills_stay_single_line(browser, tmp_path, monkeypatch):
         };
       };
       pill('dpb-approve-label', 'dpb-btn-approve');
-      pill('dpb-approve-label-drawer', 'dpb-approve-drawer');
       return out;
     }""",
         label,
     )
     page.close()
-    for btn_id in ("dpb-btn-approve", "dpb-approve-drawer"):
+    for btn_id in ("dpb-btn-approve",):
         row = facts[btn_id]
         assert row["width"] > 0, f"{btn_id} label was not laid out"
         assert row["lines"] == 1, f"{btn_id} label folded to {row['lines']} lines"
