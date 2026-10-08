@@ -9,6 +9,7 @@ answer comes from the local service, and an offline service yields
 """
 from __future__ import annotations
 
+import importlib.util
 import io
 import json
 import os
@@ -28,6 +29,28 @@ for candidate in (PLUGIN_DIR, WORKBENCH_DIR):
 from design_playbook.scripts import project_target as pt  # noqa: E402
 from design_playbook_workbench.launcher import start_runtime  # noqa: E402
 
+WORKBENCH_TESTS = WORKBENCH_DIR / "tests"
+
+
+def _load_workbench_harness():
+    """Load the workbench test harness by path, never by package name.
+
+    `tests` is a regular package in two plugin directories: the plugin's own
+    `packages/design-playbook/tests` and the workbench's. A test that imports
+    `tests.run_console` binds the shared name to the plugin package for the
+    rest of the session, and any later `tests.harness` import then fails, so
+    this file loads the harness from its path instead.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "dp_workbench_harness", WORKBENCH_TESTS / "harness.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+HARNESS = _load_workbench_harness()
+
 #: R02 names these commands as the project-touching surface; `doctor` is a
 #: no-project help surface and must not gain a targeting requirement.
 PROJECT_COMMANDS = (
@@ -41,6 +64,22 @@ PROJECT_COMMANDS = (
 )
 NO_PROJECT_COMMANDS = ("doctor",)
 CONTRACT_MARKER = "project_target.py"
+
+
+class HarnessLoadingTest(unittest.TestCase):
+    """The harness must not load through the shared `tests` package name."""
+
+    def test_harness_is_loaded_without_the_shared_tests_package_name(self) -> None:
+        # tests/test_operator_continuation_e2e.py and
+        # tests/test_t006_continuation_acceptance_matrix.py bind the name
+        # `tests` to packages/design-playbook/tests for the rest of the
+        # session, so importing the harness through that name fails late in a
+        # full run. Loading it by path is the contract that keeps it working.
+        source = Path(__file__).read_text(encoding="utf-8")
+        # Split so this assertion does not match its own literal.
+        banned = "from tests.harness" + " import"
+        self.assertNotIn(banned, source)
+        self.assertTrue(callable(HARNESS.http_request))
 
 
 class ArgumentParsingTest(unittest.TestCase):
@@ -160,7 +199,7 @@ class ResolverIntegrationTest(unittest.TestCase):
         self.runtime = start_runtime(data_dir=self.data_dir, port=0)
         self.directory = self.base / "设计 项目 alpha"
         self.directory.mkdir()
-        from tests.harness import http_request  # noqa: PLC0415
+        http_request = HARNESS.http_request
 
         session = self.runtime.session.token
         candidate = http_request(
@@ -229,8 +268,6 @@ class ResolverIntegrationTest(unittest.TestCase):
         self.assertEqual(caught.exception.code, "disconnected")
 
     def test_an_offline_service_still_resolves_an_explicit_directory(self) -> None:
-        # No request, no service: the pre-workbench slash workflow keeps its
-        # explicit directory. Nothing is registered and nothing is written.
         self.runtime.stop()
         before = sorted(
             str(p.relative_to(self.data_dir)) for p in self.data_dir.rglob("*")
@@ -247,11 +284,9 @@ class ResolverIntegrationTest(unittest.TestCase):
         after = sorted(
             str(p.relative_to(self.data_dir)) for p in self.data_dir.rglob("*")
         )
-        # No competing offline registry or asset directory is created.
         self.assertEqual(before, after)
 
     def test_an_offline_service_with_a_request_reports_unavailable(self) -> None:
-        # A request needs the matching live service, always.
         self.runtime.stop()
         with self.assertRaises(pt.ServiceUnavailable):
             pt.resolve_target(
@@ -304,7 +339,6 @@ class ResolverIntegrationTest(unittest.TestCase):
             code = pt.main(
                 ["--project", str(self.directory), "--data-dir", str(self.data_dir)]
             )
-        # No request + no service: the explicit directory still resolves.
         self.assertEqual(code, pt.EXIT_OK)
         self.assertIsNone(json.loads(buffer.getvalue())["project"]["projectId"])
 

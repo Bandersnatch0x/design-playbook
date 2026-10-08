@@ -58,7 +58,6 @@ class MatrixSchemaTests(unittest.TestCase):
         self.assertEqual(errors, [], f"Matrix validation errors: {errors}")
 
     def test_all_required_fields_present(self) -> None:
-        # T-040: the capability flags were retired — a row is agent/tier/native.
         for row in matrix_mod.MATRIX:
             self.assertIsInstance(row.agent, str)
             self.assertGreater(len(row.agent), 0)
@@ -82,8 +81,6 @@ class MatrixSchemaTests(unittest.TestCase):
         self.assertIn("codex", tier1)
 
     def test_tier_counts_match_published_claims(self) -> None:
-        # T-040: README/AGENTS counts are derived from the matrix and gated
-        # by validate.py; this pins the derivation itself.
         self.assertEqual(len(matrix_mod.MATRIX), 30)
         self.assertEqual(len(matrix_mod.TIER1_SNAPSHOT_AGENTS), 1)
 
@@ -257,7 +254,12 @@ class GeneratorCLITests(unittest.TestCase):
 
 
 class NodeShimSmokeTests(unittest.TestCase):
-    """cli.js: spawn with --list via node (skip visibly when node absent)."""
+    """cli.js: spawn with --list via node (skip visibly when node absent).
+
+    Output is decoded leniently: a Windows shim can print the console code
+    page, and a strict utf-8 decode turns that into a codec crash that hides
+    the actual return code.
+    """
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -271,7 +273,7 @@ class NodeShimSmokeTests(unittest.TestCase):
             self.skipTest("node not found on PATH — skipping cli.js smoke")
         result = subprocess.run(
             [self.node, str(CLI_JS), "--list"],
-            capture_output=True, text=True, encoding="utf-8",
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
             cwd=PKG, timeout=15,
         )
         self.assertEqual(result.returncode, 0,
@@ -283,24 +285,19 @@ class NodeShimSmokeTests(unittest.TestCase):
             self.skipTest("node not found on PATH — skipping cli.js smoke")
         result = subprocess.run(
             [self.node, str(CLI_JS), "--list"],
-            capture_output=True, text=True, encoding="utf-8",
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
             cwd=PKG, timeout=15,
         )
         self.assertEqual(result.returncode, 0)
 
     def test_cli_js_has_no_deps(self) -> None:
         src = CLI_JS.read_text(encoding="utf-8")
-        # Must only use built-in node: modules
         self.assertNotIn("require('", src.replace("require('node:", ""))
-        # Well, it uses node: prefixed modules — check no external packages
         for line in src.splitlines():
             if "require(" in line and "node:" not in line and "//" not in line.lstrip():
                 self.fail(f"cli.js requires non-builtin module: {line.strip()}")
 
 
-# ---------------------------------------------------------------------------
-# S2 tests
-# ---------------------------------------------------------------------------
 
 
 class MergeJsonHelperTests(unittest.TestCase):
@@ -377,7 +374,6 @@ class ApplyMarkerBlockTests(unittest.TestCase):
 
     def test_replace_existing_block_in_place(self) -> None:
         first = self._apply(None, "old content")
-        # Simulate a second run with updated content
         second = gen_mod.apply_marker_block(first, "0.21.0", "new content")
         self.assertIn("new content", second)
         self.assertNotIn("old content", second, "old block content must be replaced")
@@ -501,7 +497,6 @@ class WindsurfRendererTests(unittest.TestCase):
 
     def test_workflow_files_written(self) -> None:
         workflows = list((self.out / ".windsurf" / "workflows").glob("*.md"))
-        # one workflow file per shipped command (8 as of 0.25)
         self.assertEqual(len(workflows), 8)
 
     def test_workflow_file_naming(self) -> None:
@@ -814,7 +809,6 @@ class Tier3RendererTests(unittest.TestCase):
         self.assertEqual(len(tier3), 22)
         for agent in tier3:
             with tempfile.TemporaryDirectory() as tmp:
-                # Should not raise NotImplementedError
                 m = gen_mod.render(agent, out_dir=Path(tmp), dry_run=True)
                 self.assertEqual(m["agent"], agent)
 
@@ -884,7 +878,6 @@ class Tier2ListTests(unittest.TestCase):
         out = self._list_output()
         for agent in ("cursor", "gemini-cli", "opencode", "windsurf", "github-copilot", "zed"):
             self.assertIn(f"{agent}", out, f"{agent} not in --list output")
-            # Find the line for this agent and check for renderer ready marker
             line = next((ln for ln in out.splitlines() if agent in ln), "")
             self.assertIn("renderer ready", line, f"{agent} not shown as renderer ready: {line!r}")
 
