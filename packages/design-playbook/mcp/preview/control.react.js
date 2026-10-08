@@ -213,6 +213,7 @@
           return Promise.resolve({ accepted: false, error: "visual_unavailable" });
         }
         var id = ++sequence.current;
+        if (entry) entry._replayId = id;
         var locator = entry ? entry[0].locator : state.selected.selector;
         notifyPresence("user-editing-element", locator, property);
         setBusy(true);
@@ -392,6 +393,7 @@
           var operation = (request.current && change.requestId === request.current.id ? request.current : null) || unacked;
           if (!operation && !(typeof change.requestId === "string" && change.requestId.indexOf("gesture-") === 0)) return;
           if (unacked) delete unackedRequests.current[change.requestId];
+          if (operation && operation.entry && operation.entry._replayId !== operation.id) return;
           var changes = (change.changes || [change]).map(function (c) {
             var key = change.selector + ":" + c.property;
             if (!Object.prototype.hasOwnProperty.call(interruptedValues.current, key)) return c;

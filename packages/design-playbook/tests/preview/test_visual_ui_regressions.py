@@ -2700,3 +2700,117 @@ def test_bo06_mb_f01_duplicate_undo_does_not_double_consume_history(tmp_path) ->
         finally:
             browser.close()
 
+
+def test_bo07_mb_f01_late_undo_after_replacement_and_redo_matches_admitted_batch(editor_page):
+    from playwright.sync_api import expect
+    from preview_e2e_helpers import dismiss_onboarding
+
+    page = editor_page
+    page_errors = []
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    page.add_init_script("""
+        window.heldUndo = null;
+        window.holdNextReceipt = false;
+        window.addEventListener('message', event => {
+            if (!event.data?.dpbVisualEditChange || !window.holdNextReceipt ||
+                event.source !== document.querySelector('iframe.dpb-proto-frame').contentWindow) return;
+            event.stopImmediatePropagation();
+            window.heldUndo = {data: event.data, source: event.source, origin: event.origin};
+            window.holdNextReceipt = false;
+        }, true);
+    """)
+    page.reload()
+    dismiss_onboarding(page)
+    target = page.frame_locator("iframe.dpb-proto-frame").locator("#panel-title")
+    assert target.evaluate("el => el.style.backgroundColor") == ""
+    target.evaluate("el => el.click()")
+    page.keyboard.press("Escape")
+    page.locator("#dpb-tab-visual").click()
+    field = page.locator('.dpb-react-field[data-property="background-color"] input')
+    expect(field).to_be_enabled()
+    page.locator("#dpb-feedback").fill("Approve inspected color changes")
+    page.evaluate("""() => {
+        window.admittedBatches = [];
+        document.querySelector('form').addEventListener('submit', event => {
+            if (!event.defaultPrevented) {
+                window.admittedBatches.push(
+                    JSON.parse(document.getElementById('dpb-visual-edits-json').value));
+            }
+            event.preventDefault();
+        });
+    }""")
+    count = page.locator("#dpb-visual-count")
+    first_color = "rgb(18, 52, 86)"
+    final_color = "rgb(171, 205, 239)"
+    field.fill("#123456")
+    field.press("Enter")
+    expect(count).to_have_text("1")
+    expect(field).to_be_enabled()
+    field.fill("#abcdef")
+    field.press("Enter")
+    expect(count).to_have_text("2")
+    expect(field).to_be_enabled()
+
+    page.evaluate("window.holdNextReceipt = true")
+    field.press("Control+z")
+    page.wait_for_function("window.heldUndo !== null")
+    assert target.evaluate("el => el.style.backgroundColor") == first_color
+    page.wait_for_timeout(1800)
+    expect(field).to_be_enabled()
+    expect(count).to_have_text("2")
+    assert page.evaluate("window.dpbHasPendingVisualEdits()") is True
+
+    field.press("Control+z")
+    expect(count).to_have_text("1")
+    expect(field).to_be_enabled()
+    assert target.evaluate("el => el.style.backgroundColor") == first_color
+    field.press("Control+Shift+z")
+    expect(count).to_have_text("2")
+    expect(field).to_be_enabled()
+    assert target.evaluate("el => el.style.backgroundColor") == final_color
+    page.evaluate("""() => {
+        window.dispatchEvent(new MessageEvent('message', window.heldUndo));
+        window.heldUndo = null;
+    }""")
+    page.locator("#dpb-btn-approve").click()
+    page.wait_for_function("window.admittedBatches.length > 0")
+    submissions = page.evaluate("window.admittedBatches")
+    final_inline = target.evaluate("el => el.style.backgroundColor")
+    has_pending = page.evaluate("window.dpbHasPendingVisualEdits()")
+    print("BO07 admitted:", submissions, "inline:", final_inline, "pending:", has_pending)
+    assert len(submissions) == 1
+    edits = submissions[0]["edits"]
+    assert final_inline == final_color
+    assert edits and edits[-1]["newValue"] == final_inline, (
+        f"Admitted batch {edits} differs from actual inline {final_inline}; pending={has_pending}"
+    )
+    assert edits == [
+        {"kind": "style", "viewport": "desktop", "locator": "#panel-title",
+         "property": "background-color", "oldValue": "", "newValue": first_color},
+        {"kind": "style", "viewport": "desktop", "locator": "#panel-title",
+         "property": "background-color", "oldValue": first_color, "newValue": final_color},
+    ]
+    assert has_pending is False
+    assert not page_errors
+
+
+def test_escape_exits_preview_and_resets_hand_in_one_action(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    page.locator("#dpb-header").click()
+    page.keyboard.press("v")
+    preview = page.locator("#dpb-mode-preview")
+    hand = page.locator("#dpb-hand-toggle")
+    select = page.locator("#dpb-pin-toggle")
+    expect(preview).to_have_attribute("aria-pressed", "true")
+    expect(select).to_have_attribute("aria-pressed", "true")
+    page.keyboard.press("h")
+    expect(preview).to_have_attribute("aria-pressed", "true")
+    expect(hand).to_have_attribute("aria-pressed", "true")
+    page.keyboard.press("Escape")
+    expect(preview).to_have_attribute("aria-pressed", "false")
+    expect(page.locator("#dpb-preview-exit-pill")).to_be_hidden()
+    expect(hand).to_have_attribute("aria-pressed", "false")
+    expect(select).to_have_attribute("aria-pressed", "true")
+

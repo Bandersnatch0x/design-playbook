@@ -526,6 +526,9 @@
         cancelDraft(true);
       } else if (!coachmark.hidden) {
         hideCoachmark(true);
+      } else if (mode === "preview") {
+        setMode("annotate");
+        if (tool !== "select") setTool("select");
       } else if (tool !== "select") {
         setTool("select");
       }
