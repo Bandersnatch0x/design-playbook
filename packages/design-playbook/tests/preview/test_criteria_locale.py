@@ -6,8 +6,6 @@ keep rendering the text it was given in both locales.
 """
 from __future__ import annotations
 
-import json
-import os
 import re
 import sys
 import tempfile
@@ -15,8 +13,6 @@ import threading
 from pathlib import Path
 from urllib import parse as urlparse
 from urllib import request as urlrequest
-
-import pytest
 
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
