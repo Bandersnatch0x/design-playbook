@@ -21,6 +21,8 @@ import sys
 import tempfile
 import threading
 import unittest
+
+import pytest
 from pathlib import Path
 
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -34,11 +36,15 @@ from design_playbook.mcp.preview import review_session  # noqa: E402
 from design_playbook.mcp.preview import control as preview_control  # noqa: E402
 from design_playbook.mcp.preview.i18n import default_options  # noqa: E402
 
-from playwright.sync_api import sync_playwright  # noqa: E402
+try:
+    from playwright.sync_api import sync_playwright  # noqa: E402
+except ImportError:  # pragma: no cover - only the browser tests need it
+    sync_playwright = None
 
 # Same directory; pytest's prepend import mode and direct `python <file>` runs
 # both put this directory on sys.path.
 from tests.preview_e2e_helpers import dismiss_onboarding  # noqa: E402
+from tests.preview.conftest import expand_inspector_section  # noqa: E402
 
 ROUND_N = 1
 SUMMARY = "pin sync e2e - collapse keeps pin"
@@ -63,6 +69,10 @@ def _bridge_inner_js() -> str:
     m = re.search(r"<script[^>]*>(.*)</script>\s*$", raw, re.DOTALL)
     assert m, f"BRIDGE_SCRIPT is not a single <script> block: {raw[:80]!r}"
     return m.group(1)
+
+
+# This module drives a real browser: the no-chromium CI job deselects it by marker.
+pytestmark = pytest.mark.browser
 
 
 class BridgePinSyncProtocolTests(unittest.TestCase):
@@ -251,6 +261,9 @@ class _PlaywrightPinSyncAdapter:
                         ).evaluate("el => el.style.color")
                         # Layout property: proves the batch distinguishes a
                         # layout change from a style change (T-107 kinds).
+                        # spacing is collapsed by default since e37464b, so the
+                        # field only exists once its section is expanded.
+                        expand_inspector_section(page, "padding")
                         page.locator(
                             '#dpb-react-editor-root .dpb-react-field[data-property="padding"] input'
                         ).fill("21px")

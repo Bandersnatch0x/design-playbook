@@ -13,6 +13,7 @@ This drives the real sandbox path through ``review_session.collect_review``
 with a Playwright ``BrowserInteraction`` adapter. The same-origin direct-embed
 path covered by test_floor_frontend.py remains a separate frontend test.
 """
+import pytest
 import sys
 import tempfile
 import threading
@@ -28,7 +29,10 @@ if str(PACKAGE) not in sys.path:
 from design_playbook.mcp.preview import review_session  # noqa: E402
 from design_playbook.mcp.preview.i18n import default_options  # noqa: E402
 
-from playwright.sync_api import sync_playwright  # noqa: E402
+try:
+    from playwright.sync_api import sync_playwright  # noqa: E402
+except ImportError:  # pragma: no cover - only the browser tests need it
+    sync_playwright = None
 
 # Same directory; pytest's prepend import mode and direct `python <file>` runs
 # both put this directory on sys.path.
@@ -47,6 +51,9 @@ proto = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <button id="action" class="btn-primary">Submit</button>
 <p>some body text</p>
 </body></html>"""
+
+# This module drives a real browser: the no-chromium CI job deselects it by marker.
+pytestmark = pytest.mark.browser
 
 class _PlaywrightPinAdapter:
     """Drive the public review session and retain bridge observations."""

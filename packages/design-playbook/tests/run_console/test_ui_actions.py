@@ -17,6 +17,8 @@ tests) and the browser-only copy control (test_ui_browser.py copy tests).
 """
 from __future__ import annotations
 
+import pytest
+
 import json
 import sys
 import time
@@ -24,7 +26,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from playwright.sync_api import expect, sync_playwright
+try:
+    from playwright.sync_api import expect, sync_playwright  # noqa: E402
+except ImportError:  # pragma: no cover - only the browser tests need it
+    expect = None
+    sync_playwright = None
 
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
@@ -39,6 +45,9 @@ from design_playbook.mcp.run_console.snapshot_builder import SnapshotBuildError 
 _PLAYWRIGHT = None
 _BROWSER = None
 
+
+# This module drives a real browser: the no-chromium CI job deselects it by marker.
+pytestmark = pytest.mark.browser
 
 def setUpModule() -> None:
     global _PLAYWRIGHT, _BROWSER

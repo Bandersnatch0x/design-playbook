@@ -45,6 +45,8 @@ written to .scratch/ or the repository.
 """
 from __future__ import annotations
 
+import pytest
+
 import ast
 import contextlib
 import io
@@ -56,7 +58,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from playwright.sync_api import expect, sync_playwright
+try:
+    from playwright.sync_api import expect, sync_playwright  # noqa: E402
+except ImportError:  # pragma: no cover - only the browser tests need it
+    expect = None
+    sync_playwright = None
 
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
@@ -86,6 +92,9 @@ _BASE_TMP = None
 _BASE = None
 _ROOT_SEQ = itertools.count(1)
 
+
+# This module drives a real browser: the no-chromium CI job deselects it by marker.
+pytestmark = pytest.mark.browser
 
 def setUpModule() -> None:
     global _PLAYWRIGHT, _BROWSER, _BASE_TMP, _BASE

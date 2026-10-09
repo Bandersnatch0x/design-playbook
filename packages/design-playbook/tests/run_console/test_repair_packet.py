@@ -8,6 +8,8 @@ persisted run state.
 """
 from __future__ import annotations
 
+import pytest
+
 from copy import deepcopy
 import hashlib
 import json
@@ -16,7 +18,11 @@ import sys
 import unittest
 from pathlib import Path
 
-from playwright.sync_api import expect, sync_playwright
+try:
+    from playwright.sync_api import expect, sync_playwright  # noqa: E402
+except ImportError:  # pragma: no cover - only the browser tests need it
+    expect = None
+    sync_playwright = None
 
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
@@ -82,6 +88,9 @@ _COPY_LINE_SHAPE = re.compile(
 _PLAYWRIGHT = None
 _BROWSER = None
 
+
+# This module drives a real browser: the no-chromium CI job deselects it by marker.
+pytestmark = pytest.mark.browser
 
 def setUpModule() -> None:
     global _PLAYWRIGHT, _BROWSER

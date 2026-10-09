@@ -17,11 +17,18 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from host import ASSET_MANIFEST, source_files, source_hash, source_path as _source_path
-from presence import user_identity
 
 from design_playbook.mcp.preview.live_route import observe_visual_source, validate_live_route_url
 from design_playbook.mcp.preview.visual_batch import normalize_visual_batch
 from design_playbook.mcp.preview.visual_handoff import build_agent_handoff
+
+
+def user_identity(value):
+    """Local display identity for conflict diagnostics; not authentication."""
+    if (not isinstance(value, str) or not 1 <= len(value) <= 64
+            or not all(c.isascii() and (c.isalnum() or c in "_-") for c in value)):
+        raise ValueError("user identity must be 1-64 letters, digits, underscores or hyphens")
+    return value
 
 
 def _candidate_files(candidate: Path) -> dict[str, bytes]:

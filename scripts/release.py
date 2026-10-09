@@ -251,6 +251,27 @@ def check_adapter() -> None:
     print(stdout[-400:])
 
 
+AUTHORIZATION_ADR = "docs/adr/0045-external-evidence-spend-gate.md"
+
+
+def authorization_content_digest() -> str:
+    """SHA-256 over HEAD's tracked entries except the authorization record.
+
+    Hashing the commit id, or a tree that still holds the record blob, would
+    make an approved record mismatch itself the moment the decision lands:
+    committing it changes the very bytes being hashed. Excluding that one path
+    keeps the digest stable before and after the record is committed.
+    """
+    listing = git("ls-tree", "-r", "HEAD")
+    if not listing:
+        return ""
+    kept = [
+        line for line in listing.splitlines()
+        if line.split("\t", 1)[-1] != AUTHORIZATION_ADR
+    ]
+    return hashlib.sha256("\n".join(kept).encode("utf-8")).hexdigest()
+
+
 def check_release_authorization(tag: str) -> None:
     """Require the separate release decision retained by ADR-0045.
 
@@ -258,11 +279,12 @@ def check_release_authorization(tag: str) -> None:
     elapsed dates and --checks cannot authorize promotion. A maintainer records
     one fenced ``release-authorization`` JSON object there with the exact tag,
     decision="approved", authority="maintainer", and a nonempty reason.
-    Optional contentSha256 binds the decision to SHA-256 of the ASCII HEAD
-    commit ID (without a trailing newline), not to uncommitted working files.
+    Optional contentSha256 binds the decision to SHA-256 over HEAD's tracked
+    entries with this ADR excluded, so the record can authorize the tree it is
+    itself committed into.
     This validates a recorded decision, not the identity of its author.
     """
-    adr = ROOT / "docs/adr/0045-external-evidence-spend-gate.md"
+    adr = ROOT / AUTHORIZATION_ADR
     try:
         text = adr.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
@@ -297,14 +319,17 @@ def check_release_authorization(tag: str) -> None:
         if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
             fail("release-authorization-content-invalid: contentSha256 must be a lowercase SHA-256 digest")
             return
-        head = git("rev-parse", "HEAD")
-        if not head:
-            fail("release-authorization-content-unreadable: cannot resolve HEAD")
+        digest = authorization_content_digest()
+        if not digest:
+            fail("release-authorization-content-unreadable: cannot read the HEAD tree")
             return
-        if hashlib.sha256(head.encode("ascii")).hexdigest() != expected:
-            fail(f"release-authorization-content-mismatch: HEAD is not authorized for {tag}")
+        if digest != expected:
+            fail(
+                "release-authorization-content-mismatch: HEAD tree is not "
+                f"authorized for {tag}"
+            )
             return
-        ok(f"release-authorization-content-bound: HEAD {head}")
+        ok("release-authorization-content-bound: HEAD tree")
     else:
         print("  WARN  release-authorization-content-unbound: contentSha256 absent; approval is tag-only")
     ok(f"release-authorization-approved: ADR-0045 authorizes {tag}")
@@ -374,6 +399,11 @@ def main() -> int:
         help=f"comma-separated checks (default: {','.join(CHECK_ORDER)})",
     )
     args = parser.parse_args()
+    selected = list(args.checks)
+    if args.apply and "tree" not in selected:
+        # A tag is irreversible, so --apply always re-checks the working tree:
+        # --checks tag --apply must not promote an uncommitted authorization.
+        selected.insert(0, "tree")
 
     checks = {
         "tree": check_tree,
@@ -384,7 +414,7 @@ def main() -> int:
         "adapter": check_adapter,
     }
     tag = f"v{plugin_version()}"
-    for name in args.checks:
+    for name in selected:
         if name == "tag":
             tag = check_tag(apply=args.apply)
         else:

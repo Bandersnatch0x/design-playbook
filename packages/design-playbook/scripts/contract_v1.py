@@ -265,6 +265,7 @@ def promote_fields(
     for path, entry in fields.items():
         if not isinstance(entry, Mapping):
             raise ContractError(f"promote field {path} must be an object")
+        # Accepting a whole spec must not silently invent decided.
         if entry.get("resolution") == "decided":
             raise ContractError(
                 f"field {path}: promote_fields cannot create decided; "

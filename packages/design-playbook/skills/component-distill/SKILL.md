@@ -5,7 +5,7 @@ description: Cross-run component backflow. Derive the reusable components that h
 
 # component-distill
 
-Distill the recurring components out of iterated pages and propose promoting them into the project `DESIGN.md`. This is the **backflow** leg of the pipeline: `design-baseline` reads the baseline into pages once. This skill reads the pages back toward the baseline. It is **propose-only and user-gated**, it never writes `DESIGN.md` or any authority. Promotion is a user decision (governance log) executed only by `design_baseline.py promote` (ADR-0012).
+Distill the recurring components out of iterated pages and propose promoting them into the project `DESIGN.md`. This is the **backflow** leg of the pipeline: `design-baseline` reads the baseline into pages once. This skill reads the pages back toward the baseline. It is **propose-only and user-gated**; it never writes `DESIGN.md` or any authority. Promotion is a user decision (governance log) executed only by `design_baseline.py promote` (ADR-0012).
 
 This is a **cross-run** review, not a step of a single Design I/O run. It reads prior runs' `decision-report.md` files and emits a proposal artifact for user adjudication.
 
@@ -33,12 +33,12 @@ Candidate identity is currently the **referenced file path**. Multiple selectors
 
 1. **Discover runs.** Scan the project's `.scratch/<run>/` dirs for a `decision-report.md`. List dirs without one as skipped (they contribute 0 references). If fewer than 2 runs carry a decision report, report that count and stop, backflow needs history to mean anything.
 2. **Derive.** Build `reports_by_run` and call `candidate_view`. Read-only: parse, never mutate.
-3. **Render the proposal** (markdown, report header `component-distill/v1`) at the invocation-level output path the caller names (not a single run's `design-baseline/` dir, this is a cross-run artifact). Sections:
+3. **Render the proposal** (markdown, report header `component-distill/v1`) at the invocation-level output path the caller names (not a single run's `design-baseline/` dir; this is a cross-run artifact). Sections:
    - **Inclusion manifest**, `run | status` (included / skipped + reason).
    - **Qualifying candidates**, one block per candidate: component path, recurrence, distinct runs, distinct scenes, the contributing references (`run / role / action / scene`), and a **decision slot** for the user (`promote | reject | defer`).
    - **Below threshold**, candidates approaching the threshold with their gap list (e.g. `distinct_runs 2 < 3`), so the distance is visible.
    - **Coverage**, `runs_with_components` / `total_references`, so an empty corpus reads as "no qualifying candidates + why", never silence.
-4. **Adjudicate (user).** Present the proposal. The user marks each qualifying candidate. Record the decision as a governance event (agent may append `promotion_candidate_opened`; only the user's `promotion_decided` carries `promote`/`reject`/`defer`). In this local-file architecture, `decided_by: user` is an explicit attestation enforced by the read and write protocol, not cryptographic or OS-backed identity authentication. Processes with filesystem write access remain inside the local trust boundary. This skill stops at the proposal, it does not write `DESIGN.md`.
+4. **Adjudicate (user).** Present the proposal. The user marks each qualifying candidate. Record the decision as a governance event (agent may append `promotion_candidate_opened`; only the user's `promotion_decided` carries `promote`/`reject`/`defer`). In this local-file architecture, `decided_by: user` is an explicit attestation enforced by the read and write protocol, not cryptographic or OS-backed identity authentication. Processes with filesystem write access remain inside the local trust boundary. This skill stops at the proposal; it does not write `DESIGN.md`.
 5. **Promote through the write seam.** `design_baseline.py promote` re-derives the current project candidate view. It refuses components that no longer meet the threshold or lack a project-relative source file, even when an older user decision exists.
 
 **Done when:** all these conditions hold. The proposal artifact exists at the named output path. Qualifying candidates carry full provenance and a decision slot. Below-threshold signals carry their gaps. Nothing under the project `DESIGN.md` was touched.

@@ -10,6 +10,7 @@ structural semantics - no minimum length (ADR-0008). Also covers the v9
 chrome: status pill readiness, drawer collapse, abort popover (Scheme A'),
 Ctrl+Enter routing, and theme sync.
 """
+import pytest
 import sys
 import tempfile
 from pathlib import Path
@@ -24,12 +25,18 @@ if str(PACKAGE) not in sys.path:
 from design_playbook.mcp.preview import control as preview_control  # noqa: E402
 from design_playbook.mcp.preview.i18n import default_options  # noqa: E402
 
-from playwright.sync_api import sync_playwright  # noqa: E402
+try:
+    from playwright.sync_api import sync_playwright  # noqa: E402
+except ImportError:  # pragma: no cover - only the browser tests need it
+    sync_playwright = None
 
 # Same directory; pytest's prepend import mode and direct `python <file>` runs
 # both put this directory on sys.path.
 from tests.preview_e2e_helpers import dismiss_onboarding  # noqa: E402
 
+
+# This module drives a real browser: the no-chromium CI job deselects it by marker.
+pytestmark = pytest.mark.browser
 
 def wait_submit_navigated(page, timeout_ms=3000) -> bool:
     """Wait until the confirm POST has committed (URL left file:).

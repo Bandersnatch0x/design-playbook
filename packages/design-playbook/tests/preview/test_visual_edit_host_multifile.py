@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 import threading
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -369,3 +369,77 @@ def test_incomplete_or_invalid_lock_is_not_stolen(host_case, marker) -> None:
     assert diagnostic["lockOwnerError"]
     assert lock.read_bytes() == marker
     assert read_source(case) == case.before
+
+
+@contextmanager
+def waiting_applier(argv):
+    process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, text=True, encoding="utf-8")
+    output = queue.Queue()
+    lines = []
+
+    def read():
+        for line in process.stdout:
+            lines.append(line)
+            output.put(line)
+        output.put(None)
+
+    reader = threading.Thread(target=read, daemon=True)
+    reader.start()
+    try:
+        while True:
+            line = output.get(timeout=20)
+            assert line is not None, "first applier exited before confirmation"
+            if line.startswith("Type exactly: "):
+                yield process, line.removeprefix("Type exactly: ")
+                break
+    finally:
+        if process.poll() is None:
+            process.stdin.close()  # EOF withdraws approval and releases only its own marker.
+            process.wait(timeout=10)
+        reader.join(timeout=5)
+        assert not reader.is_alive()
+        print("FIRST", process.returncode, "".join(lines), process.stderr.read())
+        process.stdout.close()
+        process.stderr.close()
+        if not process.stdin.closed:
+            process.stdin.close()
+
+
+def test_named_applier_conflict_then_owner_disconnect_allows_apply(host_case):
+    case = host_case
+    argv = [sys.executable, "-X", "utf8", str(FIXTURE / "applier.py"), "apply",
+            "--root", str(case.root), "--handoff", str(case.handoff),
+            "--candidate", str(case.candidate), "--route-url", case.route, "--user-id"]
+    lock = case.root.parent / ("." + case.root.name + ".applier.lock")
+    with waiting_applier([*argv, "alice"]) as (first, confirmation):
+        marker = lock.read_bytes()
+        owner = json.loads(marker)
+        assert owner["userId"] == "alice"
+        assert owner["pid"] == first.pid
+        assert owner["selectors"] == ["#next-read", "#queue-title"]
+        second = subprocess.run([*argv, "bob"], input=confirmation, capture_output=True,
+                                text=True, encoding="utf-8", timeout=20)
+        print("CONFLICT", second.returncode, second.stdout, second.stderr)
+        assert second.returncode == 2
+        error = json.loads(second.stderr.removeprefix("REFUSED: "))
+        assert error["phase"] == "lock"
+        assert error["requestedBy"] == "bob"
+        assert error["lockOwner"] == owner
+        assert error["pluginWritesSource"] is False
+        assert error["conflicts"] == owner["pendingEdits"]
+        assert any(e["locator"] == "#next-read" and e["property"] == "padding"
+                   and e["newValue"] == "24px" for e in error["conflicts"])
+        assert all(text in error["error"] for text in ("alice", "pending edits", "#next-read", "padding", "24px"))
+        assert lock.read_bytes() == marker
+        assert read_source(case) == case.before
+        assert first.poll() is None
+    assert first.returncode == 2
+    assert not lock.exists()
+    survivor = subprocess.run([*argv, "bob"], input=confirmation, capture_output=True,
+                              text=True, encoding="utf-8", timeout=20)
+    print("SURVIVOR APPLY", survivor.returncode, survivor.stdout, survivor.stderr)
+    assert survivor.returncode == 0
+    assert json.loads(survivor.stdout.splitlines()[-1])["pluginWritesSource"] is False
+    assert read_source(case) == case.contents
+    assert not lock.exists()

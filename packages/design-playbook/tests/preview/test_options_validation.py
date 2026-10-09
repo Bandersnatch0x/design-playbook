@@ -7,6 +7,7 @@ import socket
 import sys
 import unittest
 from http.server import BaseHTTPRequestHandler
+from unittest.mock import patch
 from pathlib import Path
 
 PACKAGE = Path(__file__).resolve().parents[2]
@@ -113,6 +114,38 @@ class PreviewPortTests(unittest.TestCase):
         finally:
             os.environ.pop("DESIGN_PLAYBOOK_PREVIEW_PORT", None)
             blocker.close()
+
+    def test_ephemeral_fallback_skips_a_browser_blocked_port(self) -> None:
+        # Chromium refuses net::ERR_UNSAFE_PORT ports, so a round bound to one
+        # cannot open; the fallback has to rebind until it gets a usable port.
+        ports = iter([sorted(review_session._BROWSER_BLOCKED_PORTS)[0], 51000])
+        made = []
+        calls = {"n": 0}
+
+        class _FakeServer:
+            def __init__(self, address):
+                self.server_address = address
+                self.closed = False
+
+            def server_close(self) -> None:
+                self.closed = True
+
+        def _fake_bind(address, handler):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("configured port is taken")
+            server = _FakeServer(("127.0.0.1", next(ports)))
+            made.append(server)
+            return server
+
+        with patch.object(review_session, "_PreviewHTTPServer", _fake_bind):
+            server = _bind_preview_server(BaseHTTPRequestHandler)
+        self.assertEqual(server.server_address[1], 51000)
+        self.assertTrue(made[0].closed, "the blocked port must be released")
+
+    def test_browser_blocked_port_list_covers_the_observed_port(self) -> None:
+        # 6566 is the port a real run could not open (net::ERR_UNSAFE_PORT).
+        self.assertIn(6566, review_session._BROWSER_BLOCKED_PORTS)
 
 
 if __name__ == "__main__":

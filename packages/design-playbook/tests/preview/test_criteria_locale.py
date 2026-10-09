@@ -6,6 +6,8 @@ keep rendering the text it was given in both locales.
 """
 from __future__ import annotations
 
+import pytest
+
 import re
 import sys
 import tempfile
@@ -64,6 +66,8 @@ def test_cards_carry_both_locales_and_the_primary_title_attribute() -> None:
     assert 'data-criterion-title="Interaction feels direct"' in html
 
 
+# This module drives a real browser: the no-chromium CI job deselects it by marker.
+@pytest.mark.browser
 def test_criteria_follow_the_one_existing_language_switcher() -> None:
     from playwright.sync_api import sync_playwright
 

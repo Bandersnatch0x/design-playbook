@@ -19,6 +19,7 @@ import math
 import os
 import re
 import secrets
+import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer as HTTPServer
 from pathlib import Path
@@ -86,6 +87,21 @@ class _DecisionSession:
     @property
     def locked(self) -> bool:
         return self._locked
+
+    def proven(self, posted_round: int, posted_token: str | None) -> bool:
+        """Whether this POST carries the form's one-time token; never consumes.
+
+        Reading the body is free, but acting on it is not: the handler only
+        fetches the live route for a POST that proves trusted-form origin, so an
+        unauthenticated fetch cannot make the server do outbound work.
+        """
+        with self._lock:
+            return (
+                bool(posted_token)
+                and posted_round == self.round_n
+                and not self._locked
+                and secrets.compare_digest(posted_token, self._token)
+            )
 
     def validate(self, posted_round: int, posted_token: str | None) -> bool:
         # LOW-1 (secure-ship-0.4.4): the check-then-set on ``_locked`` must
@@ -423,6 +439,17 @@ def _build_parent_page(
 
 DEFAULT_PREVIEW_PORT = 4619
 
+# Chromium refuses to navigate to these (net::ERR_UNSAFE_PORT), so an ephemeral
+# port that lands here leaves the review round impossible to open.
+_BROWSER_BLOCKED_PORTS = frozenset({
+    1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79,
+    87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137,
+    139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540,
+    548, 554, 556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723, 2049,
+    3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679,
+    6697, 10080,
+})
+
 
 class _PreviewHTTPServer(HTTPServer):
     """Preview server whose bind is exclusive where reuse would alias a live peer.
@@ -441,6 +468,14 @@ class _PreviewHTTPServer(HTTPServer):
 
     allow_reuse_address = os.name != "nt"
 
+    def server_bind(self) -> None:
+        if os.name == "nt":
+            # Without reuse the bind is already strict; EXCLUSIVEADDRUSE also
+            # stops another local process that sets SO_REUSEADDR from binding
+            # the port this preview is listening on (Windows-only option).
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
 
 def _bind_preview_server(handler: type) -> HTTPServer:
     """Bind the preview HTTP server (fixed default port, ephemeral fallback).
@@ -454,7 +489,12 @@ def _bind_preview_server(handler: type) -> HTTPServer:
     try:
         return _PreviewHTTPServer(("127.0.0.1", port), handler)
     except OSError:
-        return _PreviewHTTPServer(("127.0.0.1", 0), handler)
+        for _ in range(20):
+            server = _PreviewHTTPServer(("127.0.0.1", 0), handler)
+            if server.server_address[1] not in _BROWSER_BLOCKED_PORTS:
+                return server
+            server.server_close()
+        raise RuntimeError("no browser-safe ephemeral port for the preview server")
 
 
 def collect_review(
@@ -491,8 +531,15 @@ def collect_review(
     prototype_html = raw_bytes.decode("utf-8")
     result["prototype_html_hash"] = prototype_html_hash
 
+    # Hash the collector observed live for the accepted batch. The transaction
+    # records the handoff against this instead of fetching the route a second
+    # time microseconds later, which could only disagree by racing itself.
+    visual_source_hash = ""
+
     def with_prototype_hash(submission: dict[str, Any]) -> dict[str, Any]:
         submission["prototype_html_hash"] = prototype_html_hash
+        if visual_source_hash:
+            submission["visual_source_hash"] = visual_source_hash
         return submission
 
     control = _build_control(round_n, summary.strip(), options, criteria=criteria)
@@ -528,7 +575,7 @@ def collect_review(
             self.wfile.write(data)
 
         def do_POST(self) -> None:  # noqa: N802
-            nonlocal result
+            nonlocal result, visual_source_hash
             length = int(self.headers.get("Content-Length", "0"))
             body = self.rfile.read(length).decode("utf-8")
             form = parse_qs(body)
@@ -549,25 +596,36 @@ def collect_review(
             criteria_review = _parse_criteria_review(
                 (form.get("criteria_json") or ["[]"])[0]
             )
+            posted_token = (form.get("dpb_token") or [None])[0]
+            # Only a POST that proves trusted-form origin may make this server do
+            # outbound work: observe_visual_source fetches the live route, so an
+            # unauthenticated POST must not reach it (a forged cross-origin fetch
+            # could otherwise make every preview pay for a route round trip).
+            proven = session.proven(posted_round, posted_token)
             visual_edits: dict[str, Any] = normalize_visual_batch(
                 {}, source_hash=prototype_html_hash
             )
             visual_edits_error = ""
-            try:
-                visual_edits = _parse_visual_edits(
-                    (form.get("visual_edits_json") or [""])[0],
-                    observe_visual_source(prototype, live_route_url),
-                    live_route_url,
-                )
-            except (VisualBatchError, OSError) as exc:
-                visual_edits_error = str(exc)
-            # An unusable anchor list must fail closed BEFORE the one-time token
-            # is spent. validate() consumes the session on a valid token, so
-            # checking anchors afterwards would burn the round and leave the
+            if proven and not anchors_error:
+                try:
+                    visual_source_hash = observe_visual_source(prototype, live_route_url)
+                    visual_edits = _parse_visual_edits(
+                        (form.get("visual_edits_json") or [""])[0],
+                        visual_source_hash,
+                        live_route_url,
+                    )
+                except (VisualBatchError, OSError) as exc:
+                    visual_edits_error = str(exc)
+            # An unusable anchor list or edit batch must fail closed BEFORE the
+            # one-time token is spent. validate() consumes the session on a valid
+            # token, so rejecting afterwards would burn the round and leave the
             # reviewer with no way to retry from the real form.
-            posted_token = (form.get("dpb_token") or [None])[0]
-            validated = False if anchors_error else session.validate(posted_round, posted_token)
-            if anchors_error:
+            validated = (
+                False
+                if anchors_error or visual_edits_error
+                else session.validate(posted_round, posted_token)
+            )
+            if anchors_error or visual_edits_error:
                 if not session.locked:
                     result = with_prototype_hash(
                         {
@@ -579,8 +637,8 @@ def collect_review(
                             "visual_edits": visual_edits,
                             "visual_edits_error": visual_edits_error,
                             "rejected": True,
-                            "rejection": anchors_error,
-                            "floor_failure": anchors_error,
+                            "rejection": anchors_error or visual_edits_error,
+                            "floor_failure": anchors_error or visual_edits_error,
                         }
                     )
             elif not validated:
@@ -641,7 +699,12 @@ def collect_review(
             # done.set() here let one forged POST abort every preview before
             # the user clicked anything. Fail-closed semantics above are
             # unchanged — only session termination is now gated.
-            if validated:
+            if validated or (proven and visual_edits_error):
+                # A refused edit batch ends the round: the source moved under the
+                # review, so no retry can succeed and the caller must receive the
+                # structured refusal. The token stays unspent anyway, so nothing
+                # about the round was consumed. An unusable anchor list does NOT
+                # end it: that one the reviewer can fix and resubmit.
                 done.set()
 
     server = _bind_preview_server(Handler)

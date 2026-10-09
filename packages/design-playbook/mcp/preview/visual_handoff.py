@@ -33,20 +33,3 @@ def build_agent_handoff(
         "nextAction": "coding-agent-review-diff",
         "writesSource": False,
     }
-
-
-def confirm_agent_handoff(
-    handoff: dict[str, Any], *, current_source_hash: str
-) -> dict[str, Any]:
-    """Record confirmation intent only after fresh source hash validation."""
-    if not isinstance(handoff, dict):
-        raise VisualHandoffError("visual handoff must be an object")
-    if handoff.get("sourceHash") != current_source_hash:
-        raise VisualHandoffError("visual handoff is stale")
-    if handoff.get("status") != "pending-review":
-        raise VisualHandoffError("visual handoff is not pending review")
-    confirmed = dict(handoff)
-    confirmed["status"] = "confirmed-for-agent"
-    confirmed["requiresUserConfirmation"] = False
-    confirmed["writesSource"] = False
-    return confirmed

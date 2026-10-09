@@ -219,6 +219,8 @@ class RunConsoleSession:
             self._built = False
             self._document = None
             self._registry = None
+            # Keep this call indirect so callers and tests that replace the
+            # public build seam still observe the rebuild attempt.
             return self.build_snapshot()
 
     def resolve_source(

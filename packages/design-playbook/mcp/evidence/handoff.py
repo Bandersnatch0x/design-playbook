@@ -49,6 +49,9 @@ from design_playbook.mcp.evidence.disclosure import (
     disclosure_json,
 )
 
+# A gate whose precondition never occurred produces no finding: "not
+# triggered" must not be read as "passed". G7 additionally needs contract
+# paths the handoff does not wire, so it stays not-applicable until they are.
 CONDITIONAL_GATES: tuple[int, ...] = (5, 6, 7, 8)
 
 _GATE_RULE = re.compile(r"^G([1-8])(?:\.|$)")

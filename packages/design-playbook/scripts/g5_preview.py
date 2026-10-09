@@ -180,6 +180,10 @@ def check_preview(
     ledger_rounds = ledger.rounds_for(preview_dir)
     if not snapshot.occurred and not ledger_rounds:
         return []
+    # Union check: every registered round must still have on-disk artifacts. A
+    # round registered in the run-external ledger but absent from preview/
+    # means records were moved, renamed or deleted, an observable INVALID and
+    # never a pass.
     orphans = [r for r in ledger_rounds if r not in snapshot.rounds]
     if orphans:
         return [finding(

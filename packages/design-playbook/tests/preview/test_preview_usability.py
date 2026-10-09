@@ -7,13 +7,19 @@ textarea; this file keeps the same lockstep patterns against the new DOM.
 """
 from __future__ import annotations
 
+import pytest
+
 import json
 import re
 import sys
 from pathlib import Path
 
-import pytest
-from playwright.sync_api import expect, sync_playwright
+
+try:
+    from playwright.sync_api import expect, sync_playwright  # noqa: E402
+except ImportError:  # pragma: no cover - only the browser tests need it
+    expect = None
+    sync_playwright = None
 
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
@@ -35,6 +41,9 @@ from design_playbook.mcp.preview.review_session import _build_parent_page  # noq
 UI_WAIT = 20000
 
 
+
+# This module drives a real browser: the no-chromium CI job deselects it by marker.
+pytestmark = pytest.mark.browser
 
 @pytest.fixture(scope="module")
 def browser():
@@ -478,6 +487,34 @@ def test_english_header_actions_remain_inside_window(page, tmp_path, width):
     assert page.locator("#dpb-btn-approve span#dpb-approve-label").evaluate("el => { const r = document.createRange(); r.selectNodeContents(el); return r.getClientRects().length; }") == 1
 
 
+def test_frame_cannot_forge_a_decision_shortcut(page, tmp_path):
+    # The sandboxed prototype shares the iframe window, so a shortcut that
+    # carries a decision must never cross the frame boundary. Shift+Escape is
+    # Skip and Ctrl/Cmd+Enter is Approve; both consume the one-time token.
+    prototype = '<html lang="en"><head><title>t</title></head><body>Author content</body></html>'
+    target = tmp_path / "parent.html"
+    target.write_text(_build_parent_page(prototype, _build_control(1, "Review", ["确认通过", "需要修改"])), encoding="utf-8")
+    page.goto(target.as_uri())
+    dismiss_intro(page)
+    forgeries = page.evaluate("""() => {
+      window.__dpbSubmits = 0;
+      document.addEventListener('submit', () => { window.__dpbSubmits += 1; }, true);
+      const frame = document.querySelector('iframe.dpb-proto-frame');
+      const sent = [];
+      for (const shortcut of [{key: 'Escape', shiftKey: true},
+                              {key: 'Enter', ctrlKey: true, metaKey: true}]) {
+        const event = new MessageEvent('message', { data: {dpbReviewShortcut: shortcut },
+          source: frame.contentWindow });
+        sent.push(event.source === frame.contentWindow);
+        window.dispatchEvent(event);
+      }
+      return sent;
+    }""")
+    assert forgeries == [True, True], "the forgery must reach the review shell"
+    page.wait_for_timeout(300)
+    assert page.url == target.as_uri(), "a forged shortcut submitted the review form"
+    assert page.evaluate("() => window.__dpbSubmits") == 0
+
 def test_compact_workspace_keeps_canvas_usable_and_rail_reachable(page, tmp_path):
     # One rail owns criteria AND annotations, so the canvas keeps its
     # width even on compact screens; the rail stays collapsible.
@@ -500,7 +537,7 @@ def test_compact_workspace_keeps_canvas_usable_and_rail_reachable(page, tmp_path
 
 
 def test_english_approve_pills_stay_single_line(browser, tmp_path, monkeypatch):
-    # OBS-1 (T-087): the EN shell renders longer decision labels than zh-CN, so
+    # The EN shell renders longer decision labels than zh-CN, so
     # the Approve pill folded onto two lines inside a fixed-height button and
     # its "Ctrl/⌘↵" badge lost glyphs at the rail width. Same contract must hold
     # in EN at the RC window size.

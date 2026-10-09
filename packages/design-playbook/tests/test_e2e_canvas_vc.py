@@ -14,6 +14,8 @@ persistence across reload (file:// scenarios, mirroring test_floor_frontend).
 """
 from __future__ import annotations
 
+import pytest
+
 import json
 import sys
 import tempfile
@@ -57,6 +59,9 @@ PROTO = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <button id="act">Do it</button>
 </body></html>"""
 
+
+# This module drives a real browser: the no-chromium CI job deselects it by marker.
+pytestmark = pytest.mark.browser
 
 class _PlaywrightReviewAdapter:
     """BrowserInteraction adapter that drives the real review interface."""

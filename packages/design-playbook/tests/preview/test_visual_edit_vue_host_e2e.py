@@ -1,6 +1,8 @@
 """Real offline Vue 3 rendering inside the plugin live-route bridge, not a proxy."""
 from __future__ import annotations
 
+import pytest
+
 import importlib.util
 import json
 import os
@@ -15,7 +17,11 @@ FIXTURE = PACKAGE / "tests" / "fixtures" / "visual-edit-vue-host"
 for directory in (PACKAGE, PACKAGE / "tests"):
     sys.path.insert(0, str(directory))
 
-from playwright.sync_api import expect, sync_playwright  # noqa: E402
+try:
+    from playwright.sync_api import expect, sync_playwright  # noqa: E402
+except ImportError:  # pragma: no cover - only the browser tests need it
+    expect = None
+    sync_playwright = None
 from preview_e2e_helpers import dismiss_onboarding  # noqa: E402
 
 from design_playbook.mcp.preview import review_session  # noqa: E402
@@ -28,6 +34,9 @@ spec.loader.exec_module(vue_host)
 
 COLOR = "rgb(40, 80, 120)"
 
+
+# This module drives a real browser: the no-chromium CI job deselects it by marker.
+pytestmark = pytest.mark.browser
 
 class VueReviewBrowser:
     def __init__(self, route: str):

@@ -25,6 +25,8 @@ from pathlib import Path
 from .conftest import expand_inspector_section
 from collections.abc import Callable
 
+import pytest
+
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
@@ -43,7 +45,6 @@ from design_playbook.mcp.preview.visual_batch import (  # noqa: E402
 from design_playbook.mcp.preview.visual_handoff import (  # noqa: E402
     VisualHandoffError,
     build_agent_handoff,
-    confirm_agent_handoff,
 )
 
 try:  # chromium is required only for the browser half
@@ -57,6 +58,9 @@ PROTOTYPE = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <p class="row">one</p>
 </body></html>"""
 
+
+# This module drives a real browser: the no-chromium CI job deselects it by marker.
+pytestmark = pytest.mark.browser
 
 class _PlaywrightEditAdapter:
     """Drive one review session: pick an element, edit it, then approve."""
@@ -348,16 +352,15 @@ class VisualEditNegativeTests(unittest.TestCase):
         with self.assertRaises(VisualBatchError):
             validate_batch_current(batch, "artifact-v1")
 
-    def test_unconfirmed_handoff_never_authorizes_a_write(self) -> None:
+    def test_handoff_is_review_only_and_never_authorizes_a_write(self) -> None:
         handoff = build_agent_handoff(self._batch(), current_source_hash="artifact-v1")
+        self.assertEqual(handoff["status"], "pending-review")
+        self.assertTrue(handoff["requiresUserConfirmation"])
         self.assertFalse(handoff["writesSource"])
-        confirmed = confirm_agent_handoff(handoff, current_source_hash="artifact-v1")
-        self.assertFalse(confirmed["writesSource"])
 
-    def test_stale_confirmation_is_rejected(self) -> None:
-        handoff = build_agent_handoff(self._batch(), current_source_hash="artifact-v1")
+    def test_a_stale_source_refuses_the_handoff(self) -> None:
         with self.assertRaises(VisualHandoffError):
-            confirm_agent_handoff(handoff, current_source_hash="artifact-v2")
+            build_agent_handoff(self._batch(), current_source_hash="artifact-v2")
 
     def test_unsupported_schema_version_is_rejected(self) -> None:
         with self.assertRaises(VisualBatchError):
@@ -524,6 +527,48 @@ class VisualEditorRegressionTests(unittest.TestCase):
         self.assertEqual(len(self.edits()), 1)
         self.assertEqual(self.frame.locator("#a").evaluate("el => el.style.backgroundColor"), "red")
         self.assertTrue(self.page.locator(".dpb-react-diagnostic").inner_text())
+
+    def test_a_rejected_edit_does_not_lock_the_round(self) -> None:
+        """One refused value must not wedge every later drain.
+
+        A rejection is terminal for its request id, but the editor kept the
+        entry in its unacked table, so every later drain answered
+        unresolved_edits and only Abort stayed usable.
+        """
+        self.open_editor()
+        self.select("#a")
+        field = self.page.locator('[data-property="background-color"] input')
+        field.fill("not-a-color")
+        self.page.wait_for_timeout(400)
+        self.assertTrue(self.page.locator(".dpb-react-diagnostic").inner_text())
+        field.fill("red")
+        self.page.wait_for_timeout(400)
+        self.assertEqual(len(self.edits()), 1)
+        drain = self.page.evaluate("() => window.dpbDrainVisualEdits()")
+        self.assertEqual(drain["ok"], True, drain)
+
+    def test_a_late_heartbeat_tick_is_not_a_disconnect(self) -> None:
+        """A throttled ping timer must not freeze the round as stale.
+
+        The heartbeat compared wall clock, so one late tick - what a background
+        tab always produces - read a healthy bridge as dead. It marked the round
+        stale while edits were pending and nothing ever cleared it.
+        """
+        self.open_editor()
+        self.select("#a")
+        self.page.locator('[data-property="background-color"] input').fill("red")
+        self.page.wait_for_timeout(400)
+        self.assertEqual(len(self.edits()), 1)
+        self.page.evaluate(
+            "() => { const real = Date.now.bind(Date); Date.now = () => real() + 30000; }"
+        )
+        self.page.wait_for_timeout(3000)
+        self.assertEqual(
+            self.page.locator(".dpb-react-diagnostic").get_attribute("data-stale"), "false"
+        )
+        self.assertFalse(self.page.evaluate("() => window.dpbVisualEditorState().stale"))
+        drain = self.page.evaluate("() => window.dpbDrainVisualEdits()")
+        self.assertEqual(drain["ok"], True, drain)
 
     def test_paused_color_typing_keeps_focus_across_debounce(self) -> None:
         self.open_editor()

@@ -160,7 +160,7 @@ python <plugin>/scripts/run_profile.py route \
 
 `--intent` and `--consequence` are required. The rest of the facts are the
 boolean and count flags listed by `run_profile.py route --help`. The router takes
-normalized facts only, it has no repository-path or request-text argument, so
+normalized facts only; it has no repository-path or request-text argument, so
 do not invent one.
 
 - `no-run`: respond directly. Do not create `.scratch/<run>/`, `plan.md`, or a
@@ -306,7 +306,7 @@ Smoke: the decision report names scene, density, template, regions, components, 
 Coding has not started before that report exists.
 For native desktop, it also consumes the declared render-surface seam.
 
-`ui-picker` stops at the decision report, it has no preview step.
+`ui-picker` stops at the decision report; it has no preview step.
 
 ### 6. preview* (optional external MCP adapter)
 

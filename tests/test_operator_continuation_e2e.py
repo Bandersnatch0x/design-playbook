@@ -6,6 +6,8 @@ Missing Chromium is an error, not a successful skip.
 """
 from __future__ import annotations
 
+import pytest
+
 import hashlib
 import json
 import os
@@ -19,7 +21,11 @@ import zipfile
 from contextlib import contextmanager
 from pathlib import Path
 
-from playwright.sync_api import expect, sync_playwright
+try:
+    from playwright.sync_api import expect, sync_playwright  # noqa: E402
+except ImportError:  # pragma: no cover - only the browser tests need it
+    expect = None
+    sync_playwright = None
 
 ROOT = Path(__file__).resolve().parents[1]
 PKG = ROOT / "packages" / "design-playbook"
@@ -38,6 +44,9 @@ CAPTURE_CODE = (
     "print(json.dumps(execute_capture_plan(json.load(sys.stdin))))"
 )
 
+
+# This module drives a real browser: the no-chromium CI job deselects it by marker.
+pytestmark = pytest.mark.browser
 
 def _command(
     project: Path, *args: str, data: dict | None = None,

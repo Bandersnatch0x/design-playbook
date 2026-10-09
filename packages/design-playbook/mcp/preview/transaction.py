@@ -27,7 +27,9 @@ from design_playbook.mcp.preview.control import _format_feedback
 from design_playbook.mcp.preview.i18n import CONFIRM_LABELS, SKIP_LABELS
 from design_playbook.mcp.preview.live_route import observe_visual_source, validate_live_route_url
 from design_playbook.mcp.preview.visual_handoff import build_agent_handoff
-from design_playbook.mcp.preview.visual_batch import has_effective_visual_edits
+from design_playbook.mcp.preview.visual_batch import (
+    has_effective_visual_edits,
+)
 from design_playbook.mcp.preview.integrity import (
     compute_binding_digest,
     confirm_name,
@@ -138,6 +140,16 @@ def _ensure_prototype(path_arg: str | None, html: str | None, round_n: int,
     return prototype
 
 
+def _self_check(condition: bool, message: str) -> None:
+    """Self-check assertion that still fires under `python -O`.
+
+    A bare `assert` is compiled out under -O, so a self-check built from one
+    reports success on a broken floor without ever running the comparison.
+    """
+    if not condition:
+        raise AssertionError(message)
+
+
 def self_check_floor() -> None:
     """ADR-0008 floor branch logic self-check (ponytail: one runnable check)."""
     cases = [
@@ -164,7 +176,7 @@ def self_check_floor() -> None:
     ]
     for label, fb, anc, want in cases:
         got = evaluate_feedback_floor(fb, anc).passed
-        assert got == want, f"{label}: want {want}, got {got}"
+        _self_check(got == want, f"{label}: want {want}, got {got}")
     # The 2026-10-08 amendment added a third trigger, a validated visual batch
     # whose net effect changes a value. Every case above calls the floor with
     # has_visual_edits defaulted to False, so the branch the amendment added was
@@ -179,7 +191,7 @@ def self_check_floor() -> None:
     ]
     for label, fb, anc, want in edit_cases:
         got = evaluate_feedback_floor(fb, anc, has_visual_edits=True).passed
-        assert got == want, f"{label} (with edits): want {want}, got {got}"
+        _self_check(got == want, f"{label} (with edits): want {want}, got {got}")
     # The flag itself is decided elsewhere, so the substance of the amendment is
     # only checked if that decision is checked. It is passed as a literal above.
     from design_playbook.mcp.preview.visual_batch import normalize_visual_batch
@@ -203,10 +215,39 @@ def self_check_floor() -> None:
             {"locator": "#a", "property": "color", "oldValue": "red", "newValue": ""},
             {"locator": "#a", "property": "padding", "oldValue": "8px", "newValue": "16px"},
         ], True),
+        # 2026-10-09: only the parent shell's own edit is evidence. The
+        # prototype shares the bridge window, so what it reports is not proof a
+        # human reviewed anything, and neither is an agent's own tool call.
+        ("a frame gesture alone does not count",
+         [{"source": "frame", "locator": "#a", "property": "color",
+           "oldValue": "", "newValue": "red"}], False),
+        ("an agent tool edit alone does not count",
+         [{"source": "agent", "locator": "#a", "property": "color",
+           "oldValue": "", "newValue": "red"}], False),
+        ("a case-only CSS value does not count",
+         [{"kind": "style", "locator": "#a", "property": "color",
+           "oldValue": "red", "newValue": "RED"}], False),
+        ("a kind-only round trip does not count", [
+            {"kind": "style", "locator": "#a", "property": "padding",
+             "oldValue": "8px", "newValue": "16px"},
+            {"kind": "layout", "locator": "#a", "property": "padding",
+             "oldValue": "16px", "newValue": "8px"},
+        ], False),
     ]:
+        # These cases are about the net effect; the provenance cases declare
+        # their own source, so the rest default to the reviewer's own shell.
+        edits = [{"source": "shell", **edit} for edit in edits]
         batch = normalize_visual_batch({"edits": edits}, source_hash="self-check")
         got = has_effective_visual_edits(batch)
-        assert got == want, f"{label}: want {want}, got {got}"
+        _self_check(got == want, f"{label}: want {want}, got {got}")
+    # An edit with no declared provenance is not attributable, and the shell
+    # always declares one, so it cannot be evidence either. Asserted outside the
+    # loop because that loop defaults a missing source to the shell.
+    unattributed = normalize_visual_batch(
+        {"edits": [{"kind": "style", "locator": "#a", "property": "color",
+                    "oldValue": "", "newValue": "red"}]}, source_hash="self-check")
+    _self_check(not has_effective_visual_edits(unattributed),
+                "an edit with no declared source must not count")
     print("FLOOR SELF-CHECK PASSED")
 
 
@@ -614,6 +655,7 @@ def load_entry(path: Path) -> dict[str, Any] | None:
                 prototype_html_hash=binding["prototype_html_hash"],
                 report_ref=binding["report_ref"], summary=binding["summary"],
                 options=binding["options"],
+                route_url=binding.get("route_url", ""),
             )
             binding_valid = binding == expected
         except (KeyError, TypeError):
@@ -873,6 +915,7 @@ def run_preview_transaction(
     binding = compute_binding_digest(
         round_n=round_n, prototype_html_hash=prototype_hash,
         report_ref=report_ref, summary=summary, options=options,
+        route_url=live_route_url,
     )
     entry_path = preview_dir / decision_name(round_n)
     existing = load_entry(entry_path)
@@ -954,11 +997,9 @@ def _run_locked(
 
     existing = load_entry(entry_path)
     if existing is not None:
-        prior_batch = existing["outcome"].get("visual_edits") or {}
-        if prior_batch.get("routeUrl", "") != live_route_url or (live_route_url and
-                prior_batch.get("sourceHash") != observe_visual_source(_prototype, live_route_url)):
-            raise TransactionConflict("live route binding changed; use next round", retryable=False,
-                                      round_n=round_n, decision_id=decision_id, artifact=str(entry_path))
+        # The bound live-route URL is inside the digest, so a replay of a
+        # committed round does not touch the network: an unchanged request
+        # returns the record and a changed one is a binding conflict.
         if existing["binding"].get("digest") != binding["digest"]:
             raise TransactionConflict(
                 f"round binding differs from durable decision; use next round: {round_n}",
@@ -997,7 +1038,13 @@ def _run_locked(
         try:
             visual_handoff = build_agent_handoff(
                 visual_edits,
-                current_source_hash=observe_visual_source(prototype, live_route_url),
+                # The browser collector validated the batch against a source
+                # it observed live; re-observing here would be a second fetch
+                # inside the same round and could only race itself.
+                current_source_hash=(
+                    str(submission.get("visual_source_hash") or "")
+                    or observe_visual_source(prototype, live_route_url)
+                ),
                 route_url=live_route_url,
             )
         except (ValueError, OSError) as exc:

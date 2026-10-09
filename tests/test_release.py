@@ -32,6 +32,24 @@ def _current_version() -> str:
 CURRENT_VERSION = _current_version()
 CURRENT_TAG = f"v{CURRENT_VERSION}"
 CURRENT_NOTES_REL = f"docs/releases/{CURRENT_TAG}.md"
+AUTHORIZATION_REL = "docs/adr/0045-external-evidence-spend-gate.md"
+
+
+def _authorization_content_digest(root: Path) -> str:
+    """Mirror release.py: SHA-256 over HEAD's tracked entries minus the record.
+
+    The record has to change when the decision is committed, so hashing it (or
+    the commit id) would make an approved record mismatch itself. Keeping the
+    same recipe here pins that contract from the outside.
+    """
+    listed = _run("git", "ls-tree", "-r", "HEAD", cwd=root)
+    if listed.returncode != 0:
+        raise AssertionError(listed.stderr)
+    kept = [
+        line for line in listed.stdout.splitlines()
+        if line.split("\t", 1)[-1] != AUTHORIZATION_REL
+    ]
+    return hashlib.sha256("\n".join(kept).encode("utf-8")).hexdigest()
 
 
 def _run(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -186,10 +204,10 @@ class ReleaseGateTests(unittest.TestCase):
         self.assert_no_tag()
 
     def test_authorization_matching_content_sha256_passes(self) -> None:
-        head = _run("git", "rev-parse", "HEAD", cwd=self.root)
-        self.assertEqual(head.returncode, 0, head.stderr)
-        self.write_authorization({**self.record, "contentSha256": hashlib.sha256(
-            head.stdout.strip().encode("ascii")).hexdigest()})
+        self.write_authorization({
+            **self.record,
+            "contentSha256": _authorization_content_digest(self.root),
+        })
         result = self.release("--checks", "tag")
         print(result.stdout)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -246,6 +264,35 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("release-authorization-invalid", result.stdout)
         self.assert_no_tag()
+
+    def test_tag_only_apply_still_requires_a_clean_tree(self) -> None:
+        # The bypass this closes: --checks tag --apply used to skip the tree
+        # check, so an uncommitted authorization record could cut a release tag.
+        (self.root / "untracked.txt").write_text("not released\n", encoding="utf-8")
+
+        result = self.release("--checks", "tag", "--apply")
+
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("working tree has uncommitted changes", result.stdout)
+        self.assertNotIn("created tag", result.stdout)
+        self.assert_no_tag()
+
+    def test_apply_can_tag_a_committed_authorization_record(self) -> None:
+        # contentSha256 must not be self-defeating: the digest written before
+        # the record lands still matches once the record is committed.
+        self.write_authorization({
+            **self.record,
+            "contentSha256": _authorization_content_digest(self.root),
+        })
+        _run("git", "add", ".", cwd=self.root)
+        committed = _run("git", "commit", "-m", "authorize release", cwd=self.root)
+        self.assertEqual(committed.returncode, 0, committed.stderr)
+
+        result = self.release("--checks", "tag", "--apply")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("release-authorization-content-bound", result.stdout)
+        self.assertIn("created tag", result.stdout)
 
     def test_untracked_file_blocks_release_by_default(self) -> None:
         (self.root / "untracked.txt").write_text("not released\n", encoding="utf-8")

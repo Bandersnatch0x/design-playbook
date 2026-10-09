@@ -319,6 +319,8 @@ def _require_contained_target(relpath: str) -> None:
     """Reject any path-shaped, encoded, or escaping target uniformly."""
     if not isinstance(relpath, str):
         raise TypeError("capture target must be a string")
+    # Gate and non-viewable keys can never hold a locator: reject any
+    # path-shaped, encoded or escaping target before it reaches the table.
     if not _is_lexically_contained(relpath):
         raise SourceRegistryError(LOCATOR_INPUT_INVALID)
 

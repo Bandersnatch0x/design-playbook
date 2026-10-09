@@ -22,6 +22,11 @@ _PROPERTY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9-]{0,63}$")
 CHANGE_KINDS = ("style", "layout", "content", "responsive", "structure")
 CONTENT_PROPERTIES = ("text", "placeholder", "aria-label")
 VIEWPORTS = ("desktop", "tablet", "mobile", "any")
+# Who composed an edit. Only the parent control shell is the reviewer; a
+# prototype gesture and a WebMCP tool call are recorded for provenance but are
+# not evidence that a human reviewed anything. An edit with no declared source
+# is not attributable, so it cannot be evidence either.
+EDIT_SOURCES = ("shell", "frame", "agent", "unknown")
 # A locator addresses an element inside the reviewed artifact. Anything that
 # looks like a filesystem path, URL scheme, or traversal target is rejected so a
 # hostile page cannot smuggle a host path into a coding-agent handoff.
@@ -51,6 +56,22 @@ def _locator(value: Any) -> str:
     if _DRIVE_PREFIX_RE.match(locator) or locator.startswith("/"):
         raise VisualBatchError("locator must be an element selector")
     return locator
+
+
+def _value(value: Any, field: str) -> str:
+    """Keep a value verbatim: refuse rather than silently truncate it.
+
+    The old `str(value or "")[:MAX_VALUE]` turned 0 into an empty string and
+    truncated anything longer, so the stored edit no longer matched what the
+    reviewer typed and the batch hash covered text nobody saw.
+    """
+    if value is None or isinstance(value, (str, int, float, bool)):
+        text = "" if value is None else str(value)
+    else:
+        raise VisualBatchError(f"{field} must be a scalar")
+    if len(text) > MAX_VALUE:
+        raise VisualBatchError(f"{field} exceeds {MAX_VALUE} characters")
+    return text
 
 
 def _canonical(value: Any) -> str:
@@ -102,6 +123,9 @@ def normalize_visual_batch(
         viewport = str(item.get("viewport") or "any").strip()
         if viewport not in VIEWPORTS:
             raise VisualBatchError(f"viewport must be one of {', '.join(VIEWPORTS)}")
+        source = str(item.get("source") or "unknown").strip()
+        if source not in EDIT_SOURCES:
+            raise VisualBatchError(f"source must be one of {', '.join(EDIT_SOURCES)}")
         property_name = _text(item.get("property"), "property", 64)
         if not _PROPERTY_RE.fullmatch(property_name):
             raise VisualBatchError("property contains unsupported characters")
@@ -116,8 +140,9 @@ def normalize_visual_batch(
             # captures DOM selectors, the batch contract calls them locators.
             "locator": _locator(item.get("locator") or item.get("selector")),
             "property": property_name,
-            "oldValue": str(item.get("oldValue") or "")[:MAX_VALUE],
-            "newValue": str(item.get("newValue") or "")[:MAX_VALUE],
+            "oldValue": _value(item.get("oldValue"), "oldValue"),
+            "newValue": _value(item.get("newValue"), "newValue"),
+            "source": source,
         })
 
     batch: dict[str, Any] = {
@@ -136,18 +161,39 @@ def normalize_visual_batch(
 def has_effective_visual_edits(batch: dict[str, Any]) -> bool:
     """Read net change from a validated batch, excluding no-ops and undone chains.
 
-    The net-effect key deliberately omits ``viewport``. The editor has one shared
-    DOM, so a change made while "desktop" is selected and its reversal while
-    "mobile" is selected act on the same element; keying by viewport would count
-    that round trip as two effective changes and let a zero-net-change round
-    confirm. Viewport stays on each edit as provenance, not as identity.
+    The net-effect key deliberately omits ``viewport`` and ``kind``. The editor
+    has one shared DOM, so a change made while "desktop" is selected and its
+    reversal while "mobile" is selected act on the same element, and the same
+    holds for a pair that disagrees only about the ``kind`` label; keying by
+    either would count that round trip as two effective changes and let a
+    zero-net-change round confirm. Both stay on each edit as provenance, not as
+    identity.
     """
-    values: dict[tuple[str, str, str], tuple[str, str]] = {}
+    values: dict[tuple[str, str], tuple[str, str, str]] = {}
     for edit in batch.get("edits", []):
-        key = (edit["kind"], edit["locator"], edit["property"])
+        # Only the parent control shell composes a human edit. A prototype
+        # gesture or an agent tool call carries its own provenance and cannot
+        # stand in for review notes.
+        if edit.get("source") != "shell":
+            continue
+        key = (edit["locator"], edit["property"])
         original = values[key][0] if key in values else edit["oldValue"]
-        values[key] = (original, edit["newValue"])
-    return any(original != final for original, final in values.values())
+        values[key] = (original, edit["newValue"], edit["kind"])
+    return any(
+        _comparable(original, kind) != _comparable(final, kind)
+        for original, final, kind in values.values()
+    )
+
+
+def _comparable(value: str, kind: str) -> str:
+    """Compare at the review's granularity, not the file's.
+
+    A CSS value that differs only in case renders identically, so it is not a
+    review; text content is case-sensitive and compares exactly.
+    """
+    if kind in ("style", "layout", "responsive"):
+        return str(value).strip().casefold()
+    return str(value)
 
 
 def validate_batch_current(
@@ -163,11 +209,3 @@ def validate_batch_current(
     expected = batch_digest(batch)
     if batch.get("batchHash") != expected:
         raise VisualBatchError("visual edit batch hash mismatch")
-
-
-def confirm_visual_batch(batch: dict[str, Any], current_source_hash: str) -> dict[str, Any]:
-    validate_batch_current(batch, current_source_hash)
-    confirmed = dict(batch)
-    confirmed["status"] = "confirmed"
-    confirmed["batchHash"] = batch_digest(confirmed)
-    return confirmed

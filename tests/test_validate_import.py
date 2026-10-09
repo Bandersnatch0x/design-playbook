@@ -55,3 +55,55 @@ def test_main_returns_status_and_clears_previous_failures():
             assert output.getvalue() == "\nVALIDATION PASSED\n"
     finally:
         sys.path[:] = path_before
+
+def test_every_named_check_is_registered_and_runs():
+    """main() must be a runner over CHECKS, not a hand-ordered procedure.
+
+    A ``validate_*`` function that exists but is missing from ``CHECKS`` never
+    runs, and nothing would say so; this pins the two sets to each other so
+    adding a check without registering it fails here instead of silently
+    passing the gate.
+    """
+    module = load_validator()
+    defined = {
+        name for name in vars(module)
+        if name.startswith("validate_") and callable(getattr(module, name))
+    }
+    registered = {name for name, _inputs, _targets in module.CHECKS}
+    assert defined == registered
+    for name, inputs, targets in module.CHECKS:
+        assert isinstance(targets, tuple)
+        assert set(inputs) <= {t for _n, _i, ts in module.CHECKS for t in ts}
+
+
+class _RecordingStream(io.StringIO):
+    """A StringIO that remembers any reconfigure() the validator asks for."""
+
+    def __init__(self):
+        super().__init__()
+        self.reconfigures = []
+
+    def reconfigure(self, **kwargs):
+        self.reconfigures.append(kwargs)
+
+
+def test_main_leaves_the_callers_path_and_streams_alone():
+    """An in-process main() must not edit the importer's state.
+
+    The module-level path inserts that make this file importable are measured
+    after loading; only main()'s own effect is under test here.
+    """
+    module = load_validator()
+    path_before = sys.path[:]
+    stream = _RecordingStream()
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(contextlib.redirect_stdout(stream))
+        stack.enter_context(contextlib.redirect_stderr(stream))
+        for name in vars(module):
+            if name.startswith("validate_"):
+                stack.enter_context(patch.object(module, name))
+        module.validate_json_manifests.return_value = ({}, {})
+        module.validate_runtime_surface.side_effect = lambda: module.check(False, "pinned failure")
+        assert module.main() == 1
+    assert stream.reconfigures == []
+    assert sys.path == path_before

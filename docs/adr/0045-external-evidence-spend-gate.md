@@ -174,7 +174,7 @@ publication; the ADR-0045 spend gate otherwise remains in force.
 ## Amendment (2026-10-03): bounded self-use exception (round 3: real local host integration, Vite/React dev server)
 
 The maintainer explicitly authorized implementation and local validation against
-one named real host, `D:\code_space\design-playbook-share\opsbench-demo-host`,
+one named real host outside this repository (`<local-checkout>/opsbench-demo-host`),
 on 2026-10-03. The authorized boundary is limited to:
 
 - the plugin's existing read-only live-route Preview against that host's real
@@ -200,7 +200,7 @@ or other platforms; the ADR-0045 spend gate otherwise remains in force.
 
 The maintainer explicitly authorized this bounded F2 exception on 2026-10-03.
 Implementation and local validation are limited to the named real host
-`D:\code_space\idea_project\moemail`, using its Next.js dev server rather than
+`<local-checkout>/moemail`, using its Next.js dev server rather than
 the previously exercised Vite host. The authorized boundary is:
 
 - the plugin's existing read-only live-route Preview against that host;
@@ -258,6 +258,46 @@ claim: delivery requires both design reviews to pass, the full repository gates
 to be green, and the existing test assertions to remain unweakened. This bounded
 exception does not satisfy the external trial gate, and the ADR-0045 spend gate
 otherwise remains in force.
+
+## Amendment (2026-10-07): scope extension for the sandbox shortcut allowlist
+
+The maintainer authorized, on 2026-10-07, extending the file list of the
+2026-10-06 amendment by exactly one file: `mcp/preview/pin_bridge.py`, and within
+it only the frame-side key allowlist (`FRAME_PASS_KEYS`) that decides which of
+the parent's shortcuts are forwarded across the sandbox boundary.
+
+Rationale: the reviewed work remapped the Select tool to `A` in the parent. The
+frame-side allowlist was never updated, so `A` works with focus in the parent and
+not with focus inside the sandboxed prototype - the reviewers reproduced the
+split both times. The split cannot be closed from the parent side, because the
+child's filter drops the key before the parent ever sees it.
+
+Everything else in the 2026-10-06 amendment is unchanged: the same exclusions,
+the same invariants (`writesSource` false, G5 intact, the ADR-0008 floor exact,
+a single readiness owner, no new skills, commands, gates, collectors, adapter
+rows, MCP servers or runtimes), and no release, tag, publish, catalog submission
+or recruitment. Authorization is not a completion claim.
+
+### Additional accepted field (2026-10-07): `inlineStyle` in selection snapshots
+
+A second pi session held this path concurrently and, before ownership was yielded
+and the paths frozen, added an `inlineStyle` field to the selection snapshot the
+bridge sends for each selected element in `pin_bridge.py`. That is a second field
+in the same border file, beyond the key allowlist named above.
+
+The maintainer accepted it on 2026-10-07 rather than reverting, because that
+session's reconnect fix depends on it: the child applies a style before sending
+its acknowledgment, and when the acknowledgment is lost the parent has no pending
+edit record, so on reconnect the child reports `31px -> 31px` and the existing
+no-op filter discards the edit. The snapshot must therefore carry the element's
+inline style so the parent can recover the original value.
+
+The boundary is unchanged in kind: still `mcp/preview/` only, still no new skill,
+command, gate, collector, adapter row, MCP server or runtime, still `writesSource`
+false and G5 intact, still no release or publication. The field was authored by a
+concurrent session whose work is uncommitted and unverified at suite level; it
+carries no acceptance claim of its own and must still pass independent review on
+the merged tree.
 
 ## Amendment (2026-10-08): scope extension for the anchor parser
 
@@ -330,46 +370,6 @@ action. No other boundary moves: the authorized files, the exclusions and the
 invariants listed above are unchanged, and authorization is still not a
 completion claim.
 
-## Amendment (2026-10-07): scope extension for the sandbox shortcut allowlist
-
-The maintainer authorized, on 2026-10-07, extending the file list of the
-2026-10-06 amendment by exactly one file: `mcp/preview/pin_bridge.py`, and within
-it only the frame-side key allowlist (`FRAME_PASS_KEYS`) that decides which of
-the parent's shortcuts are forwarded across the sandbox boundary.
-
-Rationale: the reviewed work remapped the Select tool to `A` in the parent. The
-frame-side allowlist was never updated, so `A` works with focus in the parent and
-not with focus inside the sandboxed prototype - the reviewers reproduced the
-split both times. The split cannot be closed from the parent side, because the
-child's filter drops the key before the parent ever sees it.
-
-Everything else in the 2026-10-06 amendment is unchanged: the same exclusions,
-the same invariants (`writesSource` false, G5 intact, the ADR-0008 floor exact,
-a single readiness owner, no new skills, commands, gates, collectors, adapter
-rows, MCP servers or runtimes), and no release, tag, publish, catalog submission
-or recruitment. Authorization is not a completion claim.
-
-### Additional accepted field (2026-10-07): `inlineStyle` in selection snapshots
-
-A second pi session held this path concurrently and, before ownership was yielded
-and the paths frozen, added an `inlineStyle` field to the selection snapshot the
-bridge sends for each selected element in `pin_bridge.py`. That is a second field
-in the same border file, beyond the key allowlist named above.
-
-The maintainer accepted it on 2026-10-07 rather than reverting, because that
-session's reconnect fix depends on it: the child applies a style before sending
-its acknowledgment, and when the acknowledgment is lost the parent has no pending
-edit record, so on reconnect the child reports `31px -> 31px` and the existing
-no-op filter discards the edit. The snapshot must therefore carry the element's
-inline style so the parent can recover the original value.
-
-The boundary is unchanged in kind: still `mcp/preview/` only, still no new skill,
-command, gate, collector, adapter row, MCP server or runtime, still `writesSource`
-false and G5 intact, still no release or publication. The field was authored by a
-concurrent session whose work is uncommitted and unverified at suite level; it
-carries no acceptance claim of its own and must still pass independent review on
-the merged tree.
-
 ## Amendment (2026-10-08): scope extension for the transaction floor verdict
 
 The maintainer authorized, on 2026-10-08, extending the file list of the
@@ -412,3 +412,14 @@ verbatim from the previous revision, against `_floor_verdict` over 480
 combinations of the six inputs: zero mismatches. `transaction.self_check_floor()`
 passes, and the transaction, integrity and visual-batch modules pass 80 tests with
 19 subtests. `validate.py` exits 0 with `repeat_blockers=0`.
+
+## Follow-on (2026-10-09): the visual-editing capability has its own ADR
+
+An independent audit found that the visual-editing surface delivered on the
+`feat/preview-control-shell-consolidation` branch was authorized by amendments
+written inside the same commits that added it, and that a presence client
+shipped in the explicitly excluded multiplayer scope. The capability set is now
+recorded, and the collaboration part removed, in
+[ADR-0047](0047-preview-visual-editing-capability.md). This pointer changes no
+boundary above; the exclusions here remain in force and the ADR-0045 spend gate
+otherwise remains in force.

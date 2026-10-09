@@ -262,41 +262,66 @@
     return !!(state && state.ready && !state.stale);
   }
   function hasEffectiveVisualEdits() {
-    // Mirror of the adapter floor (integrity.evaluate_feedback): the batch the
-    // editor published is substantive only when it is still pending (a stale
+    // Mirror of the adapter floor (integrity.evaluate_feedback_floor): the batch
+    // the editor published is substantive only when it is still pending (a stale
     // batch is refused by the transaction, so readiness must not claim
-    // otherwise) and its NET effect changes a value - a no-op edit or a chain
+    // otherwise), the reviewer composed the edit rather than the prototype or an
+    // agent tool, and its NET effect changes a value - a no-op edit or a chain
     // undone back to its baseline cannot stand in for notes. The net-effect key
-    // omits viewport on purpose: the editor has one shared DOM, so a change and
-    // its reversal under different viewport labels touch the same element.
+    // omits viewport and kind on purpose: the editor has one shared DOM, so a
+    // change and its reversal under different labels, or under a different kind
+    // field, touch the same element and net to nothing. A CSS value that differs
+    // only in case renders identically and is not a review; text stays exact.
     // Readiness stays owned here; the editor only publishes state.
     var batch = window.DPB_VISUAL_EDIT_BATCH;
     if (!batch || batch.status !== "pending") return false;
     if (!batch.edits || !batch.edits.length) return false;
     var net = {};
     batch.edits.forEach(function (e) {
-      var key = [e.kind, e.locator, e.property].join("\u0000");
+      if (e.source !== "shell") return;
+      var key = [e.locator, e.property].join("\u0000");
       var original = Object.prototype.hasOwnProperty.call(net, key) ? net[key][0] : e.oldValue;
-      net[key] = [original, e.newValue];
+      net[key] = [original, e.newValue, e.kind];
     });
-    return Object.keys(net).some(function (k) { return net[k][0] !== net[k][1]; });
+    return Object.keys(net).some(function (k) {
+      var pair = net[k];
+      var cssKind = pair[2] === "style" || pair[2] === "layout" || pair[2] === "responsive";
+      var original = String(pair[0] == null ? "" : pair[0]);
+      var final = String(pair[1] == null ? "" : pair[1]);
+      if (!cssKind) return original !== final;
+      return original.trim().toLowerCase() !== final.trim().toLowerCase();
+    });
   }
-  function isSubstantive() {
-    // Mirror of the adapter floor (integrity.evaluate_feedback_floor):
-    // when ANY anchor exists, every anchor must carry a non-empty trimmed
-    // selector and comment (feedback alone cannot compensate, and an
-    // incomplete anchor also cannot be rescued by visual edits); with no
-    // anchors, non-empty feedback OR an effective visual edit is substantive.
-    // No minimum length (ADR-0008, amended 2026-10-08).
-    if (anchors.length) {
-      return anchors.every(function (a) {
+  // Mirror of the adapter floor (integrity.evaluate_feedback_floor): when ANY
+  // anchor exists, every anchor must carry a non-empty trimmed selector and
+  // comment (feedback alone cannot compensate, and an incomplete anchor cannot
+  // be rescued by visual edits); with no anchors, non-empty feedback OR an
+  // effective visual edit is substantive. No minimum length (ADR-0008, amended
+  // 2026-10-08). The rule text has two owners by necessity (this live mirror
+  // and the authoritative Python floor), so they are kept in sync by an
+  // executable check instead of by comment:
+  // tests/preview/test_floor_mirror.py runs THIS function in node against the
+  // Python floor over a shared case table.
+  function dpbFloorVerdict(state) {
+    var list = state.anchors || [];
+    if (list.length) {
+      return list.every(function (a) {
         return Boolean(a && typeof a === "object") &&
           String(a.selector || "").trim() !== "" &&
           String(a.comment || "").trim() !== "";
       });
     }
-    return feedbackValue().trim() !== "" || hasEffectiveVisualEdits() ||
-      (editorCanFlush() && hasUnflushedVisualEdits());
+    return String(state.feedback || "").trim() !== "" || Boolean(state.effectiveEdit) ||
+      Boolean(state.flushableEdit);
+  }
+  window.dpbFloorVerdict = dpbFloorVerdict;
+  function isSubstantive() {
+    return dpbFloorVerdict({
+      anchors: anchors,
+      feedback: feedbackValue(),
+      effectiveEdit: hasEffectiveVisualEdits(),
+      flushableEdit: editorCanFlush() && hasUnflushedVisualEdits(),
+    });
   }
   function setReadiness() { updateStatus(); }
   if (field) field.addEventListener("input", function () { setReadiness(); scheduleDraft(); });
@@ -542,14 +567,12 @@
     });
   }
 
+  // One requester entry point. The submit listener below owns every decision
+  // (floor gate, drain, allow) so a caller cannot pick a different path.
   function submitPrimary() {
     var targetBtn = document.getElementById("dpb-btn-approve");
-    if (hasUnflushedVisualEdits() && isSubstantive()) {
-      executeApprovedSubmit(targetBtn || approveBtn);
-    } else {
-      if (draftPopoverOpen() && annoInput && annoInput.value.trim()) saveDraftAnchor();
-      if (targetBtn) form.requestSubmit(targetBtn); else form.requestSubmit();
-    }
+    if (draftPopoverOpen() && annoInput && annoInput.value.trim()) saveDraftAnchor();
+    if (targetBtn) form.requestSubmit(targetBtn); else form.requestSubmit();
   }
 
   form.addEventListener("submit", function (e) {
@@ -685,9 +708,15 @@
       return;
     }
     if ((e.ctrlKey || e.metaKey) && (k === "z" || k === "y")) {
+      // The visual editor owns its own history. Annotation history answers
+      // otherwise, and also when the click destroyed the focused control so
+      // focus fell back to the body. A review control in the header owns
+      // neither, so Ctrl+Z there must not reach the annotation stack.
+      if (activeEl && activeEl.closest("#dpb-react-editor-root, #dpb-visual-view")) return;
       if (activeEl && activeEl.closest("#dpb-canvas") && document.getElementById("dpb-tab-visual").getAttribute("aria-selected") === "true") return;
-      // Annotation history owns only annotation controls/canvas, not visual or review controls.
-      if (!activeEl || !activeEl.closest(
+      var neutralFocus = !activeEl || activeEl === document.body ||
+        activeEl === document.documentElement;
+      if (!neutralFocus && !activeEl.closest(
         "#dpb-annotations-view, #dpb-anno-popover, #dpb-toolbar, #dpb-canvas, #dpb-tab-annotations"
       )) return;
       e.preventDefault();
@@ -733,6 +762,9 @@
     if (!shortcut) shortcut = { key: data.dpbToolShortcut };
     var key = shortcut.key;
     if (typeof key !== "string" || ["Escape", "Enter", "a", "b", "d", "h", "p", "r", "v", "z", "y", "l", "[", "]", "?", "j", "k", "s", "Delete", "Backspace", "=", "+", "-", "_", "0", "1", "2", "3"].indexOf(key) < 0) return;
+    // The prototype shares the frame window, so a decision never arrives from
+    // there: only a key pressed in this shell may approve or skip.
+    if (key === "Enter" || (key === "Escape" && shortcut.shiftKey === true)) return;
     // Dispatch on the frame so review and visual history share the normal keymap.
     frame.dispatchEvent(new KeyboardEvent("keydown", { key: key, bubbles: true, cancelable: true,
       ctrlKey: shortcut.ctrlKey === true, metaKey: shortcut.metaKey === true, shiftKey: shortcut.shiftKey === true }));

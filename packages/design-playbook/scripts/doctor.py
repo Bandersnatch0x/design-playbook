@@ -48,6 +48,8 @@ def _check(name: str, ok: bool, repair: str, *, required: bool = True) -> dict:
 
 
 
+# Marker protocol: owned by adapter_markers; this module consumes
+# markers.* and never re-derives the regexes.
 _MARKER_RE = markers.MARKER_RE
 _MARKER_NORM_RE = markers.MARKER_NORM_RE
 
@@ -279,6 +281,9 @@ def _lifecycle_findings(repo_root: Path, package_version: str | None) -> dict:
     }
 
 
+# Report-only: drift means re-running `npx design-playbook init <agent>` with
+# the installed package would change the file. This check never writes and
+# never blocks.
 def _adapter_lifecycle_check(repo_root: Path, package_version: str | None) -> dict:
     report = _lifecycle_findings(repo_root, package_version)
     findings = report["files"]

@@ -16,6 +16,8 @@ Covers the secure-ship 0.4.4 ticket 01 acceptance:
 
 from __future__ import annotations
 
+import pytest
+
 import json
 import re
 import shutil
@@ -25,7 +27,7 @@ import sys
 import tempfile
 import threading
 import unittest
-from http.server import BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -43,7 +45,10 @@ from design_playbook.mcp.preview import review_session  # noqa: E402
 from design_playbook.mcp.preview import control as preview_control  # noqa: E402
 from design_playbook.mcp.preview import transaction  # noqa: E402
 from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
-from playwright.sync_api import sync_playwright  # noqa: E402
+try:
+    from playwright.sync_api import sync_playwright  # noqa: E402
+except ImportError:  # pragma: no cover - only the browser tests need it
+    sync_playwright = None
 from preview_e2e_helpers import dismiss_onboarding  # noqa: E402
 
 
@@ -122,7 +127,7 @@ def _write_control_page(
     options: tuple[str, ...] = ("确认通过", "需要修改"),
 ) -> str:
     # Default fixture assertions are Chinese, independent of the test host's
-    # LANG; OBS-1 checks pass an explicit ``lang`` to render the other locale.
+    # LANG; the locale checks pass an explicit ``lang`` to render the other locale.
     with patch.dict("os.environ", {"DPB_PREVIEW_LANG": lang}):
         control = preview_control._build_control(
             1, "Spec matrix workbench", list(options), criteria=criteria
@@ -191,6 +196,7 @@ def _run_collect(
     options: list[str] | None = None,
     round_n: int = 1,
     fake_adapter: _FakeBrowserAdapter | None = None,
+    live_route_url: str = "",
 ) -> dict[str, Any]:
     """Drive review_session.collect_review through one fake owned-browser
     adapter (US-4).
@@ -211,7 +217,8 @@ def _run_collect(
         proto = Path(tmp) / "proto.html"
         proto.write_text(proto_html, encoding="utf-8")
         decision = review_session.collect_review(
-            proto, summary, options, round_n, fake_adapter
+            proto, summary, options, round_n, fake_adapter,
+            live_route_url=live_route_url,
         )
 
     assert fake_adapter.client_thread is not None
@@ -326,6 +333,8 @@ class ControlResourceAssemblyTests(unittest.TestCase):
         self.assertIn("z-index: 999", control)
 
 
+# This module drives a real browser: the no-chromium CI job deselects it by marker.
+@pytest.mark.browser
 class SpecMatrixWorkbenchTests(unittest.TestCase):
     def test_spec_matrix_renders_criteria_and_updates_hidden_field(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -737,6 +746,88 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
 
 
 class TrustBoundaryIntegrationTests(unittest.TestCase):
+    def test_an_unauthenticated_post_never_reaches_the_live_route(self) -> None:
+        """Observing a live route is outbound work, so only a POST that proves
+        trusted-form origin may pay for it (a forged cross-origin fetch must not
+        make every preview do a route round trip)."""
+        hits: list[int] = []
+
+        class Route(BaseHTTPRequestHandler):
+            def log_message(self, *args: Any) -> None:  # noqa: D102 - silence logs
+                pass
+
+            def do_GET(self) -> None:  # noqa: N802 - request-handler contract
+                hits.append(1)
+                body = b"<html><body>live</body></html>"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        route = HTTPServer(("127.0.0.1", 0), Route)
+        threading.Thread(target=route.serve_forever, daemon=True).start()
+        forged_delta: list[int] = []
+        observed_delta: list[int] = []
+        try:
+            def client(port: int) -> None:
+                token = _extract_token(_get_page(port)) or ""
+                # The session build paints the binding once; every later fetch
+                # has to be earned by a POST that carries the token.
+                baseline = len(hits)
+                _post_form(port, {
+                    "choice": "\u786e\u8ba4\u901a\u8fc7", "feedback": "forged",
+                    "anchors_json": "[]", "dpb_round": "1",
+                })
+                forged_delta.append(len(hits) - baseline)
+                _post_form(port, {
+                    "choice": "\u786e\u8ba4\u901a\u8fc7", "feedback": "ok",
+                    "anchors_json": "[]", "dpb_token": token, "dpb_round": "1",
+                })
+                observed_delta.append(len(hits) - baseline)
+
+            decision = _run_collect(
+                "<html><body>x</body></html>", client,
+                live_route_url=f"http://127.0.0.1:{route.server_address[1]}/",
+            )
+        finally:
+            route.shutdown()
+            route.server_close()
+
+        self.assertEqual(forged_delta, [0], "a POST without the token fetched the route")
+        self.assertGreaterEqual(observed_delta[0], 1,
+                                "the real form's POST must observe the route")
+        self.assertEqual(decision.get("choice"), "\u786e\u8ba4\u901a\u8fc7")
+
+    def test_a_rejected_edit_batch_leaves_the_token_usable(self) -> None:
+        """A stale batch is the reviewer's mistake, so rejecting it must not
+        consume the one-time token and lock the round."""
+        def client(port: int) -> None:
+            token = _extract_token(_get_page(port)) or ""
+            _post_form(port, {
+                "choice": "\u786e\u8ba4\u901a\u8fc7", "feedback": "stale",
+                "anchors_json": "[]",
+                "visual_edits_json": json.dumps({
+                    "schemaVersion": 1,
+                    "sourceHash": "deadbeef",
+                    "edits": [{
+                        "locator": "#hero", "property": "padding",
+                        "oldValue": "8px", "newValue": "16px",
+                        "source": "shell",
+                    }],
+                }),
+                "dpb_token": token, "dpb_round": "1",
+            })
+            _post_form(port, {
+                "choice": "\u786e\u8ba4\u901a\u8fc7", "feedback": "retry",
+                "anchors_json": "[]", "dpb_token": token, "dpb_round": "1",
+            })
+
+        decision = _run_collect("<html><body>x</body></html>", client)
+
+        self.assertFalse(decision.get("rejected"), decision)
+        self.assertEqual(decision.get("choice"), "\u786e\u8ba4\u901a\u8fc7")
+
     def test_iframe_sandbox_excludes_allow_same_origin(self) -> None:
         page_box: dict[str, str] = {"page": ""}
 

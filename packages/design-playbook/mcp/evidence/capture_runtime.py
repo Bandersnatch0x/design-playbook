@@ -281,6 +281,10 @@ def _apply_freeze(page: Any, freeze: dict[str, Any]) -> None:
 _RUN_MARKERS = ("plan.md", "point-back.md")
 _warned_run_root = False
 
+# A --plugin-dir dev host cannot edit the shipped DESIGN_PLAYBOOK_RUN_ROOT
+# after the MCP process starts, so execute_capture_plan accepts a run_root
+# argument that binds the resolution for the duration of one call and
+# nothing longer.
 _CALL_RUN_ROOT: ContextVar["Path | None"] = ContextVar(
     "design_playbook_call_run_root", default=None
 )
@@ -1029,6 +1033,14 @@ def _capture(
                 request=request,
             )
         try:
+        # OSError (disk full / permission / path-is-a-directory) must reach
+        # the orchestrator via the same {result:"failed"} channel as the
+        # main capture, because escaping to MCP isError loses the
+        # structured echo. ValueError stays for containment/path-shape
+        # sidecar rejection and keeps its full message, which is debug
+        # info and not raw exception text. No clean sidecar is written;
+        # the failure carries written_path, the non-secret absolute
+        # artifact path.
             wrote_probe = _write_probe_sidecar(probe_rel, probe_payload)
         except ValueError as exc:
             return _failed(

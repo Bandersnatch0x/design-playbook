@@ -217,7 +217,7 @@ def validate_bundled_mcp() -> None:
           "bundled preview runtime at mcp/preview/server.py")
     check((PKG / "mcp" / "preview" / "integrity.py").is_file(),
           "bundled preview integrity module at mcp/preview/integrity.py")
-    for resource_name in ("control.html", "control.css", "control.js", "control.review.js"):
+    for resource_name in ("pin_bridge.js", "control.html", "control.css", "control.js", "control.review.js"):
         check((PKG / "mcp" / "preview" / resource_name).is_file(),
               f"bundled preview frontend resource at mcp/preview/{resource_name}")
     check((PKG / "mcp" / "evidence" / "server.py").is_file(),
@@ -1204,33 +1204,44 @@ def validate_run_aggregate() -> None:
             check(False, f"aggregate_runs smoke failed: {exc}")
 
 
-def main() -> int:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packages" / "design-playbook"))
-    from design_playbook.scripts.stdio_encoding import configure_piped_utf8
+# Ordered registry: one entry per check, ``(function, inputs, targets)``.
+# ``inputs`` names the earlier results the check consumes and ``targets`` names
+# the values it binds for later checks, so ``main`` is a runner over this list
+# rather than a procedure written by hand. A check that is defined but never
+# listed never runs; tests/test_validate.py pins that the two sets match.
+CHECKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
+    ("validate_json_manifests", (), ("pj", "mj")),
+    ("validate_plugin_layout", (), ()),
+    ("validate_bundled_mcp", (), ()),
+    ("validate_marketplace_catalog", ("mj",), ()),
+    ("validate_codex_manifest", ("pj",), ("claude_version",)),
+    ("validate_adapter_drift", (), ()),
+    ("validate_publish_manifest", ("claude_version",), ("npmj",)),
+    ("validate_skill_frontmatter", (), ()),
+    ("validate_command_frontmatter", (), ()),
+    ("validate_release_identity", ("pj",), ()),
+    ("validate_capability_claims", (), ()),
+    ("validate_cordis_commands", ("npmj",), ()),
+    ("validate_dsh_bundle", ("npmj",), ()),
+    ("validate_runtime_surface", (), ("banned",)),
+    ("validate_reference_intake", (), ()),
+    ("validate_native_routing", (), ()),
+    ("validate_registry", ("banned",), ()),
+    ("validate_skill_contracts", (), ()),
+    ("validate_test_executability", (), ()),
+    ("validate_ruff", (), ()),
+    ("validate_run_aggregate", (), ()),
+)
 
-    configure_piped_utf8()
+
+def main() -> int:
+    """Run every registered check in order and return the exit status."""
     failures.clear()
-    pj, mj = validate_json_manifests()
-    validate_plugin_layout()
-    validate_bundled_mcp()
-    validate_marketplace_catalog(mj)
-    claude_version = validate_codex_manifest(pj)
-    validate_adapter_drift()
-    npmj = validate_publish_manifest(claude_version)
-    validate_skill_frontmatter()
-    validate_command_frontmatter()
-    validate_release_identity(pj)
-    validate_capability_claims()
-    validate_cordis_commands(npmj)
-    validate_dsh_bundle(npmj)
-    banned = validate_runtime_surface()
-    validate_reference_intake()
-    validate_native_routing()
-    validate_registry(banned)
-    validate_skill_contracts()
-    validate_test_executability()
-    validate_ruff()
-    validate_run_aggregate()
+    bound: dict[str, object] = {}
+    for name, inputs, targets in CHECKS:
+        result = globals()[name](*(bound[arg] for arg in inputs))
+        values = result if len(targets) > 1 else (result,) * len(targets)
+        bound.update(zip(targets, values, strict=True))
     print()
     if failures:
         print(f"VALIDATION FAILED: {len(failures)} issue(s)")
@@ -1240,4 +1251,11 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # The pipe-encoding seam and the package path belong to the process entry
+    # point, not to main(): importing this module or calling main() in process
+    # must not re-encode the caller's streams or edit its sys.path.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packages" / "design-playbook"))
+    from design_playbook.scripts.stdio_encoding import configure_piped_utf8
+
+    configure_piped_utf8()
     sys.exit(main())

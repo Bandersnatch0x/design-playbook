@@ -218,6 +218,7 @@ class PreviewIntegritySnapshotTests(unittest.TestCase):
                 "report_ref": "decision-report.md",
                 "summary": "review",
                 "options": ["确认通过", "需要修改"],
+                "route_url": "",
             }
             canonical = json.dumps(
                 binding_fields,

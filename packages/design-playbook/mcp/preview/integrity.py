@@ -128,7 +128,7 @@ def prototype_html_digest(raw: bytes) -> str:
 
 def compute_binding_digest(
     *, round_n: int, prototype_html_hash: str, report_ref: str,
-    summary: str, options: list[str],
+    summary: str, options: list[str], route_url: str = "",
 ) -> dict[str, Any]:
     """Build the binding record (canonical fields + SHA-256 digest).
 
@@ -143,6 +143,9 @@ def compute_binding_digest(
         "report_ref": report_ref,
         "summary": summary,
         "options": list(options),
+        # The bound live-route URL is part of the digest so a committed round
+        # replays from the record instead of re-observing the network.
+        "route_url": route_url,
     }
     canonical = json.dumps(
         fields, ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -203,6 +206,7 @@ def _valid_decision_entry(path: Path) -> bool:
         and isinstance(binding.get("summary"), str)
         and isinstance(binding.get("options"), list)
         and all(isinstance(item, str) for item in binding["options"])
+        and isinstance(binding.get("route_url", ""), str)
         and isinstance(outcome, dict)
     ):
         return False
@@ -212,6 +216,7 @@ def _valid_decision_entry(path: Path) -> bool:
         report_ref=binding["report_ref"],
         summary=binding["summary"],
         options=binding["options"],
+        route_url=binding.get("route_url", ""),
     )
     return binding.get("digest") == expected["digest"]
 

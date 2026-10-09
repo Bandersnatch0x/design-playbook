@@ -137,6 +137,8 @@ def preflight_entry(request: object, entry: int) -> list[PreflightFact]:
         elif isinstance(capture_type, str) and (
             name_error := trace_artifact_error(capture_type, artifact)
         ):
+            # Same rule the Provider rejects with (path_syntax), reported
+            # here before a browser starts.
             facts.append(_error("bad_artifact_extension", name_error, entry,
                                 expected=f"name ending in {TRACE_SUFFIX}",
                                 actual=artifact))
@@ -209,10 +211,15 @@ def _bad_artifact_path(artifact: str) -> str | None:
 
 
 def _bad_action(action: object, entry: int, index: int) -> list[PreflightFact]:
+    # 0-based label matches the runtime's _run_actions so preflight and
+    # provider report the same position for the same action.
     label = f"actions[{index}]"
     if not isinstance(action, dict):
         return [_error("bad_action", f"{label} must be an object", entry,
                        expected="object", actual=type(action).__name__)]
+    # Canonicalize the verb through the SAME normalizer the runtime uses, so
+    # "Click" / " click " / "FILL" preflight as cleanly as they execute.
+    # The shared action dialect is enforced here, never by documenting a ban.
     do = normalize_action_do(action.get("do"))
     if not do or do not in KNOWN_DOS:
         return [_error(

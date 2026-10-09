@@ -25,7 +25,7 @@ class LabelSetTests(unittest.TestCase):
         self.assertFalse(i18n.SKIP_LABELS & i18n.CONFIRM_LABELS)
 
     def test_confirm_labels_keep_new_and_historical_cta_labels(self) -> None:
-        # R7 lockstep (T-083): the active-locale CTA wording was renamed
+        # Lockstep (T-083): the active-locale CTA wording was renamed
         # to "确认通过"/"Approve"; the union must carry BOTH the new labels and
         # every historical one so older submitted options still classify.
         self.assertIn("确认签署决策", i18n.CONFIRM_LABELS)
@@ -76,12 +76,30 @@ class LabelSetTests(unittest.TestCase):
             "coachmark_title",
             "coachmark_text",
             "field_label",
+            "gate_reason",
         ):
             for locale in (i18n.ZH, i18n.EN):
                 value = i18n._STRINGS[locale].get(key)
                 self.assertTrue(
                     value and value.strip(), f"{key} missing in {locale}"
                 )
+
+    def test_english_chrome_carries_no_hardcoded_chinese(self) -> None:
+        # The muted-approve gate reason shipped as a Chinese literal
+        # with no i18n key, so an English session read Chinese out of a
+        # role=status region. The language toggle is the one deliberate
+        # exception - its label names the language it switches to.
+        import re
+        from unittest import mock
+
+        with mock.patch.dict("os.environ", {"DPB_PREVIEW_LANG": "en"}):
+            html = preview_control._build_control(
+                round_n=1, summary="review", options=["Confirm", "Revise"]
+            )
+        chrome = re.sub(r"<script>.*?</script>", "", html, flags=re.S)
+        chrome = re.sub(r"<button[^>]*id=\"dpb-language-toggle\".*?</button>", "", chrome, flags=re.S)
+        leaked = re.findall(r"[\u4e00-\u9fff]+", chrome)
+        self.assertEqual(leaked, [], f"hardcoded Chinese in the English chrome: {leaked[:3]}")
 
     def test_approve_ready_uses_english_singular_for_one_note(self) -> None:
         # EN "1 notes" is ungrammatical — the ready label branches on

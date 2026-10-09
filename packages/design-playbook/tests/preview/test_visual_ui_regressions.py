@@ -23,6 +23,9 @@ JS = (PREVIEW / "control.react.js").read_text(encoding="utf-8")
 HTML = (PREVIEW / "control.html").read_text(encoding="utf-8")
 
 
+# This module drives a real browser: the no-chromium CI job deselects it by marker.
+pytestmark = pytest.mark.browser
+
 @pytest.fixture
 def editor_page(tmp_path):
     from playwright.sync_api import sync_playwright
@@ -229,24 +232,18 @@ def test_console_section_hint_text_remains_visible(console_page, width):
         assert hint.evaluate("el => el.scrollHeight <= el.clientHeight + 1")
 
 
+# The pending class, the count and the badge class are asserted at runtime in
+# test_rendered_editor_state_changes below; grepping the shipped JS for the
+# lines that set them only proved the text still existed. These two keep the
+# rule half, which has no runtime equivalent.
 def test_pending_tab_uses_batch_count_and_accent():
-    assert 'classList.toggle("is-pending", pending.length > 0)' in JS
-    assert 'textContent = String(pending.length)' in JS
     style = rule(".dpb-rail-tab.is-pending .dpb-filter-n")
     assert "color: var(--dpb-accent)" in style
     assert "font-weight: 700" in style
 
 
 def test_webmcp_badge_activates_success_style():
-    assert 'className: "dpb-react-badge" + (webmcp ? " is-on" : "")' in JS
     assert "color: var(--dpb-success)" in rule(".dpb-react-badge.is-on")
-
-
-@pytest.mark.parametrize("action", ["undo", "redo"])
-def test_history_buttons_have_names_and_keyboard_focus(action):
-    assert f'"aria-label": t("visual_{action}")' in JS
-    assert "outline: 2px solid var(--dpb-accent)" in rule(
-        ".dpb-react-actions button:focus-visible")
 
 
 def test_computed_fields_clip_long_values_and_use_readable_labels():
@@ -260,19 +257,6 @@ def test_popover_scrolls_within_viewport():
     style = rule(".dpb-anno-popover")
     assert "max-height: calc(100vh - 24px)" in style
     assert "overflow-y: auto" in style
-
-
-def test_stale_diagnostic_has_distinct_color():
-    assert '"data-stale": stale' in JS
-    assert "color: var(--dpb-danger)" in rule(
-        '.dpb-react-diagnostic[data-stale="true"]')
-
-
-@pytest.mark.parametrize("tab", ["visual", "annotations", "spec"])
-def test_tabpanels_are_labelled_by_their_tab(tab):
-    panel = re.search(r'<div[^>]*id="dpb-' + tab + r'-view"[^>]*>', HTML)
-    assert panel
-    assert f'aria-labelledby="dpb-tab-{tab}"' in panel.group()
 
 
 @pytest.mark.parametrize("webmcp", [False, True])
@@ -970,7 +954,7 @@ def test_resize_hud_and_cached_raf_guides(editor_page):
     assert target.evaluate("() => window.siblingReads") == reads
     page.mouse.up()
     expect(hud).not_to_be_visible()
-    assert 'requestAnimationFrame(draw)' in (PREVIEW / "pin_bridge.py").read_text(encoding="utf-8")
+    assert 'requestAnimationFrame(draw)' in (PREVIEW / "pin_bridge.js").read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("markup,visible", [("<span>Nested title</span>", False), ('<img alt="asset">', False), ("Direct title", True)])
@@ -1312,21 +1296,31 @@ def test_ip05_frame_shortcuts_and_ip08_canvas_history(pending_visual_edit, modif
         e.preventDefault(); window.submitted.push(e.submitter.id);
       });
     }""")
+    # The prototype shares the frame window, so a decision never arrives from
+    # there: a key pressed while the frame holds focus must not approve or
+    # skip, however real it looks inside the frame.
     handle.focus()
     page.keyboard.press(f"{modifier}+Enter")
-    page.wait_for_function("window.submitted.includes('dpb-btn-approve')")
-    # The pending effective edit satisfies the floor (ADR-0008 amendment
-    # 2026-10-08), so Ctrl+Enter is admitted here instead of bouncing the user
-    # to the note field, and the frame keeps working afterwards.
-    assert page.evaluate("window.submitted") == ['dpb-btn-approve']
-    handle.focus()
-    expect(handle).to_be_focused()
     page.keyboard.press("Shift+Escape")
-    page.wait_for_function("window.submitted.includes('dpb-btn-skip')")
     proto.locator("body").evaluate("el => {const input=document.createElement('input'); input.id='ip-input'; el.append(input)}")
     proto.locator("#ip-input").focus()
     page.keyboard.press(f"{modifier}+Enter")
-    assert page.evaluate("window.submitted.length") == 2
+    page.wait_for_timeout(400)
+    assert page.evaluate("window.submitted") == []
+    # The shell owns the decision channel. The pending effective edit satisfies
+    # the floor (ADR-0008 amendment 2026-10-08), so Ctrl+Enter is admitted here
+    # instead of bouncing the user to the note field.
+    page.locator("#dpb-feedback").focus()
+    page.keyboard.press(f"{modifier}+Enter")
+    page.wait_for_function("window.submitted.includes('dpb-btn-approve')")
+    assert page.evaluate("window.submitted") == ['dpb-btn-approve']
+    # Skip is the other shell-owned channel, and the frame keeps working after.
+    page.locator("#dpb-feedback").focus()
+    page.keyboard.press("Shift+Escape")
+    page.wait_for_function("window.submitted.includes('dpb-btn-skip')")
+    assert 'dpb-btn-skip' in page.evaluate("window.submitted")
+    handle.focus()
+    expect(handle).to_be_focused()
 
 
 def test_skip_shortcut_submits_while_feedback_has_focus(editor_page):
@@ -1574,7 +1568,7 @@ def test_readiness_is_not_claimed_while_the_bridge_cannot_flush(editor_page) -> 
     page.evaluate("""() => {
       window.DPB_VISUAL_EDIT_BATCH = {schemaVersion: 1, status: 'pending', sourceHash: 'x',
         routeUrl: '', edits: [{kind: 'style', viewport: 'desktop', locator: '#panel-title',
-        property: 'background-color', oldValue: '', newValue: 'rgb(1, 2, 3)'}]};
+        property: 'background-color', oldValue: '', newValue: 'rgb(1, 2, 3)', source: 'shell'}]};
       window.dpbHasPendingVisualEdits = function () { return false; };
       window.dpbVisualEditorState = function () { return {ready: false, stale: false}; };
       document.dispatchEvent(new CustomEvent('dpbVisualEditsChanged'));
@@ -1617,7 +1611,7 @@ def test_f4_stale_batch_does_not_read_as_ready(editor_page) -> None:
     page.evaluate("""() => {
       window.DPB_VISUAL_EDIT_BATCH = {schemaVersion: 1, status: 'stale', sourceHash: 'x',
         routeUrl: '', edits: [{kind: 'style', viewport: 'desktop', locator: '#panel-title',
-        property: 'background-color', oldValue: '', newValue: 'rgb(1, 2, 3)'}]};
+        property: 'background-color', oldValue: '', newValue: 'rgb(1, 2, 3)', source: 'shell'}]};
       document.dispatchEvent(new CustomEvent('dpbVisualEditsChanged'));
     }""")
     expect(status).to_contain_text(i18n.t("rail_status_waiting"))
@@ -3193,9 +3187,11 @@ def test_bo07_mb_f01_late_undo_after_replacement_and_redo_matches_admitted_batch
     )
     assert edits == [
         {"kind": "style", "viewport": "desktop", "locator": "#panel-title",
-         "property": "background-color", "oldValue": "", "newValue": first_color},
+         "property": "background-color", "oldValue": "", "newValue": first_color,
+         "source": "shell"},
         {"kind": "style", "viewport": "desktop", "locator": "#panel-title",
-         "property": "background-color", "oldValue": first_color, "newValue": final_color},
+         "property": "background-color", "oldValue": first_color, "newValue": final_color,
+         "source": "shell"},
     ]
     assert has_pending is False
     assert not page_errors

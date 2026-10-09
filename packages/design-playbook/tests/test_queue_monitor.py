@@ -2,6 +2,8 @@
 """Real-browser regression tests for queue-monitor dialog timer races."""
 from __future__ import annotations
 
+import pytest
+
 import unittest
 from pathlib import Path
 
@@ -13,6 +15,9 @@ except ModuleNotFoundError:  # pragma: no cover - environment marker
 PACKAGE = Path(__file__).resolve().parents[1]
 QUEUE_MONITOR_URL = (PACKAGE / "showcase" / "queue-monitor.html").as_uri()
 
+
+# This module drives a real browser: the no-chromium CI job deselects it by marker.
+pytestmark = pytest.mark.browser
 
 class QueueMonitorRaceTests(unittest.TestCase):
     @classmethod

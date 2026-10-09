@@ -9,6 +9,8 @@ Playwright adapter for screenshot, a11y, and trace captures.
 """
 from __future__ import annotations
 
+import pytest
+
 import json
 import os
 import subprocess
@@ -572,6 +574,8 @@ class EvidenceRuntimeTests(unittest.TestCase):
             self.assertEqual(artifact.read_bytes(), b"original")
 
 
+# This module drives a real browser: the no-chromium CI job deselects it by marker.
+@pytest.mark.browser
 class EvidenceCaptureTests(unittest.TestCase):
     """Production Playwright adapter integration; requires chromium."""
 

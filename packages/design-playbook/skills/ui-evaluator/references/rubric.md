@@ -26,7 +26,7 @@ Dimensions are read from the scene. No hardcoded list. **Every criterion must po
 
 If this run produced `preview*` artifacts (`.scratch/<run>/preview/log.md` + `confirm-round-*.json` exist), list it as a supporting finding:
 
-- Read `preview/log.md` + confirm json: did feedback drive a revision, or did empty / unannotated anchors slide past the structural floor? `decision-round-*.json` is for audit / recovery only, it is not a confirmation authority or a second semantic input (ADR-0013).
+- Read `preview/log.md` + confirm json: did feedback drive a revision, or did empty / unannotated anchors slide past the structural floor? `decision-round-*.json` is for audit / recovery only; it is not a confirmation authority or a second semantic input (ADR-0013).
 - The structural floor (adapter, G5) only blocks empty feedback / unannotated anchors; **semantic** problems, e.g. example (zh): 「安师大」, a valid CJK string unrelated to the annotated element, cannot be blocked by the structural floor. Catch them here.
 - `source` is `preview* seam` (the orchestrator's preview-step contract), not UI source, use this when the defect is in the adapter loop contract rather than the generated UI itself.
 - Process gaps (seam contract) are recorded separately from product findings (UI). Do not mix them into the recirculate closure trail.

@@ -69,6 +69,12 @@ jobs:
           python3 tests/test_vnext_s6.py
           python3 tests/test_operator_evidence_hardening.py
           python3 tests/test_project_target.py
+          python3 tests/test_adapter_drift.py
+          python3 tests/test_component_backflow_e2e.py
+          python3 tests/test_component_candidates.py
+          python3 tests/test_design_baseline_promote.py
+          python3 tests/test_promotion_governance.py
+          python3 tests/test_run_metadata.py
       - name: Queue monitor dialog state tests
         run: node packages/design-playbook/showcase/test_queue_monitor_state.js
 
@@ -100,44 +106,28 @@ jobs:
       - name: Read-only frontend scope review
         run: python3 -m pytest tests/test_frontend_review.py -q
 
+      - name: Validator import and CLI stream contract
+        # tests/test_validate_import.py is a pytest module, so the script list
+        # above cannot reach it: importing the validator must not validate or
+        # reconfigure the caller's streams, and main() must be repeatable.
+        run: python3 -m pytest tests/test_validate_import.py -q
+
       - name: Piped-stdout encoding (every entry point, non-UTF-8 code pages)
         # T-105: static net (every entry point wires the one seam) plus a sweep
         # of every entry point under cp1252 / shift_jis / gbk.
         run: python3 -m pytest tests/test_stdio_encoding.py -q
 
-      - name: Shared transport + Preview transaction/stdin tests (required)
+      - name: Shared transport + Preview/Evidence/Console tests (required, no chromium)
+        # Directory collection, not a hand-kept file list: a module joins this
+        # gate the moment it lands in the tree. Modules that drive a real
+        # browser declare the `browser` marker and run in the chromium job
+        # below; this job installs pytest only, so a browser module that forgot
+        # the marker fails loudly here instead of silently never running.
         run: |
           python3 -m pytest \
             packages/design-playbook/mcp/test_transport.py \
-            packages/design-playbook/tests/preview/test_integrity.py \
-            packages/design-playbook/tests/preview/test_transaction.py \
-            packages/design-playbook/tests/preview/test_versions.py \
-            packages/design-playbook/tests/preview/test_server_stdio.py \
-            packages/design-playbook/tests/preview/test_i18n_labels.py \
-            packages/design-playbook/tests/preview/test_visual_batch.py \
-            packages/design-playbook/tests/preview/test_visual_handoff.py \
-            packages/design-playbook/tests/evidence/test_capture_contract.py \
-            packages/design-playbook/tests/evidence/test_disclosure.py \
-            packages/design-playbook/tests/evidence/test_delivery_matrix.py \
-            packages/design-playbook/tests/evidence/test_containment.py \
-            packages/design-playbook/tests/evidence/test_handoff.py \
-            packages/design-playbook/tests/evidence/test_handoff_i18n.py \
-            packages/design-playbook/tests/evidence/test_evidence_preflight.py \
-            packages/design-playbook/tests/evidence/test_page_defects.py \
-            -v
-
-      - name: Run Console — pure-Python tests (required, no Playwright)
-        # Contract, registry, builder, parity, session, security, and
-        # action-allowlist tests. Browser files are excluded here and
-        # collected in the chromium gate below so a missing Playwright
-        # install cannot skip this group (same split as Evidence
-        # PurePathTests / CaptureTests).
-        run: |
-          python3 -m pytest packages/design-playbook/tests/run_console \
-            --ignore=packages/design-playbook/tests/run_console/test_ui_browser.py \
-            --ignore=packages/design-playbook/tests/run_console/test_ui_actions.py \
-            --ignore=packages/design-playbook/tests/run_console/test_read_only_trial.py \
-            --ignore=packages/design-playbook/tests/run_console/test_repair_packet.py \
+            packages/design-playbook/tests \
+            -m "not browser" \
             -v
 
       - name: Workbench — pure-Python tests (required, no Playwright)
@@ -197,12 +187,11 @@ jobs:
       - name: Evidence MCP stdio — capture tests (require chromium)
         if: steps.pw_install.outcome == 'success'
         # Real-browser captures: screenshot, a11y tree, interaction trace,
-        # select_option, failure paths, overwrite opt-in. Requires the
-        # Playwright + chromium install step above to have succeeded.
-        # Selection by class name (review item M3): EvidenceCaptureTests.
+        # select_option, failure paths, overwrite opt-in. The `browser` marker
+        # selects EvidenceCaptureTests and leaves the no-chromium classes to
+        # the required gate above, so the two groups stay disjoint.
         run: |
-          python3 -m pytest packages/design-playbook/tests/evidence/test_server_stdio.py -v \
-            -k CaptureTests
+          python3 -m pytest packages/design-playbook/tests/evidence -m browser -v
 
       - name: Playwright missing — skip-with-reason, mark gate red
         if: steps.pw_install.outcome != 'success'
@@ -238,32 +227,24 @@ jobs:
             | tee /tmp/pin-sync.log
           grep -Fx "PIN SYNC E2E TEST PASSED" /tmp/pin-sync.log
 
-      - name: Visual-edit Phase 1 acceptance (require chromium)
-        # T-110: route -> React edit -> pending batch -> transaction ->
-        # confirm record as a pending coding-agent handoff, plus the
-        # fail-closed negatives (stale batch, tampered hash, drifted source).
+      - name: Preview browser suites (require chromium)
         if: steps.pw_install.outcome == 'success'
+        # T-110 acceptance plus every other preview module that drives a real
+        # browser: host appliers, reconnect/drain, anchor floor, live route,
+        # criteria locale, visual-UI regressions. Same marker the required gate
+        # filters on, so no list here can fall behind the tree.
         run: |
-          python3 -m pytest \
-            packages/design-playbook/tests/preview/test_visual_edit_acceptance.py \
-            -v
+          python3 -m pytest packages/design-playbook/tests/preview -m browser -v
 
       - name: Queue monitor dialog timer races (require chromium)
         if: steps.pw_install.outcome == 'success'
         run: |
-          python3 -m pytest \
-            packages/design-playbook/tests/test_queue_monitor.py \
-            -v
+          python3 -m pytest packages/design-playbook/tests/test_queue_monitor.py -v
 
       - name: Run Console — browser tests (require chromium)
         if: steps.pw_install.outcome == 'success'
         run: |
-          python3 -m pytest \
-            packages/design-playbook/tests/run_console/test_ui_browser.py \
-            packages/design-playbook/tests/run_console/test_ui_actions.py \
-            packages/design-playbook/tests/run_console/test_read_only_trial.py \
-            packages/design-playbook/tests/run_console/test_repair_packet.py \
-            -v
+          python3 -m pytest packages/design-playbook/tests/run_console -m browser -v
 
       - name: Workbench — browser journeys (require chromium)
         if: steps.pw_install.outcome == 'success'
@@ -282,11 +263,8 @@ jobs:
       - name: Preview canvas version-control e2e (require chromium)
         if: steps.pw_install.outcome == 'success'
         run: |
-          python3 -c "from playwright.sync_api import sync_playwright"
-          python3 -m pytest \
-            packages/design-playbook/tests/test_e2e_canvas_vc.py \
-            packages/design-playbook/tests/preview/test_preview_usability.py \
-            -v
+          python3 -m pytest packages/design-playbook/tests/test_e2e_canvas_vc.py -v
+          python3 -m pytest packages/design-playbook/tests/preview/test_preview_usability.py -v
 
       - name: Operator continuation — extra-project journey (require chromium)
         id: operator_journey
@@ -333,6 +311,13 @@ jobs:
         run: python -m pip install pytest
       - name: Read-only frontend scope review on Windows paths
         run: python -m pytest tests/test_frontend_review.py -q
+      - name: Preview origin exclusivity (ADR-0046)
+        # SO_REUSEADDR makes a second bind alias a live port on Windows only, so
+        # this regression can only fail on a real Windows runner. It lives in a
+        # module the no-chromium gate also collects, hence the class selection.
+        run: |
+          python -m pytest packages/design-playbook/tests/preview/test_browser_control.py \
+            -q -k PreviewServerBindIsolationTests
 
   workbench-python312:
     # R15 names Python 3.12 as the main target. The `validate` job runs the

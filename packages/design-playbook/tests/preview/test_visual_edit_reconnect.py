@@ -2,11 +2,17 @@
 import json
 
 import pytest
-from playwright.sync_api import expect
+try:
+    from playwright.sync_api import expect  # noqa: E402
+except ImportError:  # pragma: no cover - only the browser tests need it
+    expect = None
 
 from tests.preview.conftest import expand_inspector_section
 from tests.preview.test_visual_ui_regressions import editor_page as editor_page
 
+
+# This module drives a real browser: the no-chromium CI job deselects it by marker.
+pytestmark = pytest.mark.browser
 
 @pytest.mark.parametrize(("disconnect", "lost_message", "edit_source"), [
     ("load", "request", "inspector"),

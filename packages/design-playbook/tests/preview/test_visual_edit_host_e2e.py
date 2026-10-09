@@ -5,6 +5,8 @@ host applier is a real subprocess and requires a diff-bound stdin confirmation.
 """
 from __future__ import annotations
 
+import pytest
+
 import json
 import os
 import shutil
@@ -23,7 +25,11 @@ FIXTURE = PACKAGE / "tests" / "fixtures" / "visual-edit-host"
 for directory in (PACKAGE, PACKAGE / "tests", FIXTURE):
     sys.path.insert(0, str(directory))
 
-from playwright.sync_api import expect, sync_playwright  # noqa: E402
+try:
+    from playwright.sync_api import expect, sync_playwright  # noqa: E402
+except ImportError:  # pragma: no cover - only the browser tests need it
+    expect = None
+    sync_playwright = None
 from preview_e2e_helpers import dismiss_onboarding  # noqa: E402
 from host import create_server, source_hash  # noqa: E402
 from design_playbook.mcp.preview import review_session  # noqa: E402
@@ -35,6 +41,9 @@ from design_playbook.mcp.preview.visual_handoff import VisualHandoffError, build
 EDITS = [("#queue-title", "background-color", "rgb(221, 238, 226)"),
          ("#next-read", "padding", "24px")]
 
+
+# This module drives a real browser: the no-chromium CI job deselects it by marker.
+pytestmark = pytest.mark.browser
 
 class LiveReviewBrowser:
     """Synchronous real-browser adapter; the plugin HTTP server runs its own thread."""

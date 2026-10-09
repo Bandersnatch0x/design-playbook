@@ -9,7 +9,9 @@ import tempfile
 import threading
 import time
 import unittest
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 # One import seam (ADR-0022): package root on sys.path once, then absolute
@@ -849,6 +851,9 @@ class PreviewVisualEditHandoffTests(unittest.TestCase):
                         "property": "padding",
                         "oldValue": "8px",
                         "newValue": "16px",
+                        # The review shell is the only producer whose edits
+                        # can stand in for notes (ADR-0008 amendment).
+                        "source": "shell",
                     }
                 ],
             },
@@ -1080,6 +1085,7 @@ class PreviewVisualEditHandoffTests(unittest.TestCase):
             {"schemaVersion": 1, "edits": [{
                 "locator": "#hero", "property": "padding",
                 "oldValue": "16px", "newValue": "16px",
+                "source": "shell",
             }]},
             source_hash=source_hash,
             route_url="",
@@ -1137,6 +1143,92 @@ class PreviewVisualEditHandoffTests(unittest.TestCase):
         self.assertFalse(result["confirmed"])
         self.assertFalse(entry["user_confirmed"])
         self.assertIsNone(confirm)
+
+class LiveRouteReplayTests(unittest.TestCase):
+    """A committed live-route round replays from the record.
+
+    The bound live-route URL is inside the binding digest, so replaying the
+    same request returns the durable decision instead of re-observing the
+    network. A route that has since gone away must not turn a replay into an
+    unstructured failure, and a different route URL is a binding conflict.
+    """
+
+    PROTO = "<html><body>live route</body></html>"
+
+    def _static(self, choice: str, feedback: str):
+        def collect(
+            prototype: Path, summary: str, options: list[str], round_n: int, *,
+            criteria: list[dict[str, str]], live_route_url: str = "",
+        ) -> dict:
+            return {
+                "choice": choice,
+                "feedback": feedback,
+                "anchors": [],
+                "aborted": False,
+            }
+        return collect
+
+    def _serve_route(self, hits: list[int]):
+        class RouteHandler(BaseHTTPRequestHandler):
+            def log_message(self, *args: Any) -> None:
+                pass
+
+            def do_GET(self) -> None:  # noqa: N802 - stdlib contract
+                hits.append(1)
+                body = b"<html><body>live</body></html>"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        server = HTTPServer(("127.0.0.1", 0), RouteHandler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        return server, f"http://127.0.0.1:{server.server_address[1]}/"
+
+    def _call(self, prototype: Path, route: str, collect) -> dict:
+        return run_preview_transaction(
+            path_arg=str(prototype), html=None, summary="summary", round_n=1,
+            report_ref="report.md",
+            options=["确认通过", "需要修改"],
+            collect=collect, live_route_url=route,
+        )
+
+    def test_a_committed_live_route_round_replays_without_re_observing(self) -> None:
+        hits: list[int] = []
+        server, route = self._serve_route(hits)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                prototype = Path(tmp) / "round-1.html"
+                prototype.write_text(self.PROTO, encoding="utf-8")
+                first = self._call(prototype, route, self._static("确认通过", "清晰"))
+                self.assertTrue(first["confirmed"])
+
+                def offline_collect(*args: Any, **kwargs: Any) -> dict:
+                    raise AssertionError("a replay must not collect or observe again")
+
+                replay = self._call(prototype, route, offline_collect)
+                self.assertEqual(replay["decision_id"], first["decision_id"])
+        finally:
+            server.shutdown()
+            server.server_close()
+
+        self.assertEqual(hits, [], "a replay re-observed the live route")
+
+    def test_a_different_live_route_url_is_a_binding_conflict(self) -> None:
+        hits: list[int] = []
+        server, route = self._serve_route(hits)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                prototype = Path(tmp) / "round-1.html"
+                prototype.write_text(self.PROTO, encoding="utf-8")
+                self._call(prototype, route, self._static("确认通过", "清晰"))
+                with self.assertRaises(TransactionConflict):
+                    self._call(prototype, "http://127.0.0.1:9/",
+                               self._static("确认通过", "清晰"))
+        finally:
+            server.shutdown()
+            server.server_close()
 
 
 if __name__ == "__main__":
