@@ -567,8 +567,10 @@
     });
   }
 
-  // One requester entry point. The submit listener below owns every decision
-  // (floor gate, drain, allow) so a caller cannot pick a different path.
+  // Several requesters reach the form (Ctrl/Cmd+Enter via submitPrimary, the
+  // Shift+Escape Skip path, and native button activation), but the submit
+  // listener below owns every decision (floor gate, drain, allow), so no
+  // requester can pick a different path than another.
   function submitPrimary() {
     var targetBtn = document.getElementById("dpb-btn-approve");
     if (draftPopoverOpen() && annoInput && annoInput.value.trim()) saveDraftAnchor();
