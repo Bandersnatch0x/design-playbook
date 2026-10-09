@@ -219,6 +219,17 @@ def test_bound_batch_cannot_be_resigned_or_moved_to_another_route() -> None:
         normalize_visual_batch(batch, source_hash="v1", route_url="http://127.0.0.1:5173/b")
 
 
+def test_overlong_route_is_refused_not_truncated() -> None:
+    # The stored route must equal the route the shell is bound to, so a value
+    # past the limit is refused rather than silently cut: a truncated copy
+    # could never validate against the real route.
+    with pytest.raises(VisualBatchError, match="routeUrl exceeds"):
+        normalize_visual_batch(
+            {"edits": [{"locator": "#a", "property": "color", "newValue": "red"}]},
+            source_hash="v1", route_url="http://127.0.0.1:5173/" + "a" * 2000,
+        )
+
+
 @pytest.mark.parametrize("url", [
     "file:///tmp/a", "about:blank", "javascript:alert(1)", "http://example.com/",
     "http://127.0.0.1.evil.test/", "http://user:pass@127.0.0.1/", "http://127.0.0.1/#x",

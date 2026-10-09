@@ -149,7 +149,7 @@ def normalize_visual_batch(
         "schemaVersion": SCHEMA_VERSION,
         "status": "pending",
         "sourceHash": source_hash,
-        "routeUrl": str(route_url or "")[:2000],
+        "routeUrl": _value(route_url, "routeUrl"),
         "edits": normalized,
     }
     batch["batchHash"] = batch_digest(batch)
