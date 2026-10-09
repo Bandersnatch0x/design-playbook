@@ -72,6 +72,24 @@
       if (item._seq !== undefined) return item._seq;
       return null;
     }
+    // Whether the round still holds unpublished visual work. Pure over a state
+    // snapshot so the rule executes in node without a browser; the component
+    // assembles the snapshot from its refs. It deliberately does NOT consult a
+    // stale flag: a disconnect sets stale whenever work is pending, so treating
+    // stale as "nothing pending" made the drain decision blind to an unpublished
+    // draft and let the round submit without it. Only an absent selection makes
+    // drafts irrelevant.
+    function dpbPendingVisualEdits(state) {
+      if (!state.selected) return false;
+      if (!state.published) return true;
+      if (state.request) return true;
+      if (state.unacked && Object.keys(state.unacked).length > 0) return true;
+      if (Object.keys(state.draftTimers).length > 0) return true;
+      return Object.keys(state.drafts).some(function (p) {
+        return state.drafts[p] !== undefined && state.dispatched[p] !== state.drafts[p];
+      });
+    }
+
     function Editor() {
       var [selected, setSelected] = React.useState(null);
       var [pending, setPending] = React.useState([]);
@@ -695,19 +713,17 @@
       }
 
       function hasPendingVisualEdits() {
+        // The pending rule is pure and executes in node; this only assembles the
+        // snapshot from the component's refs.
         var state = current.current;
-        // Do NOT short-circuit on stale. A disconnect sets stale whenever work is
-        // pending, so treating stale as "nothing pending" made the drain decision
-        // blind to an unpublished draft and let the round submit without it. Only
-        // an absent selection makes drafts irrelevant. Callers that need to know
-        // whether a flush is possible ask dpbVisualEditorState, not this.
-        if (!state.selected) return false;
-        if (!isPublishedRef.current) return true;
-        if (request.current || requestPromiseRef.current) return true;
-        if (unackedRequests.current && Object.keys(unackedRequests.current).length > 0) return true;
-        if (Object.keys(draftTimers.current).length > 0) return true;
-        return Object.keys(state.drafts).some(function (p) {
-          return state.drafts[p] !== undefined && dispatchedDrafts.current[p] !== state.drafts[p];
+        return dpbPendingVisualEdits({
+          selected: state.selected,
+          published: isPublishedRef.current,
+          request: request.current || requestPromiseRef.current,
+          unacked: unackedRequests.current,
+          draftTimers: draftTimers.current,
+          drafts: state.drafts,
+          dispatched: dispatchedDrafts.current,
         });
       }
       var hasPendingRef = React.useRef(hasPendingVisualEdits);
