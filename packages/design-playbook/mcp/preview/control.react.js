@@ -962,7 +962,7 @@
                   ["I", t("visual_italic"), "font-style", selected.style.fontStyle === "italic", "italic", "normal"],
                   ["U", t("visual_underline"), "text-decoration", selected.style.textDecoration.indexOf("underline") >= 0, "underline", "none"],
                   ["S", t("visual_strikethrough"), "text-decoration", selected.style.textDecoration.indexOf("line-through") >= 0, "line-through", "none"]].map(function (action) {
-                  return h("button", { key: action[1], type: "button", "aria-label": action[1], "aria-pressed": action[3],
+                  return h("button", { key: action[1], type: "button", "aria-label": action[1], "aria-pressed": action[3], "data-action": action[4],
                     disabled: !ready || stale || busy, onClick: function () { applyStyle(action[2], action[3] ? action[5] : action[4]); } }, action[0]);
                 })),
               renderField("font-family", t("visual_fontFamily"), "select", fontFamilyOpts),

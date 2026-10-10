@@ -216,3 +216,24 @@ def test_font_family_dropdown_lists_generic_families_only() -> None:
     generic = {"", "system-ui", "ui-sans-serif", "ui-serif", "ui-monospace",
                "ui-rounded", "sans-serif", "serif", "monospace"}
     assert set(opts) <= generic
+
+
+# Chord glyphs depend on the reviewer's keyboard, so the template names the
+# chord and the shell draws it. Single-letter tool keys stay literal.
+def test_template_carries_no_hard_coded_chord_glyphs() -> None:
+    caps = re.findall(r"<kbd([^>]*)>(.*?)</kbd>", HTML, re.S)
+    drawn = [text for attrs, text in caps if "data-kbd" not in attrs]
+    assert [t for t in drawn if re.search(r"⌘|⇧|↵|Ctrl|Esc|Del", t)] == []
+    names = {re.search(r'data-kbd="([^"]+)"', attrs).group(1)
+             for attrs, _ in caps if "data-kbd" in attrs}
+    for table in ("KEYCAPS_COMMAND", "KEYCAPS_CTRL"):
+        start = REVIEW_JS.index(f"var {table} = {{")
+        body = REVIEW_JS[start:REVIEW_JS.index("};", start)]
+        assert names <= set(re.findall(r"(\w+):", body))
+
+
+def test_italic_button_is_styled_by_action_not_by_its_english_label() -> None:
+    assert 'aria-label="Italic"' not in CSS
+    assert '.dpb-compact-text-toolbar button[data-action="italic"]' in CSS
+    react = (PREVIEW / "control.react.js").read_text(encoding="utf-8")
+    assert '"data-action": action[4]' in react

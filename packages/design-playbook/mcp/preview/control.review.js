@@ -2,6 +2,24 @@
   // Concatenated at the review insertion marker in control.js by
   // control.py (_load_resources); both fragments share one IIFE scope.
 
+  // ---- keycaps ----
+  // The shell's chords are fixed, but how a key is drawn depends on the
+  // keyboard in front of the reviewer, so the template carries only the chord
+  // name and this fills the glyphs once.
+  var KEYCAPS_COMMAND = { approve: "\u2318\u21b5", skip: "\u21e7Esc", abort: "\u21e7\u232b", undo: "\u2318Z", enter: "\u21b5", escape: "Esc" };
+  var KEYCAPS_CTRL = { approve: "Ctrl+\u21b5", skip: "\u21e7Esc", abort: "\u21e7Del", undo: "Ctrl+Z", enter: "\u21b5", escape: "Esc" };
+  function keycapSet() {
+    var platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+    return /mac|iphone|ipad/i.test(platform) ? KEYCAPS_COMMAND : KEYCAPS_CTRL;
+  }
+  (function fillKeycaps() {
+    var caps = keycapSet();
+    Array.prototype.forEach.call(document.querySelectorAll("kbd[data-kbd]"), function (el) {
+      var cap = caps[el.getAttribute("data-kbd")];
+      if (cap) el.textContent = cap;
+    });
+  })();
+
   // ---- annotation list rendering (v9 cards) ----
   function kindChip(anchor) {
     if (["draw", "box", "pin", "copy", "layout", "visual"].indexOf(anchor.tag) >= 0) {

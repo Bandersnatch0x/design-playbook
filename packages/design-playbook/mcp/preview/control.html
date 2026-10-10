@@ -68,14 +68,14 @@
       <!-- Destructive Action (Safely De-emphasized, neutral resting state) -->
       <button type="button" id="dpb-abort" data-i18n-title="terminate_desc" title="{t_terminate_desc}" aria-haspopup="dialog" aria-expanded="false" aria-controls="dpb-abort-popover" class="dpb-abort-btn">
         <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M5.5 5.5 10.5 10.5M10.5 5.5 5.5 10.5"/></svg>
-        <span class="i18n" data-i18n="terminate">{t_terminate}</span><kbd>⇧Del</kbd>
+        <span class="i18n" data-i18n="terminate">{t_terminate}</span><kbd data-kbd="abort"></kbd>
       </button>
 
       {secondary_html}
 
       <div class="dpb-skip-wrap">
         <button type="submit" name="choice" value="{skip_val}" id="dpb-btn-skip" data-i18n-title="skip_desc" title="{t_skip_desc}" class="dpb-btn-quiet">
-          <span class="i18n" data-i18n="skip">{t_skip}</span><kbd>⇧Esc</kbd>
+          <span class="i18n" data-i18n="skip">{t_skip}</span><kbd data-kbd="skip"></kbd>
         </button>
         <div class="dpb-popover" id="dpb-skip-popover" role="dialog" data-i18n-aria-label="skip_popover_aria" aria-label="{t_skip_popover_aria}" hidden>
           <p class="dpb-popover-msg" data-i18n="skip_confirm">{t_skip_confirm}</p>
@@ -101,7 +101,7 @@
       <!-- Primary Decision CTA: Keyboard accessible, advisory floor posture, submit intercepted until substantive -->
       <button type="submit" name="choice" value="{primary_val}" id="dpb-btn-approve" class="dpb-approve-btn dpb-approve-muted" aria-describedby="dpb-gate-reason" data-i18n-title="confirm_desc" title="{t_confirm_desc}">
         <span class="dpb-approve-dot" aria-hidden="true"></span>
-        <span id="dpb-approve-label"{primary_i18n}>{primary_label}</span><kbd>Ctrl/⌘↵</kbd>
+        <span id="dpb-approve-label"{primary_i18n}>{primary_label}</span><kbd data-kbd="approve"></kbd>
       </button>
       <span id="dpb-gate-reason" class="dpb-sr-only" role="status" data-i18n="gate_reason">{t_gate_reason}</span>
     </div>
@@ -260,7 +260,7 @@
     </div>
     <textarea id="dpb-anno-input" rows="3" data-i18n-placeholder="popover_placeholder" placeholder="{t_popover_placeholder}"></textarea>
     <div class="dpb-anno-foot">
-      <span class="dpb-anno-hint"><kbd>↵</kbd> <span class="i18n" data-i18n="popover_save">{t_popover_save}</span> · <kbd>Esc</kbd></span>
+      <span class="dpb-anno-hint"><kbd data-kbd="enter"></kbd> <span class="i18n" data-i18n="popover_save">{t_popover_save}</span> · <kbd data-kbd="escape"></kbd></span>
       <span class="dpb-hint dpb-anno-floor-hint" id="dpb-anno-floor-hint" role="alert"></span>
     </div>
   </div>
@@ -290,10 +290,10 @@
       <div class="dpb-modal-body">
         <p class="dpb-modal-group i18n" data-i18n="group_global">{t_group_global}</p>
         <div class="dpb-modal-grid">
-          <span{primary_i18n}>{primary_label}</span><kbd>Ctrl/⌘ + ↵</kbd>
-          <span class="i18n" data-i18n="skip">{t_skip}</span><kbd>⇧Esc</kbd>
-          <span data-i18n="cancel_tool">{t_cancel_tool}</span><kbd>Esc</kbd>
-          <span class="i18n" data-i18n="terminate">{t_terminate}</span><kbd>⇧Del</kbd>
+          <span{primary_i18n}>{primary_label}</span><kbd data-kbd="approve"></kbd>
+          <span class="i18n" data-i18n="skip">{t_skip}</span><kbd data-kbd="skip"></kbd>
+          <span data-i18n="cancel_tool">{t_cancel_tool}</span><kbd data-kbd="escape"></kbd>
+          <span class="i18n" data-i18n="terminate">{t_terminate}</span><kbd data-kbd="abort"></kbd>
           <span class="i18n" data-i18n="lang_toggle">{t_lang_toggle}</span><kbd>L</kbd>
         </div>
         <p class="dpb-modal-group i18n" data-i18n="group_tools">{t_group_tools}</p>
@@ -305,8 +305,8 @@
           <span class="i18n" data-i18n="tool_box">{t_tool_box}</span><kbd>B</kbd>
           <span class="i18n" data-i18n="tool_ruler">{t_tool_ruler}</span><kbd>R</kbd>
           <span class="i18n" data-i18n="roam_label">{t_roam_label}</span><kbd>J / K</kbd>
-          <span class="i18n" data-i18n="undo_label">{t_undo_label}</span><kbd>Ctrl + Z</kbd>
-          <span class="i18n" data-i18n="tool_hand">{t_tool_hand}</span><kbd>Space / H</kbd>
+          <span class="i18n" data-i18n="undo_label">{t_undo_label}</span><kbd data-kbd="undo"></kbd>
+          <span class="i18n" data-i18n="tool_hand">{t_tool_hand}</span><kbd><span class="i18n" data-i18n="kbd_space">{t_kbd_space}</span> / H</kbd>
           <span class="i18n" data-i18n="zoom_in_t">{t_zoom_in_t}</span><kbd data-i18n="zoom_keys">{t_zoom_keys}</kbd>
           <span class="i18n" data-i18n="zoom_fit">{t_zoom_fit}</span><kbd>0</kbd>
           <span class="i18n" data-i18n="drawer_toggle">{t_drawer_toggle}</span><kbd>[</kbd>
