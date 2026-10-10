@@ -92,6 +92,73 @@ CHECK_TYPES = frozenset({"machine-detector", "protocol-check"})
 EVIDENCE_LAYERS = frozenset({
     "source", "rendered", "interaction", "measurement", "decision",
 })
+# Authority -> (allowed severity levels, required class or "" for any).
+# hard-constraint and measured-threshold are facts; taste and convention never
+# reach S3. The registry header states the same mapping in prose.
+AUTHORITY_SEVERITY = {
+    "hard-constraint": (frozenset({"S2", "S3"}), "fact"),
+    "measured-threshold": (frozenset({"S1", "S2", "S3"}), "fact"),
+    "project-declaration": (frozenset({"S1", "S2", "S3"}), ""),
+    "platform-convention": (frozenset({"S1", "S2"}), ""),
+    "usability-heuristic": (frozenset({"S1", "S2"}), ""),
+    "advisory-aesthetic": (frozenset({"S0", "S1", "S2"}), "judgment"),
+}
+THRESHOLD_OPS = (">=", "<=", "=")
+THRESHOLD_UNITS = (":1", "px", "ms", "s", "%", "count")
+THRESHOLD_TERM = re.compile(
+    r"^([a-z][a-z0-9-]*)\s*(>=|<=|=)\s*([0-9]+(?:\.[0-9]+)?)(:1|px|ms|s|%|count)$"
+)
+
+
+@dataclass(frozen=True)
+class Threshold:
+    """One parsed ``<term> <op> <number><unit>`` clause."""
+
+    term: str
+    op: str
+    value: float
+    unit: str
+
+
+def parse_threshold(value: str) -> tuple[dict[str, Threshold], list[str]]:
+    """Parse a ``threshold`` field into terms, plus the problems found.
+
+    Syntax: ``<term> <op> <number><unit>; ...`` with op in ``>= <= =`` and
+    unit in ``:1 px ms s % count``. A term appears once.
+    """
+    terms: dict[str, Threshold] = {}
+    problems: list[str] = []
+    for clause in value.split(";"):
+        clause = clause.strip()
+        if not clause:
+            continue
+        match = THRESHOLD_TERM.match(clause)
+        if not match:
+            problems.append(f"unparseable clause {clause!r}")
+            continue
+        term, op, number, unit = match.groups()
+        if term in terms:
+            problems.append(f"duplicate term {term!r}")
+            continue
+        terms[term] = Threshold(term, op, float(number), unit)
+    if not terms and not problems:
+        problems.append("empty threshold")
+    return terms, problems
+
+
+def threshold(entries: list["RuleEntry"], entry_id: str, term: str) -> Threshold:
+    """Read one threshold term from the registry: the single source for gates."""
+    for entry in entries:
+        if entry.id == entry_id:
+            terms, problems = parse_threshold(entry.fields.get("threshold", ""))
+            if problems:
+                raise ValueError(f"{entry_id}: {'; '.join(problems)}")
+            if term not in terms:
+                raise KeyError(f"{entry_id} has no threshold term {term!r}")
+            return terms[term]
+    raise KeyError(f"unknown registry id {entry_id!r}")
+
+
 SEVERITY_PATTERN = re.compile(r"^(S[0-3])(?:\s*/\s*(fact|judgment))?$")
 # Owner first hop = recirculate-map artifact names + the bound-baseline path.
 OWNER_FIRST_HOPS = frozenset({
@@ -260,6 +327,8 @@ def validate_registry(
         _validate_governance(entry, governance_events, promotions, errors)
         _validate_owner(entry, errors)
         _validate_evidence_layers(entry, errors)
+        _validate_authority_severity(entry, errors)
+        _validate_threshold(entry, errors)
 
     _validate_references(entries, seen, errors)
     _validate_overrides(entries, errors)
@@ -529,6 +598,53 @@ def _validate_references(
                             actual=f"{ref_id}@{ref_version}",
                             repair=f"Re-pin {key} to {ref_id}@{target.version}",
                         ))
+
+
+def _validate_authority_severity(entry: RuleEntry, errors: list[RegistryError]) -> None:
+    authority = entry.fields.get("authority", "")
+    match = SEVERITY_PATTERN.match(entry.fields.get("severity-default", ""))
+    if authority not in AUTHORITY_SEVERITY or not match:
+        return  # enum and format errors are reported by the field checks
+    levels, klass = AUTHORITY_SEVERITY[authority]
+    level, seen_class = match.group(1), match.group(2) or ""
+    if level not in levels or (klass and seen_class != klass):
+        expected = "|".join(sorted(levels)) + (f" / {klass}" if klass else "")
+        errors.append(RegistryError(
+            f"{entry.id}: authority {authority} allows severity-default "
+            f"{expected}, got {entry.fields['severity-default']!r}",
+            rule=entry.id,
+            expected=expected,
+            actual=entry.fields["severity-default"],
+            repair="Recalibrate severity-default or the authority, and bump "
+                   "the version with a history line",
+        ))
+
+
+def _validate_threshold(entry: RuleEntry, errors: list[RegistryError]) -> None:
+    value = entry.fields.get("threshold", "").strip()
+    if entry.fields.get("authority") == "measured-threshold" and not value:
+        errors.append(RegistryError(
+            f"{entry.id}: measured-threshold entry has no threshold field",
+            rule=entry.id,
+            expected="threshold: <term> <op> <number><unit>; ...",
+            actual="missing",
+            repair="Add the threshold line; it is the single source for the "
+                   "rule's numbers",
+        ))
+        return
+    if not value:
+        return
+    _, problems = parse_threshold(value)
+    for problem in problems:
+        errors.append(RegistryError(
+            f"{entry.id}: threshold {problem}",
+            rule=entry.id,
+            expected="<term> <op> <number><unit> with op >=|<=|= and unit "
+                     ":1|px|ms|s|%|count",
+            actual=value,
+            repair="Rewrite the clause in the threshold syntax; keep prose in "
+                   "statement or check-inputs",
+        ))
 
 
 def _validate_overrides(entries: list[RuleEntry], errors: list[RegistryError]) -> None:

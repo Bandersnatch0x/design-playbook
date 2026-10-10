@@ -59,5 +59,41 @@ class ProtocolFaceTests(unittest.TestCase):
         self.assertIn("usability-heuristic", rules_registry.AUTHORITIES)
 
 
+
+class AuthoritySeverityTests(unittest.TestCase):
+    def test_hard_constraint_with_judgment_fails(self) -> None:
+        errors = _errors(_mutate("A11Y-01", "severity-default", "S1 / judgment"))
+        self.assertTrue(any(e.startswith("A11Y-01: authority hard-constraint") for e in errors), errors)
+
+    def test_advisory_aesthetic_at_s3_fails(self) -> None:
+        errors = _errors(_mutate("CRAFT-01", "severity-default", "S3 / judgment"))
+        self.assertTrue(any(e.startswith("CRAFT-01: authority advisory-aesthetic") for e in errors), errors)
+
+    def test_measured_threshold_needs_fact_class(self) -> None:
+        errors = _errors(_mutate("A11Y-03", "severity-default", "S2 / judgment"))
+        self.assertTrue(any(e.startswith("A11Y-03: authority measured-threshold") for e in errors), errors)
+
+
+class ThresholdTests(unittest.TestCase):
+    def test_measured_threshold_without_threshold_fails(self) -> None:
+        errors = _errors(_mutate("PERF-01", "threshold", None))
+        self.assertIn("PERF-01: measured-threshold entry has no threshold field", errors)
+
+    def test_prose_threshold_fails(self) -> None:
+        errors = _errors(_mutate("A11Y-03", "threshold", "text-contrast >= high"))
+        self.assertTrue(any(e.startswith("A11Y-03: threshold unparseable clause") for e in errors), errors)
+
+    def test_duplicate_term_fails(self) -> None:
+        errors = _errors(_mutate("A11Y-04", "threshold", "hit-area-floor >= 24px; hit-area-floor >= 20px"))
+        self.assertIn("A11Y-04: threshold duplicate term 'hit-area-floor'", errors)
+
+    def test_threshold_reader_returns_the_registry_value(self) -> None:
+        entries = rules_registry.parse_registry(REGISTRY_TEXT)
+        floor = rules_registry.threshold(entries, "A11Y-04", "hit-area-floor")
+        self.assertEqual((floor.op, floor.value, floor.unit), (">=", 24.0, "px"))
+        with self.assertRaises(KeyError):
+            rules_registry.threshold(entries, "A11Y-04", "missing-term")
+
+
 if __name__ == "__main__":
     unittest.main()
