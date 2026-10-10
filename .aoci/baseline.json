@@ -1,0 +1,3642 @@
+{
+  "version": 1,
+  "created_at": "2026-10-10T03:32:43Z",
+  "updated_at": "2026-10-10T05:19:10Z",
+  "files": {
+    ".agents/plugins/marketplace.json": {
+      "role": "index",
+      "sha256": "70ebb5d37cca6ef6b19aa0af8583b5f11a843e431388a18c2afc5129b84ba1c4",
+      "size": 385,
+      "normalized_sha256": "70ebb5d37cca6ef6b19aa0af8583b5f11a843e431388a18c2afc5129b84ba1c4"
+    },
+    ".claude-plugin/marketplace.json": {
+      "role": "index",
+      "sha256": "089a04012b5a21e62a1c42b110469acb602589c138d6cb37eb0679d99bb3798c",
+      "size": 906,
+      "normalized_sha256": "089a04012b5a21e62a1c42b110469acb602589c138d6cb37eb0679d99bb3798c"
+    },
+    ".gitattributes": {
+      "role": "index",
+      "sha256": "21fa16a2122e2b0360b47502c577428b645437e08e9e87ffba661f84853cb476",
+      "size": 291,
+      "normalized_sha256": "21fa16a2122e2b0360b47502c577428b645437e08e9e87ffba661f84853cb476"
+    },
+    ".github/CONTRIBUTING.md": {
+      "role": "index",
+      "sha256": "23582c2a4703fe5c9f78134b0a59b1a8fe5f3fe4e5d5e0b864b7f615462a39a0",
+      "size": 6492,
+      "normalized_sha256": "23582c2a4703fe5c9f78134b0a59b1a8fe5f3fe4e5d5e0b864b7f615462a39a0"
+    },
+    ".github/CONTRIBUTING.zh-CN.md": {
+      "role": "index",
+      "sha256": "55a9b45b0f86d090252f2beecf8704708ba8ed8892fb3f110c117c9cf9520c44",
+      "size": 5453,
+      "normalized_sha256": "55a9b45b0f86d090252f2beecf8704708ba8ed8892fb3f110c117c9cf9520c44"
+    },
+    ".github/ISSUE_TEMPLATE/bug-install.yml": {
+      "role": "index",
+      "sha256": "cdecccceb53d893a6dcb7f50579dc9845f3fd20bc8460a819093ccb455e0ed28",
+      "size": 2390,
+      "normalized_sha256": "cdecccceb53d893a6dcb7f50579dc9845f3fd20bc8460a819093ccb455e0ed28"
+    },
+    ".github/ISSUE_TEMPLATE/bug-run.yml": {
+      "role": "index",
+      "sha256": "392f89ef0fabe0053e09edb48305b2cb9a299f5616f1f9ab0e77fbbb3deeb433",
+      "size": 1983,
+      "normalized_sha256": "392f89ef0fabe0053e09edb48305b2cb9a299f5616f1f9ab0e77fbbb3deeb433"
+    },
+    ".github/ISSUE_TEMPLATE/config.yml": {
+      "role": "index",
+      "sha256": "46bb3e6f83c6bd6fc98fe3505aa0e575354239d2fede09b4bfadbedb2fca79f3",
+      "size": 393,
+      "normalized_sha256": "46bb3e6f83c6bd6fc98fe3505aa0e575354239d2fede09b4bfadbedb2fca79f3"
+    },
+    ".github/ISSUE_TEMPLATE/feature.yml": {
+      "role": "index",
+      "sha256": "42cddb7b1424bc92dedc3864b9836f94dcd4a8351ee5f1f3270e0e7130cfd441",
+      "size": 1654,
+      "normalized_sha256": "42cddb7b1424bc92dedc3864b9836f94dcd4a8351ee5f1f3270e0e7130cfd441"
+    },
+    ".github/PULL_REQUEST_TEMPLATE.md": {
+      "role": "index",
+      "sha256": "a4a60b6d2344e6bccf79773fa6d4361af48cfac78ee5ad1bc864c6ec26488541",
+      "size": 494,
+      "normalized_sha256": "a4a60b6d2344e6bccf79773fa6d4361af48cfac78ee5ad1bc864c6ec26488541"
+    },
+    ".github/SECURITY.md": {
+      "role": "index",
+      "sha256": "bba9d667ac138549cde948ce01d7e36dd26914ff54337a4badbb9164d95a29be",
+      "size": 892,
+      "normalized_sha256": "bba9d667ac138549cde948ce01d7e36dd26914ff54337a4badbb9164d95a29be"
+    },
+    ".github/workflows/ci.yml": {
+      "role": "index",
+      "sha256": "a84d3a493328da19681c478ae6d95c98f43d5d3dc7858015e2dcd4808c92b670",
+      "size": 17732,
+      "normalized_sha256": "a84d3a493328da19681c478ae6d95c98f43d5d3dc7858015e2dcd4808c92b670"
+    },
+    ".github/workflows/release-dsh-bundle.yml": {
+      "role": "index",
+      "sha256": "f7d5fefbc892cb2d503734e094a7bb61e2f10e07c43a7705a5f93525ff6c27bd",
+      "size": 6670,
+      "normalized_sha256": "f7d5fefbc892cb2d503734e094a7bb61e2f10e07c43a7705a5f93525ff6c27bd"
+    },
+    ".github/workflows/release.yml": {
+      "role": "index",
+      "sha256": "595d5d7b12db925069b17f4af68c1fd8eda6840c50ef6a5d012b9b9c5999af53",
+      "size": 9172,
+      "normalized_sha256": "595d5d7b12db925069b17f4af68c1fd8eda6840c50ef6a5d012b9b9c5999af53"
+    },
+    ".gitignore": {
+      "role": "index",
+      "sha256": "0c223a9ce40dfe9fdf49f04c3c1073a94e0ea0d59e555b743eb42f7c7eed18db",
+      "size": 1903,
+      "normalized_sha256": "0c223a9ce40dfe9fdf49f04c3c1073a94e0ea0d59e555b743eb42f7c7eed18db"
+    },
+    ".mcp.json": {
+      "role": "index",
+      "sha256": "5aab99cb64cd59b17760205ef805e1782297318352ef3cbb58048b1aa450efa6",
+      "size": 439,
+      "normalized_sha256": "5aab99cb64cd59b17760205ef805e1782297318352ef3cbb58048b1aa450efa6"
+    },
+    "AGENTS.md": {
+      "role": "index",
+      "sha256": "e7d0746aec29fb1e32e7484c2447b9bf68c7d9c44e1886d868c778eebd8fcf41",
+      "size": 18920,
+      "normalized_sha256": "e7d0746aec29fb1e32e7484c2447b9bf68c7d9c44e1886d868c778eebd8fcf41"
+    },
+    "CLAUDE.md": {
+      "role": "index",
+      "sha256": "336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49",
+      "size": 11,
+      "normalized_sha256": "336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49"
+    },
+    "CONTEXT.md": {
+      "role": "index",
+      "sha256": "7dc5f6e4ebaf5fb9054f19e366bf137a8404eb25861eb028031737945062a3a4",
+      "size": 66786,
+      "normalized_sha256": "7dc5f6e4ebaf5fb9054f19e366bf137a8404eb25861eb028031737945062a3a4"
+    },
+    "LICENSE": {
+      "role": "index",
+      "sha256": "d7ac5d211fb96918004dac5e2aaa4ccac90d7f94e16feaed5684e1be505f77e5",
+      "size": 1379,
+      "normalized_sha256": "d7ac5d211fb96918004dac5e2aaa4ccac90d7f94e16feaed5684e1be505f77e5"
+    },
+    "PRODUCT.md": {
+      "role": "index",
+      "sha256": "7a0657e41088b68a384496fec775fb126bcfedef9bc0f22d52bcd156192eb0ab",
+      "size": 2422,
+      "normalized_sha256": "7a0657e41088b68a384496fec775fb126bcfedef9bc0f22d52bcd156192eb0ab"
+    },
+    "README-zh.md": {
+      "role": "index",
+      "sha256": "ebe4444ca3c1776baf7eb888ac083f84de6033994d6ed699ad3db9f05e2f9bd8",
+      "size": 16297,
+      "normalized_sha256": "ebe4444ca3c1776baf7eb888ac083f84de6033994d6ed699ad3db9f05e2f9bd8"
+    },
+    "README.md": {
+      "role": "index",
+      "sha256": "d544ae7fec55ffd83bdca8e24c6dbc9c4f00187ced8595a672778ea9628f885a",
+      "size": 17459,
+      "normalized_sha256": "d544ae7fec55ffd83bdca8e24c6dbc9c4f00187ced8595a672778ea9628f885a"
+    },
+    "aoci.code.txt": {
+      "role": "index",
+      "sha256": "c467cdaa84c4bf12bb9d85cb54252ba935cdcb74483e609fdeb1228a31f981fb",
+      "size": 170622,
+      "normalized_sha256": "c467cdaa84c4bf12bb9d85cb54252ba935cdcb74483e609fdeb1228a31f981fb"
+    },
+    "aoci.meta.txt": {
+      "role": "index",
+      "sha256": "fbc304fa05182547e96f1f8404c7c30ad6c366bba9589523f1019c2c1da0427c",
+      "size": 1989,
+      "normalized_sha256": "fbc304fa05182547e96f1f8404c7c30ad6c366bba9589523f1019c2c1da0427c"
+    },
+    "aoci.txt": {
+      "role": "index",
+      "sha256": "267984388d7ba1a3ca681dfe6b68da7426167b9336effdddb931008be1dc4329",
+      "size": 304,
+      "normalized_sha256": "267984388d7ba1a3ca681dfe6b68da7426167b9336effdddb931008be1dc4329"
+    },
+    "docs/README.md": {
+      "role": "index",
+      "sha256": "528b32ffd610f67cfcd4be68c349f1a44cdfdc666380ccf7c7c4aea15896ce2f",
+      "size": 1725,
+      "normalized_sha256": "528b32ffd610f67cfcd4be68c349f1a44cdfdc666380ccf7c7c4aea15896ce2f"
+    },
+    "docs/adr/0001-local-tracker-and-product-workflow.md": {
+      "role": "index",
+      "sha256": "15bcc239e36fef1379b068be19a5127cc4643a37321f151d7345973272409d49",
+      "size": 1620,
+      "normalized_sha256": "15bcc239e36fef1379b068be19a5127cc4643a37321f151d7345973272409d49"
+    },
+    "docs/adr/0002-v0-scope-cut-and-public-add.md": {
+      "role": "index",
+      "sha256": "46d139f54bff802ccc9f7da048c88f25e3200eb4f6463fca1162f354d7b3ffb8",
+      "size": 1174,
+      "normalized_sha256": "46d139f54bff802ccc9f7da048c88f25e3200eb4f6463fca1162f354d7b3ffb8"
+    },
+    "docs/adr/0003-plugin-redistributable-surface.md": {
+      "role": "index",
+      "sha256": "e39af1e8d80b978ff96a6641f183295144bc48ae9884ea29408238735d75b362",
+      "size": 2005,
+      "normalized_sha256": "e39af1e8d80b978ff96a6641f183295144bc48ae9884ea29408238735d75b362"
+    },
+    "docs/adr/0004-ssot-references-not-upstream-port.md": {
+      "role": "index",
+      "sha256": "a2fddf897996021598875b26535305e18330375e2f90ecd900a97ec3b51f0d12",
+      "size": 1316,
+      "normalized_sha256": "a2fddf897996021598875b26535305e18330375e2f90ecd900a97ec3b51f0d12"
+    },
+    "docs/adr/0005-split-plugin-package-drop-demo.md": {
+      "role": "index",
+      "sha256": "1496b980c9983a033eeea4d0d293e7856eaae4a710e4d744c16f5ed421db7a3c",
+      "size": 1140,
+      "normalized_sha256": "1496b980c9983a033eeea4d0d293e7856eaae4a710e4d744c16f5ed421db7a3c"
+    },
+    "docs/adr/0006-canonical-plugin-root-layout.md": {
+      "role": "index",
+      "sha256": "e0b7469a2008a3d90cc80fde6231d657a222015677cb98fa71270d19214387a1",
+      "size": 1244,
+      "normalized_sha256": "e0b7469a2008a3d90cc80fde6231d657a222015677cb98fa71270d19214387a1"
+    },
+    "docs/adr/0007-native-craft-authored-absorption.md": {
+      "role": "index",
+      "sha256": "39fc82de2745618c2f52fa14a9a38b6352b43b05fccb15ab643a368592f24d3b",
+      "size": 2430,
+      "normalized_sha256": "39fc82de2745618c2f52fa14a9a38b6352b43b05fccb15ab643a368592f24d3b"
+    },
+    "docs/adr/0008-preview-feedback-floor.md": {
+      "role": "index",
+      "sha256": "188edf774d220ed97dab61a0892fccf8c72b5fc266e1503c0a276d144d283da1",
+      "size": 12841,
+      "normalized_sha256": "188edf774d220ed97dab61a0892fccf8c72b5fc266e1503c0a276d144d283da1"
+    },
+    "docs/adr/0009-bundled-mcp-adapters.md": {
+      "role": "index",
+      "sha256": "16b949b1d9de13c41c89c1566908e3db561833b02991ecdcad55dea4f529760f",
+      "size": 4861,
+      "normalized_sha256": "16b949b1d9de13c41c89c1566908e3db561833b02991ecdcad55dea4f529760f"
+    },
+    "docs/adr/0010-input-navigation-extension-boundary.md": {
+      "role": "index",
+      "sha256": "0ac6c825afa09ba68cb785bc69856d4dbb5178591b112fc759bfc22c98e29ccb",
+      "size": 2558,
+      "normalized_sha256": "0ac6c825afa09ba68cb785bc69856d4dbb5178591b112fc759bfc22c98e29ccb"
+    },
+    "docs/adr/0011-reference-intake-contract.md": {
+      "role": "index",
+      "sha256": "d49e180d1579257de33544ca120b06770ae2b9eb81493795f4181ebd7f9eccba",
+      "size": 4157,
+      "normalized_sha256": "d49e180d1579257de33544ca120b06770ae2b9eb81493795f4181ebd7f9eccba"
+    },
+    "docs/adr/0012-design-baseline-initialization.md": {
+      "role": "index",
+      "sha256": "2e3cecd88eda097094f2c39145978e1ca3910a8957ec277b5f12de50baa39992",
+      "size": 5575,
+      "normalized_sha256": "2e3cecd88eda097094f2c39145978e1ca3910a8957ec277b5f12de50baa39992"
+    },
+    "docs/adr/0013-preview-decision-transaction.md": {
+      "role": "index",
+      "sha256": "809a72d1e3f5a2fa5b317a529f6c70c173bdf66023c4f51a2fb55f324a9149f1",
+      "size": 3073,
+      "normalized_sha256": "809a72d1e3f5a2fa5b317a529f6c70c173bdf66023c4f51a2fb55f324a9149f1"
+    },
+    "docs/adr/0014-advisory-craft-detectors.md": {
+      "role": "index",
+      "sha256": "4c9959b28b6ff38722da9c6533a9b05b8f6ffde9ae3a27e39ba64c044e9e10af",
+      "size": 2566,
+      "normalized_sha256": "4c9959b28b6ff38722da9c6533a9b05b8f6ffde9ae3a27e39ba64c044e9e10af"
+    },
+    "docs/adr/0015-stable-main-channel.md": {
+      "role": "index",
+      "sha256": "87dab92e6d73c801368e3a489874f697925815de85b3ff6a676d32c8893dd83e",
+      "size": 2471,
+      "normalized_sha256": "87dab92e6d73c801368e3a489874f697925815de85b3ff6a676d32c8893dd83e"
+    },
+    "docs/adr/0016-l6-user-risk-budget.md": {
+      "role": "index",
+      "sha256": "609dc0231547471bc3ef30889bcdd275148b5867793788ae7dbe8ceaec9bb49b",
+      "size": 1770,
+      "normalized_sha256": "609dc0231547471bc3ef30889bcdd275148b5867793788ae7dbe8ceaec9bb49b"
+    },
+    "docs/adr/0017-persistent-contract-decision-authority.md": {
+      "role": "index",
+      "sha256": "c8cc4a3a27ca03c4971ad463e39357f36628c5175024d62a60263ffd89a6780c",
+      "size": 2162,
+      "normalized_sha256": "c8cc4a3a27ca03c4971ad463e39357f36628c5175024d62a60263ffd89a6780c"
+    },
+    "docs/adr/0018-atomic-capture-contract-v1.md": {
+      "role": "index",
+      "sha256": "15079bd54ad5c6d5d4d2082a6b58a1582ef9cba654bba7a3c05cab17334e85dd",
+      "size": 3323,
+      "normalized_sha256": "15079bd54ad5c6d5d4d2082a6b58a1582ef9cba654bba7a3c05cab17334e85dd"
+    },
+    "docs/adr/0019-defer-layered-contract-inheritance.md": {
+      "role": "index",
+      "sha256": "0e5e465cf0ec5cd64a4fac840b30b204f3e3d3dd7c3b52505263c2bab952b316",
+      "size": 1570,
+      "normalized_sha256": "0e5e465cf0ec5cd64a4fac840b30b204f3e3d3dd7c3b52505263c2bab952b316"
+    },
+    "docs/adr/0020-g7-contract-drift-boundary.md": {
+      "role": "index",
+      "sha256": "bc8286199cb1d8860cdf1ade2a957512573aba0d4fc0afc1127ba2eedbc4712f",
+      "size": 2342,
+      "normalized_sha256": "bc8286199cb1d8860cdf1ade2a957512573aba0d4fc0afc1127ba2eedbc4712f"
+    },
+    "docs/adr/0021-stage-registry-module.md": {
+      "role": "index",
+      "sha256": "5c34e51d23db57ee53912419c32d95c85a35cce5c2ff402f6ac3fcf2ece0747f",
+      "size": 2347,
+      "normalized_sha256": "5c34e51d23db57ee53912419c32d95c85a35cce5c2ff402f6ac3fcf2ece0747f"
+    },
+    "docs/adr/0022-real-import-seam.md": {
+      "role": "index",
+      "sha256": "5b0113347d5689be9fad189f1769aeaefdbae05b4a3d07393137f8e3901d8e9c",
+      "size": 2819,
+      "normalized_sha256": "5b0113347d5689be9fad189f1769aeaefdbae05b4a3d07393137f8e3901d8e9c"
+    },
+    "docs/adr/0023-closed-loop-gate-split.md": {
+      "role": "index",
+      "sha256": "3c31b51c4478d9d1d161b3e41a2c599c88e5daed66802f3a24528dee2830c763",
+      "size": 4679,
+      "normalized_sha256": "3c31b51c4478d9d1d161b3e41a2c599c88e5daed66802f3a24528dee2830c763"
+    },
+    "docs/adr/0024-preview-versions-primitives.md": {
+      "role": "index",
+      "sha256": "327d3de3ea1af5d438bc2ea072950513bf4e225085defde7a834aee3d4a5789a",
+      "size": 4346,
+      "normalized_sha256": "327d3de3ea1af5d438bc2ea072950513bf4e225085defde7a834aee3d4a5789a"
+    },
+    "docs/adr/0025-closed-loop-syntax-facts.md": {
+      "role": "index",
+      "sha256": "ee6cecf733daf8f53f86bca20be1fd113306683b914d9446f5a55260798d3133",
+      "size": 2445,
+      "normalized_sha256": "ee6cecf733daf8f53f86bca20be1fd113306683b914d9446f5a55260798d3133"
+    },
+    "docs/adr/0026-evidence-artifact-containment.md": {
+      "role": "index",
+      "sha256": "dfa744a4ed7836cbd0c633ca393de2025f57c93eb7b927359eec958e6747bf3e",
+      "size": 2419,
+      "normalized_sha256": "dfa744a4ed7836cbd0c633ca393de2025f57c93eb7b927359eec958e6747bf3e"
+    },
+    "docs/adr/0027-preview-versions-lifecycle.md": {
+      "role": "index",
+      "sha256": "2918e666c094d91fbdabe94533d0bda41f4bc69cc83dc45b3dc44b4b6a87ca16",
+      "size": 2585,
+      "normalized_sha256": "2918e666c094d91fbdabe94533d0bda41f4bc69cc83dc45b3dc44b4b6a87ca16"
+    },
+    "docs/adr/0028-severity-alias-removal.md": {
+      "role": "index",
+      "sha256": "03b9f9e253d92b3e5407133320ae9bd3c98abf5fcb7369d82132407228ff0ac3",
+      "size": 2368,
+      "normalized_sha256": "03b9f9e253d92b3e5407133320ae9bd3c98abf5fcb7369d82132407228ff0ac3"
+    },
+    "docs/adr/0029-vnext-closed-loop-final-state.md": {
+      "role": "index",
+      "sha256": "ad21e8a2bffb8b9433bccf559219ac5c847a453f5ad7a7190f618d91b03c82a0",
+      "size": 3802,
+      "normalized_sha256": "ad21e8a2bffb8b9433bccf559219ac5c847a453f5ad7a7190f618d91b03c82a0"
+    },
+    "docs/adr/0030-vnext-implementation-architecture-supplement.md": {
+      "role": "index",
+      "sha256": "f75a1a57de5c48248defc8e0e5fc4f50b26d43cb289677fc02f9112e8b17ffea",
+      "size": 3730,
+      "normalized_sha256": "f75a1a57de5c48248defc8e0e5fc4f50b26d43cb289677fc02f9112e8b17ffea"
+    },
+    "docs/adr/0031-architecture-deepening.md": {
+      "role": "index",
+      "sha256": "9da809da321a880c5fd8dae51e2b5e59255b2516308229d0870df95331059a4a",
+      "size": 2830,
+      "normalized_sha256": "9da809da321a880c5fd8dae51e2b5e59255b2516308229d0870df95331059a4a"
+    },
+    "docs/adr/0032-adaptive-entry-routing-and-reference-sources.md": {
+      "role": "index",
+      "sha256": "a0545b5b299f538a34a8d4ae4350f7da2b49ec408617c6b88f1399a32dbae063",
+      "size": 1987,
+      "normalized_sha256": "a0545b5b299f538a34a8d4ae4350f7da2b49ec408617c6b88f1399a32dbae063"
+    },
+    "docs/adr/0033-audit-acceptance-user-preferences.md": {
+      "role": "index",
+      "sha256": "f70c942c64b4df0909231adb581204d8546828001a3720d1a9af4ea445d50fc4",
+      "size": 5281,
+      "normalized_sha256": "f70c942c64b4df0909231adb581204d8546828001a3720d1a9af4ea445d50fc4"
+    },
+    "docs/adr/0034-static-handoff-ownership-and-lifecycle.md": {
+      "role": "index",
+      "sha256": "9bb8767acb309c3f3e23539193cbfa34d895a06b7a1155f0e7ec429f8006fa0b",
+      "size": 7763,
+      "normalized_sha256": "9bb8767acb309c3f3e23539193cbfa34d895a06b7a1155f0e7ec429f8006fa0b"
+    },
+    "docs/adr/0035-run-view-projection-authority.md": {
+      "role": "index",
+      "sha256": "e885d030cee1932861b4e49954b76d53152a4c54089c897cd8126d29c8adc339",
+      "size": 2827,
+      "normalized_sha256": "e885d030cee1932861b4e49954b76d53152a4c54089c897cd8126d29c8adc339"
+    },
+    "docs/adr/0036-invited-trial-data-and-role-boundary.md": {
+      "role": "index",
+      "sha256": "d33af6bff202233f23f675bc287eb12ded2184a7490143573f8bf6b848b0f0da",
+      "size": 4047,
+      "normalized_sha256": "d33af6bff202233f23f675bc287eb12ded2184a7490143573f8bf6b848b0f0da"
+    },
+    "docs/adr/0037-local-single-run-console-lifecycle.md": {
+      "role": "index",
+      "sha256": "d4796ef735d3570e9a1a85bd3644c5a87a2c630be8fdff6ca21a845943ac50b9",
+      "size": 2621,
+      "normalized_sha256": "d4796ef735d3570e9a1a85bd3644c5a87a2c630be8fdff6ca21a845943ac50b9"
+    },
+    "docs/adr/0038-run-snapshot-contract-and-loopback-security.md": {
+      "role": "index",
+      "sha256": "fbe5d17ec1bbf915c15cd06aef5a5b52c4a4d6f9c2b82de30b3a90c29b718f36",
+      "size": 3831,
+      "normalized_sha256": "fbe5d17ec1bbf915c15cd06aef5a5b52c4a4d6f9c2b82de30b3a90c29b718f36"
+    },
+    "docs/adr/0039-authority-read-seams.md": {
+      "role": "index",
+      "sha256": "be41b3caa9c0ac4b4026348766f6c93aeb9e205bf36df6895f92d8161428d259",
+      "size": 2350,
+      "normalized_sha256": "be41b3caa9c0ac4b4026348766f6c93aeb9e205bf36df6895f92d8161428d259"
+    },
+    "docs/adr/0040-readme-front-door-positioning.md": {
+      "role": "index",
+      "sha256": "4ce18db453dd12a802a764220619caf25431e1476a4169646133ea379e47c5fc",
+      "size": 4472,
+      "normalized_sha256": "4ce18db453dd12a802a764220619caf25431e1476a4169646133ea379e47c5fc"
+    },
+    "docs/adr/0041-v10-workbench-reviewer-record-criteria.md": {
+      "role": "index",
+      "sha256": "bbee09df1b1d07784c0ca38f3da6d0f9095c32f5995dd6590b58d2064ad95703",
+      "size": 1815,
+      "normalized_sha256": "bbee09df1b1d07784c0ca38f3da6d0f9095c32f5995dd6590b58d2064ad95703"
+    },
+    "docs/adr/0042-multi-platform-adapter-generator.md": {
+      "role": "index",
+      "sha256": "a8daaa35c70671365ffcac42625732d0c6cc05af026db8560f55262250876ece",
+      "size": 6468,
+      "normalized_sha256": "a8daaa35c70671365ffcac42625732d0c6cc05af026db8560f55262250876ece"
+    },
+    "docs/adr/0043-product-beachhead-and-operator-continuation.md": {
+      "role": "index",
+      "sha256": "386fe6d3160a326f9504d7c7ef0aa02812155fe55bc69be9ca9a5dc1bd2f04dd",
+      "size": 6406,
+      "normalized_sha256": "386fe6d3160a326f9504d7c7ef0aa02812155fe55bc69be9ca9a5dc1bd2f04dd"
+    },
+    "docs/adr/0044-diagnostic-export-contract-v1.md": {
+      "role": "index",
+      "sha256": "3ec0fb9fbbfdd1eabd33745e2d6103cfc5a3c52e107625f80b313884aacddd35",
+      "size": 5430,
+      "normalized_sha256": "3ec0fb9fbbfdd1eabd33745e2d6103cfc5a3c52e107625f80b313884aacddd35"
+    },
+    "docs/adr/0045-external-evidence-spend-gate.md": {
+      "role": "index",
+      "sha256": "0334f558079c9ae90718df5dfc30d220a9a387318b2876a990207c3ab25974c7",
+      "size": 24619,
+      "normalized_sha256": "0334f558079c9ae90718df5dfc30d220a9a387318b2876a990207c3ab25974c7"
+    },
+    "docs/adr/0046-preview-session-origin-exclusivity.md": {
+      "role": "index",
+      "sha256": "ad19c8ef33f6676d29033460e7837e89db86dee5ac51e2b44e0b63b6eeb39b72",
+      "size": 4465,
+      "normalized_sha256": "ad19c8ef33f6676d29033460e7837e89db86dee5ac51e2b44e0b63b6eeb39b72"
+    },
+    "docs/adr/0047-preview-visual-editing-capability.md": {
+      "role": "index",
+      "sha256": "632161b26beab68afbbe0c8f9a5b24bec2e5231de5b810a53d0fc20051ff1428",
+      "size": 4330,
+      "normalized_sha256": "632161b26beab68afbbe0c8f9a5b24bec2e5231de5b810a53d0fc20051ff1428"
+    },
+    "docs/agents/automated-acceptance.md": {
+      "role": "index",
+      "sha256": "9bf674d6aed9e0afcba5bf0190fb2d0aae771164e22cc19bc85e257b0c9d3a6c",
+      "size": 3934,
+      "normalized_sha256": "9bf674d6aed9e0afcba5bf0190fb2d0aae771164e22cc19bc85e257b0c9d3a6c"
+    },
+    "docs/agents/domain.md": {
+      "role": "index",
+      "sha256": "30224fad15328458fa946eff4e6df120dbbd557a4c6055200459c1091bfddbc1",
+      "size": 573,
+      "normalized_sha256": "30224fad15328458fa946eff4e6df120dbbd557a4c6055200459c1091bfddbc1"
+    },
+    "docs/agents/issue-tracker.md": {
+      "role": "index",
+      "sha256": "cea93481efb9eb2d1c02a282fc26e16176f64499cf0081e5bc6f5cfca0ca4d1b",
+      "size": 2351,
+      "normalized_sha256": "cea93481efb9eb2d1c02a282fc26e16176f64499cf0081e5bc6f5cfca0ca4d1b"
+    },
+    "docs/agents/product-workflow.md": {
+      "role": "index",
+      "sha256": "68965472ee27f1fd17537fd2d7eb834bfe8c8756dcc873939b564d892995774b",
+      "size": 6126,
+      "normalized_sha256": "68965472ee27f1fd17537fd2d7eb834bfe8c8756dcc873939b564d892995774b"
+    },
+    "docs/agents/release-checklist.md": {
+      "role": "index",
+      "sha256": "92f57528c1ce64ce3786f79b296a18b6e5c2fc3fb2d3caa9c507ee481964f12e",
+      "size": 11409,
+      "normalized_sha256": "92f57528c1ce64ce3786f79b296a18b6e5c2fc3fb2d3caa9c507ee481964f12e"
+    },
+    "docs/agents/run-console-read-only-trial.md": {
+      "role": "index",
+      "sha256": "e2d61028f135e588c2fe2c99bc009a0f85519ab7c4965fe829f7d2396e71b90f",
+      "size": 9923,
+      "normalized_sha256": "e2d61028f135e588c2fe2c99bc009a0f85519ab7c4965fe829f7d2396e71b90f"
+    },
+    "docs/agents/triage-labels.md": {
+      "role": "index",
+      "sha256": "a25fda2628acd4fcb9896f86c12ee289d459160b411988e5cc2c62a9356e9358",
+      "size": 964,
+      "normalized_sha256": "a25fda2628acd4fcb9896f86c12ee289d459160b411988e5cc2c62a9356e9358"
+    },
+    "docs/agents/vnext-live-dogfood.md": {
+      "role": "index",
+      "sha256": "8c922294071e1ec59ad2e7d237359bfe8fd296c8fdc8ad52aa936e2d3b1f2f2a",
+      "size": 6773,
+      "normalized_sha256": "8c922294071e1ec59ad2e7d237359bfe8fd296c8fdc8ad52aa936e2d3b1f2f2a"
+    },
+    "docs/architecture.zh.md": {
+      "role": "index",
+      "sha256": "c67666c088992f70d442ed531288d40f465b31c54dcd27201169622b480768b1",
+      "size": 2696,
+      "normalized_sha256": "c67666c088992f70d442ed531288d40f465b31c54dcd27201169622b480768b1"
+    },
+    "docs/deprecations/preview-versions.md": {
+      "role": "index",
+      "sha256": "f65bac1324c8d65b63b12627e4bb21f78b5ba719f8961b978112666d2d77e4db",
+      "size": 5303,
+      "normalized_sha256": "f65bac1324c8d65b63b12627e4bb21f78b5ba719f8961b978112666d2d77e4db"
+    },
+    "docs/development.zh.md": {
+      "role": "index",
+      "sha256": "3c3340c45b91ac7fd6f31d415db71b5513b37d8a46db16d370de2bb8fe729cb0",
+      "size": 1499,
+      "normalized_sha256": "3c3340c45b91ac7fd6f31d415db71b5513b37d8a46db16d370de2bb8fe729cb0"
+    },
+    "docs/releases/v0.10.0.md": {
+      "role": "index",
+      "sha256": "4c08c4a43accd9c94e18566252adcbdf08d31190268620b487ee61ace2a09f90",
+      "size": 1956,
+      "normalized_sha256": "4c08c4a43accd9c94e18566252adcbdf08d31190268620b487ee61ace2a09f90"
+    },
+    "docs/releases/v0.11.0.md": {
+      "role": "index",
+      "sha256": "52587a10a795c1f2306992b997d090bca3423965dbae2a204d496b6f0f8f2d10",
+      "size": 1714,
+      "normalized_sha256": "52587a10a795c1f2306992b997d090bca3423965dbae2a204d496b6f0f8f2d10"
+    },
+    "docs/releases/v0.11.1.md": {
+      "role": "index",
+      "sha256": "5920e411e0cae3f37d360a7e6663dfb9e6c25baf46dcf262c81643f6108084df",
+      "size": 1486,
+      "normalized_sha256": "5920e411e0cae3f37d360a7e6663dfb9e6c25baf46dcf262c81643f6108084df"
+    },
+    "docs/releases/v0.12.0.md": {
+      "role": "index",
+      "sha256": "7b1fd066dd8ef859ff08e1209bd41a0c75830dc041861af37303c862f21d4756",
+      "size": 2145,
+      "normalized_sha256": "7b1fd066dd8ef859ff08e1209bd41a0c75830dc041861af37303c862f21d4756"
+    },
+    "docs/releases/v0.13.0.md": {
+      "role": "index",
+      "sha256": "6af4471d1b376f4838536b79c74b7e6e2a21e5ca68f7965051292402d7e8fe89",
+      "size": 2940,
+      "normalized_sha256": "6af4471d1b376f4838536b79c74b7e6e2a21e5ca68f7965051292402d7e8fe89"
+    },
+    "docs/releases/v0.14.0.md": {
+      "role": "index",
+      "sha256": "c76e8ca97eb7e7baff94ab4effc1100873086742facb54054509d7c1d0756805",
+      "size": 3943,
+      "normalized_sha256": "c76e8ca97eb7e7baff94ab4effc1100873086742facb54054509d7c1d0756805"
+    },
+    "docs/releases/v0.14.1.md": {
+      "role": "index",
+      "sha256": "0e7a3854d4d3065baf8ed1d9cadd66e138f5d6771558048c690e4c7aac2d08de",
+      "size": 1265,
+      "normalized_sha256": "0e7a3854d4d3065baf8ed1d9cadd66e138f5d6771558048c690e4c7aac2d08de"
+    },
+    "docs/releases/v0.2.1.md": {
+      "role": "index",
+      "sha256": "131a695fc081427b305bdd74996547b4af8e20f72bf5b847d35c242a6dbac947",
+      "size": 5974,
+      "normalized_sha256": "131a695fc081427b305bdd74996547b4af8e20f72bf5b847d35c242a6dbac947"
+    },
+    "docs/releases/v0.20.0.md": {
+      "role": "index",
+      "sha256": "d6ea12c7d5c2006afa10688df9deec82a7413034f57874156bfce884d497c868",
+      "size": 3951,
+      "normalized_sha256": "d6ea12c7d5c2006afa10688df9deec82a7413034f57874156bfce884d497c868"
+    },
+    "docs/releases/v0.20.1.md": {
+      "role": "index",
+      "sha256": "1adaa2c79348d93cf6669948c5b939fbc1833f57bcfd286cdfc5f698f41f97aa",
+      "size": 2131,
+      "normalized_sha256": "1adaa2c79348d93cf6669948c5b939fbc1833f57bcfd286cdfc5f698f41f97aa"
+    },
+    "docs/releases/v0.20.2.md": {
+      "role": "index",
+      "sha256": "f86639a6d3a495487026e4f1a11838f7bf5970c79667667b60fe3c36b605ab0a",
+      "size": 2214,
+      "normalized_sha256": "f86639a6d3a495487026e4f1a11838f7bf5970c79667667b60fe3c36b605ab0a"
+    },
+    "docs/releases/v0.21.0.md": {
+      "role": "index",
+      "sha256": "7a9739fe99a773d39954e92e1dd55e92b36e3a31c717417b8493d99ecccca686",
+      "size": 6612,
+      "normalized_sha256": "7a9739fe99a773d39954e92e1dd55e92b36e3a31c717417b8493d99ecccca686"
+    },
+    "docs/releases/v0.21.1.md": {
+      "role": "index",
+      "sha256": "30ebd33983033ffd580daa84b8ae229a15a905c2d803669d7ee00babe6302902",
+      "size": 4015,
+      "normalized_sha256": "30ebd33983033ffd580daa84b8ae229a15a905c2d803669d7ee00babe6302902"
+    },
+    "docs/releases/v0.21.2.md": {
+      "role": "index",
+      "sha256": "a7b54549a6b565d3ca44ed1a59c37aa66dbebf711e7a1e13bfae02c937f04f0a",
+      "size": 3679,
+      "normalized_sha256": "a7b54549a6b565d3ca44ed1a59c37aa66dbebf711e7a1e13bfae02c937f04f0a"
+    },
+    "docs/releases/v0.22.0.md": {
+      "role": "index",
+      "sha256": "57d2ab81ac82803480dd4c47fd2659eff0538793d517f1d68b1e2e8a9f0d48c2",
+      "size": 6503,
+      "normalized_sha256": "57d2ab81ac82803480dd4c47fd2659eff0538793d517f1d68b1e2e8a9f0d48c2"
+    },
+    "docs/releases/v0.22.1.md": {
+      "role": "index",
+      "sha256": "8a7ca6908461dc8e6106b0da47b22929ae41a13d49d54761dfbe0d317d5cf599",
+      "size": 2307,
+      "normalized_sha256": "8a7ca6908461dc8e6106b0da47b22929ae41a13d49d54761dfbe0d317d5cf599"
+    },
+    "docs/releases/v0.22.2.md": {
+      "role": "index",
+      "sha256": "b6c787f9f951c387c27eb2ed1d1cec41642a8da3cebb3a3d582e2e0fa12db3c8",
+      "size": 2012,
+      "normalized_sha256": "b6c787f9f951c387c27eb2ed1d1cec41642a8da3cebb3a3d582e2e0fa12db3c8"
+    },
+    "docs/releases/v0.23.0.md": {
+      "role": "index",
+      "sha256": "1402ce35de257bdb145c99893b6819772013fd83b9d6f3917d8ac07024322795",
+      "size": 2709,
+      "normalized_sha256": "1402ce35de257bdb145c99893b6819772013fd83b9d6f3917d8ac07024322795"
+    },
+    "docs/releases/v0.24.0.md": {
+      "role": "index",
+      "sha256": "dd84f5b69b09ea46d96709b78cd736f52e5fc0cbb3218b7acf32edc33daa5dc1",
+      "size": 2489,
+      "normalized_sha256": "dd84f5b69b09ea46d96709b78cd736f52e5fc0cbb3218b7acf32edc33daa5dc1"
+    },
+    "docs/releases/v0.24.1.md": {
+      "role": "index",
+      "sha256": "60ea63f68419bb6566c34e5e259696f950ecc8c722c162e6feded49eb2129d2b",
+      "size": 2288,
+      "normalized_sha256": "60ea63f68419bb6566c34e5e259696f950ecc8c722c162e6feded49eb2129d2b"
+    },
+    "docs/releases/v0.24.2.md": {
+      "role": "index",
+      "sha256": "ae54533f9957dfe8fba98503a9ba710491df381698867450b1f7154a9ebbc425",
+      "size": 3033,
+      "normalized_sha256": "ae54533f9957dfe8fba98503a9ba710491df381698867450b1f7154a9ebbc425"
+    },
+    "docs/releases/v0.24.3.md": {
+      "role": "index",
+      "sha256": "c72d6b67a6ffeca8ac037f28057b184ac27704b92ad1ea032657e683c96c46ab",
+      "size": 5042,
+      "normalized_sha256": "c72d6b67a6ffeca8ac037f28057b184ac27704b92ad1ea032657e683c96c46ab"
+    },
+    "docs/releases/v0.24.4.md": {
+      "role": "index",
+      "sha256": "fd251a7cf14171d905e3aace8206e804c8965d0890037686d92fa559d6d74ba9",
+      "size": 3794,
+      "normalized_sha256": "fd251a7cf14171d905e3aace8206e804c8965d0890037686d92fa559d6d74ba9"
+    },
+    "docs/releases/v0.25.0.md": {
+      "role": "index",
+      "sha256": "859c9f1db57b7277c6758efa9d8260ce08fba2d9e038e2b32fed1dffd585cc3b",
+      "size": 1445,
+      "normalized_sha256": "859c9f1db57b7277c6758efa9d8260ce08fba2d9e038e2b32fed1dffd585cc3b"
+    },
+    "docs/releases/v0.25.1.md": {
+      "role": "index",
+      "sha256": "8b783c28f94c3348c2fb173a1ca9975396c24340333911f13df8e5a663a185eb",
+      "size": 834,
+      "normalized_sha256": "8b783c28f94c3348c2fb173a1ca9975396c24340333911f13df8e5a663a185eb"
+    },
+    "docs/releases/v0.25.2.md": {
+      "role": "index",
+      "sha256": "d9be3eda4f24242c0071e5842cae21fedd815e8dc82e1c23721cd3527ae8ea21",
+      "size": 15568,
+      "normalized_sha256": "d9be3eda4f24242c0071e5842cae21fedd815e8dc82e1c23721cd3527ae8ea21"
+    },
+    "docs/releases/v0.25.3.md": {
+      "role": "index",
+      "sha256": "ae6cf7352c34b69a4ac05836335d91221e1fea1304b7c968aed16962fa6b5d1b",
+      "size": 5283,
+      "normalized_sha256": "ae6cf7352c34b69a4ac05836335d91221e1fea1304b7c968aed16962fa6b5d1b"
+    },
+    "docs/releases/v0.25.4.md": {
+      "role": "index",
+      "sha256": "e80a8eb3863fc856ad8cbf583356fb29a233a48ccc1e79149d37ed8aaa56eeef",
+      "size": 3622,
+      "normalized_sha256": "e80a8eb3863fc856ad8cbf583356fb29a233a48ccc1e79149d37ed8aaa56eeef"
+    },
+    "docs/releases/v0.3.0.md": {
+      "role": "index",
+      "sha256": "2e1befcf9f47b1aea6c4b1e14e886d47f42b383b90393a1dc724fd7e2b72b19a",
+      "size": 4836,
+      "normalized_sha256": "2e1befcf9f47b1aea6c4b1e14e886d47f42b383b90393a1dc724fd7e2b72b19a"
+    },
+    "docs/releases/v0.3.1.md": {
+      "role": "index",
+      "sha256": "0993a7fa6bbb948f24eaf6ab20b9f9f58721c4d89087b6501c4d6d690102cf72",
+      "size": 2868,
+      "normalized_sha256": "0993a7fa6bbb948f24eaf6ab20b9f9f58721c4d89087b6501c4d6d690102cf72"
+    },
+    "docs/releases/v0.4.0.md": {
+      "role": "index",
+      "sha256": "6b87cc59e965a60a2f39c57545de6c543b773c2753f88d764911ed8ca46bb4a6",
+      "size": 2757,
+      "normalized_sha256": "6b87cc59e965a60a2f39c57545de6c543b773c2753f88d764911ed8ca46bb4a6"
+    },
+    "docs/releases/v0.4.1.md": {
+      "role": "index",
+      "sha256": "9ea3143367d65f0abd1a9e9709b04a56d3969cc71222c7d9c813fa45e83438f9",
+      "size": 1886,
+      "normalized_sha256": "9ea3143367d65f0abd1a9e9709b04a56d3969cc71222c7d9c813fa45e83438f9"
+    },
+    "docs/releases/v0.4.2.md": {
+      "role": "index",
+      "sha256": "2c7ec04f236d0e0f4fcefd9234144c53b52df6a6c35baee21147bbd3d1b702b2",
+      "size": 1303,
+      "normalized_sha256": "2c7ec04f236d0e0f4fcefd9234144c53b52df6a6c35baee21147bbd3d1b702b2"
+    },
+    "docs/releases/v0.4.3.md": {
+      "role": "index",
+      "sha256": "bc423465e3cbf1560f1906cbcdcd505b689167acc6e7a620eab3a34ff8dfb39e",
+      "size": 1074,
+      "normalized_sha256": "bc423465e3cbf1560f1906cbcdcd505b689167acc6e7a620eab3a34ff8dfb39e"
+    },
+    "docs/releases/v0.4.4.md": {
+      "role": "index",
+      "sha256": "d48c7b12ae335e32b72b6406a68de5e8f3fc67f8d2caef56e9f2d9512e1fc8e8",
+      "size": 5404,
+      "normalized_sha256": "d48c7b12ae335e32b72b6406a68de5e8f3fc67f8d2caef56e9f2d9512e1fc8e8"
+    },
+    "docs/releases/v0.5.0.md": {
+      "role": "index",
+      "sha256": "4ac9c2b37b4a383abf3c7a6e63e18ac8fed1c257987dcd37a52c22dbf53b26e0",
+      "size": 3998,
+      "normalized_sha256": "4ac9c2b37b4a383abf3c7a6e63e18ac8fed1c257987dcd37a52c22dbf53b26e0"
+    },
+    "docs/releases/v0.6.0.md": {
+      "role": "index",
+      "sha256": "66a42cb1883307abd18bc36b5938a20623d51a50fb225f9122a0d10b92830516",
+      "size": 2435,
+      "normalized_sha256": "66a42cb1883307abd18bc36b5938a20623d51a50fb225f9122a0d10b92830516"
+    },
+    "docs/releases/v0.7.0.md": {
+      "role": "index",
+      "sha256": "b0492103251693e4fed7aa5eee533c9bfba561ce5af4187db2dedcd1d19f9a84",
+      "size": 3008,
+      "normalized_sha256": "b0492103251693e4fed7aa5eee533c9bfba561ce5af4187db2dedcd1d19f9a84"
+    },
+    "docs/releases/v0.8.0.md": {
+      "role": "index",
+      "sha256": "9ebb0090163bf49bbdd9cee21bf8893344f5aa81634e5f1f998547a5043e85c5",
+      "size": 2759,
+      "normalized_sha256": "9ebb0090163bf49bbdd9cee21bf8893344f5aa81634e5f1f998547a5043e85c5"
+    },
+    "docs/releases/v0.9.0.md": {
+      "role": "index",
+      "sha256": "f78e3209835d183c89bca3f1aca9ddb407d6bed0af455914363e5ff972ee2d24",
+      "size": 1460,
+      "normalized_sha256": "f78e3209835d183c89bca3f1aca9ddb407d6bed0af455914363e5ff972ee2d24"
+    },
+    "docs/releases/v0.9.1.md": {
+      "role": "index",
+      "sha256": "3cdc846b9ceb957162e5658ff00d0b5cd994c67d0388655f051260126d84ba39",
+      "size": 1637,
+      "normalized_sha256": "3cdc846b9ceb957162e5658ff00d0b5cd994c67d0388655f051260126d84ba39"
+    },
+    "docs/releases/v0.9.2.md": {
+      "role": "index",
+      "sha256": "054380ad9a72ba000aceef71cf7889d1306ab8117f46b4b4e4552d44a9e9b210",
+      "size": 1449,
+      "normalized_sha256": "054380ad9a72ba000aceef71cf7889d1306ab8117f46b4b4e4552d44a9e9b210"
+    },
+    "docs/roadmap.md": {
+      "role": "index",
+      "sha256": "8dbface764751867c255ad387d415117ad96fc3d72e6bf5152598c7dba7a67b4",
+      "size": 8229,
+      "normalized_sha256": "8dbface764751867c255ad387d415117ad96fc3d72e6bf5152598c7dba7a67b4"
+    },
+    "docs/subsystems/run-console.zh.md": {
+      "role": "index",
+      "sha256": "c004c5c5f918f293e91bcdf2cbde85b31bbe0f847a595cda0301bdf3704daa4a",
+      "size": 4413,
+      "normalized_sha256": "c004c5c5f918f293e91bcdf2cbde85b31bbe0f847a595cda0301bdf3704daa4a"
+    },
+    "docs/subsystems/runtime.zh.md": {
+      "role": "index",
+      "sha256": "8d1e45d6d6abd751921a09d4bb7dd691c944cb2b7dbb17356b5a7af564a4e385",
+      "size": 2258,
+      "normalized_sha256": "8d1e45d6d6abd751921a09d4bb7dd691c944cb2b7dbb17356b5a7af564a4e385"
+    },
+    "docs/testing.zh.md": {
+      "role": "index",
+      "sha256": "cbcedb51bf9fcb7a0fd8e00cc004de632f48ac8046c11f95a1faf864d14b52dd",
+      "size": 1527,
+      "normalized_sha256": "cbcedb51bf9fcb7a0fd8e00cc004de632f48ac8046c11f95a1faf864d14b52dd"
+    },
+    "packages/design-playbook-evidence/README.md": {
+      "role": "index",
+      "sha256": "2cd2a9467e5971a2791826ea96977ac0955728b221784a652e97a6e2fdf58a04",
+      "size": 3024,
+      "normalized_sha256": "2cd2a9467e5971a2791826ea96977ac0955728b221784a652e97a6e2fdf58a04"
+    },
+    "packages/design-playbook-evidence/mcp.example.toml": {
+      "role": "index",
+      "sha256": "ce3b0041725a11dd1a11dfeb06715c32e144fa79f8db398370565325c47a835d",
+      "size": 348,
+      "normalized_sha256": "ce3b0041725a11dd1a11dfeb06715c32e144fa79f8db398370565325c47a835d"
+    },
+    "packages/design-playbook-evidence/server.py": {
+      "role": "index",
+      "sha256": "e01ab62757dcd7229646b119b782cdcdd5c3009a0fb2092f167d8e13ee202042",
+      "size": 899,
+      "normalized_sha256": "e01ab62757dcd7229646b119b782cdcdd5c3009a0fb2092f167d8e13ee202042"
+    },
+    "packages/design-playbook-preview/README.md": {
+      "role": "index",
+      "sha256": "62f46472e85f466568162582c439909f4150e32dac452586b1cb5d43e4c0dbe4",
+      "size": 2736,
+      "normalized_sha256": "62f46472e85f466568162582c439909f4150e32dac452586b1cb5d43e4c0dbe4"
+    },
+    "packages/design-playbook-preview/mcp.example.toml": {
+      "role": "index",
+      "sha256": "beaaeded9a37f76adc04677102345f0a065d44eba95700503101413a80df429f",
+      "size": 287,
+      "normalized_sha256": "beaaeded9a37f76adc04677102345f0a065d44eba95700503101413a80df429f"
+    },
+    "packages/design-playbook-preview/server.py": {
+      "role": "index",
+      "sha256": "3f25c60690049ee2185f2917baa51483574f6208ad9619b380553f405d822f00",
+      "size": 893,
+      "normalized_sha256": "3f25c60690049ee2185f2917baa51483574f6208ad9619b380553f405d822f00"
+    },
+    "packages/design-playbook-workbench/.gitignore": {
+      "role": "index",
+      "sha256": "6d4427fdd12128173fae00d1597f0a0e8fd48cb69b1b2ce053438cb813632564",
+      "size": 294,
+      "normalized_sha256": "6d4427fdd12128173fae00d1597f0a0e8fd48cb69b1b2ce053438cb813632564"
+    },
+    "packages/design-playbook-workbench/README.md": {
+      "role": "index",
+      "sha256": "765d7abcff358bc68db986445315d3a0795628617e686d0f1312fc96b83de6ce",
+      "size": 9709,
+      "normalized_sha256": "765d7abcff358bc68db986445315d3a0795628617e686d0f1312fc96b83de6ce"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/__init__.py": {
+      "role": "index",
+      "sha256": "48c9d863f8a8fde5d23e7d104066f0dc7e92a14406ac5b337fbad34a446af3c9",
+      "size": 427,
+      "normalized_sha256": "48c9d863f8a8fde5d23e7d104066f0dc7e92a14406ac5b337fbad34a446af3c9"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/__main__.py": {
+      "role": "index",
+      "sha256": "b92c1a833c0fa8a9de86aa23519e01c676312f9ed6f7796ef05976acaf7302da",
+      "size": 4482,
+      "normalized_sha256": "b92c1a833c0fa8a9de86aa23519e01c676312f9ed6f7796ef05976acaf7302da"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/assets.py": {
+      "role": "index",
+      "sha256": "c5109ebacff0c65c4ad75daff5c1099bdbc48b9933eac1b389dab0d039674b7a",
+      "size": 37790,
+      "normalized_sha256": "c5109ebacff0c65c4ad75daff5c1099bdbc48b9933eac1b389dab0d039674b7a"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/backup.py": {
+      "role": "index",
+      "sha256": "5f858481f8e1472e75ed1cb336ba892296dcf817a55fe5f88b98b1940ba0b87f",
+      "size": 19141,
+      "normalized_sha256": "5f858481f8e1472e75ed1cb336ba892296dcf817a55fe5f88b98b1940ba0b87f"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/blobs.py": {
+      "role": "index",
+      "sha256": "0926e10fa2261ee60af27e71134af9de19c8995c339bf10231d0292452f8d311",
+      "size": 4463,
+      "normalized_sha256": "0926e10fa2261ee60af27e71134af9de19c8995c339bf10231d0292452f8d311"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/canvas.py": {
+      "role": "index",
+      "sha256": "234584fd9e6f60dc4a3be339b0753b0eeebc589850b3212876b333243346af99",
+      "size": 68505,
+      "normalized_sha256": "234584fd9e6f60dc4a3be339b0753b0eeebc589850b3212876b333243346af99"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/components.py": {
+      "role": "index",
+      "sha256": "6f8a8e47a3096053d15de2dab861a7c63fc789098c268ede3c8bf75f1a406198",
+      "size": 50401,
+      "normalized_sha256": "6f8a8e47a3096053d15de2dab861a7c63fc789098c268ede3c8bf75f1a406198"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/credentials.py": {
+      "role": "index",
+      "sha256": "025dc74daa1c4304369b92efa782dceea8e37c091e694dd4e0f9b1f4565cf8b6",
+      "size": 5006,
+      "normalized_sha256": "025dc74daa1c4304369b92efa782dceea8e37c091e694dd4e0f9b1f4565cf8b6"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/designsystem.py": {
+      "role": "index",
+      "sha256": "3357e05ef97429b08cd4ed8410601de7f60c10253e5aa447cd9dfe73833da18a",
+      "size": 27341,
+      "normalized_sha256": "3357e05ef97429b08cd4ed8410601de7f60c10253e5aa447cd9dfe73833da18a"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/errors.py": {
+      "role": "index",
+      "sha256": "a06f922115809dc5a77187f87852d7836ba811d98a8d7a25ea99ef49905242a5",
+      "size": 4318,
+      "normalized_sha256": "a06f922115809dc5a77187f87852d7836ba811d98a8d7a25ea99ef49905242a5"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/http_server.py": {
+      "role": "index",
+      "sha256": "dc9feac9312c0a3f77cf1df9f26c679e8fbca48e00810d3e482e97e197289925",
+      "size": 77068,
+      "normalized_sha256": "dc9feac9312c0a3f77cf1df9f26c679e8fbca48e00810d3e482e97e197289925"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/launcher.py": {
+      "role": "index",
+      "sha256": "ce3eebfe5b957d2c5a12c87712d0bfbb3d287674d8aeee559cde8ade2380bc20",
+      "size": 8566,
+      "normalized_sha256": "ce3eebfe5b957d2c5a12c87712d0bfbb3d287674d8aeee559cde8ade2380bc20"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/lifecycle.py": {
+      "role": "index",
+      "sha256": "d1453c754698c82a3dc634b5775e4e5f15aa1bea3441041fbc8fde64e2dd3278",
+      "size": 19170,
+      "normalized_sha256": "d1453c754698c82a3dc634b5775e4e5f15aa1bea3441041fbc8fde64e2dd3278"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/orchestration.py": {
+      "role": "index",
+      "sha256": "63f0f21f48fae407957067b2e9ae35ebb5553d284493e1c0915a91119ae94cf3",
+      "size": 25078,
+      "normalized_sha256": "63f0f21f48fae407957067b2e9ae35ebb5553d284493e1c0915a91119ae94cf3"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/owners.py": {
+      "role": "index",
+      "sha256": "d582f21c6308d345ae3e252ba40bac8624996264e111764ba8f84946f5ae315a",
+      "size": 31007,
+      "normalized_sha256": "d582f21c6308d345ae3e252ba40bac8624996264e111764ba8f84946f5ae315a"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/paths.py": {
+      "role": "index",
+      "sha256": "75cdffb0bc2b22df05d0b11b99ceeb0ac7812747cd3f69ac076e2ae25bdbe753",
+      "size": 6798,
+      "normalized_sha256": "75cdffb0bc2b22df05d0b11b99ceeb0ac7812747cd3f69ac076e2ae25bdbe753"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/preview.py": {
+      "role": "index",
+      "sha256": "ecd611f678b294a8c5972313f69dbd9ea82890dceed2be4ac365bd26c2c1792a",
+      "size": 9564,
+      "normalized_sha256": "ecd611f678b294a8c5972313f69dbd9ea82890dceed2be4ac365bd26c2c1792a"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/proposals.py": {
+      "role": "index",
+      "sha256": "5fddc8496fe2cb53af05a89f53e7ae208f8fa2281eaea4c46508b8b4d13aab0b",
+      "size": 38488,
+      "normalized_sha256": "5fddc8496fe2cb53af05a89f53e7ae208f8fa2281eaea4c46508b8b4d13aab0b"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/resolver.py": {
+      "role": "index",
+      "sha256": "3c16076cd7daa549f68e2f728bf31ae3dff6d9844000198eb37f18caada9ec7e",
+      "size": 5079,
+      "normalized_sha256": "3c16076cd7daa549f68e2f728bf31ae3dff6d9844000198eb37f18caada9ec7e"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/reuse.py": {
+      "role": "index",
+      "sha256": "b37c958bae5d4e02f2f9ea500f11053c59555bc27a131de5abdae26ae0dc786d",
+      "size": 40428,
+      "normalized_sha256": "b37c958bae5d4e02f2f9ea500f11053c59555bc27a131de5abdae26ae0dc786d"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/security.py": {
+      "role": "index",
+      "sha256": "07e672be7f7eab7f376d056a70af7a5a6c72b83bb6c02ef4a514fea5a2aa676a",
+      "size": 5223,
+      "normalized_sha256": "07e672be7f7eab7f376d056a70af7a5a6c72b83bb6c02ef4a514fea5a2aa676a"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/service.py": {
+      "role": "index",
+      "sha256": "1fcc28539bea102c1ab2570588fa32257d3c329ae9d091f67d8091a99a133efb",
+      "size": 19072,
+      "normalized_sha256": "1fcc28539bea102c1ab2570588fa32257d3c329ae9d091f67d8091a99a133efb"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/session.py": {
+      "role": "index",
+      "sha256": "45f3fc3bf93c37a9fca01ef6ac88c3dd3afc2fcf50f0be22f856d24e0dd05117",
+      "size": 10507,
+      "normalized_sha256": "45f3fc3bf93c37a9fca01ef6ac88c3dd3afc2fcf50f0be22f856d24e0dd05117"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/store.py": {
+      "role": "index",
+      "sha256": "501000bb31647e66e94383f8f3837dd27f3042c71619f6a8be2fae44886f7096",
+      "size": 78279,
+      "normalized_sha256": "501000bb31647e66e94383f8f3837dd27f3042c71619f6a8be2fae44886f7096"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/ui.py": {
+      "role": "index",
+      "sha256": "edd4d49c78eca41034df8912aea851f7be5cd41e7a2e46fa19e3d6acb29d06f7",
+      "size": 3323,
+      "normalized_sha256": "edd4d49c78eca41034df8912aea851f7be5cd41e7a2e46fa19e3d6acb29d06f7"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/web/app.css": {
+      "role": "index",
+      "sha256": "c7c52446aa0749f071f0305a93bd9cf2d9f3059c5f1368a41080013cb0fe23da",
+      "size": 13790,
+      "normalized_sha256": "c7c52446aa0749f071f0305a93bd9cf2d9f3059c5f1368a41080013cb0fe23da"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/web/app.html": {
+      "role": "index",
+      "sha256": "eb842c7f465549cffc0a60747de12e5cd0d0e61fe458563358c8da21906fb35d",
+      "size": 41081,
+      "normalized_sha256": "eb842c7f465549cffc0a60747de12e5cd0d0e61fe458563358c8da21906fb35d"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/web/app.js": {
+      "role": "index",
+      "sha256": "f5b32165bcf0ac39d95d6556a8d8f317d817837d43900f0a9e1404d44d6b2034",
+      "size": 167324,
+      "normalized_sha256": "f5b32165bcf0ac39d95d6556a8d8f317d817837d43900f0a9e1404d44d6b2034"
+    },
+    "packages/design-playbook-workbench/design_playbook_workbench/work.py": {
+      "role": "index",
+      "sha256": "6efc9d4ea06c435f4e333af117b43dd80d7c6e0704d2dce93377dcd0c1a56949",
+      "size": 40762,
+      "normalized_sha256": "6efc9d4ea06c435f4e333af117b43dd80d7c6e0704d2dce93377dcd0c1a56949"
+    },
+    "packages/design-playbook-workbench/pyproject.toml": {
+      "role": "index",
+      "sha256": "8dd7894f070d1321f595ebc3cd3e3a9fe578a59bae0ab22b9ef9278e6f4120bd",
+      "size": 552,
+      "normalized_sha256": "8dd7894f070d1321f595ebc3cd3e3a9fe578a59bae0ab22b9ef9278e6f4120bd"
+    },
+    "packages/design-playbook-workbench/tests/__init__.py": {
+      "role": "observe",
+      "sha256": "48f1ce8263c1ea00373fae0a866d4dc3f8767ec9aa9fc92a91e5cdc4e0d070c1",
+      "size": 70,
+      "normalized_sha256": "48f1ce8263c1ea00373fae0a866d4dc3f8767ec9aa9fc92a91e5cdc4e0d070c1"
+    },
+    "packages/design-playbook-workbench/tests/harness.py": {
+      "role": "observe",
+      "sha256": "fc3292a350233b24d411c84789490279a85280ccd6720d2c7a21293c54c8a88a",
+      "size": 18258,
+      "normalized_sha256": "fc3292a350233b24d411c84789490279a85280ccd6720d2c7a21293c54c8a88a"
+    },
+    "packages/design-playbook-workbench/tests/test_acceptance_tools.py": {
+      "role": "observe",
+      "sha256": "f15c69926ddf1868726b24620886974c1ebfd2fca7b7d21fc8f5377bea4d926c",
+      "size": 14339,
+      "normalized_sha256": "f15c69926ddf1868726b24620886974c1ebfd2fca7b7d21fc8f5377bea4d926c"
+    },
+    "packages/design-playbook-workbench/tests/test_assets.py": {
+      "role": "observe",
+      "sha256": "cada2ebae0690b8cc3ec67d248a74baec8cdc8c8bfb8b3d319e7edc074a9cd58",
+      "size": 23717,
+      "normalized_sha256": "cada2ebae0690b8cc3ec67d248a74baec8cdc8c8bfb8b3d319e7edc074a9cd58"
+    },
+    "packages/design-playbook-workbench/tests/test_backup.py": {
+      "role": "observe",
+      "sha256": "3668914a32c04c68266abe9ebaabd17d3c370298aea1b76ba85cd3a0c0d664de",
+      "size": 16787,
+      "normalized_sha256": "3668914a32c04c68266abe9ebaabd17d3c370298aea1b76ba85cd3a0c0d664de"
+    },
+    "packages/design-playbook-workbench/tests/test_backup_api.py": {
+      "role": "observe",
+      "sha256": "1128e477a10f1a996d560aa5cefb533c509d16a298cab62a0128307bee0a6a46",
+      "size": 4353,
+      "normalized_sha256": "1128e477a10f1a996d560aa5cefb533c509d16a298cab62a0128307bee0a6a46"
+    },
+    "packages/design-playbook-workbench/tests/test_canvas.py": {
+      "role": "observe",
+      "sha256": "5e166b064d38865923ae9366e9262617f41fe6da55d21a63bd15cd5705d63355",
+      "size": 33357,
+      "normalized_sha256": "5e166b064d38865923ae9366e9262617f41fe6da55d21a63bd15cd5705d63355"
+    },
+    "packages/design-playbook-workbench/tests/test_canvas_api.py": {
+      "role": "observe",
+      "sha256": "bc323c6c731b71eb5de52bced217249f7a8f9c23c00d285895813516779cc85c",
+      "size": 13724,
+      "normalized_sha256": "bc323c6c731b71eb5de52bced217249f7a8f9c23c00d285895813516779cc85c"
+    },
+    "packages/design-playbook-workbench/tests/test_components.py": {
+      "role": "observe",
+      "sha256": "55a69c03cc1c8292231a157292aeabd1a2306dd1c672d3f3b37f07adfffeb901",
+      "size": 27693,
+      "normalized_sha256": "55a69c03cc1c8292231a157292aeabd1a2306dd1c672d3f3b37f07adfffeb901"
+    },
+    "packages/design-playbook-workbench/tests/test_components_api.py": {
+      "role": "observe",
+      "sha256": "ebbeb719f82e64a0a61fe4c9cac354d2f7636cd8c4fc6f0a08845bb18195523d",
+      "size": 15433,
+      "normalized_sha256": "ebbeb719f82e64a0a61fe4c9cac354d2f7636cd8c4fc6f0a08845bb18195523d"
+    },
+    "packages/design-playbook-workbench/tests/test_designsystem.py": {
+      "role": "observe",
+      "sha256": "c13592f66c44e96a345f9c9f99ace9f023215e5ae9c69f7d720b11c7a071297f",
+      "size": 20018,
+      "normalized_sha256": "c13592f66c44e96a345f9c9f99ace9f023215e5ae9c69f7d720b11c7a071297f"
+    },
+    "packages/design-playbook-workbench/tests/test_designsystem_api.py": {
+      "role": "observe",
+      "sha256": "d645823b92fa9cc456897e268407b7bfb01273c9450b514b5036f509fbc82f53",
+      "size": 15063,
+      "normalized_sha256": "d645823b92fa9cc456897e268407b7bfb01273c9450b514b5036f509fbc82f53"
+    },
+    "packages/design-playbook-workbench/tests/test_fix_closure.py": {
+      "role": "observe",
+      "sha256": "b28ee1938631cff2a112d3eabbee586d0b81cb15d39af878859eb61f8165cc7e",
+      "size": 6699,
+      "normalized_sha256": "b28ee1938631cff2a112d3eabbee586d0b81cb15d39af878859eb61f8165cc7e"
+    },
+    "packages/design-playbook-workbench/tests/test_http_api.py": {
+      "role": "observe",
+      "sha256": "07999d74d37a5d5bebbe5fce0cde1b8bd7808dea7154bb4fdd01722dff73fc85",
+      "size": 32876,
+      "normalized_sha256": "07999d74d37a5d5bebbe5fce0cde1b8bd7808dea7154bb4fdd01722dff73fc85"
+    },
+    "packages/design-playbook-workbench/tests/test_lifecycle.py": {
+      "role": "observe",
+      "sha256": "9ea14c696f92192451ff6b00a2810baa8a07e0a059e56e6f921f52d63037e2ac",
+      "size": 18302,
+      "normalized_sha256": "9ea14c696f92192451ff6b00a2810baa8a07e0a059e56e6f921f52d63037e2ac"
+    },
+    "packages/design-playbook-workbench/tests/test_lifecycle_api.py": {
+      "role": "observe",
+      "sha256": "71574b546bbe719557dc9452bd37821c8f1006353c369c8186bcfbf3f4fb48fa",
+      "size": 7758,
+      "normalized_sha256": "71574b546bbe719557dc9452bd37821c8f1006353c369c8186bcfbf3f4fb48fa"
+    },
+    "packages/design-playbook-workbench/tests/test_orchestration.py": {
+      "role": "observe",
+      "sha256": "ed4164f3804b2edbbc6985958d32205dbf69a7d0bc52b62ffa8855023bf5d2c0",
+      "size": 29545,
+      "normalized_sha256": "ed4164f3804b2edbbc6985958d32205dbf69a7d0bc52b62ffa8855023bf5d2c0"
+    },
+    "packages/design-playbook-workbench/tests/test_orchestration_api.py": {
+      "role": "observe",
+      "sha256": "e74accd3b5174a22de6430b3efd2e302835ff92f92b3622674b89868936adfa3",
+      "size": 15993,
+      "normalized_sha256": "e74accd3b5174a22de6430b3efd2e302835ff92f92b3622674b89868936adfa3"
+    },
+    "packages/design-playbook-workbench/tests/test_owner_projection_integration.py": {
+      "role": "observe",
+      "sha256": "f41eda141214cfc940c5a5e5db4973e62135644e32b37f8c6cfa335112ad3323",
+      "size": 7780,
+      "normalized_sha256": "f41eda141214cfc940c5a5e5db4973e62135644e32b37f8c6cfa335112ad3323"
+    },
+    "packages/design-playbook-workbench/tests/test_owners.py": {
+      "role": "observe",
+      "sha256": "d12fca539980a8d10d8268c3b067bf45c42c540fc0dda9edab2cbc0903592d6f",
+      "size": 27407,
+      "normalized_sha256": "d12fca539980a8d10d8268c3b067bf45c42c540fc0dda9edab2cbc0903592d6f"
+    },
+    "packages/design-playbook-workbench/tests/test_packaging.py": {
+      "role": "observe",
+      "sha256": "657b441c0a40607b1392866f3535b0694edf6de477ef668b58987afb875931ff",
+      "size": 3904,
+      "normalized_sha256": "657b441c0a40607b1392866f3535b0694edf6de477ef668b58987afb875931ff"
+    },
+    "packages/design-playbook-workbench/tests/test_paths.py": {
+      "role": "observe",
+      "sha256": "f9169d901874686600ed4854b66e055a907681fdb982717e2b91cdc1fb13f8f8",
+      "size": 9930,
+      "normalized_sha256": "f9169d901874686600ed4854b66e055a907681fdb982717e2b91cdc1fb13f8f8"
+    },
+    "packages/design-playbook-workbench/tests/test_preview.py": {
+      "role": "observe",
+      "sha256": "62ba5c2e6551d130a81aa7df1cc57b785d41f2626468f501e92e8876063e30bc",
+      "size": 13925,
+      "normalized_sha256": "62ba5c2e6551d130a81aa7df1cc57b785d41f2626468f501e92e8876063e30bc"
+    },
+    "packages/design-playbook-workbench/tests/test_proposals.py": {
+      "role": "observe",
+      "sha256": "00cec32bf3029d069eadba5becd082cf490c25588df239201b90aa1970f59c70",
+      "size": 30307,
+      "normalized_sha256": "00cec32bf3029d069eadba5becd082cf490c25588df239201b90aa1970f59c70"
+    },
+    "packages/design-playbook-workbench/tests/test_proposals_api.py": {
+      "role": "observe",
+      "sha256": "cc48e6862e9eebd70d22ec48025af9d73c2f6a42bf7dc46c6990f8a47ae99c66",
+      "size": 13624,
+      "normalized_sha256": "cc48e6862e9eebd70d22ec48025af9d73c2f6a42bf7dc46c6990f8a47ae99c66"
+    },
+    "packages/design-playbook-workbench/tests/test_resolver.py": {
+      "role": "observe",
+      "sha256": "fa9729babe01a6b0eff5ef8c85d656b9794426b79c2250e8756bb07d38af3594",
+      "size": 9830,
+      "normalized_sha256": "fa9729babe01a6b0eff5ef8c85d656b9794426b79c2250e8756bb07d38af3594"
+    },
+    "packages/design-playbook-workbench/tests/test_reuse.py": {
+      "role": "observe",
+      "sha256": "809e6868f601e9c59aafb94f4ea8a6a8c1a1b3618ab50eb2c2876cbe725be414",
+      "size": 32672,
+      "normalized_sha256": "809e6868f601e9c59aafb94f4ea8a6a8c1a1b3618ab50eb2c2876cbe725be414"
+    },
+    "packages/design-playbook-workbench/tests/test_reuse_api.py": {
+      "role": "observe",
+      "sha256": "c1ce2b7cb687ba12462d75e76e7bd8cb1fb9ac37501a20135a3622075d566c83",
+      "size": 13330,
+      "normalized_sha256": "c1ce2b7cb687ba12462d75e76e7bd8cb1fb9ac37501a20135a3622075d566c83"
+    },
+    "packages/design-playbook-workbench/tests/test_security.py": {
+      "role": "observe",
+      "sha256": "615eb867e4287cc9d32aa34c88cc39b2b8cbde65ad19b35de2950031df3239c7",
+      "size": 8515,
+      "normalized_sha256": "615eb867e4287cc9d32aa34c88cc39b2b8cbde65ad19b35de2950031df3239c7"
+    },
+    "packages/design-playbook-workbench/tests/test_service.py": {
+      "role": "observe",
+      "sha256": "b114ccc9c183c698b72225c20f47db735b60e47d021738387c855477a74b997f",
+      "size": 17220,
+      "normalized_sha256": "b114ccc9c183c698b72225c20f47db735b60e47d021738387c855477a74b997f"
+    },
+    "packages/design-playbook-workbench/tests/test_store.py": {
+      "role": "observe",
+      "sha256": "6eeef2de6e6c1585d117ab337d1ae3381d73a0800c3c508cc53be89dd9271397",
+      "size": 7388,
+      "normalized_sha256": "6eeef2de6e6c1585d117ab337d1ae3381d73a0800c3c508cc53be89dd9271397"
+    },
+    "packages/design-playbook-workbench/tests/test_ui_browser.py": {
+      "role": "observe",
+      "sha256": "25d0ebd8bb3fc3ea4c22810c61d8bcec33b904b899cbefd85f2f816145f5b4fa",
+      "size": 105769,
+      "normalized_sha256": "25d0ebd8bb3fc3ea4c22810c61d8bcec33b904b899cbefd85f2f816145f5b4fa"
+    },
+    "packages/design-playbook-workbench/tests/test_work.py": {
+      "role": "observe",
+      "sha256": "c4073e4b70ae9efad7f632b0ec8c2920afb0d969f9e7b260a1d4f783bd511117",
+      "size": 31584,
+      "normalized_sha256": "c4073e4b70ae9efad7f632b0ec8c2920afb0d969f9e7b260a1d4f783bd511117"
+    },
+    "packages/design-playbook-workbench/tests/test_work_api.py": {
+      "role": "observe",
+      "sha256": "ebf3fa11b1838714aebf161f6ae26b778f513952a3f9d2235988321fe1c15f52",
+      "size": 25195,
+      "normalized_sha256": "ebf3fa11b1838714aebf161f6ae26b778f513952a3f9d2235988321fe1c15f52"
+    },
+    "packages/design-playbook-workbench/tools/README.md": {
+      "role": "index",
+      "sha256": "bea7b6dae0710fa32f36a56721397e20f99a1a37ddae815eefb9894cfae2961f",
+      "size": 2362,
+      "normalized_sha256": "bea7b6dae0710fa32f36a56721397e20f99a1a37ddae815eefb9894cfae2961f"
+    },
+    "packages/design-playbook-workbench/tools/install_smoke.py": {
+      "role": "index",
+      "sha256": "1412f57e924f3d985485a6a2f52a7ecad648f91854bd99e965c77fcfca1adc55",
+      "size": 12594,
+      "normalized_sha256": "1412f57e924f3d985485a6a2f52a7ecad648f91854bd99e965c77fcfca1adc55"
+    },
+    "packages/design-playbook-workbench/tools/perf_harness.py": {
+      "role": "index",
+      "sha256": "d56235ca35416fcc89a4babcb6b092d1523ec4c685060565b73db2eec17ef4ca",
+      "size": 24097,
+      "normalized_sha256": "d56235ca35416fcc89a4babcb6b092d1523ec4c685060565b73db2eec17ef4ca"
+    },
+    "packages/design-playbook-workbench/tools/sample_targets.py": {
+      "role": "index",
+      "sha256": "a84371ada7f6835f6e52133e329b53cff6a384a7859a114a5b44bba5e14db343",
+      "size": 7912,
+      "normalized_sha256": "a84371ada7f6835f6e52133e329b53cff6a384a7859a114a5b44bba5e14db343"
+    },
+    "packages/design-playbook-workbench/tools/seed_scale.py": {
+      "role": "index",
+      "sha256": "d99336db12dc437d3aa9bccfd9d42a9ef73706858d96c27d418354002d3963e6",
+      "size": 14976,
+      "normalized_sha256": "d99336db12dc437d3aa9bccfd9d42a9ef73706858d96c27d418354002d3963e6"
+    },
+    "packages/design-playbook/.claude-plugin/plugin.json": {
+      "role": "index",
+      "sha256": "a17146f50b56d057e6ed10c070f9ff5ebdfd041d694dee8e6b2bba23627cb089",
+      "size": 544,
+      "normalized_sha256": "a17146f50b56d057e6ed10c070f9ff5ebdfd041d694dee8e6b2bba23627cb089"
+    },
+    "packages/design-playbook/.codex-plugin/mcp.json": {
+      "role": "index",
+      "sha256": "271dd8c95e3509df06a94c5379b6f173a087a1bc9d80bb3cd381588cbcd519f8",
+      "size": 429,
+      "normalized_sha256": "271dd8c95e3509df06a94c5379b6f173a087a1bc9d80bb3cd381588cbcd519f8"
+    },
+    "packages/design-playbook/.codex-plugin/plugin.json": {
+      "role": "index",
+      "sha256": "b2004e1c7972efcdc24a669a7dc22c4bcc848e20cdb27415c9a9803b7660af7a",
+      "size": 1127,
+      "normalized_sha256": "b2004e1c7972efcdc24a669a7dc22c4bcc848e20cdb27415c9a9803b7660af7a"
+    },
+    "packages/design-playbook/.mcp.json": {
+      "role": "index",
+      "sha256": "e1c7512e40165d9dc50c35d421ccd589f92f837bcb1c2d7d5ce81645ab8bd538",
+      "size": 461,
+      "normalized_sha256": "e1c7512e40165d9dc50c35d421ccd589f92f837bcb1c2d7d5ce81645ab8bd538"
+    },
+    "packages/design-playbook/LICENSE": {
+      "role": "index",
+      "sha256": "d7ac5d211fb96918004dac5e2aaa4ccac90d7f94e16feaed5684e1be505f77e5",
+      "size": 1379,
+      "normalized_sha256": "d7ac5d211fb96918004dac5e2aaa4ccac90d7f94e16feaed5684e1be505f77e5"
+    },
+    "packages/design-playbook/NOTICE": {
+      "role": "index",
+      "sha256": "e99868fa140964123b9c19358208b4f0d4ad19b2b14662b36f75893eda4dc0d4",
+      "size": 1905,
+      "normalized_sha256": "e99868fa140964123b9c19358208b4f0d4ad19b2b14662b36f75893eda4dc0d4"
+    },
+    "packages/design-playbook/README.md": {
+      "role": "index",
+      "sha256": "ed85acc40b606b38f9c462c17baff96346935cf7db1c8a1c20c73a43997e47db",
+      "size": 13407,
+      "normalized_sha256": "ed85acc40b606b38f9c462c17baff96346935cf7db1c8a1c20c73a43997e47db"
+    },
+    "packages/design-playbook/codex/AGENTS.md": {
+      "role": "index",
+      "sha256": "a3fe427c01d3d519db12400c82d466135a542c24cbbc01a87ca38482d577ead9",
+      "size": 3317,
+      "normalized_sha256": "a3fe427c01d3d519db12400c82d466135a542c24cbbc01a87ca38482d577ead9"
+    },
+    "packages/design-playbook/codex/install_skills.py": {
+      "role": "index",
+      "sha256": "7b756e31715f5e1d1e6ef3cfbd0717f64144f98aaf78dd8441a65b4d488f5a5f",
+      "size": 2640,
+      "normalized_sha256": "7b756e31715f5e1d1e6ef3cfbd0717f64144f98aaf78dd8441a65b4d488f5a5f"
+    },
+    "packages/design-playbook/commands/component-distill.md": {
+      "role": "index",
+      "sha256": "af435e52ba7b1854e0dc5d4e15169844aa301e1948034375e2faf9eb304dcbd9",
+      "size": 1928,
+      "normalized_sha256": "af435e52ba7b1854e0dc5d4e15169844aa301e1948034375e2faf9eb304dcbd9"
+    },
+    "packages/design-playbook/commands/design-io.md": {
+      "role": "index",
+      "sha256": "926d5a6a1b21fa1fc24aebadbc50306da61a339ff15bf4c23d1ea3a25b03190f",
+      "size": 1815,
+      "normalized_sha256": "926d5a6a1b21fa1fc24aebadbc50306da61a339ff15bf4c23d1ea3a25b03190f"
+    },
+    "packages/design-playbook/commands/doctor.md": {
+      "role": "index",
+      "sha256": "2cd269520a1352e79031719310bdeb68bdcfc447f13f89927db7d8602be2de0e",
+      "size": 1006,
+      "normalized_sha256": "2cd269520a1352e79031719310bdeb68bdcfc447f13f89927db7d8602be2de0e"
+    },
+    "packages/design-playbook/commands/run-handoff.md": {
+      "role": "index",
+      "sha256": "a39dd81645277c80d806d513c1e7723dae94da07d182ddd74952231e759d969e",
+      "size": 2929,
+      "normalized_sha256": "a39dd81645277c80d806d513c1e7723dae94da07d182ddd74952231e759d969e"
+    },
+    "packages/design-playbook/commands/run-review.md": {
+      "role": "index",
+      "sha256": "ac4f1fae3170ab56a7dbd1f67c3e90f95ab4fb9569e86ad9d0d1c6c693e7304c",
+      "size": 5049,
+      "normalized_sha256": "ac4f1fae3170ab56a7dbd1f67c3e90f95ab4fb9569e86ad9d0d1c6c693e7304c"
+    },
+    "packages/design-playbook/commands/run-status.md": {
+      "role": "index",
+      "sha256": "818cde78e294cb35858b4855a226903ddb8f5df1dd446b2b3fe7cd159e5a7728",
+      "size": 7790,
+      "normalized_sha256": "818cde78e294cb35858b4855a226903ddb8f5df1dd446b2b3fe7cd159e5a7728"
+    },
+    "packages/design-playbook/commands/ui-review.md": {
+      "role": "index",
+      "sha256": "329a7cbffcba17f0cd5a580d00e4d0e69d7bf2a4c759d7f694b9cc179c3dece9",
+      "size": 1659,
+      "normalized_sha256": "329a7cbffcba17f0cd5a580d00e4d0e69d7bf2a4c759d7f694b9cc179c3dece9"
+    },
+    "packages/design-playbook/commands/ux-spec.md": {
+      "role": "index",
+      "sha256": "ca7a819a77b7fc0bcb8edbf392eb2467c83f6f36bcd059c64a4072776e376ebd",
+      "size": 1944,
+      "normalized_sha256": "ca7a819a77b7fc0bcb8edbf392eb2467c83f6f36bcd059c64a4072776e376ebd"
+    },
+    "packages/design-playbook/cordis.patch.yml": {
+      "role": "index",
+      "sha256": "595d9362a7f08d71d691bfbdd44fdf31641f1c0908647dc8cb7137a4682ce3cc",
+      "size": 776,
+      "normalized_sha256": "595d9362a7f08d71d691bfbdd44fdf31641f1c0908647dc8cb7137a4682ce3cc"
+    },
+    "packages/design-playbook/design_playbook.py": {
+      "role": "index",
+      "sha256": "1dcab2d02be50f3f5ebefe900974a3bb578302efd559ae547d4445ae2f23f1ae",
+      "size": 870,
+      "normalized_sha256": "1dcab2d02be50f3f5ebefe900974a3bb578302efd559ae547d4445ae2f23f1ae"
+    },
+    "packages/design-playbook/examples/README.md": {
+      "role": "index",
+      "sha256": "894ad18182c7ffba1a0f0cb3a3044053c4b40ac3f75e5aba85855bccceecfef5",
+      "size": 1663,
+      "normalized_sha256": "894ad18182c7ffba1a0f0cb3a3044053c4b40ac3f75e5aba85855bccceecfef5"
+    },
+    "packages/design-playbook/examples/craft-detectors/composition-contrast.md": {
+      "role": "index",
+      "sha256": "48abcaab6fb6a1afbe933d9eba7b76a5eb093c240c15c82d05b0a1e155c4fefb",
+      "size": 3953,
+      "normalized_sha256": "48abcaab6fb6a1afbe933d9eba7b76a5eb093c240c15c82d05b0a1e155c4fefb"
+    },
+    "packages/design-playbook/examples/craft-detectors/existing-brand-contrast.md": {
+      "role": "index",
+      "sha256": "4b9e5bb43f7506230cccb3c36dca4348b5dce1a8b34474d9e156ae6f8fc4a6b0",
+      "size": 2887,
+      "normalized_sha256": "4b9e5bb43f7506230cccb3c36dca4348b5dce1a8b34474d9e156ae6f8fc4a6b0"
+    },
+    "packages/design-playbook/examples/craft-detectors/landing-product-contrast.md": {
+      "role": "index",
+      "sha256": "b9cc3d2781b5bff8063ecfa974a4da67395f9b9ba6bf1e9e1070970f0cf192db",
+      "size": 2836,
+      "normalized_sha256": "b9cc3d2781b5bff8063ecfa974a4da67395f9b9ba6bf1e9e1070970f0cf192db"
+    },
+    "packages/design-playbook/examples/craft-detectors/saas-dashboard.md": {
+      "role": "index",
+      "sha256": "2cd94530da6ca90422f0eaf3ad5e7fe37bb6702f5a6e187ad8a4b8c6697369a2",
+      "size": 2975,
+      "normalized_sha256": "2cd94530da6ca90422f0eaf3ad5e7fe37bb6702f5a6e187ad8a4b8c6697369a2"
+    },
+    "packages/design-playbook/examples/dogfood/README.md": {
+      "role": "index",
+      "sha256": "5c8e6ddce6575308e0c1a274e4643f368ef1dc4e2c27d75182adef248a0aaa0f",
+      "size": 3036,
+      "normalized_sha256": "5c8e6ddce6575308e0c1a274e4643f368ef1dc4e2c27d75182adef248a0aaa0f"
+    },
+    "packages/design-playbook/examples/dogfood/project/DESIGN.md": {
+      "role": "index",
+      "sha256": "9d5ca40b6d547c91e9d7b2d4f282c137728a1196dd98c597dd00b063e74a34fc",
+      "size": 1190,
+      "normalized_sha256": "9d5ca40b6d547c91e9d7b2d4f282c137728a1196dd98c597dd00b063e74a34fc"
+    },
+    "packages/design-playbook/examples/dogfood/project/contract.json": {
+      "role": "index",
+      "sha256": "b77ebabe7382347b5f54929e3cf6e2be0e6b84a4282ebd87fb0a99ac4337530d",
+      "size": 3286,
+      "normalized_sha256": "b77ebabe7382347b5f54929e3cf6e2be0e6b84a4282ebd87fb0a99ac4337530d"
+    },
+    "packages/design-playbook/examples/dogfood/project/decisions.jsonl": {
+      "role": "index",
+      "sha256": "6e753c1e3527fb7ca94e57e9ffb9c3adf7519c01e9e87b104194fb8dfb26d14d",
+      "size": 2861,
+      "normalized_sha256": "6e753c1e3527fb7ca94e57e9ffb9c3adf7519c01e9e87b104194fb8dfb26d14d"
+    },
+    "packages/design-playbook/examples/export-entry/project/contract.json": {
+      "role": "index",
+      "sha256": "8768cbb36c675e8680997b621ebb46821f560ee507018a856bd926e60459d8ab",
+      "size": 2696,
+      "normalized_sha256": "8768cbb36c675e8680997b621ebb46821f560ee507018a856bd926e60459d8ab"
+    },
+    "packages/design-playbook/examples/export-entry/project/decisions.jsonl": {
+      "role": "index",
+      "sha256": "a788329526d8b8ea4d82d286dd0f4f0292bc503b044681aa3f83079425ea81ae",
+      "size": 1695,
+      "normalized_sha256": "a788329526d8b8ea4d82d286dd0f4f0292bc503b044681aa3f83079425ea81ae"
+    },
+    "packages/design-playbook/examples/export-pointfix-upgrade/project/contract.json": {
+      "role": "index",
+      "sha256": "4740d08190d482c5e94092020f187bf360edd01de082f74af078c42242aee9a9",
+      "size": 2265,
+      "normalized_sha256": "4740d08190d482c5e94092020f187bf360edd01de082f74af078c42242aee9a9"
+    },
+    "packages/design-playbook/examples/export-pointfix-upgrade/project/decisions.jsonl": {
+      "role": "index",
+      "sha256": "ba879f689b79594c6c89b1d29f7ed63b6e78b27d20ab70adbab052fe9a1ee83a",
+      "size": 2063,
+      "normalized_sha256": "ba879f689b79594c6c89b1d29f7ed63b6e78b27d20ab70adbab052fe9a1ee83a"
+    },
+    "packages/design-playbook/examples/export-retry-stop/project/contract.json": {
+      "role": "index",
+      "sha256": "98ecbc43dbed938fe57cfd149183056d3fb48f2a9439fa4d5a3d94cb307463b8",
+      "size": 1232,
+      "normalized_sha256": "98ecbc43dbed938fe57cfd149183056d3fb48f2a9439fa4d5a3d94cb307463b8"
+    },
+    "packages/design-playbook/examples/export-retry-stop/project/decisions.jsonl": {
+      "role": "index",
+      "sha256": "3e3f70349633a9feea44d7f73f652cfce2993efdc6ac56496b2fc1fdf20c8cee",
+      "size": 898,
+      "normalized_sha256": "3e3f70349633a9feea44d7f73f652cfce2993efdc6ac56496b2fc1fdf20c8cee"
+    },
+    "packages/design-playbook/examples/export-upgrade/project/DESIGN.md": {
+      "role": "index",
+      "sha256": "2d0728566b52e19c5fb5fd81cb7c8ef44dd51f63e83212154b4d954dc22425a3",
+      "size": 888,
+      "normalized_sha256": "2d0728566b52e19c5fb5fd81cb7c8ef44dd51f63e83212154b4d954dc22425a3"
+    },
+    "packages/design-playbook/examples/export-upgrade/project/contract.json": {
+      "role": "index",
+      "sha256": "5aa98617242c83fca2f8f7468f5f802e158d5199a4b19e09f09f68282b9e2a01",
+      "size": 3514,
+      "normalized_sha256": "5aa98617242c83fca2f8f7468f5f802e158d5199a4b19e09f09f68282b9e2a01"
+    },
+    "packages/design-playbook/examples/export-upgrade/project/decisions.jsonl": {
+      "role": "index",
+      "sha256": "e5da0b732e54aca744826c0357f87cf1fc34c80e4499e84797b63d8bc96c66cc",
+      "size": 2737,
+      "normalized_sha256": "e5da0b732e54aca744826c0357f87cf1fc34c80e4499e84797b63d8bc96c66cc"
+    },
+    "packages/design-playbook/examples/ops-list-spec.md": {
+      "role": "index",
+      "sha256": "8dae8cb3c80825c5ec36df7dae0c5e89699c2e16541489559cc247ad1bb6effc",
+      "size": 1746,
+      "normalized_sha256": "8dae8cb3c80825c5ec36df7dae0c5e89699c2e16541489559cc247ad1bb6effc"
+    },
+    "packages/design-playbook/examples/point-back-findings.md": {
+      "role": "index",
+      "sha256": "69c960ce67b616aa3000948c795f9aedeb36fbfe4155e915fb6838eea76ef9d6",
+      "size": 932,
+      "normalized_sha256": "69c960ce67b616aa3000948c795f9aedeb36fbfe4155e915fb6838eea76ef9d6"
+    },
+    "packages/design-playbook/examples/reference-intake/README.md": {
+      "role": "index",
+      "sha256": "a99d9b46d2a2a1c5aeb1f36db402f0383c3b26e41cacdab31d84be7104809257",
+      "size": 477,
+      "normalized_sha256": "a99d9b46d2a2a1c5aeb1f36db402f0383c3b26e41cacdab31d84be7104809257"
+    },
+    "packages/design-playbook/examples/reference-intake/product-analogy/contract.md": {
+      "role": "index",
+      "sha256": "3f5c848a3c02064c5545957adba35b2250f68d077f84a68505b0e8979cf6f831",
+      "size": 2073,
+      "normalized_sha256": "3f5c848a3c02064c5545957adba35b2250f68d077f84a68505b0e8979cf6f831"
+    },
+    "packages/design-playbook/examples/reference-intake/product-analogy/manifest.json": {
+      "role": "index",
+      "sha256": "82621d74af86ce989be6af52a5983d0274d6607605a9f74eb6578b497c1dc530",
+      "size": 480,
+      "normalized_sha256": "82621d74af86ce989be6af52a5983d0274d6607605a9f74eb6578b497c1dc530"
+    },
+    "packages/design-playbook/examples/reference-intake/screenshot/assets/README.md": {
+      "role": "index",
+      "sha256": "818d66490e37e627d201a1302cc2405231dfd140720439a18b0f42fb524222b9",
+      "size": 75,
+      "normalized_sha256": "818d66490e37e627d201a1302cc2405231dfd140720439a18b0f42fb524222b9"
+    },
+    "packages/design-playbook/examples/reference-intake/screenshot/contract.md": {
+      "role": "index",
+      "sha256": "e1b0eb26bdc52735d866162c43aba40a1d4288655f13910de748b80e67e58444",
+      "size": 2235,
+      "normalized_sha256": "e1b0eb26bdc52735d866162c43aba40a1d4288655f13910de748b80e67e58444"
+    },
+    "packages/design-playbook/examples/reference-intake/screenshot/manifest.json": {
+      "role": "index",
+      "sha256": "01ba5d767c44fde586a2f7d42e9b52e758bc584ff84f5b215b1900c67c3d4745",
+      "size": 594,
+      "normalized_sha256": "01ba5d767c44fde586a2f7d42e9b52e758bc584ff84f5b215b1900c67c3d4745"
+    },
+    "packages/design-playbook/examples/reference-intake/url/contract.md": {
+      "role": "index",
+      "sha256": "95a28f8f54fa5eb8e14b7a353e663aecd239672940537529771d8efca3c80630",
+      "size": 2176,
+      "normalized_sha256": "95a28f8f54fa5eb8e14b7a353e663aecd239672940537529771d8efca3c80630"
+    },
+    "packages/design-playbook/examples/reference-intake/url/manifest.json": {
+      "role": "index",
+      "sha256": "5bec95186d0b88cd7944ad243f53da7436a1ee13526632fb175a1500b04afbd6",
+      "size": 492,
+      "normalized_sha256": "5bec95186d0b88cd7944ad243f53da7436a1ee13526632fb175a1500b04afbd6"
+    },
+    "packages/design-playbook/examples/rules-governance/README.md": {
+      "role": "index",
+      "sha256": "bc61739fb3dad25875da2d95bd7bfbd373c7acaca7089e42d0d0ddea87bbd645",
+      "size": 1457,
+      "normalized_sha256": "bc61739fb3dad25875da2d95bd7bfbd373c7acaca7089e42d0d0ddea87bbd645"
+    },
+    "packages/design-playbook/examples/rules-governance/rules-governance.jsonl": {
+      "role": "index",
+      "sha256": "7b127ad2f36a4ab2b531c164a10176afca6e6aa5d272a29b03910d732a69bde9",
+      "size": 3080,
+      "normalized_sha256": "7b127ad2f36a4ab2b531c164a10176afca6e6aa5d272a29b03910d732a69bde9"
+    },
+    "packages/design-playbook/examples/settings-decision-report.md": {
+      "role": "index",
+      "sha256": "dcc9080a7edd3fd5dd70a591c2adf81c2b3e1aae41cf778ed8c4a54fd1a48250",
+      "size": 908,
+      "normalized_sha256": "dcc9080a7edd3fd5dd70a591c2adf81c2b3e1aae41cf778ed8c4a54fd1a48250"
+    },
+    "packages/design-playbook/lib/cli.js": {
+      "role": "index",
+      "sha256": "2f9d4a595a8945edcfdd3fdd96a1a7deb71dfc0f7e7d64827ddfbf2d0f2bcf31",
+      "size": 1208,
+      "normalized_sha256": "2f9d4a595a8945edcfdd3fdd96a1a7deb71dfc0f7e7d64827ddfbf2d0f2bcf31"
+    },
+    "packages/design-playbook/lib/index.js": {
+      "role": "index",
+      "sha256": "a389f68d6717b2641cb70c11220b858517986246e030ba00bf8a05a5e9f247df",
+      "size": 6128,
+      "normalized_sha256": "a389f68d6717b2641cb70c11220b858517986246e030ba00bf8a05a5e9f247df"
+    },
+    "packages/design-playbook/lib/test_commands.js": {
+      "role": "index",
+      "sha256": "7a595b69cf3771e0bddc70468ce927f6beda477577351de87efde0c475403d5f",
+      "size": 3928,
+      "normalized_sha256": "7a595b69cf3771e0bddc70468ce927f6beda477577351de87efde0c475403d5f"
+    },
+    "packages/design-playbook/mcp/__init__.py": {
+      "role": "index",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "packages/design-playbook/mcp/_transport.py": {
+      "role": "index",
+      "sha256": "549ff413f097f89a75661cc69b9a0c92dfa0c6b2b5818c46c7d90e708405ebc8",
+      "size": 8723,
+      "normalized_sha256": "549ff413f097f89a75661cc69b9a0c92dfa0c6b2b5818c46c7d90e708405ebc8"
+    },
+    "packages/design-playbook/mcp/evidence/README.md": {
+      "role": "index",
+      "sha256": "e4c18c321a9c85422010417f3230be9927a1a0b2632d00bd37806db5b8401cc0",
+      "size": 3014,
+      "normalized_sha256": "e4c18c321a9c85422010417f3230be9927a1a0b2632d00bd37806db5b8401cc0"
+    },
+    "packages/design-playbook/mcp/evidence/__init__.py": {
+      "role": "index",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "packages/design-playbook/mcp/evidence/action_params.py": {
+      "role": "index",
+      "sha256": "6a5d791e0f6f524c96650ecbbd68ff08e499aaf8ea3011aaf4113439dddbd6b8",
+      "size": 4216,
+      "normalized_sha256": "6a5d791e0f6f524c96650ecbbd68ff08e499aaf8ea3011aaf4113439dddbd6b8"
+    },
+    "packages/design-playbook/mcp/evidence/capture_contract.py": {
+      "role": "index",
+      "sha256": "761975259e777e0beb815e7e91cbfa5275872698a47e52c96ef8c20a03c60363",
+      "size": 10031,
+      "normalized_sha256": "761975259e777e0beb815e7e91cbfa5275872698a47e52c96ef8c20a03c60363"
+    },
+    "packages/design-playbook/mcp/evidence/capture_runtime.py": {
+      "role": "index",
+      "sha256": "8d4c4bcafae9058fc5821cb687ceb1c8e2f7c11437bc01f2eea86fe53bdda4f7",
+      "size": 44080,
+      "normalized_sha256": "8d4c4bcafae9058fc5821cb687ceb1c8e2f7c11437bc01f2eea86fe53bdda4f7"
+    },
+    "packages/design-playbook/mcp/evidence/capture_snapshot.py": {
+      "role": "index",
+      "sha256": "ede9a6eec374982c963d0e16d2dddd611b92dbc8967ffac1c5a35d15b12389ba",
+      "size": 1202,
+      "normalized_sha256": "ede9a6eec374982c963d0e16d2dddd611b92dbc8967ffac1c5a35d15b12389ba"
+    },
+    "packages/design-playbook/mcp/evidence/containment.py": {
+      "role": "index",
+      "sha256": "78ae27a38f2833bbe82cce27ad2682ef9af3fc39ccf6292ab8b098389a6aaa35",
+      "size": 13509,
+      "normalized_sha256": "78ae27a38f2833bbe82cce27ad2682ef9af3fc39ccf6292ab8b098389a6aaa35"
+    },
+    "packages/design-playbook/mcp/evidence/disclosure.py": {
+      "role": "index",
+      "sha256": "14d0c4e478209e422f1776cbd1d930cdc5ec22fe4535c39ed673aa7731910d35",
+      "size": 11088,
+      "normalized_sha256": "14d0c4e478209e422f1776cbd1d930cdc5ec22fe4535c39ed673aa7731910d35"
+    },
+    "packages/design-playbook/mcp/evidence/evidence_preflight.py": {
+      "role": "index",
+      "sha256": "07760a293bf0cf4a7e8d195172e7dc9c5b3be68438a5e0d2a84e12365f418173",
+      "size": 15106,
+      "normalized_sha256": "07760a293bf0cf4a7e8d195172e7dc9c5b3be68438a5e0d2a84e12365f418173"
+    },
+    "packages/design-playbook/mcp/evidence/handoff.py": {
+      "role": "index",
+      "sha256": "0a6ab453f5700fcab7a2f7fe6e41a0f2185abe956ea226f5a94fec39d90ab4eb",
+      "size": 35677,
+      "normalized_sha256": "0a6ab453f5700fcab7a2f7fe6e41a0f2185abe956ea226f5a94fec39d90ab4eb"
+    },
+    "packages/design-playbook/mcp/evidence/handoff_i18n.py": {
+      "role": "index",
+      "sha256": "dd5f07da92aefb91ab20048464ac4cb892d5bdf2f9dc01493257d015e9873c9f",
+      "size": 4160,
+      "normalized_sha256": "dd5f07da92aefb91ab20048464ac4cb892d5bdf2f9dc01493257d015e9873c9f"
+    },
+    "packages/design-playbook/mcp/evidence/ledger_syntax.py": {
+      "role": "index",
+      "sha256": "bd84a4592b411613e24a784405308f1de6dd184e46e9ef5ed7ee30a48b7dd5df",
+      "size": 5229,
+      "normalized_sha256": "bd84a4592b411613e24a784405308f1de6dd184e46e9ef5ed7ee30a48b7dd5df"
+    },
+    "packages/design-playbook/mcp/evidence/page_defects.py": {
+      "role": "index",
+      "sha256": "a780f1f2ddcab381484e2a72b61ea15bee8a852ff4550e5fc1de75bb8ce394cb",
+      "size": 5888,
+      "normalized_sha256": "a780f1f2ddcab381484e2a72b61ea15bee8a852ff4550e5fc1de75bb8ce394cb"
+    },
+    "packages/design-playbook/mcp/evidence/path_syntax.py": {
+      "role": "index",
+      "sha256": "3921ab8fff4cadc18d66636f2c828d16bfdf1c259a7466ee9c5f471bccb137ef",
+      "size": 2208,
+      "normalized_sha256": "3921ab8fff4cadc18d66636f2c828d16bfdf1c259a7466ee9c5f471bccb137ef"
+    },
+    "packages/design-playbook/mcp/evidence/server.py": {
+      "role": "index",
+      "sha256": "3d8cd6bbc92fae01306fdc31fd872d5060cf5f80e3d0762f9fecd540d11f0e4d",
+      "size": 5826,
+      "normalized_sha256": "3d8cd6bbc92fae01306fdc31fd872d5060cf5f80e3d0762f9fecd540d11f0e4d"
+    },
+    "packages/design-playbook/mcp/evidence/static_handoff_page.html": {
+      "role": "index",
+      "sha256": "778df841ff7c01cca91294c8f84010425e35b61a9dfea845c59507171070f2b5",
+      "size": 5096,
+      "normalized_sha256": "778df841ff7c01cca91294c8f84010425e35b61a9dfea845c59507171070f2b5"
+    },
+    "packages/design-playbook/mcp/preview/__init__.py": {
+      "role": "index",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "packages/design-playbook/mcp/preview/compatibility.py": {
+      "role": "index",
+      "sha256": "c1acede1d13fa4f0bb3177ff2ec80846ce3f1aaeb534e700a58fe59a18f5abc1",
+      "size": 6128,
+      "normalized_sha256": "c1acede1d13fa4f0bb3177ff2ec80846ce3f1aaeb534e700a58fe59a18f5abc1"
+    },
+    "packages/design-playbook/mcp/preview/control.css": {
+      "role": "index",
+      "sha256": "fa7a9ff636a9396711825a78e53ce7402a7b2ee5cf872a07543b3eadb2cc561d",
+      "size": 54901,
+      "normalized_sha256": "fa7a9ff636a9396711825a78e53ce7402a7b2ee5cf872a07543b3eadb2cc561d"
+    },
+    "packages/design-playbook/mcp/preview/control.html": {
+      "role": "index",
+      "sha256": "1d87b6c3be5575e8501f529717cc927dccd5fc248052ccb7a4f22fa5c655b553",
+      "size": 23540,
+      "normalized_sha256": "1d87b6c3be5575e8501f529717cc927dccd5fc248052ccb7a4f22fa5c655b553"
+    },
+    "packages/design-playbook/mcp/preview/control.js": {
+      "role": "index",
+      "sha256": "06bb39e3a1d4d15d8ec3c88fa0cc543dc6187c394352ad7d90771ba7800e22d4",
+      "size": 55570,
+      "normalized_sha256": "06bb39e3a1d4d15d8ec3c88fa0cc543dc6187c394352ad7d90771ba7800e22d4"
+    },
+    "packages/design-playbook/mcp/preview/control.py": {
+      "role": "index",
+      "sha256": "94d25ee05d8aa1b51629bc7214e9ae45667451b9572c73f3991b509b21864026",
+      "size": 12785,
+      "normalized_sha256": "94d25ee05d8aa1b51629bc7214e9ae45667451b9572c73f3991b509b21864026"
+    },
+    "packages/design-playbook/mcp/preview/control.react.js": {
+      "role": "index",
+      "sha256": "4a16ec2d2fb04b8dd40c60b009ebd98f7902968ce22afaa02b99eb36d37a852f",
+      "size": 54697,
+      "normalized_sha256": "4a16ec2d2fb04b8dd40c60b009ebd98f7902968ce22afaa02b99eb36d37a852f"
+    },
+    "packages/design-playbook/mcp/preview/control.review.js": {
+      "role": "index",
+      "sha256": "de78b199e5e1582ab0626b3396fb7a9d03d5eaff25efba71c25e72379d858f73",
+      "size": 37013,
+      "normalized_sha256": "de78b199e5e1582ab0626b3396fb7a9d03d5eaff25efba71c25e72379d858f73"
+    },
+    "packages/design-playbook/mcp/preview/i18n.py": {
+      "role": "index",
+      "sha256": "c937b9783acc1b57baa8ceb68a4e35236197a044577a88f3e82f59d1982dc73e",
+      "size": 22324,
+      "normalized_sha256": "c937b9783acc1b57baa8ceb68a4e35236197a044577a88f3e82f59d1982dc73e"
+    },
+    "packages/design-playbook/mcp/preview/integrity.py": {
+      "role": "index",
+      "sha256": "8680913f8402368760b37d7f531e93663848bee735905f0a057115b360ef2020",
+      "size": 14747,
+      "normalized_sha256": "8680913f8402368760b37d7f531e93663848bee735905f0a057115b360ef2020"
+    },
+    "packages/design-playbook/mcp/preview/ledger.py": {
+      "role": "index",
+      "sha256": "31f49552ade1e9dd92ff25009c52af2917dd23781f6e1eb808acf39e2a9e3719",
+      "size": 2273,
+      "normalized_sha256": "31f49552ade1e9dd92ff25009c52af2917dd23781f6e1eb808acf39e2a9e3719"
+    },
+    "packages/design-playbook/mcp/preview/live_route.py": {
+      "role": "index",
+      "sha256": "e662b4c047e21e317803da12e22ffd9ce34e2cdf9b7d8b3b9d3aed11146d98cf",
+      "size": 6652,
+      "normalized_sha256": "e662b4c047e21e317803da12e22ffd9ce34e2cdf9b7d8b3b9d3aed11146d98cf"
+    },
+    "packages/design-playbook/mcp/preview/owned_browser.py": {
+      "role": "index",
+      "sha256": "70d137a7c795daef04c94afb2d789c53d1f777deee2edf767c7260f1586ee2a2",
+      "size": 9992,
+      "normalized_sha256": "70d137a7c795daef04c94afb2d789c53d1f777deee2edf767c7260f1586ee2a2"
+    },
+    "packages/design-playbook/mcp/preview/pin_bridge.js": {
+      "role": "index",
+      "sha256": "a936671765b438d58f988bae373f46c2136703cde887260af822041c09c3096c",
+      "size": 66195,
+      "normalized_sha256": "a936671765b438d58f988bae373f46c2136703cde887260af822041c09c3096c"
+    },
+    "packages/design-playbook/mcp/preview/pin_bridge.py": {
+      "role": "index",
+      "sha256": "3c9f09b4b6485910c599596accfeaf82fd538297e87ae0fc8b95e93841f24d69",
+      "size": 3270,
+      "normalized_sha256": "3c9f09b4b6485910c599596accfeaf82fd538297e87ae0fc8b95e93841f24d69"
+    },
+    "packages/design-playbook/mcp/preview/preview_request.py": {
+      "role": "index",
+      "sha256": "d99cef1c0a1cd47ff5e8189fc1e544d85c97ba6a519ed76a0bc598c420057269",
+      "size": 9978,
+      "normalized_sha256": "d99cef1c0a1cd47ff5e8189fc1e544d85c97ba6a519ed76a0bc598c420057269"
+    },
+    "packages/design-playbook/mcp/preview/review_session.py": {
+      "role": "index",
+      "sha256": "136eedfeb3b6c06b7f8d4a7ab93c78033436997549003f3864a9eaf14ca96db0",
+      "size": 33619,
+      "normalized_sha256": "136eedfeb3b6c06b7f8d4a7ab93c78033436997549003f3864a9eaf14ca96db0"
+    },
+    "packages/design-playbook/mcp/preview/server.py": {
+      "role": "index",
+      "sha256": "79ec2d382d98606cafbe9a8898c767427e553274aced53011aed66cca0787769",
+      "size": 7477,
+      "normalized_sha256": "79ec2d382d98606cafbe9a8898c767427e553274aced53011aed66cca0787769"
+    },
+    "packages/design-playbook/mcp/preview/transaction.py": {
+      "role": "index",
+      "sha256": "b4a34b00d83214c09c0da0e3ad5a3ad89e84d3ccdd3c7c6192d30601f702723c",
+      "size": 35927,
+      "normalized_sha256": "b4a34b00d83214c09c0da0e3ad5a3ad89e84d3ccdd3c7c6192d30601f702723c"
+    },
+    "packages/design-playbook/mcp/preview/vendor/REACT-DOM-LICENSE.txt": {
+      "role": "index",
+      "sha256": "52412d7bc7ce4157ea628bbaacb8829e0a9cb3c58f57f99176126bc8cf2bfc85",
+      "size": 1086,
+      "normalized_sha256": "52412d7bc7ce4157ea628bbaacb8829e0a9cb3c58f57f99176126bc8cf2bfc85"
+    },
+    "packages/design-playbook/mcp/preview/vendor/REACT-LICENSE.txt": {
+      "role": "index",
+      "sha256": "52412d7bc7ce4157ea628bbaacb8829e0a9cb3c58f57f99176126bc8cf2bfc85",
+      "size": 1086,
+      "normalized_sha256": "52412d7bc7ce4157ea628bbaacb8829e0a9cb3c58f57f99176126bc8cf2bfc85"
+    },
+    "packages/design-playbook/mcp/preview/vendor/react-dom.production.min.js": {
+      "role": "observe",
+      "sha256": "35f4f974f4b2bcd44da73963347f8952e341f83909e4498227d4e26b98f66f0d",
+      "size": 131835,
+      "normalized_sha256": "35f4f974f4b2bcd44da73963347f8952e341f83909e4498227d4e26b98f66f0d"
+    },
+    "packages/design-playbook/mcp/preview/vendor/react.production.min.js": {
+      "role": "observe",
+      "sha256": "d949f1c3687aedadcedac85261865f29b17cd273997e7f6b2bfc53b2f9d4c4dd",
+      "size": 10751,
+      "normalized_sha256": "d949f1c3687aedadcedac85261865f29b17cd273997e7f6b2bfc53b2f9d4c4dd"
+    },
+    "packages/design-playbook/mcp/preview/versions.py": {
+      "role": "index",
+      "sha256": "e4e9837c3b1b223d47c2455af62a1296253835e78b365d27ceae56b84323b762",
+      "size": 13414,
+      "normalized_sha256": "e4e9837c3b1b223d47c2455af62a1296253835e78b365d27ceae56b84323b762"
+    },
+    "packages/design-playbook/mcp/preview/visual_batch.py": {
+      "role": "index",
+      "sha256": "fe5080f3a666c17cac5ae2498c117c6e796527b3755b2009e7707e0c22a18e54",
+      "size": 9220,
+      "normalized_sha256": "fe5080f3a666c17cac5ae2498c117c6e796527b3755b2009e7707e0c22a18e54"
+    },
+    "packages/design-playbook/mcp/preview/visual_handoff.py": {
+      "role": "index",
+      "sha256": "4b3d3721533d852be63c09f943b09b3677d7646539de94c3a616f42c0172b6ce",
+      "size": 1162,
+      "normalized_sha256": "4b3d3721533d852be63c09f943b09b3677d7646539de94c3a616f42c0172b6ce"
+    },
+    "packages/design-playbook/mcp/run_console/__init__.py": {
+      "role": "index",
+      "sha256": "9f6b9797982408b2a4ca4ad057881f1cc2427a544001dd848aa9eae7ef726f9e",
+      "size": 369,
+      "normalized_sha256": "9f6b9797982408b2a4ca4ad057881f1cc2427a544001dd848aa9eae7ef726f9e"
+    },
+    "packages/design-playbook/mcp/run_console/actions.py": {
+      "role": "index",
+      "sha256": "e0afbb9c03cb5d8f2eb179051485313d44a473ece6b4c9a5c404f2f726bbeee2",
+      "size": 11483,
+      "normalized_sha256": "e0afbb9c03cb5d8f2eb179051485313d44a473ece6b4c9a5c404f2f726bbeee2"
+    },
+    "packages/design-playbook/mcp/run_console/app.css": {
+      "role": "index",
+      "sha256": "09fd73e4ab47acce911fa1daa7b11877db1162ed9062f7414a1887673dede1d7",
+      "size": 27056,
+      "normalized_sha256": "09fd73e4ab47acce911fa1daa7b11877db1162ed9062f7414a1887673dede1d7"
+    },
+    "packages/design-playbook/mcp/run_console/app.html": {
+      "role": "index",
+      "sha256": "55ccc16c2fd55ae8e46b24ccd3f2fcf5f0e62915101e0825caad56c1d8c3f4ce",
+      "size": 8929,
+      "normalized_sha256": "55ccc16c2fd55ae8e46b24ccd3f2fcf5f0e62915101e0825caad56c1d8c3f4ce"
+    },
+    "packages/design-playbook/mcp/run_console/app.js": {
+      "role": "index",
+      "sha256": "8b7188ab64880561c071001fa75c75e02f3fa59a51ee30d9fede720a94af2a00",
+      "size": 107304,
+      "normalized_sha256": "8b7188ab64880561c071001fa75c75e02f3fa59a51ee30d9fede720a94af2a00"
+    },
+    "packages/design-playbook/mcp/run_console/contract.py": {
+      "role": "index",
+      "sha256": "853e9452c09561410c3574fef39448e81934b3835eb71a6063bbfa010be12825",
+      "size": 16075,
+      "normalized_sha256": "853e9452c09561410c3574fef39448e81934b3835eb71a6063bbfa010be12825"
+    },
+    "packages/design-playbook/mcp/run_console/diagnostic_export.py": {
+      "role": "index",
+      "sha256": "c1a8cb5adbc7455efecf4894710cb3a4c46eba8a21ec88b21299da1beae63a12",
+      "size": 16204,
+      "normalized_sha256": "c1a8cb5adbc7455efecf4894710cb3a4c46eba8a21ec88b21299da1beae63a12"
+    },
+    "packages/design-playbook/mcp/run_console/export_transaction.py": {
+      "role": "index",
+      "sha256": "77f7b7489dee020f25f1b41b948f4f37d3ea863b6c12c2a33944fdca2f2a0817",
+      "size": 8468,
+      "normalized_sha256": "77f7b7489dee020f25f1b41b948f4f37d3ea863b6c12c2a33944fdca2f2a0817"
+    },
+    "packages/design-playbook/mcp/run_console/http_server.py": {
+      "role": "index",
+      "sha256": "5f88fe18bad59545266577851f765d8b6f7beafe828f94aa597834defefc2a2f",
+      "size": 27057,
+      "normalized_sha256": "5f88fe18bad59545266577851f765d8b6f7beafe828f94aa597834defefc2a2f"
+    },
+    "packages/design-playbook/mcp/run_console/projection.py": {
+      "role": "index",
+      "sha256": "2a2de01feada24ef7b9c588033fa2896df783a37acbdb4f9f7b38992e520079b",
+      "size": 7414,
+      "normalized_sha256": "2a2de01feada24ef7b9c588033fa2896df783a37acbdb4f9f7b38992e520079b"
+    },
+    "packages/design-playbook/mcp/run_console/repair_packet.py": {
+      "role": "index",
+      "sha256": "cc7aafc2bef165ad0f3414ddbae415f06fe8e93b603e9e774beeacc70370c9e8",
+      "size": 14488,
+      "normalized_sha256": "cc7aafc2bef165ad0f3414ddbae415f06fe8e93b603e9e774beeacc70370c9e8"
+    },
+    "packages/design-playbook/mcp/run_console/request_security.py": {
+      "role": "index",
+      "sha256": "054d44c07b2fa4b905be75ddaabf3d1b423628a22b8f390830f4dcc7fb223b2c",
+      "size": 7796,
+      "normalized_sha256": "054d44c07b2fa4b905be75ddaabf3d1b423628a22b8f390830f4dcc7fb223b2c"
+    },
+    "packages/design-playbook/mcp/run_console/session.py": {
+      "role": "index",
+      "sha256": "4da9024b85c0b3b1d1e5dab83881075b87b43bb79a958fe853f9dc3b89051862",
+      "size": 10054,
+      "normalized_sha256": "4da9024b85c0b3b1d1e5dab83881075b87b43bb79a958fe853f9dc3b89051862"
+    },
+    "packages/design-playbook/mcp/run_console/snapshot_builder.py": {
+      "role": "index",
+      "sha256": "2c99224530518c6907fed0f2aa4c8c2c1e67d56a94d3a54b8c52b3f8c3c4f083",
+      "size": 48414,
+      "normalized_sha256": "2c99224530518c6907fed0f2aa4c8c2c1e67d56a94d3a54b8c52b3f8c3c4f083"
+    },
+    "packages/design-playbook/mcp/run_console/snapshot_v1.schema.json": {
+      "role": "index",
+      "sha256": "6367664739351ffbaaaf58b521972a1d403d7da25a88fdde288a09f2d435837f",
+      "size": 20560,
+      "normalized_sha256": "6367664739351ffbaaaf58b521972a1d403d7da25a88fdde288a09f2d435837f"
+    },
+    "packages/design-playbook/mcp/run_console/source_registry.py": {
+      "role": "index",
+      "sha256": "ec31ce837fe2a2292b7a65ba2a15a5aeefcb3207e33012028519a132067d9a6b",
+      "size": 19464,
+      "normalized_sha256": "ec31ce837fe2a2292b7a65ba2a15a5aeefcb3207e33012028519a132067d9a6b"
+    },
+    "packages/design-playbook/mcp/run_console/ui.py": {
+      "role": "index",
+      "sha256": "a70bee6253961e69d4ab1c06ff95e59d1d39901a15d26043c1b8b95f347b681f",
+      "size": 3140,
+      "normalized_sha256": "a70bee6253961e69d4ab1c06ff95e59d1d39901a15d26043c1b8b95f347b681f"
+    },
+    "packages/design-playbook/mcp/test_transport.py": {
+      "role": "observe",
+      "sha256": "6327d218674ced199bc3f6d831d47d8ee7662ca168519599c40660a954056248",
+      "size": 1476,
+      "normalized_sha256": "6327d218674ced199bc3f6d831d47d8ee7662ca168519599c40660a954056248"
+    },
+    "packages/design-playbook/mcp/ui_locale.py": {
+      "role": "index",
+      "sha256": "7154d86834153d480ea258f91c751c954128113cf8f77f987f8110329a640fef",
+      "size": 940,
+      "normalized_sha256": "7154d86834153d480ea258f91c751c954128113cf8f77f987f8110329a640fef"
+    },
+    "packages/design-playbook/mcp/util.py": {
+      "role": "index",
+      "sha256": "673f9c99eb4bd0ae32100d355056b2779010f43a53715b71273fa2a1180e8d97",
+      "size": 548,
+      "normalized_sha256": "673f9c99eb4bd0ae32100d355056b2779010f43a53715b71273fa2a1180e8d97"
+    },
+    "packages/design-playbook/notes.md": {
+      "role": "index",
+      "sha256": "df13c94b8c74ac43d7715e24181fdc72ce053e76748b7c2cd48951a662d83149",
+      "size": 1499,
+      "normalized_sha256": "df13c94b8c74ac43d7715e24181fdc72ce053e76748b7c2cd48951a662d83149"
+    },
+    "packages/design-playbook/package.json": {
+      "role": "index",
+      "sha256": "89755a2294100f24dc677b23d8b28a1fe9bdcc222a16038e39e4cbcc14628d80",
+      "size": 1631,
+      "normalized_sha256": "89755a2294100f24dc677b23d8b28a1fe9bdcc222a16038e39e4cbcc14628d80"
+    },
+    "packages/design-playbook/scripts/__init__.py": {
+      "role": "index",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "packages/design-playbook/scripts/_diagnostics.py": {
+      "role": "index",
+      "sha256": "d3d5faa67a69224a500a04115ddeb5d5e789c1057bcc754b38816b2c3468ae61",
+      "size": 3440,
+      "normalized_sha256": "d3d5faa67a69224a500a04115ddeb5d5e789c1057bcc754b38816b2c3468ae61"
+    },
+    "packages/design-playbook/scripts/adapter_drift.py": {
+      "role": "index",
+      "sha256": "65b72bb0257a59bc95ff4feb1c789bbe20b5e96111234185dad231767722a0aa",
+      "size": 4792,
+      "normalized_sha256": "65b72bb0257a59bc95ff4feb1c789bbe20b5e96111234185dad231767722a0aa"
+    },
+    "packages/design-playbook/scripts/adapter_markers.py": {
+      "role": "index",
+      "sha256": "d0d78877b75cefe86d54be1dde2228a443a1c6625742da35078e381c5c4cdce5",
+      "size": 1839,
+      "normalized_sha256": "d0d78877b75cefe86d54be1dde2228a443a1c6625742da35078e381c5c4cdce5"
+    },
+    "packages/design-playbook/scripts/adapter_matrix.py": {
+      "role": "index",
+      "sha256": "2e5dce7e8ee4cc09fb0a5f4cae4a77da7617e3f86657d9120545282985fd6e70",
+      "size": 3845,
+      "normalized_sha256": "2e5dce7e8ee4cc09fb0a5f4cae4a77da7617e3f86657d9120545282985fd6e70"
+    },
+    "packages/design-playbook/scripts/adapter_templates/codex-agents.md": {
+      "role": "index",
+      "sha256": "4a394f5bc6a8f84e52e092a3cf9a370508738474a98f915450646c1b52b61392",
+      "size": 3271,
+      "normalized_sha256": "4a394f5bc6a8f84e52e092a3cf9a370508738474a98f915450646c1b52b61392"
+    },
+    "packages/design-playbook/scripts/adapter_templates/cursor-mcp-note.mdc": {
+      "role": "index",
+      "sha256": "5a264d422ed69802cd26affce2082d751efe2786723e49895ba9e7e9900f584e",
+      "size": 1196,
+      "normalized_sha256": "5a264d422ed69802cd26affce2082d751efe2786723e49895ba9e7e9900f584e"
+    },
+    "packages/design-playbook/scripts/adapter_templates/windsurf-mcp-guide.md": {
+      "role": "index",
+      "sha256": "d77384a72679b2f8c23194cc88f482273654d5b753ff3ac9391ab063d0f4041e",
+      "size": 1419,
+      "normalized_sha256": "d77384a72679b2f8c23194cc88f482273654d5b753ff3ac9391ab063d0f4041e"
+    },
+    "packages/design-playbook/scripts/audit_preferences.py": {
+      "role": "index",
+      "sha256": "f371d87be3f33f86f9b67770a616f5f332706cd3f8b808f6238d434a3bccf335",
+      "size": 24114,
+      "normalized_sha256": "f371d87be3f33f86f9b67770a616f5f332706cd3f8b808f6238d434a3bccf335"
+    },
+    "packages/design-playbook/scripts/capability_receipt.py": {
+      "role": "index",
+      "sha256": "6c59429dd9249b41a842af27523efacd666e786712736f361967a4264b9c2d1a",
+      "size": 11018,
+      "normalized_sha256": "6c59429dd9249b41a842af27523efacd666e786712736f361967a4264b9c2d1a"
+    },
+    "packages/design-playbook/scripts/component_candidates.py": {
+      "role": "index",
+      "sha256": "ed4745d9a48bea96a34d2e417ca3c35062f33dcaeb36260607b09fb74c4c20de",
+      "size": 16525,
+      "normalized_sha256": "ed4745d9a48bea96a34d2e417ca3c35062f33dcaeb36260607b09fb74c4c20de"
+    },
+    "packages/design-playbook/scripts/context_budget.py": {
+      "role": "index",
+      "sha256": "ae343faf041d0c6f6068512a737100751c224a870a3c9820cbba24a16a362f50",
+      "size": 5277,
+      "normalized_sha256": "ae343faf041d0c6f6068512a737100751c224a870a3c9820cbba24a16a362f50"
+    },
+    "packages/design-playbook/scripts/contract_v1.py": {
+      "role": "index",
+      "sha256": "d219df2ffe3103aafce71243006306bc8df0ebabc0594fb4837d468b4eb046cf",
+      "size": 21200,
+      "normalized_sha256": "d219df2ffe3103aafce71243006306bc8df0ebabc0594fb4837d468b4eb046cf"
+    },
+    "packages/design-playbook/scripts/dd_entries.py": {
+      "role": "index",
+      "sha256": "5486aa2d14c38967c1cdc346f1b50f161c0f04e24bc398364e358206aeebbcf9",
+      "size": 20405,
+      "normalized_sha256": "5486aa2d14c38967c1cdc346f1b50f161c0f04e24bc398364e358206aeebbcf9"
+    },
+    "packages/design-playbook/scripts/doctor.py": {
+      "role": "index",
+      "sha256": "1f986cf5736421e8e407fa7102c40423ac59b554b2c8987d89b989e8f8047226",
+      "size": 17254,
+      "normalized_sha256": "1f986cf5736421e8e407fa7102c40423ac59b554b2c8987d89b989e8f8047226"
+    },
+    "packages/design-playbook/scripts/escalation_signals.py": {
+      "role": "index",
+      "sha256": "ec9310f9e114183420d8d0cc9ba659b31964aad2adfb39d17f462dfc14892c65",
+      "size": 11010,
+      "normalized_sha256": "ec9310f9e114183420d8d0cc9ba659b31964aad2adfb39d17f462dfc14892c65"
+    },
+    "packages/design-playbook/scripts/eval_decisions.py": {
+      "role": "index",
+      "sha256": "8801ba48504d996dd7a612ce2a2f774ce3339d1d788e99f047446407446ab1f2",
+      "size": 11661,
+      "normalized_sha256": "8801ba48504d996dd7a612ce2a2f774ce3339d1d788e99f047446407446ab1f2"
+    },
+    "packages/design-playbook/scripts/evidence_manifest.py": {
+      "role": "index",
+      "sha256": "d472e1aee170b4776140a3ecf518872ae9de84e958f2a549dded6768ec1feb33",
+      "size": 10561,
+      "normalized_sha256": "d472e1aee170b4776140a3ecf518872ae9de84e958f2a549dded6768ec1feb33"
+    },
+    "packages/design-playbook/scripts/finding_syntax.py": {
+      "role": "index",
+      "sha256": "66c79ced8fe555adff820113aa7f5e2de359b7d628041e2bd902473d60d30edf",
+      "size": 6619,
+      "normalized_sha256": "66c79ced8fe555adff820113aa7f5e2de359b7d628041e2bd902473d60d30edf"
+    },
+    "packages/design-playbook/scripts/frontend_review.py": {
+      "role": "index",
+      "sha256": "3f538466d6dfed83eda282d3f30527ae46a95978285268b66d7aa4f0f9b1d8ad",
+      "size": 24742,
+      "normalized_sha256": "3f538466d6dfed83eda282d3f30527ae46a95978285268b66d7aa4f0f9b1d8ad"
+    },
+    "packages/design-playbook/scripts/g10_design_decisions.py": {
+      "role": "index",
+      "sha256": "232efe8f3eb1492e950c41edc2c6c47d5d6241e4d6a4bfbcfa73bfd9252c41bf",
+      "size": 44227,
+      "normalized_sha256": "232efe8f3eb1492e950c41edc2c6c47d5d6241e4d6a4bfbcfa73bfd9252c41bf"
+    },
+    "packages/design-playbook/scripts/g11_coverage.py": {
+      "role": "index",
+      "sha256": "17343569b3a28fd87669608a7131503b444fbfb4d59b82bd95e5b04f45cd6757",
+      "size": 14237,
+      "normalized_sha256": "17343569b3a28fd87669608a7131503b444fbfb4d59b82bd95e5b04f45cd6757"
+    },
+    "packages/design-playbook/scripts/g12_tier_boundary.py": {
+      "role": "index",
+      "sha256": "bbb08e02acdbc1f072342aabb7700abd744430be9fc11a37e82d79ac2147ea8e",
+      "size": 13850,
+      "normalized_sha256": "bbb08e02acdbc1f072342aabb7700abd744430be9fc11a37e82d79ac2147ea8e"
+    },
+    "packages/design-playbook/scripts/g1_spec.py": {
+      "role": "index",
+      "sha256": "e8dac7c4533f862f0f1df7bbe341bc25a33a0f273e58f47d4167aa48f1fd4c71",
+      "size": 19820,
+      "normalized_sha256": "e8dac7c4533f862f0f1df7bbe341bc25a33a0f273e58f47d4167aa48f1fd4c71"
+    },
+    "packages/design-playbook/scripts/g2_g4_pointback.py": {
+      "role": "index",
+      "sha256": "c09a3222b6924f3dbe3e0942a8a91cb6b77d67e70cbf6f8d55f3e03e307914fb",
+      "size": 23930,
+      "normalized_sha256": "c09a3222b6924f3dbe3e0942a8a91cb6b77d67e70cbf6f8d55f3e03e307914fb"
+    },
+    "packages/design-playbook/scripts/g5_preview.py": {
+      "role": "index",
+      "sha256": "6d30e0c7b3910824403f833e4edc6ab1f6909c66f1728c2ca28f2bfa30bae73e",
+      "size": 14327,
+      "normalized_sha256": "6d30e0c7b3910824403f833e4edc6ab1f6909c66f1728c2ca28f2bfa30bae73e"
+    },
+    "packages/design-playbook/scripts/g6_evidence.py": {
+      "role": "index",
+      "sha256": "f1d7956cfad8796ffeef6aeb244023aab8094084d60f51c9b5da74a0131b42be",
+      "size": 17289,
+      "normalized_sha256": "f1d7956cfad8796ffeef6aeb244023aab8094084d60f51c9b5da74a0131b42be"
+    },
+    "packages/design-playbook/scripts/g6_records.py": {
+      "role": "index",
+      "sha256": "13918d8df60705234013c517025840eb058cb7bfa5f74efea772b1a5cfdeda86",
+      "size": 4277,
+      "normalized_sha256": "13918d8df60705234013c517025840eb058cb7bfa5f74efea772b1a5cfdeda86"
+    },
+    "packages/design-playbook/scripts/g6_warnings.py": {
+      "role": "index",
+      "sha256": "c0fb951d74b7dc3bf94942f9bdddb0cb9fce951e7bca14e4837907187c65c6cb",
+      "size": 5088,
+      "normalized_sha256": "c0fb951d74b7dc3bf94942f9bdddb0cb9fce951e7bca14e4837907187c65c6cb"
+    },
+    "packages/design-playbook/scripts/g7_contract_drift.py": {
+      "role": "index",
+      "sha256": "7897254d257bc46ef5a2ab462a8be33ff491dc02c1e9ccd37971c56105c963da",
+      "size": 9750,
+      "normalized_sha256": "7897254d257bc46ef5a2ab462a8be33ff491dc02c1e9ccd37971c56105c963da"
+    },
+    "packages/design-playbook/scripts/g8_run_registry.py": {
+      "role": "index",
+      "sha256": "c235638883b6ef2d53222c452a4ffea615c091a4665f4af0e44c8c7d90c0f19e",
+      "size": 7863,
+      "normalized_sha256": "c235638883b6ef2d53222c452a4ffea615c091a4665f4af0e44c8c7d90c0f19e"
+    },
+    "packages/design-playbook/scripts/g9_shaping.py": {
+      "role": "index",
+      "sha256": "813f9b3c3e40051dd3fc8819f626f3de00533344c671ce1424d4f4d72d784733",
+      "size": 10963,
+      "normalized_sha256": "813f9b3c3e40051dd3fc8819f626f3de00533344c671ce1424d4f4d72d784733"
+    },
+    "packages/design-playbook/scripts/generate_adapter.py": {
+      "role": "index",
+      "sha256": "c168d5e737a86c69a901cb8a7ccfb32ec19b6eb57b6214727a0c8d983638ca32",
+      "size": 29651,
+      "normalized_sha256": "c168d5e737a86c69a901cb8a7ccfb32ec19b6eb57b6214727a0c8d983638ca32"
+    },
+    "packages/design-playbook/scripts/governance_jsonl.py": {
+      "role": "index",
+      "sha256": "313a663e5cef498da0bdc4ff26b39da5fb2b49b7aec896fdcea6de167df83650",
+      "size": 1743,
+      "normalized_sha256": "313a663e5cef498da0bdc4ff26b39da5fb2b49b7aec896fdcea6de167df83650"
+    },
+    "packages/design-playbook/scripts/interaction_dimensions.py": {
+      "role": "index",
+      "sha256": "4dbef25eb56f08a4ed6712a9a71104c29a73154deb29bcd899c60ff039f1c9f8",
+      "size": 10932,
+      "normalized_sha256": "4dbef25eb56f08a4ed6712a9a71104c29a73154deb29bcd899c60ff039f1c9f8"
+    },
+    "packages/design-playbook/scripts/learning_candidates.py": {
+      "role": "index",
+      "sha256": "fa28e31a272a0a4e3873dc04970bd7cc25303bd448ebf7a5cbe6b18b3fe96f0d",
+      "size": 11093,
+      "normalized_sha256": "fa28e31a272a0a4e3873dc04970bd7cc25303bd448ebf7a5cbe6b18b3fe96f0d"
+    },
+    "packages/design-playbook/scripts/method_semantics.py": {
+      "role": "index",
+      "sha256": "e9f1a7c15dc10d47d65442cd58445c5c7fc2a6dcfc7969354f99518cb3bab34e",
+      "size": 9445,
+      "normalized_sha256": "e9f1a7c15dc10d47d65442cd58445c5c7fc2a6dcfc7969354f99518cb3bab34e"
+    },
+    "packages/design-playbook/scripts/pointback_projection.py": {
+      "role": "index",
+      "sha256": "c714ec50db321a339aa9657e87005dd1bfec12244620276e6c66cdfe4271b940",
+      "size": 9550,
+      "normalized_sha256": "c714ec50db321a339aa9657e87005dd1bfec12244620276e6c66cdfe4271b940"
+    },
+    "packages/design-playbook/scripts/project_target.py": {
+      "role": "index",
+      "sha256": "770ac91e42a270ad5b3f0e63c1549b89e0be9a65cc6bf7443c86976bab362a19",
+      "size": 14432,
+      "normalized_sha256": "770ac91e42a270ad5b3f0e63c1549b89e0be9a65cc6bf7443c86976bab362a19"
+    },
+    "packages/design-playbook/scripts/promotion_governance.py": {
+      "role": "index",
+      "sha256": "1730a3d62462aed09ba5d62c011d6dcde6925b3c3e71ee51df26d86c6af358c3",
+      "size": 8027,
+      "normalized_sha256": "1730a3d62462aed09ba5d62c011d6dcde6925b3c3e71ee51df26d86c6af358c3"
+    },
+    "packages/design-playbook/scripts/publish_owner_projection.py": {
+      "role": "index",
+      "sha256": "d2bd4b39bf7b31f97b5fbc2cede9541326ffbcedfa23d956eccc245a30b25e8a",
+      "size": 16567,
+      "normalized_sha256": "d2bd4b39bf7b31f97b5fbc2cede9541326ffbcedfa23d956eccc245a30b25e8a"
+    },
+    "packages/design-playbook/scripts/repair_rounds.py": {
+      "role": "index",
+      "sha256": "5f5a16b074f897a5a64e63184f2d6335a88e742b6da28ba2a3561d183fdac3fd",
+      "size": 10276,
+      "normalized_sha256": "5f5a16b074f897a5a64e63184f2d6335a88e742b6da28ba2a3561d183fdac3fd"
+    },
+    "packages/design-playbook/scripts/rules_governance.py": {
+      "role": "index",
+      "sha256": "5541393b61b072f2db69976eff0b4618f417c46eafa25bd58b334a1807124737",
+      "size": 13611,
+      "normalized_sha256": "5541393b61b072f2db69976eff0b4618f417c46eafa25bd58b334a1807124737"
+    },
+    "packages/design-playbook/scripts/rules_registry.py": {
+      "role": "index",
+      "sha256": "95e136554ee7308938bff1b69712b9cd96ecb3052885f6d88dc14e89beb6bb45",
+      "size": 27484,
+      "normalized_sha256": "95e136554ee7308938bff1b69712b9cd96ecb3052885f6d88dc14e89beb6bb45"
+    },
+    "packages/design-playbook/scripts/run_console.py": {
+      "role": "index",
+      "sha256": "7f76e0208c10178cb604e044fdea6ad5db133c6214a1fc3ec0c072a9d61d3b52",
+      "size": 2775,
+      "normalized_sha256": "7f76e0208c10178cb604e044fdea6ad5db133c6214a1fc3ec0c072a9d61d3b52"
+    },
+    "packages/design-playbook/scripts/run_continuation.py": {
+      "role": "index",
+      "sha256": "336cf60aa68caa9d5009e1cdbfe10b73ed98fc30a9ae13907465ac710e70f56d",
+      "size": 17843,
+      "normalized_sha256": "336cf60aa68caa9d5009e1cdbfe10b73ed98fc30a9ae13907465ac710e70f56d"
+    },
+    "packages/design-playbook/scripts/run_facts.py": {
+      "role": "index",
+      "sha256": "169321b9a5b2eeccffee030ceb14b042486f62b9e240e2d595010dddc936710d",
+      "size": 17888,
+      "normalized_sha256": "169321b9a5b2eeccffee030ceb14b042486f62b9e240e2d595010dddc936710d"
+    },
+    "packages/design-playbook/scripts/run_handoff.py": {
+      "role": "index",
+      "sha256": "c18acee8115df0fec0007ac5204de821dfc70e6ed8d7c538174d990d1f4be511",
+      "size": 8416,
+      "normalized_sha256": "c18acee8115df0fec0007ac5204de821dfc70e6ed8d7c538174d990d1f4be511"
+    },
+    "packages/design-playbook/scripts/run_metadata.py": {
+      "role": "index",
+      "sha256": "3f9862233dff3809f400c203f939cae00ad4bca6a0fabe18b3dab4b4cc6a3446",
+      "size": 6115,
+      "normalized_sha256": "3f9862233dff3809f400c203f939cae00ad4bca6a0fabe18b3dab4b4cc6a3446"
+    },
+    "packages/design-playbook/scripts/run_profile.py": {
+      "role": "index",
+      "sha256": "f9fbc9c6f34c775e23c65fac86c52cc1d87f80333ccc9113c7bbc6cf4e6438eb",
+      "size": 12540,
+      "normalized_sha256": "f9fbc9c6f34c775e23c65fac86c52cc1d87f80333ccc9113c7bbc6cf4e6438eb"
+    },
+    "packages/design-playbook/scripts/run_status.py": {
+      "role": "index",
+      "sha256": "c6f918913878cf4dbd399086ea2656ce5b350dbad0d8723ba148079bf2b45be1",
+      "size": 12209,
+      "normalized_sha256": "c6f918913878cf4dbd399086ea2656ce5b350dbad0d8723ba148079bf2b45be1"
+    },
+    "packages/design-playbook/scripts/shaping_log.py": {
+      "role": "index",
+      "sha256": "881af99b19d690b9a3e18b305c38fe74eeae4a36145212c8d2fe930242a5a5f0",
+      "size": 11297,
+      "normalized_sha256": "881af99b19d690b9a3e18b305c38fe74eeae4a36145212c8d2fe930242a5a5f0"
+    },
+    "packages/design-playbook/scripts/stages.py": {
+      "role": "index",
+      "sha256": "a4f0d340474796dc2a6950e35a0ac9bd5baced100dfede04903a731d0d95205c",
+      "size": 3940,
+      "normalized_sha256": "a4f0d340474796dc2a6950e35a0ac9bd5baced100dfede04903a731d0d95205c"
+    },
+    "packages/design-playbook/scripts/status_projection.py": {
+      "role": "index",
+      "sha256": "00b3f50a685b2b758e87b47fc4d54196a09a602772295a3edbf62baeff7277d0",
+      "size": 26300,
+      "normalized_sha256": "00b3f50a685b2b758e87b47fc4d54196a09a602772295a3edbf62baeff7277d0"
+    },
+    "packages/design-playbook/scripts/stdio_encoding.py": {
+      "role": "index",
+      "sha256": "dc3756ffe35d2f87a34aacfa57246fd841b4fbbff89e099a55ec820ad86aaf90",
+      "size": 1874,
+      "normalized_sha256": "dc3756ffe35d2f87a34aacfa57246fd841b4fbbff89e099a55ec820ad86aaf90"
+    },
+    "packages/design-playbook/scripts/test_verdict_syntax.py": {
+      "role": "observe",
+      "sha256": "27779ce06ea9b28072fa9da97ca94c002a5dee60d636a0785af3ef337660d810",
+      "size": 9743,
+      "normalized_sha256": "27779ce06ea9b28072fa9da97ca94c002a5dee60d636a0785af3ef337660d810"
+    },
+    "packages/design-playbook/scripts/validate_run.py": {
+      "role": "index",
+      "sha256": "0e915e54b926b2aada1c33a5d439eb30111e6313e9c63b75b85748c219e90209",
+      "size": 29657,
+      "normalized_sha256": "0e915e54b926b2aada1c33a5d439eb30111e6313e9c63b75b85748c219e90209"
+    },
+    "packages/design-playbook/scripts/verdict_syntax.py": {
+      "role": "index",
+      "sha256": "d00321f282ac78afdd02645512050d81081c12ab4b57fbf5af9288bcc7388c3a",
+      "size": 4330,
+      "normalized_sha256": "d00321f282ac78afdd02645512050d81081c12ab4b57fbf5af9288bcc7388c3a"
+    },
+    "packages/design-playbook/showcase/01-spec.md": {
+      "role": "index",
+      "sha256": "3df93a39584fd8303f35aa101446260f446cbaf28ffe42783f503e2822ab7cb1",
+      "size": 2379,
+      "normalized_sha256": "3df93a39584fd8303f35aa101446260f446cbaf28ffe42783f503e2822ab7cb1"
+    },
+    "packages/design-playbook/showcase/02-decision-report.md": {
+      "role": "index",
+      "sha256": "9c764c410ec949eea91af355f2e69235b20a8149588f32931171ba5336165e52",
+      "size": 2059,
+      "normalized_sha256": "9c764c410ec949eea91af355f2e69235b20a8149588f32931171ba5336165e52"
+    },
+    "packages/design-playbook/showcase/03-point-back.md": {
+      "role": "index",
+      "sha256": "17d3f166b4c539daa105d737377fc898d2ec3aadc39835b70f7aada2abe09100",
+      "size": 3904,
+      "normalized_sha256": "17d3f166b4c539daa105d737377fc898d2ec3aadc39835b70f7aada2abe09100"
+    },
+    "packages/design-playbook/showcase/04-preview-hitl.md": {
+      "role": "index",
+      "sha256": "cc77fe1e2e63a111e710217cd70653aec8459a307c6a4a6533889f42e1e40991",
+      "size": 3446,
+      "normalized_sha256": "cc77fe1e2e63a111e710217cd70653aec8459a307c6a4a6533889f42e1e40991"
+    },
+    "packages/design-playbook/showcase/README.md": {
+      "role": "index",
+      "sha256": "6ed0308d3b2750235c6c286604e34c1346bd61615c1878e4ca22d9f46b74a0b8",
+      "size": 7960,
+      "normalized_sha256": "6ed0308d3b2750235c6c286604e34c1346bd61615c1878e4ca22d9f46b74a0b8"
+    },
+    "packages/design-playbook/showcase/case-reader/.design-playbook/preferences.yaml": {
+      "role": "index",
+      "sha256": "2eef94e8ed1cb4be20840ebfa1d20274891464d109d1c1f71366c341bcc892df",
+      "size": 12,
+      "normalized_sha256": "2eef94e8ed1cb4be20840ebfa1d20274891464d109d1c1f71366c341bcc892df"
+    },
+    "packages/design-playbook/showcase/case-reader/_gen_docs.js": {
+      "role": "index",
+      "sha256": "4fd41340d5bead81160d06a502907ff8747e1f2a4f5a7220049ebd17d7eafc76",
+      "size": 13227,
+      "normalized_sha256": "4fd41340d5bead81160d06a502907ff8747e1f2a4f5a7220049ebd17d7eafc76"
+    },
+    "packages/design-playbook/showcase/case-reader/contract.json": {
+      "role": "index",
+      "sha256": "83bf01632fb5752535eb94d538fa9fca661dae3eb239121988ca0a880e328f17",
+      "size": 4424,
+      "normalized_sha256": "83bf01632fb5752535eb94d538fa9fca661dae3eb239121988ca0a880e328f17"
+    },
+    "packages/design-playbook/showcase/case-reader/decisions.jsonl": {
+      "role": "index",
+      "sha256": "513c911103ae51587fece4d17348f36f696c9dea964f41ede640c85f501af08d",
+      "size": 4798,
+      "normalized_sha256": "513c911103ae51587fece4d17348f36f696c9dea964f41ede640c85f501af08d"
+    },
+    "packages/design-playbook/showcase/case-reader/index.html": {
+      "role": "index",
+      "sha256": "853768f1cf981a705e0b676ab01f7e59f85febaa4fe383e6ec4887080e8c4767",
+      "size": 22097,
+      "normalized_sha256": "853768f1cf981a705e0b676ab01f7e59f85febaa4fe383e6ec4887080e8c4767"
+    },
+    "packages/design-playbook/showcase/case-reader/selfcheck.py": {
+      "role": "index",
+      "sha256": "d8a66603a29824b5b72d12d89a2d8b716cf31e1f1d0543c5f910a483900bb272",
+      "size": 2147,
+      "normalized_sha256": "d8a66603a29824b5b72d12d89a2d8b716cf31e1f1d0543c5f910a483900bb272"
+    },
+    "packages/design-playbook/showcase/preview/confirm-round-4.json": {
+      "role": "index",
+      "sha256": "89c020a24385228762cf9ba4a5d904bddd4220a6b45474047bce4027a1248927",
+      "size": 678,
+      "normalized_sha256": "89c020a24385228762cf9ba4a5d904bddd4220a6b45474047bce4027a1248927"
+    },
+    "packages/design-playbook/showcase/preview/decision-report.md": {
+      "role": "index",
+      "sha256": "6cda47a6f608df27ac8f3b2f7f5008a28c6cf569a9592783852e4b267872c1a4",
+      "size": 5493,
+      "normalized_sha256": "6cda47a6f608df27ac8f3b2f7f5008a28c6cf569a9592783852e4b267872c1a4"
+    },
+    "packages/design-playbook/showcase/preview/log.md": {
+      "role": "index",
+      "sha256": "7865c8529d19676d35a92187fbc8da709568545350871b1a0a2a6a9136dce66c",
+      "size": 1952,
+      "normalized_sha256": "7865c8529d19676d35a92187fbc8da709568545350871b1a0a2a6a9136dce66c"
+    },
+    "packages/design-playbook/showcase/preview/round-1.html": {
+      "role": "index",
+      "sha256": "bd64078a5f5dd45a9aa30020ea0b1abc93d52637302fbf795d8f17afec9b993e",
+      "size": 6966,
+      "normalized_sha256": "bd64078a5f5dd45a9aa30020ea0b1abc93d52637302fbf795d8f17afec9b993e"
+    },
+    "packages/design-playbook/showcase/preview/round-4.html": {
+      "role": "index",
+      "sha256": "c0ab8eb1d1c37ed237c9cb602b1472bb1cc2f10e66ddfeff1afce2fe282d602f",
+      "size": 7584,
+      "normalized_sha256": "c0ab8eb1d1c37ed237c9cb602b1472bb1cc2f10e66ddfeff1afce2fe282d602f"
+    },
+    "packages/design-playbook/showcase/queue-monitor-state.js": {
+      "role": "index",
+      "sha256": "9c4eb32a23dc2e757615ceadd3d2c82ac1bed837c1aa88222d4cb57c87edd12b",
+      "size": 2171,
+      "normalized_sha256": "9c4eb32a23dc2e757615ceadd3d2c82ac1bed837c1aa88222d4cb57c87edd12b"
+    },
+    "packages/design-playbook/showcase/queue-monitor.html": {
+      "role": "index",
+      "sha256": "f66f6ded45223aee2a53fd42165cb70501282785a9eb12bd096cb3870b8ae589",
+      "size": 28233,
+      "normalized_sha256": "f66f6ded45223aee2a53fd42165cb70501282785a9eb12bd096cb3870b8ae589"
+    },
+    "packages/design-playbook/showcase/run-review-2026-09-08.md": {
+      "role": "index",
+      "sha256": "ff78c7ca1eaffe9e2cc57579ca9baf220719913422f944d1dad7304cb625c976",
+      "size": 3554,
+      "normalized_sha256": "ff78c7ca1eaffe9e2cc57579ca9baf220719913422f944d1dad7304cb625c976"
+    },
+    "packages/design-playbook/showcase/screenshots/00-install.png": {
+      "role": "index",
+      "sha256": "bcdb8e1b9bad282436205fdf26f3b210a359dcdbd7c6ee525dd4148c15ae7d0a",
+      "size": 24364
+    },
+    "packages/design-playbook/showcase/screenshots/01-spec.png": {
+      "role": "index",
+      "sha256": "76fe94037e90bbaff9db1c1c504bcbfe5f765b65cfa04ca9eca4362babd38e8a",
+      "size": 41754
+    },
+    "packages/design-playbook/showcase/screenshots/02-decision-report.png": {
+      "role": "index",
+      "sha256": "d3395bf0c29e2fd59863c22ed963cdf15c7f72483698b5fbf8371da4df96d2da",
+      "size": 44145
+    },
+    "packages/design-playbook/showcase/screenshots/03-point-back.png": {
+      "role": "index",
+      "sha256": "0cd774cf56a6ad94d5d2b31f5a3cf5ba47606516c732e4c51b5598c2e248ff12",
+      "size": 39202
+    },
+    "packages/design-playbook/showcase/screenshots/04-gates.png": {
+      "role": "index",
+      "sha256": "5a0dc5b6b1cd2337b817539dc62291ba3aa940fa371a5e1ac87d2267bb86a2c8",
+      "size": 32919
+    },
+    "packages/design-playbook/showcase/screenshots/05-preview-confirm.png": {
+      "role": "index",
+      "sha256": "684a908929144a0912c4cd6c974969312900ec162db32d0dcebdb8dea39ed3f4",
+      "size": 453029
+    },
+    "packages/design-playbook/showcase/screenshots/hero.png": {
+      "role": "index",
+      "sha256": "5d05138a2c092f737b9cff1eef107af2c8eefaeda6c1d878d7cb854d58894e3c",
+      "size": 534263
+    },
+    "packages/design-playbook/showcase/test_queue_monitor_state.js": {
+      "role": "index",
+      "sha256": "fbde7d7dd8f2cf4be29a84a40dcea055df7d9dd47c99fafc8f6ee384585297f5",
+      "size": 982,
+      "normalized_sha256": "fbde7d7dd8f2cf4be29a84a40dcea055df7d9dd47c99fafc8f6ee384585297f5"
+    },
+    "packages/design-playbook/skills/component-distill/SKILL.md": {
+      "role": "index",
+      "sha256": "d068e56a6312f91976317ea15634fd4c375a2b1aaf6e0c512c579105415f4b3c",
+      "size": 5511,
+      "normalized_sha256": "d068e56a6312f91976317ea15634fd4c375a2b1aaf6e0c512c579105415f4b3c"
+    },
+    "packages/design-playbook/skills/craft-guard/SKILL.md": {
+      "role": "index",
+      "sha256": "b591ee45589001aad915374442b548c4ee72c192eeec7ad968cf2c4c85c9673d",
+      "size": 5124,
+      "normalized_sha256": "b591ee45589001aad915374442b548c4ee72c192eeec7ad968cf2c4c85c9673d"
+    },
+    "packages/design-playbook/skills/craft-guard/references/craft.md": {
+      "role": "index",
+      "sha256": "d7b425275f1f8cb576f25a63929455933a909a4a97e4e84c16ab29817a53a4aa",
+      "size": 2066,
+      "normalized_sha256": "d7b425275f1f8cb576f25a63929455933a909a4a97e4e84c16ab29817a53a4aa"
+    },
+    "packages/design-playbook/skills/craft-guard/references/detectors.md": {
+      "role": "index",
+      "sha256": "2ac7196044e0c7a2edf1d036e431dfd1e87fbd9ec4c47c55db97cb9bca0d1f40",
+      "size": 2191,
+      "normalized_sha256": "2ac7196044e0c7a2edf1d036e431dfd1e87fbd9ec4c47c55db97cb9bca0d1f40"
+    },
+    "packages/design-playbook/skills/design-baseline/SKILL.md": {
+      "role": "index",
+      "sha256": "aba98fcd3301e797d7246c029a0b124d2052f1e3e902b984b6f466de9e0d4a17",
+      "size": 9970,
+      "normalized_sha256": "aba98fcd3301e797d7246c029a0b124d2052f1e3e902b984b6f466de9e0d4a17"
+    },
+    "packages/design-playbook/skills/design-baseline/agents/openai.yaml": {
+      "role": "index",
+      "sha256": "41faa4a972f1178b13ce1694c851c714631cc0e6267c84ade44f159322cda4b6",
+      "size": 265,
+      "normalized_sha256": "41faa4a972f1178b13ce1694c851c714631cc0e6267c84ade44f159322cda4b6"
+    },
+    "packages/design-playbook/skills/design-baseline/references/design-template.md": {
+      "role": "index",
+      "sha256": "3e2c9e61dbe6adcc90a6427297844a75e373a8e0f0da67ad30a4dfd4849b8ace",
+      "size": 1805,
+      "normalized_sha256": "3e2c9e61dbe6adcc90a6427297844a75e373a8e0f0da67ad30a4dfd4849b8ace"
+    },
+    "packages/design-playbook/skills/design-baseline/references/extraction-guidance.md": {
+      "role": "index",
+      "sha256": "5f30e1149cbdc8a7839f74bd8d3bdffd7de502e9d7a7e5200590a8a239692ae6",
+      "size": 2253,
+      "normalized_sha256": "5f30e1149cbdc8a7839f74bd8d3bdffd7de502e9d7a7e5200590a8a239692ae6"
+    },
+    "packages/design-playbook/skills/design-baseline/scripts/design_baseline.py": {
+      "role": "index",
+      "sha256": "7cfc1e55356915c1af2c404f4da699da49c74a7eb8e8807ce45fdd75e65765dd",
+      "size": 47173,
+      "normalized_sha256": "7cfc1e55356915c1af2c404f4da699da49c74a7eb8e8807ce45fdd75e65765dd"
+    },
+    "packages/design-playbook/skills/design-playbook/SKILL.md": {
+      "role": "index",
+      "sha256": "b648cd724827128aa9106c75dd42ab046dc87452f332fab259ad43ee53981b99",
+      "size": 40776,
+      "normalized_sha256": "b648cd724827128aa9106c75dd42ab046dc87452f332fab259ad43ee53981b99"
+    },
+    "packages/design-playbook/skills/design-playbook/references/first-run.md": {
+      "role": "index",
+      "sha256": "c122d2b09f60b8e0ce2fd2c9b9da75e785f223305a0b6ae5cb39e0f3f2c31159",
+      "size": 1298,
+      "normalized_sha256": "c122d2b09f60b8e0ce2fd2c9b9da75e785f223305a0b6ae5cb39e0f3f2c31159"
+    },
+    "packages/design-playbook/skills/design-playbook/references/load-map.md": {
+      "role": "index",
+      "sha256": "7aeca24fef94de71ca010f5109d2352e26564f9c050a2d26127bf3badf625fe2",
+      "size": 1293,
+      "normalized_sha256": "7aeca24fef94de71ca010f5109d2352e26564f9c050a2d26127bf3badf625fe2"
+    },
+    "packages/design-playbook/skills/design-playbook/references/observe-ops.md": {
+      "role": "index",
+      "sha256": "0040a29393dac7b7e615682bcda4e711296b248ec8df4522163d6ba51b8cabca",
+      "size": 2288,
+      "normalized_sha256": "0040a29393dac7b7e615682bcda4e711296b248ec8df4522163d6ba51b8cabca"
+    },
+    "packages/design-playbook/skills/design-playbook/references/preview-ops.md": {
+      "role": "index",
+      "sha256": "e0a828c19e6ff07a5b9ef0ca362046898187751c4b2eadc014505ba6e0a5be6f",
+      "size": 1398,
+      "normalized_sha256": "e0a828c19e6ff07a5b9ef0ca362046898187751c4b2eadc014505ba6e0a5be6f"
+    },
+    "packages/design-playbook/skills/design-playbook/references/rules.md": {
+      "role": "index",
+      "sha256": "54cf888ad7c57d3fb85d5b52d84adfbd74826865150150e216ffc408447ed54b",
+      "size": 45971,
+      "normalized_sha256": "54cf888ad7c57d3fb85d5b52d84adfbd74826865150150e216ffc408447ed54b"
+    },
+    "packages/design-playbook/skills/native-craft/SKILL.md": {
+      "role": "index",
+      "sha256": "f6d2aff8ba91dee3a22daf97f48cef1181d45bb4e3412c84456be848668e859b",
+      "size": 4351,
+      "normalized_sha256": "f6d2aff8ba91dee3a22daf97f48cef1181d45bb4e3412c84456be848668e859b"
+    },
+    "packages/design-playbook/skills/native-craft/references/native-feel.md": {
+      "role": "index",
+      "sha256": "b3314fba7f7540d635dcce8d7e0ee49a2f9d1abf6fde714a9c9f9996836bced7",
+      "size": 4558,
+      "normalized_sha256": "b3314fba7f7540d635dcce8d7e0ee49a2f9d1abf6fde714a9c9f9996836bced7"
+    },
+    "packages/design-playbook/skills/reference-intake/SKILL.md": {
+      "role": "index",
+      "sha256": "eb2a1f5a429b0639fd53dd89574c2e3c6443858090a3def4fb009d5110fc2fad",
+      "size": 6262,
+      "normalized_sha256": "eb2a1f5a429b0639fd53dd89574c2e3c6443858090a3def4fb009d5110fc2fad"
+    },
+    "packages/design-playbook/skills/reference-intake/references/contract-template.md": {
+      "role": "index",
+      "sha256": "330471cc5d1b85c5e88614ba38eca255de91cae9d27ddffdfc29efc972d77a23",
+      "size": 2765,
+      "normalized_sha256": "330471cc5d1b85c5e88614ba38eca255de91cae9d27ddffdfc29efc972d77a23"
+    },
+    "packages/design-playbook/skills/reference-intake/scripts/reference_sources.py": {
+      "role": "index",
+      "sha256": "47c4ded390828836c01f5b6fcf3b0db8964bd1ecb8ef217a77806d90bf970d94",
+      "size": 10985,
+      "normalized_sha256": "47c4ded390828836c01f5b6fcf3b0db8964bd1ecb8ef217a77806d90bf970d94"
+    },
+    "packages/design-playbook/skills/ui-evaluator/SKILL.md": {
+      "role": "index",
+      "sha256": "fc66e3a45a8fd4e4397b81cbd085426ad05a5e8f0a2f2c0e32fef6a7103e28ad",
+      "size": 16873,
+      "normalized_sha256": "fc66e3a45a8fd4e4397b81cbd085426ad05a5e8f0a2f2c0e32fef6a7103e28ad"
+    },
+    "packages/design-playbook/skills/ui-evaluator/references/a11y-tree.md": {
+      "role": "index",
+      "sha256": "fe87df019b7b7d91adddf1e412c373ea1ea75920af6c4619811283db48e3a250",
+      "size": 2398,
+      "normalized_sha256": "fe87df019b7b7d91adddf1e412c373ea1ea75920af6c4619811283db48e3a250"
+    },
+    "packages/design-playbook/skills/ui-evaluator/references/repair.md": {
+      "role": "index",
+      "sha256": "2f68401e96b504e1d1d6127b46570969856e3a1361cd6bcc7457eeaf19a0b1b9",
+      "size": 4601,
+      "normalized_sha256": "2f68401e96b504e1d1d6127b46570969856e3a1361cd6bcc7457eeaf19a0b1b9"
+    },
+    "packages/design-playbook/skills/ui-evaluator/references/rubric.md": {
+      "role": "index",
+      "sha256": "243a6c20e18b1b8c1b07cc96b95da6b05017795ad3bcf285ef0e62ad71f746e3",
+      "size": 2384,
+      "normalized_sha256": "243a6c20e18b1b8c1b07cc96b95da6b05017795ad3bcf285ef0e62ad71f746e3"
+    },
+    "packages/design-playbook/skills/ui-picker/SKILL.md": {
+      "role": "index",
+      "sha256": "8f3c3314d3bdf967f53da8a5fffe590150a8edcc2e8b5953e8e66cc02184f379",
+      "size": 7193,
+      "normalized_sha256": "8f3c3314d3bdf967f53da8a5fffe590150a8edcc2e8b5953e8e66cc02184f379"
+    },
+    "packages/design-playbook/skills/ui-picker/references/components.md": {
+      "role": "index",
+      "sha256": "5cae65feac263d753c932e69b357549fd2a3cf237e62db65bd94d5063004d04b",
+      "size": 1115,
+      "normalized_sha256": "5cae65feac263d753c932e69b357549fd2a3cf237e62db65bd94d5063004d04b"
+    },
+    "packages/design-playbook/skills/ui-picker/references/decisions.md": {
+      "role": "index",
+      "sha256": "2e9ae39272619899eb6267e2a8bf15892ff2f3ac46642a2335967c5b60880fd6",
+      "size": 8815,
+      "normalized_sha256": "2e9ae39272619899eb6267e2a8bf15892ff2f3ac46642a2335967c5b60880fd6"
+    },
+    "packages/design-playbook/skills/ui-picker/references/design.md": {
+      "role": "index",
+      "sha256": "a0264a0ba7af334a218f1d5c43744d295569f7c5cfa509280cf4e27855bb70d5",
+      "size": 673,
+      "normalized_sha256": "a0264a0ba7af334a218f1d5c43744d295569f7c5cfa509280cf4e27855bb70d5"
+    },
+    "packages/design-playbook/skills/ui-picker/references/domain.md": {
+      "role": "index",
+      "sha256": "0bc927ca90bf02e0b21afaa5fb5fec6b67ae996cab4201a3e25bfb370101adcd",
+      "size": 853,
+      "normalized_sha256": "0bc927ca90bf02e0b21afaa5fb5fec6b67ae996cab4201a3e25bfb370101adcd"
+    },
+    "packages/design-playbook/skills/ui-picker/references/template.md": {
+      "role": "index",
+      "sha256": "1bbaa8b32f0675ec77d0f514e47e61b18a13fd4fdc6c61ae85110f924bef15b1",
+      "size": 890,
+      "normalized_sha256": "1bbaa8b32f0675ec77d0f514e47e61b18a13fd4fdc6c61ae85110f924bef15b1"
+    },
+    "packages/design-playbook/skills/ux-spec/SKILL.md": {
+      "role": "index",
+      "sha256": "e6cffa88a71016e2b85eb33d372f03becd2e14c932346ac6301010400aaff50b",
+      "size": 12498,
+      "normalized_sha256": "e6cffa88a71016e2b85eb33d372f03becd2e14c932346ac6301010400aaff50b"
+    },
+    "packages/design-playbook/skills/ux-spec/references/spec-template.md": {
+      "role": "index",
+      "sha256": "7a3b6969e17a4ffa4b27718fd41ca37856b335d3af7f549dc6398f5752c9bc55",
+      "size": 2750,
+      "normalized_sha256": "7a3b6969e17a4ffa4b27718fd41ca37856b335d3af7f549dc6398f5752c9bc55"
+    },
+    "packages/design-playbook/tests/__init__.py": {
+      "role": "observe",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "packages/design-playbook/tests/evidence/__init__.py": {
+      "role": "observe",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "packages/design-playbook/tests/evidence/test_capture_contract.py": {
+      "role": "observe",
+      "sha256": "ee306c96f200a8c4bfdb45f0beba963e2c95b13f366ffe781a3f97a5d080330b",
+      "size": 16145,
+      "normalized_sha256": "ee306c96f200a8c4bfdb45f0beba963e2c95b13f366ffe781a3f97a5d080330b"
+    },
+    "packages/design-playbook/tests/evidence/test_containment.py": {
+      "role": "observe",
+      "sha256": "0ff9164d54dc4d921de120355a062d9ddbee8c2a8c8841e8d1e271dab3f6fb88",
+      "size": 39167,
+      "normalized_sha256": "0ff9164d54dc4d921de120355a062d9ddbee8c2a8c8841e8d1e271dab3f6fb88"
+    },
+    "packages/design-playbook/tests/evidence/test_delivery_matrix.py": {
+      "role": "observe",
+      "sha256": "19dec2bb28ade16e48f5d065ba7d4aebd560f1ac7f14df03d57508ed8c1a2663",
+      "size": 6154,
+      "normalized_sha256": "19dec2bb28ade16e48f5d065ba7d4aebd560f1ac7f14df03d57508ed8c1a2663"
+    },
+    "packages/design-playbook/tests/evidence/test_disclosure.py": {
+      "role": "observe",
+      "sha256": "13a1bfa7bb1a723cd465865c0adf38c40c3a4a2b3cb9393d6b452a729f8b1aa1",
+      "size": 12966,
+      "normalized_sha256": "13a1bfa7bb1a723cd465865c0adf38c40c3a4a2b3cb9393d6b452a729f8b1aa1"
+    },
+    "packages/design-playbook/tests/evidence/test_evidence_preflight.py": {
+      "role": "observe",
+      "sha256": "4b3bea91843f8729e48588152f5f776ea6e90f3fea8ddfacf4a3ad21258457a6",
+      "size": 13486,
+      "normalized_sha256": "4b3bea91843f8729e48588152f5f776ea6e90f3fea8ddfacf4a3ad21258457a6"
+    },
+    "packages/design-playbook/tests/evidence/test_handoff.py": {
+      "role": "observe",
+      "sha256": "2e5952390f955990d1cb4e24275af3607f75381a709a69e209da1f3194bd4ed2",
+      "size": 27702,
+      "normalized_sha256": "2e5952390f955990d1cb4e24275af3607f75381a709a69e209da1f3194bd4ed2"
+    },
+    "packages/design-playbook/tests/evidence/test_handoff_i18n.py": {
+      "role": "observe",
+      "sha256": "43d63b095a12464ad7a5f005cc8b5598a51cba40d014972c533f4e202a58ee21",
+      "size": 5714,
+      "normalized_sha256": "43d63b095a12464ad7a5f005cc8b5598a51cba40d014972c533f4e202a58ee21"
+    },
+    "packages/design-playbook/tests/evidence/test_ledger_syntax.py": {
+      "role": "observe",
+      "sha256": "587ffa71392afc222ecbf0eda9103c77275c912e235bf1abdbb971909daa9617",
+      "size": 9802,
+      "normalized_sha256": "587ffa71392afc222ecbf0eda9103c77275c912e235bf1abdbb971909daa9617"
+    },
+    "packages/design-playbook/tests/evidence/test_page_defects.py": {
+      "role": "observe",
+      "sha256": "1f24b249bc866f346ec9fcd947bdab5a1175f1f5bb66001d1dd100ffa820623e",
+      "size": 3336,
+      "normalized_sha256": "1f24b249bc866f346ec9fcd947bdab5a1175f1f5bb66001d1dd100ffa820623e"
+    },
+    "packages/design-playbook/tests/evidence/test_server_stdio.py": {
+      "role": "observe",
+      "sha256": "3b4f2ed8ab404a2e11876db6314a53d9c371ff9f6097747ae47c1f76c8aeea58",
+      "size": 41124,
+      "normalized_sha256": "3b4f2ed8ab404a2e11876db6314a53d9c371ff9f6097747ae47c1f76c8aeea58"
+    },
+    "packages/design-playbook/tests/preview/__init__.py": {
+      "role": "observe",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "packages/design-playbook/tests/preview/conftest.py": {
+      "role": "observe",
+      "sha256": "a4db2fef23c75567a4f997b2d86132fb2f6d76c1592e0fcfacb9b05ef5f8dcf6",
+      "size": 1911,
+      "normalized_sha256": "a4db2fef23c75567a4f997b2d86132fb2f6d76c1592e0fcfacb9b05ef5f8dcf6"
+    },
+    "packages/design-playbook/tests/preview/test_anchor_floor.py": {
+      "role": "observe",
+      "sha256": "3dde2aec55cab00878f2d97d050a60dc3b0dbc1e86a78dff207a8d165b620ffb",
+      "size": 5212,
+      "normalized_sha256": "3dde2aec55cab00878f2d97d050a60dc3b0dbc1e86a78dff207a8d165b620ffb"
+    },
+    "packages/design-playbook/tests/preview/test_browser_control.py": {
+      "role": "observe",
+      "sha256": "2a1d6415555aa800bc6503f6255bb30caf029f007fe37918f7832a6e8f555e3e",
+      "size": 59916,
+      "normalized_sha256": "2a1d6415555aa800bc6503f6255bb30caf029f007fe37918f7832a6e8f555e3e"
+    },
+    "packages/design-playbook/tests/preview/test_control_queue_units.py": {
+      "role": "observe",
+      "sha256": "df5db898aff59ef50f4d2c0b4f44da6fa1c79d886f57985103a2591dc37ff9e8",
+      "size": 3397,
+      "normalized_sha256": "df5db898aff59ef50f4d2c0b4f44da6fa1c79d886f57985103a2591dc37ff9e8"
+    },
+    "packages/design-playbook/tests/preview/test_control_source_contract.py": {
+      "role": "observe",
+      "sha256": "9d24a297aeb82de2ba1b9b2495a8f76f42a79fad84ab74d95f817b773612e856",
+      "size": 3636,
+      "normalized_sha256": "9d24a297aeb82de2ba1b9b2495a8f76f42a79fad84ab74d95f817b773612e856"
+    },
+    "packages/design-playbook/tests/preview/test_criteria_locale.py": {
+      "role": "observe",
+      "sha256": "a59ec251869e65621f4bb2f6a8d950228db58136ae802fcba41d592917f42281",
+      "size": 7224,
+      "normalized_sha256": "a59ec251869e65621f4bb2f6a8d950228db58136ae802fcba41d592917f42281"
+    },
+    "packages/design-playbook/tests/preview/test_floor_mirror.py": {
+      "role": "observe",
+      "sha256": "55001daf73f33ced794f84fa012ab0880dffd0cdcb2c989b71a7b373f8b9645a",
+      "size": 3698,
+      "normalized_sha256": "55001daf73f33ced794f84fa012ab0880dffd0cdcb2c989b71a7b373f8b9645a"
+    },
+    "packages/design-playbook/tests/preview/test_i18n_labels.py": {
+      "role": "observe",
+      "sha256": "f0e173f8c3cb7075332cbe86650b0b878981fe789eb0140c4902d725cb0b2e4c",
+      "size": 6230,
+      "normalized_sha256": "f0e173f8c3cb7075332cbe86650b0b878981fe789eb0140c4902d725cb0b2e4c"
+    },
+    "packages/design-playbook/tests/preview/test_integrity.py": {
+      "role": "observe",
+      "sha256": "79ae840879a707d61bd30dd1b691754b143ded89932377589313f06632407446",
+      "size": 14065,
+      "normalized_sha256": "79ae840879a707d61bd30dd1b691754b143ded89932377589313f06632407446"
+    },
+    "packages/design-playbook/tests/preview/test_live_route.py": {
+      "role": "observe",
+      "sha256": "4639474ca4923d8567ea3c5a0e7658ca88ed4404288de65157834bee331a15c0",
+      "size": 6871,
+      "normalized_sha256": "4639474ca4923d8567ea3c5a0e7658ca88ed4404288de65157834bee331a15c0"
+    },
+    "packages/design-playbook/tests/preview/test_options_validation.py": {
+      "role": "observe",
+      "sha256": "6b58e0da29d184a8342ba9128806ca4670de526ad0505537080df067b2728616",
+      "size": 6019,
+      "normalized_sha256": "6b58e0da29d184a8342ba9128806ca4670de526ad0505537080df067b2728616"
+    },
+    "packages/design-playbook/tests/preview/test_pin_bridge_units.py": {
+      "role": "observe",
+      "sha256": "6a2ccf9cc90698a87c1d29ba8d7f65bad4836b943765e05615965164c9d7d075",
+      "size": 4248,
+      "normalized_sha256": "6a2ccf9cc90698a87c1d29ba8d7f65bad4836b943765e05615965164c9d7d075"
+    },
+    "packages/design-playbook/tests/preview/test_preview_usability.py": {
+      "role": "observe",
+      "sha256": "fbd52c0c0b8031935edaef2a5123403bf955c64fb9ba0a3b3e3c3fe78779e6c7",
+      "size": 26782,
+      "normalized_sha256": "fbd52c0c0b8031935edaef2a5123403bf955c64fb9ba0a3b3e3c3fe78779e6c7"
+    },
+    "packages/design-playbook/tests/preview/test_server_stdio.py": {
+      "role": "observe",
+      "sha256": "0976ed0d055a0497c7334efa04adbb78ed2a9969bb60ea425eb603b381416fa6",
+      "size": 8100,
+      "normalized_sha256": "0976ed0d055a0497c7334efa04adbb78ed2a9969bb60ea425eb603b381416fa6"
+    },
+    "packages/design-playbook/tests/preview/test_transaction.py": {
+      "role": "observe",
+      "sha256": "20878f615f7dc75c2f474431a2072cf4491787272e35aa41244767747736a256",
+      "size": 51871,
+      "normalized_sha256": "20878f615f7dc75c2f474431a2072cf4491787272e35aa41244767747736a256"
+    },
+    "packages/design-playbook/tests/preview/test_vendor_pins.py": {
+      "role": "observe",
+      "sha256": "a35843f347544ba77212bbedc70c08502dcbfa06c7ab6f0dbe024d7b58361717",
+      "size": 1776,
+      "normalized_sha256": "a35843f347544ba77212bbedc70c08502dcbfa06c7ab6f0dbe024d7b58361717"
+    },
+    "packages/design-playbook/tests/preview/test_versions.py": {
+      "role": "observe",
+      "sha256": "bd3b87c3c813a088cd7400324df5f2a74b31fe70aa0f06b416be07184893ecf6",
+      "size": 26512,
+      "normalized_sha256": "bd3b87c3c813a088cd7400324df5f2a74b31fe70aa0f06b416be07184893ecf6"
+    },
+    "packages/design-playbook/tests/preview/test_versions_freeze.py": {
+      "role": "observe",
+      "sha256": "da4c3ff09be3a59f52b94e3e30ab275e8b8f7c6f7b26bd0de0574d31c9473589",
+      "size": 7246,
+      "normalized_sha256": "da4c3ff09be3a59f52b94e3e30ab275e8b8f7c6f7b26bd0de0574d31c9473589"
+    },
+    "packages/design-playbook/tests/preview/test_visual_batch.py": {
+      "role": "observe",
+      "sha256": "9b444f92bde46d971a298fda3d5e8bed4f5d445ee4d45e16101bc8815f4d5b1a",
+      "size": 11371,
+      "normalized_sha256": "9b444f92bde46d971a298fda3d5e8bed4f5d445ee4d45e16101bc8815f4d5b1a"
+    },
+    "packages/design-playbook/tests/preview/test_visual_edit_acceptance.py": {
+      "role": "observe",
+      "sha256": "6a16d533ac7fd7db767926199d8f958a57d46ce8860e9dbba08647c0f83981d1",
+      "size": 52784,
+      "normalized_sha256": "6a16d533ac7fd7db767926199d8f958a57d46ce8860e9dbba08647c0f83981d1"
+    },
+    "packages/design-playbook/tests/preview/test_visual_edit_host_assets_crash.py": {
+      "role": "observe",
+      "sha256": "41cc9de19a207e00d1b4e85de9cbe6ed05b1bb18ba3c9e9ecc0320f90604ec31",
+      "size": 7298,
+      "normalized_sha256": "41cc9de19a207e00d1b4e85de9cbe6ed05b1bb18ba3c9e9ecc0320f90604ec31"
+    },
+    "packages/design-playbook/tests/preview/test_visual_edit_host_e2e.py": {
+      "role": "observe",
+      "sha256": "24ca03fba2e23eb792700bcbd37ae9f15440ad8009619934a4a6fa97545f07d6",
+      "size": 17039,
+      "normalized_sha256": "24ca03fba2e23eb792700bcbd37ae9f15440ad8009619934a4a6fa97545f07d6"
+    },
+    "packages/design-playbook/tests/preview/test_visual_edit_host_failures.py": {
+      "role": "observe",
+      "sha256": "391878e20272c5e08eedb811129e9cca08723dfdcf995a0eceae57674f1a5ddc",
+      "size": 10015,
+      "normalized_sha256": "391878e20272c5e08eedb811129e9cca08723dfdcf995a0eceae57674f1a5ddc"
+    },
+    "packages/design-playbook/tests/preview/test_visual_edit_host_multifile.py": {
+      "role": "observe",
+      "sha256": "6a8d4f29658a8972f28df43955e08e48568e8dcd569a89cae97f863ff6def16e",
+      "size": 20389,
+      "normalized_sha256": "6a8d4f29658a8972f28df43955e08e48568e8dcd569a89cae97f863ff6def16e"
+    },
+    "packages/design-playbook/tests/preview/test_visual_edit_reconnect.py": {
+      "role": "observe",
+      "sha256": "7ee3d14db9ce9d96f92f615b6b360a0e83f5e554017b03714208a404ef8cbeda",
+      "size": 8556,
+      "normalized_sha256": "7ee3d14db9ce9d96f92f615b6b360a0e83f5e554017b03714208a404ef8cbeda"
+    },
+    "packages/design-playbook/tests/preview/test_visual_edit_vue_host_e2e.py": {
+      "role": "observe",
+      "sha256": "d10236f24d399be666488a3acbd70c8a2472f46832c40dc6c92b374d9e13dc91",
+      "size": 12095,
+      "normalized_sha256": "d10236f24d399be666488a3acbd70c8a2472f46832c40dc6c92b374d9e13dc91"
+    },
+    "packages/design-playbook/tests/preview/test_visual_handoff.py": {
+      "role": "observe",
+      "sha256": "3c0e602ad6114f237a3b67a73262d93cde20a1a17602c9f91d03d8ccd1929fae",
+      "size": 1402,
+      "normalized_sha256": "3c0e602ad6114f237a3b67a73262d93cde20a1a17602c9f91d03d8ccd1929fae"
+    },
+    "packages/design-playbook/tests/preview/test_visual_ui_regressions.py": {
+      "role": "observe",
+      "sha256": "9f85dee24ee6ef5894608f029cc3eb3c7ef83252c0cc7b94d47b54409fb8c934",
+      "size": 143631,
+      "normalized_sha256": "9f85dee24ee6ef5894608f029cc3eb3c7ef83252c0cc7b94d47b54409fb8c934"
+    },
+    "packages/design-playbook/tests/preview_e2e_helpers.py": {
+      "role": "observe",
+      "sha256": "72e8817a5ffbbc852b9a158616e6b0d8edec1c24ab8598693087979c72a28a95",
+      "size": 1619,
+      "normalized_sha256": "72e8817a5ffbbc852b9a158616e6b0d8edec1c24ab8598693087979c72a28a95"
+    },
+    "packages/design-playbook/tests/run_console/__init__.py": {
+      "role": "observe",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "packages/design-playbook/tests/run_console/test_actions.py": {
+      "role": "observe",
+      "sha256": "ffff2d2afee434f700f2cbf46b76f81e6a04c2f274fac3c8e28b9051123980f5",
+      "size": 31838,
+      "normalized_sha256": "ffff2d2afee434f700f2cbf46b76f81e6a04c2f274fac3c8e28b9051123980f5"
+    },
+    "packages/design-playbook/tests/run_console/test_contract.py": {
+      "role": "observe",
+      "sha256": "3fb5d06343dcf3226179ce5e927fd274f0e0d17b00238c80b504268ca204a707",
+      "size": 26782,
+      "normalized_sha256": "3fb5d06343dcf3226179ce5e927fd274f0e0d17b00238c80b504268ca204a707"
+    },
+    "packages/design-playbook/tests/run_console/test_diagnostic_export.py": {
+      "role": "observe",
+      "sha256": "5a7d9ff47aed814bafb99224063eae2e21b6737bdaa89cd7b51e84da9c8004eb",
+      "size": 17982,
+      "normalized_sha256": "5a7d9ff47aed814bafb99224063eae2e21b6737bdaa89cd7b51e84da9c8004eb"
+    },
+    "packages/design-playbook/tests/run_console/test_diagnostic_export_gate.py": {
+      "role": "observe",
+      "sha256": "5453697255eea13f23cb9420c71ce6e3f683c86728bd0090e76d8ff07f5b21c6",
+      "size": 77272,
+      "normalized_sha256": "5453697255eea13f23cb9420c71ce6e3f683c86728bd0090e76d8ff07f5b21c6"
+    },
+    "packages/design-playbook/tests/run_console/test_diagnostic_export_server.py": {
+      "role": "observe",
+      "sha256": "eb769cf6aee7f476de0f73ac9a4fe562593ee7cee60dc0ad7316af933fd9e650",
+      "size": 21305,
+      "normalized_sha256": "eb769cf6aee7f476de0f73ac9a4fe562593ee7cee60dc0ad7316af933fd9e650"
+    },
+    "packages/design-playbook/tests/run_console/test_http_server.py": {
+      "role": "observe",
+      "sha256": "34d92fa46855a8756bf3320b0f2d7d2e09288afafe363c5c29dc1b1206482794",
+      "size": 42654,
+      "normalized_sha256": "34d92fa46855a8756bf3320b0f2d7d2e09288afafe363c5c29dc1b1206482794"
+    },
+    "packages/design-playbook/tests/run_console/test_parity.py": {
+      "role": "observe",
+      "sha256": "7ceda6cc14c5d9da543cc732cdb96b80db3b76cc938dfb66288d933f5246d75e",
+      "size": 46574,
+      "normalized_sha256": "7ceda6cc14c5d9da543cc732cdb96b80db3b76cc938dfb66288d933f5246d75e"
+    },
+    "packages/design-playbook/tests/run_console/test_read_only_trial.py": {
+      "role": "observe",
+      "sha256": "7cc47ee92f4da82785280ee35bfa11afc245e722f459320cf3fa7f8adbb3cab8",
+      "size": 24837,
+      "normalized_sha256": "7cc47ee92f4da82785280ee35bfa11afc245e722f459320cf3fa7f8adbb3cab8"
+    },
+    "packages/design-playbook/tests/run_console/test_repair_packet.py": {
+      "role": "observe",
+      "sha256": "0f0a61f8678a9abec158498271f2670c059a9394ea718d3c9831d650396d4471",
+      "size": 39065,
+      "normalized_sha256": "0f0a61f8678a9abec158498271f2670c059a9394ea718d3c9831d650396d4471"
+    },
+    "packages/design-playbook/tests/run_console/test_request_security.py": {
+      "role": "observe",
+      "sha256": "76d737e5fba0eeb29cc3dc6660d6274172c8f7e7f2193154477ac1b15d1c825c",
+      "size": 11749,
+      "normalized_sha256": "76d737e5fba0eeb29cc3dc6660d6274172c8f7e7f2193154477ac1b15d1c825c"
+    },
+    "packages/design-playbook/tests/run_console/test_role_attestation_gate.py": {
+      "role": "observe",
+      "sha256": "677758bee9cf9ce0b3911202798d39bfe5338abc9f3e7483036d5f136f500a56",
+      "size": 40439,
+      "normalized_sha256": "677758bee9cf9ce0b3911202798d39bfe5338abc9f3e7483036d5f136f500a56"
+    },
+    "packages/design-playbook/tests/run_console/test_session.py": {
+      "role": "observe",
+      "sha256": "3ea024fd2a12f33cd18d9e56ec7f368e3a8ab042175ebe62bce4cc8ab7ef7bc7",
+      "size": 13571,
+      "normalized_sha256": "3ea024fd2a12f33cd18d9e56ec7f368e3a8ab042175ebe62bce4cc8ab7ef7bc7"
+    },
+    "packages/design-playbook/tests/run_console/test_snapshot_builder.py": {
+      "role": "observe",
+      "sha256": "80de326d3d54aac1170291ef2862b3dac6cf59d7225cd2ca497e603993af156b",
+      "size": 37145,
+      "normalized_sha256": "80de326d3d54aac1170291ef2862b3dac6cf59d7225cd2ca497e603993af156b"
+    },
+    "packages/design-playbook/tests/run_console/test_source_registry.py": {
+      "role": "observe",
+      "sha256": "f087b18854717294ab0ae12036a4cf54fddc37117be516e23c73012bdf47b641",
+      "size": 38539,
+      "normalized_sha256": "f087b18854717294ab0ae12036a4cf54fddc37117be516e23c73012bdf47b641"
+    },
+    "packages/design-playbook/tests/run_console/test_ui.py": {
+      "role": "observe",
+      "sha256": "45112c3c890979918dd233d2415207703b48f885f22b50956bd4222bb49aa630",
+      "size": 19155,
+      "normalized_sha256": "45112c3c890979918dd233d2415207703b48f885f22b50956bd4222bb49aa630"
+    },
+    "packages/design-playbook/tests/run_console/test_ui_actions.py": {
+      "role": "observe",
+      "sha256": "14feb63f4125c44628b56d0a71eb040e0e431f4cf07c6239d9e0a8be5f7a6972",
+      "size": 12469,
+      "normalized_sha256": "14feb63f4125c44628b56d0a71eb040e0e431f4cf07c6239d9e0a8be5f7a6972"
+    },
+    "packages/design-playbook/tests/run_console/test_ui_browser.py": {
+      "role": "observe",
+      "sha256": "f01f1b2e0a0e80619c9bb4b4af598f9f5bc765f44e9afd4453d25e76c319d952",
+      "size": 47847,
+      "normalized_sha256": "f01f1b2e0a0e80619c9bb4b4af598f9f5bc765f44e9afd4453d25e76c319d952"
+    },
+    "packages/design-playbook/tests/test_adapter_lifecycle.py": {
+      "role": "observe",
+      "sha256": "20b8654b6c5f84645e88c65f127e6ae07a67e8306502b16ce4fa8624af908e69",
+      "size": 14662,
+      "normalized_sha256": "20b8654b6c5f84645e88c65f127e6ae07a67e8306502b16ce4fa8624af908e69"
+    },
+    "packages/design-playbook/tests/test_context_budget.py": {
+      "role": "observe",
+      "sha256": "b773ad7f5917207c2afef17b64329b79864ed5b5dcdd375a23a7e7c6032c3a86",
+      "size": 3793,
+      "normalized_sha256": "b773ad7f5917207c2afef17b64329b79864ed5b5dcdd375a23a7e7c6032c3a86"
+    },
+    "packages/design-playbook/tests/test_contract_v1.py": {
+      "role": "observe",
+      "sha256": "d829611560d30962114a208cbc164b8fdabb1c615d47ce14917ebcf9f6cbc74f",
+      "size": 13934,
+      "normalized_sha256": "d829611560d30962114a208cbc164b8fdabb1c615d47ce14917ebcf9f6cbc74f"
+    },
+    "packages/design-playbook/tests/test_e2e_canvas_vc.py": {
+      "role": "observe",
+      "sha256": "cef71fee823550de6e62bf262f0649064b48a02cff6f9bce4dea604721a7f47c",
+      "size": 20880,
+      "normalized_sha256": "cef71fee823550de6e62bf262f0649064b48a02cff6f9bce4dea604721a7f47c"
+    },
+    "packages/design-playbook/tests/test_eval_decisions.py": {
+      "role": "observe",
+      "sha256": "6ad3310406ca4089069af246d813a8768e73d9326c98fddbd6aec72c72cee2ff",
+      "size": 3246,
+      "normalized_sha256": "6ad3310406ca4089069af246d813a8768e73d9326c98fddbd6aec72c72cee2ff"
+    },
+    "packages/design-playbook/tests/test_evidence_manifest.py": {
+      "role": "observe",
+      "sha256": "667108e2d667533db4d8d10381d04fe5d652a9368978c7d5097c08cddfc8ce61",
+      "size": 6270,
+      "normalized_sha256": "667108e2d667533db4d8d10381d04fe5d652a9368978c7d5097c08cddfc8ce61"
+    },
+    "packages/design-playbook/tests/test_floor_frontend.py": {
+      "role": "observe",
+      "sha256": "946fecf1b6caa9d43fa872979e4036bca00b4d03498d2749d622d988e472088e",
+      "size": 20768,
+      "normalized_sha256": "946fecf1b6caa9d43fa872979e4036bca00b4d03498d2749d622d988e472088e"
+    },
+    "packages/design-playbook/tests/test_g6_evidence_binding.py": {
+      "role": "observe",
+      "sha256": "ebafe1a3180084d2bce1735bacf6586bfe0aabb1e53f1191db6ffcf29c0755f5",
+      "size": 2136,
+      "normalized_sha256": "ebafe1a3180084d2bce1735bacf6586bfe0aabb1e53f1191db6ffcf29c0755f5"
+    },
+    "packages/design-playbook/tests/test_g6_warnings.py": {
+      "role": "observe",
+      "sha256": "6fdbfd87fe1663b597a5c03c9817fd0938c7a4887349a4c8175a8e80e7ab71bc",
+      "size": 2980,
+      "normalized_sha256": "6fdbfd87fe1663b597a5c03c9817fd0938c7a4887349a4c8175a8e80e7ab71bc"
+    },
+    "packages/design-playbook/tests/test_g7_contract_drift.py": {
+      "role": "observe",
+      "sha256": "c5cf325a270bc2f2ce8ae6dd016b3f14433f8501a6068996819a89d3ddcd1206",
+      "size": 5150,
+      "normalized_sha256": "c5cf325a270bc2f2ce8ae6dd016b3f14433f8501a6068996819a89d3ddcd1206"
+    },
+    "packages/design-playbook/tests/test_mcp_manifests.py": {
+      "role": "observe",
+      "sha256": "dcdd2ca00c6d321e6a2bf53c2de195b203c19fd4a47e4a74ddf62f6a6be49381",
+      "size": 7181,
+      "normalized_sha256": "dcdd2ca00c6d321e6a2bf53c2de195b203c19fd4a47e4a74ddf62f6a6be49381"
+    },
+    "packages/design-playbook/tests/test_pin_bridge_frontend.py": {
+      "role": "observe",
+      "sha256": "16a04732253f4be429607ade112efa2ae7ad9b8725af4a045f615ea21d9836de",
+      "size": 10938,
+      "normalized_sha256": "16a04732253f4be429607ade112efa2ae7ad9b8725af4a045f615ea21d9836de"
+    },
+    "packages/design-playbook/tests/test_pin_sync_frontend.py": {
+      "role": "observe",
+      "sha256": "5d90a760dc0360079fff5907d3ee38198bb6732cb67d4ac9797b5618ffe51a25",
+      "size": 31039,
+      "normalized_sha256": "5d90a760dc0360079fff5907d3ee38198bb6732cb67d4ac9797b5618ffe51a25"
+    },
+    "packages/design-playbook/tests/test_pointback_projection.py": {
+      "role": "observe",
+      "sha256": "7e195735efeb5a325dbdc5887c5a5150e1707475b5c3c590d8c8c46c9334d97f",
+      "size": 11728,
+      "normalized_sha256": "7e195735efeb5a325dbdc5887c5a5150e1707475b5c3c590d8c8c46c9334d97f"
+    },
+    "packages/design-playbook/tests/test_publish_owner_projection.py": {
+      "role": "observe",
+      "sha256": "c2166dd572bb8ce188656e2ce1e8609963fae471ea79672c2b2a1be376cab49b",
+      "size": 14861,
+      "normalized_sha256": "c2166dd572bb8ce188656e2ce1e8609963fae471ea79672c2b2a1be376cab49b"
+    },
+    "packages/design-playbook/tests/test_queue_monitor.py": {
+      "role": "observe",
+      "sha256": "20303f372f5b78bf3415489e3f09792beaf2299cb8d74313c84f4af3dc4d922b",
+      "size": 4890,
+      "normalized_sha256": "20303f372f5b78bf3415489e3f09792beaf2299cb8d74313c84f4af3dc4d922b"
+    },
+    "packages/design-playbook/tests/test_run_facts.py": {
+      "role": "observe",
+      "sha256": "47151442382227aa28fc8abb88bb0cb4e6a34b45deac48ab61b28d3aa89c454e",
+      "size": 7766,
+      "normalized_sha256": "47151442382227aa28fc8abb88bb0cb4e6a34b45deac48ab61b28d3aa89c454e"
+    },
+    "packages/design-playbook/tests/test_shaping_log.py": {
+      "role": "observe",
+      "sha256": "cf23ae91a3c593b33d3101cd29b5a101b4551f5079c4c220afca78bfa2ad9901",
+      "size": 2154,
+      "normalized_sha256": "cf23ae91a3c593b33d3101cd29b5a101b4551f5079c4c220afca78bfa2ad9901"
+    },
+    "packages/design-playbook/tests/test_specification_projection.py": {
+      "role": "observe",
+      "sha256": "2e2b94caeccd69800d6ecb789bf81baffbbc3c62bb467ebd157103b9c1be0635",
+      "size": 9832,
+      "normalized_sha256": "2e2b94caeccd69800d6ecb789bf81baffbbc3c62bb467ebd157103b9c1be0635"
+    },
+    "packages/design-playbook/tests/test_validate_run.py": {
+      "role": "observe",
+      "sha256": "dec9cc9bf078a24c24557fdd6af84430c899861d66a2a2f4c46dfc10ed13c362",
+      "size": 60617,
+      "normalized_sha256": "dec9cc9bf078a24c24557fdd6af84430c899861d66a2a2f4c46dfc10ed13c362"
+    },
+    "packages/design-playbook/tests/test_vnext_integration.py": {
+      "role": "observe",
+      "sha256": "40b5cf01f9b4c2084f2c9803f0dc586e0a2eda5ba708ce357209917e8ab4b754",
+      "size": 2812,
+      "normalized_sha256": "40b5cf01f9b4c2084f2c9803f0dc586e0a2eda5ba708ce357209917e8ab4b754"
+    },
+    "packages/dsh-design-playbook/NOTICE": {
+      "role": "index",
+      "sha256": "7a9e782ee3799f6e0178545b63f58f9ae5cf31fd9a0ed7759cb46931537dddfa",
+      "size": 481,
+      "normalized_sha256": "7a9e782ee3799f6e0178545b63f58f9ae5cf31fd9a0ed7759cb46931537dddfa"
+    },
+    "packages/dsh-design-playbook/README.md": {
+      "role": "index",
+      "sha256": "852cc278cac739eb2bac0ee7552731920b3d8125498001f934b6dc3efda9de59",
+      "size": 2959,
+      "normalized_sha256": "852cc278cac739eb2bac0ee7552731920b3d8125498001f934b6dc3efda9de59"
+    },
+    "packages/dsh-design-playbook/cordis.patch.yml": {
+      "role": "index",
+      "sha256": "6978dd8cee3bd1be30f8365be20748f839d8263928ef04c77bc4fedcfc4036ed",
+      "size": 1623,
+      "normalized_sha256": "6978dd8cee3bd1be30f8365be20748f839d8263928ef04c77bc4fedcfc4036ed"
+    },
+    "packages/dsh-design-playbook/package.json": {
+      "role": "index",
+      "sha256": "a368e8af169752b7d68a9bd01d8486072cbea491c06c43665746ae5250cabbac",
+      "size": 1250,
+      "normalized_sha256": "a368e8af169752b7d68a9bd01d8486072cbea491c06c43665746ae5250cabbac"
+    },
+    "pytest.ini": {
+      "role": "index",
+      "sha256": "01ef37cb35368d016b6c61238dadcbc1504236bf759d444e15163c3c91df389e",
+      "size": 235,
+      "normalized_sha256": "01ef37cb35368d016b6c61238dadcbc1504236bf759d444e15163c3c91df389e"
+    },
+    "rules-governance.jsonl": {
+      "role": "index",
+      "sha256": "3360d9dbc585754f6bad0ad13ad1e8d7c520da04417c668e3e3e2c43d35dfbe1",
+      "size": 2062,
+      "normalized_sha256": "3360d9dbc585754f6bad0ad13ad1e8d7c520da04417c668e3e3e2c43d35dfbe1"
+    },
+    "scripts/_checks.py": {
+      "role": "index",
+      "sha256": "cd05ada289f2c1d81ed4944b161b32420c4ab8b81100ccd530a39a1130122457",
+      "size": 17916,
+      "normalized_sha256": "cd05ada289f2c1d81ed4944b161b32420c4ab8b81100ccd530a39a1130122457"
+    },
+    "scripts/aggregate_runs.py": {
+      "role": "index",
+      "sha256": "1aa670107a043361af561de842481ab5b30edafd6c0dbaa2e47cb047541282b7",
+      "size": 14288,
+      "normalized_sha256": "1aa670107a043361af561de842481ab5b30edafd6c0dbaa2e47cb047541282b7"
+    },
+    "scripts/check_doc_links.py": {
+      "role": "index",
+      "sha256": "1ccca8f2d9b1df7f775342c8c2d0e7ad57d7e4fcd82dce3ba8e07349993554dd",
+      "size": 15291,
+      "normalized_sha256": "1ccca8f2d9b1df7f775342c8c2d0e7ad57d7e4fcd82dce3ba8e07349993554dd"
+    },
+    "scripts/doctor.py": {
+      "role": "index",
+      "sha256": "b6b514b1043b0a41bb028e2de86b21de645ab7056a6688c0d69e12d1cbd76e4a",
+      "size": 16833,
+      "normalized_sha256": "b6b514b1043b0a41bb028e2de86b21de645ab7056a6688c0d69e12d1cbd76e4a"
+    },
+    "scripts/hooks/commit-msg": {
+      "role": "index",
+      "sha256": "69405ad2ff64aa1794eb37c2527d7243b616bcd3f796822c7558692b65b28fb6",
+      "size": 543,
+      "normalized_sha256": "69405ad2ff64aa1794eb37c2527d7243b616bcd3f796822c7558692b65b28fb6"
+    },
+    "scripts/hooks/pre-commit": {
+      "role": "index",
+      "sha256": "94c1231c5faf299e3283ebf37817ae5640301a51532ea88d00e764e3ea8a1a89",
+      "size": 607,
+      "normalized_sha256": "94c1231c5faf299e3283ebf37817ae5640301a51532ea88d00e764e3ea8a1a89"
+    },
+    "scripts/host_scenario.py": {
+      "role": "index",
+      "sha256": "cada0d876b917c35d3413f13a50bfa79505f8c9811b241c8d97504624866c6b7",
+      "size": 51058,
+      "normalized_sha256": "cada0d876b917c35d3413f13a50bfa79505f8c9811b241c8d97504624866c6b7"
+    },
+    "scripts/install_hooks.py": {
+      "role": "index",
+      "sha256": "bfe2d052cb43f46685216dc7ffa199821e22fcd8c5843716155139de2f326aea",
+      "size": 1703,
+      "normalized_sha256": "bfe2d052cb43f46685216dc7ffa199821e22fcd8c5843716155139de2f326aea"
+    },
+    "scripts/install_smoke.py": {
+      "role": "index",
+      "sha256": "7b3ec52889f655d5e1d7b6f3f29b572a46831022f4bad6b41e07e6fbe2541ff5",
+      "size": 26132,
+      "normalized_sha256": "7b3ec52889f655d5e1d7b6f3f29b572a46831022f4bad6b41e07e6fbe2541ff5"
+    },
+    "scripts/package_inventory.py": {
+      "role": "index",
+      "sha256": "cdf6835df852dd6a43f7937256c47bfdb9d822784cdd2f09190cbc39911a51f3",
+      "size": 5294,
+      "normalized_sha256": "cdf6835df852dd6a43f7937256c47bfdb9d822784cdd2f09190cbc39911a51f3"
+    },
+    "scripts/plugin_dir_smoke.py": {
+      "role": "index",
+      "sha256": "d95a6c0db913b4a801ba4a4976841601e4eb45a145d5d057c1ecdc53bc3bff5f",
+      "size": 19013,
+      "normalized_sha256": "d95a6c0db913b4a801ba4a4976841601e4eb45a145d5d057c1ecdc53bc3bff5f"
+    },
+    "scripts/release.py": {
+      "role": "index",
+      "sha256": "349a4a9027583b3413505eacb41a872e6440873c928d7995ef5249cfc1dca162",
+      "size": 16304,
+      "normalized_sha256": "349a4a9027583b3413505eacb41a872e6440873c928d7995ef5249cfc1dca162"
+    },
+    "scripts/release_state.py": {
+      "role": "index",
+      "sha256": "9b329cebfacb4e646cb7053167a26b996a666f74475e4f2fea85ed43dd0c0de2",
+      "size": 6409,
+      "normalized_sha256": "9b329cebfacb4e646cb7053167a26b996a666f74475e4f2fea85ed43dd0c0de2"
+    },
+    "scripts/release_transaction.py": {
+      "role": "index",
+      "sha256": "c0c8f917f935220f9f73bebdb92537ccd716c0fc066ab12e283b5001b96f7681",
+      "size": 12078,
+      "normalized_sha256": "c0c8f917f935220f9f73bebdb92537ccd716c0fc066ab12e283b5001b96f7681"
+    },
+    "scripts/screenshot-hero.mjs": {
+      "role": "index",
+      "sha256": "13496e1396e197c49690b01c26d45a5785f41b07a618b10163b3a8b52a44aeed",
+      "size": 3498,
+      "normalized_sha256": "13496e1396e197c49690b01c26d45a5785f41b07a618b10163b3a8b52a44aeed"
+    },
+    "scripts/screenshot-showcase.mjs": {
+      "role": "index",
+      "sha256": "d267f1b1af986cba3d8adff071b0b50330ec2483e06601fb398e167169704cfe",
+      "size": 8723,
+      "normalized_sha256": "d267f1b1af986cba3d8adff071b0b50330ec2483e06601fb398e167169704cfe"
+    },
+    "scripts/validate.py": {
+      "role": "index",
+      "sha256": "2f10844f339361ea0e20c55775acf7ea9622de2407dd8ca94c163f84fb253947",
+      "size": 59727,
+      "normalized_sha256": "2f10844f339361ea0e20c55775acf7ea9622de2407dd8ca94c163f84fb253947"
+    },
+    "scripts/vnext_live_dogfood.py": {
+      "role": "index",
+      "sha256": "11649cc1bf4e4e3b9f04686dbe3a2f30545d96c75e8894669c838da4217c54ae",
+      "size": 17018,
+      "normalized_sha256": "11649cc1bf4e4e3b9f04686dbe3a2f30545d96c75e8894669c838da4217c54ae"
+    },
+    "tests/_standalone_promote_fallback.py": {
+      "role": "observe",
+      "sha256": "e951e33c19af625c43a59b16ead01298aacbfba6e866c3d9ccffcc237514efbb",
+      "size": 2012,
+      "normalized_sha256": "e951e33c19af625c43a59b16ead01298aacbfba6e866c3d9ccffcc237514efbb"
+    },
+    "tests/test_adapter_drift.py": {
+      "role": "observe",
+      "sha256": "e35cf10b395050b4c5a8eb9da64c23d584bcbd0609ba11cb9d7f65a8b44b69b0",
+      "size": 4219,
+      "normalized_sha256": "e35cf10b395050b4c5a8eb9da64c23d584bcbd0609ba11cb9d7f65a8b44b69b0"
+    },
+    "tests/test_adapter_generator.py": {
+      "role": "observe",
+      "sha256": "a6aff3d988dc9b0bfc64806d3aeb8b23ffa43966976e4911ae0665b6aeb5cde3",
+      "size": 46730,
+      "normalized_sha256": "a6aff3d988dc9b0bfc64806d3aeb8b23ffa43966976e4911ae0665b6aeb5cde3"
+    },
+    "tests/test_aggregate_runs.py": {
+      "role": "observe",
+      "sha256": "c4f9000ae8a2a65a0505810714a1ebca19000cfd042bf3dbfeca586bd3bad1f0",
+      "size": 12477,
+      "normalized_sha256": "c4f9000ae8a2a65a0505810714a1ebca19000cfd042bf3dbfeca586bd3bad1f0"
+    },
+    "tests/test_audit_preferences.py": {
+      "role": "observe",
+      "sha256": "89de5bb5153a4a456042c05e8531f1d648c74393d5f515e8564d1e01cab119ab",
+      "size": 16124,
+      "normalized_sha256": "89de5bb5153a4a456042c05e8531f1d648c74393d5f515e8564d1e01cab119ab"
+    },
+    "tests/test_audit_preferences_prose.py": {
+      "role": "observe",
+      "sha256": "460a00cb52fa67b23c98adf22c305190c809c5340e810b3c1348ffed58b016d8",
+      "size": 6961,
+      "normalized_sha256": "460a00cb52fa67b23c98adf22c305190c809c5340e810b3c1348ffed58b016d8"
+    },
+    "tests/test_audit_skeleton.py": {
+      "role": "observe",
+      "sha256": "75c2894c5d506d83a56260ca1a728a263e22ffa3a9198e368eceb71218c49445",
+      "size": 16032,
+      "normalized_sha256": "75c2894c5d506d83a56260ca1a728a263e22ffa3a9198e368eceb71218c49445"
+    },
+    "tests/test_audit_writeback.py": {
+      "role": "observe",
+      "sha256": "d4349fd2c178fe8534ad5047a13335ceccd3ceea27c08c82eb89c5c840d28a7d",
+      "size": 12613,
+      "normalized_sha256": "d4349fd2c178fe8534ad5047a13335ceccd3ceea27c08c82eb89c5c840d28a7d"
+    },
+    "tests/test_codex_workflow_prompt.py": {
+      "role": "observe",
+      "sha256": "8f2d8544e100cddc39063d96e667455d0a01450f4c4e19edf4e4badf6c0fe821",
+      "size": 1063,
+      "normalized_sha256": "8f2d8544e100cddc39063d96e667455d0a01450f4c4e19edf4e4badf6c0fe821"
+    },
+    "tests/test_component_backflow_e2e.py": {
+      "role": "observe",
+      "sha256": "f210cb20eecd8f8c7667f6a5fd1c723c53091bfed19f8120e7d95487ef5c43e1",
+      "size": 6037,
+      "normalized_sha256": "f210cb20eecd8f8c7667f6a5fd1c723c53091bfed19f8120e7d95487ef5c43e1"
+    },
+    "tests/test_component_candidates.py": {
+      "role": "observe",
+      "sha256": "b966d805e1836c2e5265d1db8693e8e53acfb5df992b0039b6548781c8d60962",
+      "size": 12134,
+      "normalized_sha256": "b966d805e1836c2e5265d1db8693e8e53acfb5df992b0039b6548781c8d60962"
+    },
+    "tests/test_design_baseline.py": {
+      "role": "observe",
+      "sha256": "6bb1849d6520f5a0831f6622723ece056ea97759662403c710efbca3fc870cd7",
+      "size": 16242,
+      "normalized_sha256": "6bb1849d6520f5a0831f6622723ece056ea97759662403c710efbca3fc870cd7"
+    },
+    "tests/test_design_baseline_promote.py": {
+      "role": "observe",
+      "sha256": "0971cdb7dd3d9983251adba46d5736066b3fa034fa15133b8540f45d168759fe",
+      "size": 20880,
+      "normalized_sha256": "0971cdb7dd3d9983251adba46d5736066b3fa034fa15133b8540f45d168759fe"
+    },
+    "tests/test_doc_links.py": {
+      "role": "observe",
+      "sha256": "894c95c37f69030e5fde8d8c38c2bfbbf5a2e3c44c36a6798bebac2e4e93f005",
+      "size": 15220,
+      "normalized_sha256": "894c95c37f69030e5fde8d8c38c2bfbbf5a2e3c44c36a6798bebac2e4e93f005"
+    },
+    "tests/test_doctor.py": {
+      "role": "observe",
+      "sha256": "477afe4614cf80b7e2cefeca83043dbd423c7b212fe39c2642bc474685f6a009",
+      "size": 12109,
+      "normalized_sha256": "477afe4614cf80b7e2cefeca83043dbd423c7b212fe39c2642bc474685f6a009"
+    },
+    "tests/test_frontend_review.py": {
+      "role": "observe",
+      "sha256": "84f165dfca0edd62377959877d3b76acc939afc8518d27d64acf5053f65ec773",
+      "size": 31945,
+      "normalized_sha256": "84f165dfca0edd62377959877d3b76acc939afc8518d27d64acf5053f65ec773"
+    },
+    "tests/test_host_scenario.py": {
+      "role": "observe",
+      "sha256": "7c764f4e358077f2950604228a2eba890db3c7126d2064324e0176c04d3dc4a0",
+      "size": 49259,
+      "normalized_sha256": "7c764f4e358077f2950604228a2eba890db3c7126d2064324e0176c04d3dc4a0"
+    },
+    "tests/test_install_smoke.py": {
+      "role": "observe",
+      "sha256": "20400b2310e8f72031ba4d3da9d27d1540316a9761d2895e29b8cd93e8e10eb4",
+      "size": 20398,
+      "normalized_sha256": "20400b2310e8f72031ba4d3da9d27d1540316a9761d2895e29b8cd93e8e10eb4"
+    },
+    "tests/test_normalize_lockstep.py": {
+      "role": "observe",
+      "sha256": "43d686e01c1d84dd6e41ad16db76543f8cf198ef637daca1ecf3b6ed4b1c58ea",
+      "size": 3397,
+      "normalized_sha256": "43d686e01c1d84dd6e41ad16db76543f8cf198ef637daca1ecf3b6ed4b1c58ea"
+    },
+    "tests/test_operator_continuation_e2e.py": {
+      "role": "observe",
+      "sha256": "d9604fa33f112484bd1330849986f87ba3125c07ebe3ae6565e630ac4bc364e6",
+      "size": 14820,
+      "normalized_sha256": "d9604fa33f112484bd1330849986f87ba3125c07ebe3ae6565e630ac4bc364e6"
+    },
+    "tests/test_operator_evidence_hardening.py": {
+      "role": "observe",
+      "sha256": "b9b64a560dcafba11663a734d54d837760f15eb46266422b86a8513aec7eae66",
+      "size": 45342,
+      "normalized_sha256": "b9b64a560dcafba11663a734d54d837760f15eb46266422b86a8513aec7eae66"
+    },
+    "tests/test_plan_handoff_prompt.py": {
+      "role": "observe",
+      "sha256": "ab5fed98fe704dfa52c55f8908686d74406847d4ed224649640107f8f4e7c829",
+      "size": 3107,
+      "normalized_sha256": "ab5fed98fe704dfa52c55f8908686d74406847d4ed224649640107f8f4e7c829"
+    },
+    "tests/test_plugin_dir_smoke.py": {
+      "role": "observe",
+      "sha256": "f1d49fcd77b95bd43a036f44f61a5daf0f8360315db8c839207bb2c64415ef36",
+      "size": 20834,
+      "normalized_sha256": "f1d49fcd77b95bd43a036f44f61a5daf0f8360315db8c839207bb2c64415ef36"
+    },
+    "tests/test_project_target.py": {
+      "role": "observe",
+      "sha256": "fbd37b9018f4c2da6ffc703e5878d3423372b10eedae28b55ce00579a3bf40a1",
+      "size": 17437,
+      "normalized_sha256": "fbd37b9018f4c2da6ffc703e5878d3423372b10eedae28b55ce00579a3bf40a1"
+    },
+    "tests/test_promotion_governance.py": {
+      "role": "observe",
+      "sha256": "c7ac64bc9369667461a94182b2e4231fcc9c6f7047d38558b40908c8a3145fa6",
+      "size": 5308,
+      "normalized_sha256": "c7ac64bc9369667461a94182b2e4231fcc9c6f7047d38558b40908c8a3145fa6"
+    },
+    "tests/test_reference_intake_fixtures.py": {
+      "role": "observe",
+      "sha256": "5a45c4335d21a065bd6cd2c5d3e3d8eee4a896855fb942a9b5f41a1c744a6167",
+      "size": 3301,
+      "normalized_sha256": "5a45c4335d21a065bd6cd2c5d3e3d8eee4a896855fb942a9b5f41a1c744a6167"
+    },
+    "tests/test_reference_sources.py": {
+      "role": "observe",
+      "sha256": "dfc337bfbfa8d0c008fc08b0b30f02527f9c5291c39d839427dec9bd47bb3e91",
+      "size": 22419,
+      "normalized_sha256": "dfc337bfbfa8d0c008fc08b0b30f02527f9c5291c39d839427dec9bd47bb3e91"
+    },
+    "tests/test_release.py": {
+      "role": "observe",
+      "sha256": "16c442d10b7a666fe493abe1b62f986695bd2647fcc8a997bf17806774abb88c",
+      "size": 18731,
+      "normalized_sha256": "16c442d10b7a666fe493abe1b62f986695bd2647fcc8a997bf17806774abb88c"
+    },
+    "tests/test_release_transaction.py": {
+      "role": "observe",
+      "sha256": "8d7a900c67bcb9bc99bd4328cf7bb48d7f31447902977569b4983a330ac9d9f5",
+      "size": 5129,
+      "normalized_sha256": "8d7a900c67bcb9bc99bd4328cf7bb48d7f31447902977569b4983a330ac9d9f5"
+    },
+    "tests/test_release_workflow.py": {
+      "role": "observe",
+      "sha256": "6f781c265e7125893baef6b8b5c221629462ea0a5ba9163126649f44142561ce",
+      "size": 15471,
+      "normalized_sha256": "6f781c265e7125893baef6b8b5c221629462ea0a5ba9163126649f44142561ce"
+    },
+    "tests/test_request_routing.py": {
+      "role": "observe",
+      "sha256": "e440f51328c7a602820530fc9ca1311df18041f34ce2a486c6b3ac2eaff0f132",
+      "size": 21003,
+      "normalized_sha256": "e440f51328c7a602820530fc9ca1311df18041f34ce2a486c6b3ac2eaff0f132"
+    },
+    "tests/test_run_facts_snapshot.py": {
+      "role": "observe",
+      "sha256": "ccbada83b8446113aead31c931c2d2969af41f02c7057fa8483215463a69d247",
+      "size": 10626,
+      "normalized_sha256": "ccbada83b8446113aead31c931c2d2969af41f02c7057fa8483215463a69d247"
+    },
+    "tests/test_run_metadata.py": {
+      "role": "observe",
+      "sha256": "a23e8493c0444c246626695f936791d9c2a0102cd754bafc20d8bef9e8ac32af",
+      "size": 8149,
+      "normalized_sha256": "a23e8493c0444c246626695f936791d9c2a0102cd754bafc20d8bef9e8ac32af"
+    },
+    "tests/test_run_status.py": {
+      "role": "observe",
+      "sha256": "58a78d38def22ebe77552c989afa748517a0e361ac1218389c1715301552a692",
+      "size": 50861,
+      "normalized_sha256": "58a78d38def22ebe77552c989afa748517a0e361ac1218389c1715301552a692"
+    },
+    "tests/test_stages_registry.py": {
+      "role": "observe",
+      "sha256": "41c34ee58694fc584895a40b59101e3d66a66380cb7e0bf020c6259146b315fc",
+      "size": 4741,
+      "normalized_sha256": "41c34ee58694fc584895a40b59101e3d66a66380cb7e0bf020c6259146b315fc"
+    },
+    "tests/test_stdio_encoding.py": {
+      "role": "observe",
+      "sha256": "26055e37c3575d06d8845eb99ead72ba21320e13b4982b5487e1a5e7643ecc8c",
+      "size": 11871,
+      "normalized_sha256": "26055e37c3575d06d8845eb99ead72ba21320e13b4982b5487e1a5e7643ecc8c"
+    },
+    "tests/test_t001_capability_receipt.py": {
+      "role": "observe",
+      "sha256": "9089c47b7f85877f828541074d8f6a9814a86ee64ced36930f8f389d78ec586f",
+      "size": 9250,
+      "normalized_sha256": "9089c47b7f85877f828541074d8f6a9814a86ee64ced36930f8f389d78ec586f"
+    },
+    "tests/test_t002_run_status_continuation.py": {
+      "role": "observe",
+      "sha256": "c997e051531b0338493b7b588c67e8a05f186e4aa2c9c390739ea0081f09eacd",
+      "size": 28604,
+      "normalized_sha256": "c997e051531b0338493b7b588c67e8a05f186e4aa2c9c390739ea0081f09eacd"
+    },
+    "tests/test_t004_run_handoff.py": {
+      "role": "observe",
+      "sha256": "bb4e9a508b2deb88bf94e395b21bb5fe4154038265acc252647b132228ead5af",
+      "size": 23640,
+      "normalized_sha256": "bb4e9a508b2deb88bf94e395b21bb5fe4154038265acc252647b132228ead5af"
+    },
+    "tests/test_t006_continuation_acceptance_matrix.py": {
+      "role": "observe",
+      "sha256": "09efcf8f4056ca328cd050adc755cbed4cdd940ade7a5348dc84bea27a9e8378",
+      "size": 49047,
+      "normalized_sha256": "09efcf8f4056ca328cd050adc755cbed4cdd940ade7a5348dc84bea27a9e8378"
+    },
+    "tests/test_validate.py": {
+      "role": "observe",
+      "sha256": "717fd443656e9e4171d694ad5fc533f6bc12a5aab095f1e45eb44abed95805b4",
+      "size": 37705,
+      "normalized_sha256": "717fd443656e9e4171d694ad5fc533f6bc12a5aab095f1e45eb44abed95805b4"
+    },
+    "tests/test_validate_import.py": {
+      "role": "observe",
+      "sha256": "ccd502f2b2cb8778874f7d12473256cd6660d0c6cb0636bbcce0a9a0f0179a3e",
+      "size": 4281,
+      "normalized_sha256": "ccd502f2b2cb8778874f7d12473256cd6660d0c6cb0636bbcce0a9a0f0179a3e"
+    },
+    "tests/test_vnext_s1.py": {
+      "role": "observe",
+      "sha256": "066823557a52009f248510b735562cc5fb555364e0aefcfdc1a7f9faa8d16387",
+      "size": 30714,
+      "normalized_sha256": "066823557a52009f248510b735562cc5fb555364e0aefcfdc1a7f9faa8d16387"
+    },
+    "tests/test_vnext_s2.py": {
+      "role": "observe",
+      "sha256": "513714ee8346bf47af5e6bd0c030241d0de5b090e266ed132d43973eb49a23d2",
+      "size": 32131,
+      "normalized_sha256": "513714ee8346bf47af5e6bd0c030241d0de5b090e266ed132d43973eb49a23d2"
+    },
+    "tests/test_vnext_s3.py": {
+      "role": "observe",
+      "sha256": "2184c2d1a9abf0a473628907e98cdaf25580bcb1516bdf7b78f00e5eccacdc7d",
+      "size": 24846,
+      "normalized_sha256": "2184c2d1a9abf0a473628907e98cdaf25580bcb1516bdf7b78f00e5eccacdc7d"
+    },
+    "tests/test_vnext_s4.py": {
+      "role": "observe",
+      "sha256": "a16ecb42ddef96e7112658b910f4b1f7c9bdf036f71cf82b90106e8c3f30a814",
+      "size": 26096,
+      "normalized_sha256": "a16ecb42ddef96e7112658b910f4b1f7c9bdf036f71cf82b90106e8c3f30a814"
+    },
+    "tests/test_vnext_s5.py": {
+      "role": "observe",
+      "sha256": "aea0b7c3ed831d52f9e979d64d0df8908d29bf1bb446e9385a0f71b023fdcb44",
+      "size": 29392,
+      "normalized_sha256": "aea0b7c3ed831d52f9e979d64d0df8908d29bf1bb446e9385a0f71b023fdcb44"
+    },
+    "tests/test_vnext_s6.py": {
+      "role": "observe",
+      "sha256": "aedbf834a4207ed566486cd386cb09e86809a9d815f8282bd294e25551562d43",
+      "size": 9719,
+      "normalized_sha256": "aedbf834a4207ed566486cd386cb09e86809a9d815f8282bd294e25551562d43"
+    }
+  },
+  "managed_scope": {
+    "version": "managed-scope-baseline/v1",
+    "policy_identity": "3b029307ca9a998f7863146b9aae29089dbd7d695d8e543a5334a9ba32f41394",
+    "observe_change_policy": "review_required",
+    "budget_policy_identity": "15e9b37a6c57e9bf03c9df3d0d049eb5b9a7f5540f9d34960408114e2538a32d",
+    "budget_policy": {
+      "version": "cognition-budget-policy/v1",
+      "mode": "enforce",
+      "whole_index": {
+        "target_tokens": 200000,
+        "warning_tokens": 300000,
+        "max_tokens": 400000
+      },
+      "r": [
+        {
+          "min_c": 1,
+          "max_c": 4,
+          "target_tokens": 25,
+          "max_tokens": 50
+        },
+        {
+          "min_c": 5,
+          "max_c": 7,
+          "target_tokens": 45,
+          "max_tokens": 90
+        },
+        {
+          "min_c": 8,
+          "max_c": 8,
+          "target_tokens": 70,
+          "max_tokens": 140
+        },
+        {
+          "min_c": 9,
+          "max_c": 9,
+          "target_tokens": 90,
+          "max_tokens": 180
+        }
+      ],
+      "s": [
+        {
+          "min_c": 1,
+          "max_c": 4,
+          "target_tokens": 20,
+          "max_tokens": 40
+        },
+        {
+          "min_c": 5,
+          "max_c": 7,
+          "target_tokens": 40,
+          "max_tokens": 80
+        },
+        {
+          "min_c": 8,
+          "max_c": 8,
+          "target_tokens": 70,
+          "max_tokens": 140
+        },
+        {
+          "min_c": 9,
+          "max_c": 9,
+          "target_tokens": 100,
+          "max_tokens": 200
+        }
+      ]
+    },
+    "apply_authorization_mode": "auto"
+  }
+}
