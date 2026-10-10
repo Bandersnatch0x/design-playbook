@@ -183,3 +183,36 @@ def test_return_in_an_anchor_note_blurs_instead_of_submitting() -> None:
     handler = REVIEW_JS[start:REVIEW_JS.index("});", start)]
     assert 'e.key !== "Enter"' in handler
     assert "e.preventDefault()" in handler and "input.blur()" in handler
+
+
+# Shell copy and comments describe behavior in the project's own words; a
+# vendor or an outside publication is never named there. Font stacks in CSS
+# are fallback lists, not copy, so they are out of scope.
+EXTERNAL_NAMES = re.compile(r"apple|\bHIG\b|refactoring ui|human interface", re.I)
+
+
+def _comments_and_strings(text: str) -> list[str]:
+    parts = re.findall(r"<!--(.*?)-->", text, re.S)
+    parts += re.findall(r"/\*(.*?)\*/", text, re.S)
+    parts += re.findall(r"//([^\n]*)", text)
+    parts += re.findall(r'"([^"\n]*)"', text)
+    return parts
+
+
+def test_shell_copy_and_comments_name_no_external_product() -> None:
+    hits = []
+    for name in ("control.html", "control.css", "control.js", "control.review.js",
+                 "control.react.js", "i18n.py"):
+        for part in _comments_and_strings((PREVIEW / name).read_text(encoding="utf-8")):
+            if EXTERNAL_NAMES.search(part) and "font-family" not in part:
+                hits.append((name, part.strip()[:80]))
+    assert hits == []
+
+
+def test_font_family_dropdown_lists_generic_families_only() -> None:
+    react = (PREVIEW / "control.react.js").read_text(encoding="utf-8")
+    start = react.index("var fontFamilyOpts = [")
+    opts = re.findall(r'"([^"]*)"', react[start:react.index("];", start)])
+    generic = {"", "system-ui", "ui-sans-serif", "ui-serif", "ui-monospace",
+               "ui-rounded", "sans-serif", "serif", "monospace"}
+    assert set(opts) <= generic

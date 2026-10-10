@@ -933,10 +933,10 @@
             );
           }
 
-          var fontFamilyOpts = ["", "system-ui", "-apple-system", "Segoe UI", "Roboto",
-            "Helvetica Neue", "Arial", "Georgia", "Times New Roman", "ui-monospace",
-            "Consolas", "Courier New", "PingFang SC", "Microsoft YaHei", "sans-serif",
-            "serif", "monospace"];
+          // Generic families only: they resolve on every platform, and a value
+          // the element already carries is still listed by renderField.
+          var fontFamilyOpts = ["", "system-ui", "ui-sans-serif", "ui-serif",
+            "ui-monospace", "ui-rounded", "sans-serif", "serif", "monospace"];
           var fontSizeOpts = ["", "12px", "13px", "14px", "15px", "16px", "18px", "20px",
             "22px", "24px", "28px", "32px", "40px", "48px", "64px"];
           var fontWeightOpts = ["", "normal", "bold", "100", "200", "300", "400", "500",
