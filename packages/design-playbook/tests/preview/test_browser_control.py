@@ -740,6 +740,70 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
                     browser.close()
 
 
+@pytest.mark.browser
+class ReturnInAnchorNoteTests(unittest.TestCase):
+    """E-01: Return in an anchor note keeps the note and never submits."""
+
+    _ARM = """() => {
+        window.__dpbSubmits = 0;
+        document.getElementById('dpb-decide-form').addEventListener(
+            'submit', e => { window.__dpbSubmits += 1; e.preventDefault(); }, true);
+    }"""
+
+    def _page_with_anchor(self, pw, root: Path):
+        browser = pw.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        posts: list[str] = []
+        page.on("request", lambda r: posts.append(r.url) if r.method == "POST" else None)
+        page.goto(_write_control_page(root, []), wait_until="domcontentloaded")
+        page.wait_for_selector("#dpb-root")
+        dismiss_onboarding(page)
+        page.click("#prototype h1")
+        page.wait_for_selector("#dpb-anno-popover")
+        page.fill("#dpb-anno-input", "first note")
+        page.keyboard.press("Enter")
+        page.wait_for_selector("#dpb-anchors .dpb-anchor input[data-i]")
+        page.evaluate(self._ARM)
+        return browser, page, posts
+
+    def _anchors(self, page) -> list[dict[str, Any]]:
+        return json.loads(page.evaluate(
+            "() => document.getElementById('dpb-anchors-json').value"))
+
+    def test_return_saves_the_note_blurs_and_does_not_submit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, sync_playwright() as pw:
+            browser, page, posts = self._page_with_anchor(pw, Path(tmp))
+            try:
+                note = page.locator("#dpb-anchors .dpb-anchor input[data-i]").first
+                note.click()
+                note.fill("edited note")
+                page.keyboard.press("Enter")
+                page.wait_for_timeout(200)
+                self.assertEqual(page.evaluate("() => window.__dpbSubmits"), 0)
+                self.assertEqual(posts, [])
+                self.assertFalse(page.evaluate(
+                    "() => !!document.activeElement.closest('#dpb-anchors input[data-i]')"))
+                self.assertEqual(self._anchors(page)[0]["comment"], "edited note")
+            finally:
+                browser.close()
+
+    def test_return_while_composing_does_not_submit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, sync_playwright() as pw:
+            browser, page, posts = self._page_with_anchor(pw, Path(tmp))
+            try:
+                note = page.locator("#dpb-anchors .dpb-anchor input[data-i]").first
+                note.click()
+                cdp = page.context.new_cdp_session(page)
+                cdp.send("Input.imeSetComposition",
+                         {"text": "zhong", "selectionStart": 5, "selectionEnd": 5})
+                page.keyboard.press("Enter")
+                page.wait_for_timeout(200)
+                self.assertEqual(page.evaluate("() => window.__dpbSubmits"), 0)
+                self.assertEqual(posts, [])
+            finally:
+                browser.close()
+
+
 # --------------------------------------------------------------------------- #
 # Integration tests: parent-page rendering + HTTP decide flow                 #
 # --------------------------------------------------------------------------- #
