@@ -26,7 +26,9 @@ read-only frontend scope report, the single-maintainer, loopback-only local
 asset workbench authorized on 2026-09-26, and the bounded Preview
 visual-editing capability recorded in
 [ADR-0047](docs/adr/0047-preview-visual-editing-capability.md) on 2026-10-09
-(multiplayer collaboration stays excluded). The workbench exception authorizes
+(multiplayer collaboration stays excluded). The staged UI-runtime migration is recorded in
+[ADR-0048](docs/adr/0048-staged-ui-runtime-migration.md), which opens only its
+specification stage; each later stage needs its own dated amendment. The workbench exception authorizes
 implementation and local validation only within its recorded authority and
 distribution boundary; it does not claim that the workbench exists, passes
 acceptance, or has been released. No exception reopens catalog submission,

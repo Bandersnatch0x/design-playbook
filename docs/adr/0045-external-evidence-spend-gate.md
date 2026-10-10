@@ -423,3 +423,13 @@ recorded, and the collaboration part removed, in
 [ADR-0047](0047-preview-visual-editing-capability.md). This pointer changes no
 boundary above; the exclusions here remain in force and the ADR-0045 spend gate
 otherwise remains in force.
+
+## Follow-on (2026-10-10): staged UI-runtime migration has its own ADR
+
+The plan to move the plugin's own surfaces onto one shared component layer is
+staged and authorized stage by stage in
+[ADR-0048](0048-staged-ui-runtime-migration.md). Its acceptance opens only the
+specification prerequisites (Stage S): the listed registry entries, the
+`threshold` field and the registry-level checks. Every later stage needs its
+own dated amendment there. This pointer changes no boundary above, and the
+ADR-0045 spend gate otherwise remains in force.
