@@ -145,6 +145,16 @@
     updateStatus();
     scheduleDraft();
   });
+  // Return in an anchor note keeps the note and leaves the field. It never
+  // reaches the form: the blur commits the edit through the change listener.
+  listEl.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter" || e.isComposing || e.keyCode === 229) return;
+    if (e.ctrlKey || e.metaKey) return;
+    var input = e.target.closest("input[data-i]");
+    if (!input) return;
+    e.preventDefault();
+    input.blur();
+  });
   // C4: comment-edit before-snapshots keyed by anchor index (NOT hung on the
   // input DOM node - render() rebuilds rows and would drop node-bound state,
   // making that edit un-undoable).

@@ -164,3 +164,22 @@ def test_skip_confirmation_defaults_to_keep_reviewing() -> None:
     assert 'type="submit" name="choice" value="{skip_val}"' in popover
     show = REVIEW_JS[REVIEW_JS.index("function showSkipPopover()"):]
     assert "skipCancel.focus()" in show[:show.index("\n  }\n")]
+
+
+# Implicit submission picks the form's first submit button. A disabled one in
+# that slot means Return in any text field submits nothing. The runtime half
+# (no POST /decide after Return in an anchor note) is a browser case.
+def test_form_opens_with_a_disabled_default_submit() -> None:
+    form = HTML[HTML.index('<form method="POST" action="/decide"'):]
+    first = re.search(r"<button[^>]*>", form).group(0)
+    assert 'type="submit"' in first
+    for attr in ("disabled", "hidden", 'aria-hidden="true"', 'tabindex="-1"'):
+        assert attr in first
+    assert 'name="choice"' not in first
+
+
+def test_return_in_an_anchor_note_blurs_instead_of_submitting() -> None:
+    start = REVIEW_JS.index('listEl.addEventListener("keydown"')
+    handler = REVIEW_JS[start:REVIEW_JS.index("});", start)]
+    assert 'e.key !== "Enter"' in handler
+    assert "e.preventDefault()" in handler and "input.blur()" in handler

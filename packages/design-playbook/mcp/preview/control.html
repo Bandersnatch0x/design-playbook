@@ -1,6 +1,8 @@
 <!-- v10 app shell: header / canvas workspace / left mini-dock / unified right rail -->
 <div id="dpb-root" lang="{locale}" data-round="{round_n}">
   <form method="POST" action="/decide" id="dpb-decide-form">
+  <!-- Return in a text field submits the form's first submit button. A disabled default blocks that, so only an explicit control decides. -->
+  <button type="submit" id="dpb-implicit-submit-guard" disabled hidden aria-hidden="true" tabindex="-1"></button>
   <input type="hidden" name="anchors_json" id="dpb-anchors-json" value="[]" />
   <input type="hidden" name="visual_edits_json" id="dpb-visual-edits-json" value="{visual_edits_hidden}" />
   <input type="hidden" name="criteria_json" id="dpb-criteria-json" value="{criteria_hidden}" />
