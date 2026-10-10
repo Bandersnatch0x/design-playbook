@@ -109,3 +109,33 @@ def test_form_controls_inherit_the_shell_font() -> None:
     # Zero specificity, so every longhand on a control class still wins.
     reset = ":where(#dpb-root, #dpb-float-root) :where(button, input, textarea, select)"
     assert "font: inherit" in rule(reset)
+
+
+# Focus indicators are drawn with one solid token. A translucent ring tint
+# disappears on light surfaces, so `--dpb-ring-*` stays a decoration token.
+FOCUS_RULE = re.compile(r"([^{}]*:focus[^{}]*)\{([^}]*)\}")
+
+
+def test_focus_outlines_use_the_solid_focus_token() -> None:
+    outlines = [
+        (sel.strip(), decl.strip())
+        for sel, body in FOCUS_RULE.findall(CSS)
+        for decl in re.findall(r"outline\s*:[^;]*", body)
+    ]
+    assert outlines
+    assert [o for o in outlines if "2px solid var(--dpb-focus)" not in o[1]] == []
+
+
+def test_focus_token_is_opaque_in_both_themes() -> None:
+    values = re.findall(r"--dpb-focus\s*:\s*([^;]+);", CSS)
+    assert values and all(v.strip() == "var(--dpb-accent)" for v in values)
+    for accent in re.findall(r"--dpb-accent\s*:\s*([^;]+);", CSS):
+        assert "rgba" not in accent and "/" not in accent
+
+
+def test_suppressed_outlines_fall_back_to_the_shell_focus_rule() -> None:
+    shell = rule(
+        ":is(#dpb-root, #dpb-float-root) "
+        ":is(button, input, textarea, select, a[href], [tabindex]):focus-visible"
+    )
+    assert "outline: 2px solid var(--dpb-focus)" in shell
