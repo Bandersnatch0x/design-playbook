@@ -25,18 +25,20 @@ Treat as exhaustive for the surface under edit.
 
 ### Loading tiers
 
+Tiers and their boundaries are the `threshold` of `PERF-01@2` in [`../design-playbook/references/rules.md`](../design-playbook/references/rules.md), the single source for these numbers:
+
 ```text
-<300ms      no indicator
-300ms–2s    skeleton (layout stable)
->2s         loader + what is happening
->10s        timeout + retry (or cancel)
+below placeholder-from           no indicator
+placeholder-from to indicator-from   skeleton (layout stable)
+past indicator-from              loader + what is happening
+past timeout-at                  timeout + retry (or cancel)
 ```
 
 **Done when:** every async path in scope maps to a tier with a next action on failure/timeout.
 
 ### Motion
 
-- UI motion ≤ 300ms. Animate `transform` / `opacity` only.
+- UI motion stays within `motion-max`, and hover, focus and typing feedback within `high-frequency-motion-max` (the `threshold` of `CRAFT-08@2`). Animate `transform` / `opacity` only.
 - Each animation names the state change it explains.
 - Honor `prefers-reduced-motion`. Keyboard-triggered actions stay free of decorative motion.
 

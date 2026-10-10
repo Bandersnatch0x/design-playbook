@@ -1,0 +1,44 @@
+{
+  "_comment": "Single home for the external-name boundary (AGENTS.md rule 7). deny: names of outside guidelines, design systems, books and third-party skills that product text must not carry. allowed_identifiers: machine identifiers that contain a denied word but name a platform font or install path, legal only inside code. scope: product surfaces scanned. exempt_files: surfaces where naming the ecosystem is the point.",
+  "deny": [
+    "apple",
+    "google",
+    "microsoft",
+    "human interface guidelines?",
+    "hig",
+    "refactoring ui",
+    "material design",
+    "material you",
+    "fluent design",
+    "wcag",
+    "w3c",
+    "nielsen",
+    "ui-ux-pro-max",
+    "impeccable",
+    "stitch-loop",
+    "taste-skill"
+  ],
+  "allowed_identifiers": [
+    "-apple-system",
+    "Microsoft YaHei",
+    "(\"Microsoft\", \"Edge",
+    "(\"Google\", \"Chrome\""
+  ],
+  "code_suffixes": [".html", ".css", ".js", ".py"],
+  "scope": [
+    "packages/design-playbook/skills/**/*.md",
+    "CONTEXT.md",
+    "AGENTS.md",
+    "packages/design-playbook/mcp/**/*.html",
+    "packages/design-playbook/mcp/**/*.css",
+    "packages/design-playbook/mcp/**/*.js",
+    "packages/design-playbook/mcp/**/*.py"
+  ],
+  "exclude_parts": ["vendor"],
+  "exempt_files": [
+    "README.md",
+    "packages/design-playbook/README.md",
+    "NOTICE",
+    "packages/design-playbook/codex/AGENTS.md"
+  ]
+}

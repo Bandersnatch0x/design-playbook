@@ -17,13 +17,12 @@ Copy quality is registry-owned: `COPY-01/02@1` and `COPY-03@2` (active voice, us
 
 ## Interactive affordance (L4 interactive zones, grill v0.3 Q3.4)
 
-Every L4-declared interactive zone (row, card, button group, clickable unit) must have intentional motion and hover affordance, with purpose stated in the craft review:
+Every L4-declared interactive zone (row, card, button group, clickable unit) states its affordance intent in the craft review: either a hover and pressed response, or an explicit read-only declaration (example (zh): "此区只读，无 hover", meaning "this zone is read-only, no hover"). Hover responses apply only where a fine pointer is present; touch-primary viewports express affordance through shape, labeling, or a pressed state instead. Hover and pressed transitions use the motion token for high-frequency interaction and stay within `high-frequency-motion-max` in `CRAFT-08@2`; dense lists may use an instant state change with no transition. Native desktop targets follow the `native-craft` row conventions instead.
 
-- Default hover and active states have a transition (opacity / transform / background, ~120ms), purpose written in the craft report (e.g. example (zh): "行可点时，提示可进入详情" meaning "row is clickable then hints it leads to detail". Example (zh): "行只读时，不加 hover" meaning "row is read-only then no hover").
-- Static throwaway prototypes must still express the affordance intent. Either provide hover or explicitly declare example (zh): "此区只读，无 hover", meaning "this zone is read-only, no hover". A zone with neither hover nor declaration cannot silently PASS.
+- State the purpose in the craft report (example (zh): "行可点时，提示可进入详情", meaning "row is clickable then hints it leads to detail").
 - Ledger rows in data tables and lists are especially easy to miss: in dense scanning contexts hover is a scannability affordance, not decoration.
 
-**Done when:** every L4 interactive zone has motion and hover purpose (provided or explicitly declared read-only). No zone silently missing hover.
+**Done when:** every L4 interactive zone has a stated affordance intent (response provided or read-only declared), matched to the declared input modality, with no raw duration literal.
 
 ## Charts
 

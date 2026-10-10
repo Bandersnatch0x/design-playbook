@@ -66,6 +66,13 @@ class ValidateGateTests(unittest.TestCase):
         shutil.copy2(ROOT / "README.md", self.root / "README.md")
         shutil.copy2(ROOT / "README-zh.md", self.root / "README-zh.md")
         shutil.copy2(ROOT / "AGENTS.md", self.root / "AGENTS.md")
+        shutil.copy2(ROOT / "CONTEXT.md", self.root / "CONTEXT.md")
+        # The own-UI self-audit (V-6) reads the workbench's shipped style sheet.
+        workbench_css = (
+            "packages/design-playbook-workbench/design_playbook_workbench/web/app.css"
+        )
+        (self.root / workbench_css).parent.mkdir(parents=True)
+        shutil.copy2(ROOT / workbench_css, self.root / workbench_css)
 
     def tearDown(self) -> None:
         self.temp.cleanup()
@@ -465,6 +472,108 @@ class ValidateGateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("G8 CRAFT-01 entry valid", result.stdout)
         self.assertIn("VALIDATION FAILED", result.stdout)
+
+    # --- Stage S gates (ADR-0048): V-2, V-4, V-5, V-6 -----------------------
+
+    def _pkg(self, *parts: str) -> Path:
+        return self.root / "packages" / "design-playbook" / Path(*parts)
+
+    def _edit(self, path: Path, old: str, new: str) -> None:
+        text = path.read_text(encoding="utf-8")
+        self.assertIn(old, text)
+        path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+    def test_tap_probe_drift_from_registry_fails(self) -> None:
+        self._edit(self._pkg("mcp", "evidence", "page_defects.py"),
+                   "TAP_MIN_PX = 24", "TAP_MIN_PX = 20")
+        result = self.validate()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL  evidence tap probe TAP_MIN_PX equals A11Y-04", result.stdout)
+
+    def test_threshold_moved_back_into_the_skill_fails(self) -> None:
+        self._edit(self._pkg("skills", "craft-guard", "SKILL.md"),
+                   "- UI motion stays within", "- UI motion stays under 300ms and within")
+        result = self.validate()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("SKILL.md restates no duration threshold (found", result.stdout)
+
+    def test_measured_threshold_without_threshold_line_fails(self) -> None:
+        self._edit(self._pkg("skills", "design-playbook", "references", "rules.md"),
+                   "threshold: placeholder-from = 300ms; indicator-from = 2s; timeout-at = 10s\n", "")
+        result = self.validate()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("PERF-01: measured-threshold entry has no threshold field", result.stdout)
+
+    def test_thirty_first_registry_entry_trips_the_split_clause(self) -> None:
+        registry = self._pkg("skills", "design-playbook", "references", "rules.md")
+        text = registry.read_text(encoding="utf-8")
+        start = text.index("## CRAFT-11 — ")
+        extra = text[start:].replace("CRAFT-11", "CRAFT-12")
+        registry.write_text(text.rstrip("\n") + "\n\n" + extra, encoding="utf-8")
+        result = self.validate()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL  registry within the single-file limits (31 entries", result.stdout)
+
+    def test_external_name_in_a_skill_fails(self) -> None:
+        craft = self._pkg("skills", "craft-guard", "references", "craft.md")
+        craft.write_text(craft.read_text(encoding="utf-8")
+                         + "\nSee Refactoring UI for spacing.\n", encoding="utf-8")
+        result = self.validate()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("craft.md", result.stdout)
+        self.assertIn("FAIL  no external product, guideline or skill name", result.stdout)
+
+    def test_external_name_in_a_shell_comment_fails(self) -> None:
+        html = self._pkg("mcp", "preview", "control.html")
+        html.write_text(html.read_text(encoding="utf-8")
+                        + "\n<!-- spacing per the HIG -->\n", encoding="utf-8")
+        result = self.validate()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("control.html", result.stdout)
+
+    def test_external_name_in_the_readme_ecosystem_table_passes(self) -> None:
+        readme = self.root / "README.md"
+        readme.write_text(readme.read_text(encoding="utf-8")
+                          + "\n| Refactoring UI | adjacent reading |\n", encoding="utf-8")
+        result = self.validate()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_platform_font_identifiers_in_code_pass(self) -> None:
+        # -apple-system and the like already ship in control.css; the shipped
+        # tree passing at all is the positive case, and a denied word outside
+        # an allowed identifier still fails.
+        css = self._pkg("mcp", "preview", "control.css")
+        css.write_text(css.read_text(encoding="utf-8")
+                       + "\n/* palette after Material Design */\n", encoding="utf-8")
+        result = self.validate()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("control.css", result.stdout)
+        self.assertNotIn("apple-system", result.stdout.split("(V-5)")[1].split("==")[0])
+
+    def test_new_low_contrast_token_fails_the_self_audit(self) -> None:
+        self._edit(self._pkg("mcp", "preview", "control.css"),
+                   "--dpb-soft: #475569;", "--dpb-soft: #A0AEC0;")
+        result = self.validate()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL  own UI meets the registry floors outside the recorded debt", result.stdout)
+        self.assertIn("preview:light:--dpb-soft", result.stdout)
+
+    def test_paid_debt_must_leave_the_ledger(self) -> None:
+        self._edit(self._pkg("mcp", "preview", "control.css"),
+                   "--dpb-muted: #94A3B8;", "--dpb-muted: #475569;")
+        result = self.validate()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL  self-audit debt ledger lists only findings that still fail", result.stdout)
+        self.assertIn("preview:light:--dpb-muted:--dpb-bg", result.stdout)
+
+    def test_self_audit_reads_the_registry_floor(self) -> None:
+        # Read-through: raise the registry's text floor and a token pair that
+        # passes today (soft on surface, 7.13:1 in dark) starts failing.
+        self._edit(self._pkg("skills", "design-playbook", "references", "rules.md"),
+                   "text-contrast >= 4.5:1", "text-contrast >= 7.5:1")
+        result = self.validate()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("preview:dark:--dpb-soft:--dpb-surface", result.stdout)
 
     def test_registry_third_party_source_name_fails_content_lint(self) -> None:
         # G8 content ban (review advisory, R4): naming a third-party source

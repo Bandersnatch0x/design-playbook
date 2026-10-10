@@ -31,6 +31,7 @@ sys.path.insert(0, str(PKG / "scripts"))
 import adapter_drift  # noqa: E402
 import adapter_matrix  # noqa: E402
 import rules_registry  # noqa: E402
+import self_audit  # noqa: E402
 
 failures: list[str] = []
 
@@ -849,7 +850,7 @@ def validate_native_routing() -> None:
     check(web_skip in orchestrator, "orchestrator skips native-craft for Web targets")
 
 
-def validate_registry(banned: re.Pattern[str]) -> None:
+def validate_registry(banned: re.Pattern[str]) -> list[rules_registry.RuleEntry]:
 
     banned_external_sources = re.compile(
         r"\bui-ux-pro-max\b|\bimpeccable\b|\bstitch-loop\b|\btaste-skill\b",
@@ -1075,6 +1076,97 @@ def validate_registry(banned: re.Pattern[str]) -> None:
         )),
         "safety usability and declarations override baseline",
     )
+    return registry_entries
+
+
+def validate_threshold_sources(entries: list[rules_registry.RuleEntry]) -> None:
+    """V-2: a number the registry owns lives only in the registry."""
+    print("\n== Registry thresholds are the single source (V-2) ==")
+    probe = (PKG / "mcp" / "evidence" / "page_defects.py").read_text(encoding="utf-8")
+    match = re.search(r"^TAP_MIN_PX = (\d+)$", probe, re.M)
+    try:
+        floor = rules_registry.threshold(entries, "A11Y-04", "hit-area-floor")
+    except (KeyError, ValueError) as exc:
+        check(False, f"A11Y-04 hit-area-floor readable from the registry: {exc}")
+    else:
+        check(
+            match is not None and float(match.group(1)) == floor.value,
+            "evidence tap probe TAP_MIN_PX equals A11Y-04 hit-area-floor "
+            f"({floor.value:g}px; probe has {match.group(1) if match else 'none'})",
+        )
+    # The craft skills implement PERF-01 and CRAFT-08; they name the terms and
+    # never restate the numbers.
+    literal = re.compile(r"(?<![\w.])\d+(?:\.\d+)?\s?(?:ms|s)\b")
+    craft = PKG / "skills" / "craft-guard"
+    for path in [craft / "SKILL.md", *sorted((craft / "references").glob("*.md"))]:
+        hits = [
+            f"{n}:{m.group(0)}"
+            for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+            for m in literal.finditer(line)
+        ]
+        check(not hits, f"{path.relative_to(ROOT)} restates no duration threshold"
+                        + ("" if not hits else f" (found {', '.join(hits)})"))
+
+
+def validate_registry_split(entries: list[rules_registry.RuleEntry]) -> None:
+    """V-4: the registry's own split clause, enforced."""
+    print("\n== Registry split clause (V-4) ==")
+    groups = {entry.fields.get("capability-domain", "") for entry in entries}
+    single_file = True  # one rules.md until the split lands; the split replaces this check
+    check(
+        not (single_file and (len(entries) > 30 or len(groups) > 3)),
+        f"registry within the single-file limits ({len(entries)} entries <= 30, "
+        f"{len(groups)} capability-domain group(s) <= 3), or split",
+    )
+
+
+def validate_external_terms() -> None:
+    """V-5: product surfaces carry no outside product, guideline or skill name."""
+    print("\n== External-name boundary (V-5) ==")
+    config = _read_json(ROOT / "scripts" / "external_terms.json")
+    deny = re.compile(
+        r"(?<![\w-])(?:" + "|".join(config["deny"]) + r")(?![\w-])", re.I)
+    allowed = [re.escape(term) for term in config["allowed_identifiers"]]
+    exempt = set(config["exempt_files"])
+    paths: set[Path] = set()
+    for pattern in config["scope"]:
+        paths.update(ROOT.glob(pattern))
+    hits: list[str] = []
+    for path in sorted(paths):
+        rel = path.relative_to(ROOT).as_posix()
+        if rel in exempt or set(path.parts) & set(config["exclude_parts"]) or not path.is_file():
+            continue
+        is_code = path.suffix in config["code_suffixes"]
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if is_code and allowed:
+                line = re.sub("|".join(allowed), "", line)
+            for match in deny.finditer(line):
+                hits.append(f"{rel}:{number}: {match.group(0)}")
+    check(not hits, "no external product, guideline or skill name on product surfaces"
+                    + ("" if not hits else " (" + "; ".join(hits[:12]) + ")"))
+
+
+def validate_self_audit(entries: list[rules_registry.RuleEntry]) -> None:
+    """V-6: the plugin's own style sheets against A11Y-03/A11Y-02/A11Y-05."""
+    print("\n== Own-UI self-audit (V-6) ==")
+    ledger_path = PKG / "examples" / "self-audit" / "baseline.json"
+    try:
+        floors = {
+            "text-contrast": rules_registry.threshold(entries, "A11Y-03", "text-contrast").value,
+            "nontext-contrast": max(
+                rules_registry.threshold(entries, "A11Y-03", "nontext-contrast").value,
+                rules_registry.threshold(entries, "A11Y-02", "focus-contrast").value),
+            "text-min": rules_registry.threshold(entries, "A11Y-05", "cjk-text-min").value,
+        }
+    except (KeyError, ValueError) as exc:
+        check(False, f"self-audit thresholds readable from the registry: {exc}")
+        return
+    ledger = self_audit.load_ledger(ledger_path)
+    new, paid = self_audit.compare(self_audit.audit(ROOT, ledger, floors), ledger)
+    check(not new, "own UI meets the registry floors outside the recorded debt"
+                   + ("" if not new else " (" + "; ".join(f"{f.key} {f.detail}" for f in new[:8]) + ")"))
+    check(not paid, "self-audit debt ledger lists only findings that still fail"
+                    + ("" if not paid else " (remove: " + ", ".join(paid[:8]) + ")"))
 
 
 def validate_skill_contracts() -> None:
@@ -1230,7 +1322,11 @@ CHECKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("validate_runtime_surface", (), ("banned",)),
     ("validate_reference_intake", (), ()),
     ("validate_native_routing", (), ()),
-    ("validate_registry", ("banned",), ()),
+    ("validate_registry", ("banned",), ("registry_entries",)),
+    ("validate_threshold_sources", ("registry_entries",), ()),
+    ("validate_registry_split", ("registry_entries",), ()),
+    ("validate_external_terms", (), ()),
+    ("validate_self_audit", ("registry_entries",), ()),
     ("validate_skill_contracts", (), ()),
     ("validate_test_executability", (), ()),
     ("validate_ruff", (), ()),
