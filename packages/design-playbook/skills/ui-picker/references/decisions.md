@@ -33,7 +33,7 @@ status: confirmed-user           # open | compared | confirmed-agent | confirmed
 constraints:
   baseline: DESIGN.md sha256:<digest>   # or waived:<reason> (top-block syntax)
   spec: [l1.scenes, l6.c1]
-  rules: [PERF-01@1]             # pinned ID@version, cross-checked with the registry
+  rules: [PERF-01@2]             # pinned ID@version, cross-checked with the registry
 candidates:                      # C/E: 2-3 flow-map items; R: 0-1 (selection line is enough)
   - {id: A, source: agent, created_at: <ts>, fidelity: description,
      summary: <one line>, deviations: none, assets: []}

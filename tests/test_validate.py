@@ -171,9 +171,9 @@ class ValidateGateTests(unittest.TestCase):
             / "craft-guard" / "references" / "craft.md"
         )
         text = craft.read_text(encoding="utf-8")
-        self.assertIn("COPY-01/02/03@1", text)
+        self.assertIn("COPY-01/02@1", text)
         craft.write_text(
-            text.replace("COPY-01/02/03@1", "COPY-01/02/03@2"), encoding="utf-8"
+            text.replace("COPY-01/02@1", "COPY-01/02@2"), encoding="utf-8"
         )
 
         result = self.validate()

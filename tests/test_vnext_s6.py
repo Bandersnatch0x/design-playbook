@@ -202,7 +202,7 @@ class DogfoodFixtureTests(unittest.TestCase):
             run, project = _copy_fixture(DOG_BASE, tmp)
             craft = (run / "craft-guard.md").read_text(encoding="utf-8")
             lines = [line for line in craft.splitlines()
-                     if not line.startswith("| PERF-01@1 ")]
+                     if not line.startswith("| PERF-01@2 ")]
             _write(run / "craft-guard.md", "\n".join(lines) + "\n")
             result = _validate(run, project)
             self.assertEqual(result.returncode, 1)

@@ -11,21 +11,28 @@ Registry: `skills/design-playbook/references/rules.md`, full catalog (P2 run). S
 | CRAFT-05@1 | applicable | - | clear | 控件几何各自特定；无泛化胶囊 | 按钮与复选框使用各自控件半径 | 无品牌几何例外诉求 | - |
 | CRAFT-06@1 | applicable | - | clear | 紧凑控制台层级用结构与字重 | 面板内无 display 字号令牌 | 无 hero 场景主张 | - |
 | CRAFT-07@1 | applicable | - | clear | 高频动作用图标按钮且有无障碍名 | 图标按钮带可访问标签 | 破坏性动作保留显式文字 | - |
-| CRAFT-08@1 | not-applicable | 本 run 表面无动效（导出反馈用状态文字与 busy 态，未引入动画） | - | - | - | 无动效面可查 | - |
+| CRAFT-08@2 | not-applicable | 本 run 表面无动效（导出反馈用状态文字与 busy 态，未引入动画） | - | - | - | 无动效面可查 | - |
 | A11Y-01@1 | applicable | - | hit | 超限 toast 节点无可访问名称与 role | toast 组件未绑定 role=alert 与名称 | 无已声明豁免 | toast 增加 role=alert 与可读名称（含超限数值）；组件语义入 components 声明 |
 | RESP-01@1 | applicable | - | clear | 声明视口 1280x800 下主路径可用 | 响应式行为符合声明视口组 | 契约仅声明桌面视口 | - |
 | I18N-01@1 | not-applicable | 单语控制台，无 i18n 声明（无 i18n.* 契约字段，L1 未声明多语言用户群） | - | - | - | 单语声明成立 | - |
-| PERF-01@1 | blocked | 性能感知需运行时度量，本 run provider 缺度量面（measurement 层不可采） | - | 导出等待仅观察到 busy 态 | 度量面缺席，无法判定反馈与耗时的相称性 | 无法在不承诺阈值的情况下检查例外 | 补采运行时度量后重评；缺口的证据语义见 point-back 覆盖声明 |
-| SEC-01@1 | not-applicable | 声明范围无敏感操作新增（导出非敏感数据；隐藏敏感列由 column_scope 假设排除） | - | - | - | 无敏感面可查 | - |
+| PERF-01@2 | blocked | 性能感知需运行时度量，本 run provider 缺度量面（measurement 层不可采） | - | 导出等待仅观察到 busy 态 | 度量面缺席，无法判定反馈与耗时的相称性 | 无法在不承诺阈值的情况下检查例外 | 补采运行时度量后重评；缺口的证据语义见 point-back 覆盖声明 |
+| SEC-01@2 | not-applicable | 声明范围无敏感操作新增（导出非敏感数据；隐藏敏感列由 column_scope 假设排除） | - | - | - | 无敏感面可查 | - |
 | COPY-01@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档（2026-08-14）；主动语态与动作命名一致性审查所需的全流程文案清单未采集 | - | - | - | - | - |
 | COPY-02@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；用户侧命名审查所需的界面名词与实现命名对照未采集 | - | - | - | - | - |
-| COPY-03@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；错误信息语气审查所需的错误态文案样本未采集 | - | - | - | - | - |
-| A11Y-02@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；可见键盘焦点判定所需的聚焦态截图与键盘走查未采集（a11y 树无法证明视觉属性） | - | - | - | - | - |
-| CRAFT-09@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；归档缺审计面样式源——filled-ui.md 为静态替身描述，无填充面样式源文件归档 | - | - | - | - | - |
+| COPY-03@2 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；错误信息语气审查所需的错误态文案样本未采集 | - | - | - | - | - |
+| A11Y-02@2 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；可见键盘焦点判定所需的聚焦态截图与键盘走查未采集（a11y 树无法证明视觉属性） | - | - | - | - | - |
+| CRAFT-09@2 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；归档缺审计面样式源——filled-ui.md 为静态替身描述，无填充面样式源文件归档 | - | - | - | - | - |
 | CRAFT-10@1 | blocked | 条目 2026-08-28 注册，晚于本 run 存档；归档缺审计面源标记——filled-ui.md 为静态替身描述；既有截图仅覆盖错误态，无结构装置的视觉捕捉 | - | - | - | - | - |
 | DECIDE-01@1 | applicable | - | clear | 选中方向为按周命名模式（compare 档轻量比较），不落入 2026-08 记录的自默认外观样貌；DD-0001 为 record 档，不在本规则范围 | DD-0002 理由可回溯 l1.target_user 比较轴（周频归档场景下检索是主任务）——引用 brief 具体事实而非通用措辞 | 常规方向经比较矩阵沿 brief 轴证成，非未审视默认；无基线默认方向身份声明 | - |
 
 注：2026-08-28 注册批（COPY-01/02/03、A11Y-02、CRAFT-09/10、DECIDE-01）晚于本 run 存档；按三态谓词补记——blocked 行在理由列点名缺失的证据面；DECIDE-01 依归档内可读的决策报告求值为 applicable。
-| STATE-01@1 | applicable | - | clear | 批量导出触发钮 busy/disabled 守卫（控件自身标签即操作名，pending 区域限于触发钮） | Fill 声明 busy state while exporting + busy/disabled guard | 单帧完成例外不成立（批量导出为长操作） | - |
-| STATE-02@1 | blocked | 静态夹具无数据源，首载空/筛选空均不可达 | - | 表格列表区声明在场，空态分支缺席 | 无数据源可供触发空态 | - | 接入数据面后补评首载空与筛选空呈现 |
-| STATE-03@1 | applicable | - | clear | cap 上限 toast（role=alert + 可读名称含上限值） | Fill 声明 toast 承载上限拒绝 | 上限拒绝为失败路径的可恢复呈现（出口=调整范围后再导出） | - |
+| STATE-01@2 | applicable | - | clear | 批量导出触发钮 busy/disabled 守卫（控件自身标签即操作名，pending 区域限于触发钮） | Fill 声明 busy state while exporting + busy/disabled guard | 单帧完成例外不成立（批量导出为长操作） | - |
+| STATE-02@2 | blocked | 静态夹具无数据源，首载空/筛选空均不可达 | - | 表格列表区声明在场，空态分支缺席 | 无数据源可供触发空态 | - | 接入数据面后补评首载空与筛选空呈现 |
+| STATE-03@2 | applicable | - | clear | cap 上限 toast（role=alert + 可读名称含上限值） | Fill 声明 toast 承载上限拒绝 | 上限拒绝为失败路径的可恢复呈现（出口=调整范围后再导出） | - |
+| A11Y-03@1 | blocked | 条目 2026-10-10 注册，晚于本 run 存档；各外观下的计算色对比度测量未采集 | - | - | - | - | - |
+| A11Y-04@1 | blocked | 条目 2026-10-10 注册，晚于本 run 存档；各声明视口下的命中区探针行未采集 | - | - | - | - | - |
+| A11Y-05@1 | blocked | 条目 2026-10-10 注册，晚于本 run 存档；计算字号与 200% 文本缩放截图未采集 | - | - | - | - | - |
+| A11Y-06@1 | blocked | 条目 2026-10-10 注册，晚于本 run 存档；灰度截图与状态绑定走查未采集 | - | - | - | - | - |
+| SEC-02@1 | blocked | 条目 2026-10-10 注册，晚于本 run 存档；临时视图的 Esc / Return / Tab 键盘走查未采集 | - | - | - | - | - |
+| STATE-04@1 | blocked | 条目 2026-10-10 注册，晚于本 run 存档；通知出现与消失的时间戳及 live-region 语义未采集 | - | - | - | - | - |
+| CRAFT-11@1 | blocked | 条目 2026-10-10 注册，晚于本 run 存档；样式源码与声明刻度的比对未采集 | - | - | - | - | - |

@@ -14,7 +14,7 @@ the same field-block style as the rule registry:
     constraints:
       baseline: DESIGN.md sha256:<digest>
       spec: [l1.scenes, l6.c1]
-      rules: [PERF-01@1]
+      rules: [PERF-01@2]
     candidates:
       - {id: A, source: agent, created_at: <ts>, fidelity: description,
          summary: <one line>, deviations: none, assets: []}

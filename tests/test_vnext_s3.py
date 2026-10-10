@@ -396,7 +396,7 @@ class G8RunRegistryTests(unittest.TestCase):
     def test_duplicate_row_detected(self) -> None:
         line = next(
             line for line in P2_CRAFT.splitlines()
-            if line.startswith("| SEC-01@1 |"))
+            if line.startswith("| SEC-01@2 |"))
         self.assertIn(
             "G8.run_duplicate_row",
             _rules(check_g8_run(P2_CRAFT + line + "\n", self.entries, "P2")))

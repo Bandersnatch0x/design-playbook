@@ -875,11 +875,15 @@ def validate_registry(banned: re.Pattern[str]) -> None:
         # Issue #102 batch: copy family, keyboard focus, source-craft pair,
         # decision hygiene — appended after SEC-01 in registration order.
         + ["COPY-01", "COPY-02", "COPY-03", "A11Y-02"]
-        + list(_registry_craft_ids[8:])
+        + list(_registry_craft_ids[8:10])
         + ["DECIDE-01"]
         # 2026-09-19 batch: state-completeness family (pending / zero-data /
         # failure feedback) — appended in registration order.
         + ["STATE-01", "STATE-02", "STATE-03"]
+        # 2026-10-10 Stage S batch (ADR-0048): measured accessibility floors,
+        # dialog semantics, transient feedback and scale conformance.
+        + ["A11Y-03", "A11Y-04", "A11Y-05", "A11Y-06", "SEC-02", "STATE-04"]
+        + list(_registry_craft_ids[10:])
     )
     registry_ids = tuple(entry.id for entry in registry_entries)
     check(
@@ -960,8 +964,8 @@ def validate_registry(banned: re.Pattern[str]) -> None:
 
     detector_ids = _registry_craft_ids[:8]
     check(
-        _registry_craft_ids[8:] == ("CRAFT-09", "CRAFT-10"),
-        "CRAFT fixtures cover CRAFT-01..08; CRAFT-09/10 recorded as "
+        _registry_craft_ids[8:] == ("CRAFT-09", "CRAFT-10", "CRAFT-11"),
+        "CRAFT fixtures cover CRAFT-01..08; CRAFT-09/10/11 recorded as "
         "registry-gated without example-fixture coverage",
     )
 

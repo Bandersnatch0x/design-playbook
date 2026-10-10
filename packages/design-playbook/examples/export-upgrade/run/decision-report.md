@@ -37,14 +37,14 @@ status: invalidated
 constraints:
   baseline: DESIGN.md sha256:3fda06eff9714a24e23f6b6b75443b449313d63675512bd848f618135b9f9a69
   spec: [l1.scenes, l6.c1]
-  rules: [PERF-01@1, CRAFT-01@1]
+  rules: [PERF-01@2, CRAFT-01@1]
 candidates:
   - {id: A, source: agent, created_at: 2026-08-14T10:58:00Z, fidelity: description, summary: 行内进度条嵌入各选中行 + 工具列总进度（强化 action region）, deviations: none, assets: []}
   - {id: B, source: provider-adapter, adapter: provider-a, created_at: 2026-08-14T11:00:00Z, fidelity: sketch, summary: 启用全局 status region 收纳导出任务（主列表仅禁用 + 行内微标）, deviations: none, assets: [candidates/B.html sha256:95647183de6f57d15d959211b863d79e4722c5c2a5701f46cd9e5c9f8d2b09e8]}
 comparison:
   axes:
     - {axis: 任务适配·导出中切页 (l1.scenes), A: 不利——切页后状态散在行内不可查, B: 支持——全局一处可查}
-    - {axis: 感知反馈相称性 (PERF-01@1), A: 部分——短导出足够长导出无持续感, B: 支持——长导出有持续进度感}
+    - {axis: 感知反馈相称性 (PERF-01@2), A: 部分——短导出足够长导出无持续感, B: 支持——长导出有持续进度感}
     - {axis: 基线·布局段 (DESIGN.md), A: 遵循——不新增 region, B: 遵循——启用既有 status region 惯例}
   tradeoffs: "A 以上下文邻近换操作区占用与切页丢失；B 以全局可见换离上下文远"
 selection:

@@ -64,7 +64,10 @@ class RegistryTests(unittest.TestCase):
                "COPY-01", "COPY-02", "COPY-03", "A11Y-02", "CRAFT-09",
                "CRAFT-10", "DECIDE-01",
                # 2026-09-19 batch: state-completeness family.
-               "STATE-01", "STATE-02", "STATE-03"],
+               "STATE-01", "STATE-02", "STATE-03",
+               # 2026-10-10 Stage S batch (ADR-0048).
+               "A11Y-03", "A11Y-04", "A11Y-05", "A11Y-06", "SEC-02",
+               "STATE-04", "CRAFT-11"],
         )
         self.assertEqual(
             rules_registry.validate_registry(entries), [])
@@ -76,7 +79,9 @@ class RegistryTests(unittest.TestCase):
             entry_id for entry_id, entry in by_id.items()
             if entry.provenance == "placeholder"
         }
-        self.assertEqual(placeholders, {"I18N-01", "PERF-01", "SEC-01"})
+        # PERF-01 and SEC-01 left placeholder status at v2, when the first
+        # gained its threshold and the second its full statement.
+        self.assertEqual(placeholders, {"I18N-01"})
         for entry_id in placeholders:
             for key in rules_registry.APPLICABILITY_KEYS:
                 self.assertTrue(
@@ -184,14 +189,14 @@ class SevenColumnRowTests(unittest.TestCase):
             rules_registry.validate_craft_rows(rows, entries), [])
 
     def test_blank_not_applicable_reason_rejected(self) -> None:
-        row = ("| CRAFT-08@1 | not-applicable | - | - | - | - | - | - |")
+        row = ("| CRAFT-08@2 | not-applicable | - | - | - | - | - | - |")
         entries = rules_registry.parse_registry(REGISTRY_TEXT)
         errors = rules_registry.validate_craft_rows(
             rules_registry.parse_craft_rows(row + "\n"), entries)
         self.assertTrue(any("observable reason" in e for e in errors))
 
     def test_result_present_only_when_applicable(self) -> None:
-        row = ("| CRAFT-08@1 | blocked | motion source missing | clear "
+        row = ("| CRAFT-08@2 | blocked | motion source missing | clear "
                "| - | - | - | - |")
         entries = rules_registry.parse_registry(REGISTRY_TEXT)
         errors = rules_registry.validate_craft_rows(

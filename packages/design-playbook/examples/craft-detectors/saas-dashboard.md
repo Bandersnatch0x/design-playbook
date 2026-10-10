@@ -20,7 +20,7 @@ Worked fixture for the seven-column registry audit format. Rendered and source d
 | CRAFT-05@1 | not-applicable | Surface declares one restrained standard control radius in design tokens; no pill or shape-geometry variation face is in scope | - | - | - | No geometry face to check | - |
 | CRAFT-06@1 | applicable | - | clear | Panel headings fit dense dashboard hierarchy | Display type token is absent inside panels | No hero context claimed | - |
 | CRAFT-07@1 | applicable | - | clear | Refresh and close use named icon buttons; destructive action keeps text | IconButton has accessible labels and destructive Button remains explicit | High-risk action needs text | - |
-| CRAFT-08@1 | blocked | Motion source was not included in review input; static capture cannot prove transition purpose or reduced-motion behavior | - | Static capture shows a CTA badge mid-animation | Motion source absent from review input | No exception can be checked without source | Provide motion source and interaction trace before complete craft Pass |
+| CRAFT-08@2 | blocked | Motion source was not included in review input; static capture cannot prove transition purpose or reduced-motion behavior | - | Static capture shows a CTA badge mid-animation | Motion source absent from review input | No exception can be checked without source | Provide motion source and interaction trace before complete craft Pass |
 
 ## Expected contract observations
 

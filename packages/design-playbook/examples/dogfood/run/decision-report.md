@@ -37,14 +37,14 @@ status: invalidated
 constraints:
   baseline: DESIGN.md sha256:8f4d2b61c7a3e95d0f8c2a1b6e9d4c7f3a5b8d1e0c2f4a6b8d0e2c4f6a8b0d2f
   spec: [l1.scenes, l6.c4]
-  rules: [PERF-01@1, CRAFT-01@1]
+  rules: [PERF-01@2, CRAFT-01@1]
 candidates:
   - {id: A, source: agent, created_at: 2026-08-14T09:22:00Z, fidelity: description, summary: 顶栏轻量计数增强（计数 + 最近 3 条 toast 式通知，强化既有 topbar）, deviations: none, assets: []}
   - {id: B, source: provider-adapter, adapter: provider-a, created_at: 2026-08-14T09:24:00Z, fidelity: sketch, summary: 启用全局 run console region（汇总 + feed + 全局控制；主列表仅禁用 + 行内微标）, deviations: none, assets: [candidates/console-region.html sha256:547cbb919d2124c2536942df8eca134e8bfcbad8ebd03c8086c7d025e0902da8]}
 comparison:
   axes:
     - {axis: 任务适配·运行中切页 (l1.scenes), A: 不利——切页后计数无条目可续读, B: 支持——全局一处可续读}
-    - {axis: 感知反馈相称性 (PERF-01@1), A: 部分——长运行无持续进度感, B: 支持——feed 条目级进度持续}
+    - {axis: 感知反馈相称性 (PERF-01@2), A: 部分——长运行无持续进度感, B: 支持——feed 条目级进度持续}
     - {axis: 基线·布局段 (DESIGN.md), A: 遵循——不新增 region, B: 突破——顶栏不承载任务级数据惯例被 region 取代（呈报用户裁决）}
   tradeoffs: "A 以轻量换跨页不可续读；B 以新 region 换全局可查（需基线漂移复核）"
 selection:
