@@ -100,3 +100,32 @@ code. This record exists so that each stage is authorized before it is built.
   were not run are reported as not run.
 - This bounded exception does not satisfy the external trial gate. The ADR-0045
   spend gate otherwise remains in force, and its Day-90 review is not moved.
+
+## Amendment (2026-10-10): maintainer decisions recorded
+
+The maintainer confirmed on 2026-10-10 that every recommended decision in the
+remediation plan is adopted. The ones this record governs:
+
+- Defect repairs to the run console and the workbench, made in place, are not
+  new gates or registry entries, so they sit outside the ADR-0045 freeze.
+  They change no stage boundary here.
+- Stage S is the authority for the spec track (Decision 2). `SEC-01` is revised
+  in place to v2, not forked, because a fork would take the registry past its
+  30-entry split limit before the split exists. The registry's threshold field
+  uses the structured syntax, and the numbers the spec track proposed are
+  adopted as this registry's own rules.
+- Build and runtime (Decision 5): option (a), no build step, for Stage P. The
+  choice for the run console and the workbench is made by the amendment that
+  opens each of them, if one ever does.
+- Stages R and W stay unauthorized (Decision 4).
+- Only the maintainer opens a stage, by a dated amendment committed on its own
+  (Decision 1). The rollback switch follows Decision 6 as written.
+- Operating-system names are platform identifiers, not external design
+  authorities, and the runtime's package names may appear in this record as
+  code identifiers only. Where ADR-0007 and the external-terms rule disagree,
+  the external-terms rule governs.
+- The plugin's own-UI self-audit becomes its own record (ADR-0049), because it
+  is a standing product rule that must outlive this migration.
+
+Stage P is not opened by this amendment. It still opens only by its own
+amendment after Stage S lands and the in-place repair batch is green.
