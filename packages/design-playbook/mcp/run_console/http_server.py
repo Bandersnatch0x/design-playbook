@@ -372,7 +372,7 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
         """Serve the immutable static UI shell (RCV1-007).
 
         Browser navigations and subresource loads cannot carry an
-        Authorization header, so the four exact UI routes are served to
+        Authorization header, so the five exact UI routes are served to
         requests that present no bearer token. Any request that does
         present a token is an API request and keeps pure API semantics.
         The bytes are frozen at server start; there is no filesystem

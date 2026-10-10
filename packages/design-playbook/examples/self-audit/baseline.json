@@ -2,15 +2,23 @@
   "surfaces": [
     {
       "name": "preview",
-      "stylesheet": "packages/design-playbook/mcp/preview/control.css"
+      "stylesheets": [
+        "packages/design-playbook/mcp/_shared/tokens.css",
+        "packages/design-playbook/mcp/preview/control.css"
+      ]
     },
     {
       "name": "run-console",
-      "stylesheet": "packages/design-playbook/mcp/run_console/app.css"
+      "stylesheets": [
+        "packages/design-playbook/mcp/_shared/tokens.css",
+        "packages/design-playbook/mcp/run_console/app.css"
+      ]
     },
     {
       "name": "workbench",
-      "stylesheet": "packages/design-playbook-workbench/design_playbook_workbench/web/app.css"
+      "stylesheets": [
+        "packages/design-playbook-workbench/design_playbook_workbench/web/app.css"
+      ]
     }
   ],
   "text_pairs": [

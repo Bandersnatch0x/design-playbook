@@ -1322,13 +1322,17 @@ class PinAnnotationBridgeTests(unittest.TestCase):
         )
 
     def test_bridge_draw_style_matches_the_parent_theme_tokens(self) -> None:
-        """The iframe's inlined draw style must track control.css.
+        """The iframe's inlined draw style must track the shared tokens.
 
         The sandboxed frame cannot read the parent's custom properties, so the
         bridge inlines literal values. That copy is the production path — when
-        it drifts, the dashed #E11D48 stroke in control.css is not what any
+        it drifts, the dashed #E11D48 stroke in tokens.css is not what any
         reviewer ever sees, and nothing else catches it.
         """
+        tokens = (
+            Path(preview_control.__file__).parent.parent
+            / "_shared" / "tokens.css"
+        ).read_text(encoding="utf-8")
         css = (
             Path(preview_control.__file__)
             .with_name("control.css")
@@ -1339,8 +1343,8 @@ class PinAnnotationBridgeTests(unittest.TestCase):
         for token, expected in (("--dpb-draw-stroke", "#E11D48"),
                                 ("--dpb-draw-ink", "#FFFFFF")):
             self.assertIn(
-                f"{token}: {expected}", css,
-                f"control.css light-theme {token} changed; update the bridge copy",
+                f"{token}: {expected}", tokens,
+                f"tokens.css light-theme {token} changed; update the bridge copy",
             )
             self.assertIn(
                 expected, bridge,

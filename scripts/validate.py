@@ -221,6 +221,8 @@ def validate_bundled_mcp() -> None:
     for resource_name in ("pin_bridge.js", "control.html", "control.css", "control.js", "control.review.js"):
         check((PKG / "mcp" / "preview" / resource_name).is_file(),
               f"bundled preview frontend resource at mcp/preview/{resource_name}")
+    check((PKG / "mcp" / "_shared" / "tokens.css").is_file(),
+          "bundled shared token file at mcp/_shared/tokens.css")
     check((PKG / "mcp" / "evidence" / "server.py").is_file(),
           "bundled evidence runtime at mcp/evidence/server.py")
 
@@ -1169,6 +1171,37 @@ def validate_self_audit(entries: list[rules_registry.RuleEntry]) -> None:
                     + ("" if not paid else " (remove: " + ", ".join(paid[:8]) + ")"))
 
 
+# G-2 (U-07): each token file and every file that reads it. The shared file
+# feeds the Preview shell and the Run Console; the workbench still carries
+# its own block until it takes a copy of the shared one.
+TOKEN_GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("shared", "packages/design-playbook/mcp/_shared/tokens.css", tuple(
+        f"packages/design-playbook/mcp/{rel}" for rel in (
+            "preview/control.css", "preview/control.html", "preview/control.js",
+            "preview/control.review.js", "preview/control.react.js",
+            "run_console/app.css", "run_console/app.html", "run_console/app.js"))),
+    ("workbench", "packages/design-playbook-workbench/design_playbook_workbench/web/app.css",
+     ("packages/design-playbook-workbench/design_playbook_workbench/web/app.css",)),
+)
+
+
+def validate_token_contract() -> None:
+    """G-2: every --dpb token is set for the light theme and read somewhere."""
+    print("\n== Token contract (G-2) ==")
+    gaps: list[str] = []
+    for name, definitions, consumers in TOKEN_GROUPS:
+        source = ROOT / definitions
+        if not source.is_file():
+            gaps.append(f"{name}:missing:{definitions}")
+            continue
+        readers = "\n".join((ROOT / rel).read_text(encoding="utf-8")
+                            for rel in consumers if (ROOT / rel).is_file())
+        gaps += [f"{name}:{gap}" for gap in
+                 self_audit.token_gaps(source.read_text(encoding="utf-8"), readers)]
+    check(not gaps, "every --dpb token resolves in both themes and is used (G-2)"
+                    + ("" if not gaps else " (" + "; ".join(gaps[:12]) + ")"))
+
+
 def validate_skill_contracts() -> None:
     print("== Dogfood 004 regression guards ==")
 
@@ -1327,6 +1360,7 @@ CHECKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("validate_registry_split", ("registry_entries",), ()),
     ("validate_external_terms", (), ()),
     ("validate_self_audit", ("registry_entries",), ()),
+    ("validate_token_contract", (), ()),
     ("validate_skill_contracts", (), ()),
     ("validate_test_executability", (), ()),
     ("validate_ruff", (), ()),

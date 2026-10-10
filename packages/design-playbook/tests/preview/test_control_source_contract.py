@@ -10,6 +10,7 @@ from pathlib import Path
 
 PREVIEW = Path(__file__).resolve().parents[2] / "mcp" / "preview"
 CSS = (PREVIEW / "control.css").read_text(encoding="utf-8")
+TOKENS = (PREVIEW.parent / "_shared" / "tokens.css").read_text(encoding="utf-8")
 
 
 def rule(selector: str) -> str:
@@ -127,9 +128,9 @@ def test_focus_outlines_use_the_solid_focus_token() -> None:
 
 
 def test_focus_token_is_opaque_in_both_themes() -> None:
-    values = re.findall(r"--dpb-focus\s*:\s*([^;]+);", CSS)
+    values = re.findall(r"--dpb-focus\s*:\s*([^;]+);", TOKENS)
     assert values and all(v.strip() == "var(--dpb-accent)" for v in values)
-    for accent in re.findall(r"--dpb-accent\s*:\s*([^;]+);", CSS):
+    for accent in re.findall(r"--dpb-accent\s*:\s*([^;]+);", TOKENS):
         assert "rgba" not in accent and "/" not in accent
 
 

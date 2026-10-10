@@ -97,7 +97,7 @@ class UIStaticAnalysisTest(unittest.TestCase):
         self.assertNotIn("<form", _HTML)
 
     def test_html_declares_language_and_viewport(self) -> None:
-        self.assertIn('<html lang="en">', _HTML)
+        self.assertRegex(_HTML, r"<html lang=\"en\"[ >]")
         self.assertIn('name="viewport"', _HTML)
         self.assertIn("<h1>", _HTML)
 

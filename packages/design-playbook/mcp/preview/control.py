@@ -114,6 +114,10 @@ def _load_resources() -> tuple[str, str, str, str]:
         if marker not in js_tpl:
             raise RuntimeError("control.js is missing the review insertion marker")
         js_tpl = js_tpl.replace(marker, review_tpl, 1)
+        # The shared token file (mcp/_shared/tokens.css) comes first so
+        # control.css reads the same palette the Run Console serves.
+        tokens = (HERE.parent / "_shared" / "tokens.css").read_text(encoding="utf-8")
+        css_tpl = tokens + "\n" + css_tpl
         return html_tpl, css_tpl, js_tpl, review_tpl
     except (OSError, UnicodeError) as exc:
         raise RuntimeError(

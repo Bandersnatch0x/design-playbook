@@ -1,43 +1,9 @@
 /* Run Console v1 — read-only UI (RCV1-007).
-   Hallmark design system tokens & theme: slate surfaces, blue primary,
-   subtle diffused shadows, optical alignment, and zero layout shift. */
+   Tokens and theme come from tokens.css (mcp/_shared), loaded ahead of this
+   sheet: slate surfaces, blue primary, zero layout shift. */
 
 :root {
-  --dpb-text-xs: 12px;
-  --dpb-bg: #F8FAFC;
-  --dpb-surface: #F1F5F9;
-  --dpb-elev: #FFFFFF;
-  --dpb-line: #E2E8F0;
-  --dpb-line-strong: #CBD5E1;
-  --dpb-ink: #0F172A;
-  --dpb-muted: #5B6B80;
-  --dpb-soft: #475569;
-  --dpb-accent: #2563EB;
-  --dpb-accent-ink: #FFFFFF;
-  --dpb-accent-deep: #1D4ED8;
-  --dpb-accent-wash: #EFF6FF;
-  --dpb-accent-chip-bg: #EFF6FF;
-  --dpb-accent-chip-border: #BFDBFE;
-  --dpb-accent-soft: #1D4ED8;
-  --dpb-danger: #BE123C;
-  --dpb-danger-wash: #FFF1F2;
-  --dpb-success: #047857;
-  --dpb-success-wash: #ECFDF5;
-  --dpb-tertiary: #B45309;
-  --dpb-tertiary-wash: #FFFBEB;
-  --dpb-tertiary-border: #FDE68A;
-  --dpb-shadow-pill: 0 6px 24px -4px rgba(15,23,42,.14), 0 2px 6px -1px rgba(15,23,42,.06);
-  --dpb-shadow-tool: 0 4px 20px -2px rgba(15,23,42,.06), 0 2px 6px -1px rgba(15,23,42,.03);
-  --dpb-shadow-pop: 0 12px 32px -8px rgba(15,23,42,.18), 0 2px 8px rgba(15,23,42,.06);
-  --dpb-shadow-glow: 0 0 24px -2px rgba(37,99,235,.3);
-  --dpb-ring-accent: rgba(37,99,235,.25);
-  --dpb-ring-danger: rgba(225,29,72,.25);
-  --dpb-radius: 8px;
-  --dpb-radius-lg: 12px;
-  --dpb-radius-sm: 6px;
-  --dpb-focus: #2563EB;
-
-  /* Aliases mapped to Hallmark contract */
+  /* Aliases over the shared tokens (tokens.css) */
   --bg: var(--dpb-bg);
   --surface: var(--dpb-elev);
   --surface-dim: var(--dpb-surface);
@@ -61,40 +27,6 @@
 
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --dpb-bg: #0F1218;
-    --dpb-surface: #1E2430;
-    --dpb-elev: #252B38;
-    --dpb-line: #2C3444;
-    --dpb-line-strong: #3D475A;
-    --dpb-ink: #F3F4F6;
-    --dpb-muted: #9AA3B2;
-    --dpb-soft: #C5CBD6;
-    --dpb-accent: #60A5FA;
-    --dpb-accent-ink: #0F172A;
-    --dpb-accent-deep: #2563EB;
-    --dpb-accent-wash: rgba(59,130,246,.14);
-    --dpb-accent-chip-bg: rgba(59,130,246,.14);
-    --dpb-accent-chip-border: rgba(59,130,246,.35);
-    --dpb-accent-soft: #93C5FD;
-    --dpb-danger: #F87171;
-    --dpb-danger-wash: rgba(248,113,113,.12);
-    --dpb-success: #34D399;
-    --dpb-success-wash: rgba(52,211,153,.12);
-    --dpb-tertiary: #FBBF24;
-    --dpb-tertiary-wash: rgba(251,191,36,.12);
-    --dpb-tertiary-border: rgba(251,191,36,.3);
-    --dpb-shadow-pill: 0 8px 28px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.2);
-    --dpb-shadow-tool: 0 8px 24px rgba(0,0,0,.4);
-    --dpb-shadow-pop: 0 12px 32px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.3);
-    --dpb-shadow-glow: 0 0 24px -2px rgba(59,130,246,.4);
-    --dpb-ring-accent: rgba(59,130,246,.3);
-    --dpb-ring-danger: rgba(248,113,113,.3);
-    --dpb-focus: #3B82F6;
-  }
 }
 
 * {

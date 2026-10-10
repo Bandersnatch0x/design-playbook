@@ -103,15 +103,45 @@ def contrast(fg: str, bg: str, floor: str) -> float | None:
     return (high + 0.05) / (low + 0.05)
 
 
+def token_gaps(definitions: str, consumers: str) -> list[str]:
+    """G-2 findings for one token file and the text that reads it.
+
+    ``dark-only:<token>``: set by a dark block but not by the light one, so
+    the light theme has no value for it. ``undefined:<token>``: read through
+    ``var()`` with no fallback but never set in the light block. ``unused:
+    <token>``: set but read nowhere.
+    """
+    strip = lambda text: re.sub(r"/\*.*?\*/", "", text, flags=re.S)  # noqa: E731
+    light: set[str] = set()
+    dark: set[str] = set()
+    for context, selector, body in _blocks(definitions):
+        if selector.startswith("@"):
+            continue
+        names = {k for k, _ in _PROP.findall(body) if k.startswith("--dpb-")}
+        (dark if "dark" in selector or "dark" in context else light).update(names)
+    text = strip(definitions) + "\n" + strip(consumers)
+    used = set(re.findall(r"var\(\s*(--dpb-[\w-]+)", text))
+    bare = set(re.findall(r"var\(\s*(--dpb-[\w-]+)\s*\)", text))
+    return ([f"dark-only:{name}" for name in sorted(dark - light)]
+            + [f"undefined:{name}" for name in sorted(bare - light - dark)]
+            + [f"unused:{name}" for name in sorted((light | dark) - used)])
+
+
+def surface_sheets(surface: dict) -> list[str]:
+    """The style sheets a surface loads, shared token file first."""
+    return list(surface.get("stylesheets") or [surface["stylesheet"]])
+
+
 def audit(root: Path, ledger: dict, floors: dict[str, float]) -> list[Finding]:
     """Every contrast and size finding across the ledger's surfaces."""
     findings: list[Finding] = []
     for surface in ledger["surfaces"]:
-        sheet = root / surface["stylesheet"]
-        if not sheet.is_file():
-            findings.append(Finding(f"{surface['name']}:missing-stylesheet", surface["stylesheet"]))
+        missing = [rel for rel in surface_sheets(surface) if not (root / rel).is_file()]
+        if missing:
+            findings.append(Finding(f"{surface['name']}:missing-stylesheet", ", ".join(missing)))
             continue
-        css = sheet.read_text(encoding="utf-8")
+        css = "\n".join((root / rel).read_text(encoding="utf-8")
+                        for rel in surface_sheets(surface))
         for appearance, tokens in sorted(appearance_tokens(css).items()):
             floor = tokens.get("--dpb-bg", "#ffffff")
             for kind, pairs in (("text", ledger["text_pairs"]), ("nontext", ledger["nontext_pairs"])):

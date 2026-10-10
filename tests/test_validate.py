@@ -550,8 +550,31 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("control.css", result.stdout)
         self.assertNotIn("apple-system", result.stdout.split("(V-5)")[1].split("==")[0])
 
+    def test_dark_only_token_fails_the_token_gate(self) -> None:
+        self._edit(self._pkg("mcp", "_shared", "tokens.css"),
+                   "--dpb-overlay: #2A303D;", "--dpb-overlay: #2A303D;\n  --dpb-dusk: #111111;")
+        result = self.validate()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL  every --dpb token resolves in both themes and is used (G-2)", result.stdout)
+        self.assertIn("shared:dark-only:--dpb-dusk", result.stdout)
+
+    def test_undefined_token_reference_fails_the_token_gate(self) -> None:
+        css = self._pkg("mcp", "run_console", "app.css")
+        css.write_text(css.read_text(encoding="utf-8")
+                       + "\n.x { color: var(--dpb-nowhere); }\n", encoding="utf-8")
+        result = self.validate()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("shared:undefined:--dpb-nowhere", result.stdout)
+
+    def test_unused_token_fails_the_token_gate(self) -> None:
+        self._edit(self._pkg("mcp", "_shared", "tokens.css"),
+                   "--dpb-bg: #F8FAFC;", "--dpb-bg: #F8FAFC;\n  --dpb-spare: #F8FAFC;")
+        result = self.validate()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("shared:unused:--dpb-spare", result.stdout)
+
     def test_new_low_contrast_token_fails_the_self_audit(self) -> None:
-        self._edit(self._pkg("mcp", "preview", "control.css"),
+        self._edit(self._pkg("mcp", "_shared", "tokens.css"),
                    "--dpb-soft: #475569;", "--dpb-soft: #A0AEC0;")
         result = self.validate()
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
