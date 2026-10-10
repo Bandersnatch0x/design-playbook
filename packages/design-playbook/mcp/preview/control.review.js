@@ -399,6 +399,46 @@
   });
   window.addEventListener("resize", function () { if (abortPopoverOpen()) positionAbortPopover(); });
 
+  // ---- skip confirmation ----
+  // The keyboard path to Skip asks first, the same way Shift+Delete asks
+  // before an abort. The popover's own submit carries the skip choice, so the
+  // submit listener still owns the drain and the decision.
+  var skipBtn = document.getElementById("dpb-btn-skip");
+  var skipPopover = document.getElementById("dpb-skip-popover");
+  var skipCancel = document.getElementById("dpb-skip-cancel");
+  var skipStatus = document.getElementById("dpb-skip-status");
+  function skipPopoverOpen() { return !!(skipPopover && !skipPopover.hidden); }
+  function positionSkipPopover() {
+    if (!skipPopover || !skipBtn) return;
+    var r = skipBtn.getBoundingClientRect();
+    var pw = skipPopover.offsetWidth || 240;
+    var left = Math.max(8, Math.min(r.left + r.width / 2 - pw / 2, window.innerWidth - pw - 8));
+    skipPopover.style.setProperty("--dpb-pop-left", left + "px");
+    skipPopover.style.setProperty("--dpb-pop-top", (r.bottom + 8 + window.scrollY) + "px");
+  }
+  function showSkipPopover() {
+    if (!skipPopover) return;
+    skipPopover.hidden = false;
+    positionSkipPopover();
+    if (skipBtn) skipBtn.setAttribute("aria-expanded", "true");
+    if (skipCancel) skipCancel.focus();
+  }
+  function hideSkipPopover(announceCancel) {
+    if (!skipPopover) return;
+    var wasOpen = skipPopoverOpen();
+    skipPopover.hidden = true;
+    if (skipBtn) skipBtn.setAttribute("aria-expanded", "false");
+    if (skipStatus) skipStatus.textContent = (announceCancel && wasOpen) ? tt("skip_cancelled") : "";
+    if (wasOpen && skipBtn) skipBtn.focus();
+  }
+  if (skipCancel) skipCancel.addEventListener("click", function () { hideSkipPopover(true); });
+  root.addEventListener("click", function (e) {
+    if (!skipPopoverOpen()) return;
+    if (e.target.closest && e.target.closest(".dpb-skip-wrap")) return;
+    hideSkipPopover(true);
+  });
+  window.addEventListener("resize", function () { if (skipPopoverOpen()) positionSkipPopover(); });
+
   // All modal review UI shares focus ownership and background isolation.
   var activeReviewDialog = null;
   var dialogReturnFocus = null;
@@ -568,7 +608,7 @@
   }
 
   // Several requesters reach the form (Ctrl/Cmd+Enter via submitPrimary, the
-  // Shift+Escape Skip path, and native button activation), but the submit
+  // Skip confirmation, and native button activation), but the submit
   // listener below owns every decision (floor gate, drain, allow), so no
   // requester can pick a different path than another.
   function submitPrimary() {
@@ -586,6 +626,7 @@
     var choice = submitter && submitter.name === "choice" ? submitter.value : "";
     if (!choice || choice === "__abort__") { clearDraft(); return; }
     if (isSkipChoice(choice)) {
+      if (skipPopoverOpen()) hideSkipPopover(false);
       if (field) field.removeAttribute("aria-invalid");
       setHintGate(false);
       clearDraft();
@@ -645,11 +686,13 @@
   function handleKeyDown(e) {
     // An IME's Enter commits composition, never a comment or review decision.
     if (e.isComposing || e.keyCode === 229) return;
-    var dialog = activeReviewDialog || (abortPopoverOpen() ? abortPopover : null);
+    var dialog = activeReviewDialog || (abortPopoverOpen() ? abortPopover : null) ||
+      (skipPopoverOpen() ? skipPopover : null);
     if (dialog) {
       if (e.key === "Escape") {
         e.preventDefault();
         if (dialog === modal) toggleModal(false);
+        else if (dialog === skipPopover) hideSkipPopover(true);
         else hideAbortPopover(true);
       } else if (e.key === "Tab") {
         trapDialogTab(e, dialog);
@@ -662,11 +705,11 @@
     var activeEl = document.activeElement;
     // Skip is a global channel and must survive a focused property field. A
     // property edit has no use for Shift+Escape, so this runs before the
-    // editor-field isolation below, which otherwise swallowed it.
+    // editor-field isolation below, which otherwise swallowed it. The key only
+    // opens the confirmation; it never submits on its own.
     if (e.shiftKey && e.key === "Escape") {
       e.preventDefault();
-      var skipBtn = document.getElementById("dpb-btn-skip");
-      if (skipBtn) form.requestSubmit(skipBtn);
+      showSkipPopover();
       return;
     }
     // Property edits own Enter (including modifier variants), never a review decision.

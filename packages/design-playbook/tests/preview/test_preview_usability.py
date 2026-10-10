@@ -248,11 +248,21 @@ def test_help_traps_focus_blocks_submit_and_restores_trigger(page):
     expect(trigger).to_be_focused()
 
 
-def test_plain_escape_cancels_only_shift_escape_explicitly_skips(page):
+def test_shift_escape_asks_before_skipping(page):
     dismiss_intro(page)
     page.keyboard.press("Escape")
     assert page.evaluate("window.submittedChoices") == []
     page.keyboard.press("Shift+Escape")
+    popover = page.locator("#dpb-skip-popover")
+    expect(popover).to_be_visible()
+    expect(page.locator("#dpb-skip-cancel")).to_be_focused()
+    assert page.evaluate("window.submittedChoices") == []
+    page.keyboard.press("Escape")
+    expect(popover).to_be_hidden()
+    expect(page.locator("#dpb-btn-skip")).to_be_focused()
+    assert page.evaluate("window.submittedChoices") == []
+    page.keyboard.press("Shift+Escape")
+    page.locator("#dpb-skip-confirm").click()
     assert page.evaluate("window.submittedChoices") == ["跳过"]
 
 

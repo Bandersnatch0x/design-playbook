@@ -423,21 +423,28 @@ def main():
         if not s20_ok:
             failures.append("S20: shortcut modal must open on ? and close on Esc")
 
-        # --- S21: Esc cancels; only Shift+Esc explicitly submits Skip ---
+        # --- S21: Esc cancels; Shift+Esc asks first, the confirmation submits Skip ---
         fresh(page)
         page.evaluate(CAPTURE_SUBMITTER_JS)
         page.keyboard.press("Escape")
         idle_choice = page.evaluate("() => window.__capturedSubmitter")
         page.keyboard.press("Shift+Escape")
         page.wait_for_timeout(250)
+        asked_choice = page.evaluate("() => window.__capturedSubmitter")
+        asked = page.evaluate(
+            "() => !document.getElementById('dpb-skip-popover').hidden")
+        page.locator("#dpb-skip-confirm").click()
+        page.wait_for_timeout(250)
         captured = page.evaluate("() => window.__capturedSubmitter")
         skip_val = page.evaluate(
             "() => document.getElementById('dpb-btn-skip').getAttribute('value')")
-        s21_ok = not idle_choice and captured == skip_val
-        print(f"  S21 Shift+Esc skip: captured={captured!r} skip_val={skip_val!r} -> "
-              f"{'OK' if s21_ok else 'FAIL'}")
+        s21_ok = not idle_choice and asked and not asked_choice and captured == skip_val
+        print(f"  S21 Shift+Esc skip: asked={asked} captured={captured!r} "
+              f"skip_val={skip_val!r} -> {'OK' if s21_ok else 'FAIL'}")
         if not s21_ok:
-            failures.append("S21: Esc must not submit; Shift+Esc must submit the skip choice")
+            failures.append(
+                "S21: Esc must not submit; Shift+Esc must open the skip confirmation "
+                "and only its confirm button submits the skip choice")
 
         browser.close()
 

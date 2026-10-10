@@ -71,9 +71,19 @@
 
       {secondary_html}
 
-      <button type="submit" name="choice" value="{skip_val}" id="dpb-btn-skip" data-i18n-title="skip_desc" title="{t_skip_desc}" class="dpb-btn-quiet">
-        <span class="i18n" data-i18n="skip">{t_skip}</span><kbd>⇧Esc</kbd>
-      </button>
+      <div class="dpb-skip-wrap">
+        <button type="submit" name="choice" value="{skip_val}" id="dpb-btn-skip" data-i18n-title="skip_desc" title="{t_skip_desc}" class="dpb-btn-quiet">
+          <span class="i18n" data-i18n="skip">{t_skip}</span><kbd>⇧Esc</kbd>
+        </button>
+        <div class="dpb-popover" id="dpb-skip-popover" role="dialog" data-i18n-aria-label="skip_popover_aria" aria-label="{t_skip_popover_aria}" hidden>
+          <p class="dpb-popover-msg" data-i18n="skip_confirm">{t_skip_confirm}</p>
+          <div class="dpb-popover-actions">
+            <button type="button" class="dpb-btn dpb-btn-quiet" id="dpb-skip-cancel" data-i18n="skip_keep_reviewing">{t_skip_keep_reviewing}</button>
+            <button type="submit" name="choice" value="{skip_val}" class="dpb-btn" id="dpb-skip-confirm" data-i18n="skip_confirm_go">{t_skip_confirm_go}</button>
+          </div>
+        </div>
+      </div>
+      <span class="dpb-sr-only" id="dpb-skip-status" role="status"></span>
 
       <div class="dpb-abort-wrap">
         <div class="dpb-popover" id="dpb-abort-popover" role="dialog" data-i18n-aria-label="abort_popover_aria" aria-label="{t_abort_popover_aria}" hidden>

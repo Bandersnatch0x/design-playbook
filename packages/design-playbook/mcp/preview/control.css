@@ -218,7 +218,7 @@ body.dpb-shell { overflow: hidden; height: 100vh; }
 .dpb-header-right .dpb-btn-secondary:hover { background: var(--dpb-surface); color: var(--dpb-ink); }
 
 /* Scheme A′ abort popover */
-.dpb-abort-wrap { position: relative; display: inline-flex; align-items: center; }
+.dpb-abort-wrap, .dpb-skip-wrap { position: relative; display: inline-flex; align-items: center; }
 .dpb-popover {
   position: fixed; margin-left: 0; left: var(--dpb-pop-left, 0);
   bottom: auto; top: var(--dpb-pop-top, 0); right: auto;

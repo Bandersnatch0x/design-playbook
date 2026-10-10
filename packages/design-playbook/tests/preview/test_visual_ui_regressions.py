@@ -1282,13 +1282,14 @@ def test_ip05_frame_shortcuts_and_ip08_canvas_history(pending_visual_edit, modif
     # Skip is the other shell-owned channel, and the frame keeps working after.
     page.locator("#dpb-feedback").focus()
     page.keyboard.press("Shift+Escape")
-    page.wait_for_function("window.submitted.includes('dpb-btn-skip')")
-    assert 'dpb-btn-skip' in page.evaluate("window.submitted")
+    page.locator("#dpb-skip-confirm").click()
+    page.wait_for_function("window.submitted.includes('dpb-skip-confirm')")
+    assert 'dpb-skip-confirm' in page.evaluate("window.submitted")
     handle.focus()
     expect(handle).to_be_focused()
 
 
-def test_skip_shortcut_submits_while_feedback_has_focus(editor_page):
+def test_skip_shortcut_asks_while_feedback_has_focus(editor_page):
     from playwright.sync_api import expect
 
     page = editor_page
@@ -1302,7 +1303,10 @@ def test_skip_shortcut_submits_while_feedback_has_focus(editor_page):
     feedback.focus()
     expect(feedback).to_be_focused()
     page.keyboard.press("Shift+Escape")
-    assert page.evaluate("window.submitted") == ["dpb-btn-skip"]
+    expect(page.locator("#dpb-skip-cancel")).to_be_focused()
+    assert page.evaluate("window.submitted") == []
+    page.locator("#dpb-skip-confirm").click()
+    assert page.evaluate("window.submitted") == ["dpb-skip-confirm"]
 
 
 def test_ip06_inspector_enter_is_local_and_ip07_abort_focus(editor_page):
@@ -1451,6 +1455,7 @@ def test_skip_drains_pending_visual_edits_instead_of_dropping_them(editor_page) 
     # and must not submit a batch that is missing the edit. A dropped receipt
     # leaves the edit permanently unacknowledged, so failing closed is correct.
     page.keyboard.press("Shift+Escape")
+    page.locator("#dpb-skip-confirm").click()
     page.wait_for_function("""() => Object.values(window.DPB_I18N_DUAL.visual_drain_failed)
         .some(text => document.getElementById('dpb-toasts').textContent.includes(text))""")
     assert page.evaluate("window.__drains") >= 1, "skip must attempt the drain"

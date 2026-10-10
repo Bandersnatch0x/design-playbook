@@ -139,3 +139,28 @@ def test_suppressed_outlines_fall_back_to_the_shell_focus_rule() -> None:
         ":is(button, input, textarea, select, a[href], [tabindex]):focus-visible"
     )
     assert "outline: 2px solid var(--dpb-focus)" in shell
+
+
+REVIEW_JS = (PREVIEW / "control.review.js").read_text(encoding="utf-8")
+HTML = (PREVIEW / "control.html").read_text(encoding="utf-8")
+
+
+# The runtime half (the key opens the popover, focus lands on "keep
+# reviewing", Esc closes it without a decision) is S21 and
+# test_shift_escape_asks_before_skipping. This keeps the branch itself from
+# regaining a direct submit while the browser job is unavailable.
+def test_shift_escape_opens_the_skip_confirmation_without_submitting() -> None:
+    start = REVIEW_JS.index('if (e.shiftKey && e.key === "Escape") {')
+    branch = REVIEW_JS[start:REVIEW_JS.index("return;", start)]
+    assert "showSkipPopover()" in branch
+    assert "requestSubmit" not in branch
+
+
+def test_skip_confirmation_defaults_to_keep_reviewing() -> None:
+    popover = HTML[HTML.index('id="dpb-skip-popover"'):]
+    popover = popover[:popover.index("</div>\n        </div>")]
+    assert popover.index('id="dpb-skip-cancel"') < popover.index('id="dpb-skip-confirm"')
+    assert 'type="button" class="dpb-btn dpb-btn-quiet" id="dpb-skip-cancel"' in popover
+    assert 'type="submit" name="choice" value="{skip_val}"' in popover
+    show = REVIEW_JS[REVIEW_JS.index("function showSkipPopover()"):]
+    assert "skipCancel.focus()" in show[:show.index("\n  }\n")]
