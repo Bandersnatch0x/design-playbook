@@ -86,3 +86,26 @@ def test_next_step_copy_names_the_decision_not_the_feedback_only() -> None:
     assert "一并提交" in zh["confirm_desc"]
     assert "visual edit" in en["confirm_desc"].lower()
     assert "ride along" in en["confirm_desc"].lower()
+
+
+# A CSS-wide keyword is not a valid value inside the `font` shorthand, so a
+# declaration like `font: 500 12px/1 inherit` is dropped whole and the control
+# falls back to the browser's own control font. Controls inherit the shell font
+# through one reset and size themselves with longhands.
+FONT_SHORTHAND = re.compile(r"(?<![-\w])font\s*:\s*([^;}]+)")
+
+
+def test_font_shorthand_never_carries_a_css_wide_keyword() -> None:
+    bad = [
+        value.strip()
+        for value in FONT_SHORTHAND.findall(CSS)
+        if value.strip() != "inherit"
+        and re.search(r"\b(inherit|initial|unset|revert)\b", value)
+    ]
+    assert bad == []
+
+
+def test_form_controls_inherit_the_shell_font() -> None:
+    # Zero specificity, so every longhand on a control class still wins.
+    reset = ":where(#dpb-root, #dpb-float-root) :where(button, input, textarea, select)"
+    assert "font: inherit" in rule(reset)
