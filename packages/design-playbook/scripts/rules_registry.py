@@ -77,7 +77,11 @@ EXECUTES_IN = frozenset({
 })
 AUTHORITIES = frozenset({
     "hard-constraint", "project-declaration", "platform-convention",
-    "measured-threshold", "advisory-aesthetic",
+    "measured-threshold", "usability-heuristic", "advisory-aesthetic",
+})
+EVIDENCE_METHODS = frozenset({
+    "expert-review", "runtime-observation", "static-inspection",
+    "machine-measurement",
 })
 PROVENANCES = frozenset({
     "first-party", "promoted-from-findings", "placeholder",
@@ -113,6 +117,14 @@ REQUIRED_KEYS = (
     "owner",
     "provenance",
     "status",
+    # Protocol face: its wording is a reviewer's call, but an entry without
+    # a statement, a fix, its exceptions, its known false positives or the way
+    # it is evidenced cannot be applied or argued with.
+    "statement",
+    "fix",
+    "exceptions",
+    "false-positives",
+    "evidence-method",
 ) + APPLICABILITY_KEYS
 
 # The seven-column audit row (craft migration, rules-prototype §6.2):
@@ -308,6 +320,7 @@ def _validate_entry_fields(
         ("provenance", PROVENANCES),
         ("status", STATUSES),
         ("check-type", CHECK_TYPES),
+        ("evidence-method", EVIDENCE_METHODS),
     )
     for key, allowed in enum_checks:
         value = entry.fields.get(key, "")
