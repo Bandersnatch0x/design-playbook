@@ -3,13 +3,14 @@
    subtle diffused shadows, optical alignment, and zero layout shift. */
 
 :root {
+  --dpb-text-xs: 12px;
   --dpb-bg: #F8FAFC;
   --dpb-surface: #F1F5F9;
   --dpb-elev: #FFFFFF;
   --dpb-line: #E2E8F0;
   --dpb-line-strong: #CBD5E1;
   --dpb-ink: #0F172A;
-  --dpb-muted: #94A3B8;
+  --dpb-muted: #5B6B80;
   --dpb-soft: #475569;
   --dpb-accent: #2563EB;
   --dpb-accent-ink: #FFFFFF;
@@ -18,9 +19,9 @@
   --dpb-accent-chip-bg: #EFF6FF;
   --dpb-accent-chip-border: #BFDBFE;
   --dpb-accent-soft: #1D4ED8;
-  --dpb-danger: #E11D48;
+  --dpb-danger: #BE123C;
   --dpb-danger-wash: #FFF1F2;
-  --dpb-success: #059669;
+  --dpb-success: #047857;
   --dpb-success-wash: #ECFDF5;
   --dpb-tertiary: #B45309;
   --dpb-tertiary-wash: #FFFBEB;
@@ -72,8 +73,8 @@
     --dpb-ink: #F3F4F6;
     --dpb-muted: #9AA3B2;
     --dpb-soft: #C5CBD6;
-    --dpb-accent: #3B82F6;
-    --dpb-accent-ink: #FFFFFF;
+    --dpb-accent: #60A5FA;
+    --dpb-accent-ink: #0F172A;
     --dpb-accent-deep: #2563EB;
     --dpb-accent-wash: rgba(59,130,246,.14);
     --dpb-accent-chip-bg: rgba(59,130,246,.14);
@@ -157,7 +158,7 @@ kbd {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font: 600 9px/1.2 ui-monospace, "JetBrains Mono", Consolas, monospace;
+  font: 600 var(--dpb-text-xs)/1.2 ui-monospace, "JetBrains Mono", Consolas, monospace;
   padding: 1px 5px;
   border-radius: 4px;
   background: var(--surface-dim);
@@ -199,7 +200,7 @@ kbd {
   justify-content: center;
   background: var(--accent);
   color: var(--accent-ink);
-  font-size: 11px;
+  font-size: var(--dpb-text-xs);
   font-weight: 800;
   letter-spacing: -0.02em;
 }

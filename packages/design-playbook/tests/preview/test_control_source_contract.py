@@ -33,7 +33,7 @@ def test_webmcp_badge_activates_success_style() -> None:
 
 
 def test_computed_fields_clip_long_values_and_use_readable_labels() -> None:
-    assert "font-size: 11px" in rule(".dpb-react-field")
+    assert "font-size: var(--dpb-text-xs)" in rule(".dpb-react-field")
     style = rule(".dpb-react-field input")
     assert "overflow: hidden" in style
     assert "text-overflow: ellipsis" in style

@@ -108,7 +108,7 @@ def test_editor_input_inherits_panel_font(editor_page):
     field = editor_page.locator(".dpb-react-field input").first
     parent_font = field.evaluate("el => getComputedStyle(el.parentElement).fontFamily")
     expect(field).to_have_css("font-family", parent_font)
-    expect(field).to_have_css("font-size", "11px")
+    expect(field).to_have_css("font-size", "12px")
 
 
 def test_preview_header_truncates_long_labels_without_overflow(editor_page):
@@ -824,29 +824,15 @@ def test_typed_unit_is_kept_and_a_half_typed_number_waits(editor_page) -> None:
     expect(field.locator("xpath=..").locator(".dpb-unit-suffix")).to_have_text("px")
 
 
-def test_toolbar_shortcut_badge_never_covers_its_icon(editor_page) -> None:
-    """The badge had no CSS at all, so it sat on top of the icon."""
-    geometry = editor_page.evaluate("""() => {
-      const btn = document.getElementById('dpb-pin-toggle');
-      const svg = btn.querySelector('svg').getBoundingClientRect();
-      const kbd = btn.querySelector('.dpb-tool-kbd').getBoundingClientRect();
-      const box = btn.getBoundingClientRect();
-      const color = getComputedStyle(btn.querySelector('.dpb-tool-kbd')).color;
-      return {
-        overlaps: !(kbd.right <= svg.left || kbd.left >= svg.right ||
-                    kbd.bottom <= svg.top || kbd.top >= svg.bottom),
-        inside: kbd.left >= box.left - 0.5 && kbd.right <= box.right + 0.5 &&
-                kbd.top >= box.top - 0.5 && kbd.bottom <= box.bottom + 0.5,
-        color,
-        muted: getComputedStyle(document.getElementById('dpb-root'))
-          .getPropertyValue('--dpb-muted').trim(),
-      };
-    }""")
-    assert geometry["inside"], "the badge must stay inside its button"
-    assert not geometry["overlaps"], "the badge must not cover the icon"
-    # The global #dpb-root kbd rule used to win the colour, so the reset must
-    # inherit rather than declare a value the global rule overrides.
-    assert geometry["color"], "the badge must render a colour"
+def test_toolbar_shortcuts_live_in_the_tooltip_not_on_the_icon(editor_page) -> None:
+    """A corner badge at the 12px text floor covers a 32px tool's icon, so the
+    shortcut is named in the tooltip only."""
+    tools = editor_page.evaluate("""() => [...document.querySelectorAll('.dpb-toolbar button[data-i18n-title-suffix]')]
+      .map(b => ({title: b.title, suffix: b.dataset.i18nTitleSuffix, badges: b.querySelectorAll('kbd').length}))""")
+    assert tools, "the toolbar exposes its tools"
+    for tool in tools:
+        assert tool["title"].endswith(tool["suffix"]), tool
+        assert tool["badges"] == 0, tool
 
 
 def test_collapsed_header_indicates_pending_modifications(editor_page):

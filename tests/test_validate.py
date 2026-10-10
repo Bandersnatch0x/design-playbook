@@ -559,12 +559,13 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("preview:light:--dpb-soft", result.stdout)
 
     def test_paid_debt_must_leave_the_ledger(self) -> None:
-        self._edit(self._pkg("mcp", "preview", "control.css"),
-                   "--dpb-muted: #94A3B8;", "--dpb-muted: #475569;")
+        # A ledger line for a pair that already passes is paid debt left behind.
+        self._edit(self._pkg("examples", "self-audit", "baseline.json"),
+                   '"known": {}', '"known": {"preview:light:--dpb-ink:--dpb-bg": "stale"}')
         result = self.validate()
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("FAIL  self-audit debt ledger lists only findings that still fail", result.stdout)
-        self.assertIn("preview:light:--dpb-muted:--dpb-bg", result.stdout)
+        self.assertIn("preview:light:--dpb-ink:--dpb-bg", result.stdout)
 
     def test_self_audit_reads_the_registry_floor(self) -> None:
         # Read-through: raise the registry's text floor and a token pair that
