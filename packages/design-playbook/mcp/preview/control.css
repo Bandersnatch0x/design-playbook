@@ -8,8 +8,7 @@ body.dpb-shell { overflow: hidden; height: 100vh; }
 #dpb-root {
   display: flex; flex-direction: column; height: 100vh; box-sizing: border-box;
   position: relative;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  font-family: var(--dpb-font-ui), var(--dpb-font-cn), sans-serif;
   font-size: 13px; line-height: 1.45; color: var(--dpb-ink);
   -webkit-font-smoothing: antialiased;
 }
@@ -25,7 +24,7 @@ body.dpb-shell { overflow: hidden; height: 100vh; }
   display: inline-flex; align-items: center; justify-content: center;
   /* A shortcut badge is a fixed glyph run — never squeeze or fold it. */
   flex: 0 0 auto; white-space: nowrap;
-  font: 600 var(--dpb-text-xs)/1.2 ui-monospace, "JetBrains Mono", Consolas, monospace;
+  font: 600 var(--dpb-text-xs)/1.2 var(--dpb-font-mono), monospace;
   padding: 1px 5px; border-radius: 4px;
   background: var(--dpb-surface); color: var(--dpb-soft);
   border: 1px solid var(--dpb-line-strong); border-bottom-width: 2px;
@@ -232,7 +231,7 @@ body.dpb-shell { overflow: hidden; height: 100vh; }
   background: var(--dpb-bg); border: 1px dashed var(--dpb-line-strong);
   color: var(--dpb-soft); font-size: 12px; text-align: center;
 }
-#dpb-criteria-count { font: 600 var(--dpb-text-xs)/1 ui-monospace, Consolas, monospace; }
+#dpb-criteria-count { font: 600 var(--dpb-text-xs)/1 var(--dpb-font-mono), monospace; }
 #dpb-theme-icon {
   width: 16px; height: 16px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -285,7 +284,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 }
 .dpb-draw-layer .dpb-box-badge text,
 .dpb-draw-layer .dpb-ruler-badge text {
-  fill: var(--dpb-accent-ink); font: 700 var(--dpb-text-xs)/1 ui-monospace, Consolas, monospace;
+  fill: var(--dpb-accent-ink); font: 700 var(--dpb-text-xs)/1 var(--dpb-font-mono), monospace;
 }
 .dpb-draw-layer .dpb-ruler-hover {
   fill: var(--dpb-accent-wash); stroke: var(--dpb-accent); stroke-width: 1.5;
@@ -333,9 +332,9 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-toolbar button:focus-visible { outline: 2px solid var(--dpb-focus); outline-offset: 1px; }
 .dpb-toolbar-div { width: 20px; height: 1px; background: var(--dpb-line); margin: 2px 0; }
 .dpb-zoom-indicator {
-  font: 600 var(--dpb-text-xs)/1 ui-monospace, Consolas, monospace; color: var(--dpb-soft);
+  font: 600 var(--dpb-text-xs)/1 var(--dpb-font-mono), monospace; color: var(--dpb-soft);
 }
-.dpb-toolbar-hint { font: 500 var(--dpb-text-xs)/1 ui-monospace, Consolas, monospace; color: var(--dpb-muted); }
+.dpb-toolbar-hint { font: 500 var(--dpb-text-xs)/1 var(--dpb-font-mono), monospace; color: var(--dpb-muted); }
 
 /* ---- dynamic decision trigger (one authoritative button) ---- */
 .dpb-approve-btn {
@@ -418,7 +417,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   background: var(--dpb-elev); color: var(--dpb-accent); font-weight: 600;
   border-color: var(--dpb-line); box-shadow: var(--dpb-shadow-tool);
 }
-.dpb-filter-n { font: 600 var(--dpb-text-xs)/1 ui-monospace, Consolas, monospace; color: var(--dpb-muted); }
+.dpb-filter-n { font: 600 var(--dpb-text-xs)/1 var(--dpb-font-mono), monospace; color: var(--dpb-muted); }
 
 .dpb-anchor-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 .dpb-anchor-list:not(.has-items) + .dpb-comment-form { border-top: 1px solid var(--dpb-line); }
@@ -453,12 +452,12 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-anchor.dpb-resolved .dpb-anchor-n { background: var(--dpb-success-wash); color: var(--dpb-success); }
 .dpb-anchor-sel {
   max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font: 500 var(--dpb-text-xs)/1.4 ui-monospace, Consolas, monospace; color: var(--dpb-tertiary);
+  font: 500 var(--dpb-text-xs)/1.4 var(--dpb-font-mono), monospace; color: var(--dpb-tertiary);
   background: var(--dpb-tertiary-wash); border: 1px solid var(--dpb-tertiary-border);
   padding: 1px 6px; border-radius: 4px;
 }
 .dpb-anchor-kind {
-  font: 600 var(--dpb-text-xs)/1 ui-monospace, Consolas, monospace; color: var(--dpb-muted);
+  font: 600 var(--dpb-text-xs)/1 var(--dpb-font-mono), monospace; color: var(--dpb-muted);
   border: 1px solid var(--dpb-line); padding: 1px 5px; border-radius: 4px;
   text-transform: uppercase; white-space: nowrap;
 }
@@ -486,7 +485,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   transition: color var(--dpb-duration-spring) var(--dpb-ease-spring), background var(--dpb-duration-spring) var(--dpb-ease-spring), transform var(--dpb-duration-quick) var(--dpb-ease-spring);
 }
 .dpb-anchor-resolve:hover { color: var(--dpb-success); background: var(--dpb-success-wash); }
-.dpb-anchor-id { font: 500 var(--dpb-text-xs)/1 ui-monospace, Consolas, monospace; color: var(--dpb-muted); }
+.dpb-anchor-id { font: 500 var(--dpb-text-xs)/1 var(--dpb-font-mono), monospace; color: var(--dpb-muted); }
 
 /* ---- comment form (overall feedback only — element notes are typed
    in the in-context popover) ---- */
@@ -566,7 +565,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   width: 16px; height: 16px; border-radius: 999px;
   background: var(--dpb-accent); color: var(--dpb-accent-ink);
   display: flex; align-items: center; justify-content: center;
-  font: 700 var(--dpb-text-xs)/1 ui-monospace, Consolas, monospace;
+  font: 700 var(--dpb-text-xs)/1 var(--dpb-font-mono), monospace;
 }
 
 /* ---- modal ---- */
@@ -617,15 +616,14 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center;
   width: 22px; height: 22px; border-radius: 999px;
   background: var(--dpb-accent); color: var(--dpb-accent-ink);
-  font: 700 var(--dpb-text-xs)/1 ui-monospace, Consolas, monospace;
+  font: 700 var(--dpb-text-xs)/1 var(--dpb-font-mono), monospace;
 }
 
 /* ---- toasts ---- */
 .dpb-toasts {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 2147483200;
   display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  font-family: var(--dpb-font-ui), var(--dpb-font-cn), sans-serif;
 }
 .dpb-toast {
   display: flex; align-items: center; gap: 8px; max-width: 320px;
@@ -771,7 +769,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 }
 .dpb-anno-sel {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font: 500 var(--dpb-text-xs)/1.4 ui-monospace, Consolas, monospace; color: var(--dpb-tertiary);
+  font: 500 var(--dpb-text-xs)/1.4 var(--dpb-font-mono), monospace; color: var(--dpb-tertiary);
   background: var(--dpb-tertiary-wash); border: 1px solid var(--dpb-tertiary-border);
   padding: 1px 6px; border-radius: 4px;
 }
@@ -861,7 +859,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-react-selection {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   padding: 6px 7px; border-radius: 6px; background: var(--dpb-surface);
-  color: var(--dpb-soft); font: var(--dpb-text-xs) ui-monospace, Consolas, monospace;
+  color: var(--dpb-soft); font: var(--dpb-text-xs) var(--dpb-font-mono), monospace;
 }
 .dpb-react-actions { margin: 8px 0; }
 .dpb-react-actions button {
@@ -1065,7 +1063,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-compact-text-toolbar { display: flex; flex-wrap: wrap; gap: 6px; }
 .dpb-compact-text-toolbar button { min-width: 30px; min-height: 30px; border: 1px solid var(--dpb-line); border-radius: 4px; background: var(--dpb-surface); color: var(--dpb-ink); cursor: pointer; }
 .dpb-compact-text-toolbar button[aria-pressed="true"] { border-color: var(--dpb-accent); color: var(--dpb-accent); }
-.dpb-compact-text-toolbar button[data-action="italic"] { font-family: Georgia, "Times New Roman", serif; font-style: italic; }
+.dpb-compact-text-toolbar button[data-action="italic"] { font-family: serif; font-style: italic; }
 .dpb-compact-text-toolbar button:focus-visible { outline: 2px solid var(--dpb-focus); outline-offset: 2px; }
 
 /* Loading occupies the existing artboard, never shifting its geometry. */

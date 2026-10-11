@@ -1255,6 +1255,23 @@ def validate_literal_values() -> None:
                      + ("" if not found else " (" + "; ".join(found[:12]) + ")"))
 
 
+def validate_vendor_fonts() -> None:
+    """G-7: vendor font names appear only in the three font tokens of tokens.css."""
+    print("\n== Vendor font names (G-7) ==")
+    found: list[str] = []
+    for rel in LITERAL_SHEETS + LITERAL_SCRIPTS:
+        path = ROOT / rel
+        if not path.is_file():
+            found.append(f"missing:{rel}")
+            continue
+        text = path.read_text(encoding="utf-8")
+        if rel in LITERAL_SCRIPTS:
+            text = self_audit.bridge_css(text)
+        found += [f"{path.name}:{name}" for name in self_audit.vendor_fonts(text)]
+    check(not found, "vendor font names live only in the font tokens (G-7)"
+                     + ("" if not found else " (" + "; ".join(found[:12]) + ")"))
+
+
 def validate_skill_contracts() -> None:
     print("== Dogfood 004 regression guards ==")
 
@@ -1416,6 +1433,7 @@ CHECKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("validate_token_contract", (), ()),
     ("validate_token_copies", (), ()),
     ("validate_literal_values", (), ()),
+    ("validate_vendor_fonts", (), ()),
     ("validate_skill_contracts", (), ()),
     ("validate_test_executability", (), ()),
     ("validate_ruff", (), ()),

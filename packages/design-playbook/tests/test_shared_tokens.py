@@ -100,6 +100,40 @@ class LiteralValueTest(unittest.TestCase):
             self.assertIn(name, light)
 
 
+class FontNameTest(unittest.TestCase):
+    """G-7: vendor font names appear only in the three font tokens."""
+
+    def test_font_tokens_hold_the_vendor_names(self) -> None:
+        light: dict[str, str] = {}
+        for context, selector, props in _token_blocks():
+            if not ("dark" in selector or "dark" in context):
+                light.update(props)
+        for name in ("--dpb-font-ui", "--dpb-font-cn", "--dpb-font-mono"):
+            self.assertIn(name, light)
+        self.assertIn("Microsoft YaHei", light["--dpb-font-cn"])
+        self.assertIn("PingFang SC", light["--dpb-font-cn"])
+        self.assertIn("JetBrains Mono", light["--dpb-font-mono"])
+
+    def test_surface_sheets_name_no_vendor_font(self) -> None:
+        for sheet in LITERAL_SHEETS:
+            with self.subTest(sheet=sheet.name):
+                found = self_audit.vendor_fonts(sheet.read_text(encoding="utf-8"))
+                self.assertEqual(found, [])
+
+    def test_injected_css_names_no_vendor_font(self) -> None:
+        css = self_audit.bridge_css((MCP / "preview" / "pin_bridge.js").read_text(encoding="utf-8"))
+        self.assertEqual(self_audit.vendor_fonts(css), [])
+
+    def test_scanner_reads_family_and_shorthand_values(self) -> None:
+        css = ('a{font-family:var(--dpb-font-ui),sans-serif}'
+               'b{font-family:Georgia,"Times New Roman",serif;font:600 var(--dpb-text-xs)/1.2 ui-monospace,"JetBrains Mono",Consolas,monospace}'
+               'c{font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}'
+               'd{font:inherit}e{font:italic 12px Menlo}f{font-family:inherit}')
+        self.assertEqual(self_audit.vendor_fonts(css),
+                         ["Georgia", '"Times New Roman"', '"JetBrains Mono"', "Consolas",
+                          "-apple-system", '"Segoe UI"', "Menlo"])
+
+
 class SurfaceWiringTest(unittest.TestCase):
     def test_preview_inlines_the_shared_tokens_first(self) -> None:
         preview_control._load_resources.cache_clear()  # noqa: SLF001
@@ -151,6 +185,11 @@ class BridgeStyleTest(unittest.TestCase):
         read = set(re.findall(r"var\(\s*(--dpb-[\w-]+)", css))
         self.assertGreater(len(read), 20)
         self.assertEqual(sorted(read - defined), [])
+
+    def test_served_bridge_carries_the_mono_font_token_in_one_string_piece(self) -> None:
+        from design_playbook.mcp.preview import pin_bridge
+        css = self_audit.bridge_css(pin_bridge.BRIDGE_SCRIPT)
+        self.assertRegex(css, r"--dpb-font-mono:ui-monospace, 'Cascadia Mono', 'JetBrains Mono', Consolas, Menlo;")
 
     def test_frame_tokens_come_from_the_shared_file(self) -> None:
         from design_playbook.mcp.preview import pin_bridge

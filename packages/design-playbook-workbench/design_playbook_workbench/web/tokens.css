@@ -75,6 +75,9 @@
   --dpb-radius-sm: 6px;
   --dpb-radius-lg: 12px;
   --dpb-radius-full: 9999px;
+  --dpb-font-ui: system-ui, "Segoe UI";
+  --dpb-font-cn: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC";
+  --dpb-font-mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", Consolas, Menlo;
   --dpb-text-xs: 12px;
   --dpb-topbar-h: 48px;
   --dpb-rail-w: 320px;

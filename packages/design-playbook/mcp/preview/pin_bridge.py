@@ -57,22 +57,24 @@ def _load_bridge_script() -> str:
 BRIDGE_SCRIPT = _load_bridge_script()
 
 
-_FRAME_PREFIXES = ("--dpb-frame-", "--dpb-ease-", "--dpb-duration-")
+_FRAME_PREFIXES = ("--dpb-frame-", "--dpb-ease-", "--dpb-duration-", "--dpb-font-mono")
 
 
 def _frame_tokens() -> str:
-    """Declarations the reviewed page needs: the frame, easing and duration tokens.
+    """Declarations the reviewed page needs: the frame, easing, duration and
+    monospace-font tokens.
 
     The page inside the sandboxed frame does not load ``tokens.css``, so the
     bridge carries these values in a ``:root`` block of its own. They are read
-    from the shared file, never written a second time.
+    from the shared file, never written a second time; double quotes around
+    font names become single quotes so the block fits the script's string.
     """
     try:
         css = (HERE.parent / "_shared" / "tokens.css").read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
         raise RuntimeError(f"Failed to load the shared tokens from {HERE.parent}") from exc
     light = css.split("}", 1)[0]
-    return "".join(f"{name}:{value.strip()};"
+    return "".join(f"{name}:{value.strip()};".replace('"', "'")
                    for name, value in re.findall(r"(--dpb-[\w-]+)\s*:\s*([^;]+);", light)
                    if name.startswith(_FRAME_PREFIXES))
 

@@ -141,6 +141,62 @@ def literal_values(css: str) -> list[str]:
     return [match.group(0) for _, _, body in _blocks(css) for match in _LITERAL.finditer(body)]
 
 
+_GENERIC_FONTS = frozenset({
+    "serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui", "ui-serif",
+    "ui-sans-serif", "ui-monospace", "ui-rounded", "math", "emoji", "fangsong",
+    "inherit", "initial", "unset", "revert", "revert-layer"})
+_FAMILY = re.compile(r"(?<![\w-])font-family\s*:\s*([^;{}]+)")
+_SHORTHAND = re.compile(r"(?<![\w-])font\s*:\s*([^;{}]+)")
+_FONT_SIZE = re.compile(
+    r"(?:var\([^)]*\)|-?[\d.]+(?:px|rem|em|pt|%)|(?:x{1,2}-)?(?:small|large)|medium|larger|smaller)"
+    r"(?:\s*/\s*(?:var\([^)]*\)|[\d.]+[a-z%]*|normal))?\s+(.+)$", re.S)
+
+
+def _family_items(text: str) -> list[str]:
+    items: list[str] = []
+    depth = 0
+    current = ""
+    for char in text:
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        if char == "," and depth == 0:
+            items.append(current.strip())
+            current = ""
+        else:
+            current += char
+    items.append(current.strip())
+    return [item for item in items if item]
+
+
+def vendor_fonts(css: str) -> list[str]:
+    """G-7 findings for one style sheet: font names that are not generic keywords.
+
+    Reads ``font-family`` lists and the family part of ``font`` shorthands;
+    ``var()`` reads and generic families (``serif``, ``system-ui``, ``monospace``)
+    pass, and the font tokens in ``tokens.css`` are the one place a vendor name
+    may be written.
+    """
+    found: list[str] = []
+    for _, _, body in _blocks(css):
+        for match in _FAMILY.finditer(body):
+            found += _vendor_items(match.group(1))
+        for match in _SHORTHAND.finditer(body):
+            value = match.group(1).strip()
+            if value.lower() in _GENERIC_FONTS or value.startswith("var("):
+                continue
+            sized = _FONT_SIZE.search(value)
+            if sized:
+                found += _vendor_items(sized.group(1))
+    return found
+
+
+def _vendor_items(text: str) -> list[str]:
+    return [item for item in _family_items(text)
+            if not item.startswith("var(") and item.lower() not in _GENERIC_FONTS]
+
+
 def bridge_css(js: str) -> str:
     """The style text a script assigns to ``style.textContent``, string pieces joined.
 

@@ -929,7 +929,7 @@ def test_toolbar_flips_below_top_text_and_italic_has_serifs(editor_page):
     top = toolbar.evaluate("el => el.getBoundingClientRect().top")
     bottom = target.evaluate("el => el.getBoundingClientRect().bottom")
     assert top >= bottom + 10
-    expect(toolbar.locator(".dpb-tb-italic")).to_have_css("font-family", re.compile("Georgia"))
+    expect(toolbar.locator(".dpb-tb-italic")).to_have_css("font-family", "serif")
 
 
 def test_picker_alpha_and_opacity_commit_once_per_gesture(editor_page):

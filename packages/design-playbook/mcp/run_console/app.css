@@ -25,8 +25,7 @@
   --radius: var(--dpb-radius);
   --pad: 18px;
 
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  font-family: var(--dpb-font-ui), var(--dpb-font-cn), sans-serif;
 }
 
 * {
@@ -90,7 +89,7 @@ kbd {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font: 600 var(--dpb-text-xs)/1.2 ui-monospace, "JetBrains Mono", Consolas, monospace;
+  font: 600 var(--dpb-text-xs)/1.2 var(--dpb-font-mono), monospace;
   padding: 1px 5px;
   border-radius: 4px;
   background: var(--surface-dim);
@@ -296,7 +295,7 @@ main {
 }
 
 .view-error code {
-  font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  font-family: var(--dpb-font-mono), monospace;
   font-size: 0.85em;
   background: var(--surface-dim);
   padding: 1px 4px;
@@ -385,7 +384,7 @@ main {
   border-radius: 9999px;
   font-size: 0.78rem;
   font-weight: 600;
-  font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  font-family: var(--dpb-font-mono), monospace;
   border: 1px solid transparent;
   cursor: pointer;
   background: var(--surface-dim);
@@ -590,7 +589,7 @@ main {
   width: fit-content;
   font-size: 0.88rem;
   font-weight: 800;
-  font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  font-family: var(--dpb-font-mono), monospace;
   padding: 3px 8px;
   border-radius: 4px;
   background: var(--dpb-accent-chip-bg);
@@ -688,7 +687,7 @@ main {
   border: 1px solid transparent;
   vertical-align: middle;
   white-space: nowrap;
-  font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  font-family: var(--dpb-font-mono), monospace;
 }
 
 .badge-known { background: var(--ok-bg); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
@@ -865,7 +864,7 @@ main {
 }
 
 .reason-code {
-  font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  font-family: var(--dpb-font-mono), monospace;
   font-size: 0.85em;
   font-weight: 700;
   color: var(--text);
@@ -905,7 +904,7 @@ main {
 }
 
 .stage-id {
-  font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  font-family: var(--dpb-font-mono), monospace;
   font-size: 0.86em;
   font-weight: 600;
   min-width: 0;
@@ -921,7 +920,7 @@ main {
   color: var(--text-dim);
   background: var(--surface);
   white-space: nowrap;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-family: var(--dpb-font-mono), monospace;
 }
 
 .stage-state-present {
@@ -952,7 +951,7 @@ main {
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 0.82rem;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-family: var(--dpb-font-mono), monospace;
 }
 
 .outcome-pass {
@@ -1068,7 +1067,7 @@ main {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--dpb-radius-sm);
-  font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  font-family: var(--dpb-font-mono), monospace;
   font-size: 0.82rem;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -1124,7 +1123,7 @@ details.source[open] > summary {
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 4px;
-  font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  font-family: var(--dpb-font-mono), monospace;
   font-size: 0.84rem;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -1144,7 +1143,7 @@ details.source[open] > summary {
 }
 
 .hash {
-  font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  font-family: var(--dpb-font-mono), monospace;
   font-size: 0.82em;
   overflow-wrap: anywhere;
   word-break: break-all;

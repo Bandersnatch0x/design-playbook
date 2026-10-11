@@ -604,6 +604,28 @@ class ValidateGateTests(unittest.TestCase):
                 self.assertIn(gate, result.stdout)
                 self.assertIn(found, result.stdout)
 
+    def test_vendor_font_names_outside_tokens_fail_the_gate(self) -> None:
+        gate = "FAIL  vendor font names live only in the font tokens (G-7)"
+        cases = (
+            (self._pkg("mcp", "preview", "control.css"), '\n.x { font-family: "Fira Code", monospace; }\n',
+             '"Fira Code"'),
+            (self._pkg("mcp", "run_console", "app.css"), "\n.x { font: 12px/1 Menlo, monospace; }\n", "Menlo"),
+            (self.root / WORKBENCH_APP_CSS, "\n.x { font-family: Arial, sans-serif; }\n", "Arial"),
+            (self._pkg("mcp", "preview", "pin_bridge.js"), '\nstyle.textContent = "a{font-family:Georgia,serif}";\n',
+             "Georgia"),
+        )
+        for path, extra, found in cases:
+            with self.subTest(found=found):
+                original = path.read_text(encoding="utf-8")
+                path.write_text(original + extra, encoding="utf-8")
+                try:
+                    result = self.validate()
+                finally:
+                    path.write_text(original, encoding="utf-8")
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn(gate, result.stdout)
+                self.assertIn(found, result.stdout)
+
     def test_unused_token_fails_the_token_gate(self) -> None:
         self._edit(self._pkg("mcp", "_shared", "tokens.css"),
                    "--dpb-bg: #F8FAFC;", "--dpb-bg: #F8FAFC;\n  --dpb-spare: #F8FAFC;")

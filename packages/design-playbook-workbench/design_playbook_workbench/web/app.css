@@ -31,7 +31,7 @@ body {
   padding: 0 1.25rem 3rem;
   background: var(--surface);
   color: var(--ink);
-  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  font: 16px/1.55 var(--dpb-font-ui), var(--dpb-font-cn), sans-serif;
 }
 
 :focus-visible {
@@ -264,7 +264,7 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
-  font: 0.85rem/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font: 0.85rem/1.45 var(--dpb-font-mono), monospace;
   white-space: pre;
 }
 .proposal-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
@@ -392,7 +392,7 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
   border-radius: 8px;
   background: var(--panel);
   color: var(--ink);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--dpb-font-mono), monospace;
   font-size: 0.85rem;
   line-height: 1.45;
   tab-size: 2;
