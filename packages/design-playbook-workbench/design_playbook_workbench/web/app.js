@@ -350,6 +350,92 @@ function announce(message) {
   }, 10);
 }
 
+let dialogOpen = null;
+
+function openDialog({ message, defaultValue, text }) {
+  if (dialogOpen) dialogOpen.finish(text ? null : false);
+  return new Promise((resolve) => {
+    const opener = document.activeElement;
+    const backdrop = document.createElement("div");
+    backdrop.id = "dpb-dialog";
+    backdrop.className = "dialog-backdrop";
+    const box = document.createElement("div");
+    box.className = "dialog-box";
+    box.setAttribute("role", text ? "dialog" : "alertdialog");
+    box.setAttribute("aria-modal", "true");
+    box.setAttribute("aria-labelledby", "dpb-dialog-message");
+    const body = document.createElement("p");
+    body.id = "dpb-dialog-message";
+    body.className = "dialog-message";
+    body.textContent = message;
+    box.append(body);
+    let input = null;
+    if (text) {
+      input = document.createElement("input");
+      input.type = "text";
+      input.className = "dialog-input";
+      input.value = defaultValue || "";
+      input.setAttribute("aria-labelledby", "dpb-dialog-message");
+      box.append(input);
+    }
+    const actions = document.createElement("div");
+    actions.className = "dialog-actions";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "secondary dialog-cancel";
+    cancel.textContent = "取消";
+    const ok = document.createElement("button");
+    ok.type = "button";
+    ok.className = "dialog-ok";
+    ok.textContent = "确定";
+    actions.append(cancel, ok);
+    box.append(actions);
+    backdrop.append(box);
+    const finish = (value) => {
+      document.removeEventListener("keydown", onKey, true);
+      backdrop.remove();
+      dialogOpen = null;
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+      resolve(value);
+    };
+    const accept = () => finish(text ? input.value : true);
+    const dismiss = () => finish(text ? null : false);
+    const onKey = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        dismiss();
+      } else if (event.key === "Enter" && input && event.target === input) {
+        event.preventDefault();
+        accept();
+      } else if (event.key === "Tab") {
+        const stops = [input, cancel, ok].filter(Boolean);
+        const at = stops.indexOf(document.activeElement);
+        const next = event.shiftKey
+          ? stops[(at <= 0 ? stops.length : at) - 1]
+          : stops[(at + 1) % stops.length];
+        event.preventDefault();
+        next.focus();
+      }
+    };
+    cancel.addEventListener("click", dismiss);
+    ok.addEventListener("click", accept);
+    document.addEventListener("keydown", onKey, true);
+    dialogOpen = { finish };
+    document.body.append(backdrop);
+    (input || cancel).focus();
+    if (input) input.select();
+  });
+}
+
+function askConfirm(message) {
+  return openDialog({ message, text: false });
+}
+
+function askText(message, defaultValue) {
+  return openDialog({ message, defaultValue, text: true });
+}
+
 function newOperationId() {
   const bytes = new Uint8Array(12);
   crypto.getRandomValues(bytes);
@@ -720,7 +806,7 @@ async function openProject(project) {
 }
 
 async function renameProject(project) {
-  const name = window.prompt("新的项目名称", project.name);
+  const name = await askText("新的项目名称", project.name);
   if (name === null) return;
   try {
     await api(`/api/v1/projects/${project.projectId}/actions/rename`, {
@@ -744,7 +830,7 @@ async function renameProject(project) {
 }
 
 async function editGrants(project) {
-  const answer = window.prompt(
+  const answer = await askText(
     "授权范围（逗号分隔，读取 read 始终保留）：\nread, write, execute, model-send",
     project.grantScopes.join(", ")
   );
@@ -775,14 +861,14 @@ async function editGrants(project) {
 }
 
 async function rebindProject(project) {
-  const path = window.prompt(
+  const path = await askText(
     "该项目当前不可达。请输入重新绑定的绝对目录（不会自动匹配同名目录）：",
     project.canonicalPath
   );
   if (path === null || path.trim() === "") return;
   try {
     const probed = await probeFolder(path.trim(), project.projectId);
-    const confirmed = window.confirm(
+    const confirmed = await askConfirm(
       `将 ${project.name} 重新绑定到：\n${probed.candidate.canonicalPath}\n` +
         `目录身份：${probed.candidate.directoryIdentity}\n\n确认继续？`
     );
@@ -817,7 +903,7 @@ async function rebindProject(project) {
 }
 
 async function removeProject(project) {
-  const confirmed = window.confirm(
+  const confirmed = await askConfirm(
     `移除项目登记「${project.name}」？\n\n` +
       "只解除工作台登记与目录授权，不会删除本地源文件。"
   );
@@ -981,7 +1067,7 @@ async function proposalVerb(proposal, verb, extra) {
 }
 
 async function applyProposal(proposal) {
-  const confirmed = window.confirm(
+  const confirmed = await askConfirm(
     `批准应用该提案？\n\n摘要：${String(proposal.digest).slice(0, 24)}…\n` +
       `文件：${proposal.changes.map((change) => change.path).join("、")}\n\n` +
       "应用前会重查目录、授权、路径与每个文件的基线 hash；任何冲突都不写入。"
@@ -1014,7 +1100,7 @@ async function applyProposal(proposal) {
 }
 
 async function rejectProposal(proposal) {
-  const confirmed = window.confirm("拒绝该提案？这不会改动任何源文件。");
+  const confirmed = await askConfirm("拒绝该提案？这不会改动任何源文件。");
   if (!confirmed) return;
   try {
     await proposalVerb(proposal, "reject");
@@ -1038,7 +1124,7 @@ async function revertProposal(proposal) {
 }
 
 async function recoverProposal(proposal, mode) {
-  const confirmed = window.confirm(
+  const confirmed = await askConfirm(
     mode === "rollback"
       ? "恢复回滚：把已写入的文件还原为应用前内容，并删除本次新建的文件？"
       : "恢复完成：继续执行尚未写入的文件变更？"
@@ -1273,7 +1359,7 @@ async function enableDynamicPreview() {
   const project = state.assetsProject;
   const asset = state.selectedAsset;
   if (!project || !asset) return;
-  const confirmed = window.confirm(
+  const confirmed = await askConfirm(
     "启用动态预览？预览会执行该资产自身的脚本，但仍在独立来源中运行：" +
       "无会话凭证、不能访问管理 API、不能联网。"
   );
@@ -3015,7 +3101,7 @@ async function upgradeInstance() {
 
 async function forkCanvas() {
   if (!state.canvas) return;
-  const name = window.prompt(
+  const name = await askText(
     "冲突草稿另存为新画布的名称",
     `${state.canvas.name} 分支`
   );
@@ -3172,7 +3258,7 @@ elements.canvasViewport.addEventListener("wheel", (event) => {
 });
 elements.canvasClose.addEventListener("click", async () => {
   if (canvasHasUnsavedEdits()) {
-    const leave = window.confirm("画布还有未确认的编辑，确定关闭面板？");
+    const leave = await askConfirm("画布还有未确认的编辑，确定关闭面板？");
     if (!leave) return;
   }
   await flushCanvasQueue();
@@ -3360,7 +3446,7 @@ function saveScheme() {
 async function deriveScheme() {
   const board = activeBoard();
   if (!board || !state.canvas) return;
-  const name = window.prompt("派生方案名称", `${board.name} 方案 B`);
+  const name = await askText("派生方案名称", `${board.name} 方案 B`);
   if (name === null) return;
   queueCanvasCommand({
     kind: "scheme-derive",
@@ -4066,7 +4152,7 @@ function renderOwnerRun(run) {
 async function confirmOwnerObject(runId, objectType, objectId, sourceHash) {
   const project = state.ownerProject;
   if (!project || !sourceHash) return;
-  const note = window.prompt("确认说明（可选）", "");
+  const note = await askText("确认说明（可选）", "");
   if (note === null) return;
   try {
     await api(`/api/v1/projects/${project.projectId}/actions/confirmations`, {
@@ -4097,7 +4183,7 @@ async function confirmOwnerObject(runId, objectType, objectId, sourceHash) {
 async function backflowOwnerObject(runId, objectType, objectId) {
   const project = state.ownerProject;
   if (!project) return;
-  const name = window.prompt("回流候选名称", `${objectId} 候选`);
+  const name = await askText("回流候选名称", `${objectId} 候选`);
   if (name === null) return;
   try {
     const payload = await api(

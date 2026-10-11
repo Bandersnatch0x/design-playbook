@@ -36,6 +36,16 @@ def tearDownModule() -> None:
     _PLAYWRIGHT.stop()
 
 
+def answer_dialog(page, value=None):
+    """Answer the in-page dialog: fill its input when given, then confirm."""
+    dialog = page.locator("#dpb-dialog")
+    expect(dialog).to_be_visible()
+    if value is not None:
+        dialog.locator("input").fill(value)
+    dialog.locator(".dialog-ok").click()
+    expect(dialog).to_have_count(0)
+
+
 class ProjectEntryJourneyTest(unittest.TestCase):
     def setUp(self) -> None:
         self.h = WorkbenchHarness(consume_bootstrap=False)
@@ -101,12 +111,12 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         row.locator(".open-button").click()
         expect(row.locator(".current-flag")).to_be_visible()
 
-        self.page.once("dialog", lambda dialog: dialog.accept("重命名后的项目"))
         row.locator(".rename-button").click()
+        answer_dialog(self.page, "重命名后的项目")
         expect(row.locator(".project-name")).to_have_text("重命名后的项目")
 
-        self.page.once("dialog", lambda dialog: dialog.accept("read, write"))
         row.locator(".grants-button").click()
+        answer_dialog(self.page, "read, write")
         expect(row.locator(".grant-list")).to_contain_text("写入")
 
     def test_disconnected_rebind_and_removal_journey(self) -> None:
@@ -123,16 +133,9 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         expect(row.locator(".rebind-button")).to_be_visible()
 
         replacement = self.h.make_directory("vanish-moved")
-        # One handler for the whole flow: Playwright delivers each dialog to
-        # every registered listener, so the prompt and the confirmation
-        # cannot be answered by two separate handlers.
-        self.page.on(
-            "dialog",
-            lambda dialog: dialog.accept(str(replacement))
-            if dialog.type == "prompt"
-            else dialog.accept(),
-        )
         row.locator(".rebind-button").click()
+        answer_dialog(self.page, str(replacement))
+        answer_dialog(self.page)
         expect(row.locator(".state-badge")).to_have_text("已连接")
         expect(row.locator(".cell-path code")).to_have_text(
             str(replacement.resolve())
@@ -140,6 +143,7 @@ class ProjectEntryJourneyTest(unittest.TestCase):
 
         # Removal unregisters only; the folder itself stays on disk.
         row.locator(".remove-button").click()
+        answer_dialog(self.page)
         expect(self.page.locator("#project-rows tr")).to_have_count(0)
         expect(self.page.locator("#list-empty")).to_be_visible()
         self.assertTrue(replacement.exists())
@@ -286,8 +290,8 @@ class AssetsPanelJourneyTest(unittest.TestCase):
         self._open_static_package()
         self.page.click("#asset-preview-static")
         expect(self.page.locator("#asset-preview-enable")).to_be_visible()
-        self.page.on("dialog", lambda dialog: dialog.accept())
         self.page.click("#asset-preview-enable")
+        answer_dialog(self.page)
         expect(self.page.locator("#asset-preview-enable")).to_be_hidden()
         self.page.click("#asset-preview-dynamic")
         expect(self.page.locator("#asset-preview-frame")).to_have_attribute(
@@ -1055,8 +1059,8 @@ class CanvasJourneyTest(unittest.TestCase):
         self.page.locator("#canvas-viewport").press("ArrowDown")
         expect(self.page.locator("#canvas-save-state")).to_contain_text("保存冲突")
         expect(self.page.locator("#canvas-fork")).to_be_visible()
-        self.page.once("dialog", lambda dialog: dialog.accept("本页草稿"))
         self.page.click("#canvas-fork")
+        answer_dialog(self.page, "本页草稿")
         expect(self.page.locator("#canvas-save-state")).to_contain_text("已保存")
         names = self.page.locator("#canvas-select option")
         expect(names).to_have_count(2)
@@ -1259,8 +1263,8 @@ class OrchestrationJourneyTest(unittest.TestCase):
         expect(self.page.locator("#scheme-note")).to_contain_text("已声明方案约束")
 
         # A derived scheme is a separate board with recorded lineage.
-        self.page.once("dialog", lambda dialog: dialog.accept("方案 B"))
         self.page.click("#scheme-derive")
+        answer_dialog(self.page, "方案 B")
         self.wait_for(
             lambda: len(self.server_document()["boards"]) == 2,
             "the derived board",
@@ -1657,8 +1661,8 @@ class OwnerBackflowJourneyTest(unittest.TestCase):
         expect(self.page.locator("#owner-findings")).to_contain_text("craft-guard")
 
         # Confirming binds the object hash; the record shows it.
-        self.page.once("dialog", lambda dialog: dialog.accept("人工核对后确认"))
         self.page.locator("#owner-criteria button").first.click()
+        answer_dialog(self.page, "人工核对后确认")
         expect(self.page.locator("#owner-confirmations")).to_contain_text("owner-verified")
         expect(self.page.locator("#owner-criteria")).to_contain_text("已确认")
         stored = http_request(
@@ -1671,8 +1675,8 @@ class OwnerBackflowJourneyTest(unittest.TestCase):
         self.assertEqual(stored[0]["objectId"], "c-1")
 
         # A finding backflows into a draft candidate; the run is untouched.
-        self.page.once("dialog", lambda dialog: dialog.accept("键盘可达候选"))
         self.page.locator("#owner-findings button").first.click()
+        answer_dialog(self.page, "键盘可达候选")
         self.page.wait_for_timeout(400)
         components = [
             row
@@ -1693,8 +1697,8 @@ class OwnerBackflowJourneyTest(unittest.TestCase):
         expect(self.page.locator("#project-rows tr")).to_have_count(1)
         self.page.locator("#project-rows tr .owner-button").first.click()
         expect(self.page.locator("#owner-panel")).to_be_visible()
-        self.page.once("dialog", lambda dialog: dialog.accept(""))
         self.page.locator("#owner-criteria button").first.click()
+        answer_dialog(self.page, "")
         expect(self.page.locator("#owner-criteria")).to_contain_text("已确认")
 
         # The owner re-runs and the criterion changes.
@@ -1978,8 +1982,8 @@ class ProposalJourneyTest(unittest.TestCase):
 
         # Nothing is written until the maintainer authorizes the digest.
         self.assertEqual(self.file.read_bytes(), b"<h1>hello</h1>\n")
-        self.page.on("dialog", lambda dialog: dialog.accept())
         item.locator(".apply-button").click()
+        answer_dialog(self.page)
         expect(self.page.locator(".proposal-item").first.locator(".proposal-state")).to_have_text(
             "已应用"
         )
@@ -1993,6 +1997,7 @@ class ProposalJourneyTest(unittest.TestCase):
         expect(newest.locator(".proposal-state")).to_have_text("等待授权")
         self.assertEqual(self.file.read_bytes(), b"<h1>from proposal</h1>\n")
         newest.locator(".apply-button").click()
+        answer_dialog(self.page)
         expect(newest.locator(".proposal-state")).to_have_text("已应用")
         self.assertEqual(self.file.read_bytes(), b"<h1>hello</h1>\n")
         # The original proposal is still visible as applied history.
@@ -2000,12 +2005,25 @@ class ProposalJourneyTest(unittest.TestCase):
             self.page.locator(".proposal-item").nth(1).locator(".proposal-state")
         ).to_have_text("已应用")
 
+    def test_reject_dialog_is_an_alertdialog_focused_on_cancel_and_esc_cancels(self) -> None:
+        self._propose("<h1>never applied</h1>\n")
+        self._open_panel()
+        item = self.page.locator(".proposal-item").first
+        item.locator(".reject-button").click()
+        box = self.page.locator("#dpb-dialog [role=alertdialog]")
+        expect(box).to_be_visible()
+        expect(self.page.locator("#dpb-dialog .dialog-cancel")).to_be_focused()
+        self.page.keyboard.press("Escape")
+        expect(self.page.locator("#dpb-dialog")).to_have_count(0)
+        expect(item.locator(".proposal-state")).to_have_text("等待授权")
+        expect(item.locator(".reject-button")).to_be_focused()
+
     def test_reject_leaves_the_source_untouched(self) -> None:
         self._propose("<h1>never applied</h1>\n")
         self._open_panel()
         item = self.page.locator(".proposal-item").first
-        self.page.on("dialog", lambda dialog: dialog.accept())
         item.locator(".reject-button").click()
+        answer_dialog(self.page)
         expect(item.locator(".proposal-state")).to_have_text("已拒绝")
         self.assertEqual(self.file.read_bytes(), b"<h1>hello</h1>\n")
         expect(item.locator(".apply-button")).to_be_hidden()
@@ -2034,8 +2052,8 @@ class ProposalJourneyTest(unittest.TestCase):
         expect(item.locator(".proposal-recovery")).to_be_visible()
         expect(item.locator(".apply-button")).to_be_hidden()
 
-        self.page.on("dialog", lambda dialog: dialog.accept())
         item.locator(".recover-rollback-button").click()
+        answer_dialog(self.page)
         expect(item.locator(".proposal-state")).to_have_text("已回滚")
         self.assertEqual(self.file.read_bytes(), b"<h1>hello</h1>\n")
 
