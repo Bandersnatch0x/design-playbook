@@ -307,6 +307,10 @@ main {
 
 /* --- Loading skeleton (fixed sizes -> no shift on fill) ----------------- */
 
+.skeleton.is-pending {
+  visibility: hidden;
+}
+
 .skeleton-block {
   background: var(--surface-dim);
   border-radius: var(--radius);

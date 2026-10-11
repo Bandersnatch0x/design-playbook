@@ -368,6 +368,25 @@ class StateMachineTest(BrowserTestCase):
         # No partial rendering of the v2 document.
         self.assertEqual(self.page.locator("#fact-grid .fact").count(), 0)
 
+    def test_hung_snapshot_request_times_out_into_the_retry_view(self) -> None:
+        held = []
+        self.page.route("**/api/v1/snapshot", lambda route: held.append(route))
+        self.page.goto(self.console.url(f"#token={self.console.token}"))
+        expect(self.page.locator("#view-loading")).to_be_visible()
+        self.page.wait_for_timeout(10500)
+        expect(self.page.locator("#view-network")).to_be_visible()
+        expect(self.page.locator("#network-retry-btn")).to_be_visible()
+
+    def test_skeleton_stays_hidden_for_the_first_300ms(self) -> None:
+        held = []
+        self.page.route("**/api/v1/snapshot", lambda route: held.append(route))
+        self.page.goto(self.console.url(f"#token={self.console.token}"))
+        self.assertEqual(
+            self.page.eval_on_selector("#view-loading .skeleton",
+                                       "e => e.classList.contains('is-pending')"),
+            True)
+        expect(self.page.locator("#view-loading .skeleton")).to_be_visible()
+
     def test_generic_api_error_state(self) -> None:
         envelope = {
             "schemaVersion": 1,

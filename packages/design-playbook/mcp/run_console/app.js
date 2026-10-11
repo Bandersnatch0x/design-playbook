@@ -632,6 +632,18 @@
     });
     var main = document.getElementById("main");
     if (main) main.setAttribute("aria-busy", name === "loading" ? "true" : "false");
+    var skeleton = document.querySelector("#view-loading .skeleton");
+    if (skeletonTimer) { window.clearTimeout(skeletonTimer); skeletonTimer = null; }
+    if (skeleton) {
+      if (name === "loading") {
+        skeleton.classList.add("is-pending");
+        skeletonTimer = window.setTimeout(function () {
+          skeleton.classList.remove("is-pending");
+        }, SKELETON_DELAY_MS);
+      } else {
+        skeleton.classList.remove("is-pending");
+      }
+    }
     /* visibility, not display: the header height never changes. */
     var headerActions = document.getElementById("header-actions");
     if (headerActions) {
@@ -801,17 +813,37 @@
   /* one typed action POST from the closed allowlist (RCV1-009).      */
 
   function parseJsonResponse(response) {
-    return response.text().then(function (text) {
-      var body = null;
-      if (text) {
-        try { body = JSON.parse(text); } catch (err) { body = null; }
-      }
-      return { status: response.status, ok: response.ok, body: body };
-    });
+    var body = null;
+    if (response.text) {
+      try { body = JSON.parse(response.text); } catch (err) { body = null; }
+    }
+    return { status: response.status, ok: response.ok, body: body };
+  }
+
+  var REQUEST_TIMEOUT_MS = 10000;
+  var SKELETON_DELAY_MS = 300;
+  var skeletonTimer = null;
+
+  /* Every request aborts after ten seconds so a hung server ends in the
+     retry view instead of an endless skeleton. */
+  function timedFetch(path, init) {
+    var controller = typeof window.AbortController === "function" ? new window.AbortController() : null;
+    var timer = null;
+    if (controller) {
+      init.signal = controller.signal;
+      timer = window.setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT_MS);
+    }
+    function done(value) { if (timer) window.clearTimeout(timer); return value; }
+    return window.fetch(path, init).then(function (response) {
+      return response.text().then(function (text) {
+        done();
+        return { status: response.status, ok: response.ok, text: text };
+      });
+    }, function (err) { done(); throw err; });
   }
 
   function requestJson(path) {
-    return window.fetch(path, {
+    return timedFetch(path, {
       headers: { Authorization: "Bearer " + sessionToken },
       cache: "no-store",
     }).then(parseJsonResponse);
@@ -821,7 +853,7 @@
      Nothing else about the request varies, so no other command can be
      smuggled through this path. */
   function requestRefreshAction() {
-    return window.fetch(REFRESH_ACTION_PATH, {
+    return timedFetch(REFRESH_ACTION_PATH, {
       method: "POST",
       headers: {
         Authorization: "Bearer " + sessionToken,
@@ -1500,7 +1532,7 @@
   function requestExportPreview(participantRef) {
     var body = { schemaVersion: 1, action: "diagnostic-export-preview" };
     if (participantRef) body.participantRef = participantRef;
-    return window.fetch(EXPORT_PREVIEW_PATH, {
+    return timedFetch(EXPORT_PREVIEW_PATH, {
       method: "POST",
       headers: {
         Authorization: "Bearer " + sessionToken,
@@ -1520,7 +1552,7 @@
       participantReviewed: true,
     };
     if (participantRef) body.participantRef = participantRef;
-    return window.fetch(EXPORT_WRITE_PATH, {
+    return timedFetch(EXPORT_WRITE_PATH, {
       method: "POST",
       headers: {
         Authorization: "Bearer " + sessionToken,
