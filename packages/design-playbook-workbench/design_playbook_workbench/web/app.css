@@ -16,23 +16,12 @@
   --panel: var(--dpb-elev);
   --surface: var(--dpb-bg);
   --radius: 10px;
-  --canvas-grid-1: #eef0f4;
-  --canvas-grid-2: #f7f8fb;
-  --canvas-stage-bg: #ffffff;
-  --canvas-node-bg: #f7f9fc;
-  --canvas-node-text-bg: #ffffff;
-  --canvas-node-instance-bg: #eef3ff;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --canvas-grid-1: #1e222a;
-    --canvas-grid-2: #252b35;
-    --canvas-stage-bg: #1c1f25;
-    --canvas-node-bg: #222731;
-    --canvas-node-text-bg: #2b313d;
-    --canvas-node-instance-bg: #1c2742;
-  }
+  --canvas-grid-1: var(--dpb-canvas-grid-1);
+  --canvas-grid-2: var(--dpb-canvas-grid-2);
+  --canvas-stage-bg: var(--dpb-canvas-stage-bg);
+  --canvas-node-bg: var(--dpb-canvas-node-bg);
+  --canvas-node-text-bg: var(--dpb-canvas-node-text-bg);
+  --canvas-node-instance-bg: var(--dpb-canvas-node-instance-bg);
 }
 
 * { box-sizing: border-box; }
@@ -348,12 +337,12 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
   top: 0;
   left: 0;
   transform-origin: 0 0;
-  box-shadow: 0 2px 14px rgba(20, 26, 40, 0.18);
+  box-shadow: var(--dpb-shadow-canvas);
 }
 .canvas-node {
   position: absolute;
   box-sizing: border-box;
-  border: 1px dashed #9aa3b2;
+  border: 1px dashed var(--dpb-canvas-node-line);
   border-radius: 6px;
   padding: 2px 5px;
   overflow: hidden;
@@ -364,7 +353,7 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
 .canvas-node[data-selected="true"] {
   border-style: solid;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(31, 79, 216, 0.25);
+  box-shadow: 0 0 0 2px var(--dpb-ring-accent);
 }
 .canvas-node-text { background: var(--canvas-node-text-bg); border-style: solid; }
 .canvas-node-instance { background: var(--canvas-node-instance-bg); border-style: solid; border-color: var(--accent); }
@@ -385,7 +374,7 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
 .canvas-box {
   position: absolute;
   border: 1px dashed var(--accent);
-  background: rgba(31, 79, 216, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   pointer-events: none;
 }
 .canvas-props { border: 1px solid var(--line); border-radius: 10px; padding: 0.6rem; }

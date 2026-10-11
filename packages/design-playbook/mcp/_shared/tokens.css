@@ -47,13 +47,30 @@
   --dpb-shadow-pop: 0 12px 32px -8px rgba(15,23,42,.18), 0 2px 8px rgba(15,23,42,.06);
   --dpb-shadow-glow: 0 0 24px -2px rgba(37,99,235,.3);
   --dpb-shadow-pin: 0 3px 8px rgba(37,99,235,.35), 0 1px 2px rgba(0,0,0,.1);
+  --dpb-shadow-hairline: 0 1px 2px rgba(0,0,0,.02);
+  --dpb-shadow-canvas: 0 2px 14px rgba(20,26,40,.18);
   --dpb-ring-accent: rgba(37,99,235,.25);
   --dpb-ring-danger: rgba(225,29,72,.25);
   --dpb-focus: var(--dpb-accent);
+  --dpb-canvas-grid-1: #EEF0F4;
+  --dpb-canvas-grid-2: #F7F8FB;
+  --dpb-canvas-stage-bg: #FFFFFF;
+  --dpb-canvas-node-bg: #F7F9FC;
+  --dpb-canvas-node-text-bg: #FFFFFF;
+  --dpb-canvas-node-instance-bg: #EEF3FF;
+  --dpb-canvas-node-line: #9AA3B2;
   --dpb-ease-spring: cubic-bezier(.16,1,.3,1);
   --dpb-ease-pulse: cubic-bezier(0,0,.2,1);
-  --dpb-duration-spring: 200ms;
+  --dpb-duration-instant: 1ms;
+  --dpb-duration-press: 100ms;
   --dpb-duration-quick: 120ms;
+  --dpb-duration-base: 150ms;
+  --dpb-duration-settle: 180ms;
+  --dpb-duration-spring: 200ms;
+  --dpb-duration-enter: 220ms;
+  --dpb-duration-slow: 300ms;
+  --dpb-duration-emphasis: 380ms;
+  --dpb-duration-flash: 900ms;
   --dpb-radius: 8px;
   --dpb-radius-sm: 6px;
   --dpb-radius-lg: 12px;
@@ -101,6 +118,12 @@
     --dpb-shadow-pin: 0 3px 8px rgba(59,130,246,.35), 0 1px 2px rgba(0,0,0,.3);
     --dpb-ring-accent: rgba(59,130,246,.3);
     --dpb-ring-danger: rgba(239,68,68,.3);
+    --dpb-canvas-grid-1: #1E222A;
+    --dpb-canvas-grid-2: #252B35;
+    --dpb-canvas-stage-bg: #1C1F25;
+    --dpb-canvas-node-bg: #222731;
+    --dpb-canvas-node-text-bg: #2B313D;
+    --dpb-canvas-node-instance-bg: #1C2742;
     --dpb-focus: var(--dpb-accent);
   }
 }
@@ -145,5 +168,11 @@
   --dpb-shadow-pin: 0 3px 8px rgba(59,130,246,.35), 0 1px 2px rgba(0,0,0,.3);
   --dpb-ring-accent: rgba(59,130,246,.3);
   --dpb-ring-danger: rgba(239,68,68,.3);
+  --dpb-canvas-grid-1: #1E222A;
+  --dpb-canvas-grid-2: #252B35;
+  --dpb-canvas-stage-bg: #1C1F25;
+  --dpb-canvas-node-bg: #222731;
+  --dpb-canvas-node-text-bg: #2B313D;
+  --dpb-canvas-node-instance-bg: #1C2742;
   --dpb-focus: var(--dpb-accent);
 }

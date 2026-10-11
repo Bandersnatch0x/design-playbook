@@ -1220,6 +1220,29 @@ def validate_token_contract() -> None:
                     + ("" if not gaps else " (" + "; ".join(gaps[:12]) + ")"))
 
 
+# G-6 (U-07): style sheets that must read colour, timing and easing from tokens.
+LITERAL_SHEETS: tuple[str, ...] = (
+    "packages/design-playbook/mcp/preview/control.css",
+    "packages/design-playbook/mcp/run_console/app.css",
+    "packages/design-playbook-workbench/design_playbook_workbench/web/app.css",
+)
+
+
+def validate_literal_values() -> None:
+    """G-6: bare colour, ms and cubic-bezier literals appear only in tokens.css."""
+    print("\n== Literal values (G-6) ==")
+    found: list[str] = []
+    for rel in LITERAL_SHEETS:
+        path = ROOT / rel
+        if not path.is_file():
+            found.append(f"missing:{rel}")
+            continue
+        found += [f"{path.name}:{value}"
+                  for value in self_audit.literal_values(path.read_text(encoding="utf-8"))]
+    check(not found, "colour, timing and easing literals live only in tokens.css (G-6)"
+                     + ("" if not found else " (" + "; ".join(found[:12]) + ")"))
+
+
 def validate_skill_contracts() -> None:
     print("== Dogfood 004 regression guards ==")
 
@@ -1380,6 +1403,7 @@ CHECKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("validate_self_audit", ("registry_entries",), ()),
     ("validate_token_contract", (), ()),
     ("validate_token_copies", (), ()),
+    ("validate_literal_values", (), ()),
     ("validate_skill_contracts", (), ()),
     ("validate_test_executability", (), ()),
     ("validate_ruff", (), ()),

@@ -143,7 +143,7 @@ body.dpb-shell { overflow: hidden; height: 100vh; }
   background: color-mix(in srgb, var(--dpb-surface) 96%, transparent);
   border-left: 1px solid var(--dpb-line);
   box-shadow: var(--dpb-shadow-drawer); z-index: 40;
-  transition: margin-right .3s var(--dpb-ease-spring), opacity var(--dpb-duration-spring) var(--dpb-ease-spring);
+  transition: margin-right var(--dpb-duration-slow) var(--dpb-ease-spring), opacity var(--dpb-duration-spring) var(--dpb-ease-spring);
 }
 .dpb-rail.dpb-collapsed { margin-right: calc(-1 * var(--dpb-rail-w)); opacity: 0; pointer-events: none; }
 .dpb-rail-head {
@@ -307,7 +307,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-free-pin:hover { transform: translateY(-1px) scale(1.08); }
 .dpb-free-pin:active { transform: translateY(.5px) scale(.97); }
 .dpb-free-pin.dpb-resolved { background: var(--dpb-success); opacity: .65; }
-.dpb-free-pin.dpb-pin-drop { animation: dpb-pin-drop 380ms var(--dpb-ease-spring) both; }
+.dpb-free-pin.dpb-pin-drop { animation: dpb-pin-drop var(--dpb-duration-emphasis) var(--dpb-ease-spring) both; }
 .dpb-free-pin.dpb-active::after {
   content: ""; position: absolute; inset: -4px; border-radius: inherit;
   border: 2px solid var(--dpb-ring-accent); animation: dpb-pulse-ring 1.8s var(--dpb-ease-pulse) infinite;
@@ -377,7 +377,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-approve-btn.dpb-approve-muted .dpb-approve-dot { animation: none; }
 .dpb-approve-btn.dpb-approve-ready kbd { background: var(--dpb-highlight); color: var(--dpb-accent-ink); border-color: transparent; }
 .dpb-approve-btn kbd { color: var(--dpb-muted); }
-.dpb-approve-btn.is-shaking { animation: dpb-shake 300ms ease; }
+.dpb-approve-btn.is-shaking { animation: dpb-shake var(--dpb-duration-slow) ease; }
 .dpb-approve-btn.dpb-btn-loading,
 :where(#dpb-root) .dpb-btn-loading {
   position: relative;
@@ -516,7 +516,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-field textarea[name="feedback"]:focus { border-color: var(--dpb-accent); box-shadow: 0 0 0 2px var(--dpb-ring-accent); }
 .dpb-field textarea[name="feedback"]::placeholder { color: var(--dpb-muted); }
 .dpb-field textarea[name="feedback"].is-shaking {
-  animation: dpb-shake 300ms ease;
+  animation: dpb-shake var(--dpb-duration-slow) ease;
   border-color: var(--dpb-danger) !important;
   box-shadow: 0 0 0 3px var(--dpb-ring-danger) !important;
 }
@@ -659,9 +659,9 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 }
 
 .dpb-exit-btn {
-  background: rgba(255, 255, 255, 0.15);
+  background: color-mix(in srgb, var(--dpb-elev) 15%, transparent);
   border: none;
-  color: #FFFFFF;
+  color: var(--dpb-elev);
   padding: 2px 8px;
   border-radius: 4px;
   cursor: pointer;
@@ -717,7 +717,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   cursor: crosshair !important;
 }
 .dpb-pin-hover { outline: 1px dashed var(--dpb-ring-accent) !important; outline-offset: 1px !important; }
-.dpb-pin-flash { animation: dpb-flash 900ms ease-out 1; }
+.dpb-pin-flash { animation: dpb-flash var(--dpb-duration-flash) ease-out 1; }
 
 @keyframes dpb-pin-drop {
   0% { transform: translateY(-16px) scale(1.3); opacity: 0; }
@@ -759,7 +759,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   border: 1px solid var(--dpb-line-strong);
   box-shadow: var(--dpb-shadow-pop);
   display: flex; flex-direction: column; gap: 8px;
-  animation: dpb-anno-in 180ms var(--dpb-ease-spring) both;
+  animation: dpb-anno-in var(--dpb-duration-settle) var(--dpb-ease-spring) both;
 }
 .dpb-anno-popover[hidden] { display: none !important; }
 .dpb-anno-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
@@ -784,7 +784,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 }
 .dpb-anno-popover textarea:focus { border-color: var(--dpb-accent); box-shadow: 0 0 0 2px var(--dpb-ring-accent); }
 .dpb-anno-popover textarea::placeholder { color: var(--dpb-muted); }
-.dpb-anno-popover textarea.is-shaking { animation: dpb-shake 300ms ease; border-color: var(--dpb-danger) !important; }
+.dpb-anno-popover textarea.is-shaking { animation: dpb-shake var(--dpb-duration-slow) ease; border-color: var(--dpb-danger) !important; }
 .dpb-anno-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .dpb-anno-hint { display: inline-flex; align-items: center; gap: 4px; font-size: var(--dpb-text-xs); color: var(--dpb-muted); }
 .dpb-anno-floor-hint { font-size: var(--dpb-text-xs); }
@@ -806,7 +806,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   border: 1px solid var(--dpb-line-strong);
   box-shadow: var(--dpb-shadow-pop);
   display: flex; flex-direction: column; gap: 6px;
-  animation: dpb-anno-in 220ms var(--dpb-ease-spring) both;
+  animation: dpb-anno-in var(--dpb-duration-enter) var(--dpb-ease-spring) both;
 }
 .dpb-coachmark-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .dpb-coachmark-title { font-weight: 700; font-size: 12px; line-height: 1.3; color: var(--dpb-ink); }
@@ -823,8 +823,8 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   #dpb-float-root *, #dpb-float-root *::before, #dpb-float-root *::after,
   .dpb-toasts *, .dpb-toasts *::before, .dpb-toasts *::after {
     scroll-behavior: auto !important;
-    transition-duration: 1ms !important;
-    transition-delay: 0ms !important;
+    transition-duration: var(--dpb-duration-instant) !important;
+    transition-delay: 0s !important;
   }
   .dpb-free-pin,
   .dpb-free-pin.dpb-pin-drop,
@@ -940,7 +940,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   transition: background var(--dpb-duration-quick) var(--dpb-ease-spring);
 }
 .dpb-section-header:hover {
-  background: var(--dpb-elev-hover, rgba(0,0,0,.04));
+  background: var(--dpb-elev-hover);
 }
 .dpb-section-header:focus-visible {
   outline: 2px solid var(--dpb-focus);

@@ -66,6 +66,40 @@ class SharedTokenFileTest(unittest.TestCase):
         self.assertEqual(darks[0], darks[1])
 
 
+WORKBENCH_CSS = (_PKG_ROOT.parent / "design-playbook-workbench" / "design_playbook_workbench"
+                 / "web" / "app.css")
+LITERAL_SHEETS = (MCP / "preview" / "control.css", MCP / "run_console" / "app.css", WORKBENCH_CSS)
+
+
+class LiteralValueTest(unittest.TestCase):
+    """G-6: colour, millisecond and easing literals live only in tokens.css."""
+
+    def test_surface_sheets_hold_no_literal_values(self) -> None:
+        for sheet in LITERAL_SHEETS:
+            with self.subTest(sheet=sheet.name):
+                found = self_audit.literal_values(sheet.read_text(encoding="utf-8"))
+                self.assertEqual(found, [])
+
+    def test_literal_scanner_sees_each_kind_and_ignores_comments(self) -> None:
+        css = ("/* #123456 400ms */ a{color:#abc;background:rgba(0,0,0,.1);"
+               "transition:x 120ms cubic-bezier(0,0,1,1);border-color:rgb(1 2 3)}")
+        self.assertEqual(self_audit.literal_values(css),
+                         ["#abc", "rgba(0,0,0,.1)", "120ms", "cubic-bezier(0,0,1,1)", "rgb(1 2 3)"])
+        self.assertEqual(self_audit.literal_values("a{color:var(--dpb-ink);width:#id;animation:x 1s}"), [])
+
+    def test_tokens_carry_the_motion_and_canvas_values_the_surfaces_read(self) -> None:
+        light: set[str] = set()
+        for context, selector, props in _token_blocks():
+            if not ("dark" in selector or "dark" in context):
+                light.update(props)
+        for name in ("--dpb-duration-press", "--dpb-duration-base", "--dpb-duration-settle",
+                     "--dpb-duration-enter", "--dpb-duration-slow", "--dpb-duration-emphasis",
+                     "--dpb-duration-flash", "--dpb-duration-instant",
+                     "--dpb-canvas-grid-1", "--dpb-canvas-node-bg", "--dpb-canvas-node-line",
+                     "--dpb-shadow-hairline", "--dpb-shadow-canvas"):
+            self.assertIn(name, light)
+
+
 class SurfaceWiringTest(unittest.TestCase):
     def test_preview_inlines_the_shared_tokens_first(self) -> None:
         preview_control._load_resources.cache_clear()  # noqa: SLF001

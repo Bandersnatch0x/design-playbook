@@ -70,7 +70,7 @@ body {
   color: var(--text);
   border: 2px solid var(--focus);
   border-radius: var(--radius);
-  transition: top 120ms ease;
+  transition: top var(--dpb-duration-quick) ease;
 }
 
 .skip-link:focus {
@@ -212,7 +212,7 @@ kbd {
   gap: 6px;
   min-height: 36px;
   box-shadow: var(--dpb-shadow-tool);
-  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, transform 100ms ease;
+  transition: background-color var(--dpb-duration-base) ease, border-color var(--dpb-duration-base) ease, box-shadow var(--dpb-duration-base) ease, transform var(--dpb-duration-press) ease;
 }
 
 .button:hover {
@@ -247,9 +247,9 @@ kbd {
 }
 
 .button:not(.button-secondary) kbd {
-  background: rgba(255, 255, 255, 0.25);
+  background: color-mix(in srgb, var(--accent-ink) 25%, transparent);
   color: var(--accent-ink);
-  border-color: rgba(255, 255, 255, 0.4);
+  border-color: color-mix(in srgb, var(--accent-ink) 40%, transparent);
   border-bottom-width: 1px;
 }
 
@@ -391,7 +391,7 @@ main {
   background: var(--surface-dim);
   color: var(--text);
   box-shadow: none;
-  transition: all 150ms ease;
+  transition: all var(--dpb-duration-base) ease;
 }
 
 .build-state-chip:hover {
@@ -427,7 +427,7 @@ main {
 
 .chip-caret {
   opacity: 0.7;
-  transition: transform 150ms ease;
+  transition: transform var(--dpb-duration-base) ease;
 }
 .build-state-chip[aria-expanded="true"] .chip-caret {
   transform: rotate(180deg);
@@ -516,7 +516,7 @@ main {
   flex-direction: column;
   justify-content: space-between;
   gap: 10px;
-  transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all var(--dpb-duration-settle) var(--dpb-ease-spring);
   position: relative;
 }
 
@@ -661,7 +661,7 @@ main {
   border: 1px solid var(--line);
   color: var(--text);
   text-decoration: none;
-  transition: all 120ms ease;
+  transition: all var(--dpb-duration-quick) ease;
 }
 
 .jump-link:hover {
@@ -842,7 +842,7 @@ main {
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+  box-shadow: var(--dpb-shadow-hairline);
   min-width: 0;
   box-sizing: border-box;
 }
@@ -1088,7 +1088,7 @@ details.source {
   border-radius: 6px;
   margin: 0;
   background: var(--surface-dim);
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition: border-color var(--dpb-duration-base) ease, box-shadow var(--dpb-duration-base) ease;
 }
 
 details.source:hover {

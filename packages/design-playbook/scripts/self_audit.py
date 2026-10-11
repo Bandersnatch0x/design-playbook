@@ -127,6 +127,20 @@ def token_gaps(definitions: str, consumers: str) -> list[str]:
             + [f"unused:{name}" for name in sorted((light | dark) - used)])
 
 
+_LITERAL = re.compile(
+    r"#[0-9a-fA-F]{3,8}(?![\w-])|(?<![\w-])(?:rgba?|hsla?)\([^)]*\)"
+    r"|(?<![\w.-])\d*\.?\d+ms(?![\w-])|cubic-bezier\([^)]*\)")
+
+
+def literal_values(css: str) -> list[str]:
+    """G-6 findings for one style sheet: colour, millisecond and easing literals.
+
+    Only declaration values count (selectors such as ``#id`` do not), and the
+    token file is the one place these literals may be written.
+    """
+    return [match.group(0) for _, _, body in _blocks(css) for match in _LITERAL.finditer(body)]
+
+
 def surface_sheets(surface: dict) -> list[str]:
     """The style sheets a surface loads, shared token file first."""
     return list(surface.get("stylesheets") or [surface["stylesheet"]])

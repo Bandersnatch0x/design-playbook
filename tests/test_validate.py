@@ -23,6 +23,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+WORKBENCH_APP_CSS = "packages/design-playbook-workbench/design_playbook_workbench/web/app.css"
 WORKBENCH_TOKENS = "packages/design-playbook-workbench/design_playbook_workbench/web/tokens.css"
 VALIDATE = ROOT / "scripts" / "validate.py"
 
@@ -579,6 +580,27 @@ class ValidateGateTests(unittest.TestCase):
         result = self.validate()
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("FAIL  workbench token copy is byte-identical to the shared file (U-07)", result.stdout)
+
+    def test_literal_values_outside_tokens_fail_the_gate(self) -> None:
+        gate = "FAIL  colour, timing and easing literals live only in tokens.css (G-6)"
+        cases = (
+            (self._pkg("mcp", "preview", "control.css"), "\n.x { color: #123456; }\n", "control.css:#123456"),
+            (self._pkg("mcp", "run_console", "app.css"), "\n.x { transition: top 120ms ease; }\n",
+             "app.css:120ms"),
+            (self.root / WORKBENCH_APP_CSS, "\n.x { transition-timing-function: cubic-bezier(0,0,1,1); }\n",
+             "app.css:cubic-bezier(0,0,1,1)"),
+        )
+        for path, extra, found in cases:
+            with self.subTest(found=found):
+                original = path.read_text(encoding="utf-8")
+                path.write_text(original + extra, encoding="utf-8")
+                try:
+                    result = self.validate()
+                finally:
+                    path.write_text(original, encoding="utf-8")
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn(gate, result.stdout)
+                self.assertIn(found, result.stdout)
 
     def test_unused_token_fails_the_token_gate(self) -> None:
         self._edit(self._pkg("mcp", "_shared", "tokens.css"),
