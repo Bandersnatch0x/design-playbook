@@ -641,6 +641,37 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("FAIL  own UI meets the registry floors outside the recorded debt", result.stdout)
         self.assertIn("preview:light:--dpb-soft", result.stdout)
 
+    def test_missing_contrast_branch_fails_the_media_gate(self) -> None:
+        gate = "FAIL  every surface carries the increased-contrast, forced-colors and reduced-motion blocks (G-4)"
+        cases = (
+            (self._pkg("mcp", "_shared", "tokens.css"), "@media (forced-colors: active)",
+             "@media (forced-colors: none)", "preview:forced-colors"),
+            (self._pkg("mcp", "_shared", "tokens.css"), "@media (prefers-contrast: more)",
+             "@media (prefers-contrast: less)", "run-console:prefers-contrast"),
+            (self.root / "packages" / "design-playbook-workbench" / "design_playbook_workbench"
+             / "web" / "app.css", "@media (prefers-reduced-motion: reduce)",
+             "@media (prefers-reduced-motion: no-preference)", "workbench:prefers-reduced-motion"),
+        )
+        for path, old, new, detail in cases:
+            with self.subTest(detail=detail):
+                original = path.read_text(encoding="utf-8")
+                try:
+                    self._edit(path, old, new)
+                    result = self.validate()
+                finally:
+                    path.write_text(original, encoding="utf-8")
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn(gate, result.stdout)
+                self.assertIn(detail, result.stdout)
+
+    def test_weak_increased_contrast_block_fails_the_self_audit(self) -> None:
+        self._edit(self._pkg("mcp", "_shared", "tokens.css"),
+                   "--dpb-muted: var(--dpb-ink);", "--dpb-muted: #94A3B8;")
+        result = self.validate()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL  own UI meets the registry floors outside the recorded debt", result.stdout)
+        self.assertIn("preview:light-more:--dpb-muted", result.stdout)
+
     def test_paid_debt_must_leave_the_ledger(self) -> None:
         # A ledger line for a pair that already passes is paid debt left behind.
         self._edit(self._pkg("examples", "self-audit", "baseline.json"),
@@ -652,12 +683,12 @@ class ValidateGateTests(unittest.TestCase):
 
     def test_self_audit_reads_the_registry_floor(self) -> None:
         # Read-through: raise the registry's text floor and a token pair that
-        # passes today (soft on surface, 7.13:1 in dark) starts failing.
+        # passes today (muted on surface, 7.2:1 in dark) starts failing.
         self._edit(self._pkg("skills", "design-playbook", "references", "rules.md"),
                    "text-contrast >= 4.5:1", "text-contrast >= 7.5:1")
         result = self.validate()
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("preview:dark:--dpb-soft:--dpb-surface", result.stdout)
+        self.assertIn("preview:dark:--dpb-muted:--dpb-surface", result.stdout)
 
     def test_registry_third_party_source_name_fails_content_lint(self) -> None:
         # G8 content ban (review advisory, R4): naming a third-party source

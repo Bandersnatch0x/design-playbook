@@ -45,16 +45,31 @@ def _blocks(css: str) -> list[tuple[str, str, str]]:
 
 
 def appearance_tokens(css: str) -> dict[str, dict[str, str]]:
-    """Custom properties per appearance (``light`` / ``dark``), aliases resolved."""
+    """Custom properties per appearance, aliases resolved.
+
+    ``light`` and ``dark`` are the default appearances. ``light-more`` and
+    ``dark-more`` are those two with the ``prefers-contrast: more`` block laid
+    over them. The ``forced-colors`` block hands colour to the system and is
+    left out of the table.
+    """
     result: dict[str, dict[str, str]] = {}
+    more: dict[str, str] = {}
     for context, selector, body in _blocks(css):
         props = {k: v.strip() for k, v in _PROP.findall(body)}
-        if not any(k.startswith("--dpb-") for k in props):
+        if selector.startswith("@") or not any(k.startswith("--dpb-") for k in props):
+            continue  # an at-rule's own entry repeats the rules nested inside it
+        if "forced-colors" in context:
+            continue
+        if "prefers-contrast" in context:
+            more.update(props)
             continue
         appearance = "dark" if "dark" in selector or "dark" in context else "light"
         result.setdefault(appearance, {}).update(props)
     if "dark" in result:  # dark blocks override light ones; unset roles inherit
         result["dark"] = {**result.get("light", {}), **result["dark"]}
+    if more:
+        for appearance in list(result):
+            result[f"{appearance}-more"] = {**result[appearance], **more}
     for tokens in result.values():
         for _ in range(4):
             for key, value in tokens.items():
@@ -62,6 +77,19 @@ def appearance_tokens(css: str) -> dict[str, dict[str, str]]:
                 if alias and alias.group(1) in tokens:
                     tokens[key] = tokens[alias.group(1)]
     return result
+
+
+MEDIA_BLOCKS: tuple[tuple[str, str], ...] = (
+    ("prefers-contrast", r"@media[^{]*\(\s*prefers-contrast\s*:\s*more\s*\)"),
+    ("forced-colors", r"@media[^{]*\(\s*forced-colors\s*:\s*active\s*\)"),
+    ("prefers-reduced-motion", r"@media[^{]*\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)"),
+)
+
+
+def media_gaps(css: str) -> list[str]:
+    """G-4: the preference blocks a surface's style sheets do not carry."""
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    return [name for name, pattern in MEDIA_BLOCKS if not re.search(pattern, css)]
 
 
 def _rgba(value: str) -> tuple[float, float, float, float] | None:

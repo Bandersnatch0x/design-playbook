@@ -10,6 +10,7 @@
   --ok: var(--dpb-success);
   --accent-ink: var(--dpb-accent-ink);
   --accent: var(--dpb-accent);
+  --accent-text: var(--dpb-accent-text);
   --line: var(--dpb-line);
   --ink-muted: var(--dpb-muted);
   --ink: var(--dpb-ink);
@@ -35,7 +36,7 @@ body {
 }
 
 :focus-visible {
-  outline: 3px solid var(--focus);
+  outline: var(--dpb-focus-width) solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -215,7 +216,7 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
   padding: 0.05rem 0.4rem;
   border-radius: 999px;
   border: 1px solid var(--accent);
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 0.75rem;
 }
 
@@ -250,7 +251,7 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
 .proposal-summary { font-weight: 600; }
 .proposal-meta { margin: 0.35rem 0 0; font-size: 0.85rem; }
 .proposal-recovery { margin: 0.5rem 0 0; color: var(--warn); }
-.proposal-state[data-state="awaiting-authorization"] { color: var(--accent); border-color: var(--accent); background: transparent; }
+.proposal-state[data-state="awaiting-authorization"] { color: var(--accent-text); border-color: var(--accent); background: transparent; }
 .proposal-state[data-state="applied"] { color: var(--ok); background: var(--ok-surface); border-color: var(--ok); }
 .proposal-state[data-state="rejected"], .proposal-state[data-state="expired"] { color: var(--ink-muted); border-color: var(--line); }
 .proposal-state[data-state="recovery-required"] { color: var(--warn); background: var(--warn-surface); border-color: var(--warn); }
@@ -330,7 +331,7 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
   background: repeating-conic-gradient(var(--canvas-grid-1) 0% 25%, var(--canvas-grid-2) 0% 50%) 50% / 24px 24px;
   touch-action: none;
 }
-.canvas-viewport:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.canvas-viewport:focus-visible { outline: var(--dpb-focus-width) solid var(--focus); outline-offset: 2px; }
 .canvas-viewport[data-panning="true"] { cursor: grabbing; }
 .canvas-stage {
   position: absolute;

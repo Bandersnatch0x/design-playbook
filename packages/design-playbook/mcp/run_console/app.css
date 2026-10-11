@@ -12,6 +12,7 @@
   --line: var(--dpb-line);
   --line-strong: var(--dpb-line-strong);
   --accent: var(--dpb-accent);
+  --accent-text: var(--dpb-accent-text);
   --accent-ink: var(--dpb-accent-ink);
   --focus: var(--dpb-focus);
   --ok: var(--dpb-success);
@@ -77,7 +78,7 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--focus);
+  outline: var(--dpb-focus-width) solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -593,7 +594,7 @@ main {
   padding: 3px 8px;
   border-radius: 4px;
   background: var(--dpb-accent-chip-bg);
-  color: var(--accent);
+  color: var(--accent-text);
   border: 1px solid var(--dpb-accent-chip-border);
 }
 
@@ -666,7 +667,7 @@ main {
 .jump-link:hover {
   background: var(--dpb-accent-chip-bg);
   border-color: var(--dpb-accent-chip-border);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .jump-bullet {
@@ -930,7 +931,7 @@ main {
 }
 
 .stage-state-latest {
-  color: var(--accent);
+  color: var(--accent-text);
   border-color: var(--dpb-accent-chip-border);
   background: var(--dpb-accent-chip-bg);
   font-weight: 700;
@@ -1259,7 +1260,7 @@ details.source[open] > summary {
 }
 
 .export-ref-input:focus-visible {
-  outline: 2px solid var(--dpb-focus);
+  outline: var(--dpb-focus-width) solid var(--dpb-focus);
   outline-offset: 2px;
 }
 

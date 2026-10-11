@@ -25,7 +25,7 @@ def rule(selector: str) -> str:
 # These keep the rule half, which has no runtime equivalent.
 def test_pending_tab_uses_batch_count_and_accent() -> None:
     style = rule(".dpb-rail-tab.is-pending .dpb-filter-n")
-    assert "color: var(--dpb-accent)" in style
+    assert "color: var(--dpb-accent-text)" in style
     assert "font-weight: 700" in style
 
 
@@ -124,12 +124,14 @@ def test_focus_outlines_use_the_solid_focus_token() -> None:
         for decl in re.findall(r"outline\s*:[^;]*", body)
     ]
     assert outlines
-    assert [o for o in outlines if "2px solid var(--dpb-focus)" not in o[1]] == []
+    assert [o for o in outlines if "var(--dpb-focus-width) solid var(--dpb-focus)" not in o[1]] == []
 
 
 def test_focus_token_is_opaque_in_both_themes() -> None:
     values = re.findall(r"--dpb-focus\s*:\s*([^;]+);", TOKENS)
-    assert values and all(v.strip() == "var(--dpb-accent)" for v in values)
+    # The forced-colors block hands the ring to the system highlight colour.
+    assert values and all(v.strip() in ("var(--dpb-accent)", "Highlight") for v in values)
+    assert [v.strip() for v in values].count("Highlight") == 1
     for accent in re.findall(r"--dpb-accent\s*:\s*([^;]+);", TOKENS):
         assert "rgba" not in accent and "/" not in accent
 
@@ -139,7 +141,7 @@ def test_suppressed_outlines_fall_back_to_the_shell_focus_rule() -> None:
         ":is(#dpb-root, #dpb-float-root) "
         ":is(button, input, textarea, select, a[href], [tabindex]):focus-visible"
     )
-    assert "outline: 2px solid var(--dpb-focus)" in shell
+    assert "outline: var(--dpb-focus-width) solid var(--dpb-focus)" in shell
 
 
 REVIEW_JS = (PREVIEW / "control.review.js").read_text(encoding="utf-8")

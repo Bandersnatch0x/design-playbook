@@ -25,6 +25,7 @@
   --dpb-accent: #2563EB;
   --dpb-accent-ink: #FFFFFF;
   --dpb-accent-deep: #1D4ED8;
+  --dpb-accent-text: #2563EB;
   --dpb-accent-wash: #EFF6FF;
   --dpb-accent-chip-bg: #EFF6FF;
   --dpb-accent-chip-border: #BFDBFE;
@@ -52,6 +53,8 @@
   --dpb-ring-accent: rgba(37,99,235,.25);
   --dpb-ring-danger: rgba(225,29,72,.25);
   --dpb-focus: var(--dpb-accent);
+  --dpb-focus-width: 2px;
+  accent-color: var(--dpb-accent);
   --dpb-canvas-grid-1: #EEF0F4;
   --dpb-canvas-grid-2: #F7F8FB;
   --dpb-canvas-stage-bg: #FFFFFF;
@@ -136,11 +139,12 @@
     --dpb-line: rgba(255, 255, 255, 0.07);
     --dpb-line-strong: rgba(255, 255, 255, 0.14);
     --dpb-ink: #F1F5F9;
-    --dpb-muted: #8592A6;
-    --dpb-soft: #94A3B8;
+    --dpb-muted: #9AA3B4;
+    --dpb-soft: #B4BFCE;
     --dpb-accent: #3B82F6;
     --dpb-accent-ink: #0F172A;
     --dpb-accent-deep: #2563EB;
+    --dpb-accent-text: #60A5FA;
     --dpb-accent-wash: rgba(59,130,246,.12);
     --dpb-accent-chip-bg: rgba(59,130,246,.12);
     --dpb-accent-chip-border: rgba(59,130,246,.35);
@@ -186,11 +190,12 @@
   --dpb-line: rgba(255, 255, 255, 0.07);
   --dpb-line-strong: rgba(255, 255, 255, 0.14);
   --dpb-ink: #F1F5F9;
-  --dpb-muted: #8592A6;
-  --dpb-soft: #94A3B8;
+  --dpb-muted: #9AA3B4;
+  --dpb-soft: #B4BFCE;
   --dpb-accent: #3B82F6;
   --dpb-accent-ink: #0F172A;
   --dpb-accent-deep: #2563EB;
+  --dpb-accent-text: #60A5FA;
   --dpb-accent-wash: rgba(59,130,246,.12);
   --dpb-accent-chip-bg: rgba(59,130,246,.12);
   --dpb-accent-chip-border: rgba(59,130,246,.35);
@@ -221,4 +226,24 @@
   --dpb-canvas-node-text-bg: #2B313D;
   --dpb-canvas-node-instance-bg: #1C2742;
   --dpb-focus: var(--dpb-accent);
+}
+
+/* Increased contrast: the quiet text roles and the hairlines take the full ink
+   colour and the focus ring widens. The selector reaches an id plus an
+   attribute, so it outranks every theme block above. */
+@media (prefers-contrast: more) {
+  :is(.dpb-ui, #dpb-root, #dpb-float-root, .dpb-toasts):is(:not([data-theme]), [data-theme]) {
+    --dpb-muted: var(--dpb-ink);
+    --dpb-soft: var(--dpb-ink);
+    --dpb-line: var(--dpb-ink);
+    --dpb-line-strong: var(--dpb-ink);
+    --dpb-focus-width: 3px;
+  }
+}
+
+/* Forced colours: the focus ring takes the system highlight colour. */
+@media (forced-colors: active) {
+  :is(.dpb-ui, #dpb-root, #dpb-float-root, .dpb-toasts):is(:not([data-theme]), [data-theme]) {
+    --dpb-focus: Highlight;
+  }
 }

@@ -1204,6 +1204,24 @@ def validate_token_copies() -> None:
                      + ("" if not drift else " (" + ", ".join(drift) + ")"))
 
 
+def validate_media_blocks() -> None:
+    """G-4: every surface carries the increased-contrast, forced-colors and reduced-motion blocks."""
+    print("\n== Preference blocks (G-4) ==")
+    ledger = self_audit.load_ledger(PKG / "examples" / "self-audit" / "baseline.json")
+    missing: list[str] = []
+    for surface in ledger["surfaces"]:
+        sheets = self_audit.surface_sheets(surface)
+        absent = [rel for rel in sheets if not (ROOT / rel).is_file()]
+        if absent:
+            missing.append(f"{surface['name']}:missing-stylesheet")
+            continue
+        css = "\n".join((ROOT / rel).read_text(encoding="utf-8") for rel in sheets)
+        missing += [f"{surface['name']}:{gap}" for gap in self_audit.media_gaps(css)]
+    check(not missing, "every surface carries the increased-contrast, forced-colors and "
+                       "reduced-motion blocks (G-4)"
+                       + ("" if not missing else " (" + "; ".join(missing) + ")"))
+
+
 def validate_token_contract() -> None:
     """G-2: every --dpb token is set for the light theme and read somewhere."""
     print("\n== Token contract (G-2) ==")
@@ -1431,6 +1449,7 @@ CHECKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("validate_external_terms", (), ()),
     ("validate_self_audit", ("registry_entries",), ()),
     ("validate_token_contract", (), ()),
+    ("validate_media_blocks", (), ()),
     ("validate_token_copies", (), ()),
     ("validate_literal_values", (), ()),
     ("validate_vendor_fonts", (), ()),
