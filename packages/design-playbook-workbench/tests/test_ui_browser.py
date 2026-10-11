@@ -388,6 +388,29 @@ class DesignSystemJourneyTest(unittest.TestCase):
             f"已发布第 {number} 次修订"
         )
 
+    def test_a_double_click_on_a_mutating_button_sends_one_request(self) -> None:
+        self._open_design_system()
+        self._edit(self.TOKENS)
+        self._save()
+        seen = []
+
+        def slow(route):
+            seen.append(route.request.url)
+            self.page.wait_for_timeout(600)
+            route.continue_()
+
+        self.page.route("**/tokens-publish", slow)
+        button = self.page.locator("#tokens-publish")
+        button.dblclick(force=True)
+        expect(button).to_be_disabled()
+        expect(button).to_have_attribute("aria-busy", "true")
+        expect(button).to_contain_text("发布中")
+        expect(self.page.locator("#tokens-status")).to_contain_text("已发布第 1 次修订")
+        self.assertEqual(len(seen), 1)
+        expect(button).to_be_enabled()
+        expect(button).not_to_have_attribute("aria-busy", "true")
+        expect(button).to_have_text("发布新版本")
+
     def test_a_non_token_asset_has_no_design_system_entry(self) -> None:
         self._open_asset("markdown")
         expect(self.page.locator("#asset-design-system-controls")).to_be_hidden()

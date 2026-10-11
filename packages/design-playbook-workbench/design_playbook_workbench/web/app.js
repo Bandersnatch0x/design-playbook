@@ -408,7 +408,58 @@ function failSession(message) {
   elements.probeForm.hidden = true;
 }
 
-async function api(path, { method = "GET", body } = {}) {
+let clickedButton = null;
+document.addEventListener(
+  "click",
+  (event) => {
+    const button = event.target instanceof Element ? event.target.closest("button") : null;
+    if (!button) return;
+    if (button.getAttribute("aria-busy") === "true") {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+    clickedButton = button;
+    setTimeout(() => {
+      if (clickedButton === button) clickedButton = null;
+    }, 0);
+  },
+  true
+);
+
+function markBusy(button) {
+  const label = button.dataset.busyLabel || "处理中…";
+  const previous = {
+    text: button.textContent,
+    disabled: button.disabled,
+    focused: document.activeElement === button,
+  };
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  button.textContent = label;
+  return () => {
+    button.removeAttribute("aria-busy");
+    button.textContent = previous.text;
+    button.disabled = previous.disabled;
+    if (previous.focused && !button.disabled && document.activeElement === document.body) {
+      button.focus();
+    }
+  };
+}
+
+async function api(path, options = {}) {
+  const method = options.method || "GET";
+  const busyButton = method === "GET" ? null : clickedButton;
+  clickedButton = null;
+  const release = busyButton ? markBusy(busyButton) : null;
+  try {
+    return await sendRequest(path, options);
+  } finally {
+    if (release) release();
+  }
+}
+
+async function sendRequest(path, { method = "GET", body } = {}) {
   const headers = {};
   if (state.token) headers.Authorization = "Bearer " + state.token;
   if (body !== undefined) headers["Content-Type"] = "application/json";
