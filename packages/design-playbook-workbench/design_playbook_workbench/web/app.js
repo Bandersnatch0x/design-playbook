@@ -685,6 +685,7 @@ function renderProjects() {
         : project.connectionState;
     row.querySelector(".grant-list").textContent = grantLabel(project.grantScopes);
     row.querySelector(".open-button").addEventListener("click", () => openProject(project));
+    wireRowMenu(row);
     row.querySelector(".rename-button").addEventListener("click", () => renameProject(project));
     row.querySelector(".grants-button").addEventListener("click", () => editGrants(project));
     row.querySelector(".proposals-button").addEventListener("click", () => openProposals(project));
@@ -699,6 +700,51 @@ function renderProjects() {
     row.querySelector(".remove-button").addEventListener("click", () => removeProject(project));
     elements.rows.appendChild(fragment);
   }
+}
+
+function wireRowMenu(row) {
+  const more = row.querySelector(".more-button");
+  const menu = row.querySelector(".row-menu");
+  const items = () => Array.from(menu.querySelectorAll("button")).filter((b) => !b.hidden);
+  const close = (refocus) => {
+    menu.hidden = true;
+    more.setAttribute("aria-expanded", "false");
+    if (refocus) more.focus();
+  };
+  const open = () => {
+    menu.hidden = false;
+    more.setAttribute("aria-expanded", "true");
+    const first = items()[0];
+    if (first) first.focus();
+  };
+  more.addEventListener("click", () => (menu.hidden ? open() : close(true)));
+  more.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" && menu.hidden) {
+      event.preventDefault();
+      open();
+    }
+  });
+  menu.addEventListener("click", () => close(true), true);
+  menu.addEventListener("keydown", (event) => {
+    const list = items();
+    const at = list.indexOf(document.activeElement);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      close(true);
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      list[(at + 1) % list.length].focus();
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      list[(at - 1 + list.length) % list.length].focus();
+    } else if (event.key === "Tab") {
+      close(false);
+    }
+  });
+  document.addEventListener("click", (event) => {
+    if (!menu.hidden && !row.contains(event.target)) close(false);
+  });
 }
 
 async function loadProjects() {

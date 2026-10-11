@@ -746,16 +746,19 @@
     <td class="cell-grants"><span class="grant-list"></span></td>
     <td class="cell-actions">
       <button type="button" class="open-button">设为当前</button>
-      <button type="button" class="rename-button secondary">重命名</button>
-      <button type="button" class="grants-button secondary">授权</button>
-      <button type="button" class="proposals-button secondary">提案</button>
-      <button type="button" class="assets-button secondary">资产</button>
-      <button type="button" class="canvas-button secondary">画布</button>
-      <button type="button" class="work-button secondary">任务</button>
-      <button type="button" class="owner-button secondary">验证</button>
-      <button type="button" class="life-button secondary">生命周期</button>
-      <button type="button" class="rebind-button secondary" hidden>重新绑定</button>
-      <button type="button" class="remove-button danger">移除</button>
+      <button type="button" class="more-button secondary" aria-haspopup="menu" aria-expanded="false">更多</button>
+      <div class="row-menu" role="menu" aria-label="项目操作" hidden>
+        <button type="button" role="menuitem" class="rename-button secondary">重命名</button>
+        <button type="button" role="menuitem" class="grants-button secondary">授权</button>
+        <button type="button" role="menuitem" class="proposals-button secondary">提案</button>
+        <button type="button" role="menuitem" class="assets-button secondary">资产</button>
+        <button type="button" role="menuitem" class="canvas-button secondary">画布</button>
+        <button type="button" role="menuitem" class="work-button secondary">任务</button>
+        <button type="button" role="menuitem" class="owner-button secondary">验证</button>
+        <button type="button" role="menuitem" class="life-button secondary">生命周期</button>
+        <button type="button" role="menuitem" class="rebind-button secondary" hidden>重新绑定</button>
+        <button type="button" role="menuitem" class="remove-button danger">移除</button>
+      </div>
     </td>
   </tr>
 </template>

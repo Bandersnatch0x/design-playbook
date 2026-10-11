@@ -25,6 +25,15 @@ _PLAYWRIGHT = None
 _BROWSER = None
 
 
+def row_action(scope, name):
+    """Open the row menu when needed and return the action's locator."""
+    root = scope.locator("#project-rows tr").first if hasattr(scope, "goto") else scope
+    button = root.locator(f".{name}-button").first
+    if not button.is_visible():
+        root.locator(".more-button").click()
+    return button
+
+
 def setUpModule() -> None:
     global _PLAYWRIGHT, _BROWSER
     _PLAYWRIGHT = sync_playwright().start()
@@ -111,11 +120,11 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         row.locator(".open-button").click()
         expect(row.locator(".current-flag")).to_be_visible()
 
-        row.locator(".rename-button").click()
+        row_action(row, "rename").click()
         answer_dialog(self.page, "重命名后的项目")
         expect(row.locator(".project-name")).to_have_text("重命名后的项目")
 
-        row.locator(".grants-button").click()
+        row_action(row, "grants").click()
         answer_dialog(self.page, "read, write")
         expect(row.locator(".grant-list")).to_contain_text("写入")
 
@@ -130,10 +139,12 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         directory.rmdir()
         self.page.click("#refresh-button")
         expect(row.locator(".state-badge")).to_have_text("已断开")
+        row.locator(".more-button").click()
         expect(row.locator(".rebind-button")).to_be_visible()
+        self.page.keyboard.press("Escape")
 
         replacement = self.h.make_directory("vanish-moved")
-        row.locator(".rebind-button").click()
+        row_action(row, "rebind").click()
         answer_dialog(self.page, str(replacement))
         answer_dialog(self.page)
         expect(row.locator(".state-badge")).to_have_text("已连接")
@@ -142,7 +153,7 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         )
 
         # Removal unregisters only; the folder itself stays on disk.
-        row.locator(".remove-button").click()
+        row_action(row, "remove").click()
         answer_dialog(self.page)
         expect(self.page.locator("#project-rows tr")).to_have_count(0)
         expect(self.page.locator("#list-empty")).to_be_visible()
@@ -219,7 +230,7 @@ class AssetsPanelJourneyTest(unittest.TestCase):
         expect(self.page.locator("#session-state")).to_contain_text("会话有效")
 
     def _open_panel(self) -> None:
-        self.page.locator("#project-rows tr .assets-button").first.click()
+        row_action(self.page, "assets").click()
         expect(self.page.locator("#assets-panel")).to_be_visible()
         expect(self.page.locator(".asset-item")).to_have_count(2)
 
@@ -351,7 +362,7 @@ class DesignSystemJourneyTest(unittest.TestCase):
         expect(self.page.locator("#session-state")).to_contain_text("会话有效")
 
     def _open_asset(self, kind: str) -> None:
-        self.page.locator("#project-rows tr .assets-button").first.click()
+        row_action(self.page, "assets").click()
         expect(self.page.locator("#assets-panel")).to_be_visible()
         self.page.select_option("#assets-kind", kind)
         self.page.click("#assets-search-button")
@@ -501,7 +512,7 @@ class DesignSystemJourneyTest(unittest.TestCase):
         self.assertEqual(self.baseline.read_bytes(), before)
 
         # The proposal is the ordinary R06 proposal, reviewed elsewhere.
-        self.page.locator("#project-rows tr .proposals-button").first.click()
+        row_action(self.page, "proposals").click()
         expect(self.page.locator("#proposals-panel")).to_be_visible()
         expect(self.page.locator(".proposal-item")).to_have_count(1)
         expect(self.page.locator(".proposal-summary").first).to_contain_text(
@@ -555,7 +566,7 @@ class ComponentDocumentJourneyTest(unittest.TestCase):
         )
         self.page.goto(self.h.runtime.bootstrap_url)
         expect(self.page.locator("#session-state")).to_contain_text("会话有效")
-        self.page.locator("#project-rows tr .assets-button").first.click()
+        row_action(self.page, "assets").click()
         expect(self.page.locator("#assets-panel")).to_be_visible()
 
     def _assets(self, kind: str | None = None) -> list[dict]:
@@ -686,7 +697,7 @@ class CanvasJourneyTest(unittest.TestCase):
         assert published.status == 200, published.text
         self.page.goto(self.h.runtime.bootstrap_url)
         expect(self.page.locator("#session-state")).to_contain_text("会话有效")
-        self.page.locator("#project-rows tr .canvas-button").first.click()
+        row_action(self.page, "canvas").click()
         expect(self.page.locator("#canvas-panel")).to_be_visible()
 
     # -- helpers ---------------------------------------------------------
@@ -957,7 +968,7 @@ class CanvasJourneyTest(unittest.TestCase):
         boards_before = len(self.server_document()["boards"])
         self.page.click("#canvas-close")
         expect(self.page.locator("#canvas-panel")).to_be_hidden()
-        self.page.locator("#project-rows tr .canvas-button").first.click()
+        row_action(self.page, "canvas").click()
         expect(self.page.locator("#canvas-panel")).to_be_visible()
         expect(self.page.locator("#canvas-board option")).to_have_count(boards_before)
         self.page.locator("#canvas-undo").click()
@@ -965,7 +976,7 @@ class CanvasJourneyTest(unittest.TestCase):
 
     def test_placing_an_asset_creates_a_fixed_revision_instance(self) -> None:
         self.create_canvas()
-        self.page.locator("#project-rows tr .assets-button").first.click()
+        row_action(self.page, "assets").click()
         expect(self.page.locator("#assets-panel")).to_be_visible()
         self.page.select_option("#assets-kind", "markdown")
         self.page.click("#assets-search-button")
@@ -1135,7 +1146,7 @@ class CanvasJourneyTest(unittest.TestCase):
         self.page.select_option("#canvas-select", new_canvas_id)
         expect(self.page.locator(".canvas-node")).to_have_count(200)
 
-        self.page.locator("#project-rows tr .assets-button").first.click()
+        row_action(self.page, "assets").click()
         self.page.select_option("#assets-kind", "markdown")
         self.page.click("#assets-search-button")
         self.page.locator(".asset-item").first.locator(".asset-select").click()
@@ -1171,7 +1182,7 @@ class OrchestrationJourneyTest(unittest.TestCase):
         )
         self.page.goto(self.h.runtime.bootstrap_url)
         expect(self.page.locator("#session-state")).to_contain_text("会话有效")
-        self.page.locator("#project-rows tr .canvas-button").first.click()
+        row_action(self.page, "canvas").click()
         expect(self.page.locator("#canvas-panel")).to_be_visible()
         self.page.fill("#canvas-name", "编排方案")
         self.page.click("#canvas-create")
@@ -1425,7 +1436,7 @@ class WorkRequestJourneyTest(unittest.TestCase):
 
     def confirmed_context(self) -> str:
         """Build and confirm a context through the canvas panel."""
-        self.page.locator("#project-rows tr .canvas-button").first.click()
+        row_action(self.page, "canvas").click()
         expect(self.page.locator("#canvas-panel")).to_be_visible()
         self.page.fill("#canvas-name", "任务画布")
         self.page.click("#canvas-create")
@@ -1463,7 +1474,7 @@ class WorkRequestJourneyTest(unittest.TestCase):
 
     def test_consent_handoff_and_real_agent_events(self) -> None:
         self.confirmed_context()
-        self.page.locator("#project-rows tr .work-button").first.click()
+        row_action(self.page, "work").click()
         expect(self.page.locator("#work-panel")).to_be_visible()
         expect(self.page.locator("#work-context-note")).to_contain_text("已确认")
 
@@ -1554,7 +1565,7 @@ class WorkRequestJourneyTest(unittest.TestCase):
 
     def test_cancel_is_not_a_fake_stop_and_a_late_result_is_refused(self) -> None:
         self.confirmed_context()
-        self.page.locator("#project-rows tr .work-button").first.click()
+        row_action(self.page, "work").click()
         self.page.fill("#work-title", "取消演示")
         self.page.fill("#work-goal", "演示取消语义")
         self.page.click("#work-create")
@@ -1651,7 +1662,7 @@ class OwnerBackflowJourneyTest(unittest.TestCase):
 
     def test_facts_shown_confirmed_and_backflowed_without_a_second_verdict(self) -> None:
         expect(self.page.locator("#project-rows tr")).to_have_count(1)
-        self.page.locator("#project-rows tr .owner-button").first.click()
+        row_action(self.page, "owner").click()
         expect(self.page.locator("#owner-panel")).to_be_visible()
         expect(self.page.locator("#owner-run-note")).to_contain_text("run-console")
         expect(self.page.locator("#owner-run-note")).to_contain_text("不重新裁决")
@@ -1695,7 +1706,7 @@ class OwnerBackflowJourneyTest(unittest.TestCase):
 
     def test_a_changed_object_shows_stale_and_the_old_confirmation_lapses(self) -> None:
         expect(self.page.locator("#project-rows tr")).to_have_count(1)
-        self.page.locator("#project-rows tr .owner-button").first.click()
+        row_action(self.page, "owner").click()
         expect(self.page.locator("#owner-panel")).to_be_visible()
         self.page.locator("#owner-criteria button").first.click()
         answer_dialog(self.page, "")
@@ -1753,7 +1764,7 @@ class LifecycleJourneyTest(unittest.TestCase):
         assert published.status == 200, published.text
         self.page.goto(self.h.runtime.bootstrap_url)
         expect(self.page.locator("#session-state")).to_contain_text("会话有效")
-        self.page.locator("#project-rows tr .life-button").first.click()
+        row_action(self.page, "life").click()
         expect(self.page.locator("#life-panel")).to_be_visible()
 
     def wait_for(self, check, label, timeout=8.0):
@@ -1963,7 +1974,7 @@ class ProposalJourneyTest(unittest.TestCase):
         return response.json["result"]
 
     def _open_panel(self) -> None:
-        self.page.locator("#project-rows tr .proposals-button").first.click()
+        row_action(self.page, "proposals").click()
         expect(self.page.locator("#proposals-panel")).to_be_visible()
 
     def test_review_diff_apply_and_revert(self) -> None:
@@ -2107,7 +2118,7 @@ class UiReviewRegressionTest(unittest.TestCase):
             self.assertIn(label, cell.evaluate("el => getComputedStyle(el, '::before').content"))
 
     def test_round3_panel_siblings_close_and_nested_focus_returns(self) -> None:
-        self.page.locator(".assets-button").first.click()
+        row_action(self.page, "assets").click()
         expect(self.page.locator("#assets-panel")).to_be_visible()
         self.page.locator("#create-component").click()
         expect(self.page.locator("#document-panel")).to_be_visible()
@@ -2116,19 +2127,19 @@ class UiReviewRegressionTest(unittest.TestCase):
         expect(self.page.locator("#assets-panel")).to_be_visible()
         expect(self.page.locator("#create-component")).to_be_focused()
         self.page.locator("#assets-close").click()
-        expect(self.page.locator(".assets-button").first).to_be_focused()
-        self.page.locator(".assets-button").first.click()
-        self.page.locator(".life-button").first.click()
+        expect(self.page.locator(".more-button").first).to_be_focused()
+        row_action(self.page, "assets").click()
+        row_action(self.page, "life").click()
         expect(self.page.locator("#assets-panel")).to_be_hidden()
         expect(self.page.locator("#life-panel")).to_be_visible()
         self.page.locator("#life-close").click()
-        expect(self.page.locator(".life-button").first).to_be_focused()
+        expect(self.page.locator(".more-button").first).to_be_focused()
         expect(self.page.locator("#assets-panel")).to_be_hidden()
 
     def test_the_flow_edge_note_has_an_accessible_name(self) -> None:
         # F1: every control in the flow row announces what it is; the note was
         # the only one relying on a placeholder, which is not a name.
-        self.page.locator("#project-rows tr .canvas-button").first.click()
+        row_action(self.page, "canvas").click()
         expect(self.page.locator("#canvas-panel")).to_be_visible()
         # exact=True: the canvas viewport's own aria-label mentions these
         # words, so a substring lookup would match it too.
@@ -2142,7 +2153,7 @@ class UiReviewRegressionTest(unittest.TestCase):
     def test_icon_position_actions_keep_an_accessible_name(self) -> None:
         # F5: undo/redo/zoom use glyphs, so their name must come from aria-label
         # rather than the glyph itself.
-        self.page.locator("#project-rows tr .canvas-button").first.click()
+        row_action(self.page, "canvas").click()
         expect(self.page.locator("#canvas-panel")).to_be_visible()
         for button_id, label in (
             ("#canvas-undo", "撤销"),
@@ -2180,7 +2191,7 @@ class UiReviewRegressionTest(unittest.TestCase):
     def test_a_filtered_empty_lifecycle_list_offers_the_next_action(self) -> None:
         # F2 (downgraded): the empty branch existed but lacked the next action
         # every sibling collection surface provides.
-        self.page.locator("#project-rows tr .life-button").first.click()
+        row_action(self.page, "life").click()
         expect(self.page.locator("#life-panel")).to_be_visible()
         self.page.select_option("#life-filter", "trashed")
         empty = self.page.locator("#life-list li").first
@@ -2237,6 +2248,26 @@ class IndependentReviewRegressionTest(unittest.TestCase):
         )
         self.assertEqual(per_row, [0, 1], "only the chosen row may be current")
 
+    def test_row_more_menu_opens_and_closes_from_the_keyboard(self) -> None:
+        # U-13 / E-15: at most two visible buttons per row, rest in a menu.
+        row = self.page.locator("#project-rows tr").first
+        visible = row.evaluate(
+            "r => Array.from(r.querySelectorAll('button'))"
+            ".filter((b) => b.offsetParent !== null).length"
+        )
+        self.assertLessEqual(visible, 2)
+        more = row.locator(".more-button")
+        expect(more).to_have_attribute("aria-haspopup", "menu")
+        expect(more).to_have_attribute("aria-expanded", "false")
+        more.focus()
+        self.page.keyboard.press("ArrowDown")
+        expect(more).to_have_attribute("aria-expanded", "true")
+        expect(row.locator('[role="menuitem"]:visible').first).to_be_focused()
+        self.page.keyboard.press("Escape")
+        expect(more).to_have_attribute("aria-expanded", "false")
+        expect(more).to_be_focused()
+        expect(row.locator(".row-menu")).to_be_hidden()
+
     def test_each_project_row_offers_a_single_primary_action(self) -> None:
         # H-01: the row had two filled primaries (设为当前 plus 画布).
         # `danger` is its own role, not a competing primary, so only the
@@ -2253,9 +2284,8 @@ class IndependentReviewRegressionTest(unittest.TestCase):
 
     def test_opening_a_panel_moves_focus_in_and_closing_hands_it_back(self) -> None:
         # H-02: five panels never received focus, and no close returned it.
-        trigger = self.page.locator("#project-rows tr .canvas-button").first
-        trigger.focus()
-        trigger.press("Enter")
+        self.page.locator("#project-rows tr .more-button").first.click()
+        self.page.locator("#project-rows tr .canvas-button").first.press("Enter")
         expect(self.page.locator("#canvas-panel")).to_be_visible()
         focused = self.page.evaluate(
             "() => document.activeElement ? document.activeElement.id : null"
@@ -2268,7 +2298,7 @@ class IndependentReviewRegressionTest(unittest.TestCase):
             "() => { const a = document.activeElement;"
             " return a ? (a.className || a.tagName) : null; }"
         )
-        self.assertIn("canvas-button", returned, "focus must return to the opener")
+        self.assertIn("more-button", returned, "focus must return to the opener")
 
     def test_settings_panel_also_receives_focus(self) -> None:
         # H-02 covered settings too; it has no heading reference, so the panel
