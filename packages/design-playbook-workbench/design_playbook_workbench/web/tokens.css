@@ -1,0 +1,149 @@
+/* Shared design tokens for the plugin's own surfaces: the Preview review
+   shell and the Run Console. This file is the only place the palette, radius,
+   motion and type-floor values are set; each surface style sheet reads them
+   through var(--dpb-*). Preview inlines this file ahead of control.css; the
+   Run Console serves it as tokens.css ahead of app.css.
+
+   Theme: an explicit data-theme wins; without one the Run Console follows the
+   system preference. The two dark blocks below carry the same values. The
+   light theme defines every token the dark theme sets. */
+
+.dpb-ui,
+#dpb-root,
+#dpb-float-root,
+.dpb-toasts {
+  --dpb-bg: #F8FAFC;
+  --dpb-surface: #F1F5F9;
+  --dpb-elev: #FFFFFF;
+  --dpb-elev-hover: #F1F5F9;
+  --dpb-overlay: #FFFFFF;
+  --dpb-line: #E2E8F0;
+  --dpb-line-strong: #CBD5E1;
+  --dpb-ink: #0F172A;
+  --dpb-muted: #5B6B80;
+  --dpb-soft: #475569;
+  --dpb-accent: #2563EB;
+  --dpb-accent-ink: #FFFFFF;
+  --dpb-accent-deep: #1D4ED8;
+  --dpb-accent-wash: #EFF6FF;
+  --dpb-accent-chip-bg: #EFF6FF;
+  --dpb-accent-chip-border: #BFDBFE;
+  --dpb-accent-soft: #1D4ED8;
+  --dpb-danger: #BE123C;
+  --dpb-danger-wash: #FFF1F2;
+  --dpb-success: #047857;
+  --dpb-success-wash: #ECFDF5;
+  --dpb-tertiary: #B45309;
+  --dpb-tertiary-wash: #FFFBEB;
+  --dpb-tertiary-border: #FDE68A;
+  --dpb-draw-stroke: #E11D48;
+  --dpb-draw-ink: #FFFFFF;
+  --dpb-highlight: rgba(255,255,255,.5);
+  --dpb-scrim: rgba(15,23,42,.4);
+  --dpb-grid-dot: rgba(15,23,42,.10);
+  --dpb-shadow-pill: 0 6px 24px -4px rgba(15,23,42,.14), 0 2px 6px -1px rgba(15,23,42,.06);
+  --dpb-shadow-tool: 0 6px 24px -4px rgba(15,23,42,.08), 0 2px 6px -1px rgba(15,23,42,.04);
+  --dpb-shadow-drawer: -6px 0 32px -4px rgba(15,23,42,.07);
+  --dpb-shadow-pop: 0 12px 32px -8px rgba(15,23,42,.18), 0 2px 8px rgba(15,23,42,.06);
+  --dpb-shadow-glow: 0 0 24px -2px rgba(37,99,235,.3);
+  --dpb-shadow-pin: 0 3px 8px rgba(37,99,235,.35), 0 1px 2px rgba(0,0,0,.1);
+  --dpb-ring-accent: rgba(37,99,235,.25);
+  --dpb-ring-danger: rgba(225,29,72,.25);
+  --dpb-focus: var(--dpb-accent);
+  --dpb-ease-spring: cubic-bezier(.16,1,.3,1);
+  --dpb-ease-pulse: cubic-bezier(0,0,.2,1);
+  --dpb-duration-spring: 200ms;
+  --dpb-duration-quick: 120ms;
+  --dpb-radius: 8px;
+  --dpb-radius-sm: 6px;
+  --dpb-radius-lg: 12px;
+  --dpb-radius-full: 9999px;
+  --dpb-text-xs: 12px;
+  --dpb-topbar-h: 48px;
+  --dpb-rail-w: 320px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .dpb-ui:not([data-theme="light"]) {
+    --dpb-bg: #090B0E;
+    --dpb-surface: #12151B;
+    --dpb-elev: #1A1E26;
+    --dpb-elev-hover: #222732;
+    --dpb-overlay: #2A303D;
+    --dpb-line: rgba(255, 255, 255, 0.07);
+    --dpb-line-strong: rgba(255, 255, 255, 0.14);
+    --dpb-ink: #F1F5F9;
+    --dpb-muted: #8592A6;
+    --dpb-soft: #94A3B8;
+    --dpb-accent: #3B82F6;
+    --dpb-accent-ink: #0F172A;
+    --dpb-accent-deep: #2563EB;
+    --dpb-accent-wash: rgba(59,130,246,.12);
+    --dpb-accent-chip-bg: rgba(59,130,246,.12);
+    --dpb-accent-chip-border: rgba(59,130,246,.35);
+    --dpb-accent-soft: #93C5FD;
+    --dpb-danger: #F87171;
+    --dpb-danger-wash: rgba(239,68,68,.12);
+    --dpb-success: #10B981;
+    --dpb-success-wash: rgba(16,185,129,.12);
+    --dpb-tertiary: #F59E0B;
+    --dpb-tertiary-wash: rgba(245,158,11,.12);
+    --dpb-tertiary-border: rgba(245,158,11,.3);
+    --dpb-draw-stroke: #FB7185;
+    --dpb-draw-ink: #3B0A14;
+    --dpb-highlight: rgba(255,255,255,.14);
+    --dpb-scrim: rgba(0,0,0,.55);
+    --dpb-grid-dot: rgba(255,255,255,.03);
+    --dpb-shadow-tool: 0 4px 16px -2px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.05);
+    --dpb-shadow-drawer: -6px 0 32px rgba(0,0,0,.4);
+    --dpb-shadow-pop: 0 12px 32px -4px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.08);
+    --dpb-shadow-glow: 0 0 20px -2px rgba(59,130,246,.45);
+    --dpb-shadow-pin: 0 3px 8px rgba(59,130,246,.35), 0 1px 2px rgba(0,0,0,.3);
+    --dpb-ring-accent: rgba(59,130,246,.3);
+    --dpb-ring-danger: rgba(239,68,68,.3);
+    --dpb-focus: var(--dpb-accent);
+  }
+}
+
+.dpb-ui[data-theme="dark"],
+#dpb-root[data-theme="dark"],
+#dpb-float-root[data-theme="dark"],
+.dpb-toasts[data-theme="dark"] {
+  --dpb-bg: #090B0E;
+  --dpb-surface: #12151B;
+  --dpb-elev: #1A1E26;
+  --dpb-elev-hover: #222732;
+  --dpb-overlay: #2A303D;
+  --dpb-line: rgba(255, 255, 255, 0.07);
+  --dpb-line-strong: rgba(255, 255, 255, 0.14);
+  --dpb-ink: #F1F5F9;
+  --dpb-muted: #8592A6;
+  --dpb-soft: #94A3B8;
+  --dpb-accent: #3B82F6;
+  --dpb-accent-ink: #0F172A;
+  --dpb-accent-deep: #2563EB;
+  --dpb-accent-wash: rgba(59,130,246,.12);
+  --dpb-accent-chip-bg: rgba(59,130,246,.12);
+  --dpb-accent-chip-border: rgba(59,130,246,.35);
+  --dpb-accent-soft: #93C5FD;
+  --dpb-danger: #F87171;
+  --dpb-danger-wash: rgba(239,68,68,.12);
+  --dpb-success: #10B981;
+  --dpb-success-wash: rgba(16,185,129,.12);
+  --dpb-tertiary: #F59E0B;
+  --dpb-tertiary-wash: rgba(245,158,11,.12);
+  --dpb-tertiary-border: rgba(245,158,11,.3);
+  --dpb-draw-stroke: #FB7185;
+  --dpb-draw-ink: #3B0A14;
+  --dpb-highlight: rgba(255,255,255,.14);
+  --dpb-scrim: rgba(0,0,0,.55);
+  --dpb-grid-dot: rgba(255,255,255,.03);
+  --dpb-shadow-tool: 0 4px 16px -2px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.05);
+  --dpb-shadow-drawer: -6px 0 32px rgba(0,0,0,.4);
+  --dpb-shadow-pop: 0 12px 32px -4px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.08);
+  --dpb-shadow-glow: 0 0 20px -2px rgba(59,130,246,.45);
+  --dpb-shadow-pin: 0 3px 8px rgba(59,130,246,.35), 0 1px 2px rgba(0,0,0,.3);
+  --dpb-ring-accent: rgba(59,130,246,.3);
+  --dpb-ring-danger: rgba(239,68,68,.3);
+  --dpb-focus: var(--dpb-accent);
+}

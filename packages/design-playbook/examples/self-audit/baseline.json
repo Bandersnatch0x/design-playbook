@@ -17,6 +17,7 @@
     {
       "name": "workbench",
       "stylesheets": [
+        "packages/design-playbook-workbench/design_playbook_workbench/web/tokens.css",
         "packages/design-playbook-workbench/design_playbook_workbench/web/app.css"
       ]
     }

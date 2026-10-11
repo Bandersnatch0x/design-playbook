@@ -1,12 +1,12 @@
 /* Workbench shell styling: system fonts, no remote asset, no layout shift. */
 :root {
   color-scheme: light dark;
-  --focus: var(--dpb-ring-accent);
-  --danger-surface: var(--dpb-danger-surface);
+  --focus: var(--dpb-focus);
+  --danger-surface: var(--dpb-danger-wash);
   --danger: var(--dpb-danger);
-  --warn-surface: var(--dpb-warning-surface);
-  --warn: var(--dpb-warning);
-  --ok-surface: var(--dpb-success-surface);
+  --warn-surface: var(--dpb-tertiary-wash);
+  --warn: var(--dpb-tertiary);
+  --ok-surface: var(--dpb-success-wash);
   --ok: var(--dpb-success);
   --accent-ink: var(--dpb-accent-ink);
   --accent: var(--dpb-accent);
@@ -15,20 +15,6 @@
   --ink: var(--dpb-ink);
   --panel: var(--dpb-elev);
   --surface: var(--dpb-bg);
-  --dpb-bg: #f6f7f9;
-  --dpb-elev: #ffffff;
-  --dpb-ink: #16181d;
-  --dpb-muted: #555b66;
-  --dpb-line: #d3d7de;
-  --dpb-accent: #1f4fd8;
-  --dpb-accent-ink: #ffffff;
-  --dpb-success: #12633a;
-  --dpb-success-surface: #e2f3e9;
-  --dpb-warning: #8a4b00;
-  --dpb-warning-surface: #fdeed6;
-  --dpb-danger: #8c1d24;
-  --dpb-danger-surface: #fbe4e6;
-  --dpb-ring-accent: #0b5fce;
   --radius: 10px;
   --canvas-grid-1: #eef0f4;
   --canvas-grid-2: #f7f8fb;
@@ -46,20 +32,6 @@
     --canvas-node-bg: #222731;
     --canvas-node-text-bg: #2b313d;
     --canvas-node-instance-bg: #1c2742;
-    --dpb-bg: #14161a;
-    --dpb-elev: #1c1f25;
-    --dpb-ink: #eceff4;
-    --dpb-muted: #a8b0bd;
-    --dpb-line: #333a45;
-    --dpb-accent: #8fb4ff;
-    --dpb-accent-ink: #0d1526;
-    --dpb-success: #9fe3bd;
-    --dpb-success-surface: #16311f;
-    --dpb-warning: #f0c789;
-    --dpb-warning-surface: #3a2a12;
-    --dpb-danger: #f5a3a8;
-    --dpb-danger-surface: #3a1619;
-    --dpb-ring-accent: #a9c8ff;
   }
 }
 

@@ -23,6 +23,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+WORKBENCH_TOKENS = "packages/design-playbook-workbench/design_playbook_workbench/web/tokens.css"
 VALIDATE = ROOT / "scripts" / "validate.py"
 
 
@@ -73,6 +74,7 @@ class ValidateGateTests(unittest.TestCase):
         )
         (self.root / workbench_css).parent.mkdir(parents=True)
         shutil.copy2(ROOT / workbench_css, self.root / workbench_css)
+        shutil.copy2(ROOT / WORKBENCH_TOKENS, self.root / WORKBENCH_TOKENS)
 
     def tearDown(self) -> None:
         self.temp.cleanup()
@@ -565,6 +567,18 @@ class ValidateGateTests(unittest.TestCase):
         result = self.validate()
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("shared:undefined:--dpb-nowhere", result.stdout)
+
+    def test_workbench_token_copy_drift_fails_the_gate(self) -> None:
+        self._edit(self.root / WORKBENCH_TOKENS, "--dpb-radius: 8px;", "--dpb-radius: 9px;")
+        result = self.validate()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL  workbench token copy is byte-identical to the shared file (U-07)", result.stdout)
+
+    def test_missing_workbench_token_copy_fails_the_gate(self) -> None:
+        (self.root / WORKBENCH_TOKENS).unlink()
+        result = self.validate()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL  workbench token copy is byte-identical to the shared file (U-07)", result.stdout)
 
     def test_unused_token_fails_the_token_gate(self) -> None:
         self._edit(self._pkg("mcp", "_shared", "tokens.css"),

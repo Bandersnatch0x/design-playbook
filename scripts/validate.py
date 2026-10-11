@@ -9,6 +9,7 @@ See docs/agents/release-checklist.md 'Validation surfaces' for the split
 between this script (static structure gate), release.py (publish gate),
 and doctor.py (read-only diagnostic aggregator).
 """
+import hashlib
 import json
 import os
 import re
@@ -1172,17 +1173,34 @@ def validate_self_audit(entries: list[rules_registry.RuleEntry]) -> None:
 
 
 # G-2 (U-07): each token file and every file that reads it. The shared file
-# feeds the Preview shell and the Run Console; the workbench still carries
-# its own block until it takes a copy of the shared one.
+# feeds the Preview shell and the Run Console; the workbench reads a byte copy
+# of it (checked by validate_token_copies).
 TOKEN_GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("shared", "packages/design-playbook/mcp/_shared/tokens.css", tuple(
         f"packages/design-playbook/mcp/{rel}" for rel in (
             "preview/control.css", "preview/control.html", "preview/control.js",
             "preview/control.review.js", "preview/control.react.js",
-            "run_console/app.css", "run_console/app.html", "run_console/app.js"))),
-    ("workbench", "packages/design-playbook-workbench/design_playbook_workbench/web/app.css",
-     ("packages/design-playbook-workbench/design_playbook_workbench/web/app.css",)),
+            "run_console/app.css", "run_console/app.html", "run_console/app.js"))
+        + tuple(f"packages/design-playbook-workbench/design_playbook_workbench/web/{name}"
+                for name in ("app.css", "app.html", "app.js"))),
 )
+
+# Packages that ship their own copy of the shared token file, as (copy path).
+TOKEN_COPIES: tuple[str, ...] = (
+    "packages/design-playbook-workbench/design_playbook_workbench/web/tokens.css",
+)
+
+
+def validate_token_copies() -> None:
+    """U-07: each shipped copy of the shared token file matches it byte for byte."""
+    print("\n== Token copies (U-07) ==")
+    source = ROOT / "packages/design-playbook/mcp/_shared/tokens.css"
+    want = hashlib.sha256(source.read_bytes()).hexdigest() if source.is_file() else None
+    drift = [rel for rel in TOKEN_COPIES
+             if want is None or not (ROOT / rel).is_file()
+             or hashlib.sha256((ROOT / rel).read_bytes()).hexdigest() != want]
+    check(not drift, "workbench token copy is byte-identical to the shared file (U-07)"
+                     + ("" if not drift else " (" + ", ".join(drift) + ")"))
 
 
 def validate_token_contract() -> None:
@@ -1361,6 +1379,7 @@ CHECKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("validate_external_terms", (), ()),
     ("validate_self_audit", ("registry_entries",), ()),
     ("validate_token_contract", (), ()),
+    ("validate_token_copies", (), ()),
     ("validate_skill_contracts", (), ()),
     ("validate_test_executability", (), ()),
     ("validate_ruff", (), ()),
