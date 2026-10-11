@@ -769,6 +769,8 @@
           h("button", { type: "button", disabled: !ready || stale || busy || !future.length, "aria-label": t("visual_redo"), onClick: function () { replay("redo"); } }, t("visual_redo")),
           h("span", { className: "dpb-react-pending-count" }, t("visual_pending").replace("{n}", pending.length))),
         h("p", { className: "dpb-react-diagnostic", role: "status", "data-stale": stale }, stale ? t("visual_stale") : connecting ? "" : diagnostic ? t(diagnostic) : ""),
+        !connecting && !ready && !stale && diagnostic === "visual_disconnected" && h("button", { type: "button", className: "dpb-react-retry",
+          onClick: function () { frame.dispatchEvent(new Event("load")); } }, t("visual_retry")),
         connecting && !stale && h("div", { className: "dpb-loading dpb-editor-loading", role: "status" },
           h("span", null, t("visual_loading")), h("div", { className: "dpb-skeleton", "aria-hidden": true })),
         (function () {
