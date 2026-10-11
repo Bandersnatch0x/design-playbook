@@ -112,6 +112,24 @@
   var field = document.getElementById("dpb-feedback");
   var hint = document.getElementById("dpb-feedback-hint");
   var approveBtn = document.getElementById("dpb-btn-approve");
+  // U-20: a decision posts once; the pressed button reports busy and a second press is ignored.
+  form.addEventListener("submit", function (e) {
+    if (form.getAttribute("data-busy") === "true") { e.preventDefault(); return; }
+    form.setAttribute("data-busy", "true");
+    var sub = e.submitter;
+    var label = sub && (sub.querySelector("[data-i18n]") || sub);
+    var idle = label ? label.textContent : "";
+    if (sub) {
+      sub.setAttribute("aria-busy", "true");
+      label.textContent = tt("deciding");
+    }
+    setTimeout(function () {
+      if (!e.defaultPrevented) return;
+      // another handler cancelled this submit (a guard or a confirm step): undo the busy state
+      form.removeAttribute("data-busy");
+      if (sub) { sub.removeAttribute("aria-busy"); label.textContent = idle; }
+    }, 0);
+  });
   var approveLabel = document.getElementById("dpb-approve-label");
   var countBadge = document.getElementById("dpb-count-badge");
   var reopenBadge = document.getElementById("dpb-reopen-badge");
