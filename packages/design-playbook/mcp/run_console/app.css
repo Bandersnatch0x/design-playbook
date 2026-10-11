@@ -42,6 +42,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
+  font-size: var(--dpb-text-sm);
   line-height: 1.55;
   min-width: 320px;
   -webkit-font-smoothing: antialiased;
@@ -139,7 +140,7 @@ kbd {
 
 .app-kicker {
   margin: 0;
-  font-size: 0.76rem;
+  font-size: var(--dpb-text-xs);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -148,7 +149,7 @@ kbd {
 
 .app-header h1 {
   margin: 0;
-  font-size: clamp(1.35rem, 3.8vw, 1.85rem);
+  font-size: var(--dpb-text-xl);
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.2;
@@ -158,7 +159,7 @@ kbd {
 .app-subtitle {
   margin: 4px 0 0;
   color: var(--text-dim);
-  font-size: 0.9rem;
+  font-size: var(--dpb-text-sm);
 }
 
 .app-header-actions {
@@ -176,7 +177,7 @@ kbd {
 
 .run-id-line {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: var(--dpb-text-sm);
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
   max-width: 100%;
@@ -190,14 +191,14 @@ kbd {
   background: var(--surface-dim);
   border: 1px solid var(--line);
   color: var(--text-dim);
-  font-size: 0.85rem;
+  font-size: var(--dpb-text-sm);
   max-width: 76ch;
 }
 
 
 .button {
   font: inherit;
-  font-size: 0.88rem;
+  font-size: var(--dpb-text-sm);
   font-weight: 600;
   padding: 0 14px;
   height: 36px;
@@ -270,7 +271,7 @@ main {
 
 .view-heading {
   margin: 0 0 8px;
-  font-size: 1.25rem;
+  font-size: var(--dpb-text-lg);
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -292,12 +293,12 @@ main {
 
 .error-detail {
   color: var(--text-dim);
-  font-size: 0.9rem;
+  font-size: var(--dpb-text-sm);
 }
 
 .view-error code {
   font-family: var(--dpb-font-mono), monospace;
-  font-size: 0.85em;
+  font-size: var(--dpb-text-xs);
   background: var(--surface-dim);
   padding: 1px 4px;
   border-radius: 4px;
@@ -383,7 +384,7 @@ main {
   height: 30px;
   padding: 0 10px;
   border-radius: 9999px;
-  font-size: 0.78rem;
+  font-size: var(--dpb-text-xs);
   font-weight: 600;
   font-family: var(--dpb-font-mono), monospace;
   border: 1px solid transparent;
@@ -444,7 +445,7 @@ main {
   border-radius: var(--dpb-radius);
   box-shadow: var(--dpb-shadow-pop);
   padding: 12px 14px;
-  font-size: 0.84rem;
+  font-size: var(--dpb-text-sm);
   line-height: 1.45;
   color: var(--text);
 }
@@ -456,7 +457,7 @@ main {
 .popover-title {
   margin: 0 0 4px;
   font-weight: 700;
-  font-size: 0.86rem;
+  font-size: var(--dpb-text-sm);
   color: var(--text);
 }
 
@@ -481,7 +482,7 @@ main {
 }
 
 .facts-section h2 {
-  font-size: 1.35rem;
+  font-size: var(--dpb-text-xl);
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -494,7 +495,7 @@ main {
 .section-hint {
   margin: 0;
   color: var(--text-dim);
-  font-size: 0.88rem;
+  font-size: var(--dpb-text-sm);
   max-width: 80ch;
 }
 
@@ -533,7 +534,7 @@ main {
 
 .fact h3 {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: var(--dpb-text-sm);
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text-dim);
@@ -541,7 +542,7 @@ main {
 
 .fact-value {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: var(--dpb-text-md);
   font-weight: 600;
   color: var(--text);
   min-width: 0;
@@ -566,14 +567,14 @@ main {
 .intent-lead {
   font-weight: 700;
   color: var(--text);
-  font-size: 1.02rem;
+  font-size: var(--dpb-text-md);
   line-height: 1.4;
 }
 
 .intent-detail {
   font-weight: 400;
   color: var(--text-dim);
-  font-size: 0.88rem;
+  font-size: var(--dpb-text-sm);
   line-height: 1.45;
 }
 
@@ -588,7 +589,7 @@ main {
   align-items: center;
   gap: 4px;
   width: fit-content;
-  font-size: 0.88rem;
+  font-size: var(--dpb-text-sm);
   font-weight: 800;
   font-family: var(--dpb-font-mono), monospace;
   padding: 3px 8px;
@@ -599,7 +600,7 @@ main {
 }
 
 .fact-action-label {
-  font-size: 0.98rem;
+  font-size: var(--dpb-text-md);
   font-weight: 600;
   color: var(--text);
   line-height: 1.35;
@@ -608,7 +609,7 @@ main {
 .fact-meta {
   margin: 0;
   color: var(--text-dim);
-  font-size: 0.82rem;
+  font-size: var(--dpb-text-sm);
   min-width: 0;
   overflow-wrap: anywhere;
   padding-top: 8px;
@@ -634,7 +635,7 @@ main {
 }
 
 .jump-nav-label {
-  font-size: 0.78rem;
+  font-size: var(--dpb-text-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -653,7 +654,7 @@ main {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.82rem;
+  font-size: var(--dpb-text-sm);
   font-weight: 600;
   padding: 4px 10px;
   border-radius: 6px;
@@ -681,7 +682,7 @@ main {
   align-items: center;
   gap: 4px;
   border-radius: 4px;
-  font-size: 0.76rem;
+  font-size: var(--dpb-text-xs);
   font-weight: 700;
   letter-spacing: 0.03em;
   padding: 2px 8px;
@@ -700,7 +701,7 @@ main {
   background: var(--ok-bg);
   color: var(--ok);
   border: 1px solid var(--ok);
-  font-size: 0.92rem;
+  font-size: var(--dpb-text-sm);
   padding: 4px 14px;
   font-weight: 800;
 }
@@ -709,7 +710,7 @@ main {
   background: var(--bad-bg);
   color: var(--bad);
   border: 1px solid var(--bad);
-  font-size: 0.92rem;
+  font-size: var(--dpb-text-sm);
   padding: 4px 14px;
   font-weight: 800;
 }
@@ -747,7 +748,7 @@ main {
   align-items: center;
   justify-content: space-between;
   margin: 0;
-  font-size: 1.15rem;
+  font-size: var(--dpb-text-lg);
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text);
@@ -789,7 +790,7 @@ main {
 .detail-section .sub-card > h3,
 .detail-section div > h3 {
   margin: 0 0 4px;
-  font-size: 0.88rem;
+  font-size: var(--dpb-text-sm);
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text-dim);
@@ -808,7 +809,7 @@ main {
   gap: 6px 14px;
   align-items: baseline;
   margin: 0;
-  font-size: 0.88rem;
+  font-size: var(--dpb-text-sm);
 }
 
 .kv dt {
@@ -859,14 +860,14 @@ main {
   border: 1px solid var(--line);
   padding: 10px 14px;
   margin: 4px 0;
-  font-size: 0.88rem;
+  font-size: var(--dpb-text-sm);
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
 .reason-code {
   font-family: var(--dpb-font-mono), monospace;
-  font-size: 0.85em;
+  font-size: var(--dpb-text-xs);
   font-weight: 700;
   color: var(--text);
 }
@@ -899,21 +900,21 @@ main {
   border-radius: 6px;
   border: 1px solid var(--line);
   background: var(--surface);
-  font-size: 0.86rem;
+  font-size: var(--dpb-text-sm);
   min-width: 0;
   box-sizing: border-box;
 }
 
 .stage-id {
   font-family: var(--dpb-font-mono), monospace;
-  font-size: 0.86em;
+  font-size: var(--dpb-text-xs);
   font-weight: 600;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
 .stage-state {
-  font-size: 0.76rem;
+  font-size: var(--dpb-text-xs);
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 4px;
@@ -939,7 +940,7 @@ main {
 
 .stage-skip-reason {
   color: var(--text-dim);
-  font-size: 0.82rem;
+  font-size: var(--dpb-text-sm);
   width: 100%;
   margin-top: 4px;
   overflow-wrap: anywhere;
@@ -951,7 +952,7 @@ main {
   align-items: center;
   padding: 2px 8px;
   border-radius: 4px;
-  font-size: 0.82rem;
+  font-size: var(--dpb-text-sm);
   font-family: var(--dpb-font-mono), monospace;
 }
 
@@ -992,7 +993,7 @@ main {
 
 .action-card .action-label {
   font-weight: 600;
-  font-size: 1rem;
+  font-size: var(--dpb-text-md);
   margin: 0 0 6px;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -1001,7 +1002,7 @@ main {
 .unavailable-reason {
   display: block;
   color: var(--text-dim);
-  font-size: 0.85rem;
+  font-size: var(--dpb-text-sm);
   margin-top: 6px;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -1017,7 +1018,7 @@ main {
 
 .copy-status {
   display: inline-block;
-  font-size: 0.85rem;
+  font-size: var(--dpb-text-sm);
   color: var(--ok);
   font-weight: 600;
 }
@@ -1027,7 +1028,7 @@ main {
 .repair-packet-notice {
   margin: 0;
   color: var(--text-dim);
-  font-size: 0.88rem;
+  font-size: var(--dpb-text-sm);
   max-width: 80ch;
 }
 
@@ -1069,7 +1070,7 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--dpb-radius-sm);
   font-family: var(--dpb-font-mono), monospace;
-  font-size: 0.82rem;
+  font-size: var(--dpb-text-sm);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -1102,7 +1103,7 @@ details.source > summary {
   list-style: revert;
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 0.88rem;
+  font-size: var(--dpb-text-sm);
   font-weight: 600;
   color: var(--text);
 }
@@ -1125,7 +1126,7 @@ details.source[open] > summary {
   border: 1px solid var(--line);
   border-radius: 4px;
   font-family: var(--dpb-font-mono), monospace;
-  font-size: 0.84rem;
+  font-size: var(--dpb-text-sm);
   line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -1137,7 +1138,7 @@ details.source[open] > summary {
 
 .excerpt-state {
   margin: 8px 0 0;
-  font-size: 0.86rem;
+  font-size: var(--dpb-text-sm);
   color: var(--text-dim);
   min-width: 0;
   overflow-wrap: anywhere;
@@ -1145,7 +1146,7 @@ details.source[open] > summary {
 
 .hash {
   font-family: var(--dpb-font-mono), monospace;
-  font-size: 0.82em;
+  font-size: var(--dpb-text-xs);
   overflow-wrap: anywhere;
   word-break: break-all;
   color: var(--text-dim);
@@ -1244,7 +1245,7 @@ details.source[open] > summary {
 
 .export-field span {
   display: block;
-  font-size: 0.85em;
+  font-size: var(--dpb-text-xs);
   margin-bottom: 4px;
 }
 
@@ -1273,7 +1274,7 @@ details.source[open] > summary {
   border: 1px solid var(--dpb-line-strong);
   border-radius: 6px;
   padding: 8px;
-  font-size: 0.8em;
+  font-size: var(--dpb-text-xs);
 }
 
 .export-review {

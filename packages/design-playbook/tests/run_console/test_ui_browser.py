@@ -929,6 +929,19 @@ class LanguageToggleTest(BrowserTestCase):
         self.assertEqual(cookies, "")
 
 
+class TypeScaleTest(BrowserTestCase):
+    """U-08 (E-13): console text stays above the registry size floors."""
+
+    def test_text_is_not_below_the_registry_floor_and_uses_six_sizes_at_most(self) -> None:
+        from tests.preview.test_type_scale import TEXT_SIZES, under_floor
+
+        self.open()
+        rows = self.page.evaluate(TEXT_SIZES, "body")
+        self.assertGreater(len(rows), 10)
+        self.assertEqual(under_floor(rows), [])
+        self.assertLessEqual(len({row["px"] for row in rows}), 6)
+
+
 class RCV1R1LegibilityRemediationTest(BrowserTestCase):
     """Rigorous browser tests for the RCV1-R1 Legibility Remediation features."""
 

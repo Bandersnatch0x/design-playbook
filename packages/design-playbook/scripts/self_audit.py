@@ -169,6 +169,60 @@ def literal_values(css: str) -> list[str]:
     return [match.group(0) for _, _, body in _blocks(css) for match in _LITERAL.finditer(body)]
 
 
+_SIZE_DECL = re.compile(r"(?<![\w-])font-size\s*:\s*([^;{}]+)")
+_SIZE_IN_SHORTHAND = re.compile(
+    r"(?:^|\s)(var\([^)]*\)|-?[\d.]+(?:px|rem|em|pt|%)|(?:x{1,2}-)?(?:small|large)|medium|larger|smaller)"
+    r"(?=/|\s|$)")
+_SCALE_TOKEN = re.compile(r"var\(\s*--dpb-text-[\w-]+\s*\)")
+
+
+def font_size_literals(css: str) -> list[str]:
+    """G-8 findings for one style sheet: font sizes that are not scale tokens.
+
+    Reads ``font-size`` declarations and the size part of ``font`` shorthands.
+    ``var(--dpb-text-*)`` and ``inherit`` pass; any length, percentage, keyword
+    or ``clamp()`` is a finding.
+    """
+    found: list[str] = []
+    for _, _, body in _blocks(css):
+        for match in _SIZE_DECL.finditer(body):
+            value = re.sub(r"\s*!important$", "", match.group(1).strip())
+            if value != "inherit" and not _SCALE_TOKEN.fullmatch(value):
+                found.append(value)
+        for match in _SHORTHAND.finditer(body):
+            value = match.group(1).strip()
+            if value in _GENERIC_FONTS or value.startswith("var(--dpb-font"):
+                continue
+            sized = _SIZE_IN_SHORTHAND.search(value)
+            if sized and not _SCALE_TOKEN.fullmatch(sized.group(1)):
+                found.append(sized.group(1))
+    return found
+
+
+def type_scale_gaps(tokens_css: str, latin_min: float, cjk_min: float) -> list[str]:
+    """G-8 findings for the scale tokens: a size under its floor, or not in px.
+
+    ``--dpb-text-2xs`` is the one token reserved for Latin-only text (key caps,
+    numbers, code) and answers to ``latin_min``; every other step may carry
+    Chinese and answers to ``cjk_min``.
+    """
+    gaps: list[str] = []
+    for context, selector, body in _blocks(tokens_css):
+        if selector.startswith("@") or "dark" in selector or "dark" in context:
+            continue
+        for name, value in _PROP.findall(body):
+            if not name.startswith("--dpb-text-"):
+                continue
+            value = value.strip()
+            size = re.fullmatch(r"(\d*\.?\d+)px", value)
+            floor = latin_min if name == "--dpb-text-2xs" else cjk_min
+            if not size:
+                gaps.append(f"{name}:{value} is not a px size")
+            elif float(size.group(1)) < floor:
+                gaps.append(f"{name}:{value} under {floor:g}px")
+    return gaps
+
+
 _GENERIC_FONTS = frozenset({
     "serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui", "ui-serif",
     "ui-sans-serif", "ui-monospace", "ui-rounded", "math", "emoji", "fangsong",

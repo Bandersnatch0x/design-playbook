@@ -81,7 +81,14 @@
   --dpb-font-ui: system-ui, "Segoe UI";
   --dpb-font-cn: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC";
   --dpb-font-mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", Consolas, Menlo;
+  /* Type scale: 2xs is for Latin-only text (key caps, numbers, code);
+     Chinese text starts at xs. */
+  --dpb-text-2xs: 11px;
   --dpb-text-xs: 12px;
+  --dpb-text-sm: 13px;
+  --dpb-text-md: 15px;
+  --dpb-text-lg: 17px;
+  --dpb-text-xl: 22px;
   --dpb-topbar-h: 48px;
   --dpb-rail-w: 320px;
   /* Frame tokens: the pin bridge copies these (and the ease and duration

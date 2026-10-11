@@ -57,12 +57,13 @@ def _load_bridge_script() -> str:
 BRIDGE_SCRIPT = _load_bridge_script()
 
 
-_FRAME_PREFIXES = ("--dpb-frame-", "--dpb-ease-", "--dpb-duration-", "--dpb-font-mono")
+_FRAME_PREFIXES = ("--dpb-frame-", "--dpb-ease-", "--dpb-duration-", "--dpb-font-mono",
+                   "--dpb-text-2xs", "--dpb-text-xs")
 
 
 def _frame_tokens() -> str:
-    """Declarations the reviewed page needs: the frame, easing, duration and
-    monospace-font tokens.
+    """Declarations the reviewed page needs: the frame, easing, duration,
+    monospace-font and the two small text-size tokens.
 
     The page inside the sandboxed frame does not load ``tokens.css``, so the
     bridge carries these values in a ``:root`` block of its own. They are read

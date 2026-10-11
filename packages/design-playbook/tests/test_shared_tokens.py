@@ -280,3 +280,57 @@ class BridgeStyleTest(unittest.TestCase):
         for name, value in re.findall(r"(--dpb-frame-[\w-]+)\s*:\s*([^;]+);", css):
             with self.subTest(token=name):
                 self.assertIn(f"{name}: {value.strip()};", shared)
+
+
+class TypeScaleTest(unittest.TestCase):
+    """G-8 (U-08): font sizes come from six scale tokens, nothing else."""
+
+    SCALE = {"--dpb-text-2xs": "11px", "--dpb-text-xs": "12px", "--dpb-text-sm": "13px",
+             "--dpb-text-md": "15px", "--dpb-text-lg": "17px", "--dpb-text-xl": "22px"}
+
+    def test_tokens_define_the_six_step_scale(self) -> None:
+        light: dict[str, str] = {}
+        for context, selector, props in _token_blocks():
+            if not ("dark" in selector or "dark" in context):
+                light.update(props)
+        self.assertEqual({k: v for k, v in light.items() if k.startswith("--dpb-text-")}, self.SCALE)
+
+    def test_surface_sheets_read_only_scale_tokens(self) -> None:
+        for sheet in LITERAL_SHEETS:
+            with self.subTest(sheet=sheet.name):
+                self.assertEqual(self_audit.font_size_literals(sheet.read_text(encoding="utf-8")), [])
+
+    def test_injected_css_reads_only_scale_tokens(self) -> None:
+        css = self_audit.bridge_css(BRIDGE_JS.read_text(encoding="utf-8"))
+        self.assertEqual(self_audit.font_size_literals(css), [])
+
+    def test_scanner_reads_size_and_shorthand_values(self) -> None:
+        css = ("a{font-size:var(--dpb-text-sm);font:inherit}b{font-size:inherit}"
+               "c{font-size:13.5px}d{font-size:.9rem}e{font-size:0.85em}"
+               "f{font:600 12px/1 var(--dpb-font-mono),monospace}"
+               "g{font:var(--dpb-text-xs)/1.4 var(--dpb-font-mono),monospace}"
+               "h{font:16px/1.55 var(--dpb-font-ui)}i{font-size:clamp(1rem,3vw,2rem)}"
+               "j{font:italic 700 var(--dpb-text-lg)/1 serif}k{font-size:larger}")
+        self.assertEqual(self_audit.font_size_literals(css),
+                         ["13.5px", ".9rem", "0.85em", "12px", "16px", "clamp(1rem,3vw,2rem)", "larger"])
+
+    def test_scale_floors(self) -> None:
+        css = ".dpb-ui{--dpb-text-2xs:11px;--dpb-text-xs:12px;--dpb-text-sm:13px;}"
+        self.assertEqual(self_audit.type_scale_gaps(css, 11, 12), [])
+        low = ".dpb-ui{--dpb-text-2xs:10px;--dpb-text-xs:11px;--dpb-text-sm:13px;}"
+        self.assertEqual(self_audit.type_scale_gaps(low, 11, 12),
+                         ["--dpb-text-2xs:10px under 11px", "--dpb-text-xs:11px under 12px"])
+        self.assertEqual(self_audit.type_scale_gaps(".dpb-ui{--dpb-text-sm:1rem;}", 11, 12),
+                         ["--dpb-text-sm:1rem is not a px size"])
+
+    def test_bridge_carries_the_small_size_token(self) -> None:
+        from design_playbook.mcp.preview import pin_bridge
+        css = self_audit.bridge_css(pin_bridge.BRIDGE_SCRIPT)
+        self.assertIn("--dpb-text-2xs:11px;", css)
+
+    def test_body_text_is_the_dense_console_size(self) -> None:
+        for sheet in (MCP / "run_console" / "app.css", WORKBENCH_CSS):
+            with self.subTest(sheet=sheet.name):
+                css = sheet.read_text(encoding="utf-8")
+                body = next(b for _, sel, b in self_audit._blocks(css) if sel.strip() == "body")  # noqa: SLF001
+                self.assertRegex(body, r"font(?:-size)?:\s*var\(--dpb-text-sm\)")

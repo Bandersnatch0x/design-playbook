@@ -1290,6 +1290,34 @@ def validate_vendor_fonts() -> None:
                      + ("" if not found else " (" + "; ".join(found[:12]) + ")"))
 
 
+def validate_type_scale(entries: list[rules_registry.RuleEntry]) -> None:
+    """G-8: font sizes read only the type-scale tokens, and the tokens meet the text floors."""
+    print("\n== Type scale (G-8) ==")
+    try:
+        latin = rules_registry.threshold(entries, "A11Y-05", "latin-text-min").value
+        cjk = rules_registry.threshold(entries, "A11Y-05", "cjk-text-min").value
+    except (KeyError, ValueError) as exc:
+        check(False, f"type-scale floors readable from the registry: {exc}")
+        return
+    found: list[str] = []
+    for rel in LITERAL_SHEETS + LITERAL_SCRIPTS:
+        path = ROOT / rel
+        if not path.is_file():
+            found.append(f"missing:{rel}")
+            continue
+        text = path.read_text(encoding="utf-8")
+        if rel in LITERAL_SCRIPTS:
+            text = self_audit.bridge_css(text)
+        found += [f"{path.name}:{value}" for value in self_audit.font_size_literals(text)]
+    check(not found, "font sizes read only the type-scale tokens (G-8)"
+                     + ("" if not found else " (" + "; ".join(found[:12]) + ")"))
+    tokens = ROOT / "packages/design-playbook/mcp/_shared/tokens.css"
+    gaps = (self_audit.type_scale_gaps(tokens.read_text(encoding="utf-8"), latin, cjk)
+            if tokens.is_file() else [f"missing:{tokens.name}"])
+    check(not gaps, "type-scale tokens meet the registry text floors (G-8)"
+                    + ("" if not gaps else " (" + "; ".join(gaps) + ")"))
+
+
 def validate_skill_contracts() -> None:
     print("== Dogfood 004 regression guards ==")
 
@@ -1453,6 +1481,7 @@ CHECKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("validate_token_copies", (), ()),
     ("validate_literal_values", (), ()),
     ("validate_vendor_fonts", (), ()),
+    ("validate_type_scale", ("registry_entries",), ()),
     ("validate_skill_contracts", (), ()),
     ("validate_test_executability", (), ()),
     ("validate_ruff", (), ()),
