@@ -782,6 +782,26 @@ class SecurityTest(BrowserTestCase):
         close_button.click()
         expect(self.page.locator(".export-dialog")).to_have_count(0)
 
+    def test_export_buttons_are_busy_while_a_request_is_in_flight(self) -> None:
+        """U-20: the preview button disables, carries aria-busy and a named
+        busy label while the request runs, then returns to normal."""
+        self.open()
+        self.page.get_by_role("button", name="Export diagnostics").click()
+        dialog = self.page.locator(".export-dialog")
+        expect(dialog).to_be_visible()
+
+        held = []
+        self.page.route("**/diagnostic-export/preview", lambda route: held.append(route))
+        preview = dialog.locator("button", has_text="Preview export")
+        preview.click()
+        busy = dialog.locator("button[aria-busy='true']")
+        expect(busy).to_have_count(1)
+        self.assertTrue(busy.is_disabled())
+        self.assertIn("Preparing", busy.inner_text())
+        held[0].continue_()
+        expect(dialog.locator("button[aria-busy='true']")).to_have_count(0, timeout=8000)
+        expect(dialog.get_by_role("button", name="Preview export")).to_be_enabled()
+
     def test_copyable_command_copies_plaintext_when_known(self) -> None:
         self.context.grant_permissions(["clipboard-read", "clipboard-write"])
         snapshot = self.console.snapshot()

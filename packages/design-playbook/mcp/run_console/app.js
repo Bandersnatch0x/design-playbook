@@ -1661,9 +1661,11 @@
       resetReview();
       previewButton.disabled = true;
       previewButton.textContent = t("export_previewing");
+      previewButton.setAttribute("aria-busy", "true");
       requestExportPreview(participantRef.value.trim()).then(function (result) {
         previewButton.disabled = false;
         previewButton.textContent = t("export_preview");
+        previewButton.removeAttribute("aria-busy");
         if (!result.ok) {
           showError(t("export_error") + " — " + exportErrorMessage(result));
           return;
@@ -1678,6 +1680,7 @@
       }).catch(function () {
         previewButton.disabled = false;
         previewButton.textContent = t("export_preview");
+        previewButton.removeAttribute("aria-busy");
         showError(t("export_error") + " — " + t("export_err_network"));
       });
     });
@@ -1688,6 +1691,7 @@
       hide(errorLine);
       writeButton.disabled = true;
       writeButton.textContent = t("export_writing");
+      writeButton.setAttribute("aria-busy", "true");
       requestExportWrite(
         String(reviewed.expectedSourceSetHash),
         String(reviewed.previewHash),
@@ -1695,6 +1699,7 @@
       ).then(function (result) {
         writeButton.disabled = false;
         writeButton.textContent = t("export_write");
+        writeButton.removeAttribute("aria-busy");
         if (!result.ok) {
           /* A binding mismatch (S36) tells the participant to preview
              again; reset so the stale pair cannot be re-submitted. */
@@ -1715,6 +1720,7 @@
       }).catch(function () {
         writeButton.disabled = false;
         writeButton.textContent = t("export_write");
+        writeButton.removeAttribute("aria-busy");
         showError(t("export_error") + " — " + t("export_err_network"));
       });
     });
