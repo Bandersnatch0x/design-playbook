@@ -38,6 +38,7 @@ faithful copy of control.py's cssPath so selectors match the same-origin path.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from design_playbook.mcp.preview.i18n import ZH, _STRINGS
@@ -56,6 +57,27 @@ def _load_bridge_script() -> str:
 BRIDGE_SCRIPT = _load_bridge_script()
 
 
+_FRAME_PREFIXES = ("--dpb-frame-", "--dpb-ease-", "--dpb-duration-")
+
+
+def _frame_tokens() -> str:
+    """Declarations the reviewed page needs: the frame, easing and duration tokens.
+
+    The page inside the sandboxed frame does not load ``tokens.css``, so the
+    bridge carries these values in a ``:root`` block of its own. They are read
+    from the shared file, never written a second time.
+    """
+    try:
+        css = (HERE.parent / "_shared" / "tokens.css").read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise RuntimeError(f"Failed to load the shared tokens from {HERE.parent}") from exc
+    light = css.split("}", 1)[0]
+    return "".join(f"{name}:{value.strip()};"
+                   for name, value in re.findall(r"(--dpb-[\w-]+)\s*:\s*([^;]+);", light)
+                   if name.startswith(_FRAME_PREFIXES))
+
+
+BRIDGE_SCRIPT = BRIDGE_SCRIPT.replace("__DPB_FRAME_TOKENS__", _frame_tokens())
 BRIDGE_SCRIPT = BRIDGE_SCRIPT.replace("__DPB_VISUAL_LABELS__", json.dumps(
     {key: value for key, value in _STRINGS[ZH].items() if key.startswith("visual_")},
     ensure_ascii=True,

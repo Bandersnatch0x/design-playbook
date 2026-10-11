@@ -78,6 +78,49 @@
   --dpb-text-xs: 12px;
   --dpb-topbar-h: 48px;
   --dpb-rail-w: 320px;
+  /* Frame tokens: the pin bridge copies these (and the ease and duration
+     tokens) into the reviewed page, which does not load this file. */
+  --dpb-ease-ring: cubic-bezier(.24,0,.38,1);
+  --dpb-duration-ring: 1800ms;
+  --dpb-frame-accent: #2563EB;
+  --dpb-frame-accent-glow: rgba(37,99,235,.18);
+  --dpb-frame-accent-wash: rgba(37,99,235,.08);
+  --dpb-frame-white: #FFFFFF;
+  --dpb-frame-focus-alt: #F59E0B;
+  --dpb-frame-guide: #EF4444;
+  --dpb-frame-pin: #14B8A6;
+  --dpb-frame-pin-ink: #042F2E;
+  --dpb-frame-pin-edge: rgba(20,184,166,.9);
+  --dpb-frame-pin-wash: rgba(20,184,166,.06);
+  --dpb-frame-pin-hover: rgba(20,184,166,.45);
+  --dpb-frame-pin-ring: rgba(20,184,166,.35);
+  --dpb-frame-pin-flash-start: rgba(20,184,166,.55);
+  --dpb-frame-pin-flash-mid: rgba(20,184,166,.25);
+  --dpb-frame-pin-flash-end: rgba(20,184,166,0);
+  --dpb-frame-bar: #1E293B;
+  --dpb-frame-bar-ink: #F8FAFC;
+  --dpb-frame-bar-icon: #E2E8F0;
+  --dpb-frame-bar-line: #334155;
+  --dpb-frame-bar-field: #0F172A;
+  --dpb-frame-bar-hover: rgba(255,255,255,.1);
+  --dpb-frame-bar-edge: rgba(255,255,255,.2);
+  --dpb-frame-bar-stroke: rgba(255,255,255,.45);
+  --dpb-frame-note-bg: #1F2430;
+  --dpb-frame-note-ink: #F3F4F6;
+  --dpb-frame-note-line: #2C3444;
+  --dpb-frame-draw-stroke: #E11D48;
+  --dpb-frame-flash-glow: rgba(244,96,42,.85);
+  --dpb-frame-flash-clear: rgba(244,96,42,0);
+  --dpb-frame-shadow-handle: 0 1px 3px rgba(0,0,0,.25);
+  --dpb-frame-shadow-bar: 0 4px 16px rgba(0,0,0,.3);
+  --dpb-frame-shadow-picker: 0 8px 24px rgba(0,0,0,.4);
+  --dpb-frame-shadow-thumb: 0 0 2px rgba(0,0,0,.5);
+  --dpb-frame-shadow-badge: 0 1px 3px rgba(0,0,0,.3);
+  --dpb-frame-shadow-note: 0 6px 18px rgba(0,0,0,.25);
+  --dpb-frame-cp-hue-base: #FF0000;
+  --dpb-frame-cp-shade: linear-gradient(to top,#000000,rgba(0,0,0,0)),linear-gradient(to right,#FFFFFF,rgba(255,255,255,0));
+  --dpb-frame-cp-hue-ramp: linear-gradient(to right,#FF0000,#FFFF00,#00FF00,#00FFFF,#0000FF,#FF00FF,#FF0000);
+  --dpb-frame-cp-alpha-ramp: linear-gradient(to right,rgba(255,255,255,0),#2563EB);
 }
 
 @media (prefers-color-scheme: dark) {

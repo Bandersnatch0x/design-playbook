@@ -141,6 +141,32 @@ def literal_values(css: str) -> list[str]:
     return [match.group(0) for _, _, body in _blocks(css) for match in _LITERAL.finditer(body)]
 
 
+def bridge_css(js: str) -> str:
+    """The style text a script assigns to ``style.textContent``, string pieces joined.
+
+    Reads the double-quoted pieces after each assignment up to its closing
+    semicolon and skips ``//`` comment lines between them (G-6b).
+    """
+    pieces: list[str] = []
+    start = js.find("style.textContent")
+    while start >= 0:
+        index = js.index("=", start) + 1
+        while index < len(js) and js[index] != ";":
+            if js.startswith("//", index):
+                index = js.find("\n", index)
+                if index < 0:
+                    break
+            elif js[index] == '"':
+                end = index + 1
+                while end < len(js) and js[end] != '"':
+                    end += 2 if js[end] == "\\" else 1
+                pieces.append(js[index + 1:end])
+                index = end
+            index += 1
+        start = js.find("style.textContent", index)
+    return "".join(pieces)
+
+
 def surface_sheets(surface: dict) -> list[str]:
     """The style sheets a surface loads, shared token file first."""
     return list(surface.get("stylesheets") or [surface["stylesheet"]])

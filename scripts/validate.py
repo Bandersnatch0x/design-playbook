@@ -1180,7 +1180,8 @@ TOKEN_GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         f"packages/design-playbook/mcp/{rel}" for rel in (
             "preview/control.css", "preview/control.html", "preview/control.js",
             "preview/control.review.js", "preview/control.react.js",
-            "run_console/app.css", "run_console/app.html", "run_console/app.js"))
+            "preview/pin_bridge.js", "run_console/app.css", "run_console/app.html",
+            "run_console/app.js"))
         + tuple(f"packages/design-playbook-workbench/design_playbook_workbench/web/{name}"
                 for name in ("app.css", "app.html", "app.js"))),
 )
@@ -1226,6 +1227,10 @@ LITERAL_SHEETS: tuple[str, ...] = (
     "packages/design-playbook/mcp/run_console/app.css",
     "packages/design-playbook-workbench/design_playbook_workbench/web/app.css",
 )
+# G-6b: scripts whose injected style text (style.textContent) is scanned the same way.
+LITERAL_SCRIPTS: tuple[str, ...] = (
+    "packages/design-playbook/mcp/preview/pin_bridge.js",
+)
 
 
 def validate_literal_values() -> None:
@@ -1239,6 +1244,13 @@ def validate_literal_values() -> None:
             continue
         found += [f"{path.name}:{value}"
                   for value in self_audit.literal_values(path.read_text(encoding="utf-8"))]
+    for rel in LITERAL_SCRIPTS:
+        path = ROOT / rel
+        if not path.is_file():
+            found.append(f"missing:{rel}")
+            continue
+        found += [f"{path.name}:{value}" for value in
+                  self_audit.literal_values(self_audit.bridge_css(path.read_text(encoding="utf-8")))]
     check(not found, "colour, timing and easing literals live only in tokens.css (G-6)"
                      + ("" if not found else " (" + "; ".join(found[:12]) + ")"))
 

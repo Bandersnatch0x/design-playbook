@@ -120,3 +120,42 @@ class SurfaceWiringTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+BRIDGE_JS = MCP / "preview" / "pin_bridge.js"
+
+
+class BridgeStyleTest(unittest.TestCase):
+    """G-6b: the CSS the bridge injects into the reviewed page reads tokens too.
+
+    The reviewed page does not load tokens.css, so the bridge carries the
+    frame tokens from the shared file into a ``:root`` block of its own.
+    """
+
+    def test_injected_css_holds_no_literal_values(self) -> None:
+        css = self_audit.bridge_css(BRIDGE_JS.read_text(encoding="utf-8"))
+        self.assertGreater(len(css), 1000)
+        self.assertEqual(self_audit.literal_values(css), [])
+
+    def test_bridge_css_extractor_joins_the_string_pieces(self) -> None:
+        js = 'var style = x;\nstyle.textContent =\n  "a{color:" +\n  // note\n  "red}";\nfoo("b{x:y}");'
+        self.assertEqual(self_audit.bridge_css(js), "a{color:red}")
+
+    def test_served_bridge_defines_every_token_its_css_reads(self) -> None:
+        from design_playbook.mcp.preview import pin_bridge
+        script = pin_bridge.BRIDGE_SCRIPT
+        self.assertNotIn("__DPB_FRAME_TOKENS__", script)
+        css = self_audit.bridge_css(script)
+        self.assertIn(":root{", css)
+        defined = set(_DEF.findall(css))
+        read = set(re.findall(r"var\(\s*(--dpb-[\w-]+)", css))
+        self.assertGreater(len(read), 20)
+        self.assertEqual(sorted(read - defined), [])
+
+    def test_frame_tokens_come_from_the_shared_file(self) -> None:
+        from design_playbook.mcp.preview import pin_bridge
+        css = self_audit.bridge_css(pin_bridge.BRIDGE_SCRIPT)
+        shared = TOKENS.read_text(encoding="utf-8")
+        for name, value in re.findall(r"(--dpb-frame-[\w-]+)\s*:\s*([^;]+);", css):
+            with self.subTest(token=name):
+                self.assertIn(f"{name}: {value.strip()};", shared)

@@ -589,6 +589,8 @@ class ValidateGateTests(unittest.TestCase):
              "app.css:120ms"),
             (self.root / WORKBENCH_APP_CSS, "\n.x { transition-timing-function: cubic-bezier(0,0,1,1); }\n",
              "app.css:cubic-bezier(0,0,1,1)"),
+            (self._pkg("mcp", "preview", "pin_bridge.js"), '\nstyle.textContent = "a{color:#123456}";\n',
+             "pin_bridge.js:#123456"),
         )
         for path, extra, found in cases:
             with self.subTest(found=found):
