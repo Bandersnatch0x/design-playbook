@@ -411,6 +411,21 @@ class DesignSystemJourneyTest(unittest.TestCase):
         expect(button).not_to_have_attribute("aria-busy", "true")
         expect(button).to_have_text("发布新版本")
 
+    def test_a_hung_request_times_out_with_a_retryable_message(self) -> None:
+        self._open_design_system()
+        self._edit(self.TOKENS)
+        self._save()
+        self.page.route("**/tokens-publish", lambda route: None)
+        button = self.page.locator("#tokens-publish")
+        button.click()
+        expect(button).to_be_disabled()
+        self.page.wait_for_timeout(10500)
+        expect(self.page.locator("#tokens-error")).to_contain_text("timeout")
+        expect(self.page.locator("#tokens-error")).to_contain_text("重试")
+        expect(button).to_be_enabled()
+        self.page.unroute("**/tokens-publish")
+        self._publish(1)
+
     def test_a_non_token_asset_has_no_design_system_entry(self) -> None:
         self._open_asset("markdown")
         expect(self.page.locator("#asset-design-system-controls")).to_be_hidden()

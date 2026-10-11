@@ -447,6 +447,8 @@ function markBusy(button) {
   };
 }
 
+const REQUEST_TIMEOUT_MS = 10000;
+
 async function api(path, options = {}) {
   const method = options.method || "GET";
   const busyButton = method === "GET" ? null : clickedButton;
@@ -463,7 +465,12 @@ async function sendRequest(path, { method = "GET", body } = {}) {
   const headers = {};
   if (state.token) headers.Authorization = "Bearer " + state.token;
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  const response = await fetch(path, {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetch(path, {
+    signal: controller.signal,
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -471,7 +478,18 @@ async function sendRequest(path, { method = "GET", body } = {}) {
     cache: "no-store",
     redirect: "error",
     referrerPolicy: "no-referrer",
-  });
+    });
+  } catch (error) {
+    if (error && error.name === "AbortError") {
+      const timeout = new Error("请求超过 10 秒没有应答");
+      timeout.code = "timeout";
+      timeout.retryable = true;
+      throw timeout;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
   let payload = null;
   try {
     payload = await response.json();
@@ -501,6 +519,9 @@ function describeFailure(error, action) {
   // The code stays in the sentence (existing contract, asserted by the
   // browser suite) so a report can be traced; the action is added.
   console.debug("workbench-failure", action, code, error.message);
+  if (code === "timeout") {
+    return `${action}失败：服务端 10 秒没有应答（timeout）。请点击同一按钮重试。`;
+  }
   if (code === "conflict") {
     return (
       `${action}失败：项目状态已变化（conflict）。` +
