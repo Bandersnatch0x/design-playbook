@@ -3180,3 +3180,41 @@ def test_move_snaps_to_a_neighbour_edge_within_four_pixels(editor_page):
     drag_interaction(page, move, 283, 3)
     rect = target.evaluate("el => el.getBoundingClientRect().toJSON()")
     assert rect["left"] == pytest.approx(400, abs=0.5)
+
+
+_PICKER_COLORS = """(root) => {
+  const parse = (value) => value.match(/[\\d.]+/g).slice(0, 3).map(Number);
+  const lum = (rgb) => {
+    const [r, g, b] = rgb.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const hex = root.querySelector('.dpb-cp-hex');
+  const panel = getComputedStyle(root);
+  const field = getComputedStyle(hex);
+  return {panel: lum(parse(panel.backgroundColor)),
+          panelText: ratio(parse(field.color), parse(panel.backgroundColor)),
+          fieldText: ratio(parse(field.color), parse(field.backgroundColor))};
+}"""
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_color_picker_follows_page_theme_and_offers_native_input(editor_page, theme):
+    """U-33 (E-24): the picker follows data-theme, text contrast holds, and a native colour input exists."""
+    page = editor_page
+    proto = page.frame_locator("iframe.dpb-proto-frame")
+    proto.locator("html").evaluate("(el, t) => el.setAttribute('data-theme', t)", theme)
+    proto.locator("#panel-title").evaluate("el => el.click()")
+    proto.locator(".dpb-tb-color-btn").click()
+    picker = proto.locator("#dpb-color-picker")
+    seen = picker.evaluate(_PICKER_COLORS)
+    if theme == "light":
+        assert seen["panel"] > 0.5
+    else:
+        assert seen["panel"] < 0.2
+    assert seen["fieldText"] >= 4.5
+    native = picker.locator('input[type="color"]')
+    assert native.count() == 1
+    assert native.get_attribute("aria-label")
+    native.evaluate("el => { el.value = '#00ff00'; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }")
+    assert picker.locator(".dpb-cp-hex").input_value() == "#00ff00"

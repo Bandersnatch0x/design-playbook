@@ -73,6 +73,10 @@
     "#dpb-color-picker{position:absolute;top:calc(100% + 6px);left:0;background:var(--dpb-frame-bar);border:1px solid var(--dpb-frame-bar-line);" +
     "border-radius:8px;padding:8px;box-shadow:var(--dpb-frame-shadow-picker);display:none;flex-direction:column;gap:8px;width:190px;max-width:calc(100vw - 32px);pointer-events:auto;z-index:2147483015}" +
     "#dpb-color-picker.is-open{display:flex}" +
+    "#dpb-color-picker[data-theme=light]{background:var(--dpb-frame-lt-bar);border-color:var(--dpb-frame-lt-line)}" +
+    "#dpb-color-picker[data-theme=light] .dpb-cp-hex,#dpb-color-picker[data-theme=light] .dpb-cp-opacity,#dpb-color-picker[data-theme=light] .dpb-cp-native{background:var(--dpb-frame-lt-field);color:var(--dpb-frame-lt-ink);border-color:var(--dpb-frame-lt-line)}" +
+    "#dpb-color-picker[data-theme=light] .dpb-cp-swatch{border-color:var(--dpb-frame-lt-edge)}" +
+    ".dpb-cp-native{width:24px;height:24px;padding:0;border:1px solid var(--dpb-frame-bar-line);border-radius:4px;background:var(--dpb-frame-bar-field);cursor:pointer;flex:none}" +
     ".dpb-cp-sv{position:relative;width:100%;height:90px;border-radius:6px;cursor:crosshair;background:var(--dpb-frame-cp-hue-base);" +
     "background-image:var(--dpb-frame-cp-shade);touch-action:none}" +
     ".dpb-cp-sv-thumb{position:absolute;width:10px;height:10px;border-radius:50%;border:2px solid var(--dpb-frame-white);" +
@@ -508,12 +512,18 @@
 
     var hexInput = colorPickerEl.querySelector(".dpb-cp-hex");
     var opacityInput = colorPickerEl.querySelector(".dpb-cp-opacity");
+    var nativeInput = colorPickerEl.querySelector(".dpb-cp-native");
     var svArea = colorPickerEl.querySelector(".dpb-cp-sv");
     var hueSlider = colorPickerEl.querySelector(".dpb-cp-hue");
     var alphaSlider = colorPickerEl.querySelector(".dpb-cp-alpha");
     var swatches = Array.from(colorPickerEl.querySelectorAll(".dpb-cp-swatch"));
     var hue = 0, saturation = 0, brightness = 0, alpha = 1, property = "color";
     var colorDraft = null, colorTarget = null, opener = null;
+    function pageTheme() {
+      var set = document.documentElement.getAttribute("data-theme");
+      if (set === "light" || set === "dark") return set;
+      return window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
     function clamp(value, max) { return Math.max(0, Math.min(max, value)); }
     function readColor(value) {
       if (!CSS.supports("color", value)) return false;
@@ -531,6 +541,7 @@
     function refreshColor() {
       var rgb = hsvToRgb(hue, saturation, brightness), hex = rgbToHex(rgb[0], rgb[1], rgb[2]);
       hexInput.value = hex;
+      nativeInput.value = hex;
       opacityInput.value = Math.round(alpha * 100) + "%";
       svArea.style.backgroundColor = "hsl(" + hue + ",100%,50%)";
       svArea.firstElementChild.style.left = saturation * 100 + "%";
@@ -569,6 +580,7 @@
       closeColorPicker(false);
       colorTarget = visualSelectedEl; property = nextProperty; opener = source;
       readColor(getComputedStyle(colorTarget).getPropertyValue(property)); refreshColor();
+      colorPickerEl.setAttribute("data-theme", pageTheme());
       colorPickerEl.classList.add("is-open");
       var rect = (source || colorTarget).getBoundingClientRect();
       var width = colorPickerEl.offsetWidth, height = colorPickerEl.offsetHeight;
@@ -595,6 +607,10 @@
       hexInput.removeAttribute("aria-invalid"); previewColor(); commitColor();
     }
     hexInput.addEventListener("change", commitHex);
+    nativeInput.addEventListener("input", function () {
+      hexInput.value = nativeInput.value; if (readColor(hexInput.value)) previewColor();
+    });
+    nativeInput.addEventListener("change", function () { hexInput.value = nativeInput.value; commitHex(); });
     hexInput.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); commitHex(); } });
     function updateOpacity() {
       if (!/^\d+(?:\.\d+)?%?$/.test(opacityInput.value.trim())) {
@@ -750,6 +766,7 @@
       '<div class="dpb-cp-hue"><div class="dpb-cp-hue-thumb"></div></div>' +
       '<div class="dpb-cp-alpha"><div class="dpb-cp-alpha-thumb"></div></div>' +
       '<div class="dpb-cp-inputs">' +
+      '<input class="dpb-cp-native" type="color" value="#000000" data-dpb-label="visual_native_color" />' +
       '<input class="dpb-cp-hex" value="#000000" data-dpb-label="visual_hex" />' +
       '<input class="dpb-cp-opacity" value="100%" data-dpb-label="visual_opacity" />' +
       '</div>' +

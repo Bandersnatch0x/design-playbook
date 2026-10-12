@@ -117,6 +117,11 @@
   --dpb-frame-bar-field: #0F172A;
   --dpb-frame-bar-hover: rgba(255,255,255,.1);
   --dpb-frame-bar-edge: rgba(255,255,255,.2);
+  --dpb-frame-lt-bar: #FFFFFF;
+  --dpb-frame-lt-ink: #0F172A;
+  --dpb-frame-lt-line: #CBD5E1;
+  --dpb-frame-lt-field: #F1F5F9;
+  --dpb-frame-lt-edge: rgba(15,23,42,.3);
   --dpb-frame-bar-stroke: rgba(255,255,255,.45);
   --dpb-frame-note-bg: #1F2430;
   --dpb-frame-note-ink: #F3F4F6;
