@@ -3218,3 +3218,26 @@ def test_color_picker_follows_page_theme_and_offers_native_input(editor_page, th
     assert native.get_attribute("aria-label")
     native.evaluate("el => { el.value = '#00ff00'; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }")
     assert picker.locator(".dpb-cp-hex").input_value() == "#00ff00"
+
+
+def test_pin_mode_picks_an_element_with_the_keyboard_alone(editor_page):
+    """E-23: arrows move the highlight, Enter anchors it; no pointer needed."""
+    from playwright.sync_api import expect
+
+    page = editor_page
+    page.evaluate("window.__anchors = []; window.addEventListener('message', e => { if (e.data && e.data.dpbPinAnchor) window.__anchors.push(e.data.dpbPinAnchor.selector); })")
+    page.locator("#dpb-pin-toggle").click()
+    frame = page.frame_locator("iframe.dpb-proto-frame")
+    frame.locator("body").evaluate("el => el.focus()")
+    page.locator("iframe.dpb-proto-frame").focus()
+    page.keyboard.press("ArrowDown")
+    expect(frame.locator(".dpb-pin-hover")).to_have_count(1)
+    first = frame.locator(".dpb-pin-hover").evaluate("el => el.outerHTML")
+    page.keyboard.press("ArrowDown")
+    second = frame.locator(".dpb-pin-hover").evaluate("el => el.outerHTML")
+    assert first != second
+    page.keyboard.press("ArrowUp")
+    expect(frame.locator("#panel-title.dpb-pin-hover")).to_have_count(1)
+    page.keyboard.press("Enter")
+    page.wait_for_function("window.__anchors.length === 1")
+    assert page.evaluate("window.__anchors[0]") == "#panel-title"

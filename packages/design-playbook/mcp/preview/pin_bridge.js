@@ -907,6 +907,9 @@
     var el = (hoverEl && hoverEl.contains(raw)) ? hoverEl : raw;
     e.preventDefault();
     e.stopPropagation();
+    pickElement(el);
+  }, true);
+  function pickElement(el) {
     // highlight reconciliation is syncAnchors' job — the parent echoes the
     // full list back after recording the anchor, so every pinned element
     // stays highlighted (not just the latest click).
@@ -925,6 +928,41 @@
       },
     }, "*");
     reportVisualSelection(el, false);
+  }
+  function pinCandidates() {
+    var all = document.body ? document.body.querySelectorAll("*") : [];
+    var out = [];
+    for (var i = 0; i < all.length; i++) {
+      var c = all[i];
+      if (/^(SCRIPT|STYLE|LINK|META|BR|TEMPLATE|NOSCRIPT)$/.test(c.tagName)) continue;
+      if (c.closest("#dpb-float-root")) continue;
+      var r = c.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) out.push(c);
+    }
+    return out;
+  }
+  document.addEventListener("keydown", function (e) {
+    if (!pinOn || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
+    var t = e.target;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    var k = e.key;
+    if (k === "Enter" && hoverEl) {
+      e.preventDefault();
+      e.stopPropagation();
+      pickElement(hoverEl);
+      return;
+    }
+    var step = (k === "ArrowDown" || k === "ArrowRight") ? 1 : (k === "ArrowUp" || k === "ArrowLeft") ? -1 : 0;
+    if (!step) return;
+    var list = pinCandidates();
+    if (!list.length) return;
+    e.preventDefault();
+    var at = hoverEl ? list.indexOf(hoverEl) : -1;
+    var next = at < 0 ? (step > 0 ? 0 : list.length - 1) : Math.max(0, Math.min(list.length - 1, at + step));
+    clearHover();
+    hoverEl = list[next];
+    hoverEl.classList.add("dpb-pin-hover");
+    try { hoverEl.scrollIntoView({ block: "nearest" }); } catch (err) {}
   }, true);
 
   // ---- #57 scheme A: cross-origin locate, flash and numbered badges ----
