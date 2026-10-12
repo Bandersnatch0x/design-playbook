@@ -2016,26 +2016,28 @@ class ProposalJourneyTest(unittest.TestCase):
             self.page.locator(".proposal-item").nth(1).locator(".proposal-state")
         ).to_have_text("已应用")
 
-    def test_reject_dialog_is_an_alertdialog_focused_on_cancel_and_esc_cancels(self) -> None:
+    def test_reject_has_no_confirm_dialog_and_waits_five_seconds_for_undo(self) -> None:
         self._propose("<h1>never applied</h1>\n")
         self._open_panel()
         item = self.page.locator(".proposal-item").first
         item.locator(".reject-button").click()
-        box = self.page.locator("#dpb-dialog [role=alertdialog]")
-        expect(box).to_be_visible()
-        expect(self.page.locator("#dpb-dialog .dialog-cancel")).to_be_focused()
-        self.page.keyboard.press("Escape")
         expect(self.page.locator("#dpb-dialog")).to_have_count(0)
+        undo = self.page.locator("#proposals-undo")
+        expect(undo).to_be_visible()
+        expect(undo.locator("button")).to_have_text("撤销")
         expect(item.locator(".proposal-state")).to_have_text("等待授权")
-        expect(item.locator(".reject-button")).to_be_focused()
+        undo.locator("button").click()
+        expect(undo).to_be_hidden()
+        self.page.wait_for_timeout(5600)
+        expect(item.locator(".proposal-state")).to_have_text("等待授权")
 
     def test_reject_leaves_the_source_untouched(self) -> None:
         self._propose("<h1>never applied</h1>\n")
         self._open_panel()
         item = self.page.locator(".proposal-item").first
         item.locator(".reject-button").click()
-        answer_dialog(self.page)
-        expect(item.locator(".proposal-state")).to_have_text("已拒绝")
+        expect(item.locator(".proposal-state")).to_have_text("已拒绝", timeout=9000)
+        expect(self.page.locator("#proposals-undo")).to_be_hidden()
         self.assertEqual(self.file.read_bytes(), b"<h1>hello</h1>\n")
         expect(item.locator(".apply-button")).to_be_hidden()
 

@@ -73,6 +73,9 @@ const elements = {
   proposalsHeading: document.getElementById("proposals-heading"),
   proposalsScope: document.getElementById("proposals-scope"),
   proposalsError: document.getElementById("proposals-error"),
+  proposalsUndo: document.getElementById("proposals-undo"),
+  proposalsUndoText: document.getElementById("proposals-undo-text"),
+  proposalsUndoButton: document.getElementById("proposals-undo-button"),
   proposalsEmpty: document.getElementById("proposals-empty"),
   proposalItems: document.getElementById("proposal-items"),
   proposalTemplate: document.getElementById("proposal-template"),
@@ -1145,9 +1148,10 @@ async function applyProposal(proposal) {
   await loadProposals();
 }
 
-async function rejectProposal(proposal) {
-  const confirmed = await askConfirm("拒绝该提案？这不会改动任何源文件。");
-  if (!confirmed) return;
+const REJECT_DELAY_MS = 5000;
+let pendingReject = null;
+
+async function sendReject(proposal) {
   try {
     await proposalVerb(proposal, "reject");
     announce("提案已拒绝。");
@@ -1157,6 +1161,35 @@ async function rejectProposal(proposal) {
   }
   await loadProposals();
 }
+
+function clearPendingReject() {
+  if (!pendingReject) return null;
+  window.clearTimeout(pendingReject.timer);
+  const done = pendingReject;
+  pendingReject = null;
+  elements.proposalsUndo.hidden = true;
+  return done;
+}
+
+function rejectProposal(proposal) {
+  const earlier = clearPendingReject();
+  if (earlier) sendReject(earlier.proposal);
+  elements.proposalsUndoText.textContent =
+    "将在 5 秒后拒绝该提案（不会改动任何源文件）。";
+  elements.proposalsUndo.hidden = false;
+  announce("5 秒后拒绝该提案，可撤销。");
+  pendingReject = {
+    proposal,
+    timer: window.setTimeout(() => {
+      const due = clearPendingReject();
+      if (due) sendReject(due.proposal);
+    }, REJECT_DELAY_MS),
+  };
+}
+
+elements.proposalsUndoButton.addEventListener("click", () => {
+  if (clearPendingReject()) announce("已撤销拒绝。");
+});
 
 async function revertProposal(proposal) {
   try {
