@@ -104,7 +104,7 @@ def test_muted_approve_dot_never_pulses(editor_page):
 def test_editor_input_inherits_panel_font(editor_page):
     from playwright.sync_api import expect
 
-    editor_page.locator("#dpb-tab-visual").click()
+    select_target_only(editor_page)
     field = editor_page.locator(".dpb-react-field input").first
     parent_font = field.evaluate("el => getComputedStyle(el.parentElement).fontFamily")
     expect(field).to_have_css("font-family", parent_font)
@@ -297,7 +297,7 @@ def test_round3_narrow_visual_inspector_has_one_column_and_clearance(editor_page
 
     page = editor_page
     page.set_viewport_size({"width": 320, "height": 800})
-    page.locator("#dpb-tab-visual").click()
+    select_target_only(page)
     grid = page.locator(".dpb-react-fields")
     assert len(grid.evaluate("el => getComputedStyle(el).gridTemplateColumns").split()) == 1
     expect(page.locator("#dpb-visual-view")).to_have_css("padding-bottom", "80px")
@@ -468,7 +468,7 @@ def test_inspector_layout_spacing_and_border_default_to_collapsed(editor_page):
     from playwright.sync_api import expect
 
     page = editor_page
-    page.locator("#dpb-tab-visual").click()
+    select_target_only(page)
     for section_id in ("layout", "spacing", "border"):
         section = page.locator(f'.dpb-inspector-section[data-section="{section_id}"]')
         expect(section).to_have_class(re.compile(r"\bis-collapsed\b"))
@@ -621,6 +621,13 @@ def test_bridge_supports_resize_and_move_messages(editor_page):
         }, "*");
     }''')
     expect(target).to_have_css("transform", "matrix(1, 0, 0, 1, 15, 25)")
+
+
+def select_target_only(page):
+    page.frame_locator("iframe.dpb-proto-frame").locator("#panel-title").evaluate("el => el.click()")
+    page.keyboard.press("Escape")
+    page.locator("#dpb-tab-visual").click()
+    page.locator(".dpb-react-fields").wait_for()
 
 
 # Independent interaction review of the interaction surface.
@@ -1360,7 +1367,7 @@ def test_ip10_layout_and_ip11_ip13_stable_borders(editor_page, locale):
     page.locator("#dpb-btn-approve").evaluate("el => {el.classList.remove('dpb-approve-muted'); el.classList.add('dpb-approve-ready')}")
     expect(kbd).to_have_css("border-bottom-width", "2px")
     assert kbd.bounding_box()["height"] == before
-    page.locator("#dpb-tab-visual").click()
+    select_target_only(page)
     header = page.locator(".dpb-section-header").first
     before = header.bounding_box()["height"]
     header.click()

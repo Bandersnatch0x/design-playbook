@@ -811,6 +811,18 @@
           function handleBlur(prop, val) {
             commit(prop, val, selected && selected.selector);
           }
+          // Arrow keys step a number: 1, Shift 10, Alt 0.1. Each press goes
+          // through the same debounce as typing, so a held key is one commit.
+          function stepKey(prop, e, unit) {
+            if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return false;
+            var m = /^(-?(?:\d+\.?\d*|\.\d+))([a-z%]*)$/i.exec(String(e.target.value).trim());
+            if (!m) return false;
+            e.preventDefault();
+            var step = e.altKey ? 0.1 : e.shiftKey ? 10 : 1;
+            var next = Math.round((parseFloat(m[1]) + (e.key === "ArrowUp" ? step : -step)) * 10) / 10;
+            handleInput(prop, String(next) + (m[2] || unit || ""));
+            return true;
+          }
           function handleKey(prop, val, e) {
             if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); e.stopPropagation(); commit(prop, val, selected && selected.selector); }
           }
@@ -877,7 +889,7 @@
                     // at an explicit commit, Enter or blur.
                     onChange: function (e) { handleInput(prop, e.target.value); },
                     onBlur: function (e) { handleBlur(prop, joinUnit(e.target.value, parts.unit)); },
-                    onKeyDown: function (e) { handleKey(prop, joinUnit(e.target.value, parts.unit), e); }
+                    onKeyDown: function (e) { if (!stepKey(prop, e, parts.unit)) handleKey(prop, joinUnit(e.target.value, parts.unit), e); }
                   }),
                   parts.unit ? h("span", { className: "dpb-unit-suffix" }, parts.unit) : null
                 )
@@ -922,7 +934,7 @@
                   placeholder: "0px",
                   onChange: function (e) { handleInput(prop, e.target.value); },
                   onBlur: function (e) { handleBlur(prop, e.target.value); },
-                  onKeyDown: function (e) { handleKey(prop, e.target.value, e); }
+                  onKeyDown: function (e) { if (!stepKey(prop, e, "px")) handleKey(prop, e.target.value, e); }
                 })
               ),
               h("div", { className: "dpb-quad-grid" }, sides.map(function (side) {
@@ -935,7 +947,7 @@
                     placeholder: "0",
                     onChange: function (e) { handleInput(sProp, e.target.value); },
                     onBlur: function (e) { handleBlur(sProp, e.target.value); },
-                    onKeyDown: function (e) { handleKey(sProp, e.target.value, e); }
+                    onKeyDown: function (e) { if (!stepKey(sProp, e, "px")) handleKey(sProp, e.target.value, e); }
                   })
                 );
               }))
@@ -978,6 +990,11 @@
           var justifyOpts = ["", "flex-start", "center", "flex-end", "space-between", "space-around", "space-evenly"];
           var alignOpts = ["", "flex-start", "center", "flex-end", "stretch", "baseline"];
 
+          if (!selected) {
+            return h("div", { className: "dpb-react-empty" },
+              h("p", null, t("visual_select")),
+              h("button", { type: "button", onClick: function () { try { frame.focus(); } catch (_) {} } }, t("visual_pick")));
+          }
           return h("div", { className: "dpb-react-fields" },
             renderSection("colors", t("sec_colors"), [
               renderField("color", t("visual_color"), "color"),
