@@ -605,6 +605,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-modal-grid > kbd { align-self: center; }
 .dpb-modal-foot { padding-top: 12px; border-top: 1px solid var(--dpb-line); }
 .dpb-modal-foot .dpb-btn { width: 100%; }
+.dpb-modal-switch { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: var(--dpb-text-xs); color: var(--dpb-soft); }
 .dpb-onboarding-list {
   list-style: none; margin: 0; padding: 0; display: grid; gap: 10px;
 }

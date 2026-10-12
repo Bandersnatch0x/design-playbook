@@ -2506,6 +2506,7 @@
         return;
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (document.querySelector(".export-overlay")) return;
       if (isRefresh) {
         var readyView = document.getElementById("view-ready");
         if (!readyView || readyView.hidden) return;

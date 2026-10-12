@@ -266,6 +266,25 @@ def test_shift_escape_asks_before_skipping(page):
     assert page.evaluate("window.submittedChoices") == ["跳过"]
 
 
+def test_single_key_shortcuts_can_be_switched_off(page):
+    """U-32 (E-07): the shortcut guide carries a switch; off means plain keys do nothing."""
+    dismiss_intro(page)
+    page.keyboard.press("?")
+    toggle = page.locator("#dpb-singlekeys-toggle")
+    expect(toggle).to_be_visible()
+    expect(toggle).to_be_checked()
+    toggle.uncheck()
+    page.locator("#dpb-shortcut-ok").click()
+    page.keyboard.press("2")
+    page.keyboard.press("3")
+    expect(page.locator("#dpb-vp-desktop")).to_have_attribute("aria-pressed", "true")
+    assert page.evaluate("localStorage.getItem('dpb.singlekeys.v1')") == "off"
+    page.keyboard.press("?")
+    expect(page.locator("#dpb-shortcut-modal")).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(page.locator("#dpb-shortcut-modal")).to_be_hidden()
+
+
 def test_abort_defaults_to_cancel_and_returns_focus(page):
     dismiss_intro(page)
     page.locator("#dpb-abort").click()

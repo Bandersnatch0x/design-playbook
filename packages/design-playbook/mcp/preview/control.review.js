@@ -508,6 +508,19 @@
   }
 
   // ---- shortcut modal ----
+  var SINGLE_KEYS = "dpb.singlekeys.v1";
+  var singleKeysToggle = document.getElementById("dpb-singlekeys-toggle");
+  function singleKeysOn() {
+    try { return localStorage.getItem(SINGLE_KEYS) !== "off"; }
+    catch (err) { return true; }
+  }
+  if (singleKeysToggle) {
+    singleKeysToggle.checked = singleKeysOn();
+    singleKeysToggle.addEventListener("change", function () {
+      try { localStorage.setItem(SINGLE_KEYS, singleKeysToggle.checked ? "on" : "off"); }
+      catch (err) { /* private mode: the switch lasts for this page only */ }
+    });
+  }
   function toggleModal(show) {
     setReviewDialog(modal, show, document.getElementById("dpb-shortcut-close"));
   }
@@ -798,6 +811,7 @@
       return;
     }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!singleKeysOn()) return;
     if (k === "l") { e.preventDefault(); toggleLanguage(); return; }
     if (k === "h") { e.preventDefault(); setTool(tool === "hand" ? "select" : "hand"); return; }
     if (k === "j") { e.preventDefault(); roam(1); return; }

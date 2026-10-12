@@ -820,6 +820,18 @@ class SecurityTest(BrowserTestCase):
         expect(dialog.locator("button[aria-busy='true']")).to_have_count(0, timeout=8000)
         expect(dialog.get_by_role("button", name="Preview export")).to_be_enabled()
 
+    def test_global_r_does_nothing_while_the_export_dialog_is_open(self) -> None:
+        """U-32 (E-07): a temporary view blocks the global single keys."""
+        self.open()
+        hits = []
+        self.page.route("**/refresh*", lambda route: (hits.append(1), route.abort()))
+        self.page.get_by_role("button", name="Export diagnostics").click()
+        expect(self.page.locator(".export-dialog")).to_be_visible()
+        self.page.locator(".export-dialog").get_by_role("button").first.focus()
+        self.page.keyboard.press("r")
+        self.page.wait_for_timeout(400)
+        self.assertEqual(hits, [])
+
     def test_copyable_command_copies_plaintext_when_known(self) -> None:
         self.context.grant_permissions(["clipboard-read", "clipboard-write"])
         snapshot = self.console.snapshot()

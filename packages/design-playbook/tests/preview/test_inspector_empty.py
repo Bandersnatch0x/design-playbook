@@ -35,7 +35,7 @@ def test_unselected_inspector_shows_empty_state_not_disabled_fields(tmp_path):
 
 
 def test_arrow_keys_step_numeric_value(tmp_path):
-    from playwright.sync_api import sync_playwright, expect
+    from playwright.sync_api import sync_playwright
     from preview_e2e_helpers import dismiss_onboarding
     from tests.preview.test_visual_ui_regressions import select_interaction_target
 
@@ -43,7 +43,7 @@ def test_arrow_keys_step_numeric_value(tmp_path):
         browser, page = _page(pw, tmp_path)
         try:
             dismiss_onboarding(page)
-            target = select_interaction_target(page, "width: 100px")
+            select_interaction_target(page, "width: 100px")
             box = page.locator('.dpb-react-field[data-property="width"] input')
             box.fill("100")
             box.press("ArrowUp")
