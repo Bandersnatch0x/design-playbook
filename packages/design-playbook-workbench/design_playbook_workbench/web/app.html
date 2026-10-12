@@ -62,7 +62,7 @@
         <label for="project-name">项目名称（可选）</label>
         <input id="project-name" name="name" type="text" maxlength="120"
                placeholder="默认使用目录名">
-        <button type="submit" id="register-button">登记项目</button>
+        <button type="submit" id="register-button" class="primary">登记项目</button>
         <button type="button" id="cancel-candidate" class="secondary">取消</button>
       </form>
     </div>
@@ -123,7 +123,7 @@
         <option value="runnable-verified">已运行验证</option>
         <option value="native-editable">原生可编辑</option>
       </select>
-      <button type="submit" id="assets-search-button">检索</button>
+      <button type="submit" id="assets-search-button" class="primary">检索</button>
     </form>
     <p id="assets-error" class="error-text" hidden></p>
     <p id="assets-empty" class="empty" hidden>还没有导入资产。先在项目里导入设计说明、组件、页面或截图。</p>
@@ -200,7 +200,7 @@
     <textarea id="tokens-document" class="tokens-editor" rows="16" spellcheck="false"></textarea>
     <div class="preview-controls">
       <button type="button" id="tokens-save" data-busy-label="保存中…">校验并保存草稿</button>
-      <button type="button" id="tokens-publish" data-busy-label="发布中…">发布新版本</button>
+      <button type="button" id="tokens-publish" class="primary" data-busy-label="发布中…">发布新版本</button>
       <button type="button" id="tokens-reload" class="secondary">重新载入</button>
     </div>
     <p id="tokens-status" class="hint" role="status"></p>
@@ -257,7 +257,7 @@
     <textarea id="document-text" class="tokens-editor" rows="16" spellcheck="false"></textarea>
     <div class="preview-controls">
       <button type="button" id="document-save">校验并保存草稿</button>
-      <button type="button" id="document-publish">发布新版本</button>
+      <button type="button" id="document-publish" class="primary">发布新版本</button>
       <button type="button" id="document-reload" class="secondary">重新载入</button>
     </div>
     <p id="document-status" class="hint" role="status"></p>
@@ -326,7 +326,7 @@
       <label for="canvas-name">新建画布名称</label>
       <input id="canvas-name" name="name" type="text" maxlength="120"
              placeholder="例如 首页方案" required>
-      <button type="submit" id="canvas-create">新建画布</button>
+      <button type="submit" id="canvas-create" class="primary">新建画布</button>
     </form>
     <div class="row-form">
       <label for="canvas-select">当前画布</label>
@@ -583,7 +583,7 @@
     <label for="work-required">结果必需字段（逗号分隔）</label>
     <input id="work-required" type="text" spellcheck="false" value="summary, entrypoints">
     <div class="preview-controls">
-      <button type="button" id="work-create">用当前确认上下文建立任务</button>
+      <button type="button" id="work-create" class="primary">用当前确认上下文建立任务</button>
       <button type="button" id="work-reload" class="secondary">重新载入任务</button>
     </div>
     <p id="work-context-note" class="hint"></p>
@@ -706,7 +706,7 @@
     <div class="row-form">
       <label for="backup-dest">备份输出（绝对路径，可留空用默认目录）</label>
       <input id="backup-dest" type="text" spellcheck="false" placeholder="D:\\backups\\workbench.dpwb.zip">
-      <button type="button" id="backup-create">创建备份</button>
+      <button type="button" id="backup-create" class="primary">创建备份</button>
     </div>
     <p id="backup-note" class="hint" role="status"></p>
     <div class="row-form">

@@ -157,12 +157,20 @@ main {
 button {
   font: inherit;
   padding: 0.5rem 0.9rem;
-  border: 1px solid transparent;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: transparent;
+  color: var(--ink);
   cursor: pointer;
 }
+button.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+button:hover:not([disabled]) { background: var(--dpb-elev-hover); }
+button.primary:hover:not([disabled]) { background: var(--accent); filter: brightness(1.08); }
+button:active:not([disabled]) { transform: translateY(1px); }
 button.secondary {
   background: transparent;
   color: var(--ink);
