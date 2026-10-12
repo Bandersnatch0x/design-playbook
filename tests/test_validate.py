@@ -677,6 +677,33 @@ class ValidateGateTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
                 self.assertIn("FAIL  no style sheet uses transition: all (G-10)", result.stdout)
 
+    def test_important_in_breakpoint_fails_the_gate(self) -> None:
+        rel = "packages/design-playbook/mcp/preview/control.css"
+        path = self.root / rel
+        original = path.read_text(encoding="utf-8")
+        path.write_text(original + "\n@media (max-width: 500px) { .x { color: red !important; } }\n", encoding="utf-8")
+        try:
+            result = self.validate()
+        finally:
+            path.write_text(original, encoding="utf-8")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL  no !important inside a breakpoint block (G-12)", result.stdout)
+
+    def test_important_over_baseline_fails_the_gate(self) -> None:
+        for rel in ("packages/design-playbook/mcp/preview/control.css",
+                    "packages/design-playbook/mcp/run_console/app.css",
+                    WORKBENCH_APP_CSS):
+            with self.subTest(sheet=rel):
+                path = self.root / rel
+                original = path.read_text(encoding="utf-8")
+                path.write_text(original + "\n.x { color: red !important; }\n", encoding="utf-8")
+                try:
+                    result = self.validate()
+                finally:
+                    path.write_text(original, encoding="utf-8")
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn("FAIL  !important counts stay at or under the registered baseline (G-12)", result.stdout)
+
     def test_infinite_animation_fails_the_gate(self) -> None:
         for rel in ("packages/design-playbook/mcp/preview/control.css",
                     "packages/design-playbook/mcp/run_console/app.css",

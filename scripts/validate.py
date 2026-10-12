@@ -1365,6 +1365,27 @@ def validate_motion_limits() -> None:
           "easing tokens are named for their curve (G-11)")
 
 
+IMPORTANT_BASELINE = (29, 0, 3)
+
+
+def validate_important_limits() -> None:
+    """G-12: `!important` only goes down, and never inside a breakpoint block."""
+    print("\n== Specificity (G-12) ==")
+    from self_audit import _blocks
+    over, in_breakpoint = [], []
+    for rel, limit in zip(LITERAL_SHEETS, IMPORTANT_BASELINE):
+        path = ROOT / rel
+        text = path.read_text(encoding="utf-8") if path.is_file() else ""
+        bare = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+        if bare.count("!important") > limit:
+            over.append(rel)
+        for context, selector, body in _blocks(text):
+            if "max-width" in context and "!important" in body and not selector.startswith("@"):
+                in_breakpoint.append(rel)
+    check(not in_breakpoint, "no !important inside a breakpoint block (G-12)")
+    check(not over, "!important counts stay at or under the registered baseline (G-12)")
+
+
 def validate_skill_contracts() -> None:
     print("== Dogfood 004 regression guards ==")
 
@@ -1532,6 +1553,7 @@ CHECKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("validate_button_states", (), ()),
     ("validate_transition_all", (), ()),
     ("validate_motion_limits", (), ()),
+    ("validate_important_limits", (), ()),
     ("validate_skill_contracts", (), ()),
     ("validate_test_executability", (), ()),
     ("validate_ruff", (), ()),

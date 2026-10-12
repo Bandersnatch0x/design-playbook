@@ -1089,9 +1089,9 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 }
 @media (max-width: 768px) {
   /* At 768px: hide viewport switcher, KEEP MODE SWITCHER VISIBLE */
-  .dpb-vp-seg,
-  .dpb-vp-sep {
-    display: none !important;
+  #dpb-root .dpb-vp-seg,
+  #dpb-root .dpb-vp-sep {
+    display: none;
   }
   /* 120px leaves the 12px-floor approve label room on one line. */
   .dpb-header-left {
@@ -1119,23 +1119,23 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
     width: 26px;
     height: 26px;
   }
-  #dpb-language-toggle {
-    width: auto !important;
-    padding: 0 4px !important;
+  #dpb-root #dpb-language-toggle {
+    width: auto;
+    padding: 0 4px;
   }
-  .dpb-abort-btn {
-    padding: 0 4px !important;
-    height: 26px !important;
+  #dpb-root .dpb-abort-btn {
+    padding: 0 4px;
+    height: 26px;
     min-width: 24px;
   }
-  .dpb-btn-secondary {
-    padding: 0 6px !important;
-    height: 28px !important;
-    font-size: var(--dpb-text-xs) !important;
+  #dpb-root .dpb-btn-secondary {
+    padding: 0 6px;
+    height: 28px;
+    font-size: var(--dpb-text-xs);
   }
-  #dpb-btn-skip {
-    padding: 0 4px !important;
-    height: 26px !important;
+  #dpb-root #dpb-btn-skip {
+    padding: 0 4px;
+    height: 26px;
     min-width: 24px;
   }
   #dpb-btn-approve {
