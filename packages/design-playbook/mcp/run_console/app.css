@@ -396,7 +396,7 @@ main {
   background: var(--surface-dim);
   color: var(--text);
   box-shadow: none;
-  transition: all var(--dpb-duration-base) ease;
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform; transition-duration: var(--dpb-duration-base); transition-timing-function: ease;
 }
 
 .build-state-chip:hover {
@@ -521,7 +521,7 @@ main {
   flex-direction: column;
   justify-content: space-between;
   gap: 10px;
-  transition: all var(--dpb-duration-settle) var(--dpb-ease-spring);
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform; transition-duration: var(--dpb-duration-settle); transition-timing-function: var(--dpb-ease-spring);
   position: relative;
 }
 
@@ -666,7 +666,7 @@ main {
   border: 1px solid var(--line);
   color: var(--text);
   text-decoration: none;
-  transition: all var(--dpb-duration-quick) ease;
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform; transition-duration: var(--dpb-duration-quick); transition-timing-function: ease;
 }
 
 .jump-link:hover {

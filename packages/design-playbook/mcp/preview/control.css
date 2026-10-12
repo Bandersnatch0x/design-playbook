@@ -69,7 +69,7 @@ body.dpb-shell { overflow: hidden; height: 100vh; }
   appearance: none; cursor: pointer; border: 0; background: transparent;
   display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; white-space: nowrap;
   height: 26px; padding: 0 9px; border-radius: 6px;
-  color: var(--dpb-soft); font-weight: 500; font-size: var(--dpb-text-xs); line-height: 1; transition: all var(--dpb-duration-spring) var(--dpb-ease-spring);
+  color: var(--dpb-soft); font-weight: 500; font-size: var(--dpb-text-xs); line-height: 1; transition-property: color, background-color, border-color, box-shadow, opacity, transform; transition-duration: var(--dpb-duration-spring); transition-timing-function: var(--dpb-ease-spring);
 }
 .dpb-seg button:hover { color: var(--dpb-ink); }
 .dpb-seg button[aria-pressed="true"] {
@@ -91,7 +91,7 @@ body.dpb-shell { overflow: hidden; height: 100vh; }
   display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; white-space: nowrap;
   height: 32px; padding: 0 10px; border-radius: 8px;
   background: transparent; color: var(--dpb-soft); font-weight: 500; font-size: var(--dpb-text-xs); line-height: 1;
-  transition: all var(--dpb-duration-spring) var(--dpb-ease-spring);
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform; transition-duration: var(--dpb-duration-spring); transition-timing-function: var(--dpb-ease-spring);
 }
 :where(.dpb-header-right) :is(button:hover, .dpb-util-cluster > button:hover) { background: var(--dpb-surface); color: var(--dpb-ink); }
 .dpb-header-right > .dpb-approve-btn { flex-shrink: 1; min-width: 160px; }
@@ -119,7 +119,7 @@ body.dpb-shell { overflow: hidden; height: 100vh; }
   appearance: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
   height: 32px; padding: 0 10px; border-radius: 8px;
   background: transparent; border: 1px solid var(--dpb-line-strong); color: var(--dpb-soft);
-  font-weight: 500; font-size: var(--dpb-text-xs); line-height: 1; transition: all var(--dpb-duration-spring) var(--dpb-ease-spring);
+  font-weight: 500; font-size: var(--dpb-text-xs); line-height: 1; transition-property: color, background-color, border-color, box-shadow, opacity, transform; transition-duration: var(--dpb-duration-spring); transition-timing-function: var(--dpb-ease-spring);
 }
 .dpb-header-right .dpb-btn-secondary:hover { background: var(--dpb-surface); color: var(--dpb-ink); }
 
@@ -163,7 +163,7 @@ body.dpb-shell { overflow: hidden; height: 100vh; }
   height: 26px; padding: 0 6px; border-radius: 6px;
   min-width: 0; max-width: 96px; overflow: hidden; text-overflow: ellipsis;
   color: var(--dpb-soft); font-weight: 500; font-size: var(--dpb-text-xs); line-height: 1;
-  transition: all var(--dpb-duration-spring) var(--dpb-ease-spring);
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform; transition-duration: var(--dpb-duration-spring); transition-timing-function: var(--dpb-ease-spring);
 }
 .dpb-rail-tab span.i18n {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
@@ -177,7 +177,7 @@ body.dpb-shell { overflow: hidden; height: 100vh; }
   appearance: none; cursor: pointer; border: 0; background: transparent;
   width: 26px; height: 26px; border-radius: 6px;
   display: flex; align-items: center; justify-content: center;
-  color: var(--dpb-soft); transition: all var(--dpb-duration-spring) var(--dpb-ease-spring);
+  color: var(--dpb-soft); transition-property: color, background-color, border-color, box-shadow, opacity, transform; transition-duration: var(--dpb-duration-spring); transition-timing-function: var(--dpb-ease-spring);
 }
 .dpb-rail-nav button:hover { background: var(--dpb-surface); color: var(--dpb-ink); }
 .dpb-rail-view { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
@@ -325,7 +325,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   appearance: none; cursor: pointer; border: 0; background: transparent;
   width: 32px; height: 32px; border-radius: 8px; position: relative;
   display: flex; align-items: center; justify-content: center;
-  color: var(--dpb-soft); transition: all var(--dpb-duration-spring) var(--dpb-ease-spring);
+  color: var(--dpb-soft); transition-property: color, background-color, border-color, box-shadow, opacity, transform; transition-duration: var(--dpb-duration-spring); transition-timing-function: var(--dpb-ease-spring);
 }
 .dpb-toolbar button:hover { background: var(--dpb-surface); color: var(--dpb-ink); transform: translateY(-1px); }
 .dpb-toolbar button[aria-pressed="true"] { background: var(--dpb-accent-wash); color: var(--dpb-accent-text); }
@@ -340,7 +340,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-approve-btn {
   background: var(--dpb-elev); color: var(--dpb-muted);
   border: 1px solid var(--dpb-line);
-  font-weight: 600; padding: 0 12px; transition: all var(--dpb-duration-spring) var(--dpb-ease-spring);
+  font-weight: 600; padding: 0 12px; transition-property: color, background-color, border-color, box-shadow, opacity, transform; transition-duration: var(--dpb-duration-spring); transition-timing-function: var(--dpb-ease-spring);
 }
 .dpb-approve-btn:hover { background: var(--dpb-elev-hover); color: var(--dpb-ink); }
 .dpb-approve-btn > span:not(.dpb-approve-dot) {
@@ -410,7 +410,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   display: inline-flex; align-items: center; gap: 5px;
   height: 24px; padding: 0 10px; border-radius: 6px;
   background: transparent; color: var(--dpb-soft); font-weight: 500; font-size: var(--dpb-text-xs); line-height: 1;
-  transition: all var(--dpb-duration-spring) var(--dpb-ease-spring);
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform; transition-duration: var(--dpb-duration-spring); transition-timing-function: var(--dpb-ease-spring);
 }
 .dpb-filter-tabs button:hover { color: var(--dpb-ink); }
 .dpb-filter-tabs button[aria-pressed="true"] {
@@ -497,7 +497,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-tag {
   appearance: none; cursor: pointer; height: 22px; padding: 0 9px; border-radius: 6px;
   border: 1px solid var(--dpb-line); background: var(--dpb-bg); color: var(--dpb-soft);
-  font-weight: 500; font-size: var(--dpb-text-xs); line-height: 1; transition: all var(--dpb-duration-spring) var(--dpb-ease-spring);
+  font-weight: 500; font-size: var(--dpb-text-xs); line-height: 1; transition-property: color, background-color, border-color, box-shadow, opacity, transform; transition-duration: var(--dpb-duration-spring); transition-timing-function: var(--dpb-ease-spring);
 }
 .dpb-tag:hover { color: var(--dpb-ink); border-color: var(--dpb-line-strong); }
 .dpb-tag.is-on { background: var(--dpb-accent-wash); color: var(--dpb-accent-text); border-color: var(--dpb-accent-chip-border); }
@@ -537,7 +537,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
      (EN "Approve (2 notes)") wrap onto a second row of the actions instead. */
   flex: 0 0 auto; white-space: nowrap;
   border: 1px solid var(--dpb-line-strong); background: transparent; color: var(--dpb-soft);
-  font-weight: 600; font-size: var(--dpb-text-xs); line-height: 1; transition: all var(--dpb-duration-spring) var(--dpb-ease-spring);
+  font-weight: 600; font-size: var(--dpb-text-xs); line-height: 1; transition-property: color, background-color, border-color, box-shadow, opacity, transform; transition-duration: var(--dpb-duration-spring); transition-timing-function: var(--dpb-ease-spring);
 }
 .dpb-btn:hover { background: var(--dpb-surface); color: var(--dpb-ink); }
 .dpb-btn-quiet { border-color: transparent; }
@@ -554,7 +554,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   background: color-mix(in srgb, var(--dpb-elev) 95%, transparent);
   box-shadow: var(--dpb-shadow-tool);
   display: flex; flex-direction: column; align-items: center; gap: 8px;
-  color: var(--dpb-soft); cursor: pointer; transition: all var(--dpb-duration-spring) var(--dpb-ease-spring);
+  color: var(--dpb-soft); cursor: pointer; transition-property: color, background-color, border-color, box-shadow, opacity, transform; transition-duration: var(--dpb-duration-spring); transition-timing-function: var(--dpb-ease-spring);
 }
 .dpb-reopen-tab:hover { color: var(--dpb-accent-text); }
 .dpb-reopen-tab[hidden] { display: none !important; }

@@ -1330,6 +1330,18 @@ def validate_button_states() -> None:
     check(":hover" in text, "workbench style sheet has a :hover rule (G-9)")
 
 
+def validate_transition_all() -> None:
+    """G-10: transitions name their properties; `all` is banned."""
+    print("\n== Transitions (G-10) ==")
+    bad = []
+    for rel in LITERAL_SHEETS:
+        path = ROOT / rel
+        text = re.sub(r"/\*.*?\*/", "", path.read_text(encoding="utf-8"), flags=re.S) if path.is_file() else ""
+        if re.search(r"transition(?:-property)?\s*:\s*all\b", text):
+            bad.append(rel)
+    check(not bad, "no style sheet uses transition: all (G-10)")
+
+
 def validate_skill_contracts() -> None:
     print("== Dogfood 004 regression guards ==")
 
@@ -1495,6 +1507,7 @@ CHECKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("validate_vendor_fonts", (), ()),
     ("validate_type_scale", ("registry_entries",), ()),
     ("validate_button_states", (), ()),
+    ("validate_transition_all", (), ()),
     ("validate_skill_contracts", (), ()),
     ("validate_test_executability", (), ()),
     ("validate_ruff", (), ()),
