@@ -1361,6 +1361,8 @@ def validate_motion_limits() -> None:
         if name not in ("flash", "ring") and int(ms) > 300
     ]
     check(not slow, "interface motion tokens stay at or under 300ms (G-11)")
+    check("--dpb-ease-spring" not in tokens and "--dpb-ease-out:" in tokens,
+          "easing tokens are named for their curve (G-11)")
 
 
 def validate_skill_contracts() -> None:

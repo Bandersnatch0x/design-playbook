@@ -92,8 +92,8 @@
     "padding:0 5px;border-radius:999px;background:var(--dpb-frame-pin);color:var(--dpb-frame-pin-ink);" +
     "font:700 var(--dpb-text-2xs)/18px system-ui,sans-serif;text-align:center;pointer-events:none;" +
     "box-shadow:var(--dpb-frame-shadow-badge);transform-origin:center;" +
-    "transition:transform var(--dpb-duration-spring) var(--dpb-ease-spring),box-shadow var(--dpb-duration-spring) var(--dpb-ease-spring)}" +
-    ".dpb-pin-badge.dpb-pin-drop{animation:dpb-pin-drop var(--dpb-duration-emphasis) var(--dpb-ease-spring) both}" +
+    "transition:transform var(--dpb-duration-spring) var(--dpb-ease-out),box-shadow var(--dpb-duration-spring) var(--dpb-ease-out)}" +
+    ".dpb-pin-badge.dpb-pin-drop{animation:dpb-pin-drop var(--dpb-duration-emphasis) var(--dpb-ease-out) both}" +
     ".dpb-pin-badge.dpb-active::after{content:'';position:absolute;inset:-4px;border-radius:999px;" +
     "border:2px solid var(--dpb-frame-pin-ring);animation:dpb-pulse-ring var(--dpb-duration-ring) var(--dpb-ease-ring) 3}" +
     ".dpb-pin-badge-note{position:absolute;z-index:2147483000;max-width:220px;" +

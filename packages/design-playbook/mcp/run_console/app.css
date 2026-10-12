@@ -521,7 +521,7 @@ main {
   flex-direction: column;
   justify-content: space-between;
   gap: 10px;
-  transition-property: color, background-color, border-color, box-shadow, opacity, transform; transition-duration: var(--dpb-duration-settle); transition-timing-function: var(--dpb-ease-spring);
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform; transition-duration: var(--dpb-duration-settle); transition-timing-function: var(--dpb-ease-out);
   position: relative;
 }
 
