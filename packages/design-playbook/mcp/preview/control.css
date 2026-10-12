@@ -94,9 +94,9 @@ body.dpb-shell { overflow: hidden; height: 100vh; }
   transition: all var(--dpb-duration-spring) var(--dpb-ease-spring);
 }
 :where(.dpb-header-right) :is(button:hover, .dpb-util-cluster > button:hover) { background: var(--dpb-surface); color: var(--dpb-ink); }
-.dpb-header-right > .dpb-approve-btn { flex-shrink: 1; min-width: 330px; }
+.dpb-header-right > .dpb-approve-btn { flex-shrink: 1; min-width: 160px; }
 :where(.dpb-header-right) :is(button:focus-visible, .dpb-util-cluster > button:focus-visible) { outline: var(--dpb-focus-width) solid var(--dpb-focus); outline-offset: 1px; }
-.dpb-abort-btn, #dpb-abort { color: var(--dpb-danger); }
+.dpb-abort-btn, #dpb-abort { color: var(--dpb-soft); }
 .dpb-abort-btn:hover, #dpb-abort:hover { background: var(--dpb-danger-wash); color: var(--dpb-danger); }
 .dpb-header-right > button:active,
 .dpb-header-right > .dpb-skip-wrap > button:active,
@@ -371,7 +371,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-approve-btn.dpb-approve-ready .dpb-approve-dot {
   background: var(--dpb-accent-ink);
   box-shadow: 0 0 6px var(--dpb-accent-ink);
-  animation: dpb-ping 1.8s var(--dpb-ease-pulse) infinite;
+  animation: dpb-ping 1.8s var(--dpb-ease-pulse) 2;
 }
 .dpb-approve-btn.dpb-approve-muted .dpb-approve-dot { animation: none; }
 .dpb-approve-btn.dpb-approve-ready kbd { background: var(--dpb-highlight); color: var(--dpb-accent-ink); border-color: transparent; }
