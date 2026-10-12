@@ -1484,14 +1484,14 @@
       return el("div", { class: "copy-wrap" },
         el("button", {
           type: "button",
-          class: "button",
+          class: "button button-secondary",
           disabled: "disabled",
           "aria-describedby": reasonId,
         }, disabledLabel),
         reasonNode);
     }
     var status = el("span", { class: "copy-status", role: "status", text: "" });
-    var button = el("button", { type: "button", class: "button" },
+    var button = el("button", { type: "button", class: "button button-secondary" },
       enabledLabel);
     button.addEventListener("click", function () {
       copyPlainText(command, status);
@@ -1609,7 +1609,7 @@
     var writeButton = el("button", {
       type: "button", class: "button", disabled: "disabled",
     }, t("export_write"));
-    var previewButton = el("button", { type: "button", class: "button" },
+    var previewButton = el("button", { type: "button", class: "button button-secondary" },
       t("export_preview"));
     var closeButton = el("button", { type: "button", class: "button button-secondary" },
       t("export_close"));
@@ -2391,7 +2391,7 @@
     });
     var summaryButton = el("button", {
       type: "button",
-      class: "button",
+      class: "button button-secondary",
       id: "packet-copy-summary",
     }, t("packet_copy_summary_plain"));
     summaryButton.addEventListener("click", function () {

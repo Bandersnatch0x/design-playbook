@@ -980,6 +980,27 @@ class TypeScaleTest(BrowserTestCase):
         self.assertLessEqual(len({row["px"] for row in rows}), 6)
 
 
+class ExportPrimaryTest(BrowserTestCase):
+    """U-11 (E-14): one solid primary in the export dialog; copy buttons are secondary."""
+
+    def test_export_dialog_has_one_solid_primary_and_it_is_write(self) -> None:
+        self.open()
+        self.page.get_by_role("button", name="Export diagnostics").click()
+        dialog = self.page.locator(".export-dialog")
+        expect(dialog).to_be_visible()
+        solid = dialog.locator("button.button:not(.button-secondary)")
+        self.assertEqual(solid.count(), 1)
+        self.assertEqual(solid.first.inner_text().strip(), "Write export")
+
+    def test_copy_buttons_are_secondary(self) -> None:
+        self.open()
+        copy_buttons = self.page.locator(".copy-wrap button, #packet-copy-summary")
+        count = copy_buttons.count()
+        for index in range(count):
+            classes = copy_buttons.nth(index).get_attribute("class") or ""
+            self.assertIn("button-secondary", classes)
+
+
 class RCV1R1LegibilityRemediationTest(BrowserTestCase):
     """Rigorous browser tests for the RCV1-R1 Legibility Remediation features."""
 
