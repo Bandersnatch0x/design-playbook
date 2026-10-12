@@ -287,9 +287,8 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
   max-height: 20rem;
   overflow: auto;
   padding: 0.6rem 0.7rem;
-  border: 1px solid var(--line);
   border-radius: var(--dpb-radius);
-  background: var(--panel);
+  background: var(--dpb-surface);
   font: var(--dpb-text-sm)/1.45 var(--dpb-font-mono), monospace;
   white-space: pre;
 }
