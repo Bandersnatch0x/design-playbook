@@ -1342,6 +1342,22 @@ def validate_transition_all() -> None:
     check(not bad, "no style sheet uses transition: all (G-10)")
 
 
+def validate_surface_shape() -> None:
+    """G-13: radii read tokens; blur backdrops carry a reduced-transparency fallback."""
+    print("\n== Surface shape (G-13) ==")
+    bad = []
+    for rel in LITERAL_SHEETS:
+        path = ROOT / rel
+        text = re.sub(r"/\*.*?\*/", "", path.read_text(encoding="utf-8"), flags=re.S) if path.is_file() else ""
+        if re.search(r"border(?:-[a-z]+)*-radius\s*:[^;}]*\d+px", text):
+            bad.append(rel + ":radius-literal")
+        if "backdrop-filter: blur" in text and not re.search(
+                r"prefers-reduced-transparency: reduce\)\s*\{.*backdrop-filter: none", text, flags=re.S):
+            bad.append(rel + ":no-reduced-transparency")
+    check(not bad, "radii come from tokens and blur backdrops drop under reduced transparency (G-13)"
+                   + ("" if not bad else " (" + "; ".join(bad) + ")"))
+
+
 def validate_motion_limits() -> None:
     """G-11: no animation loops forever; interface motion tokens stay at or under 300ms."""
     print("\n== Motion (G-11) ==")
@@ -1552,6 +1568,7 @@ CHECKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("validate_type_scale", ("registry_entries",), ()),
     ("validate_button_states", (), ()),
     ("validate_transition_all", (), ()),
+    ("validate_surface_shape", (), ()),
     ("validate_motion_limits", (), ()),
     ("validate_important_limits", (), ()),
     ("validate_skill_contracts", (), ()),

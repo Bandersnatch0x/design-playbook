@@ -74,6 +74,7 @@
   --dpb-duration-slow: 300ms;
   --dpb-duration-emphasis: 300ms;
   --dpb-duration-flash: 900ms;
+  --dpb-radius-xs: 4px;
   --dpb-radius: 8px;
   --dpb-radius-sm: 6px;
   --dpb-radius-lg: 12px;

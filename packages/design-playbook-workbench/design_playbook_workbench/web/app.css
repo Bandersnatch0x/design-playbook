@@ -16,7 +16,7 @@
   --ink: var(--dpb-ink);
   --panel: var(--dpb-elev);
   --surface: var(--dpb-bg);
-  --radius: 10px;
+  --radius: var(--dpb-radius);
   --canvas-grid-1: var(--dpb-canvas-grid-1);
   --canvas-grid-2: var(--dpb-canvas-grid-2);
   --canvas-stage-bg: var(--dpb-canvas-stage-bg);
@@ -102,7 +102,7 @@ h3 { font-size: var(--dpb-text-md); margin: 0 0 0.5rem; }
   margin: 0;
   padding: 0.35rem 0.7rem;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--dpb-radius-full);
   background: var(--panel);
   font-size: var(--dpb-text-sm);
 }
@@ -148,7 +148,7 @@ main {
   width: 100%;
   padding: 0.5rem 0.6rem;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--dpb-radius);
   background: var(--surface);
   color: var(--ink);
   font: inherit;
@@ -158,7 +158,7 @@ button {
   font: inherit;
   padding: 0.5rem 0.9rem;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--dpb-radius);
   background: transparent;
   color: var(--ink);
   cursor: pointer;
@@ -227,7 +227,7 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
   padding: 0.35rem;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--dpb-radius);
   box-shadow: var(--dpb-shadow-pop);
 }
 .row-menu[hidden] { display: none; }
@@ -239,7 +239,7 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
   display: inline-block;
   margin-left: 0.4rem;
   padding: 0.05rem 0.4rem;
-  border-radius: 999px;
+  border-radius: var(--dpb-radius-full);
   border: 1px solid var(--accent);
   color: var(--accent-text);
   font-size: var(--dpb-text-xs);
@@ -248,7 +248,7 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
 .state-badge {
   display: inline-block;
   padding: 0.15rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--dpb-radius-full);
   border: 1px solid;
   font-size: var(--dpb-text-sm);
   white-space: nowrap;
@@ -288,7 +288,7 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
   overflow: auto;
   padding: 0.6rem 0.7rem;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--dpb-radius);
   background: var(--panel);
   font: var(--dpb-text-sm)/1.45 var(--dpb-font-mono), monospace;
   white-space: pre;
@@ -324,7 +324,7 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
   min-height: 16rem;
   margin-top: 0.6rem;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--dpb-radius);
   background: var(--panel);
 }
 
@@ -352,7 +352,7 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
   overflow: hidden;
   height: 32rem;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--dpb-radius);
   background: repeating-conic-gradient(var(--canvas-grid-1) 0% 25%, var(--canvas-grid-2) 0% 50%) 50% / 24px 24px;
   touch-action: none;
 }
@@ -369,7 +369,7 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
   position: absolute;
   box-sizing: border-box;
   border: 1px dashed var(--dpb-canvas-node-line);
-  border-radius: 6px;
+  border-radius: var(--dpb-radius-sm);
   padding: 2px 5px;
   overflow: hidden;
   background: var(--canvas-node-bg);
@@ -403,7 +403,7 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   pointer-events: none;
 }
-.canvas-props { border: 1px solid var(--line); border-radius: 10px; padding: 0.6rem; }
+.canvas-props { border: 1px solid var(--line); border-radius: var(--dpb-radius); padding: 0.6rem; }
 .canvas-props h3 { margin: 0 0 0.4rem; font-size: var(--dpb-text-md); }
 .canvas-props h4 { margin: 0.7rem 0 0.3rem; font-size: var(--dpb-text-sm); }
 .canvas-props .row-form label { flex: 0 0 auto; }
@@ -415,7 +415,7 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
   margin-top: 0.4rem;
   padding: 0.6rem;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--dpb-radius);
   background: var(--panel);
   color: var(--ink);
   font-family: var(--dpb-font-mono), monospace;
@@ -457,7 +457,7 @@ button[disabled] { opacity: 0.55; cursor: not-allowed; }
   .project-table, .project-table thead, .project-table tbody,
   .project-table tr, .project-table td, .project-table th { display: block; }
   .project-table thead { position: absolute; left: -9999px; }
-  .project-table tr { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 0.6rem; }
+  .project-table tr { border: 1px solid var(--line); border-radius: var(--dpb-radius); margin-bottom: 0.6rem; }
 }
 
 @media (max-width: 760px) {

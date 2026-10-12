@@ -93,7 +93,7 @@ kbd {
   justify-content: center;
   font: 600 var(--dpb-text-xs)/1.2 var(--dpb-font-mono), monospace;
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--dpb-radius-xs);
   background: var(--surface-dim);
   color: var(--text-dim);
   border: 1px solid var(--line-strong);
@@ -126,7 +126,7 @@ kbd {
 .dpb-brand {
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: var(--dpb-radius-sm);
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -301,7 +301,7 @@ main {
   font-size: var(--dpb-text-xs);
   background: var(--surface-dim);
   padding: 1px 4px;
-  border-radius: 4px;
+  border-radius: var(--dpb-radius-xs);
   overflow-wrap: anywhere;
 }
 
@@ -325,7 +325,7 @@ main {
 
 .skeleton-card {
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--dpb-radius);
 }
 
 .skeleton-line {
@@ -387,7 +387,7 @@ main {
   gap: 6px;
   height: 30px;
   padding: 0 10px;
-  border-radius: 9999px;
+  border-radius: var(--dpb-radius-full);
   font-size: var(--dpb-text-xs);
   font-weight: 600;
   font-family: var(--dpb-font-mono), monospace;
@@ -597,7 +597,7 @@ main {
   font-weight: 800;
   font-family: var(--dpb-font-mono), monospace;
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: var(--dpb-radius-xs);
   background: var(--dpb-accent-chip-bg);
   color: var(--accent-text);
   border: 1px solid var(--dpb-accent-chip-border);
@@ -661,7 +661,7 @@ main {
   font-size: var(--dpb-text-sm);
   font-weight: 600;
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: var(--dpb-radius-sm);
   background: var(--surface-dim);
   border: 1px solid var(--line);
   color: var(--text);
@@ -685,7 +685,7 @@ main {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border-radius: 4px;
+  border-radius: var(--dpb-radius-xs);
   font-size: var(--dpb-text-xs);
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -839,7 +839,7 @@ main {
   gap: 8px;
   padding: 12px 16px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--dpb-radius-sm);
   background: var(--surface);
   box-shadow: var(--dpb-shadow-hairline);
   min-width: 0;
@@ -853,7 +853,7 @@ main {
 }
 
 .reason-block {
-  border-radius: 6px;
+  border-radius: var(--dpb-radius-sm);
   background: var(--surface);
   border: 1px solid var(--line);
   padding: 10px 14px;
@@ -895,7 +895,7 @@ main {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--dpb-radius-sm);
   border: 1px solid var(--line);
   background: var(--surface);
   font-size: var(--dpb-text-sm);
@@ -915,7 +915,7 @@ main {
   font-size: var(--dpb-text-xs);
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--dpb-radius-xs);
   border: 1px solid var(--line);
   color: var(--text-dim);
   background: var(--surface);
@@ -949,7 +949,7 @@ main {
   display: inline-flex;
   align-items: center;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--dpb-radius-xs);
   font-size: var(--dpb-text-sm);
   font-family: var(--dpb-font-mono), monospace;
 }
@@ -1083,7 +1083,7 @@ main {
 
 details.source {
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--dpb-radius-sm);
   margin: 0;
   background: var(--surface-dim);
   transition: border-color var(--dpb-duration-base) ease, box-shadow var(--dpb-duration-base) ease;
@@ -1121,7 +1121,7 @@ details.source[open] > summary {
   padding: 12px 14px;
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--dpb-radius-xs);
   font-family: var(--dpb-font-mono), monospace;
   font-size: var(--dpb-text-sm);
   line-height: 1.5;
@@ -1213,7 +1213,7 @@ details.source[open] > summary {
   background: var(--dpb-elev);
   color: inherit;
   border: 1px solid var(--dpb-line-strong);
-  border-radius: 10px;
+  border-radius: var(--dpb-radius);
   max-width: 880px;
   width: 100%;
   max-height: 88vh;
@@ -1245,7 +1245,7 @@ details.source[open] > summary {
   max-width: 360px;
   box-sizing: border-box;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--dpb-radius-sm);
   border: 1px solid var(--dpb-line-strong);
   background: var(--dpb-bg);
   color: inherit;
@@ -1263,7 +1263,7 @@ details.source[open] > summary {
   word-break: break-word;
   background: var(--dpb-bg);
   border: 1px solid var(--dpb-line-strong);
-  border-radius: 6px;
+  border-radius: var(--dpb-radius-sm);
   padding: 8px;
   font-size: var(--dpb-text-xs);
 }
@@ -1288,4 +1288,8 @@ details.source[open] > summary {
 @media (max-width: 640px) {
   .snapshot-actions { min-width: 0; max-width: 100%; gap: 6px; }
   .snapshot-actions .button { min-width: 0; padding: 6px 8px; white-space: normal; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .app-header { background: var(--surface); backdrop-filter: none; }
 }
