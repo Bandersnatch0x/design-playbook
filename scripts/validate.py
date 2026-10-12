@@ -1165,6 +1165,7 @@ def validate_self_audit(entries: list[rules_registry.RuleEntry]) -> None:
         check(False, f"self-audit thresholds readable from the registry: {exc}")
         return
     ledger = self_audit.load_ledger(ledger_path)
+    check(bool(ledger.get("viewports")), "self-audit ledger declares the target viewports (RESP-01)")
     new, paid = self_audit.compare(self_audit.audit(ROOT, ledger, floors), ledger)
     check(not new, "own UI meets the registry floors outside the recorded debt"
                    + ("" if not new else " (" + "; ".join(f"{f.key} {f.detail}" for f in new[:8]) + ")"))

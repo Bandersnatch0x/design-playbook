@@ -1150,7 +1150,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   }
 }
 @media (max-width: 600px) {
-  .dpb-header { overflow-x: auto; scrollbar-width: none; backdrop-filter: none; }
+  .dpb-header { overflow-x: auto; backdrop-filter: none; }
   .dpb-header-left { display: none; }
   .dpb-header-right { flex-shrink: 0; max-width: none; }
 }

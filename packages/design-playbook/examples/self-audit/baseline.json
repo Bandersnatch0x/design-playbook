@@ -1,4 +1,9 @@
 {
+  "viewports": [
+    1280,
+    1024,
+    768
+  ],
   "surfaces": [
     {
       "name": "preview",

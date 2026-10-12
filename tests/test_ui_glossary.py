@@ -33,7 +33,6 @@ class UiGlossaryTest(unittest.TestCase):
         html = (MCP / "run_console" / "app.html").read_text("utf-8")
         labels = re.findall(r'data-reload id="[^"]+">([^<]+)<', html)
         self.assertEqual(len(labels), len(set(labels)), labels)
-        js = (MCP / "run_console" / "app.js").read_text("utf-8")
         header = re.search(r'id="reload-button"[^>]*>([^<]+)<', html).group(1)
         self.assertNotIn(header, labels)
 
