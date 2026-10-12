@@ -1,6 +1,14 @@
 /* Direct preview edits are drafts until the bridge acknowledges a mutation. */
 (function () {
   "use strict";
+  var MERGE_WINDOW_MS = 500;
+  function mergeEdit(prev, next, now, windowMs) {
+    if (!prev || !next || prev.locator !== next.locator || prev.property !== next.property) return false;
+    if (prev.viewport !== next.viewport || !prev._t || now - prev._t > windowMs) return false;
+    prev.newValue = next.newValue;
+    prev._t = now;
+    return true;
+  }
   function boot() {
     if (!window.React || !window.ReactDOM) throw Error("Preview editor runtime missing");
     var React = window.React, h = React.createElement;
@@ -295,6 +303,10 @@
       React.useEffect(function () {
         function onHistoryKey(event) {
           if (event.key === "Escape") post({ type: "close-color-picker" });
+          var tgt = event.target;
+          if (tgt && tgt.closest && tgt.closest("input, textarea, select, [contenteditable]")) {
+            if (!tgt.closest(".dpb-react-field")) return;
+          }
           if (!(event.ctrlKey || event.metaKey) || event.altKey || event.isComposing ||
               event.defaultPrevented || mount.offsetParent === null || !event.target.closest ||
               !event.target.closest("#dpb-react-editor-root, #dpb-canvas, #dpb-artboard-wrap, #dpb-visual-view")) return;
@@ -416,6 +428,7 @@
               locator: change.selector, property: c.property, oldValue: c.oldValue, newValue: c.newValue,
               source: source,
               _seq: opSeq,
+              _t: Date.now(),
               _entryId: opSeq };
           });
           if (edits.length) edits._entryId = opSeq;
@@ -479,6 +492,14 @@
               setPending(nextPending);
               publishBatch(nextPending, current.current.stale);
             }
+          } else if (edits.length === 1 && (function () {
+            var hist = historyRef.current || [], last = hist[hist.length - 1];
+            return !!(last && last.length === 1 && !(futureRef.current || []).length && mergeEdit(last[0], edits[0], edits[0]._t, MERGE_WINDOW_MS));
+          })()) {
+            var merged = (pendingRef.current || []).slice();
+            pendingRef.current = merged;
+            setPending(merged);
+            publishBatch(merged, current.current.stale);
           } else if (edits.length) {
             var nextPending = (pendingRef.current || []).concat(edits);
             nextPending.sort(function (a, b) { return (a._seq || 0) - (b._seq || 0); });
@@ -754,6 +775,10 @@
           window.dpbDrainVisualEdits = null;
         };
       }, []);
+      function historyLabel(verb, list) {
+        var top = list && list[list.length - 1];
+        return top && top[0] ? verb + " " + top[0].property : verb;
+      }
       function replay(action) {
         var entries = action === "undo" ? (historyRef.current || []) : (futureRef.current || []);
         var entry = entries[entries.length - 1];
@@ -765,8 +790,8 @@
         h("div", { className: "dpb-react-route" }, binding.routeUrl || t("visual_artifact")),
         h("div", { className: "dpb-react-selection" }, selected ? selected.selector : t("visual_select")),
         h("div", { className: "dpb-react-actions" },
-          h("button", { type: "button", disabled: !ready || stale || busy || !history.length, "aria-label": t("visual_undo"), onClick: function () { replay("undo"); } }, t("visual_undo")),
-          h("button", { type: "button", disabled: !ready || stale || busy || !future.length, "aria-label": t("visual_redo"), onClick: function () { replay("redo"); } }, t("visual_redo")),
+          h("button", { type: "button", disabled: !ready || stale || busy || !history.length, "aria-label": historyLabel(t("visual_undo"), history), onClick: function () { replay("undo"); } }, t("visual_undo")),
+          h("button", { type: "button", disabled: !ready || stale || busy || !future.length, "aria-label": historyLabel(t("visual_redo"), future), onClick: function () { replay("redo"); } }, t("visual_redo")),
           h("span", { className: "dpb-react-pending-count" }, t("visual_pending").replace("{n}", pending.length))),
         h("p", { className: "dpb-react-diagnostic", role: "status", "data-stale": stale }, stale ? t("visual_stale") : connecting ? "" : diagnostic ? t(diagnostic) : ""),
         !connecting && !ready && !stale && diagnostic === "visual_disconnected" && h("button", { type: "button", className: "dpb-react-retry",

@@ -263,7 +263,7 @@ def test_rendered_editor_state_changes(tmp_path, webmcp):
             expect(page.locator(".dpb-react-pending-count")).to_contain_text("1")
             actions = page.locator(".dpb-react-actions button")
             for button in actions.all():
-                assert button.get_attribute("aria-label") == button.inner_text()
+                assert button.get_attribute("aria-label").startswith(button.inner_text())
             page.keyboard.press("Tab")
             actions.first.focus()
             assert actions.first.evaluate("el => getComputedStyle(el).outlineStyle") == "solid"
@@ -576,6 +576,7 @@ def test_floating_text_toolbar_toggle(editor_page):
     expect(target).to_have_css("font-weight", re.compile(r"^(400|normal)$"))
     count = page.locator("#dpb-visual-count")
     expect(count).to_have_text("1")
+    page.wait_for_timeout(600)
     btn_bold.click()
     expect(target).to_have_css("font-weight", re.compile(r"^(700|bold)$"))
     expect(count).to_have_text("2")
@@ -949,6 +950,7 @@ def test_picker_alpha_and_opacity_commit_once_per_gesture(editor_page):
     page.mouse.up()
     expect(page.locator("#dpb-visual-count")).to_have_text("1")
     opacity = proto.locator(".dpb-cp-opacity")
+    page.wait_for_timeout(600)
     opacity.fill("75")
     expect(target).to_have_css("color", "rgba(239, 68, 68, 0.75)")
     opacity.press("Enter")
@@ -2969,7 +2971,7 @@ def test_bo06_mb_f01_duplicate_undo_does_not_double_consume_history(tmp_path) ->
             # 1. Acknowledge #123456, then #abcdef
             field.fill("#123456")
             field.press("Enter")
-            page.wait_for_timeout(400)
+            page.wait_for_timeout(600)
 
             field.fill("#abcdef")
             field.press("Enter")
@@ -3061,6 +3063,7 @@ def test_bo07_mb_f01_late_undo_after_replacement_and_redo_matches_admitted_batch
     field.press("Enter")
     expect(count).to_have_text("1")
     expect(field).to_be_enabled()
+    page.wait_for_timeout(600)
     field.fill("#abcdef")
     field.press("Enter")
     expect(count).to_have_text("2")
