@@ -95,7 +95,7 @@
     "transition:transform var(--dpb-duration-spring) var(--dpb-ease-spring),box-shadow var(--dpb-duration-spring) var(--dpb-ease-spring)}" +
     ".dpb-pin-badge.dpb-pin-drop{animation:dpb-pin-drop var(--dpb-duration-emphasis) var(--dpb-ease-spring) both}" +
     ".dpb-pin-badge.dpb-active::after{content:'';position:absolute;inset:-4px;border-radius:999px;" +
-    "border:2px solid var(--dpb-frame-pin-ring);animation:dpb-pulse-ring var(--dpb-duration-ring) var(--dpb-ease-ring) infinite}" +
+    "border:2px solid var(--dpb-frame-pin-ring);animation:dpb-pulse-ring var(--dpb-duration-ring) var(--dpb-ease-ring) 3}" +
     ".dpb-pin-badge-note{position:absolute;z-index:2147483000;max-width:220px;" +
     "padding:4px 8px;border-radius:8px;background:var(--dpb-frame-note-bg);color:var(--dpb-frame-note-ink);" +
     "border:1px solid var(--dpb-frame-note-line);font:var(--dpb-text-2xs)/1.4 system-ui,sans-serif;" +

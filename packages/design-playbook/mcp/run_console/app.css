@@ -365,7 +365,7 @@ main {
 
 @media (prefers-reduced-motion: no-preference) {
   .skeleton-block {
-    animation: pulse 1.4s ease-in-out infinite;
+    animation: pulse 1.4s ease-in-out 10;
   }
 
   @keyframes pulse {

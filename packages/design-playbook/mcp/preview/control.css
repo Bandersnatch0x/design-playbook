@@ -309,7 +309,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 .dpb-free-pin.dpb-pin-drop { animation: dpb-pin-drop var(--dpb-duration-emphasis) var(--dpb-ease-spring) both; }
 .dpb-free-pin.dpb-active::after {
   content: ""; position: absolute; inset: -4px; border-radius: inherit;
-  border: 2px solid var(--dpb-ring-accent); animation: dpb-pulse-ring 1.8s var(--dpb-ease-pulse) infinite;
+  border: 2px solid var(--dpb-ring-accent); animation: dpb-pulse-ring 1.8s var(--dpb-ease-pulse) 3;
 }
 
 /* ---- left mini-dock (canvas is no longer sandwiched) ---- */
@@ -394,7 +394,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   border: 2px solid currentColor;
   border-right-color: transparent;
   border-radius: 50%;
-  animation: dpb-spin .6s linear infinite;
+  animation: dpb-spin .6s linear 50;
   vertical-align: middle;
 }
 @keyframes dpb-spin {
@@ -700,7 +700,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 }
 .dpb-float.dpb-active .dpb-float-n::after {
   content: ""; position: absolute; inset: -4px; border-radius: inherit;
-  border: 2px solid var(--dpb-ring-accent); animation: dpb-pulse-ring 1.8s var(--dpb-ease-pulse) infinite;
+  border: 2px solid var(--dpb-ring-accent); animation: dpb-pulse-ring 1.8s var(--dpb-ease-pulse) 3;
 }
 .dpb-float-note {
   font-size: var(--dpb-text-xs); line-height: 1.4; color: var(--dpb-ink);
@@ -1070,7 +1070,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
 :where(#dpb-root) .dpb-loading { padding: 16px; color: var(--dpb-soft); background: var(--dpb-surface); }
 :where(#dpb-root) :is(.dpb-prototype-loading, .dpb-editor-loading) { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
 :where(#dpb-root) .dpb-loading[hidden] { display: none; }
-:where(#dpb-root) .dpb-skeleton { margin-top: 12px; height: 96px; border-radius: 6px; background: var(--dpb-line); animation: dpb-loading-pulse 1.4s ease-in-out infinite alternate; }
+:where(#dpb-root) .dpb-skeleton { margin-top: 12px; height: 96px; border-radius: 6px; background: var(--dpb-line); animation: dpb-loading-pulse 1.4s ease-in-out 10 alternate; }
 @keyframes dpb-loading-pulse { to { opacity: .4; } }
 @media (prefers-reduced-motion: reduce) { :where(#dpb-root) .dpb-skeleton { animation: none; } }
 

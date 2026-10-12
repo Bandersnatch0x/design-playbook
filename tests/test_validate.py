@@ -677,6 +677,33 @@ class ValidateGateTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
                 self.assertIn("FAIL  no style sheet uses transition: all (G-10)", result.stdout)
 
+    def test_infinite_animation_fails_the_gate(self) -> None:
+        for rel in ("packages/design-playbook/mcp/preview/control.css",
+                    "packages/design-playbook/mcp/run_console/app.css",
+                    WORKBENCH_APP_CSS):
+            with self.subTest(sheet=rel):
+                path = self.root / rel
+                original = path.read_text(encoding="utf-8")
+                path.write_text(original + "\n.x { animation: y 1s linear infinite; }\n", encoding="utf-8")
+                try:
+                    result = self.validate()
+                finally:
+                    path.write_text(original, encoding="utf-8")
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn("FAIL  no animation loops forever (G-11)", result.stdout)
+
+    def test_slow_motion_token_fails_the_gate(self) -> None:
+        rel = "packages/design-playbook/mcp/_shared/tokens.css"
+        path = self.root / rel
+        original = path.read_text(encoding="utf-8")
+        path.write_text(original.replace("--dpb-duration-slow: 300ms;", "--dpb-duration-slow: 450ms;"), encoding="utf-8")
+        try:
+            result = self.validate()
+        finally:
+            path.write_text(original, encoding="utf-8")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL  interface motion tokens stay at or under 300ms (G-11)", result.stdout)
+
     def test_scale_token_under_the_registry_floor_fails_the_gate(self) -> None:
         self._edit(self._pkg("mcp", "_shared", "tokens.css"),
                    "--dpb-text-xs: 12px;", "--dpb-text-xs: 11px;")

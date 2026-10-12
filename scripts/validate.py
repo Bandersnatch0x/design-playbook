@@ -1342,6 +1342,27 @@ def validate_transition_all() -> None:
     check(not bad, "no style sheet uses transition: all (G-10)")
 
 
+def validate_motion_limits() -> None:
+    """G-11: no animation loops forever; interface motion tokens stay at or under 300ms."""
+    print("\n== Motion (G-11) ==")
+    looping = []
+    for rel in LITERAL_SHEETS:
+        path = ROOT / rel
+        text = re.sub(r"/\*.*?\*/", "", path.read_text(encoding="utf-8"), flags=re.S) if path.is_file() else ""
+        if re.search(r"\binfinite\b", text):
+            looping.append(rel)
+    bridge = PKG / "mcp" / "preview" / "pin_bridge.js"
+    if bridge.is_file() and re.search(r"\binfinite\b", bridge.read_text(encoding="utf-8")):
+        looping.append("pin_bridge.js")
+    check(not looping, "no animation loops forever (G-11)")
+    tokens = (PKG / "mcp" / "_shared" / "tokens.css").read_text(encoding="utf-8")
+    slow = [
+        name for name, ms in re.findall(r"--dpb-duration-([a-z-]+):\s*(\d+)ms;", tokens)
+        if name not in ("flash", "ring") and int(ms) > 300
+    ]
+    check(not slow, "interface motion tokens stay at or under 300ms (G-11)")
+
+
 def validate_skill_contracts() -> None:
     print("== Dogfood 004 regression guards ==")
 
@@ -1508,6 +1529,7 @@ CHECKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("validate_type_scale", ("registry_entries",), ()),
     ("validate_button_states", (), ()),
     ("validate_transition_all", (), ()),
+    ("validate_motion_limits", (), ()),
     ("validate_skill_contracts", (), ()),
     ("validate_test_executability", (), ()),
     ("validate_ruff", (), ()),
