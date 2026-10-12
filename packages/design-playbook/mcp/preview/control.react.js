@@ -104,6 +104,7 @@
       var [history, setHistory] = React.useState([]);
       var [future, setFuture] = React.useState([]);
       var [drafts, setDrafts] = React.useState({});
+      var [invalid, setInvalid] = React.useState({});
       var [ready, setReady] = React.useState(false);
       var [connecting, setConnecting] = React.useState(true);
       var [stale, setStale] = React.useState(false);
@@ -291,10 +292,30 @@
           draftTimers.current[property] = setTimeout(function () { commit(property, value, selector); }, 200);
           return;
         }
+        // A value the engine would drop is flagged here and never dispatched.
+        var unsupported = value !== "" && window.CSS && CSS.supports && !CSS.supports(property, String(value));
+        setInvalid(function (old) {
+          if (!!old[property] === !!unsupported) return old;
+          var next = Object.assign({}, old);
+          if (unsupported) next[property] = true; else delete next[property];
+          return next;
+        });
+        setDiagnostic(function (old) {
+          return unsupported ? "visual_invalid_value" : old === "visual_invalid_value" ? "" : old;
+        });
+        if (unsupported) return;
         if (value === accepted.current[property]) return;
         dispatchedDrafts.current[property] = value;
         applyStyle(property, value);
       }
+      React.useEffect(function () {
+        mount.querySelectorAll("[data-property]").forEach(function (field) {
+          var control = field.querySelector("input, select");
+          if (!control) return;
+          if (invalid[field.getAttribute("data-property")]) control.setAttribute("aria-invalid", "true");
+          else control.removeAttribute("aria-invalid");
+        });
+      }, [invalid, drafts]);
       React.useEffect(function () {
         var observer = new MutationObserver(function () { setLocale(root.lang); });
         observer.observe(root, { attributes: true, attributeFilter: ["lang"] });
@@ -379,6 +400,11 @@
             if (unackedRequests.current) delete unackedRequests.current[rejected.requestId];
             if (request.current && rejected.requestId === request.current.id) {
               if (rejected.code === "visual_target_missing") setStale(true);
+              var rolledBack = request.current.property;
+              if (rolledBack && Object.prototype.hasOwnProperty.call(accepted.current, rolledBack)) {
+                dispatchedDrafts.current[rolledBack] = accepted.current[rolledBack];
+                setDrafts(function (old) { return syncDraft(old, rolledBack, accepted.current[rolledBack]); });
+              }
               fail(rejected.code); return;
             }
           }
@@ -824,6 +850,13 @@
             return true;
           }
           function handleKey(prop, val, e) {
+            if (e.key === "Escape" && invalid[prop]) {
+              e.stopPropagation();
+              clearTimeout(draftTimers.current[prop]);
+              setInvalid(function (old) { var next = Object.assign({}, old); delete next[prop]; return next; });
+              setDrafts(function (old) { return syncDraft(old, prop, accepted.current[prop] || ""); });
+              return;
+            }
             if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); e.stopPropagation(); commit(prop, val, selected && selected.selector); }
           }
           // A unit belongs beside the field, not inside it. The number and its
