@@ -1330,6 +1330,41 @@ def validate_button_states() -> None:
     check(":hover" in text, "workbench style sheet has a :hover rule (G-9)")
 
 
+# G-5: elements that take programmatic focus without being controls.
+FOCUS_TARGETS: frozenset[str] = frozenset({".dpb-canvas", ".view-heading:focus"})
+
+
+def validate_focus_outlines() -> None:
+    """G-5: `outline: none|0` keeps a replacement style; focus outlines use the focus token."""
+    print("\n== Focus outlines (G-5) ==")
+    bad = []
+    for rel in LITERAL_SHEETS:
+        path = ROOT / rel
+        if not path.is_file():
+            continue
+        rules = [(ctx, sel.strip(), body) for ctx, sel, body in self_audit._blocks(path.read_text(encoding="utf-8"))
+                 if not sel.strip().startswith("@")]
+        for ctx, sel, body in rules:
+            if "keyframes" in ctx:
+                continue
+            body = body.rstrip().rstrip(";") + ";"
+            if re.search(r"(?<![\w-])outline\s*:\s*(none|0)\s*(?:;|!)", body):
+                own = re.search(r"(?<![\w-])(box-shadow|border(?:-color)?)\s*:", body)
+                sibling = any(
+                    s.startswith(sel) and re.search(r":focus(?:-visible)?$", s)
+                    and re.search(r"(box-shadow|border-color|background)\s*:", b)
+                    for _, s, b in rules)
+                if not (own or sibling or sel in FOCUS_TARGETS or sel + ":focus" in FOCUS_TARGETS):
+                    bad.append(f"{rel}: {sel}")
+            if re.search(r":focus(?:-visible)?\b", sel):
+                for value in re.findall(r"(?<![\w-])outline(?:-color)?\s*:\s*([^;]+);", body.rstrip(";") + ";"):
+                    if re.search(r"var\(|#[0-9a-fA-F]{3,8}\b|rgb", value) and not re.search(
+                            r"var\(--(?:dpb-)?focus\)", value):
+                        bad.append(f"{rel}: {sel} outline colour")
+    check(not bad, "focus outlines keep a replacement style and the focus token (G-5)"
+          + (": " + "; ".join(bad[:6]) if bad else ""))
+
+
 def validate_transition_all() -> None:
     """G-10: transitions name their properties; `all` is banned."""
     print("\n== Transitions (G-10) ==")
@@ -1567,6 +1602,7 @@ CHECKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("validate_vendor_fonts", (), ()),
     ("validate_type_scale", ("registry_entries",), ()),
     ("validate_button_states", (), ()),
+    ("validate_focus_outlines", (), ()),
     ("validate_transition_all", (), ()),
     ("validate_surface_shape", (), ()),
     ("validate_motion_limits", (), ()),

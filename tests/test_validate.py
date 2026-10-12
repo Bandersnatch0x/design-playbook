@@ -677,6 +677,24 @@ class ValidateGateTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
                 self.assertIn("FAIL  no style sheet uses transition: all (G-10)", result.stdout)
 
+    def test_outline_gate_fails_the_gate(self) -> None:
+        css = "packages/design-playbook/mcp/preview/control.css"
+        for label, extra in (
+            ("bare outline none", "\n.x-bare { outline: none; }\n"),
+            ("outline zero", "\n.x-zero { outline: 0; color: red; }\n"),
+            ("focus colour literal", "\n.x-f:focus-visible { outline: 2px solid var(--dpb-accent); }\n"),
+        ):
+            with self.subTest(case=label):
+                path = self.root / css
+                original = path.read_text(encoding="utf-8")
+                path.write_text(original + extra, encoding="utf-8")
+                try:
+                    result = self.validate()
+                finally:
+                    path.write_text(original, encoding="utf-8")
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn("FAIL  focus outlines keep a replacement style and the focus token (G-5)", result.stdout)
+
     def test_important_in_breakpoint_fails_the_gate(self) -> None:
         rel = "packages/design-playbook/mcp/preview/control.css"
         path = self.root / rel
