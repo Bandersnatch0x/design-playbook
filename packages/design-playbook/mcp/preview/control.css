@@ -1126,6 +1126,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   .dpb-abort-btn {
     padding: 0 4px !important;
     height: 26px !important;
+    min-width: 24px;
   }
   .dpb-btn-secondary {
     padding: 0 6px !important;
@@ -1135,6 +1136,7 @@ body.dpb-tool-ruler .dpb-draw-layer { pointer-events: auto; cursor: crosshair; }
   #dpb-btn-skip {
     padding: 0 4px !important;
     height: 26px !important;
+    min-width: 24px;
   }
   #dpb-btn-approve {
     max-width: 250px;
