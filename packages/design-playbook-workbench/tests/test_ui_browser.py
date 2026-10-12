@@ -2109,6 +2109,21 @@ class UiReviewRegressionTest(unittest.TestCase):
         self.page.goto(self.h.runtime.bootstrap_url)
         expect(self.page.locator("#session-state")).to_contain_text("会话有效")
 
+    def test_controls_meet_the_hit_area_floor(self) -> None:
+        """U-09 (E-09): every visible control keeps the registry hit-area floor."""
+        import importlib.util
+        import sys
+        pkg = Path(__file__).resolve().parents[2] / "design-playbook"
+        sys.path.insert(0, str(pkg / "scripts"))
+        spec = importlib.util.spec_from_file_location(
+            "dpb_hit_area", pkg / "tests" / "preview" / "test_hit_area.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        SMALL_TARGETS, hit_floor = mod.SMALL_TARGETS, mod.hit_floor
+
+        small = self.page.evaluate(SMALL_TARGETS, ["body", hit_floor()])
+        self.assertEqual(small, [])
+
     def test_round3_mobile_project_labels_and_no_overflow(self) -> None:
         self.page.set_viewport_size({"width": 320, "height": 800})
         self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 320)

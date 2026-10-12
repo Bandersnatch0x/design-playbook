@@ -992,6 +992,17 @@ class TypeScaleTest(BrowserTestCase):
         self.assertLessEqual(len({row["px"] for row in rows}), 6)
 
 
+class HitAreaTest(BrowserTestCase):
+    """U-09 (E-09): console controls keep a hit area at or above the registry floor."""
+
+    def test_controls_meet_the_hit_area_floor(self) -> None:
+        from tests.preview.test_hit_area import SMALL_TARGETS, hit_floor
+
+        self.open()
+        small = self.page.evaluate(SMALL_TARGETS, ["body", hit_floor()])
+        self.assertEqual(small, [])
+
+
 class ExportPrimaryTest(BrowserTestCase):
     """U-11 (E-14): one solid primary in the export dialog; copy buttons are secondary."""
 
