@@ -211,10 +211,8 @@
       var sel = anchors[i2].selector;
       if (resolvedSet[sel]) {
         delete resolvedSet[sel];
-        toast(ttN("toast_reopened", i2 + 1));
       } else {
         resolvedSet[sel] = true;
-        toast(ttN("toast_resolved", i2 + 1));
       }
       render();
       return;
@@ -249,7 +247,6 @@
     if (!anchors.length) return;
     activeIdx = (activeIdx + dir + anchors.length) % anchors.length;
     focusAnchor(activeIdx);
-    toast(ttN("toast_focus", activeIdx + 1));
   }
   document.getElementById("dpb-roam-prev").addEventListener("click", function () { roam(-1); });
   document.getElementById("dpb-roam-next").addEventListener("click", function () { roam(1); });
@@ -364,7 +361,6 @@
     inspector.inert = !open;
     document.getElementById("dpb-drawer-toggle").setAttribute("aria-expanded", open ? "true" : "false");
     reopenTab.hidden = open;
-    if (!quiet) toast(tt(open ? "toast_drawer_open" : "toast_drawer_closed"));
   }
   setDrawer(true, true);
   document.getElementById("dpb-drawer-toggle").addEventListener("click", function () { setDrawer(inspector.classList.contains("dpb-collapsed")); });
@@ -528,7 +524,6 @@
     Object.keys(DUAL).forEach(function (k) { I18N[k] = DUAL[k][langState]; });
     applyLanguage();
     render();
-    toast(tt("toast_lang"));
   }
   document.getElementById("dpb-language-toggle").addEventListener("click", toggleLanguage);
 
@@ -611,7 +606,7 @@
     drainPromise.then(function (res) {
       finishLoading();
       if (!res || res.ok === false) {
-        toast(tt("visual_drain_failed"));
+        toast(tt("visual_drain_failed"), { error: true });
         return;
       }
       // Re-evaluate after the drain: an edit that turned out to be a no-op must
@@ -631,7 +626,7 @@
       }, 0);
     }).catch(function () {
       finishLoading();
-      toast(tt("visual_drain_failed"));
+      toast(tt("visual_drain_failed"), { error: true });
     });
   }
 

@@ -315,16 +315,33 @@
   function announce(msg) {
     if (announceEl) announceEl.textContent = String(msg || "");
   }
-  function toast(msg) {
+  var TOAST_MS = 5000;
+  var TOAST_ACTION_MS = 10000;
+  function toast(msg, opts) {
     if (!toastsRoot) return;
+    opts = opts || {};
+    while (toastsRoot.firstChild) toastsRoot.removeChild(toastsRoot.firstChild);
     var el = document.createElement("div");
     el.className = "dpb-toast";
+    el.setAttribute("role", opts.error ? "alert" : "status");
     el.textContent = String(msg || "");
     toastsRoot.appendChild(el);
-    setTimeout(function () {
-      el.classList.add("dpb-out");
-      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 220);
-    }, 2400);
+    var left = opts.error || opts.action ? TOAST_ACTION_MS : TOAST_MS;
+    var timer = null;
+    var started = 0;
+    function arm() {
+      started = Date.now();
+      timer = setTimeout(function () {
+        el.classList.add("dpb-out");
+        setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 220);
+      }, left);
+    }
+    function hold() { if (timer) { clearTimeout(timer); timer = null; left -= Date.now() - started; if (left < 1000) left = 1000; } }
+    el.addEventListener("mouseenter", hold);
+    el.addEventListener("focusin", hold);
+    el.addEventListener("mouseleave", function () { if (!timer) arm(); });
+    el.addEventListener("focusout", function () { if (!timer) arm(); });
+    arm();
   }
 
   // ---- artboard population: relocate the served iframe / same-doc content ----
@@ -384,7 +401,6 @@
       if (b) b.setAttribute("aria-pressed", k === vp ? "true" : "false");
     });
     sizeDrawLayer();
-    if (!quiet) toast(tt("toast_vp"));
   }
   ["desktop", "tablet", "mobile"].forEach(function (vp) {
     var b = document.getElementById("dpb-vp-" + vp);
@@ -494,7 +510,6 @@
     // the bridge must learn the new state immediately.
     syncPinToFrame();
     syncDrawToFrame();
-    if (!quiet) toast(tt(m === "preview" ? "toast_mode_preview" : "toast_mode_annotate"));
   }
   modePreviewBtn.addEventListener("click", function () { setMode("preview"); setTool("select", true); });
   modeAnnotateBtn.addEventListener("click", function () { setMode("annotate"); });
@@ -520,10 +535,6 @@
     canvas.style.cursor = t === "hand" ? "grab" : ((t === "draw" || t === "box" || t === "ruler") ? "crosshair" : "default");
     if (drawLayer) drawLayer.style.pointerEvents = (t === "ruler" && protoFrame()) ? "none" : "";
     if (!quiet) {
-      if (t === "draw") toast(tt("tool_draw"));
-      else if (t === "box") toast(tt("tool_box"));
-      else if (t === "ruler") toast(tt("tool_ruler"));
-      else if (t === "hand") toast(tt("tool_hand"));
     }
     syncPinToFrame();
     syncDrawToFrame();
