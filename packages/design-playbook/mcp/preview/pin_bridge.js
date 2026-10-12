@@ -517,7 +517,7 @@
       alphaSlider.firstElementChild.style.left = alpha * 100 + "%";
       alphaSlider.style.background = "linear-gradient(to right, transparent, " + hex + ")";
       svArea.setAttribute("aria-valuenow", Math.round(saturation * 100));
-      svArea.setAttribute("aria-valuetext", "Saturation " + Math.round(saturation * 100) + "%, brightness " + Math.round(brightness * 100) + "%");
+      svArea.setAttribute("aria-valuetext", text("visual_color_value", { s: Math.round(saturation * 100), b: Math.round(brightness * 100) }));
       hueSlider.setAttribute("aria-valuenow", Math.round(hue));
       alphaSlider.setAttribute("aria-valuenow", Math.round(alpha * 100));
       swatches.forEach(function (swatch) {

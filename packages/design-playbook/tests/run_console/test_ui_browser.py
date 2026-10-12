@@ -547,9 +547,8 @@ class AccessibilityTest(BrowserTestCase):
         for expected in ("At a glance", "Identity", "Intent", "Execution",
                          "Evaluation", "Next actions", "Limitations", "Sources"):
             self.assertIn(expected, headings)
-        self.assertEqual(self.page.locator("#main").get_attribute("role"), "status")
-        self.assertEqual(self.page.locator("#main").get_attribute("aria-live"),
-                         "polite")
+        self.assertIsNone(self.page.locator("#main").get_attribute("role"))
+        self.assertIsNone(self.page.locator("#main").get_attribute("aria-live"))
         expect(self.page.locator("#lang-toggle-button")).to_have_accessible_name(
             self.page.locator("#lang-toggle-label").inner_text()
         )

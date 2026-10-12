@@ -261,6 +261,29 @@
       targetTab.click();
     });
   }
+  var toolbarEl = document.getElementById("dpb-toolbar");
+  if (toolbarEl) {
+    var toolbarItems = function () {
+      return Array.from(toolbarEl.querySelectorAll("button")).filter(function (b) { return !b.disabled && !b.hidden && b.offsetParent !== null; });
+    };
+    var toolbarRove = function (active) {
+      Array.from(toolbarEl.querySelectorAll("button")).forEach(function (b) { b.setAttribute("tabindex", b === active ? "0" : "-1"); });
+    };
+    var toolbarStart = toolbarItems();
+    if (toolbarStart.length) toolbarRove(toolbarStart[0]);
+    toolbarEl.addEventListener("focusin", function (e) {
+      if (e.target.tagName === "BUTTON") toolbarRove(e.target);
+    });
+    toolbarEl.addEventListener("keydown", function (e) {
+      var keys = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 };
+      var items = toolbarItems();
+      var at = items.indexOf(document.activeElement);
+      if (at < 0 || (!(e.key in keys) && e.key !== "Home" && e.key !== "End")) return;
+      e.preventDefault();
+      var next = e.key === "Home" ? 0 : e.key === "End" ? items.length - 1 : (at + keys[e.key] + items.length) % items.length;
+      items[next].focus();
+    });
+  }
   function setSpecPanel(open) {
     setRailView(open ? "spec" : "annotations");
   }
