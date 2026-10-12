@@ -31,6 +31,8 @@
       app_subtitle: "Read-only view of one validated run snapshot",
       app_notice: "This console is read-only. It renders the snapshot exactly as built; it never edits run files, never executes commands, and stores nothing — no analytics, no remote requests, no storage.",
       reload_snapshot: "Reload snapshot",
+      build_error_reload: "Load snapshot again",
+      generic_error_reload: "Retry loading",
       refresh_snapshot: "Refresh snapshot",
       refresh_title: "Rebuild the snapshot from the run files (R)",
       retry_connection: "Retry connection",
@@ -305,6 +307,8 @@
       app_subtitle: "单次验证运行快照的只读视图",
       app_notice: "本控制台为纯只读视图。它严格按构建时原样呈现快照；绝不修改运行文件，绝不执行任何命令，且不存储任何内容 — 无数据统计、无远程请求、无本地存储。",
       reload_snapshot: "重新加载快照",
+      build_error_reload: "再次加载快照",
+      generic_error_reload: "重试加载",
       refresh_snapshot: "刷新快照",
       refresh_title: "从运行文件重建快照 (R)",
       retry_connection: "重试连接",
@@ -743,12 +747,12 @@
     var buildP1 = document.getElementById("build-error-p1");
     if (buildP1) buildP1.textContent = d.err_build_p1;
     var buildReload = document.getElementById("build-error-reload-btn");
-    if (buildReload) buildReload.textContent = d.reload_snapshot;
+    if (buildReload) buildReload.textContent = d.build_error_reload;
 
     var errHead = document.getElementById("error-heading");
     if (errHead) errHead.textContent = d.err_error_title;
     var errReload = document.getElementById("generic-error-reload-btn");
-    if (errReload) errReload.textContent = d.reload_snapshot;
+    if (errReload) errReload.textContent = d.generic_error_reload;
 
     var netHead = document.getElementById("network-heading");
     if (netHead) netHead.textContent = d.err_network_title;
