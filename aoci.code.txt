@@ -203,6 +203,7 @@ work.py[DW8L]: F:有界Agent工作请求服务：同意、凭据、租约心跳�
 app.css[EU4L]: F:工作台壳层样式：以--dpb-*设计变量定义亮暗配色、面板、表格、画布与表单样式，仅用系统字体 | R:code:packages/design-playbook-workbench/design_playbook_workbench/web/app.html | A:- | S:不得引入远程资源(字体、图片)，壳层CSP只允许self样式
 app.html[EU6L]: F:工作台单页壳层文档：会话状态、项目登记与列表，以及资产库、设计系统、文档、提案、画布、工作请求、所有者、生命周期、设置备份等面板骨架 | R:code:packages/design-playbook-workbench/design_playbook_workbench/web/app.js,code:packages/design-playbook-workbench/design_playbook_workbench/web/app.css,code:packages/design-playbook-workbench/design_playbook_workbench/ui.py | A:- | S:文档须不含项目路径、资产或凭据(任何能访问环回端口者可免会话获取)；只能加载同源/app.js与/app.css，不得内联脚本
 app.js[EU8L]: F:工作台前端原生ES模块：bootstrap兑换会话令牌，调用/api/v1驱动项目、资产、令牌、文档、提案、画布编辑与编排、工作请求、所有者确认、生命周期与备份界面 | R:code:packages/design-playbook-workbench/design_playbook_workbench/web/app.html,code:packages/design-playbook-workbench/design_playbook_workbench/http_server.py,code:packages/design-playbook-workbench/design_playbook_workbench/session.py,code:packages/design-playbook-workbench/design_playbook_workbench/errors.py | A:startSession,api,mutation,newOperationId,flushCanvasQueue,describeFailure | S:会话令牌只存内存；兑换前replaceState清#bootstrap；fetch固定credentials omit、no-store、redirect error、no-referrer，令牌只放Authorization头；每次变更带随机operationId与expectedCounter；409时保留本地草稿；计数器取信封层counter；401提示重开bootstrap链接
+tokens.css[CU6M]: F:工作台令牌文件，是共享tokens.css的字节副本供WB样式引用 | R:code:packages/design-playbook/mcp/_shared/tokens.css,code:packages/design-playbook-workbench/design_playbook_workbench/web/app.css | A:--dpb-text-*,--dpb-font-*,--dpb-focus-width | S:不得手改，哈希门校验与共享源一致
 
 ===/workspace/projects/e7ae4c34-f7d5-42af-bebc-302d310d9072/work/design-playbook/packages/design-playbook-workbench/tools/===
 README.md[SQ3T]: F:工作台验收运维工具说明与典型运行流程 | R:- | A:- | S:-
@@ -567,3 +568,7 @@ pre-commit[OV4T]: F:本地git钩子，校验提交者姓名与邮箱为规定身
 ===/workspace/projects/e7ae4c34-f7d5-42af-bebc-302d310d9072/work/design-playbook/packages/design-playbook/examples/self-audit/===
 README.md[SQ3T]: F:自有界面自检账本说明，交代样式表、配对与已知债务的含义 | R:code:packages/design-playbook/examples/self-audit/baseline.json | A:- | S:账本不存数值；还清的债务须删行
 baseline.json[FQ6S]: F:自有界面自检账本，列三套样式表、文字与非文字颜色角色配对及已知失败项 | R:code:packages/design-playbook/scripts/self_audit.py,code:docs/adr/0049-own-ui-self-audit.md | A:surfaces,text_pairs,known | S:known只登记今天仍失败的项，修复后须同步删除，否则validate失败；不得写阈值数字
+
+===/workspace/projects/e7ae4c34-f7d5-42af-bebc-302d310d9072/work/design-playbook/packages/design-playbook/mcp/_shared/===
+glossary.json[FL3T]: F:界面术语中英对照表，统一快照与连接等词的中文译名 | R:- | A:terms[].en,terms[].zh | S:界面文案须按此译名，新增术语先在此登记
+tokens.css[CU6M]: F:Preview与RC共用的唯一设计令牌源，定义明暗两套色板、字号、间距、焦点与高对比/强制色块 | R:code:packages/design-playbook/mcp/preview/control.py,code:packages/design-playbook/mcp/preview/control.css | A:--dpb-text-*,--dpb-font-*,--dpb-focus-width,--dpb-accent-text | S:两个暗色块须逐字一致；裸色值只许出现于此文件；WB副本须字节相同
