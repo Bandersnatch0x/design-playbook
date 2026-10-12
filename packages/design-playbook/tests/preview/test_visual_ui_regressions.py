@@ -3140,3 +3140,43 @@ def test_escape_exits_preview_and_resets_hand_in_one_action(editor_page):
     expect(hand).to_have_attribute("aria-pressed", "false")
     expect(select).to_have_attribute("aria-pressed", "true")
 
+
+
+def test_escape_during_drag_restores_the_start_and_records_nothing(editor_page):
+    from playwright.sync_api import expect
+
+    page = editor_page
+    target = select_interaction_target(page, "position:absolute;left:120px;top:100px;width:200px;height:100px;margin:0")
+    move = page.frame_locator("iframe.dpb-proto-frame").locator(".dpb-move-body")
+    start = target.evaluate("el => el.getBoundingClientRect().toJSON()")
+    drag_interaction(page, move, 37, 23, release=False)
+    assert target.evaluate("el => el.getBoundingClientRect().x") != start["x"]
+    page.keyboard.press("Escape")
+    page.mouse.up()
+    rect = target.evaluate("el => el.getBoundingClientRect().toJSON()")
+    assert (rect["x"], rect["y"]) == (start["x"], start["y"])
+    expect(page.locator("#dpb-visual-count")).to_have_text("0")
+
+
+def test_shift_during_corner_resize_keeps_the_aspect_ratio(editor_page):
+    page = editor_page
+    target = select_interaction_target(page, "position:absolute;left:120px;top:100px;width:200px;height:100px;margin:0")
+    handle = page.frame_locator("iframe.dpb-proto-frame").locator('[data-handle="se"]')
+    page.keyboard.down("Shift")
+    drag_interaction(page, handle, 40, 5)
+    page.keyboard.up("Shift")
+    rect = target.evaluate("el => el.getBoundingClientRect().toJSON()")
+    assert rect["width"] / rect["height"] == pytest.approx(2.0, abs=0.03)
+    assert rect["width"] > 220
+
+
+def test_move_snaps_to_a_neighbour_edge_within_four_pixels(editor_page):
+    page = editor_page
+    target = select_interaction_target(page, "position:absolute;left:120px;top:100px;width:200px;height:100px;margin:0")
+    target.evaluate("""el => { const n = document.createElement('div');
+      n.style.cssText = 'position:absolute;left:400px;top:300px;width:50px;height:50px';
+      el.parentElement.append(n); }""")
+    move = page.frame_locator("iframe.dpb-proto-frame").locator(".dpb-move-body")
+    drag_interaction(page, move, 283, 3)
+    rect = target.evaluate("el => el.getBoundingClientRect().toJSON()")
+    assert rect["left"] == pytest.approx(400, abs=0.5)

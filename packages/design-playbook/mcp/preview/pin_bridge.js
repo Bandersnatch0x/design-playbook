@@ -264,12 +264,11 @@
   }
 
   function checkGuides(targetRect, candidates) {
-    if (!guideV || !guideH) return;
-
-
+    if (!guideV || !guideH) return { dx: 0, dy: 0 };
     var matchV = null;
     var matchH = null;
-    var threshold = 6;
+    var threshold = 4;
+    var snap = { dx: 0, dy: 0 };
     var targetEdgesX = [targetRect.left, targetRect.left + targetRect.width / 2, targetRect.right];
     var targetEdgesY = [targetRect.top, targetRect.top + targetRect.height / 2, targetRect.bottom];
 
@@ -282,6 +281,7 @@
         for (var cx = 0; cx < candEdgesX.length; cx++) {
           if (Math.abs(targetEdgesX[tx] - candEdgesX[cx]) <= threshold) {
             matchV = candEdgesX[cx];
+            snap.dx = candEdgesX[cx] - targetEdgesX[tx];
             break;
           }
         }
@@ -291,6 +291,7 @@
         for (var cy = 0; cy < candEdgesY.length; cy++) {
           if (Math.abs(targetEdgesY[ty] - candEdgesY[cy]) <= threshold) {
             matchH = candEdgesY[cy];
+            snap.dy = candEdgesY[cy] - targetEdgesY[ty];
             break;
           }
         }
@@ -315,6 +316,7 @@
     } else {
       guideH.style.display = "none";
     }
+    return snap;
   }
 
   function hideGuides() {
@@ -357,15 +359,26 @@
       return candidate !== el && !candidate.closest("#dpb-float-root");
     }).map(function (candidate) { return candidate.getBoundingClientRect(); })
       .filter(function (r) { return r.width > 0 && r.height > 0; });
-    function update(dx, dy) {
+    function update(dx, dy, shift) {
       if (!dx && !dy) {
         changes.forEach(function (c) { el.style.setProperty(c.property, c.oldValue); });
         updateOverlayPositions(el); hideGuides(); dimensionHud.style.display = "none";
         return;
       }
       if (!handle) {
+        if (shift) { if (Math.abs(dx) >= Math.abs(dy)) dy = 0; else dx = 0; }
         el.style.transform = translated(transform, Math.round(dx), Math.round(dy));
+        var near = checkGuides(el.getBoundingClientRect(), siblings);
+        if (near.dx || near.dy) {
+          el.style.transform = translated(transform, Math.round(dx + near.dx), Math.round(dy + near.dy));
+        }
       } else {
+        if (shift && /^[ns][ew]$/.test(handle)) {
+          var ratio = rect.width / rect.height;
+          var gx = (/w/.test(handle) ? -dx : dx), gy = (/n/.test(handle) ? -dy : dy);
+          var grow = Math.abs(gx) >= Math.abs(gy * ratio) ? gx : gy * ratio;
+          dx = (/w/.test(handle) ? -grow : grow); dy = (/n/.test(handle) ? -grow : grow) / ratio;
+        }
         var west = handle.indexOf("w") >= 0, north = handle.indexOf("n") >= 0;
         if (/[ew]/.test(handle)) el.style.width = Math.max(10, Math.round(rect.width + (west ? -dx : dx) - extraW)) + "px";
         if (/[ns]/.test(handle)) el.style.height = Math.max(10, Math.round(rect.height + (north ? -dy : dy) - extraH)) + "px";
@@ -378,7 +391,7 @@
         dimensionHud.style.display = "block";
       }
       updateOverlayPositions(el);
-      checkGuides(el.getBoundingClientRect(), siblings);
+      if (handle) checkGuides(el.getBoundingClientRect(), siblings);
     }
     return { update: update, finish: function (cancel) {
       if (cancel) changes.forEach(function (c) { el.style.setProperty(c.property, c.oldValue); });
@@ -409,23 +422,32 @@
       control.setPointerCapture(e.pointerId);
       var gesture = beginManipulation(visualSelectedEl, handle);
       var frame = 0, dx = 0, dy = 0;
-      function draw() { frame = 0; gesture.update(dx, dy); }
+      var shift = false, cancelled = false;
+      function draw() { frame = 0; gesture.update(dx, dy, shift); }
+      function escape(ev) {
+        if (ev.key !== "Escape") return;
+        ev.preventDefault(); ev.stopPropagation(); cancelled = true;
+        finish({ type: "pointercancel" });
+      }
       function move(ev) {
+        shift = ev.shiftKey;
         dx = ev.clientX - e.clientX; dy = ev.clientY - e.clientY;
         if (!frame) frame = requestAnimationFrame(draw);
       }
       function finish(ev) {
         if (frame) cancelAnimationFrame(frame);
-        if (ev.type === "pointerup") { dx = ev.clientX - e.clientX; dy = ev.clientY - e.clientY; draw(); }
+        if (ev.type === "pointerup" && !cancelled) { shift = ev.shiftKey; dx = ev.clientX - e.clientX; dy = ev.clientY - e.clientY; draw(); }
         control.removeEventListener("pointermove", move);
         control.removeEventListener("pointerup", finish);
         control.removeEventListener("pointercancel", finish);
+        control.removeEventListener("keydown", escape, true);
         if (control.hasPointerCapture(e.pointerId)) control.releasePointerCapture(e.pointerId);
         gesture.finish(ev.type === "pointercancel");
       }
       control.addEventListener("pointermove", move);
       control.addEventListener("pointerup", finish);
       control.addEventListener("pointercancel", finish);
+      control.addEventListener("keydown", escape, true);
     });
   }
 
