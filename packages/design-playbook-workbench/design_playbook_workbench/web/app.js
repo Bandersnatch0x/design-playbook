@@ -759,7 +759,7 @@ async function loadProjects() {
     renderProjects();
   } catch (error) {
     if (error.status === 401) {
-      failSession("会话已失效。请用启动时打印的 bootstrap 链接重新打开本页面。");
+      failSession("会话已失效。请用启动时打印的 启动链接重新打开本页面。");
       return;
     }
     elements.listError.hidden = false;
@@ -1874,7 +1874,7 @@ async function loadTokenDocument() {
         ? `编辑器内容来自第 ${source.revisionNumber} 次发布的修订；它不会随源文件改动而变。`
         : "编辑器内容来自草稿（尚未发布）。";
   } catch (error) {
-    showTokensError(error, "读取 tokens 文档");
+    showTokensError(error, "读取 令牌文件");
   }
 }
 
@@ -1979,7 +1979,7 @@ async function saveTokenDraft() {
     const item = document.createElement("li");
     item.textContent = `JSON 解析错误：${error.message}`;
     elements.tokensValidationErrors.appendChild(item);
-    announce("tokens 文档不是合法 JSON，未保存。");
+    announce("令牌文件不是合法 JSON，未保存。");
     return;
   }
   try {
@@ -2354,7 +2354,7 @@ async function flushCanvasQueue() {
       setCanvasSaveState("conflict");
       elements.canvasError.hidden = false;
       elements.canvasError.textContent =
-        "保存冲突：另一窗口或 Agent 已写入该画布。本页草稿未被覆盖，可另存分支。";
+        "保存冲突：另一窗口或智能体已写入该画布。本页草稿未被覆盖，可另存分支。";
       return;
     }
     setCanvasSaveState("failed");
@@ -3765,15 +3765,15 @@ elements.compareRun.addEventListener("click", runComparison);
 elements.contextBuild.addEventListener("click", buildContext);
 elements.contextConfirm.addEventListener("click", confirmContext);
 
-// -- Agent work requests: consent, leases, results (WB-10) --------------
+// -- 智能体 work requests: consent, leases, results (WB-10) --------------
 
 const WORK_STATE_LABELS = {
   "awaiting-consent": "等待确认发送范围",
-  "waiting-for-agent": "等待 Agent 接手",
+  "waiting-for-agent": "等待智能体接手",
   running: "执行中（服务端租约）",
   "proposal-ready": "已收到结果提案",
   applied: "提案已应用（未验证）",
-  failed: "Agent 报告失败",
+  failed: "智能体报告失败",
   interrupted: "中断（租约过期或服务重启）",
   "cancel-requested": "已请求取消（等待宿主确认）",
   cancelled: "已取消（宿主确认）",
@@ -3802,7 +3802,7 @@ function selectedWorkRequest() {
 
 async function openWork(project) {
   state.workProject = project;
-  elements.workHeading.textContent = `Agent 任务 · ${project.name}`;
+  elements.workHeading.textContent = `智能体任务 · ${project.name}`;
   elements.workScope.textContent =
     `项目：${project.name} · 目录：${project.canonicalPath}`;
   elements.workError.hidden = true;
@@ -3810,7 +3810,7 @@ async function openWork(project) {
   focusIntoPanel(elements.workHeading);
   renderWorkContextNote();
   await loadWorkRequests();
-  announce("已打开 Agent 任务。");
+  announce("已打开智能体任务。");
 }
 
 function renderWorkContextNote() {
@@ -3897,7 +3897,7 @@ function renderWorkDetail(request) {
     ? `最近一次 attempt #${request.attempt.sequence} · ${request.attempt.state} · ` +
       `租约到期 ${formatLocalTime(request.attempt.leaseExpiresAt)} · ` +
       `进度 ${JSON.stringify(request.attempt.progress || {})}`
-    : "还没有 Agent 接手：状态保持 waiting-for-agent，界面不推测进度。";
+    : "还没有智能体接手：状态保持 等待接手，界面不推测进度。";
   elements.workAttempts.textContent = "";
   for (const attempt of request.attempts || []) {
     const item = document.createElement("li");
@@ -4084,7 +4084,7 @@ elements.workClose.addEventListener("click", () => {
   restorePanelTrigger();
   state.workProject = null;
   state.workSelectedId = null;
-  announce("已关闭 Agent 任务面板。");
+  announce("已关闭智能体任务面板。");
 });
 
 // -- original owner facts, confirmations, backflow (WB-11) --------------
@@ -4101,7 +4101,7 @@ function showOwnerError(error, action) {
 
 async function openOwner(project) {
   state.ownerProject = project;
-  elements.ownerHeading.textContent = `原 owner 验证 · ${project.name}`;
+  elements.ownerHeading.textContent = `原负责方 验证 · ${project.name}`;
   elements.ownerScope.textContent =
     `项目：${project.name} · 目录：${project.canonicalPath}`;
   elements.ownerError.hidden = true;
@@ -4109,7 +4109,7 @@ async function openOwner(project) {
   focusIntoPanel(elements.ownerHeading);
   await loadOwnerRuns();
   await loadOwnerConfirmations();
-  announce("已打开原 owner 验证。");
+  announce("已打开原负责方 验证。");
 }
 
 async function loadOwnerRuns() {
@@ -4138,14 +4138,14 @@ async function loadOwnerRuns() {
     } else {
       elements.ownerRunNote.textContent =
         state.ownerRuns.length === 0
-          ? "项目内还没有 owner 投影（.design-playbook/runs/<run>/projection.json）。"
-          : "投影不可读：请检查 owner 是否发布了有效投影。";
+          ? "项目内还没有 负责方投影。"
+          : "投影不可读：请检查负责方是否发布了有效投影。";
       elements.ownerCriteria.textContent = "";
       elements.ownerEvidence.textContent = "";
       elements.ownerFindings.textContent = "";
     }
   } catch (error) {
-    showOwnerError(error, "读取 owner 运行");
+    showOwnerError(error, "读取 负责方运行");
   }
 }
 
@@ -4160,7 +4160,7 @@ async function loadOwnerRun(runId) {
     elements.ownerCriteria.textContent = "";
     elements.ownerEvidence.textContent = "";
     elements.ownerFindings.textContent = "";
-    showOwnerError(error, "读取 owner 投影");
+    showOwnerError(error, "读取 负责方投影");
   }
 }
 
@@ -4168,7 +4168,7 @@ function ownerConfirmButton(runId, row, sourceHash) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "secondary";
-  button.textContent = row.confirmation ? "已确认" : "确认（owner-verified）";
+  button.textContent = row.confirmation ? "已确认" : "确认（原负责方已验证）";
   button.disabled = Boolean(row.confirmation) || !sourceHash;
   button.addEventListener("click", () =>
     confirmOwnerObject(runId, row.objectType, row.objectId, sourceHash)
@@ -4213,7 +4213,7 @@ function renderOwnerRun(run) {
     text.textContent =
       `${row.objectId} · ${row.severity} · ${row.summary} · 指回 ${row.pointBack.kind}` +
       (row.pointBack.path ? ` ${row.pointBack.path}` : "") +
-      (row.pointBack.repairOwner ? ` · 修复 owner ${row.pointBack.repairOwner}` : "");
+      (row.pointBack.repairOwner ? ` · 修复责任方 ${row.pointBack.repairOwner}` : "");
     item.appendChild(text);
     const backflow = document.createElement("button");
     backflow.type = "button";
@@ -4321,7 +4321,7 @@ elements.ownerClose.addEventListener("click", () => {
   elements.ownerPanel.hidden = true;
   restorePanelTrigger();
   state.ownerProject = null;
-  announce("已关闭原 owner 验证面板。");
+  announce("已关闭原负责方 验证面板。");
 });
 
 // -- lifecycle: archive, recycle bin, reference-safe delete (WB-12) -----
@@ -4716,7 +4716,7 @@ async function startSession() {
   const params = new URLSearchParams(fragment);
   const bootstrap = params.get("bootstrap") || "";
   if (!bootstrap) {
-    failSession("地址中没有一次性 bootstrap 内容。请使用启动时打印的链接。");
+    failSession("地址中没有一次性启动凭据。请使用启动时打印的链接。");
     return;
   }
   // Clear the fragment before the exchange completes so the one-time
@@ -4742,7 +4742,7 @@ async function startSession() {
   } catch (error) {
     failSession(
       error.status === 401
-        ? "bootstrap 内容无效、已被使用或已过期。请重新启动服务并打开新链接。"
+        ? "启动凭据无效、已被使用或已过期。请重新启动服务并打开新链接。"
         : "无法建立会话：" + error.message
     );
   }

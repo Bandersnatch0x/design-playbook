@@ -1494,7 +1494,7 @@ class WorkRequestJourneyTest(unittest.TestCase):
         self.assertTrue(request_id)
 
         self.page.click("#work-consent")
-        expect(self.page.locator("#work-detail-state")).to_contain_text("等待 Agent 接手")
+        expect(self.page.locator("#work-detail-state")).to_contain_text("等待智能体接手")
         handoff = self.page.locator("#work-handoff")
         expect(handoff).to_contain_text("/design-playbook:run-handoff")
         expect(handoff).to_contain_text(request_id)
@@ -1571,7 +1571,7 @@ class WorkRequestJourneyTest(unittest.TestCase):
         self.page.click("#work-create")
         expect(self.page.locator("#work-detail-state")).to_contain_text("等待确认发送范围")
         self.page.click("#work-consent")
-        expect(self.page.locator("#work-detail-state")).to_contain_text("等待 Agent 接手")
+        expect(self.page.locator("#work-detail-state")).to_contain_text("等待智能体接手")
         request_id = self.request_id()
         claimed = self.agent_call("claim", request_id, {})
         self.assertEqual(claimed.status, 200, claimed.text)

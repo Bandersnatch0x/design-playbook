@@ -26,7 +26,7 @@
     <h2 id="session-error-heading">会话不可用</h2>
     <p id="session-error-message"></p>
     <p class="hint">
-      请使用启动服务时打印的 bootstrap 链接重新打开本页面；
+      请使用启动服务时打印的 启动链接重新打开本页面；
       链接中的一次性内容会在交换成功后从地址栏清除。
     </p>
   </section>
@@ -196,7 +196,7 @@
     <p class="hint">
       编辑器里是资产当前存储的原始文档。保存只写入草稿：缺失引用、引用循环、类型不符或取值非法都会整份拒绝。
     </p>
-    <label for="tokens-document">tokens 文档（JSON）</label>
+    <label for="tokens-document">令牌文件（JSON）</label>
     <textarea id="tokens-document" class="tokens-editor" rows="16" spellcheck="false"></textarea>
     <div class="preview-controls">
       <button type="button" id="tokens-save" data-busy-label="保存中…">校验并保存草稿</button>
@@ -519,7 +519,7 @@
       </figure>
     </div>
 
-    <h3>Agent 上下文选择</h3>
+    <h3>智能体上下文选择</h3>
     <p class="hint">
       只有被显式选择的内容才会进入上下文：项目文件、历史日志与凭据默认排除；确认绑定当前 digest，内容一变旧确认立即失效。
     </p>
@@ -539,13 +539,13 @@
   </section>
   <section class="panel" id="work-panel" hidden aria-labelledby="work-heading">
     <div class="panel-head">
-      <h2 id="work-heading">Agent 任务</h2>
+      <h2 id="work-heading">智能体任务</h2>
       <button type="button" id="work-close" class="secondary">关闭</button>
     </div>
     <p class="hint" id="work-scope"></p>
-    <h3>Agent 任务</h3>
+    <h3>智能体任务</h3>
     <p class="hint">
-      任务以已确认的上下文为输入；确认发送范围后才生成 slash 接手命令。未接手时保持 waiting-for-agent，
+      任务以已确认的上下文为输入；确认发送范围后才生成 slash 接手命令。未接手时保持 等待接手，
       界面不显示模拟进度，也不声称任务已完成。
     </p>
     <p id="work-error" class="error-text" hidden></p>
@@ -619,11 +619,11 @@
   </section>
   <section class="panel" id="owner-panel" hidden aria-labelledby="owner-heading">
     <div class="panel-head">
-      <h2 id="owner-heading">原 owner 验证</h2>
+      <h2 id="owner-heading">原负责方 验证</h2>
       <button type="button" id="owner-close" class="secondary">关闭</button>
     </div>
     <p class="hint" id="owner-scope"></p>
-    <h3>原 owner 验证事实</h3>
+    <h3>原负责方 验证事实</h3>
     <p class="hint">
       以下判据、证据与问题来自原工具链（run-console 等）发布在项目内的投影；工作台只展示，不重新裁决。
       确认只绑定当时的对象 hash，源变化后旧确认失效并显示 stale/unknown。
@@ -631,7 +631,7 @@
     <p id="owner-error" class="error-text" hidden></p>
     <div class="row-form">
       <label for="owner-run">运行</label>
-      <select id="owner-run" aria-label="owner 运行"></select>
+      <select id="owner-run" aria-label="负责方运行"></select>
       <button type="button" id="owner-reload" class="secondary">重新载入投影</button>
     </div>
     <p id="owner-run-note" class="hint" role="status"></p>
@@ -642,7 +642,7 @@
     <h4>问题与指回</h4>
     <ul id="owner-findings" class="plain-list"></ul>
     <h4>已记录的人工确认</h4>
-    <p class="hint">确认绑定 run + 对象 + hash + 语义角色；Agent 自批、截图上传、repair 完成都不自动通过。</p>
+    <p class="hint">确认绑定 run + 对象 + hash + 语义角色；智能体自批、截图上传、repair 完成都不自动通过。</p>
     <ul id="owner-confirmations" class="plain-list"></ul>
   </section>
   <section class="panel" id="life-panel" hidden aria-labelledby="life-heading">
