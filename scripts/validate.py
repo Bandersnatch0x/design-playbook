@@ -1318,6 +1318,17 @@ def validate_type_scale(entries: list[rules_registry.RuleEntry]) -> None:
                     + ("" if not gaps else " (" + "; ".join(gaps) + ")"))
 
 
+def validate_button_states() -> None:
+    """G-9: the workbench base button is neutral and the sheet styles :hover."""
+    print("\n== Button states (G-9) ==")
+    path = ROOT / LITERAL_SHEETS[2]
+    text = re.sub(r"/\*.*?\*/", "", path.read_text(encoding="utf-8"), flags=re.S) if path.is_file() else ""
+    base = re.search(r"(?m)^button\s*\{([^}]*)\}", text)
+    accent = bool(base and re.search(r"background(?:-color)?\s*:[^;]*(?:--accent|--dpb-accent)", base.group(1)))
+    check(base is not None and not accent, "workbench base button is not accent-filled (G-9)")
+    check(":hover" in text, "workbench style sheet has a :hover rule (G-9)")
+
+
 def validate_skill_contracts() -> None:
     print("== Dogfood 004 regression guards ==")
 
@@ -1482,6 +1493,7 @@ CHECKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("validate_literal_values", (), ()),
     ("validate_vendor_fonts", (), ()),
     ("validate_type_scale", ("registry_entries",), ()),
+    ("validate_button_states", (), ()),
     ("validate_skill_contracts", (), ()),
     ("validate_test_executability", (), ()),
     ("validate_ruff", (), ()),

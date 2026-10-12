@@ -647,6 +647,21 @@ class ValidateGateTests(unittest.TestCase):
                 self.assertIn(gate, result.stdout)
                 self.assertIn(found, result.stdout)
 
+    def test_workbench_base_button_accent_fails_the_gate(self) -> None:
+        self._edit(self.root / WORKBENCH_APP_CSS, "button {\n  font: inherit;",
+                   "button {\n  background: var(--accent);\n  font: inherit;")
+        result = self.validate()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL  workbench base button is not accent-filled (G-9)", result.stdout)
+
+    def test_workbench_without_hover_fails_the_gate(self) -> None:
+        path = self.root / WORKBENCH_APP_CSS
+        text = path.read_text(encoding="utf-8").replace(":hover", ":focus-within")
+        path.write_text(text, encoding="utf-8")
+        result = self.validate()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL  workbench style sheet has a :hover rule (G-9)", result.stdout)
+
     def test_scale_token_under_the_registry_floor_fails_the_gate(self) -> None:
         self._edit(self._pkg("mcp", "_shared", "tokens.css"),
                    "--dpb-text-xs: 12px;", "--dpb-text-xs: 11px;")
