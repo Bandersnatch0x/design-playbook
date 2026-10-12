@@ -442,6 +442,15 @@ class RepairPacketRenderContractTest(unittest.TestCase):
         self.assertIn("overflow-wrap: anywhere", _CSS)
         self.assertIn("grid-template-columns: 1fr", _CSS)
 
+    def test_packet_fields_are_a_definition_list_without_card_wall(self) -> None:
+        self.assertNotIn("packet-card", _JS)
+        self.assertNotIn("packet-card", _CSS)
+        self.assertIn('el("dl", { class: "packet-grid"', _JS)
+        self.assertIn('"packet-field"', _JS)
+
+    def test_console_css_has_no_important_overrides(self) -> None:
+        self.assertEqual(_CSS.count("!important"), 0)
+
 
 class RepairPacketBrowserTest(browser_harness.BrowserTestCase):
     """Real console UI: completed/blocked/stale/copy/security."""

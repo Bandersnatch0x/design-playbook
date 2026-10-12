@@ -2300,10 +2300,12 @@
   }
 
   function packetCard(fieldKey, title, fact, formatValue) {
-    var card = el("article", { class: "packet-card", "data-packet-field": fieldKey });
-    card.appendChild(el("h3", null, title));
-    packetFieldNodes(fact, formatValue).forEach(function (node) { card.appendChild(node); });
-    return card;
+    var field = el("div", { class: "packet-field", "data-packet-field": fieldKey });
+    var dd = el("dd");
+    field.appendChild(el("dt", null, title));
+    packetFieldNodes(fact, formatValue).forEach(function (node) { dd.appendChild(node); });
+    field.appendChild(dd);
+    return field;
   }
 
   function renderRepairPacket(details, snapshot) {
@@ -2312,7 +2314,7 @@
       el("p", { class: "section-hint", id: "repair-packet-hint", text: t("repair_packet_hint") }),
       el("p", { class: "repair-packet-notice", text: t("repair_packet_notice") }),
     ];
-    var grid = el("div", { class: "packet-grid", id: "repair-packet-grid" });
+    var grid = el("dl", { class: "packet-grid", id: "repair-packet-grid" });
 
     grid.appendChild(packetCard("intent", t("packet_intent"), packet.intent, function (value) {
       return el("p", { class: "fact-value", text: String(value) });
