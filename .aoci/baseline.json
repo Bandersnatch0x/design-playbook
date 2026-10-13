@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-10-10T03:32:43Z",
-  "updated_at": "2026-10-12T14:41:31Z",
+  "updated_at": "2026-10-13T04:09:57Z",
   "files": {
     ".agents/plugins/marketplace.json": {
       "role": "index",
@@ -143,9 +143,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "8987bb0938ae75d94cfcfdde838f85f7591b3e337336a57caf0e7ec4d4c3f6ba",
+      "sha256": "2050092988b180c2dbf6dd782858a5183cee7ed88ec7dc4b19c09a82c9a8ed29",
       "size": 174767,
-      "normalized_sha256": "8987bb0938ae75d94cfcfdde838f85f7591b3e337336a57caf0e7ec4d4c3f6ba"
+      "normalized_sha256": "2050092988b180c2dbf6dd782858a5183cee7ed88ec7dc4b19c09a82c9a8ed29"
     },
     "aoci.meta.txt": {
       "role": "index",
