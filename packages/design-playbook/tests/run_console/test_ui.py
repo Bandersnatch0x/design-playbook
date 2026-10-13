@@ -151,20 +151,26 @@ class UIResourcesTest(unittest.TestCase):
         self.assertEqual(js.content_type, "text/javascript; charset=utf-8")
 
     def test_csp_allows_only_self_css_js_and_connect_for_the_shell(self) -> None:
+        # ADR-0048 (2026-10-13 amendment): the whole policy string is pinned,
+        # so any loosening — an added source, an 'unsafe-' keyword, a nonce —
+        # is a test failure, not a substring that still passes.
         shell = UIResources().lookup("/")
         assert shell is not None
-        policy = shell.content_security_policy
-        self.assertIn("default-src 'none'", policy)
-        self.assertIn("style-src 'self'", policy)
-        self.assertIn("script-src 'self'", policy)
-        self.assertIn("connect-src 'self'", policy)
-        self.assertIn("frame-ancestors 'none'", policy)
-        self.assertIn("base-uri 'none'", policy)
+        self.assertEqual(
+            shell.content_security_policy,
+            "default-src 'none'; style-src 'self'; script-src 'self'; "
+            "connect-src 'self'; frame-ancestors 'none'; "
+            "base-uri 'none'; form-action 'none'",
+        )
+        self.assertNotIn("unsafe-", shell.content_security_policy)
         for asset in ("/app.css", "/app.js"):
             resource = UIResources().lookup(asset)
             assert resource is not None
-            self.assertNotIn("style-src", resource.content_security_policy)
-            self.assertNotIn("script-src", resource.content_security_policy)
+            self.assertEqual(
+                resource.content_security_policy,
+                "default-src 'none'; frame-ancestors 'none'",
+            )
+            self.assertNotIn("unsafe-", resource.content_security_policy)
 
     def test_lookup_is_exact_match_only(self) -> None:
         resources = UIResources()
@@ -282,9 +288,15 @@ class StaticRouteTest(unittest.TestCase):
                 for name, value in fields.items():
                     self.assertFalse(name.startswith("access-control-"), name)
         _, fields, _ = self._get("/")
-        self.assertIn("style-src 'self'", fields["content-security-policy"])
-        self.assertIn("script-src 'self'", fields["content-security-policy"])
-        self.assertIn("connect-src 'self'", fields["content-security-policy"])
+        # Whole-string equality (ADR-0048): the header the server actually
+        # sends carries the exact pinned policy, with no unsafe- source.
+        self.assertEqual(
+            fields["content-security-policy"],
+            "default-src 'none'; style-src 'self'; script-src 'self'; "
+            "connect-src 'self'; frame-ancestors 'none'; "
+            "base-uri 'none'; form-action 'none'",
+        )
+        self.assertNotIn("unsafe-", fields["content-security-policy"])
 
     def test_head_matches_get_without_a_body(self) -> None:
         get_status, get_fields, get_body = self._get("/")

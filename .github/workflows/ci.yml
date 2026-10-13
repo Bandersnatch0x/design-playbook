@@ -75,6 +75,7 @@ jobs:
           python3 tests/test_design_baseline_promote.py
           python3 tests/test_promotion_governance.py
           python3 tests/test_run_metadata.py
+          python3 tests/test_ui_shared_parity.py
       - name: Queue monitor dialog state tests
         run: node packages/design-playbook/showcase/test_queue_monitor_state.js
 

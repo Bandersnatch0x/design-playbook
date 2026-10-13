@@ -67,6 +67,18 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         self.page.goto(self.h.runtime.bootstrap_url)
         expect(self.page.locator("#session-state")).to_contain_text("会话有效")
 
+    def test_shell_loads_with_zero_security_policy_violations(self) -> None:
+        # ADR-0048: the pinned shell policy holds on a real load — one
+        # violation event anywhere on the page fails here.
+        self.page.add_init_script(
+            "window.__dpbViolations = [];"
+            "document.addEventListener('securitypolicyviolation', function (e) {"
+            "  window.__dpbViolations.push(e.violatedDirective + ' ' + e.blockedURI);"
+            "});"
+        )
+        self._open_session()
+        self.assertEqual(self.page.evaluate("window.__dpbViolations"), [])
+
     def _add_project(self, path: Path, name: str = "") -> None:
         self.page.fill("#project-path", str(path))
         self.page.click("#probe-button")

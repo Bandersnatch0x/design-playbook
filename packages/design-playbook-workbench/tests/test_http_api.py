@@ -227,6 +227,28 @@ class TransportPolicyTest(unittest.TestCase):
         self.assertNotIn("bootstrap=", shell)
         self.assertNotIn(self.h.token, shell)
 
+    def test_shell_policy_is_the_exact_pinned_string(self) -> None:
+        # ADR-0048 (2026-10-13 amendment): whole-string equality, so any
+        # added source or 'unsafe-' keyword fails here instead of passing a
+        # substring check. The one variable is the framed preview origin.
+        policy = http_request(self.h.runtime, "/").headers["Content-Security-Policy"]
+        self.assertEqual(
+            policy,
+            "default-src 'none'; style-src 'self'; script-src 'self'; "
+            "connect-src 'self'; img-src 'self' data:; "
+            f"frame-src {self.h.preview_origin}; frame-ancestors 'none'; "
+            "base-uri 'none'; form-action 'none'",
+        )
+        self.assertNotIn("unsafe-", policy)
+        for path in ("/app.css", "/app.js"):
+            with self.subTest(path=path):
+                self.assertEqual(
+                    http_request(self.h.runtime, path).headers[
+                        "Content-Security-Policy"
+                    ],
+                    "default-src 'none'; frame-ancestors 'none'",
+                )
+
     def test_resource_paths_outside_the_shell_are_never_served(self) -> None:
         target = self.h.runtime.data_dir.session_record_path
         response = http_request(

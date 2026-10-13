@@ -8,11 +8,22 @@ time, so traversal, encoded paths, and listing attempts have no surface.
 The shell document is deliberately content-free: it carries no project
 path, asset, or credential, because any process able to reach the
 loopback port can fetch it without a session.
+
+Shared files the shell ships as copies (tokens.css today) are written
+only by ``scripts/sync_ui_shared.py`` beside a sha256 lock, and the
+constructor refuses to serve copies that disagree with that lock
+(ADR-0048, 2026-10-13 amendment). The lock rides in the wheel, so an
+installed workbench self-checks without the repository.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import NamedTuple
+
+#: Written beside the copies by ``scripts/sync_ui_shared.py``.
+LOCK_NAME = "dpbui.lock.json"
 
 ROUTE_TO_FILE: dict[str, str] = {
     "/": "app.html",
@@ -69,6 +80,7 @@ class UIResources:
             if directory is not None
             else Path(__file__).resolve().parent / "web"
         )
+        self._verify_shared_lock(base)
         entries: dict[str, StaticResource] = {}
         for route, name in ROUTE_TO_FILE.items():
             entries[route] = StaticResource(
@@ -78,6 +90,37 @@ class UIResources:
             )
         self._entries = entries
         self.directory = base
+
+    @staticmethod
+    def _verify_shared_lock(base: Path) -> None:
+        """Fail closed when a shipped shared-file copy disagrees with its lock.
+
+        A lock that is absent, unreadable or malformed is also a refusal:
+        serving an unverified copy is the state this check exists to ban.
+        """
+        lock_path = base / LOCK_NAME
+        try:
+            lock = json.loads(lock_path.read_text(encoding="utf-8"))
+            files = lock["files"]
+            if lock["schemaVersion"] != 1 or not isinstance(files, dict):
+                raise ValueError("lock shape")
+        except (OSError, UnicodeError, json.JSONDecodeError, KeyError, ValueError) as exc:
+            raise RuntimeError(
+                f"shared UI lock unreadable: {lock_path} ({exc})"
+            ) from exc
+        for name, digest in files.items():
+            copy = base / name
+            try:
+                actual = hashlib.sha256(copy.read_bytes()).hexdigest()
+            except OSError as exc:
+                raise RuntimeError(
+                    f"shared UI copy missing: {copy} ({exc})"
+                ) from exc
+            if actual != digest:
+                raise RuntimeError(
+                    f"shared UI copy drifted from its lock: {copy} "
+                    f"(expected {digest}, found {actual}); run scripts/sync_ui_shared.py"
+                )
 
     def set_preview_origin(self, origin: str) -> None:
         """Allow the shell to frame exactly this preview origin.

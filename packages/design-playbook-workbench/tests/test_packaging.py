@@ -70,6 +70,21 @@ class DistributionTest(unittest.TestCase):
         self.assertIsNone(resources.lookup("/../session/session.json"))
         self.assertIsNone(resources.lookup("/app.js/extra"))
 
+    def test_shared_ui_lock_and_its_copies_ship_in_the_distribution(self) -> None:
+        # ADR-0048: the flat web/* glob is what carries the lock and the
+        # shared copies into the wheel, so an installed workbench can
+        # self-check. Every file the lock names must exist here.
+        import json
+
+        directory = _PACKAGE_ROOT / "design_playbook_workbench" / "web"
+        lock_path = directory / "dpbui.lock.json"
+        self.assertTrue(lock_path.is_file(), lock_path)
+        lock = json.loads(lock_path.read_text("utf-8"))
+        self.assertEqual(lock["schemaVersion"], 1)
+        self.assertTrue(lock["files"])
+        for name in lock["files"]:
+            self.assertTrue((directory / name).is_file(), name)
+
     def test_the_shell_has_no_remote_asset_or_storage_reference(self) -> None:
         html = (
             _PACKAGE_ROOT / "design_playbook_workbench" / "web" / "app.html"

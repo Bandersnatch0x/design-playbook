@@ -190,6 +190,24 @@ class BrowserTestCase(unittest.TestCase):
         return self.page.locator("body").inner_text()
 
 
+class SecurityPolicyViolationTest(BrowserTestCase):
+    """ADR-0048: the pinned shell policy holds on a real load.
+
+    The static tests pin the policy string; this proves the shell actually
+    runs under it — one violation event anywhere on the page fails here.
+    """
+
+    def test_shell_loads_with_zero_security_policy_violations(self) -> None:
+        self.page.add_init_script(
+            "window.__dpbViolations = [];"
+            "document.addEventListener('securitypolicyviolation', function (e) {"
+            "  window.__dpbViolations.push(e.violatedDirective + ' ' + e.blockedURI);"
+            "});"
+        )
+        self.open()
+        self.assertEqual(self.page.evaluate("window.__dpbViolations"), [])
+
+
 class ComprehensionFactsTest(BrowserTestCase):
     """The four facts, in snapshot order, on one validated page."""
 
