@@ -179,3 +179,40 @@ This amendment chooses the build and runtime only. Stage P still opens by its
 own dated amendment, committed on its own, that names its files, exclusions and
 acceptance evidence (Decision 1), once Stage S has landed and the in-place
 repair batch is green on the merged tree.
+
+## Amendment (2026-10-13): Stage P opens
+
+Stage S has landed (registry B-00..B-11, ADR-0049, V-1..V-6) and the in-place
+repair batch is green on the merged tree, so the two conditions Decision 3
+waited on are met. This amendment is the maintainer's dated record that opens
+Stage P, committed on its own before any Stage P code, as Decision 1 requires.
+
+- **Files.** The migration is confined to the Preview control shell named by
+  ADR-0047 §1 — `packages/design-playbook/mcp/preview/**` and
+  `packages/design-playbook/tests/preview/**` — plus the shared layer the
+  2026-10-13 amendment already created, `packages/design-playbook/mcp/_shared/`
+  (canonical copies) and the workbench's flat
+  `packages/design-playbook-workbench/design_playbook_workbench/web/` copies it
+  feeds, and the sync, lock and drift checks that keep them byte-identical. No
+  other surface is in scope; Stages R and W stay unauthorized (Decision 4).
+- **Exclusions.** Everything Decision 7 excludes, unchanged: no second source
+  of preview, review, verdict or floor authority; no plugin-side source
+  writer; no collaboration; no new MCP server, skill, command, collector or
+  adapter row; no new gate or registry entry beyond the ones Stage S already
+  landed; no release, tag, publish or catalog action; no change to ADR-0008
+  floor semantics. The migration is an equivalence replacement: the behavior
+  tests written by the repair batch are the acceptance floor and may not be
+  weakened (Decision 3). The form/POST transaction, the one-time decision
+  token, source-hash and route checks, and `writesSource: false` stay exactly
+  as they are.
+- **Acceptance evidence.** Per slice: the full repository gates
+  (`validate.py`, `check_doc_links.py`, `doctor.py`), the non-browser suite in
+  the CI form, the browser matrix under real Chromium, the drift check that
+  every shared copy matches its canonical file and the lock, the whole-policy
+  CSP equality test plus a browser run asserting zero
+  `securitypolicyviolation` events, and a Windows run where platform semantics
+  differ. Slices that change `control.react.js` wait for the A1 items touching
+  it to be merged first (plan §3). Checks not run are reported as not run.
+
+C2 (Stages R and W) is not opened here. Each opens only by its own later
+amendment after Stage P is delivered and has been stable for a version cycle.
