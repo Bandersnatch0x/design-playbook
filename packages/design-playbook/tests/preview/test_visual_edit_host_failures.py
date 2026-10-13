@@ -22,6 +22,10 @@ from .test_visual_edit_host_e2e import FIXTURE, PACKAGE, create_server, stage_re
 
 import applier  # noqa: E402
 
+# stage_review drives a real browser; the no-chromium CI job deselects this
+# module by marker.
+pytestmark = pytest.mark.browser
+
 
 def file_hashes(root: Path) -> dict[str, str]:
     return {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()

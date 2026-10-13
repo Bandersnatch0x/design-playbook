@@ -2,6 +2,7 @@
 """Contract tests for the Preview decision transaction."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -362,6 +363,82 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             prototype.write_text("reviewed", encoding="utf-8")
             (Path(tmp) / "confirm-round-1.json").write_text("{}", encoding="utf-8")
             with self.assertRaisesRegex(TransactionConflict, "legacy confirm"):
+                self._run(prototype)
+
+    def test_pre_live_route_records_stay_readable_and_replay_repairs(self) -> None:
+        """Compatibility: a decision entry written before route_url entered the
+        binding digest keeps its published canonical bytes and stays readable.
+
+        Regression for the break where the read side always rebuilt the
+        five-plus-route_url field set: every pre-key entry then failed
+        `binding == expected`, `load_entry` raised, and a new round crashed
+        after `atomic_write(entry_path)` — entry on disk, no projections.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            prototype = Path(tmp) / "round-1.html"
+            prototype.write_text("reviewed", encoding="utf-8")
+            self._run(prototype)
+            entry_path = Path(tmp) / "decision-round-1.json"
+            entry = json.loads(entry_path.read_text(encoding="utf-8"))
+
+            # Rebuild the entry exactly as the pre-live-route writer did: the
+            # binding carries no route_url key and the digest covers the five
+            # legacy fields only.
+            legacy_fields = {
+                "round": 1,
+                "prototype_html_hash": entry["binding"]["prototype_html_hash"],
+                "report_ref": "report.md",
+                "summary": "summary",
+                "options": ["确认通过", "需要修改"],
+            }
+            canonical = json.dumps(
+                legacy_fields, ensure_ascii=False, sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            entry["binding"] = {
+                **legacy_fields,
+                "digest": hashlib.sha256(canonical).hexdigest(),
+            }
+            entry_path.write_text(transaction.json_text(entry), encoding="utf-8")
+            (Path(tmp) / "confirm-round-1.json").unlink()
+            (Path(tmp) / "log.md").write_text("corrupt projection", encoding="utf-8")
+
+            loaded = transaction.load_entry(entry_path)
+            self.assertIsNotNone(loaded)
+            self.assertNotIn("route_url", loaded["binding"])
+
+            calls: list[int] = []
+
+            def collect(prototype_arg, summary, options, round_n, **kwargs):
+                calls.append(round_n)
+                return {"choice": "确认通过", "feedback": "清晰",
+                        "anchors": [], "aborted": False}
+
+            repaired = self._run(prototype, collect=collect)
+
+            self.assertEqual(calls, [], "a replay must not collect again")
+            self.assertEqual(repaired["decision_id"], entry["decision_id"])
+            self.assertTrue(Path(repaired["confirm_record_path"]).is_file())
+            log = (Path(tmp) / "log.md").read_text(encoding="utf-8")
+            self.assertIn(entry["decision_id"], log)
+            self.assertNotIn("corrupt projection", log)
+
+    def test_tampered_binding_still_fails_closed(self) -> None:
+        """The compatibility path must not loosen the integrity check: a
+        digest that matches the legacy fields but carries a stray route_url
+        key is still invalid."""
+        with tempfile.TemporaryDirectory() as tmp:
+            prototype = Path(tmp) / "round-1.html"
+            prototype.write_text("reviewed", encoding="utf-8")
+            self._run(prototype)
+            entry_path = Path(tmp) / "decision-round-1.json"
+            entry = json.loads(entry_path.read_text(encoding="utf-8"))
+            binding = dict(entry["binding"])
+            del binding["route_url"]  # keep the digest, drop the key
+            entry["binding"] = binding
+            entry_path.write_text(transaction.json_text(entry), encoding="utf-8")
+
+            with self.assertRaisesRegex(TransactionConflict, "metadata is invalid"):
                 self._run(prototype)
 
     def test_malformed_decision_metadata_fails_closed(self) -> None:

@@ -22,6 +22,10 @@ from .test_visual_edit_host_failures import file_hashes
 
 import applier  # noqa: E402
 
+# The host_case fixture drives a real browser through stage_review; the
+# no-chromium CI job deselects this module by marker.
+pytestmark = pytest.mark.browser
+
 
 @pytest.fixture
 def host_case(tmp_path: Path, request):

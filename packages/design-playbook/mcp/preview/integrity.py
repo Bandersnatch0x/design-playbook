@@ -126,9 +126,12 @@ def prototype_html_digest(raw: bytes) -> str:
     return hashlib.sha256(normalized).hexdigest()
 
 
+_MISSING = object()
+
+
 def compute_binding_digest(
     *, round_n: int, prototype_html_hash: str, report_ref: str,
-    summary: str, options: list[str], route_url: str = "",
+    summary: str, options: list[str], route_url: str | object = "",
 ) -> dict[str, Any]:
     """Build the binding record (canonical fields + SHA-256 digest).
 
@@ -136,6 +139,12 @@ def compute_binding_digest(
     to write, load_entry() uses it to validate on read, and
     _valid_decision_entry() uses it for the G5 gate. Moving it here keeps
     the write side and read side from drifting.
+
+    Writers use the default (``""``): the key is present, meaning no live
+    route. Readers rebuilding a record written before the live-route work
+    pass ``_MISSING`` instead, which keeps the key out of the canonical
+    bytes so a published record's digest still matches what wrote it.
+    See ``binding_equivalent`` for replay comparison.
     """
     fields = {
         "round": round_n,
@@ -143,14 +152,38 @@ def compute_binding_digest(
         "report_ref": report_ref,
         "summary": summary,
         "options": list(options),
+    }
+    if route_url is not _MISSING:
         # The bound live-route URL is part of the digest so a committed round
         # replays from the record instead of re-observing the network.
-        "route_url": route_url,
-    }
+        fields["route_url"] = route_url
     canonical = json.dumps(
         fields, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
     return {"digest": hashlib.sha256(canonical).hexdigest(), **fields}
+
+
+def binding_equivalent(stored: dict[str, Any], expected: dict[str, Any]) -> bool:
+    """Replay comparison across binding eras.
+
+    Equal digests always match. When they differ, an absent ``route_url``
+    compares equal to the empty string in both directions: the pre-key and
+    static eras have the same meaning (no live route) and a replay of either
+    must repair its projections instead of failing the round. Any other
+    difference — including two different route URLs — stays a conflict.
+    """
+    if stored.get("digest") == expected.get("digest"):
+        return True
+    stored_route = stored.get("route_url", "")
+    expected_route = expected.get("route_url", "")
+    if not isinstance(stored_route, str) or not isinstance(expected_route, str):
+        return False
+    if stored_route != expected_route:
+        return False
+    return all(
+        stored.get(key) == expected.get(key)
+        for key in ("round", "prototype_html_hash", "report_ref", "summary", "options")
+    )
 
 
 def _round_from_name(name: str) -> int | None:
@@ -216,7 +249,7 @@ def _valid_decision_entry(path: Path) -> bool:
         report_ref=binding["report_ref"],
         summary=binding["summary"],
         options=binding["options"],
-        route_url=binding.get("route_url", ""),
+        route_url=binding.get("route_url", _MISSING),
     )
     return binding.get("digest") == expected["digest"]
 

@@ -15,6 +15,7 @@ from .test_visual_edit_host_multifile import apply_in_process, host_case as host
 from host import source_hash  # noqa: E402
 
 
+@pytest.mark.browser  # the host_case fixture stages a review through a real browser
 @pytest.mark.parametrize("host_case", [True], indirect=True)
 def test_declared_asset_set_is_bound_and_unchanged_apply_succeeds(host_case):
     case = host_case
@@ -32,6 +33,7 @@ def test_declared_asset_set_is_bound_and_unchanged_apply_succeeds(host_case):
     assert json.loads(applied.stdout.splitlines()[-1])["pluginWritesSource"] is False
 
 
+@pytest.mark.browser  # the host_case fixture stages a review through a real browser
 @pytest.mark.parametrize("host_case", [True], indirect=True)
 @pytest.mark.parametrize("change", ["changed", "removed", "undeclared", "added-to-manifest", "manifest-removed"])
 @pytest.mark.parametrize("during_confirmation", [False, True], ids=["after-review", "while-typing"])
@@ -75,6 +77,7 @@ def test_declared_asset_drift_refuses_without_writing(host_case, change, during_
     print("NO HOST WRITE", change, "while-typing=" + str(during_confirmation))
 
 
+@pytest.mark.browser  # the host_case fixture stages a review through a real browser
 @pytest.mark.parametrize("host_case", [True], indirect=True)
 @pytest.mark.parametrize("point", ["after-staging", "after-first-commit"])
 def test_fixture_abort_restores_all_bytes_and_restart_acquires_lock(host_case, point):

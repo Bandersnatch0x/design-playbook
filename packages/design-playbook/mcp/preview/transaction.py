@@ -31,6 +31,8 @@ from design_playbook.mcp.preview.visual_batch import (
     has_effective_visual_edits,
 )
 from design_playbook.mcp.preview.integrity import (
+    _MISSING,
+    binding_equivalent,
     compute_binding_digest,
     confirm_name,
     decision_name,
@@ -463,12 +465,16 @@ def load_entry(path: Path) -> dict[str, Any] | None:
     binding_valid = False
     if isinstance(binding, dict):
         try:
+            # Rebuild against the same era the record was written in: a
+            # missing route_url (pre-live-route record) stays absent from the
+            # canonical bytes and from the strict equality check, while an
+            # explicit value — including "" — is required to match exactly.
             expected = compute_binding_digest(
                 round_n=round_n,
                 prototype_html_hash=binding["prototype_html_hash"],
                 report_ref=binding["report_ref"], summary=binding["summary"],
                 options=binding["options"],
-                route_url=binding.get("route_url", ""),
+                route_url=binding.get("route_url", _MISSING),
             )
             binding_valid = binding == expected
         except (KeyError, TypeError):
@@ -813,7 +819,9 @@ def _run_locked(
         # The bound live-route URL is inside the digest, so a replay of a
         # committed round does not touch the network: an unchanged request
         # returns the record and a changed one is a binding conflict.
-        if existing["binding"].get("digest") != binding["digest"]:
+        # A pre-live-route record and a static replay are the same request
+        # (both mean "no live route") and repair from the record instead.
+        if not binding_equivalent(existing["binding"], binding):
             raise TransactionConflict(
                 f"round binding differs from durable decision; use next round: {round_n}",
                 retryable=False, round_n=round_n,
