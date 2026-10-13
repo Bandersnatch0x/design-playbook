@@ -15,7 +15,8 @@ def _merge_fn():
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="node missing")
-def test_merge_rule_table():
+def test_merge_rule_table(tmp_path):
+    node = shutil.which("node")
     cases = [
         ({"locator": "a", "property": "color", "viewport": "any", "_t": 1000, "newValue": "1"},
          {"locator": "a", "property": "color", "viewport": "any", "newValue": "2"}, 1400, True),
@@ -28,7 +29,11 @@ def test_merge_rule_table():
     ]
     js = _merge_fn() + "\nconst cases=" + json.dumps(cases) + \
         ";console.log(JSON.stringify(cases.map(([p,n,t,e])=>mergeEdit(p,n,t,MERGE_WINDOW_MS))));"
-    out = subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout
+    # node -e mangles multi-line payloads on some installs; run from a file.
+    script_path = tmp_path / "history_merge.js"
+    script_path.write_text(js, encoding="utf-8")
+    out = subprocess.run([node, str(script_path)], capture_output=True, text=True,
+                         encoding="utf-8", timeout=60, check=True).stdout
     assert json.loads(out) == [True, False, False, False]
 
 
