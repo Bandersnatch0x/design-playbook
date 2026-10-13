@@ -129,3 +129,53 @@ remediation plan is adopted. The ones this record governs:
 
 Stage P is not opened by this amendment. It still opens only by its own
 amendment after Stage S lands and the in-place repair batch is green.
+
+## Amendment (2026-10-13): build and runtime decision for Stage P
+
+The maintainer records the Decision 5 choice, so the build question no longer
+stands between Stage P and its opening amendment. The choice is option (a), no
+build step. For the run console and the workbench it is the default their
+opening amendments start from; either may still choose option (b) if it says
+why. It authorizes no change to those two surfaces now.
+
+- **Runtime, pinned by digest.** The `react` and `react-dom` 18.3.1 production
+  builds stay vendored under `mcp/preview/vendor/` and pinned by sha256 in the
+  preview vendor test. That directory is the only copy the plugin package
+  edits. A surface opened later reads those same files from the package, or,
+  for the separately distributed workbench, carries a copy gated against the
+  same digests. No runtime, package manager or bundler is fetched at install,
+  build or run time, and no npm dependency is added.
+- **No build step.** Components are plain scripts with type comments. Shared
+  code is written as immediately invoked functions that attach to one
+  `window.DPBUI` namespace, so classic scripts, module scripts and the Preview
+  shell's inline assembly can load the same bytes. No markup-in-script syntax,
+  no type compiler and no transpiled artifact is committed. Type comments are
+  hints, not a gate.
+- **Content-security policy unchanged.** The console and workbench shell
+  policies keep `script-src 'self'` exactly as they are. When a surface loads
+  the runtime or a shared module, it serves it as a same-origin file added to
+  that surface's exact route allow-list, under the same per-resource policy its
+  own scripts already get. Inline script, `'unsafe-inline'`, `'unsafe-eval'`,
+  and hash or nonce allowances are not used. Policy tests compare the whole
+  policy string instead of checking that it contains `script-src 'self'`, and
+  assert that no `unsafe-` source appears. Browser tests that load a shell
+  record `securitypolicyviolation` events and expect none. The Preview shell
+  keeps inlining the pinned runtime and keeps its current headers. The
+  workbench's sandboxed preview origin is not a shell and is not touched.
+- **Shared code and its drift gate.** Shared UI code has one canonical,
+  editable copy in the plugin package's shared directory, `mcp/_shared/`, which
+  already holds the shared tokens and glossary. One sync script is the only way
+  to copy it; it writes a sha256 lock file next to the workbench copies, which
+  sit flat in the workbench's `web/` directory because its package data does
+  not recurse. A root test asserts that every copy matches its canonical file,
+  that any workbench runtime copy matches the pinned digests, and that the lock
+  file matches the files on disk. The workbench refuses to start when its
+  copies disagree with the lock, and the packaging test asserts that the lock
+  and every copy are in the built distribution. Front-end contract constants
+  are generated from the server modules and follow the same rule: regenerated
+  and compared byte for byte with the committed file.
+
+This amendment chooses the build and runtime only. Stage P still opens by its
+own dated amendment, committed on its own, that names its files, exclusions and
+acceptance evidence (Decision 1), once Stage S has landed and the in-place
+repair batch is green on the merged tree.
