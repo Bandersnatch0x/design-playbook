@@ -1,14 +1,6 @@
 /* Direct preview edits are drafts until the bridge acknowledges a mutation. */
 (function () {
   "use strict";
-  var MERGE_WINDOW_MS = 500;
-  function mergeEdit(prev, next, now, windowMs) {
-    if (!prev || !next || prev.locator !== next.locator || prev.property !== next.property) return false;
-    if (prev.viewport !== next.viewport || !prev._t || now - prev._t > windowMs) return false;
-    prev.newValue = next.newValue;
-    prev._t = now;
-    return true;
-  }
   function boot() {
     if (!window.React || !window.ReactDOM) throw Error("Preview editor runtime missing");
     var React = window.React, h = React.createElement;
@@ -69,17 +61,10 @@
       }
       return next;
     }
-    function getEntryId(item) {
-      if (!item) return null;
-      if (item._entryId !== undefined) return item._entryId;
-      if (Array.isArray(item) && item.length > 0) {
-        if (item._entryId !== undefined) return item._entryId;
-        if (item[0]._entryId !== undefined) return item[0]._entryId;
-        if (item[0]._seq !== undefined) return item[0]._seq;
-      }
-      if (item._seq !== undefined) return item._seq;
-      return null;
-    }
+    // The edit ledger lives in control.edits.js, which the shell ships in its
+    // own block ahead of this bundle. A missing module means a wrong script
+    // order, so reading it here fails loudly instead of half-working.
+    var ledger = window.DPBEdit.ledger;
     // Whether the round still holds unpublished visual work. Pure over a state
     // snapshot so the rule executes in node without a browser; the component
     // assembles the snapshot from its refs. It deliberately does NOT consult a
@@ -459,94 +444,49 @@
           });
           if (edits.length) edits._entryId = opSeq;
           if (operation && operation.action === "undo") {
-            var targetId = getEntryId(operation.entry);
-            var hist = historyRef.current || [];
-            var targetIdx = -1;
-            for (var i = hist.length - 1; i >= 0; i--) {
-              if (getEntryId(hist[i]) === targetId) {
-                targetIdx = i;
-                break;
-              }
-            }
-            if (targetIdx >= 0) {
-              var nextHist = hist.slice(0, targetIdx).concat(hist.slice(targetIdx + 1));
-              historyRef.current = nextHist;
-              setHistory(nextHist);
-              var fut = futureRef.current || [];
-              var alreadyInFut = fut.some(function (f) { return getEntryId(f) === targetId; });
-              var nextFut = alreadyInFut ? fut : fut.concat([operation.entry]);
-              futureRef.current = nextFut;
-              setFuture(nextFut);
-              var nextPending = (pendingRef.current || []).filter(function (e) {
-                return getEntryId(e) !== targetId;
-              });
-              pendingRef.current = nextPending;
-              setPending(nextPending);
-              publishBatch(nextPending, current.current.stale);
+            var undoLists = ledger.undoEntry({ pending: pendingRef.current,
+              history: historyRef.current, future: futureRef.current }, operation.entry);
+            if (undoLists) {
+              historyRef.current = undoLists.history;
+              setHistory(undoLists.history);
+              futureRef.current = undoLists.future;
+              setFuture(undoLists.future);
+              pendingRef.current = undoLists.pending;
+              setPending(undoLists.pending);
+              publishBatch(undoLists.pending, current.current.stale);
             }
           } else if (operation && operation.action === "redo") {
-            var targetId = getEntryId(operation.entry);
-            var fut = futureRef.current || [];
-            var targetIdx = -1;
-            for (var i = fut.length - 1; i >= 0; i--) {
-              if (getEntryId(fut[i]) === targetId) {
-                targetIdx = i;
-                break;
-              }
-            }
-            if (targetIdx >= 0) {
-              var nextFut = fut.slice(0, targetIdx).concat(fut.slice(targetIdx + 1));
-              futureRef.current = nextFut;
-              setFuture(nextFut);
-              var hist = historyRef.current || [];
-              var alreadyInHist = hist.some(function (h) { return getEntryId(h) === targetId; });
-              var nextHist = alreadyInHist ? hist : hist.concat([operation.entry]);
-              nextHist.sort(function (a, b) {
-                var aSeq = (a && a[0] && (a[0]._seq || a[0]._entryId)) || 0;
-                var bSeq = (b && b[0] && (b[0]._seq || b[0]._entryId)) || 0;
-                return aSeq - bSeq;
-              });
-              historyRef.current = nextHist;
-              setHistory(nextHist);
-              var curPending = pendingRef.current || [];
-              var alreadyInPending = curPending.some(function (e) { return getEntryId(e) === targetId; });
-              var nextPending = alreadyInPending ? curPending : curPending.concat(operation.entry);
-              nextPending.sort(function (a, b) {
-                return ((a._seq || a._entryId) || 0) - ((b._seq || b._entryId) || 0);
-              });
-              pendingRef.current = nextPending;
-              setPending(nextPending);
-              publishBatch(nextPending, current.current.stale);
+            var redoLists = ledger.redoEntry({ pending: pendingRef.current,
+              history: historyRef.current, future: futureRef.current }, operation.entry);
+            if (redoLists) {
+              futureRef.current = redoLists.future;
+              setFuture(redoLists.future);
+              historyRef.current = redoLists.history;
+              setHistory(redoLists.history);
+              pendingRef.current = redoLists.pending;
+              setPending(redoLists.pending);
+              publishBatch(redoLists.pending, current.current.stale);
             }
           } else if (edits.length === 1 && (function () {
             var hist = historyRef.current || [], last = hist[hist.length - 1];
-            return !!(last && last.length === 1 && !(futureRef.current || []).length && mergeEdit(last[0], edits[0], edits[0]._t, MERGE_WINDOW_MS));
+            return !!(last && last.length === 1 && !(futureRef.current || []).length && ledger.mergeEdit(last[0], edits[0], edits[0]._t, ledger.MERGE_WINDOW_MS));
           })()) {
             var merged = (pendingRef.current || []).slice();
             pendingRef.current = merged;
             setPending(merged);
             publishBatch(merged, current.current.stale);
           } else if (edits.length) {
-            var nextPending = (pendingRef.current || []).concat(edits);
-            nextPending.sort(function (a, b) { return (a._seq || 0) - (b._seq || 0); });
-            pendingRef.current = nextPending;
+            var appended = ledger.appendEdits({ pending: pendingRef.current,
+              history: historyRef.current, future: futureRef.current }, edits, opSeq);
+            pendingRef.current = appended.pending;
             setPending(pendingRef.current);
-            var nextHist = (historyRef.current || []).concat([edits]);
-            nextHist.sort(function (a, b) {
-              var aSeq = (a && a[0] && a[0]._seq) || 0;
-              var bSeq = (b && b[0] && b[0]._seq) || 0;
-              return aSeq - bSeq;
-            });
-            historyRef.current = nextHist;
-            setHistory(nextHist);
-            var fut = futureRef.current || [];
-            var isOlderReceipt = fut.some(function (f) {
-              var fSeq = (f && f[0] && (f[0]._seq || f[0]._entryId)) || 0;
-              return opSeq < fSeq;
-            });
-            if (!isOlderReceipt) {
-              futureRef.current = [];
-              setFuture([]);
+            historyRef.current = appended.history;
+            setHistory(appended.history);
+            // null means the redo stack still stands: a receipt that is older
+            // than something already in it must not throw that stack away.
+            if (appended.future !== null) {
+              futureRef.current = appended.future;
+              setFuture(appended.future);
             }
             publishBatch(pendingRef.current, current.current.stale);
           }
@@ -594,7 +534,7 @@
       }, []);
       function publishBatch(editsList, isStale) {
         var list = editsList !== undefined ? editsList : (pendingRef.current || []);
-        var sorted = (list || []).slice().sort(function (a, b) { return (a._seq || 0) - (b._seq || 0); });
+        var sorted = (list || []).slice().sort(ledger.bySeq);
         var cleanEdits = sorted.map(function (e) {
           return { kind: e.kind, viewport: e.viewport, locator: e.locator,
             property: e.property, oldValue: e.oldValue, newValue: e.newValue,

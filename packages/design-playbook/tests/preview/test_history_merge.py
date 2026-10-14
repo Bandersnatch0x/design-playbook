@@ -8,10 +8,13 @@ from pathlib import Path
 import pytest
 
 SRC = (Path(__file__).resolve().parents[2] / "mcp" / "preview" / "control.react.js").read_text(encoding="utf-8")
+# Slice S1 moved the ledger rules into their own module; the component reads
+# them from there, so this extraction follows the rule to where it now lives.
+LEDGER = (Path(__file__).resolve().parents[2] / "mcp" / "preview" / "control.edits.js").read_text(encoding="utf-8")
 
 
 def _merge_fn():
-    return re.search(r"var MERGE_WINDOW_MS = 500;\n  function mergeEdit.*?\n  \}\n", SRC, re.S).group(0)
+    return re.search(r"var MERGE_WINDOW_MS = 500;\n  function mergeEdit.*?\n  \}\n", LEDGER, re.S).group(0)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="node missing")

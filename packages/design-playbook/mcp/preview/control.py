@@ -154,6 +154,17 @@ def _load_shared_core() -> str:
         ) from exc
 
 
+@lru_cache(maxsize=1)
+def _load_edit_ledger() -> str:
+    """Load the edit-ledger module inlined ahead of the React editor."""
+    try:
+        return (HERE / "control.edits.js").read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise RuntimeError(
+            f"Failed to load preview edit ledger resources from {HERE}"
+        ) from exc
+
+
 def _script_safe(value: str) -> str:
     """Keep an inline script payload from closing its containing tag."""
     return value.replace("</", "<\\/").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
@@ -276,6 +287,7 @@ def _build_control(
     html_tpl, css_tpl, js_tpl, _review_tpl = _load_resources()
     react_js, react_dom_js, react_editor_js = _load_react_resources()
     shared_core = _load_shared_core()
+    edit_ledger = _load_edit_ledger()
     js_formatted = js_tpl
     localized_copy = {f"t_{key}": html_lib.escape(t(key), quote=True) for key in _STRINGS[ZH]}
     localized_copy["t_round"] = html_lib.escape(t("round_n", n=round_n))
@@ -316,6 +328,9 @@ def _build_control(
         # shell below reads through them instead of copying them.
         f"<script>\n{shared_core}</script>\n"
         f"<script>\n{js_formatted}\n</script>\n"
+        # The ledger module must be defined before the editor starts its
+        # component: the component reads `window.DPBEdit` while it is defined.
+        f"<script>\n{_script_safe(edit_ledger)}\n</script>\n"
         f"<script>\n{_script_safe(react_js)}\n</script>\n"
         f"<script>\n{_script_safe(react_dom_js)}\n</script>\n"
         f"<script>\n{_script_safe(react_editor_js)}\n</script>"
