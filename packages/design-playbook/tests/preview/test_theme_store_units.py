@@ -1,16 +1,17 @@
 """The theme store's rule and write path, executed from the shipped file.
 
-`control.js` resolves the active theme from three inputs — an explicit host
+`mcp/_shared/dpbui-core.js` resolves the active theme from three inputs — an explicit host
 preference on <html>/<body>, the stored choice, and the system scheme — and
 that precedence decides what every shell surface renders in. The store keeps
 it as a pure function plus a single write point, so this extracts the store's
-source text from the shipped file and runs it in node over a case table, with
-a minimal DOM stub standing in for the surfaces. It needs node, which the
-repository already requires for its JavaScript checks.
+source text from the canonical shared file and runs it in node over a case
+table, with a minimal DOM stub standing in for the surfaces. It needs node,
+which the repository already requires for its JavaScript checks.
 """
 from __future__ import annotations
 
 import json
+import sys
 import shutil
 import subprocess
 from pathlib import Path
@@ -18,7 +19,12 @@ from pathlib import Path
 import pytest
 
 PKG_ROOT = Path(__file__).resolve().parents[2]
+if str(PKG_ROOT) not in sys.path:  # one import seam (ADR-0022)
+    sys.path.insert(0, str(PKG_ROOT))
+from design_playbook.mcp.preview import control as preview_control  # noqa: E402
+
 PREVIEW = PKG_ROOT / "mcp" / "preview"
+CORE = PKG_ROOT / "mcp" / "_shared" / "dpbui-core.js"
 SHELL = PREVIEW / "control.js"
 REVIEW = PREVIEW / "control.review.js"
 
@@ -81,7 +87,7 @@ console.log(JSON.stringify(out));
 
 
 def _store_text() -> str:
-    source = SHELL.read_text(encoding="utf-8")
+    source = CORE.read_text(encoding="utf-8")
     start = source.index("DPBUI.theme = (function () {")
     depth = 0
     for i in range(source.index("{", start), len(source)):
@@ -135,7 +141,21 @@ def test_the_theme_store_keeps_its_answers(tmp_path) -> None:
 
 
 def test_the_theme_preference_has_one_write_point() -> None:
+    core = CORE.read_text(encoding="utf-8")
     shell = SHELL.read_text(encoding="utf-8")
     review = REVIEW.read_text(encoding="utf-8")
-    assert shell.count('"dpb.preview.theme"') == 1
+    assert core.count('"dpb.preview.theme"') == 1
+    assert "dpb.preview.theme" not in shell
     assert "dpb.preview.theme" not in review
+
+
+def test_the_assembled_page_carries_the_stores_once_before_the_shell() -> None:
+    # The shell reads through the stores, so the canonical bytes must reach the
+    # page exactly once, in their own block ahead of the shell bundle — a second
+    # copy here is the drift this move exists to remove.
+    core = CORE.read_text(encoding="utf-8")
+    page = preview_control._build_control(2, "Review summary", ["Confirm", "Revise"])
+    assert page.count(core) == 1
+    shell_anchor = 'function chromeLabels(surface, selector) {'
+    assert page.index(core) < page.index(shell_anchor)
+    assert page.count("DPBUI.theme = (function () {") == 1

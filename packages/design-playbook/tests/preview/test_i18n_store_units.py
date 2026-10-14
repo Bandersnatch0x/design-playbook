@@ -1,15 +1,16 @@
 """The locale store's table swap and lookups, executed from the shipped file.
 
-`control.js` holds the active label table plus the dual dict, and the review
-file's language toggle swaps them. The swap is a single write point now, so
-this extracts the store's source text from the shipped file and runs it in
-node over a case table with a stub dict. It needs node, which the repository
-already requires for its JavaScript checks.
+`mcp/_shared/dpbui-core.js` holds the active label table plus the dual dict,
+and the review file's language toggle swaps them. The swap is a single write
+point now, so this extracts the store's source text from the canonical shared
+file and runs it in node over a case table with a stub dict. It needs node,
+which the repository already requires for its JavaScript checks.
 """
 from __future__ import annotations
 
 import json
 import re
+import sys
 import shutil
 import subprocess
 from pathlib import Path
@@ -17,7 +18,11 @@ from pathlib import Path
 import pytest
 
 PKG_ROOT = Path(__file__).resolve().parents[2]
+if str(PKG_ROOT) not in sys.path:  # one import seam (ADR-0022)
+    sys.path.insert(0, str(PKG_ROOT))
+
 PREVIEW = PKG_ROOT / "mcp" / "preview"
+CORE = PKG_ROOT / "mcp" / "_shared" / "dpbui-core.js"
 SHELL = PREVIEW / "control.js"
 REVIEW = PREVIEW / "control.review.js"
 
@@ -60,7 +65,7 @@ console.log(JSON.stringify(out));
 
 
 def _store_text() -> str:
-    source = SHELL.read_text(encoding="utf-8")
+    source = CORE.read_text(encoding="utf-8")
     start = source.index("DPBUI.i18n = (function () {")
     depth = 0
     for i in range(source.index("{", start), len(source)):
@@ -118,12 +123,14 @@ def test_the_initial_locale_comes_from_the_root_lang(tmp_path) -> None:
 
 
 def test_the_locale_state_has_one_write_point() -> None:
+    core = CORE.read_text(encoding="utf-8")
     shell = SHELL.read_text(encoding="utf-8")
     review = REVIEW.read_text(encoding="utf-8")
     # Every write to the locale lives in the store block: outside it, the
     # shell and the review file only read through DPBUI.i18n.
-    outside_store = shell.replace(_store_text(), "")
+    outside_store = core.replace(_store_text(), "")
     assert re.search(r"(?m)^\s*(?:var\s+)?lang\s*=", outside_store) is None
+    assert re.search(r"(?m)^\s*(?:var\s+)?lang\s*=", shell) is None
     assert "langState" not in shell
     assert "langState" not in review
     assert "DPBUI.i18n" in review

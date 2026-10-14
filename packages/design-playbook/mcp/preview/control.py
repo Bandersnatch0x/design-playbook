@@ -143,6 +143,17 @@ def _load_react_resources() -> tuple[str, str, str]:
         ) from exc
 
 
+@lru_cache(maxsize=1)
+def _load_shared_core() -> str:
+    """Load the canonical preference stores inlined ahead of the shell bundle."""
+    try:
+        return (HERE.parent / "_shared" / "dpbui-core.js").read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise RuntimeError(
+            f"Failed to load shared UI core from {HERE.parent / '_shared'}"
+        ) from exc
+
+
 def _script_safe(value: str) -> str:
     """Keep an inline script payload from closing its containing tag."""
     return value.replace("</", "<\\/").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
@@ -264,6 +275,7 @@ def _build_control(
     )
     html_tpl, css_tpl, js_tpl, _review_tpl = _load_resources()
     react_js, react_dom_js, react_editor_js = _load_react_resources()
+    shared_core = _load_shared_core()
     js_formatted = js_tpl
     localized_copy = {f"t_{key}": html_lib.escape(t(key), quote=True) for key in _STRINGS[ZH]}
     localized_copy["t_round"] = html_lib.escape(t("round_n", n=round_n))
@@ -300,6 +312,9 @@ def _build_control(
         f"<script>window.DPB_I18N_DUAL = {dual_json};</script>\n"
         f"<script>window.DPB_SKIP_LABELS = {skip_labels_json};</script>\n"
         f"<script>window.DPB_DRAFT_KEY = {json.dumps(draft_key)};</script>\n"
+        # The canonical stores ride in their own block, byte-for-byte, so the
+        # shell below reads through them instead of copying them.
+        f"<script>\n{shared_core}</script>\n"
         f"<script>\n{js_formatted}\n</script>\n"
         f"<script>\n{_script_safe(react_js)}\n</script>\n"
         f"<script>\n{_script_safe(react_dom_js)}\n</script>\n"
