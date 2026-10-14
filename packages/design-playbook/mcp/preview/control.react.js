@@ -85,8 +85,7 @@
 
     function Editor() {
       var [selected, setSelected] = React.useState(null);
-      var [pending, setPending] = React.useState([]);
-      var [history, setHistory] = React.useState([]);
+      var [entries, setEntries] = React.useState([]);
       var [future, setFuture] = React.useState([]);
       var [drafts, setDrafts] = React.useState({});
       var [invalid, setInvalid] = React.useState({});
@@ -105,10 +104,8 @@
       var current = React.useRef({}), request = React.useRef(null);
       var sequence = React.useRef(0), draftTimers = React.useRef({});
       var accepted = React.useRef({});
-      var pendingRef = React.useRef(pending);
-      pendingRef.current = pending;
-      var historyRef = React.useRef(history);
-      historyRef.current = history;
+      var entriesRef = React.useRef(entries);
+      entriesRef.current = entries;
       var futureRef = React.useRef(future);
       futureRef.current = future;
       var requestPromiseRef = React.useRef(null);
@@ -149,8 +146,13 @@
         });
       }
       var binding = window.DPB_VISUAL_BINDING || { sourceHash: "", routeUrl: "" };
-      current.current = { selected: selected, pending: pending, history: history,
+      current.current = { selected: selected, entries: entries,
         future: future, ready: ready, stale: stale, drafts: drafts };
+      // The flat view of the ledger: the edits this round has not published
+      // away. Its length is the pending count, not entries.length - one resize
+      // receipt is one entry carrying two edits. Derived in the render body so
+      // the effects below keep the source state in their dependency arrays.
+      var flat = ledger.flatten(entries);
       function t(key) {
         var table = window.DPB_I18N_DUAL;
         var isZh = (locale || "en").indexOf("zh") === 0;
@@ -184,7 +186,7 @@
         setReady(false);
         setConnecting(false);
         // Retain unresolved drafts across disconnect (§3.3)
-        if (current.current.pending.length) setStale(true);
+        if (current.current.entries.length) setStale(true);
         Object.values(draftTimers.current).forEach(clearTimeout);
         draftTimers.current = {};
         var interrupted = Object.values(unackedRequests.current);
@@ -444,51 +446,48 @@
           });
           if (edits.length) edits._entryId = opSeq;
           if (operation && operation.action === "undo") {
-            var undoLists = ledger.undoEntry({ pending: pendingRef.current,
-              history: historyRef.current, future: futureRef.current }, operation.entry);
+            var undoLists = ledger.undoEntry({ entries: entriesRef.current,
+              future: futureRef.current }, operation.entry);
             if (undoLists) {
-              historyRef.current = undoLists.history;
-              setHistory(undoLists.history);
+              entriesRef.current = undoLists.entries;
+              setEntries(undoLists.entries);
               futureRef.current = undoLists.future;
               setFuture(undoLists.future);
-              pendingRef.current = undoLists.pending;
-              setPending(undoLists.pending);
-              publishBatch(undoLists.pending, current.current.stale);
+              publishBatch(ledger.flatten(undoLists.entries), current.current.stale);
             }
           } else if (operation && operation.action === "redo") {
-            var redoLists = ledger.redoEntry({ pending: pendingRef.current,
-              history: historyRef.current, future: futureRef.current }, operation.entry);
+            var redoLists = ledger.redoEntry({ entries: entriesRef.current,
+              future: futureRef.current }, operation.entry);
             if (redoLists) {
               futureRef.current = redoLists.future;
               setFuture(redoLists.future);
-              historyRef.current = redoLists.history;
-              setHistory(redoLists.history);
-              pendingRef.current = redoLists.pending;
-              setPending(redoLists.pending);
-              publishBatch(redoLists.pending, current.current.stale);
+              entriesRef.current = redoLists.entries;
+              setEntries(redoLists.entries);
+              publishBatch(ledger.flatten(redoLists.entries), current.current.stale);
             }
           } else if (edits.length === 1 && (function () {
-            var hist = historyRef.current || [], last = hist[hist.length - 1];
+            var list = entriesRef.current || [], last = list[list.length - 1];
             return !!(last && last.length === 1 && !(futureRef.current || []).length && ledger.mergeEdit(last[0], edits[0], edits[0]._t, ledger.MERGE_WINDOW_MS));
           })()) {
-            var merged = (pendingRef.current || []).slice();
-            pendingRef.current = merged;
-            setPending(merged);
-            publishBatch(merged, current.current.stale);
+            // The coalesce mutates the edit object the last entry already holds,
+            // so the merged value reaches the batch through the projection. The
+            // shallow copy only hands React a new list to render; keep it.
+            var merged = (entriesRef.current || []).slice();
+            entriesRef.current = merged;
+            setEntries(merged);
+            publishBatch(ledger.flatten(merged), current.current.stale);
           } else if (edits.length) {
-            var appended = ledger.appendEdits({ pending: pendingRef.current,
-              history: historyRef.current, future: futureRef.current }, edits, opSeq);
-            pendingRef.current = appended.pending;
-            setPending(pendingRef.current);
-            historyRef.current = appended.history;
-            setHistory(appended.history);
+            var appended = ledger.appendEdits({ entries: entriesRef.current,
+              future: futureRef.current }, edits, opSeq);
+            entriesRef.current = appended.entries;
+            setEntries(appended.entries);
             // null means the redo stack still stands: a receipt that is older
             // than something already in it must not throw that stack away.
             if (appended.future !== null) {
               futureRef.current = appended.future;
               setFuture(appended.future);
             }
-            publishBatch(pendingRef.current, current.current.stale);
+            publishBatch(ledger.flatten(entriesRef.current), current.current.stale);
           }
           if (state.selected && state.selected.selector === change.selector) {
             changes.forEach(function (c) {
@@ -533,7 +532,7 @@
         };
       }, []);
       function publishBatch(editsList, isStale) {
-        var list = editsList !== undefined ? editsList : (pendingRef.current || []);
+        var list = editsList !== undefined ? editsList : ledger.flatten(entriesRef.current);
         var sorted = (list || []).slice().sort(ledger.bySeq);
         var cleanEdits = sorted.map(function (e) {
           return { kind: e.kind, viewport: e.viewport, locator: e.locator,
@@ -556,19 +555,19 @@
         return batch;
       }
       React.useEffect(function () {
-        publishBatch(pending, stale);
+        publishBatch(flat, stale);
         var tabEl = document.getElementById("dpb-tab-visual");
-        if (tabEl) tabEl.classList.toggle("is-pending", pending.length > 0);
+        if (tabEl) tabEl.classList.toggle("is-pending", flat.length > 0);
         var countEl = document.getElementById("dpb-visual-count");
-        if (countEl) countEl.textContent = String(pending.length);
-      }, [pending, stale]);
+        if (countEl) countEl.textContent = String(flat.length);
+      }, [entries, stale]);
       React.useEffect(function () {
         // The rail's mirror also depends on work that is in flight (an edit whose
         // acknowledgement has not arrived) and on unsent keystrokes, which do not
         // change the published batch. Tell it whenever those move, so the first
         // edit is submittable immediately instead of only after its receipt.
         document.dispatchEvent(new CustomEvent("dpbVisualEditsChanged"));
-      }, [busy, pending, drafts]);
+      }, [busy, entries, drafts]);
       React.useEffect(function () {
         var modelContext = navigator.modelContext;
         if (!modelContext || typeof modelContext.registerTool !== "function") modelContext = document.modelContext;
@@ -604,7 +603,7 @@
           if (hasPendingVisualEdits()) {
             return Promise.resolve({ ok: false, error: "visual_unavailable" });
           }
-          publishBatch(pendingRef.current, state.stale);
+          publishBatch(ledger.flatten(entriesRef.current), state.stale);
           return Promise.resolve({ ok: true, batch: window.DPB_VISUAL_EDIT_BATCH });
         }
         isDrainingRef.current = true;
@@ -640,7 +639,7 @@
               resolve({ ok: false, error: err || "drain_failed" });
               return;
             }
-            var batch = publishBatch(pendingRef.current, current.current.stale);
+            var batch = publishBatch(ledger.flatten(entriesRef.current), current.current.stale);
             resolve({ ok: true, batch: batch });
           }
 
@@ -746,8 +745,8 @@
         return top && top[0] ? verb + " " + top[0].property : verb;
       }
       function replay(action) {
-        var entries = action === "undo" ? (historyRef.current || []) : (futureRef.current || []);
-        var entry = entries[entries.length - 1];
+        var stack = action === "undo" ? (entriesRef.current || []) : (futureRef.current || []);
+        var entry = stack[stack.length - 1];
         if (entry) applyStyle(entry[0].property, action === "undo" ? entry[0].oldValue : entry[0].newValue, action, entry);
       }
       return h("section", { className: "dpb-react-editor", "aria-label": t("visual_title") },
@@ -756,9 +755,9 @@
         h("div", { className: "dpb-react-route" }, binding.routeUrl || t("visual_artifact")),
         h("div", { className: "dpb-react-selection" }, selected ? selected.selector : t("visual_select")),
         h("div", { className: "dpb-react-actions" },
-          h("button", { type: "button", disabled: !ready || stale || busy || !history.length, "aria-label": historyLabel(t("visual_undo"), history), onClick: function () { replay("undo"); } }, t("visual_undo")),
+          h("button", { type: "button", disabled: !ready || stale || busy || !entries.length, "aria-label": historyLabel(t("visual_undo"), entries), onClick: function () { replay("undo"); } }, t("visual_undo")),
           h("button", { type: "button", disabled: !ready || stale || busy || !future.length, "aria-label": historyLabel(t("visual_redo"), future), onClick: function () { replay("redo"); } }, t("visual_redo")),
-          h("span", { className: "dpb-react-pending-count" }, t("visual_pending").replace("{n}", pending.length))),
+          h("span", { className: "dpb-react-pending-count" }, t("visual_pending").replace("{n}", flat.length))),
         h("p", { className: "dpb-react-diagnostic", role: "status", "data-stale": stale }, stale ? t("visual_stale") : connecting ? "" : diagnostic ? t(diagnostic) : ""),
         !connecting && !ready && !stale && diagnostic === "visual_disconnected" && h("button", { type: "button", className: "dpb-react-retry",
           onClick: function () { frame.dispatchEvent(new Event("load")); } }, t("visual_retry")),
@@ -931,7 +930,7 @@
             var sectionProperties = { colors: /^(color|background-color)$/, typography: /^(font-|line-height|letter-spacing)/,
               layout: /^(display|position|flex|justify|align|gap|width|height|transform)/,
               spacing: /^(padding|margin)/, border: /^border-/ };
-            var modified = pending.some(function (edit) {
+            var modified = flat.some(function (edit) {
               return selected && edit.locator === selected.selector && sectionProperties[secId].test(edit.property);
             });
             return h("section", { className: "dpb-inspector-section" + (isClosed ? " is-collapsed" : " is-open"), key: secId, "data-section": secId },

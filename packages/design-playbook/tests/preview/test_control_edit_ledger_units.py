@@ -2,10 +2,10 @@
 
 `control.edits.js` decides how a direct visual edit coalesces into the entry the
 review queue publishes, and how undo, redo and a new append move that entry
-between the pending, history and future lists. Until this module existed the
+between the entries list and the redo stack. Until this module existed the
 only thing that could evaluate any of it was the browser matrix, so a wrong
 comparison or a lost guard was only visible as a large area of red. These rules
-are pure over the three lists, so this loads the shipped module in node against
+are pure over the two lists, so this loads the shipped module in node against
 a case table. It needs node, which the repository already requires for its
 JavaScript checks.
 
@@ -72,67 +72,81 @@ eq(L.mergeEdit(at(edit(1, "color", "a", "b"), 1000),
   { locator: "#a", property: "color", viewport: "mobile", newValue: "c" }, 1100, L.MERGE_WINDOW_MS),
   false, "mergeEdit viewport branch");
 
-// Aliasing: the coalesce mutates the object that the history group and the flat
-// pending list both hold, and that shared identity is what makes the merged
-// value reach the published batch. It is the mechanism, not a coincidence.
+// Aliasing: the coalesce mutates the edit object the last entry of `entries`
+// still holds, and that shared identity is what carries the merged value into
+// the batch through the flat projection. It is the mechanism, not a coincidence.
 var shared = edit(1, "color", "a", "b");
-var sharedGroup = group(shared);
-var aliasState = { pending: [shared], history: [sharedGroup], future: [] };
+var sharedEntries = [group(shared)];
 eq(L.mergeEdit(at(shared, 1000), edit(2, "color", "b", "c"), 1400, L.MERGE_WINDOW_MS),
   true, "alias merge");
-eq(aliasState.history[0][0] === aliasState.pending[0], true, "alias identity");
-eq(aliasState.pending[0].newValue, "c", "merged value reaches the pending edit");
-eq(aliasState.pending.length, 1, "a coalesce adds nothing to pending");
+eq(sharedEntries[0][0] === L.flatten(sharedEntries)[0], true, "alias identity");
+eq(L.flatten(sharedEntries)[0].newValue, "c", "merged value reaches the projected edit");
+eq(L.flatten(sharedEntries).length, 1, "a coalesce adds nothing to the projection");
 
-// Append: pending sorts flat by sequence, history sorts grouped, and a newer
-// receipt clears the redo stack.
 var e1 = edit(1, "color", "a", "b");
 var e2 = edit(2, "width", "c", "d");
 var e3 = edit(3, "color", "e", "f");
 var g1 = group(e1), g2 = group(e2), g3 = group(e3);
-var appended = L.appendEdits({ pending: [e2], history: [g2], future: [] }, group(e1), 1);
-eq(ids(appended.pending), [1, 2], "append reorders pending");
-eq(seq(appended.history), [1, 2], "append reorders history");
+
+// The cardinality the rail depends on: `entries` is the undo stack, the
+// projection is the count. One corner resize is one receipt carrying two edits,
+// so only the projection length is what `#dpb-visual-count` shows.
+var resize = group(edit(4, "width", "1px", "2px"), edit(4, "height", "1px", "2px"));
+var card = L.appendEdits({ entries: [], future: [] }, resize, 4);
+eq(seq(card.entries), [4], "one receipt is one entry");
+eq(card.entries.length, 1, "entries.length counts undo steps, not edits");
+eq(L.flatten(card.entries).length, 2, "the projection counts edits");
+
+// flatten: the grouped entries concatenated and ordered by sequence, so a batch
+// never publishes out of the order the reviewer made the edits in.
+eq(ids(L.flatten([g3, g1, g2])), [1, 2, 3], "flatten orders by sequence");
+eq(L.flatten([]).length, 0, "flatten of no entries is empty");
+eq(L.flatten(undefined).length, 0, "flatten of nothing is empty");
+
+// Append: the entry joins the list in sequence order, and a newer receipt
+// clears the redo stack.
+var appended = L.appendEdits({ entries: [g2], future: [] }, g1, 1);
+eq(seq(appended.entries), [1, 2], "append reorders the entries list");
+eq(ids(L.flatten(appended.entries)), [1, 2], "append reorders the projection");
 eq(appended.future, [], "append invalidates the redo stack");
-eq(appended.history[1] === g2, true, "append keeps the existing entry by identity");
-eq(appended.pending[0] === e1, true, "append keeps each edit by identity");
+eq(appended.entries[1] === g2, true, "append keeps the existing entry by identity");
+eq(L.flatten(appended.entries)[0] === e1, true, "append keeps each edit by identity");
 
 // An older receipt must not throw a newer redo stack away; a null `future` is
 // the module's signal that the component leaves its stack alone.
-var older = L.appendEdits({ pending: [e1], history: [g1], future: [g3] }, group(e2), 2);
+var older = L.appendEdits({ entries: [g1], future: [g3] }, g2, 2);
 eq(older.future, null, "an older receipt keeps the redo stack");
-eq(ids(older.pending), [1, 2], "an older receipt still appends its edit");
-eq(seq(older.history), [1, 2], "an older receipt still records its entry");
-var newer = L.appendEdits({ pending: [e1], history: [g1], future: [g2] }, group(e3), 3);
+eq(seq(older.entries), [1, 2], "an older receipt still records its entry");
+var newer = L.appendEdits({ entries: [g1], future: [g2] }, g3, 3);
 eq(newer.future, [], "a newer receipt invalidates the redo stack");
 
-// Undo moves the entry from history to future and drops its edits from pending.
-var undone = L.undoEntry({ pending: [e1, e2], history: [g1, g2], future: [] }, g2);
-eq(ids(undone.pending), [1], "undo clears the entry's edits from pending");
-eq(seq(undone.history), [1], "undo consumes the history entry");
+// Undo moves the entry out of the list and onto the redo stack; its edits leave
+// the projection with it.
+var undone = L.undoEntry({ entries: [g1, g2], future: [] }, g2);
+eq(seq(undone.entries), [1], "undo consumes the entry");
+eq(ids(L.flatten(undone.entries)), [1], "undo clears the entry's edits from the projection");
 eq(seq(undone.future), [2], "undo pushes onto the redo stack");
 eq(undone.future[0] === g2, true, "undo keeps the entry by identity");
-eq(L.undoEntry({ pending: [], history: [g1], future: [] }, g2), null,
-  "undo of an entry that is no longer in history does nothing");
+eq(L.undoEntry({ entries: [g1], future: [] }, g2), null,
+  "undo of an entry that is no longer in the list does nothing");
 // alreadyInFut: the entry is already queued for redo, so it must not appear twice.
-var undup = L.undoEntry({ pending: [], history: [g1], future: [g1] }, g1);
+var undup = L.undoEntry({ entries: [g1], future: [g1] }, g1);
 eq(seq(undup.future), [1], "undo does not duplicate a future entry");
 
-// Redo is undo's mirror, and re-orders both lists it touches.
-var redone = L.redoEntry({ pending: [], history: [g2], future: [g1] }, g1);
-eq(ids(redone.pending), [1], "redo returns the edits to pending");
-eq(seq(redone.history), [1, 2], "redo re-orders history by sequence");
+// Redo is undo's mirror, and re-orders the list it touches.
+var redone = L.redoEntry({ entries: [g2], future: [g1] }, g1);
+eq(seq(redone.entries), [1, 2], "redo re-orders the entries list by sequence");
+eq(ids(L.flatten(redone.entries)), [1, 2], "redo returns the edits to the projection");
 eq(seq(redone.future), [], "redo consumes the redo stack");
-eq(L.redoEntry({ pending: [], history: [], future: [g1] }, g2), null,
-  "redo of an entry that is no longer in future does nothing");
-// alreadyInHist / alreadyInPending: a receipt that arrived twice must not put
-// the entry or its edits in a list twice.
-var rehist = L.redoEntry({ pending: [e1], history: [g1], future: [g1] }, g1);
-eq(seq(rehist.history), [1], "redo does not duplicate a history entry");
-eq(ids(rehist.pending), [1], "redo does not duplicate pending edits");
+eq(L.redoEntry({ entries: [], future: [g1] }, g2), null,
+  "redo of an entry that is no longer in the redo stack does nothing");
+// alreadyInHist: a receipt that arrived twice must not put the entry in twice.
+var rehist = L.redoEntry({ entries: [g1], future: [g1] }, g1);
+eq(seq(rehist.entries), [1], "redo does not duplicate an entry");
+eq(ids(L.flatten(rehist.entries)), [1], "redo does not duplicate the projected edits");
 
-// publishBatch's own ordering: a nested entry sorts on its first edit, so a
-// batch never publishes out of the order the reviewer made the edits in.
+// publishBatch's own ordering over a list it is handed: a nested entry sorts on
+// its first edit, so a batch never publishes out of sequence.
 var flat = [e3, e1, e2];
 eq(ids(flat.slice().sort(L.bySeq)), [1, 2, 3], "batch order over a flat list");
 eq([e3, e1, e2].map(L.seqOf), [3, 1, 2], "seqOf reads a flat edit");
@@ -182,7 +196,7 @@ def test_the_edit_ledger_keeps_its_answers(tmp_path) -> None:
 
 
 @pytest.mark.parametrize("rule", ["mergeEdit", "getEntryId", "seqOf", "bySeq",
-                                  "undoEntry", "redoEntry", "appendEdits"])
+                                  "flatten", "undoEntry", "redoEntry", "appendEdits"])
 def test_each_moved_rule_is_defined_exactly_once(rule: str) -> None:
     # The component must not carry a second copy: a drifted pair of copies is
     # the exact failure mode this extraction exists to remove.
