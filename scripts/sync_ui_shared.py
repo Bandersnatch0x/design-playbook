@@ -53,4 +53,10 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    import sys
+
+    sys.path.insert(0, str(ROOT / "packages" / "design-playbook"))
+    from design_playbook.scripts.stdio_encoding import configure_piped_utf8
+
+    configure_piped_utf8()
     raise SystemExit(main())
