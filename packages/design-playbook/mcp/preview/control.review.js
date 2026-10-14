@@ -508,17 +508,34 @@
   }
 
   // ---- shortcut modal ----
-  var SINGLE_KEYS = "dpb.singlekeys.v1";
-  var singleKeysToggle = document.getElementById("dpb-singlekeys-toggle");
-  function singleKeysOn() {
-    try { return localStorage.getItem(SINGLE_KEYS) !== "off"; }
-    catch (err) { return true; }
-  }
-  if (singleKeysToggle) {
-    singleKeysToggle.checked = singleKeysOn();
-    singleKeysToggle.addEventListener("change", function () {
-      try { localStorage.setItem(SINGLE_KEYS, singleKeysToggle.checked ? "on" : "off"); }
+  // One store, one write point for the single-key switch. The key string and
+  // the stored values are unchanged, so a preference set before this move
+  // still resolves. Kept here rather than in the shared core because only the
+  // review shell reads this preference.
+  DPBUI.singleKeys = (function () {
+    var STORAGE_KEY = "dpb.singlekeys.v1";
+
+    function on() {
+      try { return localStorage.getItem(STORAGE_KEY) !== "off"; }
+      catch (err) { return true; }
+    }
+
+    function set(next) {
+      try { localStorage.setItem(STORAGE_KEY, next ? "on" : "off"); }
       catch (err) { /* private mode: the switch lasts for this page only */ }
+    }
+
+    return {
+      STORAGE_KEY: STORAGE_KEY,
+      on: on,
+      set: set,
+    };
+  })();
+  var singleKeysToggle = document.getElementById("dpb-singlekeys-toggle");
+  if (singleKeysToggle) {
+    singleKeysToggle.checked = DPBUI.singleKeys.on();
+    singleKeysToggle.addEventListener("change", function () {
+      DPBUI.singleKeys.set(singleKeysToggle.checked);
     });
   }
   function toggleModal(show) {
@@ -808,7 +825,7 @@
       return;
     }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (!singleKeysOn()) return;
+    if (!DPBUI.singleKeys.on()) return;
     if (k === "l") { e.preventDefault(); toggleLanguage(); return; }
     if (k === "h") { e.preventDefault(); setTool(tool === "hand" ? "select" : "hand"); return; }
     if (k === "j") { e.preventDefault(); roam(1); return; }
@@ -857,24 +874,36 @@
 
   // ---- coachmark (non-blocking, persistent until the first
   // anchor is created — never timed out, never modal) ----
-  var ONBOARDING_KEY = "dpb.onboarding.v1";
+  // One store, one write point for the first-use card. Same key, same stored
+  // value, same best-effort swallow as before the move.
+  DPBUI.coachmark = (function () {
+    var STORAGE_KEY = "dpb.onboarding.v1";
+
+    function seen() {
+      try { return localStorage.getItem(STORAGE_KEY) === "1"; }
+      catch (e) { return false; }
+    }
+
+    function remember() {
+      try { localStorage.setItem(STORAGE_KEY, "1"); }
+      catch (e) { /* private mode/quota: coachmark remains best-effort */ }
+    }
+
+    return {
+      STORAGE_KEY: STORAGE_KEY,
+      seen: seen,
+      remember: remember,
+    };
+  })();
   var coachmark = document.getElementById("dpb-coachmark");
   var coachmarkClose = document.getElementById("dpb-coachmark-close");
-  function onboardingWasSeen() {
-    try { return localStorage.getItem(ONBOARDING_KEY) === "1"; }
-    catch (e) { return false; }
-  }
-  function rememberOnboarding() {
-    try { localStorage.setItem(ONBOARDING_KEY, "1"); }
-    catch (e) { /* private mode/quota: coachmark remains best-effort */ }
-  }
   function hideCoachmark(persist) {
     if (!coachmark) return;
     coachmark.hidden = true;
-    if (persist) rememberOnboarding();
+    if (persist) DPBUI.coachmark.remember();
   }
   function showCoachmark() {
-    if (!coachmark || onboardingWasSeen()) return;
+    if (!coachmark || DPBUI.coachmark.seen()) return;
     coachmark.hidden = false;
   }
   if (coachmarkClose) coachmarkClose.addEventListener("click", function () { hideCoachmark(true); });
@@ -895,7 +924,7 @@
   syncDrawToFrame();
   syncRulerToFrame();
   syncAnchorsToFrame();
-  if (anchors.length) rememberOnboarding();  // restored draft: they've annotated
-  if (!onboardingWasSeen()) showCoachmark();
+  if (anchors.length) DPBUI.coachmark.remember();  // restored draft: they've annotated
+  if (!DPBUI.coachmark.seen()) showCoachmark();
   // Position is pure CSS (fixed bottom-left of the canvas, clear of the
   // dock); no JS measurement — a late-layout measure raced the first paint.
