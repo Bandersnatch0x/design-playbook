@@ -531,10 +531,7 @@
 
   // ---- language toggle (L) ----
   function toggleLanguage() {
-    langState = langState === "zh" ? "en" : "zh";
-    // rebuild the active I18N table from the dual dict
-    I18N = {};
-    Object.keys(DUAL).forEach(function (k) { I18N[k] = DUAL[k][langState]; });
+    DPBUI.i18n.setLang(DPBUI.i18n.getLang() === "zh" ? "en" : "zh");
     applyLanguage();
     render();
   }
