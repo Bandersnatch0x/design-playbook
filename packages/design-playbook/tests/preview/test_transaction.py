@@ -22,6 +22,7 @@ if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 from design_playbook.mcp.preview import transaction  # noqa: E402
 from design_playbook.mcp.preview import versions  # noqa: E402
+from design_playbook.mcp.preview import locking  # noqa: E402
 from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
 from design_playbook.mcp.preview.visual_batch import normalize_visual_batch  # noqa: E402
 from design_playbook.mcp.preview.transaction import (  # noqa: E402
@@ -556,7 +557,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
                 except BaseException as exc:
                     errors.append(exc)
 
-            with mock.patch.object(transaction, "LOCK_HEARTBEAT_SECONDS", 0.02):
+            with mock.patch.object(locking, "LOCK_HEARTBEAT_SECONDS", 0.02):
                 thread = threading.Thread(target=run)
                 thread.start()
                 self.assertTrue(entered.wait(1))
@@ -590,7 +591,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             release_replacement = threading.Event()
             old_errors: list[BaseException] = []
             replacement_errors: list[BaseException] = []
-            real_lock_owner = transaction._lock_owner
+            real_lock_owner = locking._lock_owner
 
             def pause_old_owner_check(path: Path) -> str:
                 owner = real_lock_owner(path)
@@ -619,7 +620,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
                     replacement_errors.append(exc)
 
             with mock.patch.object(
-                transaction, "_lock_owner", side_effect=pause_old_owner_check,
+                locking, "_lock_owner", side_effect=pause_old_owner_check,
             ):
                 old_thread = threading.Thread(
                     target=release_old, name="old-release")

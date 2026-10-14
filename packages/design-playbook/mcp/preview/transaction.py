@@ -1,26 +1,17 @@
 """Durable Preview decision authority and artifact transaction.
 
-Browser collectors return authenticated submission data. This module owns
-request binding, choice authority, atomic persistence, recovery, projections,
-and result construction for one Preview decision.
+Browser collectors return authenticated submission data. This module owns the
+orchestration for one Preview decision: request binding, choice authority,
+commit, recovery, projections and result construction. The lock machinery lives
+in locking.py and the entry/ledger record IO in entry_io.py; both are imported
+into this namespace and re-exported from here, so every current importer of
+`transaction` keeps working unchanged.
 """
 from __future__ import annotations
 
-import errno
-import json
-import os
-import tempfile
-import threading
-import time
 import uuid
-from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, BinaryIO, Iterator, Protocol
-
-if os.name == "nt":
-    import msvcrt
-else:
-    import fcntl
+from typing import Any, Protocol
 
 from design_playbook.mcp.preview import ledger
 from design_playbook.mcp.preview.control import _format_feedback
@@ -31,13 +22,11 @@ from design_playbook.mcp.preview.visual_batch import (
     has_effective_visual_edits,
 )
 from design_playbook.mcp.preview.integrity import (
-    _MISSING,
     binding_equivalent,
     compute_binding_digest,
     confirm_name,
     decision_name,
     evaluate_feedback_floor,
-    prototype_name,
 )
 from design_playbook.mcp.util import now_iso as _now_iso
 from design_playbook.mcp.preview.preview_request import (
@@ -47,6 +36,47 @@ from design_playbook.mcp.preview.preview_request import (
     _preview_dir_for,
     _resolve_prototype,
     self_check_floor as self_check_floor,
+)
+# Re-exports: the error vocabulary, the record IO and the lock machinery. The
+# importers below and the tests that patch these targets keep going through this
+# module, so the names are bound here rather than reached through their modules.
+from design_playbook.mcp.preview.transaction_errors import (  # noqa: F401
+    ConfirmRecordError,
+    DirectoryLockError,
+    PreviewTransactionError,
+    TransactionConflict,
+)
+from design_playbook.mcp.preview.entry_io import (  # noqa: F401
+    _REPLACE_RETRY_ATTEMPTS,
+    _REPLACE_RETRY_SECONDS,
+    _confirm_record,
+    _ledger_record,
+    _round_from_path,
+    ENTRY_SCHEMA_VERSION,
+    atomic_write,
+    json_text,
+    load_confirm_for_entry,
+    load_entry,
+    render_log,
+    valid_entries,
+)
+from design_playbook.mcp.preview.locking import (  # noqa: F401
+    DIRECTORY_LOCK_HEARTBEAT_SECONDS,
+    DIRECTORY_LOCK_POLL_SECONDS,
+    DIRECTORY_LOCK_STALE_SECONDS,
+    DIRECTORY_LOCK_TIMEOUT_SECONDS,
+    LOCK_HEARTBEAT_SECONDS,
+    LOCK_STALE_SECONDS,
+    PROJECTION_LOCK_NAME,
+    _claim_stale_lock,
+    _directory_lock_is_stale,
+    _lock_metadata,
+    _lock_owner,
+    _release_lock_guard,
+    _round_lock,
+    _try_acquire_directory_lease,
+    _try_lock_guard,
+    directory_lock,
 )
 
 
@@ -61,583 +91,6 @@ class BrowserCollector(Protocol):
         criteria: list[dict[str, str]],
     ) -> dict[str, Any]:
         ...
-
-
-ENTRY_SCHEMA_VERSION = 1
-
-
-class PreviewTransactionError(ValueError):
-    """Recoverable transaction failure with actionable artifact context."""
-
-    def __init__(
-        self, message: str, *, retryable: bool, round_n: int,
-        decision_id: str, artifact: str,
-    ) -> None:
-        super().__init__(message)
-        self.details = {
-            "error": "preview_transaction",
-            "message": message,
-            "retryable": retryable,
-            "round": round_n,
-            "decision_id": decision_id,
-            "artifact": artifact,
-        }
-
-
-class TransactionConflict(PreviewTransactionError):
-    """Existing same-round authority cannot be replaced by this request."""
-
-
-LOCK_HEARTBEAT_SECONDS = 30
-LOCK_STALE_SECONDS = LOCK_HEARTBEAT_SECONDS * 3
-DIRECTORY_LOCK_TIMEOUT_SECONDS = 5.0
-DIRECTORY_LOCK_STALE_SECONDS = 30.0
-DIRECTORY_LOCK_HEARTBEAT_SECONDS = 10.0
-DIRECTORY_LOCK_POLL_SECONDS = 0.01
-PROJECTION_LOCK_NAME = ".preview-projection.lock"
-# ponytail: fixed 4x25ms retry covers AV/indexer WinError-5 windows on
-# Windows; backoff only if field reports ever exceed ~100ms.
-_REPLACE_RETRY_ATTEMPTS = 4
-_REPLACE_RETRY_SECONDS = 0.025
-
-
-class DirectoryLockError(OSError):
-    """A shared Preview-directory lease could not be acquired or maintained."""
-
-
-def _lock_metadata(path: Path) -> dict[str, Any]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
-        return {}
-    return value if isinstance(value, dict) else {}
-
-
-def _claim_stale_lock(
-    path: Path, *, binding_digest: str, round_n: int, decision_id: str,
-) -> None:
-    """Serialize stale takeover so one recoverer cannot delete another's lock."""
-    guard = path.with_suffix(path.suffix + ".recovery")
-    try:
-        fd = os.open(guard, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    except FileExistsError as exc:
-        raise PreviewTransactionError(
-            f"Preview round {round_n} recovery is already active",
-            retryable=True, round_n=round_n, decision_id=decision_id,
-            artifact=str(guard),
-        ) from exc
-    os.close(fd)
-    try:
-        existing = _lock_metadata(path)
-        try:
-            age = time.time() - path.stat().st_mtime
-        except FileNotFoundError:
-            return
-        if age < LOCK_STALE_SECONDS:
-            raise PreviewTransactionError(
-                f"Preview round {round_n} is already active",
-                retryable=True, round_n=round_n,
-                decision_id=str(existing.get("decision_id") or decision_id),
-                artifact=str(path),
-            )
-        if existing.get("binding_digest") != binding_digest:
-            raise TransactionConflict(
-                f"stale lock binding differs; use next round: {round_n}",
-                retryable=False, round_n=round_n,
-                decision_id=str(existing.get("decision_id") or decision_id),
-                artifact=str(path),
-            )
-        try:
-            path.unlink()
-        except FileNotFoundError:
-            pass
-    finally:
-        try:
-            guard.unlink()
-        except FileNotFoundError:
-            pass
-
-
-def _lock_owner(path: Path) -> str:
-    try:
-        return path.read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
-        return ""
-
-
-def _try_lock_guard(guard: Path) -> BinaryIO | None:
-    """Try an OS-backed transition lock that the kernel releases on crash."""
-    handle = guard.open("a+b")
-    try:
-        handle.seek(0, os.SEEK_END)
-        if handle.tell() == 0:
-            handle.write(b"\0")
-            handle.flush()
-        handle.seek(0)
-        try:
-            if os.name == "nt":
-                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError as exc:
-            handle.close()
-            if exc.errno in {errno.EACCES, errno.EAGAIN}:
-                return None
-            raise
-        return handle
-    except BaseException as exc:
-        if not handle.closed:
-            handle.close()
-        if isinstance(exc, OSError) and exc.errno in {
-            errno.EACCES, errno.EAGAIN,
-        }:
-            return None
-        raise
-
-
-def _release_lock_guard(handle: BinaryIO) -> None:
-    try:
-        handle.seek(0)
-        if os.name == "nt":
-            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-        else:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-    finally:
-        handle.close()
-
-
-def _directory_lock_is_stale(path: Path, stale_seconds: float) -> bool:
-    try:
-        return time.time() - path.stat().st_mtime >= stale_seconds
-    except FileNotFoundError:
-        return False
-
-
-def _try_acquire_directory_lease(
-    path: Path, owner_id: str, stale_seconds: float,
-) -> BinaryIO | None:
-    """Acquire a lease and retain its OS fence for the full critical section."""
-    guard = path.with_suffix(path.suffix + ".recovery")
-    guard_handle = _try_lock_guard(guard)
-    if guard_handle is None:
-        return None
-    try:
-        try:
-            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        except FileExistsError:
-            if not _directory_lock_is_stale(path, stale_seconds):
-                _release_lock_guard(guard_handle)
-                return None
-            try:
-                path.unlink()
-            except FileNotFoundError:
-                pass
-            try:
-                fd = os.open(
-                    path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-            except FileExistsError:
-                _release_lock_guard(guard_handle)
-                return None
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
-                fh.write(owner_id)
-                fh.flush()
-                os.fsync(fh.fileno())
-        except BaseException:
-            try:
-                path.unlink()
-            except FileNotFoundError:
-                pass
-            raise
-        return guard_handle
-    except BaseException:
-        if not guard_handle.closed:
-            _release_lock_guard(guard_handle)
-        raise
-
-
-@contextmanager
-def directory_lock(
-    preview_dir: Path,
-    lock_name: str,
-    *,
-    timeout_seconds: float | None = None,
-    stale_seconds: float | None = None,
-    heartbeat_seconds: float | None = None,
-    poll_seconds: float | None = None,
-) -> Iterator[None]:
-    """Hold an OS-fenced, heartbeat-backed Preview directory lease."""
-    timeout = (
-        DIRECTORY_LOCK_TIMEOUT_SECONDS
-        if timeout_seconds is None else timeout_seconds
-    )
-    stale = (
-        DIRECTORY_LOCK_STALE_SECONDS
-        if stale_seconds is None else stale_seconds
-    )
-    heartbeat_interval = (
-        DIRECTORY_LOCK_HEARTBEAT_SECONDS
-        if heartbeat_seconds is None else heartbeat_seconds
-    )
-    poll = DIRECTORY_LOCK_POLL_SECONDS if poll_seconds is None else poll_seconds
-    preview_dir.mkdir(parents=True, exist_ok=True)
-    path = preview_dir / lock_name
-    owner_id = uuid.uuid4().hex
-    deadline = time.monotonic() + timeout
-
-    guard_handle = _try_acquire_directory_lease(path, owner_id, stale)
-    while guard_handle is None:
-        if time.monotonic() >= deadline:
-            raise DirectoryLockError(f"directory lock timed out: {path}")
-        time.sleep(poll)
-        guard_handle = _try_acquire_directory_lease(path, owner_id, stale)
-
-    stopped = threading.Event()
-    heartbeat_errors: list[DirectoryLockError] = []
-
-    def heartbeat() -> None:
-        while not stopped.wait(heartbeat_interval):
-            if _lock_owner(path) != owner_id:
-                heartbeat_errors.append(DirectoryLockError(
-                    f"directory lock ownership lost: {path}"))
-                return
-            try:
-                os.utime(path, None)
-            except OSError as exc:
-                heartbeat_errors.append(DirectoryLockError(
-                    f"directory lock heartbeat failed: {path}: {exc}"))
-                return
-
-    thread = threading.Thread(target=heartbeat, daemon=True)
-    thread.start()
-    body_error: BaseException | None = None
-    try:
-        yield
-    except BaseException as exc:
-        body_error = exc
-        raise
-    finally:
-        stopped.set()
-        thread.join(timeout=1)
-        lease_error = heartbeat_errors[0] if heartbeat_errors else None
-        guard = path.with_suffix(path.suffix + ".recovery")
-        try:
-            if _lock_owner(path) != owner_id:
-                lease_error = lease_error or DirectoryLockError(
-                    f"directory lock ownership lost: {path}")
-            else:
-                try:
-                    path.unlink()
-                except FileNotFoundError:
-                    lease_error = lease_error or DirectoryLockError(
-                        f"directory lock ownership lost: {path}")
-        finally:
-            try:
-                _release_lock_guard(guard_handle)
-            except OSError as exc:
-                lease_error = lease_error or DirectoryLockError(
-                    f"directory lock guard cleanup failed: {guard}: {exc}")
-        if lease_error is not None:
-            if body_error is None:
-                raise lease_error
-            body_error.add_note(str(lease_error))
-
-
-@contextmanager
-def _round_lock(
-    preview_dir: Path, *, round_n: int, binding_digest: str, decision_id: str,
-) -> Iterator[None]:
-    preview_dir.mkdir(parents=True, exist_ok=True)
-    path = preview_dir / f"decision-round-{round_n}.lock"
-    owner_id = uuid.uuid4().hex
-    metadata = {
-        "owner_id": owner_id,
-        "decision_id": decision_id,
-        "binding_digest": binding_digest,
-        "heartbeat": time.time(),
-    }
-    raw = json.dumps(metadata, sort_keys=True)
-    while True:
-        try:
-            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        except FileExistsError:
-            _claim_stale_lock(
-                path, binding_digest=binding_digest,
-                round_n=round_n, decision_id=decision_id,
-            )
-            continue
-        else:
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                fh.write(raw)
-                fh.flush()
-            break
-
-    stopped = threading.Event()
-    heartbeat_errors: list[OSError] = []
-
-    def heartbeat() -> None:
-        while not stopped.wait(LOCK_HEARTBEAT_SECONDS):
-            current = _lock_metadata(path)
-            if current.get("owner_id") != owner_id:
-                return
-            metadata["heartbeat"] = time.time()
-            try:
-                atomic_write(path, json.dumps(metadata, sort_keys=True))
-            except OSError as exc:
-                heartbeat_errors.append(exc)
-                return
-
-    thread = threading.Thread(target=heartbeat, daemon=True)
-    thread.start()
-    try:
-        yield
-        if heartbeat_errors:
-            raise PreviewTransactionError(
-                f"Preview lock heartbeat failed: {heartbeat_errors[0]}",
-                retryable=True, round_n=round_n, decision_id=decision_id,
-                artifact=str(path),
-            )
-    finally:
-        stopped.set()
-        thread.join(timeout=1)
-        if _lock_metadata(path).get("owner_id") == owner_id:
-            try:
-                path.unlink()
-            except FileNotFoundError:
-                pass
-
-
-def atomic_write(path: Path, content: str) -> None:
-    """Flush a same-directory temporary file before atomically replacing path."""
-    if path.is_symlink():
-        raise ValueError(f"refusing write through symlinked file: {path}")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
-            fh.write(content)
-            fh.flush()
-            os.fsync(fh.fileno())
-        for attempt in range(_REPLACE_RETRY_ATTEMPTS):
-            try:
-                os.replace(temp_name, path)
-                break
-            except PermissionError:
-                # Windows: a freshly written target (e.g. log.md replaced by a
-                # prior writer milliseconds ago) can be briefly held open by
-                # AV/indexer scanning, making os.replace fail with WinError 5.
-                # The conflict is transient; retry the same temp file instead
-                # of surfacing a spurious commit failure.
-                if os.name != "nt" or attempt == _REPLACE_RETRY_ATTEMPTS - 1:
-                    raise
-                time.sleep(_REPLACE_RETRY_SECONDS)
-    except BaseException:
-        try:
-            os.unlink(temp_name)
-        except FileNotFoundError:
-            pass
-        raise
-
-
-def json_text(value: dict[str, Any]) -> str:
-    return json.dumps(value, ensure_ascii=False, indent=2) + "\n"
-
-
-def load_entry(path: Path) -> dict[str, Any] | None:
-    if not path.is_file():
-        return None
-    try:
-        entry = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise TransactionConflict(
-            f"round decision metadata is unreadable; use next round: {path}",
-            retryable=False, round_n=_round_from_path(path), decision_id="",
-            artifact=str(path),
-        ) from exc
-    required = {
-        "schema_version", "decision_id", "timestamp", "binding", "outcome"
-    }
-    round_n = _round_from_path(path)
-    binding = entry.get("binding") if isinstance(entry, dict) else None
-    outcome = entry.get("outcome") if isinstance(entry, dict) else None
-    prototype_mode = entry.get("prototype_mode") if isinstance(entry, dict) else None
-    prototype_path = entry.get("prototype_path") if isinstance(entry, dict) else None
-    binding_valid = False
-    if isinstance(binding, dict):
-        try:
-            # Rebuild against the same era the record was written in: a
-            # missing route_url (pre-live-route record) stays absent from the
-            # canonical bytes and from the strict equality check, while an
-            # explicit value — including "" — is required to match exactly.
-            expected = compute_binding_digest(
-                round_n=round_n,
-                prototype_html_hash=binding["prototype_html_hash"],
-                report_ref=binding["report_ref"], summary=binding["summary"],
-                options=binding["options"],
-                route_url=binding.get("route_url", _MISSING),
-            )
-            binding_valid = binding == expected
-        except (KeyError, TypeError):
-            binding_valid = False
-    if (
-        not isinstance(entry, dict)
-        or entry.get("schema_version") != ENTRY_SCHEMA_VERSION
-        or not required.issubset(entry)
-        or not isinstance(entry.get("decision_id"), str)
-        or not entry["decision_id"]
-        or not isinstance(entry.get("timestamp"), str)
-        or not binding_valid
-        or not isinstance(outcome, dict)
-        or not isinstance(outcome.get("selected_options"), list)
-        or not isinstance(outcome.get("anchors"), list)
-        or not isinstance(outcome.get("feedback"), str)
-        or not isinstance(outcome.get("confirmed"), bool)
-        or not isinstance(outcome.get("user_confirmed"), bool)
-        or not isinstance(outcome.get("floor_pass"), bool)
-        or not isinstance(outcome.get("aborted"), bool)
-        or prototype_mode not in (None, "html", "path")
-        or prototype_mode == "path" and (
-            not isinstance(prototype_path, str) or not prototype_path.strip()
-        )
-    ):
-        raise TransactionConflict(
-            f"round decision metadata is invalid; use next round: {path}",
-            retryable=False, round_n=round_n, decision_id="",
-            artifact=str(path),
-        )
-    return entry
-
-
-def _round_from_path(path: Path) -> int:
-    try:
-        return int(path.stem.rsplit("-", 1)[1])
-    except (IndexError, ValueError):
-        return 0
-
-
-def _confirm_record(entry: dict[str, Any]) -> dict[str, Any]:
-    binding = entry["binding"]
-    outcome = entry["outcome"]
-    record: dict[str, Any] = {
-        "round": binding["round"],
-        "report_ref": binding["report_ref"],
-        "confirmed": outcome["confirmed"],
-        "floor_pass": outcome["floor_pass"],
-        "selected_options": outcome["selected_options"],
-        "feedback": outcome["feedback"],
-        "timestamp": entry["timestamp"],
-        "prototype_path": f"preview/{prototype_name(binding['round'])}",
-        "prototype_html_hash": binding["prototype_html_hash"],
-        "decision_id": entry["decision_id"],
-    }
-    if outcome.get("floor_failure"):
-        record["floor_failure"] = outcome["floor_failure"]
-    if outcome.get("criteria_review"):
-        record["criteria_review"] = list(outcome["criteria_review"])
-    if outcome.get("visual_edits"):
-        record["visual_edits"] = dict(outcome["visual_edits"])
-    if outcome.get("visual_edits_error"):
-        record["visual_edits_error"] = str(outcome["visual_edits_error"])
-    if outcome.get("visual_handoff"):
-        record["visual_handoff"] = dict(outcome["visual_handoff"])
-    return record
-
-
-class ConfirmRecordError(ValueError):
-    """A durable confirm artifact does not match its decision authority."""
-
-
-def load_confirm_for_entry(
-    preview_dir: Path, entry: dict[str, Any], *, allow_legacy: bool = True,
-) -> dict[str, Any] | None:
-    binding = entry["binding"]
-    outcome = entry["outcome"]
-    round_n = int(binding["round"])
-    path = preview_dir / confirm_name(round_n)
-    if not path.is_file():
-        return None
-    try:
-        record = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise ConfirmRecordError(f"confirm record unreadable: {path}") from exc
-    if not isinstance(record, dict):
-        raise ConfirmRecordError(f"confirm record invalid: {path}")
-    expected = _confirm_record(entry)
-    if "decision_id" not in record:
-        if not allow_legacy:
-            raise ConfirmRecordError(f"legacy confirm record is invalid: {path}")
-        del expected["decision_id"]
-    elif not isinstance(record.get("decision_id"), str):
-        raise ConfirmRecordError(f"confirm record invalid: {path}")
-    elif record["decision_id"] != entry["decision_id"]:
-        raise ConfirmRecordError(f"confirm decision mismatch: {path}")
-    if not outcome.get("user_confirmed"):
-        raise ConfirmRecordError(f"confirm record is unexpected: {path}")
-    if record != expected:
-        raise ConfirmRecordError(f"confirm record invalid: {path}")
-    return record
-
-
-def render_log(entries: list[dict[str, Any]]) -> str:
-    blocks = ["# preview log\n"]
-    for entry in sorted(
-        entries, key=lambda item: (str(item["timestamp"]), str(item["decision_id"]))
-    ):
-        binding = entry["binding"]
-        outcome = entry["outcome"]
-        anchors = list(outcome.get("anchors") or [])
-        lines = [
-            "",
-            f"## round {binding['round']}",
-            f"- report_ref: {binding['report_ref']}",
-            f"- timestamp: {entry['timestamp']}",
-            f"- decision_id: {entry['decision_id']}",
-            f"- feedback: {outcome.get('feedback') or ''}",
-            f"- selected: {', '.join(outcome.get('selected_options') or [])}",
-            f"- aborted: {str(bool(outcome.get('aborted'))).lower()}",
-            f"- anchors: {len(anchors)}",
-            f"- floor_pass: {str(bool(outcome.get('floor_pass'))).lower()}",
-        ]
-        if outcome.get("timeout"):
-            lines.append("- timeout: true")
-        if outcome.get("floor_failure"):
-            lines.append(f"- floor_failure: {outcome['floor_failure']}")
-        if outcome.get("rejected"):
-            lines.append("- rejected: true")
-            if outcome.get("rejection"):
-                lines.append(f"- rejection: {outcome['rejection']}")
-        for index, anchor in enumerate(anchors, 1):
-            lines.append(
-                f"  - [{index}] {anchor.get('selector') or ''} | "
-                f"{anchor.get('label') or ''} | {anchor.get('comment') or ''}"
-            )
-        blocks.append("\n".join(lines) + "\n")
-    return "".join(blocks)
-
-
-def valid_entries(preview_dir: Path) -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = []
-    for path in preview_dir.glob("decision-round-*.json"):
-        entry = load_entry(path)
-        if entry is not None:
-            entries.append(entry)
-    return entries
-
-
-def _ledger_record(entry: dict[str, Any]) -> dict[str, Any]:
-    """T-086: the run-external registration for one committed round."""
-    binding = entry["binding"]
-    outcome = entry["outcome"]
-    return {
-        "round": int(binding["round"]),
-        "decision_id": entry["decision_id"],
-        "timestamp": entry["timestamp"],
-        "confirmed": outcome["confirmed"],
-        "floor_pass": outcome["floor_pass"],
-        "aborted": outcome["aborted"],
-        "binding_digest": binding["digest"],
-    }
-
 
 def _commit_projections_unlocked(preview_dir: Path, entry: dict[str, Any]) -> str:
     binding = entry["binding"]
@@ -668,7 +121,6 @@ def _commit_projections_unlocked(preview_dir: Path, entry: dict[str, Any]) -> st
     )
     return confirm_result
 
-
 def _commit_projections(preview_dir: Path, entry: dict[str, Any]) -> str:
     binding = entry["binding"]
     try:
@@ -682,7 +134,6 @@ def _commit_projections(preview_dir: Path, entry: dict[str, Any]) -> str:
             decision_id=str(entry["decision_id"]),
             artifact=str(preview_dir / PROJECTION_LOCK_NAME),
         ) from exc
-
 
 def _result(entry: dict[str, Any], confirm_path: str) -> dict[str, Any]:
     binding = entry["binding"]
@@ -709,7 +160,6 @@ def _result(entry: dict[str, Any], confirm_path: str) -> dict[str, Any]:
     if outcome.get("visual_handoff"):
         result["visual_handoff"] = dict(outcome["visual_handoff"])
     return result
-
 
 def run_preview_transaction(
     *,
@@ -770,7 +220,6 @@ def run_preview_transaction(
             round_n=round_n, decision_id=decision_id, artifact=str(artifact),
         ) from exc
 
-
 def _floor_verdict(
     *, rejected: bool, submission: dict[str, Any], timed_out: bool, is_skip: bool,
     raw_feedback: str, anchors: list[dict[str, Any]], has_visual_edits: bool,
@@ -791,7 +240,6 @@ def _floor_verdict(
         raw_feedback, anchors, has_visual_edits=has_visual_edits
     )
     return floor.passed, floor.reason
-
 
 def _run_locked(
     *, path_arg: str | None, html: str | None, summary: str, round_n: int,

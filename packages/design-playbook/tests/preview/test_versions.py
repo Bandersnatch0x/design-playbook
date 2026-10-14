@@ -19,6 +19,7 @@ if str(_PKG_ROOT) not in sys.path:
 from design_playbook.mcp.preview import transaction  # noqa: E402
 from design_playbook.mcp.preview import versions  # noqa: E402
 from design_playbook.mcp.preview import compatibility  # noqa: E402
+from design_playbook.mcp.preview import locking  # noqa: E402
 from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
 from design_playbook.mcp.preview.versions import (  # noqa: E402
     VersionCommittedError,
@@ -246,10 +247,10 @@ class NamedVersionTests(unittest.TestCase):
                     contender_errors.append(exc)
 
             with (
-                mock.patch.object(transaction, "DIRECTORY_LOCK_STALE_SECONDS", 0.05),
-                mock.patch.object(transaction, "DIRECTORY_LOCK_HEARTBEAT_SECONDS", 0.01),
-                mock.patch.object(transaction, "DIRECTORY_LOCK_TIMEOUT_SECONDS", 0.08),
-                mock.patch.object(transaction, "DIRECTORY_LOCK_POLL_SECONDS", 0.005),
+                mock.patch.object(locking, "DIRECTORY_LOCK_STALE_SECONDS", 0.05),
+                mock.patch.object(locking, "DIRECTORY_LOCK_HEARTBEAT_SECONDS", 0.01),
+                mock.patch.object(locking, "DIRECTORY_LOCK_TIMEOUT_SECONDS", 0.08),
+                mock.patch.object(locking, "DIRECTORY_LOCK_POLL_SECONDS", 0.005),
             ):
                 holder = threading.Thread(target=hold_lock)
                 holder.start()
