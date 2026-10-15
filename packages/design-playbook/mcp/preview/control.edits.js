@@ -318,16 +318,15 @@
     var heartbeat = store.heartbeat;
     var now = store.deps.now();
     if (heartbeat.started === null) heartbeat.started = now;
-  // Count unanswered pings, not wall clock: a throttled late tick is not a
-  // disconnect, while three unanswered pings are.
-  var status;
-  if (heartbeat.lastAck) {
-    if (heartbeat.unanswered >= 2) {
-      store.deps.disconnect();
-      status = markStatus(store, {}, { ready: false, stale: !store.status.stale }).status;
+    // Count unanswered pings, not wall clock: a throttled late tick is not a
+    // disconnect, while three unanswered pings are. The disconnect writes the
+    // status itself - a round with work pending goes stale, one without keeps
+    // whatever staleness it had - so there is nothing to hand back here.
+    var status;
+    if (heartbeat.lastAck) {
+      if (heartbeat.unanswered >= 2) store.deps.disconnect();
+      heartbeat.unanswered += 1;
     }
-    heartbeat.unanswered += 1;
-  }
     if (!heartbeat.lastAck && now - heartbeat.started > HEARTBEAT_FIRST_CONNECT_MS) {
       status = markStatus(store, {}, { connecting: false }).status;
     }
@@ -352,10 +351,11 @@
     var heartbeat = store.heartbeat;
     if (response.nonce !== heartbeat.nonce) return null;
     if (response.routeUrl !== routeUrl) {
-      var outcome = {};
-      markStatus(store, outcome, { stale: true, ready: false,
-        diagnostic: "visual_stale" });
-      return outcome.status || store.status;
+      // The route moved under the round: age it out, then end the request in
+      // flight so the panel is not left busy on a bridge it can no longer
+      // reach and the await settles with the route reason, not a later timeout.
+      markStatus(store, {}, { stale: true, ready: false });
+      return failRound(store, "visual_stale") || store.status;
     }
     heartbeat.lastAck = true;
     heartbeat.unanswered = 0;

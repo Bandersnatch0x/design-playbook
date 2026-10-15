@@ -41,12 +41,20 @@ var P = window.DPBEdit.protocol;
 // is independent of this table.
 function makeEnv() {
   var env = { sends: [], emits: [], results: [], disconnects: [], published: true,
-    now: 0, handle: 0, timers: {} };
+    now: 0, handle: 0, timers: {}, hasWork: false };
   env.deps = {
     send: function (message) { env.sends.push(message); },
     post: function (message) { env.sends.push(message); },
     now: function () { return env.now; },
-    disconnect: function () { env.disconnects.push(env.sends.length); },
+    // The component's `disconnected()`: a round holding ledger work goes stale,
+    // one without keeps whatever staleness it had. `hasWork` stands in for
+    // `current.current.entries.length`, so a case can decide which it is.
+    disconnect: function () {
+      env.disconnects.push(env.sends.length);
+      var fields = { ready: false, connecting: false };
+      if (env.hasWork) fields.stale = true;
+      env.store.patch(fields);
+    },
     setTimer: function (fn, ms) { var id = ++env.handle; env.timers[id] = { fn: fn, at: env.now + ms }; return id; },
     clearTimer: function (id) { delete env.timers[id]; },
     // A plain property set: the shimmed shorthand and the padding/mirror rules
@@ -241,6 +249,7 @@ async function table() {
     "heartbeat: one throttled late tick is not a disconnect");
 
   var d = makeEnv();
+  d.hasWork = true;
   d.store.status().ready = true;
   d.store.status().diagnostic = "";
   d.store.ping({ compact: false, labels: {} });
@@ -281,6 +290,56 @@ async function table() {
   ack.store.ping({ compact: false, labels: {} });
   eq([ack.store.status().stale, ack.disconnects], [false, []],
     "heartbeat: an ack restarts the unanswered count");
+
+  // ---- heartbeat disconnect: the staleness the component already decided -----
+  // Three unanswered pings call the component's `disconnected()`, which writes
+  // the status itself - a round with work pending goes stale, one without keeps
+  // whatever staleness it had. The store must not write a second, inverted copy
+  // over that, so each of the three directions is pinned.
+  var pending = makeEnv();
+  pending.hasWork = true;
+  pending.store.ping({ compact: false, labels: {} });
+  pending.store.ready({ nonce: 1, routeUrl: "route" }, "route");
+  pending.store.ping({ compact: false, labels: {} });
+  pending.store.ping({ compact: false, labels: {} });
+  pending.store.ping({ compact: false, labels: {} });
+  eq([pending.store.status().stale, pending.store.status().ready, pending.disconnects.length],
+    [true, false, 1], "heartbeat: a disconnect with work pending leaves the round stale");
+
+  var quiet = makeEnv();
+  quiet.store.ping({ compact: false, labels: {} });
+  quiet.store.ready({ nonce: 1, routeUrl: "route" }, "route");
+  quiet.store.ping({ compact: false, labels: {} });
+  quiet.store.ping({ compact: false, labels: {} });
+  quiet.store.ping({ compact: false, labels: {} });
+  eq([quiet.store.status().stale, quiet.disconnects.length], [false, 1],
+    "heartbeat: a disconnect with no work pending leaves the round not stale");
+
+  var aged = makeEnv();
+  aged.store.status().stale = true;
+  aged.store.ping({ compact: false, labels: {} });
+  aged.store.ready({ nonce: 1, routeUrl: "route" }, "route");
+  aged.store.ping({ compact: false, labels: {} });
+  aged.store.ping({ compact: false, labels: {} });
+  aged.store.ping({ compact: false, labels: {} });
+  eq([aged.store.status().stale, aged.disconnects.length], [true, 1],
+    "heartbeat: a disconnect with no work pending keeps the round stale");
+
+  // ---- route mismatch with a request in flight ------------------------------
+  // The route moved under the round: the round ages out and the request in
+  // flight is refused, so the panel is not left busy and the inspector's await
+  // settles with the route reason instead of a later timeout.
+  var moved = makeEnv();
+  moved.begin();
+  moved.store.ping({ compact: false, labels: {} });
+  var mismatch = moved.store.ready({ nonce: 1, routeUrl: "elsewhere" }, "route");
+  eq([mismatch.ready, mismatch.connecting, mismatch.stale, mismatch.busy,
+    mismatch.diagnostic], [false, false, true, false, "visual_stale"],
+    "route mismatch: the round ages out and stops sitting busy");
+  eq(moved.store.hasRequest(), false, "route mismatch: no request is left in flight");
+  await flush();
+  eq(moved.results, [{ accepted: false, error: "visual_stale" }],
+    "route mismatch: the in-flight request is refused with the route reason");
 
   console.log(JSON.stringify(failures));
 }
