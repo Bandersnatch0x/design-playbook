@@ -5,7 +5,10 @@ counter, the request in flight, the requests no receipt has answered, what has
 been dispatched, what the bridge has accepted, the accepted sequence per target,
 the values an interrupt took with it, the 1500 ms deadline, and - since slice S5
 - the drain's decision plus the two flags that say whether the panel's batch is
-still the published one and whether a drain is walking. Slice S3 moved that out
+still the published one and whether a drain is walking. Slice S6 added the wire
+boundary: ``parse`` turns the four shapes ``pin_bridge.js`` posts into the events
+the panel and the store take, so no ``dpbVisualEdit*`` name is read outside it.
+Slice S3 moved that out
 of ``control.react.js``, and until this table the only thing that could
 evaluate any of it was the browser matrix - a lost guard or a wrong comparison
 there showed up as a whole area of red rather than as a failing rule. The store
@@ -18,6 +21,7 @@ needs node, which the repository already requires for its JavaScript checks.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -95,6 +99,88 @@ function publishedOf(env) {
 }
 
 async function table() {
+  // ---- parse: the wire boundary ---------------------------------------------
+  // First, before any store exists: `parse` is the boundary, and it needs no
+  // round to answer. The four fixtures mirror the four `parent.postMessage` sites
+  // in `pin_bridge.js`, each message carrying exactly one shape, so a rename on
+  // the wire shows up here instead of as a whole area of red in the browser
+  // matrix.
+  var wireReady = { dpbVisualEditReady: { bridgeVersion: 1, nonce: 4, routeUrl: "about:srcdoc" } };
+  var wireSelection = { dpbVisualEditSelection: { selector: "#a", tag: "h2", textEditable: true,
+    style: { color: "rgb(255, 0, 0)" }, inlineStyle: "color: red;", replay: false, requestId: 3 } };
+  var wireRejected = { dpbVisualEditRejected: { requestId: 3, code: "visual_rejected" } };
+  var wireChange = { dpbVisualEditChange: { requestId: 3, selector: "#a",
+    changes: [{ property: "color", oldValue: "", newValue: "red" }], replay: false } };
+
+  eq(typeof P.parse, "function", "parse: the parser sits on the protocol, not on a store");
+  eq(P.parse(wireReady), { type: "ready", response: wireReady.dpbVisualEditReady },
+    "parse: ready carries the response the frame sent");
+  eq(P.parse(wireSelection), { type: "selection", selection: wireSelection.dpbVisualEditSelection,
+    gesture: false }, "parse: selection carries the snapshot the frame sent");
+  eq(P.parse(wireRejected), { type: "rejected", requestId: 3, code: "visual_rejected" },
+    "parse: rejected carries the id and the code");
+  eq(P.parse(wireChange), { type: "change", requestId: 3, selector: "#a",
+    changes: wireChange.dpbVisualEditChange.changes, gesture: false },
+    "parse: change carries the receipt the frame sent");
+
+  // A gesture id is minted by the frame when nobody asked for the edit, and it is
+  // the one thing the two receipt shapes share. Every case compares the whole
+  // event, so a parser that answers nothing reads as a labelled failure instead
+  // of throwing on a missing field.
+  eq(P.parse({ dpbVisualEditChange: { requestId: "gesture-7", selector: "#a", changes: [] } }),
+    { type: "change", requestId: "gesture-7", selector: "#a", changes: [], gesture: true },
+    "parse: a gesture- change id is a gesture");
+  eq(P.parse({ dpbVisualEditSelection: { selector: "#a", requestId: "gesture-7" } }),
+    { type: "selection", selection: { selector: "#a", requestId: "gesture-7" }, gesture: true },
+    "parse: a gesture- selection id is a gesture");
+  eq(P.parse(wireChange), { type: "change", requestId: 3, selector: "#a",
+    changes: wireChange.dpbVisualEditChange.changes, gesture: false },
+    "parse: a real request id is not a gesture");
+  eq(P.parse({ dpbVisualEditChange: { requestId: "req-3", selector: "#a", changes: [] } }),
+    { type: "change", requestId: "req-3", selector: "#a", changes: [], gesture: false },
+    "parse: a string id that is not a gesture- id is not a gesture");
+  eq(P.parse({ dpbVisualEditChange: { selector: "#a", changes: [] } }),
+    { type: "change", selector: "#a", changes: [], gesture: false },
+    "parse: a missing id is not a gesture");
+
+  // Nothing else is a message. A falsy shape is no message at all, the way the
+  // component's own `if (!change) return` read it.
+  eq(P.parse({}), null, "parse: an empty message is not an event");
+  eq(P.parse(null), null, "parse: null is not an event");
+  eq(P.parse(undefined), null, "parse: undefined is not an event");
+  eq(P.parse("dpbVisualEditChange"), null, "parse: a non-object is not an event");
+  eq(P.parse({ dpbVisualEditChange: null }), null, "parse: a falsy shape is not an event");
+
+  // One shape per message, so a two-shape object is unreachable on the real wire.
+  // The order is pinned anyway: a reordered parser would pass every case above and
+  // only the browser matrix would notice.
+  eq(P.parse({ dpbVisualEditReady: wireReady.dpbVisualEditReady,
+    dpbVisualEditSelection: wireSelection.dpbVisualEditSelection,
+    dpbVisualEditRejected: wireRejected.dpbVisualEditRejected,
+    dpbVisualEditChange: wireChange.dpbVisualEditChange }),
+    { type: "ready", response: wireReady.dpbVisualEditReady },
+    "parse: ready outranks the other three");
+  eq(P.parse({ dpbVisualEditSelection: wireSelection.dpbVisualEditSelection,
+    dpbVisualEditRejected: wireRejected.dpbVisualEditRejected,
+    dpbVisualEditChange: wireChange.dpbVisualEditChange }),
+    { type: "selection", selection: wireSelection.dpbVisualEditSelection, gesture: false },
+    "parse: selection outranks rejected and change");
+  eq(P.parse({ dpbVisualEditRejected: wireRejected.dpbVisualEditRejected,
+    dpbVisualEditChange: wireChange.dpbVisualEditChange }),
+    { type: "rejected", requestId: 3, code: "visual_rejected" },
+    "parse: rejected outranks change");
+
+  // The panel never holds the namespace: `control.react.js` calls
+  // `window.DPBEdit.protocol.create(deps)` once and keeps the answer. A parser
+  // reachable only on the namespace is a `TypeError` at the first bridge message,
+  // which kills `onMessage` outright - no selection, no receipt, no inspector. So
+  // the binding is checked the way the panel makes it, not the way this table does.
+  var bound = makeEnv();
+  eq(typeof bound.store.parse, "function",
+    "parse: the instance the panel holds answers too, not just the namespace");
+  eq(bound.store.parse(wireChange), P.parse(wireChange),
+    "parse: both bindings are the same function");
+
   // ---- ack -----------------------------------------------------------------
   var a = makeEnv();
   a.begin({ draft: "rr" });
@@ -215,13 +301,22 @@ async function table() {
   await flush();
   eq(i.results, [{ accepted: false, error: "visual_disconnected" }],
     "interrupt: fail settles what interrupt left waiting");
+  // The receipt reaches the store as a domain event, the way every case in this
+  // table hands one over. Whether the id names a gesture is the parser's answer
+  // (pinned above), so the store no longer re-reads the prefix itself.
   var gesture = i.store.reduce({ type: "change", requestId: "gesture-7", selector: "#a",
-    selected: "#a", changes: [{ property: "color", oldValue: "red", newValue: "blue" }] });
+    selected: "#a", gesture: true,
+    changes: [{ property: "color", oldValue: "red", newValue: "blue" }] });
   eq(gesture.source, "frame", "gesture: not our request, so not the reviewer's edit");
   eq(gesture.changes, [{ property: "color", oldValue: "orig", newValue: "blue" }],
     "gesture: the value the interrupt remembered is what the edit reports");
   eq(gesture.opSeq, 2, "gesture: a receipt with no id of ours takes the next sequence");
   eq(gesture.drafts({}), { color: "blue" }, "gesture: with no dispatch of ours the frame wins");
+  // An event that does not say it is a gesture is not one, whatever its id looks
+  // like: the store takes the parser's word, and `parse` is the only place left
+  // that knows the prefix.
+  eq(i.store.reduce({ type: "change", requestId: "gesture-8", selector: "#a", selected: "#a" }), null,
+    "gesture: the store reads the event's answer, not the id's spelling");
 
   // ---- I7: a no-op transition hands back nothing --------------------------
   // `applyOutcome` only opens the setters when the outcome carries a status, so
@@ -528,3 +623,60 @@ def test_the_store_no_longer_reaches_out_for_the_publish_flag() -> None:
     # "unpublished" is the pending rule's own adjective; the deps key is "unpublish".
     assert shell.replace("unpublished", "").count("unpublish") == 0
     assert "unpublish" not in edits
+
+
+def test_the_shell_never_spells_a_wire_field() -> None:
+    # The design's red-flag screen for this slice: after S6 the component names no
+    # inbound `dpbVisualEdit*` field, because `parse` is the only reader of the
+    # wire. One reappearing here means the boundary moved back into the panel. The
+    # outbound `{ dpbVisualEdit: message }` in `post` is the other direction.
+    shell = SHELL.read_text(encoding="utf-8")
+    for field in ("dpbVisualEditReady", "dpbVisualEditSelection",
+                  "dpbVisualEditRejected", "dpbVisualEditChange"):
+        assert field not in shell, field
+    assert "protocol.parse(event.data || {})" in shell
+
+
+def test_the_parser_is_the_only_reader_of_the_wire_names() -> None:
+    # The store does not start reading the wire: each name appears once, in the
+    # parser, so a second reader would be the boundary leaking back down.
+    edits = EDITS.read_text(encoding="utf-8")
+    for field in ("dpbVisualEditReady", "dpbVisualEditSelection",
+                  "dpbVisualEditRejected", "dpbVisualEditChange"):
+        assert edits.count(field) == 1, field
+
+
+def test_the_gesture_prefix_has_one_reading_left() -> None:
+    # The prefix test used to sit at two sites - the store's change guard and the
+    # panel's selection guard - so the two could drift apart. S6 computes it once
+    # in `parse`, and both sites read the field it answers.
+    edits = EDITS.read_text(encoding="utf-8")
+    shell = SHELL.read_text(encoding="utf-8")
+    assert edits.count('indexOf("gesture-")') == 1, "`parse` is the only reader left"
+    assert shell.count("gesture-") == 0
+    assert "!event.gesture" in edits
+    assert "parsed.gesture" in shell
+
+
+def test_every_protocol_call_the_shell_makes_is_on_the_instance() -> None:
+    # The trap this pins: `protocol` in the shell is what `create(deps)` answered,
+    # not the `DPBEdit.protocol` namespace, and the two are separate objects. A
+    # method added to the namespace alone reads fine in a text assertion and still
+    # throws at the first call - S6 shipped `parse` that way and the panel went
+    # blank on every bridge message. So every `protocol.<name>` the shell spells
+    # must appear as a key of `create`'s return block.
+    shell = SHELL.read_text(encoding="utf-8")
+    edits = EDITS.read_text(encoding="utf-8")
+    called = set(re.findall(r"\bprotocol\.([A-Za-z_$][\w$]*)", shell))
+    assert "create" in called, "the shell builds its protocol through `create`"
+    called.discard("create")
+
+    # The keys are the members of `create`'s return object: it opens at the
+    # function's own indent and closes with the same. Anchoring on `var store`'s
+    # `};` instead would cut the block off before the return object starts.
+    start = edits.index("create: function (deps) {")
+    block = edits[edits.index("        return {", start):edits.index("\n        };",
+                                                                    edits.index("        return {", start))]
+    defined = set(re.findall(r"^ {10}([A-Za-z_$][\w$]*):", block, re.M))
+    missing = sorted(called - defined)
+    assert missing == [], f"called in the shell but not on the instance: {missing}"

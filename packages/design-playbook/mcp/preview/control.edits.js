@@ -236,7 +236,9 @@
     if (!store.status.ready || store.status.stale) return null;
     var unacked = store.unacked[event.requestId];
     var operation = (store.request && event.requestId === store.request.id ? store.request : null) || unacked;
-    if (!operation && !(typeof event.requestId === "string" && event.requestId.indexOf("gesture-") === 0)) return null;
+    // Whether the id names a gesture is the parser's reading, not the store's:
+    // the event carries the answer, so no wire spelling is re-derived down here.
+    if (!operation && !event.gesture) return null;
     if (unacked) delete store.unacked[event.requestId];
     if (operation && operation.entry && operation.entry._replayId !== operation.id) return null;
     // Provenance decides whether an edit can stand in for review notes. The
@@ -399,6 +401,38 @@
     }
     return status;
   }
+
+  // ---- the wire boundary (slice S6) ----
+  // The four shapes pin_bridge.js posts, each message carrying exactly one of
+  // them, become the four events the panel and the store take. This is the only
+  // place the `dpbVisualEdit*` names appear: a rename on the wire stops here
+  // instead of reaching the panel's arms and the store's guards. It is pure - it
+  // reads no store state, so `hasAck` stays where the state is.
+  function isGestureId(id) {
+    return typeof id === "string" && id.indexOf("gesture-") === 0;
+  }
+  function parseEvent(data) {
+    if (!data) return null;
+    // One shape per message, so the first match is the message. The order is the
+    // panel's: ready, then selection, then rejected, then change. A falsy shape
+    // is no message at all, the way the component's own `if (!change) return`
+    // read it.
+    var response = data.dpbVisualEditReady;
+    if (response) return { type: "ready", response: response };
+    var selection = data.dpbVisualEditSelection;
+    if (selection) {
+      return { type: "selection", selection: selection,
+        gesture: isGestureId(selection.requestId) };
+    }
+    var rejected = data.dpbVisualEditRejected;
+    if (rejected) return { type: "rejected", requestId: rejected.requestId, code: rejected.code };
+    var change = data.dpbVisualEditChange;
+    if (change) {
+      return { type: "change", requestId: change.requestId, selector: change.selector,
+        changes: change.changes, gesture: isGestureId(change.requestId) };
+    }
+    return null;
+  }
   window.DPBEdit = {
     ledger: {
       MERGE_WINDOW_MS: MERGE_WINDOW_MS,
@@ -413,6 +447,10 @@
     },
     protocol: {
       REQUEST_TIMEOUT_MS: REQUEST_TIMEOUT_MS,
+      // The wire boundary: one message in, one event or null out. The node table
+      // reaches it here, on the namespace; the panel reaches the copy on each
+      // instance, because `create`'s answer is the only protocol it holds.
+      parse: parseEvent,
       // deps: { send, post, now, disconnect, setTimer, clearTimer, syncDraft,
       // canonicalValue, emit }. The initial status below is the store's own, so
       // the panel's first render has one definition of what the bridge looks
@@ -435,6 +473,11 @@
           draining: false,
         };
         return {
+          // The wire boundary is the same function on both objects the shell can
+          // hold. `parse` reads no store state, but the panel's only reference is
+          // the instance `create` answers, so a namespace-only copy is a call the
+          // panel cannot reach.
+          parse: parseEvent,
           begin: function (request) { return beginRequest(store, request); },
           reduce: function (event) {
             if (!event) return null;

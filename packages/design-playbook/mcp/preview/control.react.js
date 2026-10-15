@@ -328,26 +328,28 @@
         }
         function onMessage(event) {
           if (event.source !== frame.contentWindow) return;
-          var data = event.data || {};
-          if (data.dpbVisualEditReady) {
-            var response = data.dpbVisualEditReady;
-            applyOutcome({ status: protocol.ready(response, binding.routeUrl || "about:srcdoc") });
-          }
-          if (data.dpbVisualEditSelection && protocol.hasAck()) {
-            var selection = data.dpbVisualEditSelection;
+          // The wire shape stops at `parse`: every arm below reads an event, and
+          // no `dpbVisualEdit*` field name reaches this file.
+          var parsed = protocol.parse(event.data || {});
+          if (!parsed) return;
+          switch (parsed.type) {
+          case "ready":
+            applyOutcome({ status: protocol.ready(parsed.response, binding.routeUrl || "about:srcdoc") });
+            break;
+          case "selection":
+            if (!protocol.hasAck()) break;
+            var selection = parsed.selection;
             if (selection.requestId) {
               // A mutation snapshot is not a new user selection or draft.
               if (current.current.selected && selection.selector === current.current.selected.selector &&
-                  (selection.requestId === protocol.requestId() ||
-                    String(selection.requestId).indexOf("gesture-") === 0)) setSelected(selection);
+                  (selection.requestId === protocol.requestId() || parsed.gesture)) setSelected(selection);
             } else {
               Object.values(draftTimers.current).forEach(clearTimeout);
               setSelected(selection);
               setDrafts(protocol.acceptSelection(snapshot(selection)));
             }
-          }
-          var rejected = data.dpbVisualEditRejected;
-          if (rejected) {
+            break;
+          case "rejected":
             // The refusal belongs to the store: it is terminal for that request id
             // (the bridge will never confirm it, so a retained entry made every
             // later drain answer unresolved_edits and left only Abort usable), it
@@ -355,86 +357,87 @@
             // bridge accepted. `consumed` is the old `return`: the id was this
             // round's request, so no receipt can follow it.
             var refusal = protocol.reduce({ type: "rejected",
-              requestId: rejected.requestId, code: rejected.code });
+              requestId: parsed.requestId, code: parsed.code });
             applyOutcome(refusal);
             if (refusal.consumed) return;
+            break;
+          case "change":
+            // The receipt belongs to the store: which request it answers, whether
+            // that request still stands, its provenance, the values an interrupt took
+            // with it, the accepted sequence per target and the drafts that may stand.
+            // A null outcome is its guard ladder - a round that is not ready or has
+            // gone stale, an id this store never dispatched and that is not a gesture,
+            // or a replay whose receipt has already been spent.
+            var receipt = protocol.reduce({ type: "change", requestId: parsed.requestId,
+              selector: parsed.selector, changes: parsed.changes, gesture: parsed.gesture,
+              selected: (current.current.selected || {}).selector });
+            if (!receipt) return;
+            var operation = receipt.operation;
+            var changes = receipt.changes;
+            var source = receipt.source;
+            var opSeq = receipt.opSeq;
+            applyOutcome(receipt);
+            var edits = changes.filter(function (c) { return c.oldValue !== c.newValue; }).map(function (c) {
+              return { kind: LAYOUT.indexOf(c.property) >= 0 ? "layout" : "style",
+                viewport: operation ? operation.viewport : (window.DPB_ACTIVE_VIEWPORT || "any"),
+                locator: parsed.selector, property: c.property, oldValue: c.oldValue, newValue: c.newValue,
+                source: source,
+                _seq: opSeq,
+                _t: Date.now(),
+                _entryId: opSeq };
+            });
+            if (edits.length) edits._entryId = opSeq;
+            if (operation && operation.action === "undo") {
+              var undoLists = ledger.undoEntry({ entries: entriesRef.current,
+                future: futureRef.current }, operation.entry);
+              if (undoLists) {
+                entriesRef.current = undoLists.entries;
+                setEntries(undoLists.entries);
+                futureRef.current = undoLists.future;
+                setFuture(undoLists.future);
+                publishBatch(ledger.flatten(undoLists.entries), current.current.stale);
+              }
+            } else if (operation && operation.action === "redo") {
+              var redoLists = ledger.redoEntry({ entries: entriesRef.current,
+                future: futureRef.current }, operation.entry);
+              if (redoLists) {
+                futureRef.current = redoLists.future;
+                setFuture(redoLists.future);
+                entriesRef.current = redoLists.entries;
+                setEntries(redoLists.entries);
+                publishBatch(ledger.flatten(redoLists.entries), current.current.stale);
+              }
+            } else if (edits.length === 1 && (function () {
+              var list = entriesRef.current || [], last = list[list.length - 1];
+              return !!(last && last.length === 1 && !(futureRef.current || []).length && ledger.mergeEdit(last[0], edits[0], edits[0]._t, ledger.MERGE_WINDOW_MS));
+            })()) {
+              // The coalesce mutates the edit object the last entry already holds,
+              // so the merged value reaches the batch through the projection. The
+              // shallow copy only hands React a new list to render; keep it.
+              var merged = (entriesRef.current || []).slice();
+              entriesRef.current = merged;
+              setEntries(merged);
+              publishBatch(ledger.flatten(merged), current.current.stale);
+            } else if (edits.length) {
+              var appended = ledger.appendEdits({ entries: entriesRef.current,
+                future: futureRef.current }, edits, opSeq);
+              entriesRef.current = appended.entries;
+              setEntries(appended.entries);
+              // null means the redo stack still stands: a receipt that is older
+              // than something already in it must not throw that stack away.
+              if (appended.future !== null) {
+                futureRef.current = appended.future;
+                setFuture(appended.future);
+              }
+              publishBatch(ledger.flatten(entriesRef.current), current.current.stale);
+            }
+            // The accepted values and the drafts the receipt may stand for are the
+            // store's, and `applyOutcome` above already handed the drafts transform
+            // to React. Only the promise is settled here, after the ledger has been
+            // told, because the drain barrier reads the batch the receipt produced.
+            protocol.acknowledge(operation, edits.length > 0);
+            break;
           }
-          var change = data.dpbVisualEditChange;
-          if (!change) return;
-          // The receipt belongs to the store: which request it answers, whether
-          // that request still stands, its provenance, the values an interrupt took
-          // with it, the accepted sequence per target and the drafts that may stand.
-          // A null outcome is its guard ladder - a round that is not ready or has
-          // gone stale, an id this store never dispatched and that is not a gesture,
-          // or a replay whose receipt has already been spent.
-          var receipt = protocol.reduce({ type: "change", requestId: change.requestId,
-            selector: change.selector, changes: change.changes,
-            selected: (current.current.selected || {}).selector });
-          if (!receipt) return;
-          var operation = receipt.operation;
-          var changes = receipt.changes;
-          var source = receipt.source;
-          var opSeq = receipt.opSeq;
-          applyOutcome(receipt);
-          var edits = changes.filter(function (c) { return c.oldValue !== c.newValue; }).map(function (c) {
-            return { kind: LAYOUT.indexOf(c.property) >= 0 ? "layout" : "style",
-              viewport: operation ? operation.viewport : (window.DPB_ACTIVE_VIEWPORT || "any"),
-              locator: change.selector, property: c.property, oldValue: c.oldValue, newValue: c.newValue,
-              source: source,
-              _seq: opSeq,
-              _t: Date.now(),
-              _entryId: opSeq };
-          });
-          if (edits.length) edits._entryId = opSeq;
-          if (operation && operation.action === "undo") {
-            var undoLists = ledger.undoEntry({ entries: entriesRef.current,
-              future: futureRef.current }, operation.entry);
-            if (undoLists) {
-              entriesRef.current = undoLists.entries;
-              setEntries(undoLists.entries);
-              futureRef.current = undoLists.future;
-              setFuture(undoLists.future);
-              publishBatch(ledger.flatten(undoLists.entries), current.current.stale);
-            }
-          } else if (operation && operation.action === "redo") {
-            var redoLists = ledger.redoEntry({ entries: entriesRef.current,
-              future: futureRef.current }, operation.entry);
-            if (redoLists) {
-              futureRef.current = redoLists.future;
-              setFuture(redoLists.future);
-              entriesRef.current = redoLists.entries;
-              setEntries(redoLists.entries);
-              publishBatch(ledger.flatten(redoLists.entries), current.current.stale);
-            }
-          } else if (edits.length === 1 && (function () {
-            var list = entriesRef.current || [], last = list[list.length - 1];
-            return !!(last && last.length === 1 && !(futureRef.current || []).length && ledger.mergeEdit(last[0], edits[0], edits[0]._t, ledger.MERGE_WINDOW_MS));
-          })()) {
-            // The coalesce mutates the edit object the last entry already holds,
-            // so the merged value reaches the batch through the projection. The
-            // shallow copy only hands React a new list to render; keep it.
-            var merged = (entriesRef.current || []).slice();
-            entriesRef.current = merged;
-            setEntries(merged);
-            publishBatch(ledger.flatten(merged), current.current.stale);
-          } else if (edits.length) {
-            var appended = ledger.appendEdits({ entries: entriesRef.current,
-              future: futureRef.current }, edits, opSeq);
-            entriesRef.current = appended.entries;
-            setEntries(appended.entries);
-            // null means the redo stack still stands: a receipt that is older
-            // than something already in it must not throw that stack away.
-            if (appended.future !== null) {
-              futureRef.current = appended.future;
-              setFuture(appended.future);
-            }
-            publishBatch(ledger.flatten(entriesRef.current), current.current.stale);
-          }
-          // The accepted values and the drafts the receipt may stand for are the
-          // store's, and `applyOutcome` above already handed the drafts transform
-          // to React. Only the promise is settled here, after the ledger has been
-          // told, because the drain barrier reads the batch the receipt produced.
-          protocol.acknowledge(operation, edits.length > 0);
         }
         window.addEventListener("message", onMessage);
         frame.addEventListener("load", load);
