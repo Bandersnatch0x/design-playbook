@@ -207,6 +207,54 @@
         }
         if (outcome.drafts) setDrafts(outcome.drafts);
       }
+      // The one place the ledger moves. The change arm hands the receipt's
+      // operation and the edits it produced in here; the branch that applies
+      // picks the next lists and the tail writes them, so each of the four
+      // writes has exactly one writer. A receipt whose branch does not apply -
+      // an undo for an entry no longer in the list, a redo for one that is not
+      // in the future stack, a change that moved no value - leaves the ledger
+      // and the published batch exactly where they were.
+      function commitLedger(operation, edits, opSeq) {
+        var nextEntries = null, nextFuture = null;
+        if (operation && operation.action === "undo") {
+          var undoLists = ledger.undoEntry({ entries: entriesRef.current,
+            future: futureRef.current }, operation.entry);
+          if (undoLists) {
+            nextEntries = undoLists.entries;
+            nextFuture = undoLists.future;
+          }
+        } else if (operation && operation.action === "redo") {
+          var redoLists = ledger.redoEntry({ entries: entriesRef.current,
+            future: futureRef.current }, operation.entry);
+          if (redoLists) {
+            nextEntries = redoLists.entries;
+            nextFuture = redoLists.future;
+          }
+        } else if (edits.length === 1 && (function () {
+          var list = entriesRef.current || [], last = list[list.length - 1];
+          return !!(last && last.length === 1 && !(futureRef.current || []).length && ledger.mergeEdit(last[0], edits[0], edits[0]._t, ledger.MERGE_WINDOW_MS));
+        })()) {
+          // The coalesce mutates the edit object the last entry already holds,
+          // so the merged value reaches the batch through the projection. The
+          // shallow copy only hands React a new list to render; keep it.
+          nextEntries = (entriesRef.current || []).slice();
+        } else if (edits.length) {
+          var appended = ledger.appendEdits({ entries: entriesRef.current,
+            future: futureRef.current }, edits, opSeq);
+          nextEntries = appended.entries;
+          // null means the redo stack still stands: a receipt that is older
+          // than something already in it must not throw that stack away.
+          if (appended.future !== null) nextFuture = appended.future;
+        }
+        if (!nextEntries) return;
+        entriesRef.current = nextEntries;
+        setEntries(nextEntries);
+        if (nextFuture) {
+          futureRef.current = nextFuture;
+          setFuture(nextFuture);
+        }
+        publishBatch(ledger.flatten(nextEntries), current.current.stale);
+      }
       function disconnected() {
         // A round that already holds ledger work goes stale; one that does not
         // keeps whatever staleness it had, exactly as the separate setter did.
@@ -387,50 +435,7 @@
                 _entryId: opSeq };
             });
             if (edits.length) edits._entryId = opSeq;
-            if (operation && operation.action === "undo") {
-              var undoLists = ledger.undoEntry({ entries: entriesRef.current,
-                future: futureRef.current }, operation.entry);
-              if (undoLists) {
-                entriesRef.current = undoLists.entries;
-                setEntries(undoLists.entries);
-                futureRef.current = undoLists.future;
-                setFuture(undoLists.future);
-                publishBatch(ledger.flatten(undoLists.entries), current.current.stale);
-              }
-            } else if (operation && operation.action === "redo") {
-              var redoLists = ledger.redoEntry({ entries: entriesRef.current,
-                future: futureRef.current }, operation.entry);
-              if (redoLists) {
-                futureRef.current = redoLists.future;
-                setFuture(redoLists.future);
-                entriesRef.current = redoLists.entries;
-                setEntries(redoLists.entries);
-                publishBatch(ledger.flatten(redoLists.entries), current.current.stale);
-              }
-            } else if (edits.length === 1 && (function () {
-              var list = entriesRef.current || [], last = list[list.length - 1];
-              return !!(last && last.length === 1 && !(futureRef.current || []).length && ledger.mergeEdit(last[0], edits[0], edits[0]._t, ledger.MERGE_WINDOW_MS));
-            })()) {
-              // The coalesce mutates the edit object the last entry already holds,
-              // so the merged value reaches the batch through the projection. The
-              // shallow copy only hands React a new list to render; keep it.
-              var merged = (entriesRef.current || []).slice();
-              entriesRef.current = merged;
-              setEntries(merged);
-              publishBatch(ledger.flatten(merged), current.current.stale);
-            } else if (edits.length) {
-              var appended = ledger.appendEdits({ entries: entriesRef.current,
-                future: futureRef.current }, edits, opSeq);
-              entriesRef.current = appended.entries;
-              setEntries(appended.entries);
-              // null means the redo stack still stands: a receipt that is older
-              // than something already in it must not throw that stack away.
-              if (appended.future !== null) {
-                futureRef.current = appended.future;
-                setFuture(appended.future);
-              }
-              publishBatch(ledger.flatten(entriesRef.current), current.current.stale);
-            }
+            commitLedger(operation, edits, opSeq);
             // The accepted values and the drafts the receipt may stand for are the
             // store's, and `applyOutcome` above already handed the drafts transform
             // to React. Only the promise is settled here, after the ledger has been

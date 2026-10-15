@@ -240,3 +240,46 @@ def test_italic_button_is_styled_by_action_not_by_its_english_label() -> None:
     assert '.dpb-compact-text-toolbar button[data-action="italic"]' in CSS
     react = (PREVIEW / "control.react.js").read_text(encoding="utf-8")
     assert '"data-action": action[4]' in react
+
+
+# The four writes the ledger ladder performs - the two refs and the two React
+# setters - used to sit inline in `onMessage`'s change arm, one copy per branch.
+# The ladder is now one function, so a second copy of any of them is a second
+# writer, which is the failure this pins.
+def _commit_ledger_body() -> str:
+    react = (PREVIEW / "control.react.js").read_text(encoding="utf-8")
+    start = react.index("function commitLedger(")
+    return react[start:react.index("\n      }", start)]
+
+
+def test_the_ledger_has_one_writer() -> None:
+    """S7: the ladder left `onMessage`, so one function moves the ledger."""
+    react = (PREVIEW / "control.react.js").read_text(encoding="utf-8")
+    body = _commit_ledger_body()
+    # The four ledger rules are reachable only from inside it.
+    for call in ("ledger.undoEntry(", "ledger.redoEntry(",
+                 "ledger.appendEdits(", "ledger.mergeEdit("):
+        assert react.count(call) == 1, call
+        assert body.count(call) == 1, call
+    # The two React setters exist once each, in the body; the render-body sync
+    # lines above them are writes to the refs, not calls.
+    for setter in ("setEntries(", "setFuture("):
+        assert react.count(setter) == 1, setter
+        assert body.count(setter) == 1, setter
+    # The two refs are written once for the render (`:135` / `:137`) and once by
+    # the ledger.
+    for ref in ("entriesRef.current =", "futureRef.current ="):
+        assert react.count(ref) == 2, ref
+        assert body.count(ref) == 1, ref
+    # The guards and the coalesce's copy-and-mutate note are the branches' own
+    # behaviour, not decoration on top of them.
+    assert "if (undoLists) {" in body
+    assert "if (redoLists) {" in body
+    assert "if (appended.future !== null)" in body
+    assert "The coalesce mutates the edit object the last entry already holds" in body
+    assert "slice()" in body
+    # The settle stays in `onMessage`: the drain barrier reads the batch the
+    # receipt produced, so `acknowledge` has to follow the ledger.
+    assert body.count("protocol.acknowledge(") == 0
+    assert react.index("commitLedger(operation, edits, opSeq)") < \
+        react.index("protocol.acknowledge(operation, edits.length > 0)")
