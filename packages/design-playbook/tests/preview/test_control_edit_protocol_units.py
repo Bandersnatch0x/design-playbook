@@ -40,9 +40,13 @@ var P = window.DPBEdit.protocol;
 // still uses the real microtask queue for promise observation (`flush`), which
 // is independent of this table.
 function makeEnv() {
-  var env = { sends: [], emits: [], results: [], published: true, now: 0, handle: 0, timers: {} };
+  var env = { sends: [], emits: [], results: [], disconnects: [], published: true,
+    now: 0, handle: 0, timers: {} };
   env.deps = {
     send: function (message) { env.sends.push(message); },
+    post: function (message) { env.sends.push(message); },
+    now: function () { return env.now; },
+    disconnect: function () { env.disconnects.push(env.sends.length); },
     setTimer: function (fn, ms) { var id = ++env.handle; env.timers[id] = { fn: fn, at: env.now + ms }; return id; },
     clearTimer: function (id) { delete env.timers[id]; },
     // A plain property set: the shimmed shorthand and the padding/mirror rules
@@ -221,6 +225,62 @@ async function table() {
   eq(n.emits.length, emits + 1, "idempotence: the first refusal of a kind moves the diagnostic");
   n.begin({ property: "width", value: "10px" });
   eq(n.emits.length, emits + 1, "idempotence: the same refusal again moves nothing, so it emits nothing");
+
+  // ---- heartbeat ------------------------------------------------------------
+  var h = makeEnv();
+  var heldHeartbeat = h.store.status();
+  var idle = h.store.ping({ compact: true, labels: { ok: "yes" } });
+  eq(h.sends, [{ type: "ping", nonce: 1, compact: true, labels: { ok: "yes" } }],
+    "heartbeat: the wire shape is unchanged");
+  eq(idle, undefined, "heartbeat: a ping that changes nothing answers nothing");
+  eq(h.store.status() === heldHeartbeat, true,
+    "heartbeat: a no-op tick returns the same status reference");
+  h.now += 30000;
+  var late = h.store.ping({ compact: false, labels: {} });
+  eq([late, h.store.status().stale, h.disconnects], [undefined, false, []],
+    "heartbeat: one throttled late tick is not a disconnect");
+
+  var d = makeEnv();
+  d.store.status().ready = true;
+  d.store.status().diagnostic = "";
+  d.store.ping({ compact: false, labels: {} });
+  d.store.ready({ nonce: 1, routeUrl: "route" }, "route");
+  d.store.ping({ compact: false, labels: {} });
+  d.store.ping({ compact: false, labels: {} });
+  d.store.ping({ compact: false, labels: {} });
+  d.store.ping({ compact: false, labels: {} });
+  d.store.ping({ compact: false, labels: {} });
+  eq(d.store.status().stale, true, "heartbeat: the third unanswered ping goes stale");
+
+  var f = makeEnv();
+  f.store.status().ready = false;
+  f.store.status().connecting = true;
+  f.store.status().diagnostic = "";
+  f.store.ping({ compact: false, labels: {} });
+  f.now += 2501;
+  var first = f.store.ping({ compact: false, labels: {} });
+  eq(first.connecting, false, "heartbeat: the first-connect fallback clears connecting");
+  eq(first.stale, false, "heartbeat: and does not mark the round stale");
+
+  var r = makeEnv();
+  r.store.ping({ compact: false, labels: {} });
+  r.store.ready({ nonce: 1, routeUrl: "route" }, "route");
+  r.store.ready({ nonce: 9, routeUrl: "route" }, "route");
+  eq(r.store.status().ready, true, "heartbeat: a stale nonce changes nothing");
+  r.store.ping({ compact: false, labels: {} });
+  var route = r.store.ready({ nonce: 2, routeUrl: "elsewhere" }, "route");
+  eq([route.stale, route.ready, route.diagnostic], [true, false, "visual_stale"],
+    "heartbeat: a route mismatch marks the round stale and fails it");
+
+  var ack = makeEnv();
+  ack.store.ready({ nonce: 1, routeUrl: "route" }, "route");
+  ack.store.ping({ compact: false, labels: {} });
+  ack.store.ping({ compact: false, labels: {} });
+  ack.store.ready({ nonce: 2, routeUrl: "route" }, "route");
+  ack.store.ping({ compact: false, labels: {} });
+  ack.store.ping({ compact: false, labels: {} });
+  eq([ack.store.status().stale, ack.disconnects], [false, []],
+    "heartbeat: an ack restarts the unanswered count");
 
   console.log(JSON.stringify(failures));
 }

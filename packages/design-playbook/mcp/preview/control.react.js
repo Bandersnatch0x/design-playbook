@@ -107,6 +107,9 @@
       if (!protocolRef.current) {
         protocolRef.current = window.DPBEdit.protocol.create({
           send: post,
+          post: post,
+          now: Date.now,
+          disconnect: disconnected,
           setTimer: function (fn, ms) { return setTimeout(fn, ms); },
           clearTimer: function (handle) { clearTimeout(handle); },
           syncDraft: syncDraft,
@@ -316,46 +319,24 @@
         post({ type: "localize", labels: bridgeLabels() });
       }, [locale]);
       React.useEffect(function () {
-        var nonce = 0, lastAck = 0, started = Date.now(), unanswered = 0;
         function ping() {
-          // Count pings the bridge left unanswered instead of comparing wall
-          // clock. A background tab throttles this timer, so a single late tick
-          // made `Date.now() - lastAck > 2500` read a healthy bridge as dead; it
-          // then set the round permanently stale with no reset path. Three
-          // unanswered pings is a real disconnect even if one round trip is slow.
-          if (lastAck) {
-            if (unanswered >= 2) disconnected();
-            unanswered += 1;
-          }
-          if (!lastAck && Date.now() - started > 2500) {
-            applyOutcome({ status: protocol.patch({ connecting: false }) });
-          }
-          post({ type: "ping", nonce: ++nonce, compact: window.innerWidth <= 480, labels: bridgeLabels() });
+          applyOutcome({ status: protocol.ping({
+            compact: window.innerWidth <= 480, labels: bridgeLabels()
+          }) });
         }
         function load() {
-          lastAck = 0; unanswered = 0; started = Date.now();
-          disconnected();
-          applyOutcome({ status: protocol.patch({ connecting: true }) });
-          ping();
+          applyOutcome({ status: protocol.load({
+            compact: window.innerWidth <= 480, labels: bridgeLabels()
+          }) });
         }
         function onMessage(event) {
           if (event.source !== frame.contentWindow) return;
           var data = event.data || {};
           if (data.dpbVisualEditReady) {
             var response = data.dpbVisualEditReady;
-            if (response.nonce !== nonce) return;
-            if (response.routeUrl !== (binding.routeUrl || "about:srcdoc")) {
-              applyOutcome({ status: protocol.patch({ stale: true, ready: false }) });
-              applyOutcome({ status: protocol.fail("visual_stale") });
-              return;
-            }
-            lastAck = Date.now(); unanswered = 0;
-            applyOutcome({ status: protocol.patch({ ready: true, connecting: false }) });
-            if (!protocol.status().stale && protocol.status().diagnostic === "visual_disconnected") {
-              applyOutcome({ status: protocol.patch({ diagnostic: "" }) });
-            }
+            applyOutcome({ status: protocol.ready(response, binding.routeUrl || "about:srcdoc") });
           }
-          if (data.dpbVisualEditSelection && lastAck) {
+          if (data.dpbVisualEditSelection && protocol.hasAck()) {
             var selection = data.dpbVisualEditSelection;
             if (selection.requestId) {
               // A mutation snapshot is not a new user selection or draft.

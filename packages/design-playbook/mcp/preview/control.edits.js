@@ -108,6 +108,7 @@
   // treated as failed even if its receipt arrives, so the panel never sits `busy`
   // on a request the round has already given up on.
   var REQUEST_TIMEOUT_MS = 1500;
+  var HEARTBEAT_FIRST_CONNECT_MS = 2500;
   function hasOwn(map, key) {
     return Object.prototype.hasOwnProperty.call(map, key);
   }
@@ -302,6 +303,68 @@
     });
     return interrupted;
   }
+
+  function failRound(store, code) {
+    if (store.request) {
+      clearRequestTimer(store);
+      store.request.resolve({ accepted: false, error: code });
+      store.request = null;
+    }
+    store.requestPromise = null;
+    return markStatus(store, {}, { diagnostic: code, busy: false }).status;
+  }
+
+  function heartbeatPing(store, request) {
+    var heartbeat = store.heartbeat;
+    var now = store.deps.now();
+    if (heartbeat.started === null) heartbeat.started = now;
+  // Count unanswered pings, not wall clock: a throttled late tick is not a
+  // disconnect, while three unanswered pings are.
+  var status;
+  if (heartbeat.lastAck) {
+    if (heartbeat.unanswered >= 2) {
+      store.deps.disconnect();
+      status = markStatus(store, {}, { ready: false, stale: !store.status.stale }).status;
+    }
+    heartbeat.unanswered += 1;
+  }
+    if (!heartbeat.lastAck && now - heartbeat.started > HEARTBEAT_FIRST_CONNECT_MS) {
+      status = markStatus(store, {}, { connecting: false }).status;
+    }
+    heartbeat.nonce += 1;
+    store.deps.post({ type: "ping", nonce: heartbeat.nonce,
+      compact: request.compact, labels: request.labels });
+    return status;
+  }
+
+  function heartbeatLoad(store, request) {
+    var heartbeat = store.heartbeat;
+    heartbeat.lastAck = 0;
+    heartbeat.unanswered = 0;
+    heartbeat.started = store.deps.now();
+    store.deps.disconnect();
+    var status = markStatus(store, {}, { connecting: true }).status;
+    heartbeatPing(store, request);
+    return status;
+  }
+
+  function heartbeatReady(store, response, routeUrl) {
+    var heartbeat = store.heartbeat;
+    if (response.nonce !== heartbeat.nonce) return null;
+    if (response.routeUrl !== routeUrl) {
+      var outcome = {};
+      markStatus(store, outcome, { stale: true, ready: false,
+        diagnostic: "visual_stale" });
+      return outcome.status || store.status;
+    }
+    heartbeat.lastAck = true;
+    heartbeat.unanswered = 0;
+    var status = markStatus(store, {}, { ready: true, connecting: false }).status;
+    if (!store.status.stale && store.status.diagnostic === "visual_disconnected") {
+      status = markStatus(store, {}, { diagnostic: "" }).status || status;
+    }
+    return status;
+  }
   window.DPBEdit = {
     ledger: {
       MERGE_WINDOW_MS: MERGE_WINDOW_MS,
@@ -316,8 +379,8 @@
     },
     protocol: {
       REQUEST_TIMEOUT_MS: REQUEST_TIMEOUT_MS,
-      // deps: { send, setTimer, clearTimer, syncDraft, canonicalValue, unpublish,
-      // emit }. The initial status below is the store's own, so the panel's first
+      // deps: { send, post, now, disconnect, setTimer, clearTimer, syncDraft,
+      // canonicalValue, unpublish, emit }. The initial status below is the store's own, so the panel's first
       // render has one definition of what the bridge looks like before it answers.
       create: function (deps) {
         var store = {
@@ -332,6 +395,7 @@
           accepted: {},
           lastAcceptedSeq: {},
           interruptedValues: {},
+          heartbeat: { nonce: 0, lastAck: 0, started: null, unanswered: 0 },
         };
         return {
           begin: function (request) { return beginRequest(store, request); },
@@ -348,14 +412,12 @@
           patch: function (fields) { return markStatus(store, {}, fields).status; },
           // Terminal for the round: refuse the request in flight and say why.
           fail: function (code) {
-            if (store.request) {
-              clearRequestTimer(store);
-              store.request.resolve({ accepted: false, error: code });
-              store.request = null;
-            }
-            store.requestPromise = null;
-            return markStatus(store, {}, { diagnostic: code, busy: false }).status;
+            return failRound(store, code);
           },
+          ping: function (request) { return heartbeatPing(store, request); },
+          load: function (request) { return heartbeatLoad(store, request); },
+          ready: function (response, routeUrl) { return heartbeatReady(store, response, routeUrl); },
+          hasAck: function () { return !!store.heartbeat.lastAck; },
           interrupt: function () { return interruptRequests(store); },
           // The receipt is in hand and the ledger has been told: settle the promise
           // with what the round ended up holding.
