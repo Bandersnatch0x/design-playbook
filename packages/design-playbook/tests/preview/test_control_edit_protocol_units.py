@@ -3,12 +3,14 @@
 ``control.edits.js`` owns what the bridge is doing right now: the request id
 counter, the request in flight, the requests no receipt has answered, what has
 been dispatched, what the bridge has accepted, the accepted sequence per target,
-the values an interrupt took with it, and the 1500 ms deadline. Slice S3 moved
-that out of ``control.react.js``, and until this table the only thing that could
+the values an interrupt took with it, the 1500 ms deadline, and - since slice S5
+- the drain's decision plus the two flags that say whether the panel's batch is
+still the published one and whether a drain is walking. Slice S3 moved that out
+of ``control.react.js``, and until this table the only thing that could
 evaluate any of it was the browser matrix - a lost guard or a wrong comparison
 there showed up as a whole area of red rather than as a failing rule. The store
 reaches for nothing by itself: the transport, the timer, the two value
-normalizers, the publish flag and the panel callback all arrive in ``deps``, so
+normalizers and the panel callback all arrive in ``deps``, so
 this loads the shipped module in node, drives it with an injected clock over a
 case table, and asserts the send log, the settled promises and the status. It
 needs node, which the repository already requires for its JavaScript checks.
@@ -40,7 +42,7 @@ var P = window.DPBEdit.protocol;
 // still uses the real microtask queue for promise observation (`flush`), which
 // is independent of this table.
 function makeEnv() {
-  var env = { sends: [], emits: [], results: [], disconnects: [], published: true,
+  var env = { sends: [], emits: [], results: [], disconnects: [],
     now: 0, handle: 0, timers: {}, hasWork: false };
   env.deps = {
     send: function (message) { env.sends.push(message); },
@@ -65,7 +67,6 @@ function makeEnv() {
     // Distinct from the dispatched value so a test can tell which of the two a
     // record was built from.
     canonicalValue: function (property, value) { return "c:" + value; },
-    unpublish: function () { env.published = false; },
     emit: function (outcome) { env.emits.push(outcome.status || null); },
   };
   env.tick = function (ms) {
@@ -87,6 +88,11 @@ function makeEnv() {
   return env;
 }
 function flush() { return new Promise(function (r) { setTimeout(r, 0); }); }
+// The publish flag's one reader is the pending rule's snapshot, so that is how a
+// case reads it now that the store holds it instead of the panel's ref.
+function publishedOf(env) {
+  return env.store.pendingSnapshot({ selected: null, draftTimers: {}, drafts: {} }).published;
+}
 
 async function table() {
   // ---- ack -----------------------------------------------------------------
@@ -95,7 +101,7 @@ async function table() {
   eq(a.sends.length, 1, "ack: one send");
   eq(a.sends[0], { type: "set-style", requestId: 1, selector: "#a", property: "color",
     value: "red", changes: null, replay: false }, "ack: the wire shape is unchanged");
-  eq(a.published, false, "ack: a dispatch unpublishes the batch");
+  eq(publishedOf(a), false, "ack: a dispatch unpublishes the batch");
   eq(a.store.status().busy, true, "ack: busy while the request is in flight");
   eq(a.store.hasUnacked(), true, "ack: the request is owed a receipt");
   eq(a.store.requestId(), 1, "ack: the request id is the allocated sequence");
@@ -341,6 +347,100 @@ async function table() {
   eq(moved.results, [{ accepted: false, error: "visual_stale" }],
     "route mismatch: the in-flight request is refused with the route reason");
 
+  // ---- planDrain: the decision the drain walks on ---------------------------
+  // One query answers, in the order the walk must take it, what the panel used to
+  // ask for separately: the request in flight, the first draft the bridge has not
+  // been sent, the receipts no answer has cleared, or done.
+  var p = makeEnv();
+  eq(p.store.planDrain({ drafts: {} }), { kind: "done" },
+    "planDrain: nothing in flight, nothing uncommitted, nothing unacked is done");
+  p.begin({ draft: "red" });
+  eq(p.store.planDrain({ drafts: { color: "blue" } }), { kind: "await" },
+    "planDrain: a request in flight is awaited before any draft is sent");
+  var pAck = p.store.reduce({ type: "change", requestId: 1, selector: "#a", selected: "#a" });
+  p.store.acknowledge(pAck.operation, true);
+  await flush();
+  eq(p.store.planDrain({ drafts: { color: "blue", width: "10px" } }),
+    { kind: "send", property: "color", value: "blue" },
+    "planDrain: the first uncommitted draft is the one to send");
+  p.store.markDispatched("color", "blue");
+  eq(p.store.planDrain({ drafts: { color: "blue", width: "10px" } }),
+    { kind: "send", property: "width", value: "10px" },
+    "planDrain: once that draft is dispatched the next one is next");
+  p.store.markDispatched("width", "10px");
+  eq(p.store.planDrain({ drafts: { color: "blue", width: "10px" } }), { kind: "done" },
+    "planDrain: every draft dispatched and nothing unacked is done");
+
+  // A request the deadline gave up on is still owed: no receipt ever came, so the
+  // round must fail the drain rather than publish over it. It is only reached
+  // once there is nothing left to send - a draft the deadline un-marked is
+  // re-sent first.
+  var u = makeEnv();
+  u.begin({ draft: "red" });
+  u.tick(P.REQUEST_TIMEOUT_MS);
+  eq(u.store.hasUnacked(), true, "planDrain: the deadline leaves the receipt owed");
+  eq(u.store.planDrain({ drafts: {} }), { kind: "unacked" },
+    "planDrain: nothing left to send but a receipt still owed is the unacked residue");
+  eq(u.store.planDrain({ drafts: { color: "red" } }),
+    { kind: "send", property: "color", value: "red" },
+    "planDrain: a draft outranks the residue, so the walk tries it first");
+
+  // ---- a replay records what it sent ----------------------------------------
+  // The comment on `begin`'s dispatch record describes a real defect: the undo and
+  // redo paths did not mark the value they re-sent, so `drafts[property]` and
+  // `dispatched[property]` stayed permanently unequal and the editor reported a
+  // pending edit forever. `begin` records it for the replay paths too, so a replay
+  // leaves the property committed.
+  var rp = makeEnv();
+  rp.store.acceptSelection({ color: "blue" });
+  var redoEntry = [{ kind: "style", viewport: "any", locator: "#a", property: "color",
+    oldValue: "red", newValue: "blue", _seq: 1, _entryId: 1 }];
+  rp.begin({ action: "undo", entry: redoEntry, value: "red", draft: "blue", oldValue: "blue" });
+  eq(rp.store.dispatchedValues().color, "red",
+    "replay: an undo records the value it re-sent, so the property is not left uncommitted");
+  var rpAck = rp.store.reduce({ type: "change", requestId: 1, selector: "#a", selected: "#a" });
+  rp.store.acknowledge(rpAck.operation, true);
+  await flush();
+  eq(rp.store.planDrain({ drafts: { color: "red" } }), { kind: "done" },
+    "replay: after the receipt the drain sees nothing uncommitted");
+
+  // ---- pendingSnapshot: the seven fields the rule reads ---------------------
+  var s = makeEnv();
+  s.store.acceptSelection({ color: "blue" });
+  s.begin({ draft: "blue" });
+  var view = { selected: { selector: "#a" }, draftTimers: { width: 7 }, drafts: { color: "blue" } };
+  var snap = s.store.pendingSnapshot(view);
+  eq(Object.keys(snap),
+    ["selected", "published", "request", "unacked", "draftTimers", "drafts", "dispatched"],
+    "pendingSnapshot: the seven field names are the rule's, byte-identical");
+  eq(snap.selected, view.selected, "pendingSnapshot: selected comes from the caller's view");
+  eq(snap.draftTimers, view.draftTimers, "pendingSnapshot: draftTimers comes from the caller's view");
+  eq(snap.drafts, view.drafts, "pendingSnapshot: drafts comes from the caller's view");
+  eq(snap.published, false,
+    "pendingSnapshot: published is the store's, and a dispatch unpublishes it");
+  eq(snap.request === s.store.pendingRequest(), true,
+    "pendingSnapshot: request is the promise in flight");
+  eq(snap.unacked === s.store.unackedTable(), true, "pendingSnapshot: unacked is the store's table");
+  eq(snap.dispatched === s.store.dispatchedValues(), true,
+    "pendingSnapshot: dispatched is the store's record");
+
+  // ---- the two flags: one writer each ---------------------------------------
+  var fl = makeEnv();
+  eq(publishedOf(fl), true, "flags: a fresh store is published");
+  fl.store.setPublished(false);
+  eq(publishedOf(fl), false, "flags: the published setter is what the pending rule reads");
+  fl.store.setPublished(true);
+  eq(publishedOf(fl), true, "flags: and it sets both ways");
+  eq(fl.store.isDraining(), false, "flags: a fresh store is not draining");
+  fl.store.setDraining(true);
+  eq(fl.store.isDraining(), true, "flags: the draining setter is what the render guard reads");
+  fl.store.setDraining(false);
+  eq(fl.store.isDraining(), false, "flags: and it clears again");
+  // A dispatch unpublishes through the same setter, in the store: the panel is no
+  // longer called back out to for it, so `deps` carries no publish flag.
+  fl.begin({ draft: "red" });
+  eq(publishedOf(fl), false, "flags: begin unpublishes the batch inside the store");
+
   console.log(JSON.stringify(failures));
 }
 table().then(function () {}, function (error) {
@@ -370,11 +470,12 @@ def test_the_protocol_keeps_its_answers(tmp_path) -> None:
     assert failures == [], "\n".join(failures)
 
 
-# The refs S3 replaced. A leftover of any of them is a crash at render time that
-# only the browser matrix would catch, so the absence is pinned here instead.
+# The refs S3 and S5 replaced. A leftover of any of them is a crash at render time
+# that only the browser matrix would catch, so the absence is pinned here instead.
 MOVED_REFS = ("sequence.current", "unackedRequests.current", "request.current",
               "requestPromiseRef.current", "dispatchedDrafts.current",
-              "interruptedValues.current", "lastAcceptedSeq.current", "accepted.current")
+              "interruptedValues.current", "lastAcceptedSeq.current", "accepted.current",
+              "isPublishedRef.current", "isDrainingRef.current")
 
 
 def test_the_shell_keeps_no_lifecycle_ref_of_its_own() -> None:
@@ -407,3 +508,23 @@ def test_the_deadline_lives_only_in_the_module() -> None:
     shell = SHELL.read_text(encoding="utf-8")
     assert edits.count("var REQUEST_TIMEOUT_MS = 1500;") == 1
     assert "REQUEST_TIMEOUT_MS" not in shell
+
+
+def test_the_two_flags_have_one_writer_each() -> None:
+    # `published` and `isDraining` were component refs with one reader and several
+    # writers. The records moved into the store; the writers that are the panel's
+    # go through the one setter each, and the render reads the store's answer.
+    shell = SHELL.read_text(encoding="utf-8")
+    assert shell.count("protocol.setPublished(") == 2, "publishBatch and the input handler"
+    assert shell.count("protocol.setDraining(") == 3, "the drain's start, deadline and finish"
+    assert shell.count("protocol.isDraining()") == 2, "the render guard and the input guard"
+
+
+def test_the_store_no_longer_reaches_out_for_the_publish_flag() -> None:
+    # The deps entry disappearing is the point of the slice, not a tidy-up: a
+    # `deps` key left behind would be a callback the store no longer calls.
+    shell = SHELL.read_text(encoding="utf-8")
+    edits = EDITS.read_text(encoding="utf-8")
+    # "unpublished" is the pending rule's own adjective; the deps key is "unpublish".
+    assert shell.replace("unpublished", "").count("unpublish") == 0
+    assert "unpublish" not in edits

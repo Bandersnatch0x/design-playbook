@@ -99,10 +99,9 @@
       // first-render store, so a second store means two disagreeing lifecycles.
       // The status the five scalars render is the store's, so they seed from it.
       // `deps` is what the store must not reach for itself: the transport, the
-      // timer, the two DOM-bound normalizers, the publish flag, and `emit` - how a
-      // deadline nobody called still reaches React. It is also what makes the
-      // lifecycle executable in node.
-      var isPublishedRef = React.useRef(true);
+      // timer, the two DOM-bound normalizers, and `emit` - how a deadline nobody
+      // called still reaches React. It is also what makes the lifecycle
+      // executable in node.
       var protocolRef = React.useRef(null);
       if (!protocolRef.current) {
         protocolRef.current = window.DPBEdit.protocol.create({
@@ -114,7 +113,6 @@
           clearTimer: function (handle) { clearTimeout(handle); },
           syncDraft: syncDraft,
           canonicalValue: canonicalValue,
-          unpublish: function () { isPublishedRef.current = false; },
           emit: function (outcome) { applyOutcome(outcome); },
         });
       }
@@ -137,7 +135,6 @@
       entriesRef.current = entries;
       var futureRef = React.useRef(future);
       futureRef.current = future;
-      var isDrainingRef = React.useRef(false);
       // The drain timeout outlives the effect that created it, so it needs its
       // own ref: the unmount cleanup must clear it, or an unmount mid-drain
       // leaves a 2s timer that later touches unmounted state.
@@ -469,7 +466,7 @@
         if (countEl) countEl.textContent = String(cleanEdits.length);
         var tabEl = document.getElementById("dpb-tab-visual");
         if (tabEl) tabEl.classList.toggle("is-pending", cleanEdits.length > 0);
-        isPublishedRef.current = true;
+        protocol.setPublished(true);
         // The rail owns readiness; tell it the published batch changed so it can
         // re-evaluate the floor mirror (an effective edit alone can now satisfy it).
         document.dispatchEvent(new CustomEvent("dpbVisualEditsChanged"));
@@ -527,7 +524,7 @@
           publishBatch(ledger.flatten(entriesRef.current), state.stale);
           return Promise.resolve({ ok: true, batch: window.DPB_VISUAL_EDIT_BATCH });
         }
-        isDrainingRef.current = true;
+        protocol.setDraining(true);
         applyOutcome({ status: protocol.patch({ busy: true }) });
 
         Object.keys(draftTimers.current).forEach(function (prop) {
@@ -543,7 +540,7 @@
             if (finished) return;
             finished = true;
             drainTimerRef.current = null;
-            isDrainingRef.current = false;
+            protocol.setDraining(false);
             applyOutcome({ status: protocol.patch({ busy: false }) });
             resolve({ ok: false, error: "timeout" });
           }, maxWait);
@@ -554,7 +551,7 @@
             finished = true;
             clearTimeout(timer);
             drainTimerRef.current = null;
-            isDrainingRef.current = false;
+            protocol.setDraining(false);
             applyOutcome({ status: protocol.patch({ busy: false }) });
             if (!ok) {
               resolve({ ok: false, error: err || "drain_failed" });
@@ -564,11 +561,14 @@
             resolve({ ok: true, batch: batch });
           }
 
+          // The walk's effects stay here - the `finished` guard, the dispatch, the
+          // failure answers - and the decision it walks on is the store's, one
+          // `planDrain` per turn.
           function step() {
             if (finished) return;
-            var curReq = protocol.pendingRequest();
-            if (curReq) {
-              curReq.then(function (res) {
+            var plan = protocol.planDrain({ drafts: current.current.drafts });
+            if (plan.kind === "await") {
+              protocol.pendingRequest().then(function (res) {
                 if (finished) return;
                 if (!res || !res.accepted) {
                   finish(false, (res && res.error) || "rejected");
@@ -582,32 +582,25 @@
               return;
             }
 
-            var st = current.current;
-            var uncommittedProps = Object.keys(st.drafts).filter(function (p) {
-              return st.drafts[p] !== undefined && protocol.dispatchedValues()[p] !== st.drafts[p];
-            });
-
-            if (uncommittedProps.length > 0) {
-              var nextProp = uncommittedProps[0];
-              var nextVal = st.drafts[nextProp];
-              protocol.markDispatched(nextProp, nextVal);
-              applyStyle(nextProp, nextVal).then(function (res) {
+            if (plan.kind === "send") {
+              protocol.markDispatched(plan.property, plan.value);
+              applyStyle(plan.property, plan.value).then(function (res) {
                 if (finished) return;
                 if (!res || !res.accepted) {
-                  protocol.markDispatched(nextProp, null);
+                  protocol.markDispatched(plan.property, null);
                   finish(false, (res && res.error) || "rejected");
                   return;
                 }
                 step();
               }).catch(function (err) {
                 if (finished) return;
-                protocol.markDispatched(nextProp, null);
+                protocol.markDispatched(plan.property, null);
                 finish(false, String(err));
               });
               return;
             }
 
-            if (protocol.hasUnacked()) {
+            if (plan.kind === "unacked") {
               finish(false, "unresolved_edits");
               return;
             }
@@ -620,18 +613,14 @@
       }
 
       function hasPendingVisualEdits() {
-        // The pending rule is pure and executes in node; this only assembles the
-        // snapshot from the component's state and the protocol store's records.
+        // The pending rule is pure and executes in node; the store assembles the
+        // seven fields it reads, taking the render inputs the store does not hold.
         var state = current.current;
-        return dpbPendingVisualEdits({
+        return dpbPendingVisualEdits(protocol.pendingSnapshot({
           selected: state.selected,
-          published: isPublishedRef.current,
-          request: protocol.pendingRequest(),
-          unacked: protocol.unackedTable(),
           draftTimers: draftTimers.current,
           drafts: state.drafts,
-          dispatched: protocol.dispatchedValues(),
-        });
+        }));
       }
       var hasPendingRef = React.useRef(hasPendingVisualEdits);
       hasPendingRef.current = hasPendingVisualEdits;
@@ -685,10 +674,10 @@
         connecting && !stale && h("div", { className: "dpb-loading dpb-editor-loading", role: "status" },
           h("span", null, t("visual_loading")), h("div", { className: "dpb-skeleton", "aria-hidden": true })),
         (function () {
-          var fieldDisabled = !selected || !ready || stale || isDrainingRef.current;
+          var fieldDisabled = !selected || !ready || stale || protocol.isDraining();
           function handleInput(prop, val) {
-            if (isDrainingRef.current) return;
-            isPublishedRef.current = false;
+            if (protocol.isDraining()) return;
+            protocol.setPublished(false);
             setDrafts(function (old) { return syncDraft(old, prop, val); });
             clearTimeout(draftTimers.current[prop]);
             var sel = selected && selected.selector;

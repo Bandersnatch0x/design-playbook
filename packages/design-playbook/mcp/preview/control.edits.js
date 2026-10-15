@@ -13,11 +13,14 @@
    Slice S3 moved the request lifecycle in - the request id counter, the request in
    flight, the table of requests no receipt has answered, what has been dispatched,
    what the bridge has accepted, the accepted sequence per target and property, the
-   values an interrupted request took with it, and the 1500 ms deadline. Unlike the
-   ledger it is a store: it keeps those records for one Editor instance. Every
-   capability it must not reach for itself arrives in `deps` - the transport, the
-   timer, the two DOM-bound value normalizers, the publish flag, and `emit`, which
-   is how a transition nobody called it for (the deadline) still reaches the panel.
+   values an interrupted request took with it, and the 1500 ms deadline. Slice S5
+   moved two more decisions in: the drain's decision, as one query the panel's walk
+   switches on, and the two flags that had one reader and several writers - whether
+   the batch the panel holds is still the one it published, and whether a drain is
+   walking. Unlike the ledger it is a store: it keeps those records for one Editor
+   instance. Every capability it must not reach for itself arrives in `deps` - the
+   transport, the timer, the two DOM-bound value normalizers, and `emit`, which is
+   how a transition nobody called it for (the deadline) still reaches the panel.
    That is also what makes the whole lifecycle executable in node. */
 (function () {
   "use strict";
@@ -112,6 +115,18 @@
   function hasOwn(map, key) {
     return Object.prototype.hasOwnProperty.call(map, key);
   }
+  // Whether the batch the panel holds is still the one it published. Slice S5
+  // moved the flag in from the component, where the pending rule was its one
+  // reader and three writers kept it; `begin` is a writer inside the store now,
+  // so the panel is no longer called back out to for it.
+  function setPublished(store, value) {
+    store.published = value;
+  }
+  // Whether a drain is walking its steps. The render guard reads it on every
+  // render, so it is a fact of the round like the records above, not a ref.
+  function setDraining(store, value) {
+    store.draining = value;
+  }
   // Write the status only where a field actually moved, and hand out the whole
   // value, never a patch. A transition that changes nothing leaves the store's
   // status object identical, which is what lets the panel skip its setters on a
@@ -167,7 +182,7 @@
     // permanently unequal and the editor reported a pending edit forever - which the
     // readiness mirror now reads as "submittable".
     store.dispatched[request.property] = request.value;
-    store.deps.unpublish();
+    setPublished(store, false);
     emitStatus(store, { busy: true });
     var operation = { oldValue: request.oldValue, id: id, action: request.action || "edit",
       entry: entry, origin: request.origin || "shell",
@@ -304,6 +319,25 @@
     return interrupted;
   }
 
+  // The drain's next move, decided here rather than by the panel's walk: a request
+  // in flight has to settle first, then the first draft the bridge has not been
+  // sent, then the receipts no answer has cleared, then the round is done. The
+  // walk keeps every effect - the `finished` guard, the 2 s timer, the dispatch,
+  // the batch - and switches on `kind`. `drafts` is render state the store does
+  // not hold, so it arrives in `view` the way `begin` takes `viewport`.
+  function planDrain(store, view) {
+    if (store.requestPromise) return { kind: "await" };
+    var drafts = view.drafts, dispatched = store.dispatched;
+    var uncommitted = Object.keys(drafts).filter(function (p) {
+      return drafts[p] !== undefined && dispatched[p] !== drafts[p];
+    });
+    if (uncommitted.length > 0) {
+      return { kind: "send", property: uncommitted[0], value: drafts[uncommitted[0]] };
+    }
+    if (Object.keys(store.unacked).length > 0) return { kind: "unacked" };
+    return { kind: "done" };
+  }
+
   function failRound(store, code) {
     if (store.request) {
       clearRequestTimer(store);
@@ -380,8 +414,9 @@
     protocol: {
       REQUEST_TIMEOUT_MS: REQUEST_TIMEOUT_MS,
       // deps: { send, post, now, disconnect, setTimer, clearTimer, syncDraft,
-      // canonicalValue, unpublish, emit }. The initial status below is the store's own, so the panel's first
-      // render has one definition of what the bridge looks like before it answers.
+      // canonicalValue, emit }. The initial status below is the store's own, so
+      // the panel's first render has one definition of what the bridge looks
+      // like before it answers.
       create: function (deps) {
         var store = {
           deps: deps,
@@ -396,6 +431,8 @@
           lastAcceptedSeq: {},
           interruptedValues: {},
           heartbeat: { nonce: 0, lastAck: 0, started: null, unanswered: 0 },
+          published: true,
+          draining: false,
         };
         return {
           begin: function (request) { return beginRequest(store, request); },
@@ -446,6 +483,27 @@
             store.dispatched = Object.assign({}, values);
             return store.accepted;
           },
+          // The drain's decision (S5). One query in place of the three the panel
+          // used to ask for separately, in the order it had to ask them.
+          planDrain: function (view) { return planDrain(store, view); },
+          // The seven fields the pending rule reads, in the order it reads them.
+          // `selected`, `draftTimers` and `drafts` are render/DOM inputs the store
+          // does not hold, so they arrive in `view`; the rest are its own records.
+          pendingSnapshot: function (view) {
+            return {
+              selected: view.selected,
+              published: store.published,
+              request: store.requestPromise,
+              unacked: store.unacked,
+              draftTimers: view.draftTimers,
+              drafts: view.drafts,
+              dispatched: store.dispatched,
+            };
+          },
+          // The two single-writer flags (S5), each behind one setter.
+          setPublished: function (value) { setPublished(store, value); },
+          isDraining: function () { return store.draining; },
+          setDraining: function (value) { setDraining(store, value); },
         };
       },
     },
