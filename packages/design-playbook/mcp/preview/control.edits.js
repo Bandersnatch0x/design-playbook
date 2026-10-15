@@ -7,7 +7,18 @@
    modified dots need is `flatten(entries)`: one projection, computed where it is
    read. A coalesce still mutates the edit object that the last entry holds, and
    that shared identity is what reaches the published batch. These functions only
-   answer "what are the next lists". */
+   answer "what are the next lists".
+
+   `protocol` is the other half of the module: what the bridge is doing right now.
+   Slice S3 moved the request lifecycle in - the request id counter, the request in
+   flight, the table of requests no receipt has answered, what has been dispatched,
+   what the bridge has accepted, the accepted sequence per target and property, the
+   values an interrupted request took with it, and the 1500 ms deadline. Unlike the
+   ledger it is a store: it keeps those records for one Editor instance. Every
+   capability it must not reach for itself arrives in `deps` - the transport, the
+   timer, the two DOM-bound value normalizers, the publish flag, and `emit`, which
+   is how a transition nobody called it for (the deadline) still reaches the panel.
+   That is also what makes the whole lifecycle executable in node. */
 (function () {
   "use strict";
   var MERGE_WINDOW_MS = 500;
@@ -91,6 +102,206 @@
     var isOlderReceipt = fut.some(function (f) { return opSeq < seqOf(f); });
     return { entries: nextHist, future: isOlderReceipt ? null : [] };
   }
+
+  // ---- the request lifecycle (slice S3) ----
+  // The deadline for one dispatched edit. A bridge that answers later than this is
+  // treated as failed even if its receipt arrives, so the panel never sits `busy`
+  // on a request the round has already given up on.
+  var REQUEST_TIMEOUT_MS = 1500;
+  function hasOwn(map, key) {
+    return Object.prototype.hasOwnProperty.call(map, key);
+  }
+  // Write the status only where a field actually moved, and hand out the whole
+  // value, never a patch. A transition that changes nothing leaves the store's
+  // status object identical, which is what lets the panel skip its setters on a
+  // no-op: one reference check answers "did anything move".
+  function markStatus(store, outcome, fields) {
+    var moved = Object.keys(fields).some(function (key) {
+      return store.status[key] !== fields[key];
+    });
+    if (!moved) return outcome;
+    store.status = Object.assign({}, store.status, fields);
+    outcome.status = store.status;
+    return outcome;
+  }
+  // A transition the panel did not start has no return value to carry its status,
+  // so it goes out through `deps.emit` like every other outcome.
+  function emitStatus(store, fields) {
+    var outcome = markStatus(store, {}, fields);
+    if (outcome.status) store.deps.emit(outcome);
+    return outcome.status;
+  }
+  function clearRequestTimer(store) {
+    if (store.request && store.request.timer) store.deps.clearTimer(store.request.timer);
+  }
+  // The deadline is only terminal for the request that armed it: a timer left over
+  // from a request that has since been answered or refused must not fail the round
+  // a second time.
+  function deadlineFired(store, id) {
+    var req = store.request;
+    if (!req || req.id !== id) return null;
+    if (req.property && store.dispatched) delete store.dispatched[req.property];
+    store.request = null;
+    store.requestPromise = null;
+    var outcome = {};
+    markStatus(store, outcome, { busy: false, diagnostic: "visual_drain_failed" });
+    if (outcome.status) store.deps.emit(outcome);
+    var resFn = req.resolve;
+    req.resolve = null;
+    if (typeof resFn === "function") {
+      resFn({ accepted: false, error: "timeout" });
+    }
+    return outcome;
+  }
+  function beginRequest(store, request) {
+    if (!store.status.ready || store.status.stale || request.locator == null || store.request) {
+      emitStatus(store, { diagnostic: "visual_unavailable" });
+      return Promise.resolve({ accepted: false, error: "visual_unavailable" });
+    }
+    var id = ++store.sequence;
+    var entry = request.entry || null;
+    if (entry) entry._replayId = id;
+    // Record what this dispatch sends. Typing already set this in commit(), but the
+    // replay paths (undo/redo) did not, so drafts and dispatched values stayed
+    // permanently unequal and the editor reported a pending edit forever - which the
+    // readiness mirror now reads as "submittable".
+    store.dispatched[request.property] = request.value;
+    store.deps.unpublish();
+    emitStatus(store, { busy: true });
+    var operation = { oldValue: request.oldValue, id: id, action: request.action || "edit",
+      entry: entry, origin: request.origin || "shell",
+      value: request.value, draft: request.draft, property: request.property,
+      viewport: request.viewport, locator: request.locator };
+    store.unacked[id] = operation;
+    var promise = new Promise(function (resolve) {
+      // The in-flight record is a copy that also carries the resolve and the timer;
+      // the unacked entry carries neither, so a receipt that lands after the
+      // deadline is still recorded but can never re-settle anything.
+      store.request = Object.assign({ resolve: resolve,
+        timer: store.deps.setTimer(function () { deadlineFired(store, id); }, REQUEST_TIMEOUT_MS) },
+        operation);
+      store.deps.send({ type: "set-style", requestId: id, selector: request.locator,
+        property: request.property, value: request.value, changes: entry && entry.map(function (item) {
+          return { property: item.property, value: operation.action === "undo" ? item.oldValue : item.newValue };
+        }), replay: !!entry });
+    });
+    store.requestPromise = promise;
+    promise.finally(function () {
+      if (store.requestPromise === promise) store.requestPromise = null;
+    });
+    return promise;
+  }
+  function reduceRejected(store, event) {
+    var outcome = {};
+    // A rejection is terminal for that request id: the bridge will never confirm
+    // it, so a retained entry made every later drain answer unresolved_edits and
+    // left only Abort usable.
+    delete store.unacked[event.requestId];
+    if (!store.request || event.requestId !== store.request.id) return outcome;
+    if (event.code === "visual_target_missing") markStatus(store, outcome, { stale: true });
+    var rolledBack = store.request.property;
+    if (rolledBack && hasOwn(store.accepted, rolledBack)) {
+      store.dispatched[rolledBack] = store.accepted[rolledBack];
+      var value = store.accepted[rolledBack];
+      outcome.drafts = function (old) { return store.deps.syncDraft(old, rolledBack, value); };
+    }
+    clearRequestTimer(store);
+    store.request.resolve({ accepted: false, error: event.code });
+    store.request = null;
+    store.requestPromise = null;
+    markStatus(store, outcome, { diagnostic: event.code, busy: false });
+    outcome.consumed = true;
+    return outcome;
+  }
+  // The receipt for a request this store dispatched, or a gesture the prototype did
+  // on its own. Everything the round needs to know about the request lives here;
+  // the ledger transitions the receipt drives stay with the ledger's owner.
+  function reduceChange(store, event) {
+    if (!store.status.ready || store.status.stale) return null;
+    var unacked = store.unacked[event.requestId];
+    var operation = (store.request && event.requestId === store.request.id ? store.request : null) || unacked;
+    if (!operation && !(typeof event.requestId === "string" && event.requestId.indexOf("gesture-") === 0)) return null;
+    if (unacked) delete store.unacked[event.requestId];
+    if (operation && operation.entry && operation.entry._replayId !== operation.id) return null;
+    // Provenance decides whether an edit can stand in for review notes. The
+    // prototype shares the bridge window, so a change it reports for a request the
+    // parent dispatched can carry values the parent never asked for: for those the
+    // parent rebuilds the record from its own dispatch. A gesture the parent did not
+    // dispatch has no such record, so its reported values are kept with "frame"
+    // provenance, and a WebMCP tool call is the agent editing, not the reviewer.
+    var source = operation ? (operation.origin || "shell") : "frame";
+    var reported = source === "frame" ? (event.changes || [event]) : (
+      operation.entry ? operation.entry.map(function (item) {
+        var target = operation.action === "undo" ? item.oldValue : item.newValue;
+        var prior = operation.action === "undo" ? item.newValue : item.oldValue;
+        return { property: item.property, oldValue: prior, newValue: target };
+      }) : [{
+        property: operation.property, oldValue: operation.oldValue,
+        newValue: store.deps.canonicalValue(operation.property, operation.value)
+      }]
+    );
+    var changes = reported.map(function (c) {
+      var key = event.selector + ":" + c.property;
+      if (!hasOwn(store.interruptedValues, key)) return c;
+      var recovered = Object.assign({}, c, { oldValue: store.interruptedValues[key] });
+      delete store.interruptedValues[key];
+      return recovered;
+    });
+    var outcome = { operation: operation, changes: changes, source: source };
+    if (operation && operation.timer) store.deps.clearTimer(operation.timer);
+    if (operation && store.request && store.request.id === event.requestId) {
+      store.request = null;
+      store.requestPromise = null;
+      markStatus(store, outcome, { busy: false, diagnostic: "" });
+    }
+    // A receipt the store never allocated an id for (a gesture) still needs one, so
+    // it takes the next sequence number. `begin` remains the only writer of the
+    // counter for requests.
+    outcome.opSeq = operation ? (operation.id || ++store.sequence) : ++store.sequence;
+    if (event.selected === event.selector) {
+      var opSeq = outcome.opSeq;
+      changes.forEach(function (c) {
+        var key = event.selector + ":" + c.property;
+        if (opSeq < (store.lastAcceptedSeq[key] || 0)) return;
+        store.lastAcceptedSeq[key] = opSeq;
+        store.accepted = store.deps.syncDraft(store.accepted, c.property, c.newValue);
+      });
+      // Keep newer inspector keystrokes while acknowledging older requests. The
+      // transform runs against the drafts the panel holds when it is applied, and
+      // reads the sequence map as the loop above just left it.
+      var settled = operation;
+      var acceptedChanges = changes;
+      outcome.drafts = function (values) {
+        acceptedChanges.forEach(function (c) {
+          var key = event.selector + ":" + c.property;
+          if (opSeq < (store.lastAcceptedSeq[key] || 0)) return;
+          if (!settled || settled.entry || values[c.property] === settled.draft) {
+            values = store.deps.syncDraft(values, c.property,
+              settled && !settled.entry ? settled.value : c.newValue);
+          }
+        });
+        return values;
+      };
+    }
+    return outcome;
+  }
+  // What a disconnect takes with it: the requests still waiting for a receipt.
+  // Their values are remembered, because the receipt that never comes would
+  // otherwise be the only record of what the element used to look like, and their
+  // dispatched marks are dropped so the drafts read as unsent again.
+  function interruptRequests(store) {
+    var interrupted = Object.values(store.unacked);
+    store.unacked = {};
+    store.lastAcceptedSeq = {};
+    interrupted.forEach(function (operation) {
+      var key = operation.locator + ":" + operation.property;
+      if (!operation.entry && !hasOwn(store.interruptedValues, key)) {
+        store.interruptedValues[key] = operation.oldValue;
+      }
+      delete store.dispatched[operation.property];
+    });
+    return interrupted;
+  }
   window.DPBEdit = {
     ledger: {
       MERGE_WINDOW_MS: MERGE_WINDOW_MS,
@@ -102,6 +313,79 @@
       undoEntry: undoEntry,
       redoEntry: redoEntry,
       appendEdits: appendEdits,
+    },
+    protocol: {
+      REQUEST_TIMEOUT_MS: REQUEST_TIMEOUT_MS,
+      // deps: { send, setTimer, clearTimer, syncDraft, canonicalValue, unpublish,
+      // emit }. The initial status below is the store's own, so the panel's first
+      // render has one definition of what the bridge looks like before it answers.
+      create: function (deps) {
+        var store = {
+          deps: deps,
+          status: { ready: false, connecting: true, stale: false, busy: false,
+            diagnostic: "visual_disconnected" },
+          sequence: 0,
+          request: null,
+          requestPromise: null,
+          unacked: {},
+          dispatched: {},
+          accepted: {},
+          lastAcceptedSeq: {},
+          interruptedValues: {},
+        };
+        return {
+          begin: function (request) { return beginRequest(store, request); },
+          reduce: function (event) {
+            if (!event) return null;
+            if (event.type === "rejected") return reduceRejected(store, event);
+            if (event.type === "change") return reduceChange(store, event);
+            return null;
+          },
+          status: function () { return store.status; },
+          // The status writes that are not request transitions: the heartbeat and
+          // the round's own lifecycle still decide `ready`, `connecting` and
+          // `stale`. Answers the new status, or null when nothing moved.
+          patch: function (fields) { return markStatus(store, {}, fields).status; },
+          // Terminal for the round: refuse the request in flight and say why.
+          fail: function (code) {
+            if (store.request) {
+              clearRequestTimer(store);
+              store.request.resolve({ accepted: false, error: code });
+              store.request = null;
+            }
+            store.requestPromise = null;
+            return markStatus(store, {}, { diagnostic: code, busy: false }).status;
+          },
+          interrupt: function () { return interruptRequests(store); },
+          // The receipt is in hand and the ledger has been told: settle the promise
+          // with what the round ended up holding.
+          acknowledge: function (operation, pending) {
+            if (operation && typeof operation.resolve === "function") {
+              var resFn = operation.resolve;
+              operation.resolve = null;
+              resFn({ accepted: true, pending: !!pending });
+            }
+          },
+          // Unmount: the deadline must not outlive the panel. Nothing is resolved -
+          // the round is gone.
+          dispose: function () { clearRequestTimer(store); },
+          hasRequest: function () { return !!store.request; },
+          requestId: function () { return store.request ? store.request.id : null; },
+          pendingRequest: function () { return store.requestPromise; },
+          hasUnacked: function () { return Object.keys(store.unacked).length > 0; },
+          unackedTable: function () { return store.unacked; },
+          dispatchedValues: function () { return store.dispatched; },
+          markDispatched: function (property, value) { store.dispatched[property] = value; },
+          acceptedValue: function (property) { return store.accepted[property]; },
+          // A new selection re-bases both records: the accepted values are the
+          // snapshot the panel now shows, and nothing has been sent against it.
+          acceptSelection: function (values) {
+            store.accepted = values;
+            store.dispatched = Object.assign({}, values);
+            return store.accepted;
+          },
+        };
+      },
     },
   };
 })();

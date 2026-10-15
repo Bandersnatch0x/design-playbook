@@ -89,32 +89,52 @@
       var [future, setFuture] = React.useState([]);
       var [drafts, setDrafts] = React.useState({});
       var [invalid, setInvalid] = React.useState({});
-      var [ready, setReady] = React.useState(false);
-      var [connecting, setConnecting] = React.useState(true);
-      var [stale, setStale] = React.useState(false);
+      // The request lifecycle lives in control.edits.js as one store per Editor
+      // instance: the request id counter, the request in flight, the requests no
+      // receipt has answered, what was dispatched, what was accepted, the accepted
+      // sequence per target, the values an interrupted request took with it, and
+      // the 1500 ms deadline. It is a ref, not a render-body call: a store built
+      // per render would drop the request in flight, the accepted values and the
+      // deadline on every keystroke, and the bridge effects below capture the
+      // first-render store, so a second store means two disagreeing lifecycles.
+      // The status the five scalars render is the store's, so they seed from it.
+      // `deps` is what the store must not reach for itself: the transport, the
+      // timer, the two DOM-bound normalizers, the publish flag, and `emit` - how a
+      // deadline nobody called still reaches React. It is also what makes the
+      // lifecycle executable in node.
+      var isPublishedRef = React.useRef(true);
+      var protocolRef = React.useRef(null);
+      if (!protocolRef.current) {
+        protocolRef.current = window.DPBEdit.protocol.create({
+          send: post,
+          setTimer: function (fn, ms) { return setTimeout(fn, ms); },
+          clearTimer: function (handle) { clearTimeout(handle); },
+          syncDraft: syncDraft,
+          canonicalValue: canonicalValue,
+          unpublish: function () { isPublishedRef.current = false; },
+          emit: function (outcome) { applyOutcome(outcome); },
+        });
+      }
+      var protocol = protocolRef.current;
+      var status = protocol.status();
+      var [ready, setReady] = React.useState(status.ready);
+      var [connecting, setConnecting] = React.useState(status.connecting);
+      var [stale, setStale] = React.useState(status.stale);
       React.useEffect(function () {
         var loading = document.getElementById("dpb-prototype-loading");
         if (loading) loading.hidden = !connecting;
         document.getElementById("dpb-artboard-inner").setAttribute("aria-busy", String(connecting));
       }, [connecting]);
-      var [diagnostic, setDiagnostic] = React.useState("visual_disconnected");
-      var [busy, setBusy] = React.useState(false);
+      var [diagnostic, setDiagnostic] = React.useState(status.diagnostic);
+      var [busy, setBusy] = React.useState(status.busy);
       var [webmcp, setWebmcp] = React.useState(false);
       var [locale, setLocale] = React.useState(root.lang);
-      var current = React.useRef({}), request = React.useRef(null);
-      var sequence = React.useRef(0), draftTimers = React.useRef({});
-      var accepted = React.useRef({});
+      var current = React.useRef({}), draftTimers = React.useRef({});
       var entriesRef = React.useRef(entries);
       entriesRef.current = entries;
       var futureRef = React.useRef(future);
       futureRef.current = future;
-      var requestPromiseRef = React.useRef(null);
       var isDrainingRef = React.useRef(false);
-      var dispatchedDrafts = React.useRef({});
-      var unackedRequests = React.useRef({});
-      var interruptedValues = React.useRef({});
-      var lastAcceptedSeq = React.useRef({});
-      var isPublishedRef = React.useRef(true);
       // The drain timeout outlives the effect that created it, so it needs its
       // own ref: the unmount cleanup must clear it, or an unmount mid-drain
       // leaves a 2s timer that later touches unmounted state.
@@ -172,33 +192,31 @@
         probe.setProperty(property, String(value == null ? "" : value));
         return probe.getPropertyValue(property);
       }
-      function fail(code) {
-        setDiagnostic(code);
-        if (request.current) {
-          clearTimeout(request.current.timer);
-          request.current.resolve({ accepted: false, error: code });
-          request.current = null;
+      // The one place a protocol outcome becomes React state. A transition that
+      // moved nothing hands back no status and no drafts transform, so the
+      // setters stay shut: the panel never re-renders for an event that changed
+      // no part of the round.
+      function applyOutcome(outcome) {
+        if (!outcome) return;
+        if (outcome.status) {
+          setReady(outcome.status.ready);
+          setConnecting(outcome.status.connecting);
+          setStale(outcome.status.stale);
+          setBusy(outcome.status.busy);
+          setDiagnostic(outcome.status.diagnostic);
         }
-        requestPromiseRef.current = null;
-        setBusy(false);
+        if (outcome.drafts) setDrafts(outcome.drafts);
       }
       function disconnected() {
-        setReady(false);
-        setConnecting(false);
+        // A round that already holds ledger work goes stale; one that does not
+        // keeps whatever staleness it had, exactly as the separate setter did.
+        var fields = { ready: false, connecting: false };
+        if (current.current.entries.length) fields.stale = true;
+        applyOutcome({ status: protocol.patch(fields) });
         // Retain unresolved drafts across disconnect (§3.3)
-        if (current.current.entries.length) setStale(true);
         Object.values(draftTimers.current).forEach(clearTimeout);
         draftTimers.current = {};
-        var interrupted = Object.values(unackedRequests.current);
-        unackedRequests.current = {};
-        lastAcceptedSeq.current = {};
-        interrupted.forEach(function (operation) {
-          var key = operation.locator + ":" + operation.property;
-          if (!operation.entry && !Object.prototype.hasOwnProperty.call(interruptedValues.current, key)) {
-            interruptedValues.current[key] = operation.oldValue;
-          }
-          delete dispatchedDrafts.current[operation.property];
-        });
+        var interrupted = protocol.interrupt();
         if (interrupted.length) {
           var selection = current.current.selected;
           setDrafts(function (values) {
@@ -212,62 +230,24 @@
             return next;
           });
         }
-        fail("visual_disconnected");
+        applyOutcome({ status: protocol.fail("visual_disconnected") });
       }
       function applyStyle(property, value, action, entry, origin) {
         var state = current.current;
-        if (!state.ready || state.stale || !state.selected || request.current) {
-          setDiagnostic("visual_unavailable");
-          return Promise.resolve({ accepted: false, error: "visual_unavailable" });
-        }
-        var id = ++sequence.current;
-        if (entry) entry._replayId = id;
-        // Record what this dispatch sends. Typing already set this in commit(),
-        // but the replay paths (undo/redo) did not, so drafts and dispatched
-        // values stayed permanently unequal and the editor reported a pending
-        // edit forever - which the readiness mirror now reads as "submittable".
-        dispatchedDrafts.current[property] = value;
-        var locator = entry ? entry[0].locator : state.selected.selector;
-        setBusy(true);
-        isPublishedRef.current = false;
+        // Only the reads that need the DOM or React state happen here; the
+        // dispatch - id, unacked record, deadline, wire, busy - is the store's,
+        // and it answers the same `{accepted, error}` promise the inspector, the
+        // replay paths and the tool have always awaited.
         var inlineStyle = document.createElement("div").style;
-        inlineStyle.cssText = state.selected.inlineStyle || "";
-        var unacked = { oldValue: inlineStyle.getPropertyValue(property), id: id, action: action || "edit", entry: entry,
-          origin: origin || "shell",
-          value: value, draft: state.drafts[property], property: property,
-          viewport: entry ? entry[0].viewport : window.DPB_ACTIVE_VIEWPORT || "any",
-          locator: locator };
-        unackedRequests.current[id] = unacked;
-        var p = new Promise(function (resolve) {
-          request.current = Object.assign({ resolve: resolve,
-            timer: setTimeout(function () {
-              if (request.current && request.current.id === id) {
-                var req = request.current;
-                var prop = req.property;
-                if (prop && dispatchedDrafts.current) {
-                  delete dispatchedDrafts.current[prop];
-                }
-                request.current = null;
-                requestPromiseRef.current = null;
-                setBusy(false);
-                setDiagnostic("visual_drain_failed");
-                var resFn = req.resolve;
-                req.resolve = null;
-                if (typeof resFn === "function") {
-                  resFn({ accepted: false, error: "timeout" });
-                }
-              }
-            }, 1500) }, unacked);
-          post({ type: "set-style", requestId: id, selector: locator, property: property,
-            value: value, changes: entry && entry.map(function (item) {
-              return { property: item.property, value: action === "undo" ? item.oldValue : item.newValue };
-            }), replay: !!entry });
-        });
-        requestPromiseRef.current = p;
-        p.finally(function () {
-          if (requestPromiseRef.current === p) requestPromiseRef.current = null;
-        });
-        return p;
+        inlineStyle.cssText = (state.selected && state.selected.inlineStyle) || "";
+        return protocol.begin({ property: property, value: value, action: action,
+          origin: origin, entry: entry || null,
+          // No selection means no target, whatever a replay entry carries: the
+          // store refuses an empty locator as the unavailable round it is.
+          locator: state.selected ? (entry ? entry[0].locator : state.selected.selector) : null,
+          oldValue: inlineStyle.getPropertyValue(property),
+          draft: state.drafts[property],
+          viewport: entry ? entry[0].viewport : window.DPB_ACTIVE_VIEWPORT || "any" });
       }
       function commit(property, value, selector) {
         clearTimeout(draftTimers.current[property]);
@@ -275,7 +255,7 @@
         var state = current.current;
         if (!state.selected || state.selected.selector !== selector) return;
         // Serialize requests, not typing. A newer keystroke replaces this timer.
-        if (request.current) {
+        if (protocol.hasRequest()) {
           draftTimers.current[property] = setTimeout(function () { commit(property, value, selector); }, 200);
           return;
         }
@@ -287,12 +267,11 @@
           if (unsupported) next[property] = true; else delete next[property];
           return next;
         });
-        setDiagnostic(function (old) {
-          return unsupported ? "visual_invalid_value" : old === "visual_invalid_value" ? "" : old;
-        });
+        applyOutcome({ status: protocol.patch({ diagnostic: unsupported ? "visual_invalid_value" :
+          protocol.status().diagnostic === "visual_invalid_value" ? "" : protocol.status().diagnostic }) });
         if (unsupported) return;
-        if (value === accepted.current[property]) return;
-        dispatchedDrafts.current[property] = value;
+        if (value === protocol.acceptedValue(property)) return;
+        protocol.markDispatched(property, value);
         applyStyle(property, value);
       }
       React.useEffect(function () {
@@ -321,7 +300,7 @@
           var key = event.key.toLowerCase();
           if (key !== "z" && key !== "y") return;
           var state = current.current;
-          if (!state.ready || state.stale || !state.selected || request.current) return;
+          if (!state.ready || state.stale || !state.selected || protocol.hasRequest()) return;
           event.preventDefault();
           replay(key === "y" || event.shiftKey ? "redo" : "undo");
         }
@@ -348,10 +327,17 @@
             if (unanswered >= 2) disconnected();
             unanswered += 1;
           }
-          if (!lastAck && Date.now() - started > 2500) setConnecting(false);
+          if (!lastAck && Date.now() - started > 2500) {
+            applyOutcome({ status: protocol.patch({ connecting: false }) });
+          }
           post({ type: "ping", nonce: ++nonce, compact: window.innerWidth <= 480, labels: bridgeLabels() });
         }
-        function load() { lastAck = 0; unanswered = 0; started = Date.now(); disconnected(); setConnecting(true); ping(); }
+        function load() {
+          lastAck = 0; unanswered = 0; started = Date.now();
+          disconnected();
+          applyOutcome({ status: protocol.patch({ connecting: true }) });
+          ping();
+        }
         function onMessage(event) {
           if (event.source !== frame.contentWindow) return;
           var data = event.data || {};
@@ -359,82 +345,59 @@
             var response = data.dpbVisualEditReady;
             if (response.nonce !== nonce) return;
             if (response.routeUrl !== (binding.routeUrl || "about:srcdoc")) {
-              setStale(true); setReady(false); fail("visual_stale"); return;
+              applyOutcome({ status: protocol.patch({ stale: true, ready: false }) });
+              applyOutcome({ status: protocol.fail("visual_stale") });
+              return;
             }
-            lastAck = Date.now(); unanswered = 0; setReady(true); setConnecting(false);
-            if (!current.current.stale) setDiagnostic(function (old) { return old === "visual_disconnected" ? "" : old; });
+            lastAck = Date.now(); unanswered = 0;
+            applyOutcome({ status: protocol.patch({ ready: true, connecting: false }) });
+            if (!protocol.status().stale && protocol.status().diagnostic === "visual_disconnected") {
+              applyOutcome({ status: protocol.patch({ diagnostic: "" }) });
+            }
           }
           if (data.dpbVisualEditSelection && lastAck) {
             var selection = data.dpbVisualEditSelection;
             if (selection.requestId) {
               // A mutation snapshot is not a new user selection or draft.
               if (current.current.selected && selection.selector === current.current.selected.selector &&
-                  ((request.current && selection.requestId === request.current.id) ||
+                  (selection.requestId === protocol.requestId() ||
                     String(selection.requestId).indexOf("gesture-") === 0)) setSelected(selection);
             } else {
               Object.values(draftTimers.current).forEach(clearTimeout);
               setSelected(selection);
-              accepted.current = snapshot(selection);
-              setDrafts(accepted.current);
-              dispatchedDrafts.current = Object.assign({}, accepted.current);
+              setDrafts(protocol.acceptSelection(snapshot(selection)));
             }
           }
           var rejected = data.dpbVisualEditRejected;
           if (rejected) {
-            // A rejection is terminal for that request id: the bridge will never
-            // confirm it, so a retained entry made every later drain answer
-            // unresolved_edits and left only Abort usable.
-            if (unackedRequests.current) delete unackedRequests.current[rejected.requestId];
-            if (request.current && rejected.requestId === request.current.id) {
-              if (rejected.code === "visual_target_missing") setStale(true);
-              var rolledBack = request.current.property;
-              if (rolledBack && Object.prototype.hasOwnProperty.call(accepted.current, rolledBack)) {
-                dispatchedDrafts.current[rolledBack] = accepted.current[rolledBack];
-                setDrafts(function (old) { return syncDraft(old, rolledBack, accepted.current[rolledBack]); });
-              }
-              fail(rejected.code); return;
-            }
+            // The refusal belongs to the store: it is terminal for that request id
+            // (the bridge will never confirm it, so a retained entry made every
+            // later drain answer unresolved_edits and left only Abort usable), it
+            // marks a missing target stale, and it rolls the draft back to what the
+            // bridge accepted. `consumed` is the old `return`: the id was this
+            // round's request, so no receipt can follow it.
+            var refusal = protocol.reduce({ type: "rejected",
+              requestId: rejected.requestId, code: rejected.code });
+            applyOutcome(refusal);
+            if (refusal.consumed) return;
           }
           var change = data.dpbVisualEditChange;
-          if (!change || !current.current.ready || current.current.stale) return;
-          var unacked = unackedRequests.current && unackedRequests.current[change.requestId];
-          var operation = (request.current && change.requestId === request.current.id ? request.current : null) || unacked;
-          if (!operation && !(typeof change.requestId === "string" && change.requestId.indexOf("gesture-") === 0)) return;
-          if (unacked) delete unackedRequests.current[change.requestId];
-          if (operation && operation.entry && operation.entry._replayId !== operation.id) return;
-          // Provenance decides whether an edit can stand in for review notes.
-          // The prototype shares the bridge window, so a change it reports for a
-          // request the parent dispatched can carry values the parent never
-          // asked for: for those the parent rebuilds the record from its own
-          // dispatch. A gesture the parent did not dispatch has no such record,
-          // so its reported values are kept with "frame" provenance, and a
-          // WebMCP tool call is the agent editing, not the reviewer.
-          var source = operation ? (operation.origin || "shell") : "frame";
-          var reported = source === "frame" ? (change.changes || [change]) : (
-            operation.entry ? operation.entry.map(function (item) {
-              var target = operation.action === "undo" ? item.oldValue : item.newValue;
-              var prior = operation.action === "undo" ? item.newValue : item.oldValue;
-              return { property: item.property, oldValue: prior, newValue: target };
-            }) : [{
-              property: operation.property, oldValue: operation.oldValue,
-              newValue: canonicalValue(operation.property, operation.value)
-            }]
-          );
-          var changes = reported.map(function (c) {
-            var key = change.selector + ":" + c.property;
-            if (!Object.prototype.hasOwnProperty.call(interruptedValues.current, key)) return c;
-            var recovered = Object.assign({}, c, { oldValue: interruptedValues.current[key] });
-            delete interruptedValues.current[key];
-            return recovered;
-          });
-          if (operation) {
-            clearTimeout(operation.timer);
-            if (request.current && request.current.id === change.requestId) {
-              request.current = null; requestPromiseRef.current = null; setBusy(false); setDiagnostic("");
-            }
-          }
-          var opSeq = operation ? (operation.id || ++sequence.current) : ++sequence.current;
-          var state = current.current;
+          if (!change) return;
+          // The receipt belongs to the store: which request it answers, whether
+          // that request still stands, its provenance, the values an interrupt took
+          // with it, the accepted sequence per target and the drafts that may stand.
+          // A null outcome is its guard ladder - a round that is not ready or has
+          // gone stale, an id this store never dispatched and that is not a gesture,
+          // or a replay whose receipt has already been spent.
+          var receipt = protocol.reduce({ type: "change", requestId: change.requestId,
+            selector: change.selector, changes: change.changes,
+            selected: (current.current.selected || {}).selector });
+          if (!receipt) return;
+          var operation = receipt.operation;
+          var changes = receipt.changes;
+          var source = receipt.source;
+          var opSeq = receipt.opSeq;
+          applyOutcome(receipt);
           var edits = changes.filter(function (c) { return c.oldValue !== c.newValue; }).map(function (c) {
             return { kind: LAYOUT.indexOf(c.property) >= 0 ? "layout" : "style",
               viewport: operation ? operation.viewport : (window.DPB_ACTIVE_VIEWPORT || "any"),
@@ -489,34 +452,11 @@
             }
             publishBatch(ledger.flatten(entriesRef.current), current.current.stale);
           }
-          if (state.selected && state.selected.selector === change.selector) {
-            changes.forEach(function (c) {
-              var propKey = change.selector + ":" + c.property;
-              var lastSeq = lastAcceptedSeq.current[propKey] || 0;
-              if (opSeq >= lastSeq) {
-                lastAcceptedSeq.current[propKey] = opSeq;
-                accepted.current = syncDraft(accepted.current, c.property, c.newValue);
-              }
-            });
-            // Keep newer inspector keystrokes while acknowledging older requests.
-            setDrafts(function (values) {
-              changes.forEach(function (c) {
-                var propKey = change.selector + ":" + c.property;
-                var lastSeq = lastAcceptedSeq.current[propKey] || 0;
-                if (opSeq >= lastSeq) {
-                  if (!operation || operation.entry || values[c.property] === operation.draft) {
-                    values = syncDraft(values, c.property, operation && !operation.entry ? operation.value : c.newValue);
-                  }
-                }
-              });
-              return values;
-            });
-          }
-          if (operation && typeof operation.resolve === "function") {
-            var resFn = operation.resolve;
-            operation.resolve = null;
-            resFn({ accepted: true, pending: edits.length > 0 });
-          }
+          // The accepted values and the drafts the receipt may stand for are the
+          // store's, and `applyOutcome` above already handed the drafts transform
+          // to React. Only the promise is settled here, after the ledger has been
+          // told, because the drain barrier reads the batch the receipt produced.
+          protocol.acknowledge(operation, edits.length > 0);
         }
         window.addEventListener("message", onMessage);
         frame.addEventListener("load", load);
@@ -527,7 +467,7 @@
           window.removeEventListener("message", onMessage);
           frame.removeEventListener("load", load);
           Object.values(draftTimers.current).forEach(clearTimeout);
-          if (request.current) clearTimeout(request.current.timer);
+          protocol.dispose();
           if (drainTimerRef.current) clearTimeout(drainTimerRef.current);
         };
       }, []);
@@ -591,7 +531,7 @@
           });
           setWebmcp(true);
         } catch (error) {
-          setDiagnostic("visual_tools_unavailable");
+          applyOutcome({ status: protocol.patch({ diagnostic: "visual_tools_unavailable" }) });
         }
         return function () {
           if (typeof modelContext.unregisterTool === "function") registered.forEach(function (name) { modelContext.unregisterTool(name); });
@@ -607,7 +547,7 @@
           return Promise.resolve({ ok: true, batch: window.DPB_VISUAL_EDIT_BATCH });
         }
         isDrainingRef.current = true;
-        setBusy(true);
+        applyOutcome({ status: protocol.patch({ busy: true }) });
 
         Object.keys(draftTimers.current).forEach(function (prop) {
           clearTimeout(draftTimers.current[prop]);
@@ -623,7 +563,7 @@
             finished = true;
             drainTimerRef.current = null;
             isDrainingRef.current = false;
-            setBusy(false);
+            applyOutcome({ status: protocol.patch({ busy: false }) });
             resolve({ ok: false, error: "timeout" });
           }, maxWait);
           drainTimerRef.current = timer;
@@ -634,7 +574,7 @@
             clearTimeout(timer);
             drainTimerRef.current = null;
             isDrainingRef.current = false;
-            setBusy(false);
+            applyOutcome({ status: protocol.patch({ busy: false }) });
             if (!ok) {
               resolve({ ok: false, error: err || "drain_failed" });
               return;
@@ -645,7 +585,7 @@
 
           function step() {
             if (finished) return;
-            var curReq = requestPromiseRef.current;
+            var curReq = protocol.pendingRequest();
             if (curReq) {
               curReq.then(function (res) {
                 if (finished) return;
@@ -663,30 +603,30 @@
 
             var st = current.current;
             var uncommittedProps = Object.keys(st.drafts).filter(function (p) {
-              return st.drafts[p] !== undefined && dispatchedDrafts.current[p] !== st.drafts[p];
+              return st.drafts[p] !== undefined && protocol.dispatchedValues()[p] !== st.drafts[p];
             });
 
             if (uncommittedProps.length > 0) {
               var nextProp = uncommittedProps[0];
               var nextVal = st.drafts[nextProp];
-              dispatchedDrafts.current[nextProp] = nextVal;
+              protocol.markDispatched(nextProp, nextVal);
               applyStyle(nextProp, nextVal).then(function (res) {
                 if (finished) return;
                 if (!res || !res.accepted) {
-                  dispatchedDrafts.current[nextProp] = null;
+                  protocol.markDispatched(nextProp, null);
                   finish(false, (res && res.error) || "rejected");
                   return;
                 }
                 step();
               }).catch(function (err) {
                 if (finished) return;
-                dispatchedDrafts.current[nextProp] = null;
+                protocol.markDispatched(nextProp, null);
                 finish(false, String(err));
               });
               return;
             }
 
-            if (unackedRequests.current && Object.keys(unackedRequests.current).length > 0) {
+            if (protocol.hasUnacked()) {
               finish(false, "unresolved_edits");
               return;
             }
@@ -700,16 +640,16 @@
 
       function hasPendingVisualEdits() {
         // The pending rule is pure and executes in node; this only assembles the
-        // snapshot from the component's refs.
+        // snapshot from the component's state and the protocol store's records.
         var state = current.current;
         return dpbPendingVisualEdits({
           selected: state.selected,
           published: isPublishedRef.current,
-          request: request.current || requestPromiseRef.current,
-          unacked: unackedRequests.current,
+          request: protocol.pendingRequest(),
+          unacked: protocol.unackedTable(),
           draftTimers: draftTimers.current,
           drafts: state.drafts,
-          dispatched: dispatchedDrafts.current,
+          dispatched: protocol.dispatchedValues(),
         });
       }
       var hasPendingRef = React.useRef(hasPendingVisualEdits);
@@ -793,7 +733,9 @@
               e.stopPropagation();
               clearTimeout(draftTimers.current[prop]);
               setInvalid(function (old) { var next = Object.assign({}, old); delete next[prop]; return next; });
-              setDrafts(function (old) { return syncDraft(old, prop, accepted.current[prop] || ""); });
+            // A rejected keystroke returns to what the bridge accepted, which the
+            // store now holds.
+            setDrafts(function (old) { return syncDraft(old, prop, protocol.acceptedValue(prop) || ""); });
               return;
             }
             if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); e.stopPropagation(); commit(prop, val, selected && selected.selector); }
