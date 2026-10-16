@@ -514,9 +514,6 @@
           hasRequest: function () { return !!store.request; },
           requestId: function () { return store.request ? store.request.id : null; },
           pendingRequest: function () { return store.requestPromise; },
-          hasUnacked: function () { return Object.keys(store.unacked).length > 0; },
-          unackedTable: function () { return store.unacked; },
-          dispatchedValues: function () { return store.dispatched; },
           markDispatched: function (property, value) { store.dispatched[property] = value; },
           acceptedValue: function (property) { return store.accepted[property]; },
           // A new selection re-bases both records: the accepted values are the

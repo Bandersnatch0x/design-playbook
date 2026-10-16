@@ -5,7 +5,8 @@ from pathlib import Path
 
 MCP = Path(__file__).resolve().parents[1] / "packages" / "design-playbook" / "mcp"
 FILES = ["run_console/app.js", "run_console/app.html", "preview/control.react.js",
-         "preview/control.html", "preview/i18n.py", "preview/control.review.js"]
+         "preview/control.html", "preview/i18n.py", "preview/control.review.js",
+         "preview/control.edits.js"]
 BLACKLIST = re.compile(r"bootstrap|\bowner\b|waiting-for-agent|tokens 文档|agent", re.I)
 CJK = re.compile(r"[一-鿿]")
 

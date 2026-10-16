@@ -97,6 +97,11 @@ function flush() { return new Promise(function (r) { setTimeout(r, 0); }); }
 function publishedOf(env) {
   return env.store.pendingSnapshot({ selected: null, draftTimers: {}, drafts: {} }).published;
 }
+// The two record tables are read the way the pending rule reads them: out of the
+// one snapshot, so a probe cannot reach around the store's own answer.
+function recordsOf(env) {
+  return env.store.pendingSnapshot({ selected: null, draftTimers: {}, drafts: {} });
+}
 
 async function table() {
   // ---- parse: the wire boundary ---------------------------------------------
@@ -189,7 +194,7 @@ async function table() {
     value: "red", changes: null, replay: false }, "ack: the wire shape is unchanged");
   eq(publishedOf(a), false, "ack: a dispatch unpublishes the batch");
   eq(a.store.status().busy, true, "ack: busy while the request is in flight");
-  eq(a.store.hasUnacked(), true, "ack: the request is owed a receipt");
+  eq(Object.keys(recordsOf(a).unacked), ["1"], "ack: the request is owed a receipt");
   eq(a.store.requestId(), 1, "ack: the request id is the allocated sequence");
   var ack = a.store.reduce({ type: "change", requestId: 1, selector: "#a", selected: "#a" });
   eq(ack.changes, [{ property: "color", oldValue: "", newValue: "c:red" }],
@@ -205,14 +210,14 @@ async function table() {
   a.store.acknowledge(ack.operation, true);
   await flush();
   eq(a.results, [{ accepted: true, pending: true }], "ack: the promise the inspector awaits");
-  eq([a.store.hasRequest(), a.store.hasUnacked(), a.store.pendingRequest() === null],
-    [false, false, true], "ack: the round is settled");
+  eq([a.store.hasRequest(), Object.keys(recordsOf(a).unacked), a.store.pendingRequest() === null],
+    [false, [], true], "ack: the round is settled");
   eq(a.emits.length, 1, "ack: only busy on is emitted; the receipt carries its own status");
 
   // ---- refusal -------------------------------------------------------------
   var r = makeEnv();
   r.store.acceptSelection({ color: "old" });
-  eq(r.store.dispatchedValues(), { color: "old" },
+  eq(recordsOf(r).dispatched, { color: "old" },
     "a new selection re-bases dispatched too, so the fresh snapshot reads as already sent");
   r.begin({ value: "red", draft: "red" });
   var stray = r.store.reduce({ type: "rejected", requestId: 9, code: "visual_other" });
@@ -221,10 +226,10 @@ async function table() {
   var refusal = r.store.reduce({ type: "rejected", requestId: 1, code: "visual_bridge_error" });
   eq(refusal.consumed, true, "refusal: our own id is terminal, so the panel stops looking");
   eq(refusal.drafts({}), { color: "old" }, "refusal: the draft rolls back to what was accepted");
-  eq(r.store.dispatchedValues().color, "old", "refusal: dispatched re-bases on the accepted value");
+  eq(recordsOf(r).dispatched.color, "old", "refusal: dispatched re-bases on the accepted value");
   eq(refusal.status.busy, false, "refusal: busy clears");
   eq(refusal.status.diagnostic, "visual_bridge_error", "refusal: the code reaches the panel");
-  eq(r.store.hasUnacked(), false, "refusal: an id the bridge will never confirm is dropped");
+  eq(Object.keys(recordsOf(r).unacked), [], "refusal: an id the bridge will never confirm is dropped");
   await flush();
   eq(r.results, [{ accepted: false, error: "visual_bridge_error" }], "refusal: the drain fails closed");
 
@@ -245,10 +250,10 @@ async function table() {
   t.tick(1);
   eq(t.store.status().busy, false, "timeout: the panel stops sitting busy");
   eq(t.store.status().diagnostic, "visual_drain_failed", "timeout: and says the drain failed");
-  eq(t.store.dispatchedValues().color === undefined, true,
+  eq(recordsOf(t).dispatched.color, undefined,
     "timeout: the value the request carried reads as unsent again");
   eq(t.store.hasRequest(), false, "timeout: the round is no longer waiting");
-  eq(t.store.hasUnacked(), true,
+  eq(Object.keys(recordsOf(t).unacked), ["1"],
     "timeout: the request is not forgotten - the round still owes the reviewer its edit");
   await flush();
   eq(t.results, [{ accepted: false, error: "timeout" }], "timeout: the awaited promise fails");
@@ -270,7 +275,7 @@ async function table() {
   eq(t.results, [{ accepted: false, error: "timeout" }],
     "late ack: the promise the round already gave up on is not re-answered");
   eq(t.emits.length, before, "late ack: no extra transition reaches the panel");
-  eq(t.store.hasUnacked(), false, "late ack: the receipt is spent");
+  eq(Object.keys(recordsOf(t).unacked), [], "late ack: the receipt is spent");
 
   // ---- two concurrent begins ----------------------------------------------
   var c = makeEnv();
@@ -296,7 +301,7 @@ async function table() {
   var dropped = i.store.interrupt();
   i.store.fail("visual_disconnected");
   eq(dropped.length, 1, "interrupt: the unanswered request goes with the round");
-  eq(i.store.dispatchedValues().color === undefined, true,
+  eq(recordsOf(i).dispatched.color, undefined,
     "interrupt: its dispatched mark goes with it, so the draft reads unsent again");
   await flush();
   eq(i.results, [{ accepted: false, error: "visual_disconnected" }],
@@ -473,7 +478,7 @@ async function table() {
   var u = makeEnv();
   u.begin({ draft: "red" });
   u.tick(P.REQUEST_TIMEOUT_MS);
-  eq(u.store.hasUnacked(), true, "planDrain: the deadline leaves the receipt owed");
+  eq(Object.keys(recordsOf(u).unacked), ["1"], "planDrain: the deadline leaves the receipt owed");
   eq(u.store.planDrain({ drafts: {} }), { kind: "unacked" },
     "planDrain: nothing left to send but a receipt still owed is the unacked residue");
   eq(u.store.planDrain({ drafts: { color: "red" } }),
@@ -491,7 +496,7 @@ async function table() {
   var redoEntry = [{ kind: "style", viewport: "any", locator: "#a", property: "color",
     oldValue: "red", newValue: "blue", _seq: 1, _entryId: 1 }];
   rp.begin({ action: "undo", entry: redoEntry, value: "red", draft: "blue", oldValue: "blue" });
-  eq(rp.store.dispatchedValues().color, "red",
+  eq(recordsOf(rp).dispatched.color, "red",
     "replay: an undo records the value it re-sent, so the property is not left uncommitted");
   var rpAck = rp.store.reduce({ type: "change", requestId: 1, selector: "#a", selected: "#a" });
   rp.store.acknowledge(rpAck.operation, true);
@@ -515,9 +520,10 @@ async function table() {
     "pendingSnapshot: published is the store's, and a dispatch unpublishes it");
   eq(snap.request === s.store.pendingRequest(), true,
     "pendingSnapshot: request is the promise in flight");
-  eq(snap.unacked === s.store.unackedTable(), true, "pendingSnapshot: unacked is the store's table");
-  eq(snap.dispatched === s.store.dispatchedValues(), true,
-    "pendingSnapshot: dispatched is the store's record");
+  eq(Object.keys(snap.unacked), ["1"],
+    "pendingSnapshot: unacked is the store's table of the receipts still owed");
+  eq(snap.dispatched, { color: "red" },
+    "pendingSnapshot: dispatched is the store's record of what was sent, not the draft");
 
   // ---- the two flags: one writer each ---------------------------------------
   var fl = makeEnv();

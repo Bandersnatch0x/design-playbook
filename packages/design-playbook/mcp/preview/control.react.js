@@ -130,11 +130,15 @@
       var [busy, setBusy] = React.useState(status.busy);
       var [webmcp, setWebmcp] = React.useState(false);
       var [locale, setLocale] = React.useState(root.lang);
-      var current = React.useRef({}), draftTimers = React.useRef({});
+      var draftTimers = React.useRef({});
       var entriesRef = React.useRef(entries);
       entriesRef.current = entries;
       var futureRef = React.useRef(future);
       futureRef.current = future;
+      var selectedRef = React.useRef(selected);
+      selectedRef.current = selected;
+      var draftsRef = React.useRef(drafts);
+      draftsRef.current = drafts;
       // The drain timeout outlives the effect that created it, so it needs its
       // own ref: the unmount cleanup must clear it, or an unmount mid-drain
       // leaves a 2s timer that later touches unmounted state.
@@ -166,8 +170,6 @@
         });
       }
       var binding = window.DPB_VISUAL_BINDING || { sourceHash: "", routeUrl: "" };
-      current.current = { selected: selected, entries: entries,
-        future: future, ready: ready, stale: stale, drafts: drafts };
       // The flat view of the ledger: the edits this round has not published
       // away. Its length is the pending count, not entries.length - one resize
       // receipt is one entry carrying two edits. Derived in the render body so
@@ -206,6 +208,21 @@
           setDiagnostic(outcome.status.diagnostic);
         }
         if (outcome.drafts) setDrafts(outcome.drafts);
+      }
+      // The draft debounce is one map with three moves: drop one timer, set
+      // one, drop them all. Every assignment to and deletion from
+      // `draftTimers.current` lives in these three, so no other site can
+      // orphan a handle or leave a dead key behind.
+      function clearDraftTimer(property) {
+        clearTimeout(draftTimers.current[property]);
+        delete draftTimers.current[property];
+      }
+      function setDraftTimer(property, fn) {
+        draftTimers.current[property] = setTimeout(fn, 200);
+      }
+      function clearAllDraftTimers() {
+        Object.values(draftTimers.current).forEach(clearTimeout);
+        draftTimers.current = {};
       }
       // The one place the ledger moves. The change arm hands the receipt's
       // operation and the edits it produced in here; the branch that applies
@@ -253,20 +270,19 @@
           futureRef.current = nextFuture;
           setFuture(nextFuture);
         }
-        publishBatch(ledger.flatten(nextEntries), current.current.stale);
+        publishBatch(ledger.flatten(nextEntries), protocol.status().stale);
       }
       function disconnected() {
         // A round that already holds ledger work goes stale; one that does not
         // keeps whatever staleness it had, exactly as the separate setter did.
         var fields = { ready: false, connecting: false };
-        if (current.current.entries.length) fields.stale = true;
+        if (entriesRef.current.length) fields.stale = true;
         applyOutcome({ status: protocol.patch(fields) });
         // Retain unresolved drafts across disconnect (§3.3)
-        Object.values(draftTimers.current).forEach(clearTimeout);
-        draftTimers.current = {};
+        clearAllDraftTimers();
         var interrupted = protocol.interrupt();
         if (interrupted.length) {
-          var selection = current.current.selected;
+          var selection = selectedRef.current;
           setDrafts(function (values) {
             var next = Object.assign({}, values);
             interrupted.forEach(function (operation) {
@@ -281,30 +297,27 @@
         applyOutcome({ status: protocol.fail("visual_disconnected") });
       }
       function applyStyle(property, value, action, entry, origin) {
-        var state = current.current;
         // Only the reads that need the DOM or React state happen here; the
         // dispatch - id, unacked record, deadline, wire, busy - is the store's,
         // and it answers the same `{accepted, error}` promise the inspector, the
         // replay paths and the tool have always awaited.
         var inlineStyle = document.createElement("div").style;
-        inlineStyle.cssText = (state.selected && state.selected.inlineStyle) || "";
+        inlineStyle.cssText = (selectedRef.current && selectedRef.current.inlineStyle) || "";
         return protocol.begin({ property: property, value: value, action: action,
           origin: origin, entry: entry || null,
           // No selection means no target, whatever a replay entry carries: the
           // store refuses an empty locator as the unavailable round it is.
-          locator: state.selected ? (entry ? entry[0].locator : state.selected.selector) : null,
+          locator: selectedRef.current ? (entry ? entry[0].locator : selectedRef.current.selector) : null,
           oldValue: inlineStyle.getPropertyValue(property),
-          draft: state.drafts[property],
+          draft: draftsRef.current[property],
           viewport: entry ? entry[0].viewport : window.DPB_ACTIVE_VIEWPORT || "any" });
       }
       function commit(property, value, selector) {
-        clearTimeout(draftTimers.current[property]);
-        delete draftTimers.current[property];
-        var state = current.current;
-        if (!state.selected || state.selected.selector !== selector) return;
+        clearDraftTimer(property);
+        if (!selectedRef.current || selectedRef.current.selector !== selector) return;
         // Serialize requests, not typing. A newer keystroke replaces this timer.
         if (protocol.hasRequest()) {
-          draftTimers.current[property] = setTimeout(function () { commit(property, value, selector); }, 200);
+          setDraftTimer(property, function () { commit(property, value, selector); });
           return;
         }
         // A value the engine would drop is flagged here and never dispatched.
@@ -347,8 +360,8 @@
               !event.target.closest("#dpb-react-editor-root, #dpb-canvas, #dpb-artboard-wrap, #dpb-visual-view")) return;
           var key = event.key.toLowerCase();
           if (key !== "z" && key !== "y") return;
-          var state = current.current;
-          if (!state.ready || state.stale || !state.selected || protocol.hasRequest()) return;
+          var status = protocol.status();
+          if (!status.ready || status.stale || !selectedRef.current || protocol.hasRequest()) return;
           event.preventDefault();
           replay(key === "y" || event.shiftKey ? "redo" : "undo");
         }
@@ -389,7 +402,7 @@
             var selection = parsed.selection;
             if (selection.requestId) {
               // A mutation snapshot is not a new user selection or draft.
-              if (current.current.selected && selection.selector === current.current.selected.selector &&
+              if (selectedRef.current && selection.selector === selectedRef.current.selector &&
                   (selection.requestId === protocol.requestId() || parsed.gesture)) setSelected(selection);
             } else {
               Object.values(draftTimers.current).forEach(clearTimeout);
@@ -418,7 +431,7 @@
             // or a replay whose receipt has already been spent.
             var receipt = protocol.reduce({ type: "change", requestId: parsed.requestId,
               selector: parsed.selector, changes: parsed.changes, gesture: parsed.gesture,
-              selected: (current.current.selected || {}).selector });
+              selected: (selectedRef.current || {}).selector });
             if (!receipt) return;
             var operation = receipt.operation;
             var changes = receipt.changes;
@@ -452,7 +465,7 @@
           clearInterval(timer);
           window.removeEventListener("message", onMessage);
           frame.removeEventListener("load", load);
-          Object.values(draftTimers.current).forEach(clearTimeout);
+          clearAllDraftTimers();
           protocol.dispose();
           if (drainTimerRef.current) clearTimeout(drainTimerRef.current);
         };
@@ -501,7 +514,7 @@
         var tools = [
           { name: "preview_get_selection", description: "Read selected Preview element and computed style",
             inputSchema: { type: "object", properties: {} },
-            execute: function () { return current.current.selected || { selected: false }; } },
+            execute: function () { return selectedRef.current || { selected: false }; } },
           { name: "preview_set_style", description: "Request one preview-only CSS edit",
             inputSchema: { type: "object", properties: { property: { type: "string", pattern: "^[A-Za-z-]{1,64}$" }, value: { type: "string" } }, required: ["property", "value"] },
             execute: function (input) { return applyStyle(String(input.property || ""), String(input.value || ""), "edit", null, "agent"); } },
@@ -524,8 +537,8 @@
         };
       }, []);
       function drain(timeoutMs) {
-        var state = current.current;
-        if (!state.ready || state.stale || !state.selected) {
+        var state = protocol.status();
+        if (!state.ready || state.stale || !selectedRef.current) {
           if (hasPendingVisualEdits()) {
             return Promise.resolve({ ok: false, error: "visual_unavailable" });
           }
@@ -535,10 +548,7 @@
         protocol.setDraining(true);
         applyOutcome({ status: protocol.patch({ busy: true }) });
 
-        Object.keys(draftTimers.current).forEach(function (prop) {
-          clearTimeout(draftTimers.current[prop]);
-          delete draftTimers.current[prop];
-        });
+        clearAllDraftTimers();
 
         var maxWait = typeof timeoutMs === "number" ? timeoutMs : 2000;
 
@@ -565,7 +575,7 @@
               resolve({ ok: false, error: err || "drain_failed" });
               return;
             }
-            var batch = publishBatch(ledger.flatten(entriesRef.current), current.current.stale);
+            var batch = publishBatch(ledger.flatten(entriesRef.current), protocol.status().stale);
             resolve({ ok: true, batch: batch });
           }
 
@@ -574,7 +584,7 @@
           // `planDrain` per turn.
           function step() {
             if (finished) return;
-            var plan = protocol.planDrain({ drafts: current.current.drafts });
+            var plan = protocol.planDrain({ drafts: draftsRef.current });
             if (plan.kind === "await") {
               protocol.pendingRequest().then(function (res) {
                 if (finished) return;
@@ -623,11 +633,10 @@
       function hasPendingVisualEdits() {
         // The pending rule is pure and executes in node; the store assembles the
         // seven fields it reads, taking the render inputs the store does not hold.
-        var state = current.current;
         return dpbPendingVisualEdits(protocol.pendingSnapshot({
-          selected: state.selected,
+          selected: selectedRef.current,
           draftTimers: draftTimers.current,
-          drafts: state.drafts,
+          drafts: draftsRef.current,
         }));
       }
       var hasPendingRef = React.useRef(hasPendingVisualEdits);
@@ -645,7 +654,7 @@
         // decision must still see the unpublished work so it fails closed
         // instead of dropping it, so the two questions are answered separately.
         window.dpbVisualEditorState = function () {
-          var state = current.current;
+          var state = protocol.status();
           return { ready: !!state.ready, stale: !!state.stale };
         };
         window.dpbDrainVisualEdits = function () {
@@ -689,7 +698,7 @@
             setDrafts(function (old) { return syncDraft(old, prop, val); });
             clearTimeout(draftTimers.current[prop]);
             var sel = selected && selected.selector;
-            draftTimers.current[prop] = setTimeout(function () { commit(prop, val, sel); }, 200);
+            setDraftTimer(prop, function () { commit(prop, val, sel); });
           }
           function handleBlur(prop, val) {
             commit(prop, val, selected && selected.selector);

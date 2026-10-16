@@ -205,7 +205,7 @@ def _comments_and_strings(text: str) -> list[str]:
 def test_shell_copy_and_comments_name_no_external_product() -> None:
     hits = []
     for name in ("control.html", "control.css", "control.js", "control.review.js",
-                 "control.react.js", "i18n.py"):
+                 "control.react.js", "control.edits.js", "i18n.py"):
         for part in _comments_and_strings((PREVIEW / name).read_text(encoding="utf-8")):
             if EXTERNAL_NAMES.search(part) and "font-family" not in part:
                 hits.append((name, part.strip()[:80]))
@@ -283,3 +283,62 @@ def test_the_ledger_has_one_writer() -> None:
     assert body.count("protocol.acknowledge(") == 0
     assert react.index("commitLedger(operation, edits, opSeq)") < \
         react.index("protocol.acknowledge(operation, edits.length > 0)")
+
+
+def test_the_shell_keeps_no_render_mirror() -> None:
+    """S7: `current.current` is gone; each cell has one owner."""
+    react = (PREVIEW / "control.react.js").read_text(encoding="utf-8")
+    assert "current.current" not in react
+    # `draftTimers` keeps a legal `React.useRef({})`; the mirror's is gone.
+    assert "var current = React.useRef" not in react
+
+
+def _apply_outcome_body() -> str:
+    react = (PREVIEW / "control.react.js").read_text(encoding="utf-8")
+    start = react.index("function applyOutcome(")
+    return react[start:react.index("\n      }", start)]
+
+
+def test_apply_outcome_is_the_only_status_writer() -> None:
+    """S7: one function turns a protocol outcome into React state."""
+    react = (PREVIEW / "control.react.js").read_text(encoding="utf-8")
+    body = _apply_outcome_body()
+    # The five status setters exist once each, inside `applyOutcome`; the
+    # `React.useState` declarations bind the same names without calling them.
+    for setter in ("setReady(", "setConnecting(", "setStale(",
+                   "setBusy(", "setDiagnostic("):
+        assert react.count(setter) == 1, setter
+        assert body.count(setter) == 1, setter
+
+
+# S7 closes the second mirror: the `draftTimers.current` writes collapse into
+# three helpers, so no other site can orphan a handle or leave a dead key.
+EXPECTED_TIMER_WRITES = {
+    "clearDraftTimer": "delete draftTimers.current",
+    "setDraftTimer": "draftTimers.current[property] =",
+    "clearAllDraftTimers": "draftTimers.current = {}",
+}
+
+
+def _draft_timer_helper_bodies(react: str) -> dict[str, str]:
+    bodies = {}
+    for name in EXPECTED_TIMER_WRITES:
+        start = react.index(f"function {name}(")
+        bodies[name] = react[start:react.index("\n      }", start)]
+    return bodies
+
+
+def test_draft_timers_have_one_writer() -> None:
+    """S7: `draftTimers.current` is assigned or deleted only in the three helpers."""
+    react = (PREVIEW / "control.react.js").read_text(encoding="utf-8")
+    bodies = _draft_timer_helper_bodies(react)
+    rest = react
+    for body in bodies.values():
+        rest = rest.replace(body, "")
+    # Each helper owns exactly its move, or the collapse is a rename, not a seal.
+    for name, write in EXPECTED_TIMER_WRITES.items():
+        assert bodies[name].count(write) == 1, (name, write)
+    # Outside the helpers the map is only read: clearTimeout consumes a stored
+    # handle and the pending snapshot passes it through untouched.
+    for write in ("draftTimers.current =", "delete draftTimers.current"):
+        assert rest.count(write) == 0, write
