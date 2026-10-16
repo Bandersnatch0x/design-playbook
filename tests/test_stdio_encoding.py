@@ -15,7 +15,9 @@ Two nets, because either one alone can be fooled:
   explicit and carry their reason.
 * ``PipedCodecSweepTests`` is dynamic: it runs every entry point under cp1252
   and shift_jis and asserts the bytes really are UTF-8. It cannot reach every
-  code path, which is exactly why the static net exists.
+  code path, which is exactly why the static net exists. Entry points a bare
+  run would act on are pinned to a safe form (``SAFE_INVOCATIONS``); the one
+  with no inert form at all is skipped (``DYNAMIC_NET_EXCLUDED``).
 
 Nothing here may mutate the tree: invocations stay on help/usage error paths
 and stdin is closed, so the served-stdin MCP entry points exit immediately.
@@ -69,6 +71,16 @@ SAFE_INVOCATIONS = {
     "scripts/install_hooks.py": ["--help"],
     "scripts/install_smoke.py": ["--help"],
     "scripts/release.py": ["--help"],
+}
+# No inert form: the script has no argparse, so both sweep pairings (bare
+# run and --help) execute main() and rewrite the workbench copies and the
+# lock -- its bytes land identical on an in-sync tree, so git status stays
+# clean and the mutation goes unnoticed. Its messages are ASCII (paths,
+# "synced N file(s)"), so no host code page can produce non-UTF-8 bytes or
+# a UnicodeEncodeError and the dynamic net cannot fail for this file: the
+# static net above, which still checks the seam wiring here, is the guard.
+DYNAMIC_NET_EXCLUDED = {
+    "scripts/sync_ui_shared.py",
 }
 CODECS = ("cp1252", "shift_jis", "gbk")
 
@@ -194,6 +206,8 @@ class PipedCodecSweepTests(unittest.TestCase):
     PLAN = (([], "cp1252"), (["--help"], "shift_jis"))
 
     def _invocations(self, rel: str) -> list[tuple[list[str], str]]:
+        if rel in DYNAMIC_NET_EXCLUDED:
+            return []
         if rel in SAFE_INVOCATIONS:
             args = SAFE_INVOCATIONS[rel]
             plan = [(args, "cp1252"), (args, "shift_jis")]
