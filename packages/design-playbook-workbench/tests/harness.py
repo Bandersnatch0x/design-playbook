@@ -532,13 +532,26 @@ def launch_browser(playwright: Any) -> Any:
     return playwright.chromium.launch(channel=browser_channel())
 
 
+def _enumeration_blocked(path: Path) -> bool:
+    """True when listing ``path`` now raises, i.e. the probe would see it."""
+    try:
+        with os.scandir(path) as entries:
+            next(entries, None)
+    except OSError:
+        return True
+    return False
+
+
 def revoke_folder_access(path: Path) -> "Callable[[], None] | None":
     """Deny enumeration access to a folder; return its restore callable.
 
     Windows denies the current SID's read/execute bits, which blocks
     listing while leaving metadata probes intact. POSIX clears the mode
     bits (root bypasses them, so it returns None). Returns None when the
-    host cannot apply the revocation. The restore callable raises when the
+    host cannot apply the revocation, or when the applied change does not
+    actually block enumeration (a capability or privilege bypass): the
+    caller should skip rather than assert a denial that never happened.
+    The restore callable puts the original access back and raises when the
     reset fails, so a leaked probe directory cannot pass silently.
     """
     if os.name == "nt":
@@ -551,6 +564,15 @@ def revoke_folder_access(path: Path) -> "Callable[[], None] | None":
         sid = whoami.rsplit('",', 1)[-1].strip('"')
         if not sid.startswith("S-1-"):
             raise RuntimeError(f"unexpected whoami SID output: {whoami!r}")
+
+        def restore() -> None:
+            subprocess.run(
+                ["icacls", str(path), "/reset"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
         applied = subprocess.run(
             ["icacls", str(path), "/deny", f"*{sid}:(RD)"],
             capture_output=True,
@@ -559,16 +581,22 @@ def revoke_folder_access(path: Path) -> "Callable[[], None] | None":
         )
         if applied.returncode != 0:
             return None
-        return lambda: subprocess.run(
-            ["icacls", str(path), "/reset"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+        if not _enumeration_blocked(path):
+            restore()
+            return None
+        return restore
     if os.geteuid() == 0:
         return None
+    original_mode = path.stat().st_mode & 0o7777
+
+    def restore_posix() -> None:
+        os.chmod(path, original_mode)
+
     os.chmod(path, 0o000)
-    return lambda: os.chmod(path, 0o700)
+    if not _enumeration_blocked(path):
+        restore_posix()
+        return None
+    return restore_posix
 
 
 def make_runtime(

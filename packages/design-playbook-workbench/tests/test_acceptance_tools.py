@@ -19,6 +19,8 @@ from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
+from tests.harness import launch_browser
+
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
 TOOLS_DIR = PACKAGE_DIR / "tools"
 
@@ -224,6 +226,49 @@ class PerfHarnessTest(unittest.TestCase):
             report = perf_harness.environment_report(memory_gib=1.0)
         self.assertEqual(report["browserChannel"], "msedge")
 
+    def test_environment_report_defaults_to_bundled_chromium(self) -> None:
+        with patch.dict(
+            os.environ, {"DESIGN_PLAYBOOK_WORKBENCH_BROWSER_CHANNEL": ""}
+        ):
+            report = perf_harness.environment_report(memory_gib=1.0)
+        self.assertEqual(report["browserChannel"], "bundled-chromium")
+
+    def test_row_action_opens_the_row_menu_only_when_hidden(self) -> None:
+        clicks: list[str] = []
+
+        class FakeLocator:
+            def __init__(self, name: str, visible: bool) -> None:
+                self.name = name
+                self.visible = visible
+
+            @property
+            def first(self) -> "FakeLocator":
+                return self
+
+            def is_visible(self) -> bool:
+                return self.visible
+
+            def click(self) -> None:
+                clicks.append(self.name)
+
+        class FakePage:
+            def __init__(self, action_visible: bool) -> None:
+                self.action_visible = action_visible
+
+            def locator(self, selector: str) -> FakeLocator:
+                if selector.endswith(".more-button"):
+                    return FakeLocator("more", True)
+                return FakeLocator("action", self.action_visible)
+
+        for action_visible in (False, True):
+            with self.subTest(action_visible=action_visible):
+                clicks.clear()
+                perf_harness._click_row_action(
+                    FakePage(action_visible), "#project-rows tr .assets-button"
+                )
+                expected = ["action"] if action_visible else ["more", "action"]
+                self.assertEqual(clicks, expected)
+
     def test_drag_samples_below_judging_bar_are_rejected(self) -> None:
         stderr = io.StringIO()
         with redirect_stderr(stderr):
@@ -371,6 +416,31 @@ class PerfHarnessTest(unittest.TestCase):
             with self.subTest(query=query):
                 self.assertTrue(seed_scale.asset_name(0).startswith("asset"))
                 self.assertTrue(query.startswith("asset"))
+
+
+class BrowserLaunchTest(unittest.TestCase):
+    def test_environment_channel_reaches_playwright(self) -> None:
+        calls: list[dict[str, str | None]] = []
+
+        class FakeChromium:
+            def launch(self, **kwargs: str | None) -> str:
+                calls.append(kwargs)
+                return "browser"
+
+        class FakePlaywright:
+            chromium = FakeChromium()
+
+        with patch.dict(
+            os.environ, {"DESIGN_PLAYBOOK_WORKBENCH_BROWSER_CHANNEL": "msedge"}
+        ):
+            self.assertEqual(launch_browser(FakePlaywright()), "browser")
+        self.assertEqual(calls[-1], {"channel": "msedge"})
+
+        with patch.dict(
+            os.environ, {"DESIGN_PLAYBOOK_WORKBENCH_BROWSER_CHANNEL": ""}
+        ):
+            launch_browser(FakePlaywright())
+        self.assertEqual(calls[-1], {"channel": None})
 
 
 if __name__ == "__main__":  # pragma: no cover - manual run

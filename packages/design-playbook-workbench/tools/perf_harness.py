@@ -131,6 +131,11 @@ def verdict(
     return result
 
 
+def _browser_label(harness_module: Any) -> str:
+    """The browser identity recorded in evidence: one spelling for both fields."""
+    return harness_module.browser_channel() or "bundled-chromium"
+
+
 def environment_report(*, memory_gib: float | None = None) -> dict[str, Any]:
     """Machine facts the R15 baseline requires to be recorded."""
     harness_module = _load_module(
@@ -148,7 +153,7 @@ def environment_report(*, memory_gib: float | None = None) -> dict[str, Any]:
         "cpuCount": os.cpu_count(),
         "memoryGiB": memory_gib,
         "pythonVersion": platform.python_version(),
-        "browserChannel": harness_module.browser_channel() or "bundled-chromium",
+        "browserChannel": _browser_label(harness_module),
         "recordedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
 
@@ -404,6 +409,14 @@ def _measure_selection_drag(page: Any, samples: int) -> tuple[list, int]:
     return values, rejected
 
 
+def _click_row_action(page: Any, selector: str) -> None:
+    """Click a row action, opening the row menu first when it is hidden."""
+    action = page.locator(selector).first
+    if not action.is_visible():
+        page.locator("#project-rows tr .more-button").first.click()
+    action.click()
+
+
 def _load_module(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
@@ -473,10 +486,7 @@ def run_measurement(
         page = browser.new_page(viewport={"width": 1440, "height": 1200})
         page.goto(harness.runtime.bootstrap_url)
         page.locator("#session-state").filter(has_text="会话有效").wait_for()
-        assets_button = page.locator("#project-rows tr .assets-button").first
-        if not assets_button.is_visible():
-            page.locator("#project-rows tr .more-button").first.click()
-        assets_button.click()
+        _click_row_action(page, "#project-rows tr .assets-button")
         page.locator("#assets-panel").wait_for()
 
         search_values, search_rejected = _measure_search(
@@ -506,10 +516,7 @@ def run_measurement(
             "requestedCanvasNodes": canvas_nodes,
             "source": "service (verified against the running instance)",
         }
-        canvas_button = page.locator("#project-rows tr .canvas-button").first
-        if not canvas_button.is_visible():
-            page.locator("#project-rows tr .more-button").first.click()
-        canvas_button.click()
+        _click_row_action(page, "#project-rows tr .canvas-button")
         page.locator("#canvas-panel").wait_for()
         # Select by label rather than assuming how the option value is keyed.
         options = page.evaluate(
@@ -580,9 +587,7 @@ def run_measurement(
         }
         return summarise(
             env=environment_report(),
-            browser_version=(
-                f"{harness_module.browser_channel() or 'chromium'} {browser.version}"
-            ),
+            browser_version=f"{_browser_label(harness_module)} {browser.version}",
             scale=scale,
             metrics=metrics,
             method=method,

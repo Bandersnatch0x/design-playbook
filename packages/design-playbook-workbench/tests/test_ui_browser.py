@@ -51,8 +51,12 @@ def answer_dialog(page, value=None):
     expect(dialog).to_be_visible()
     if value is not None:
         dialog.locator("input").fill(value)
+    backdrop = dialog.element_handle()
     dialog.locator(".dialog-ok").click()
-    expect(dialog).to_have_count(0)
+    # Wait for this dialog node to detach, not for the selector to stop
+    # matching: the next step may open its own dialog before the selector
+    # goes empty, and a re-resolving count check would miss that window.
+    page.wait_for_function("(el) => !el.isConnected", arg=backdrop)
 
 
 class ProjectEntryJourneyTest(unittest.TestCase):

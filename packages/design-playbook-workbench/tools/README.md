@@ -12,6 +12,13 @@ part of the shipped distribution: the wheel carries only
 | [install_smoke.py](install_smoke.py) | A15 clean install: built wheel, fresh venv, standalone run from a neutral cwd, real HTTP probes | Windows ACL / junction / file-occupation evidence on a real Windows host |
 | [sample_targets.py](sample_targets.py) | The two A11 handoff targets (static HTML/CSS/JS and React/TypeScript) | A real Agent host to claim a request and return a proposal |
 
+`perf_harness.py` records the browser it actually drove. Set
+`DESIGN_PLAYBOOK_WORKBENCH_BROWSER_CHANNEL` (`msedge`, `chrome`, …) to use a
+branded channel; unset means the bundled Chromium. The evidence then carries
+the same name in `env.browserChannel` and `browserVersion`. The drag verdict
+always requires the full 100 valid samples, and `--drag-samples` below that
+floor is refused, so a shortened smoke run cannot be mistaken for evidence.
+
 Deterministic helpers are covered by
 `tests/test_acceptance_tools.py`; the live flows are operator-driven and their
 evidence comes from an actual run, never from that test file.

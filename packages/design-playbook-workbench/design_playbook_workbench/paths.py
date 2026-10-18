@@ -120,13 +120,23 @@ def _is_filesystem_root(path: Path) -> bool:
     return path.parent == path
 
 
+def _is_enumerable(path: Path) -> bool:
+    """True when this process can list ``path`` (one entry read, no scan)."""
+    try:
+        with os.scandir(path) as entries:
+            next(entries, None)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
 def validate_folder_target(value: object, *, data_dir: Path | str) -> FolderCandidate:
     """Probe one maintainer-supplied absolute folder into a candidate.
 
-    Rejects non-local, relative, missing, file, filesystem-root, and
-    user-home-root targets, and every target that contains or is
-    contained by the workbench data directory (R14: the data directory
-    must never sit inside an imported source tree, or vice versa).
+    Rejects non-local, relative, missing, file, filesystem-root,
+    user-home-root, and denied-enumeration targets, and every target that
+    contains or is contained by the workbench data directory (R14: the data
+    directory must never sit inside an imported source tree, or vice versa).
     """
     canonical = canonical_directory(value)
     if _is_filesystem_root(canonical):
@@ -148,6 +158,11 @@ def validate_folder_target(value: object, *, data_dir: Path | str) -> FolderCand
         resolved_data_dir, canonical
     ):
         raise WorkbenchError(INVALID_TARGET)
+    if not _is_enumerable(canonical):
+        # A folder this process cannot list cannot hold usable assets; letting
+        # it through would only register a binding that probes as disconnected
+        # on the next read.
+        raise WorkbenchError(INVALID_TARGET)
     identity = directory_identity(canonical)
     return FolderCandidate(
         canonical_path=str(canonical),
@@ -165,6 +180,10 @@ def connection_state(canonical_path: str, identity: str) -> str:
     Everything else -- missing, replaced by a file, moved, re-pointed at
     another folder, denied enumeration -- is ``disconnected``; the same-name
     folder is never auto-matched.
+
+    A transient enumeration failure (I/O error, descriptor exhaustion) also
+    reads as ``disconnected``: commands fail closed, and a later probe
+    recovers the state once the directory is readable again.
     """
     try:
         current = Path(canonical_path)
@@ -177,8 +196,8 @@ def connection_state(canonical_path: str, identity: str) -> str:
         # One directory read catches revoked enumeration rights: the
         # metadata checks above still succeed for the owner under a
         # denied ACL, but listing the folder does not.
-        with os.scandir(current) as entries:
-            next(entries, None)
+        if not _is_enumerable(current):
+            return "disconnected"
     except (OSError, WorkbenchError, ValueError):
         return "disconnected"
     return "connected"

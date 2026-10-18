@@ -620,14 +620,15 @@ function describeFailure(error, action) {
   if (code === "disconnected") {
     return (
       `${action}失败：项目目录当前不可达（disconnected）。` +
-      "请重新绑定该目录后重试。"
+      "请确认目录仍存在且当前进程有读取权限；修复后重试，或重新绑定该目录。"
     );
   }
   if (code === "invalid-target") {
     return (
       `${action}失败：该目录不能作为项目目标（invalid-target）。` +
       "请填写已存在的绝对目录，" +
-      "不要选择当前用户主目录本身、文件系统根目录、文件，或与工作台数据目录重叠的位置。"
+      "不要选择当前用户主目录本身、文件系统根目录、文件、当前进程无读取权限的目录，" +
+      "或与工作台数据目录重叠的位置。"
     );
   }
   if (code === "unauthorized") {

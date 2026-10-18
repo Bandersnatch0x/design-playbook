@@ -217,6 +217,14 @@ class ConnectionStateTest(unittest.TestCase):
         self.assertEqual(
             connection_state(str(project), identity), "disconnected"
         )
+        # A folder that cannot be listed must not be registerable either:
+        # otherwise the UI would bind it and show it disconnected immediately.
+        with self.assertRaises(WorkbenchError) as refused:
+            validate_folder_target(str(project), data_dir=base / "data")
+        self.assertEqual(refused.exception.code, INVALID_TARGET)
+        # The probe is stateless: restoring access brings the binding back.
+        restore()
+        self.assertEqual(connection_state(str(project), identity), "connected")
 
     def test_junction_to_another_folder_reports_disconnected(self) -> None:
         project = self.base / "project"

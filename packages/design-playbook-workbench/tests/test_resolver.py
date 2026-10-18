@@ -125,6 +125,11 @@ class ResolverTest(unittest.TestCase):
         self.assertEqual(caught.exception.code, DISCONNECTED)
         target = self.h.runtime.service.project_target(self.project["projectId"])
         self.assertEqual(target["connectionState"], "disconnected")
+        # Re-probing the denied folder must refuse it at the boundary, so a
+        # rebind cannot register a binding that probes as disconnected.
+        with self.assertRaises(WorkbenchError) as refused:
+            self.h.runtime.service.probe_folder(str(self.directory))
+        self.assertEqual(refused.exception.code, INVALID_TARGET)
 
     def test_requests_must_match_a_live_task(self) -> None:
         with self.assertRaises(WorkbenchError) as caught:
