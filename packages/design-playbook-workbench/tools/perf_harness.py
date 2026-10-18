@@ -134,6 +134,49 @@ def verdict(
     return result
 
 
+def judging_required_samples(attempts: int) -> int:
+    """The CLI value only limits attempts; judging never drops below the floor."""
+    return max(attempts, REQUIRED_SAMPLES)
+
+
+def judge_metrics(
+    *,
+    search_values: list[float],
+    save_values: list[float],
+    drag_values: list[float],
+    search_rejected: int,
+    save_rejected: int,
+    drag_rejected: int,
+    scale: dict,
+    samples: int,
+) -> dict:
+    """Turn raw samples into the three judged metrics."""
+    return {
+        "search": verdict(
+            search_values,
+            budget_ms=BUDGET_SEARCH_MS,
+            required_samples=judging_required_samples(samples),
+            meets_scale=scale["assets"] >= SPEC_ASSETS,
+            rejected=search_rejected,
+        ),
+        "save200Node": verdict(
+            save_values,
+            budget_ms=BUDGET_SAVE_MS,
+            required_samples=judging_required_samples(samples),
+            meets_scale=scale["canvasNodes"] >= SPEC_CANVAS_NODES,
+            rejected=save_rejected,
+        ),
+        "selectionDrag": verdict(
+            drag_values,
+            budget_ms=BUDGET_SELECTION_DRAG_MS,
+            # Drag attempts are separate; judging always requires DRAG_SAMPLES.
+            required_samples=DRAG_SAMPLES,
+            meets_scale=scale["canvasNodes"] >= SPEC_CANVAS_NODES,
+            rejected=drag_rejected,
+        ),
+    }
+
+
 def _browser_label(harness_module: Any) -> str:
     """The browser identity recorded in evidence: one spelling for both fields."""
     return harness_module.browser_channel() or "bundled-chromium"
@@ -376,7 +419,9 @@ def _measure_save(page: Any, samples: int, warmup: int) -> tuple[list, int]:
     return values, rejected
 
 
-def _measure_selection_drag(page: Any, samples: int) -> tuple[list, int]:
+def _measure_selection_drag(
+    page: Any, samples: int, warmup: int
+) -> tuple[list, int]:
     """Selection/drag response: real mouse gesture, stop when the box moves."""
     viewport = page.locator("#canvas-viewport")
     viewport.scroll_into_view_if_needed()
@@ -384,12 +429,13 @@ def _measure_selection_drag(page: Any, samples: int) -> tuple[list, int]:
     total = nodes.count()
     values: list[float] = []
     rejected = 0
-    for index in range(samples):
+    for index in range(samples + warmup):
         node = nodes.nth(index % max(1, total))
         node_id = node.get_attribute("data-node-id")
         box = node.bounding_box()
         if node_id is None or box is None:
-            rejected += 1
+            if index >= warmup:
+                rejected += 1
             continue
         x = box["x"] + box["width"] / 2
         y = box["y"] + 12
@@ -404,6 +450,8 @@ def _measure_selection_drag(page: Any, samples: int) -> tuple[list, int]:
         # The baseline is read before the gesture, so a late re-render cannot
         # be mistaken for the drag response.
         elapsed = _timed(page, _drag, _COND_DRAG, [node_id, baseline])
+        if index < warmup:
+            continue
         if elapsed is None:
             rejected += 1
             continue
@@ -536,33 +584,20 @@ def run_measurement(
             f"() => document.querySelectorAll('.canvas-node').length === {canvas_nodes}"
         )
         save_values, save_rejected = _measure_save(page, samples, warmup)
-        drag_values, drag_rejected = _measure_selection_drag(page, drag_samples)
+        drag_values, drag_rejected = _measure_selection_drag(
+            page, drag_samples, warmup
+        )
 
-        metrics = {
-            "search": verdict(
-                search_values,
-                budget_ms=BUDGET_SEARCH_MS,
-                required_samples=samples,
-                meets_scale=scale["assets"] >= SPEC_ASSETS,
-                rejected=search_rejected,
-            ),
-            "save200Node": verdict(
-                save_values,
-                budget_ms=BUDGET_SAVE_MS,
-                required_samples=samples,
-                meets_scale=scale["canvasNodes"] >= SPEC_CANVAS_NODES,
-                rejected=save_rejected,
-            ),
-            "selectionDrag": verdict(
-                drag_values,
-                budget_ms=BUDGET_SELECTION_DRAG_MS,
-                # The CLI value only limits attempts; the judging threshold is
-                # always DRAG_SAMPLES.
-                required_samples=DRAG_SAMPLES,
-                meets_scale=scale["canvasNodes"] >= SPEC_CANVAS_NODES,
-                rejected=drag_rejected,
-            ),
-        }
+        metrics = judge_metrics(
+            search_values=search_values,
+            save_values=save_values,
+            drag_values=drag_values,
+            search_rejected=search_rejected,
+            save_rejected=save_rejected,
+            drag_rejected=drag_rejected,
+            scale=scale,
+            samples=samples,
+        )
         method = {
             "search": (
                 "fill #assets-query with a name-matching term, click "
@@ -578,9 +613,9 @@ def run_measurement(
                 "as stale labels"
             ),
             "selectionDrag": (
-                "real mouse drag of a canvas node; timer stops when the node's "
-                "on-screen left edge leaves the position measured before the "
-                "gesture (>0.5 px)"
+                "real mouse drag of a canvas node after a short warmup; timer "
+                "stops when the node's on-screen left edge leaves the position "
+                "measured before the gesture (>0.5 px)"
             ),
             "timing": (
                 "performance.now() inside the page; the window includes "
@@ -609,7 +644,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-dir", default=None, help="Pre-seeded data dir.")
     parser.add_argument("--assets", type=int, default=SPEC_ASSETS)
     parser.add_argument("--canvas-nodes", type=int, default=SPEC_CANVAS_NODES)
-    parser.add_argument("--samples", type=int, default=REQUIRED_SAMPLES)
+    parser.add_argument(
+        "--samples", type=int, default=REQUIRED_SAMPLES,
+        help=f"Search/save attempts; judging requires at least {REQUIRED_SAMPLES}.",
+    )
     parser.add_argument("--warmup", type=int, default=WARMUP_SAMPLES)
     parser.add_argument(
         "--drag-samples", type=int, default=DRAG_SAMPLES,

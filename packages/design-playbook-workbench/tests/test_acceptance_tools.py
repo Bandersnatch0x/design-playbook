@@ -287,6 +287,75 @@ class PerfHarnessTest(unittest.TestCase):
             ), redirect_stdout(io.StringIO()):
                 self.assertEqual(perf_harness.main([]), expected)
 
+    def test_short_samples_cannot_lower_the_judging_floor(self) -> None:
+        # --samples only limits attempts. A smoke run must read not-run even
+        # when its few samples are all under budget.
+        metrics = perf_harness.judge_metrics(
+            search_values=[1.0] * 5,
+            save_values=[1.0] * 5,
+            drag_values=[1.0] * perf_harness.DRAG_SAMPLES,
+            search_rejected=0,
+            save_rejected=0,
+            drag_rejected=0,
+            scale={
+                "assets": perf_harness.SPEC_ASSETS,
+                "canvasNodes": perf_harness.SPEC_CANVAS_NODES,
+            },
+            samples=5,
+        )
+        self.assertEqual(
+            metrics["search"]["requiredSamples"], perf_harness.REQUIRED_SAMPLES
+        )
+        self.assertEqual(metrics["search"]["status"], "not-run")
+        self.assertEqual(
+            metrics["save200Node"]["requiredSamples"], perf_harness.REQUIRED_SAMPLES
+        )
+        self.assertEqual(metrics["save200Node"]["status"], "not-run")
+        self.assertEqual(
+            metrics["selectionDrag"]["requiredSamples"], perf_harness.DRAG_SAMPLES
+        )
+        self.assertEqual(metrics["selectionDrag"]["status"], "pass")
+
+    def test_drag_warms_up_before_the_measured_gestures(self) -> None:
+        gestures = 0
+
+        class FakeNode:
+            def get_attribute(self, name: str) -> str:
+                return "node-1"
+
+            def bounding_box(self) -> dict[str, float]:
+                return {"x": 10.0, "y": 20.0, "width": 40.0, "height": 30.0}
+
+        class FakeNodes:
+            def count(self) -> int:
+                return 1
+
+            def nth(self, index: int) -> FakeNode:
+                nonlocal gestures
+                gestures += 1
+                return FakeNode()
+
+        class FakeViewport:
+            def scroll_into_view_if_needed(self) -> None:
+                pass
+
+        class FakePage:
+            mouse = object()
+
+            def locator(self, selector: str):
+                return FakeViewport() if selector == "#canvas-viewport" else FakeNodes()
+
+            def wait_for_timeout(self, ms: int) -> None:
+                pass
+
+        with patch.object(perf_harness, "_timed", return_value=1.0):
+            values, rejected = perf_harness._measure_selection_drag(
+                FakePage(), samples=2, warmup=3
+            )
+        self.assertEqual(values, [1.0, 1.0])
+        self.assertEqual(rejected, 0)
+        self.assertEqual(gestures, 5)
+
     def test_percentile_uses_nearest_rank_and_none_for_no_samples(self) -> None:
         # No samples must be None, never 0: a missing measurement must not be
         # mistaken for a fast one.
