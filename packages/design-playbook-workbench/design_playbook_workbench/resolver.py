@@ -96,8 +96,12 @@ def resolve(
     if target["archived"]:
         raise WorkbenchError(INVALID_TARGET)
     if target["connectionState"] != "connected":
-        # A moved, deleted, or permission-revoked folder is disconnected:
-        # commands stop instead of writing somewhere unexpected.
+        # A moved or deleted folder is disconnected: commands stop instead
+        # of writing somewhere unexpected. Revoked access is caught by the
+        # same probe: metadata checks still succeed for the owner under a
+        # denied ACL, but the folder cannot be enumerated, so
+        # connection_state reports disconnected before the command opens
+        # anything.
         raise WorkbenchError(DISCONNECTED)
 
     payload: dict = {

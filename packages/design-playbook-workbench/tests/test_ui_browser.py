@@ -19,7 +19,7 @@ from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 
-from tests.harness import WorkbenchHarness, http_request
+from tests.harness import WorkbenchHarness, http_request, launch_browser
 
 _PLAYWRIGHT = None
 _BROWSER = None
@@ -37,7 +37,7 @@ def row_action(scope, name):
 def setUpModule() -> None:
     global _PLAYWRIGHT, _BROWSER
     _PLAYWRIGHT = sync_playwright().start()
-    _BROWSER = _PLAYWRIGHT.chromium.launch()
+    _BROWSER = launch_browser(_PLAYWRIGHT)
 
 
 def tearDownModule() -> None:

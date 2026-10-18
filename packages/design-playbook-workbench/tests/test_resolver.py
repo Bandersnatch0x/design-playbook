@@ -19,7 +19,7 @@ from design_playbook_workbench.errors import (
 )
 from design_playbook_workbench.resolver import resolve
 
-from tests.harness import WorkbenchHarness, http_request
+from tests.harness import WorkbenchHarness, http_request, revoke_folder_access
 
 
 class ResolverTest(unittest.TestCase):
@@ -114,6 +114,17 @@ class ResolverTest(unittest.TestCase):
         with self.assertRaises(WorkbenchError) as caught:
             self.resolve(project=str(self.directory))
         self.assertEqual(caught.exception.code, DISCONNECTED)
+
+    def test_revoked_access_raises_disconnected_before_any_command(self) -> None:
+        restore = revoke_folder_access(self.directory)
+        if restore is None:
+            self.skipTest("this host cannot revoke folder access")
+        self.addCleanup(restore)
+        with self.assertRaises(WorkbenchError) as caught:
+            self.resolve(project=str(self.directory))
+        self.assertEqual(caught.exception.code, DISCONNECTED)
+        target = self.h.runtime.service.project_target(self.project["projectId"])
+        self.assertEqual(target["connectionState"], "disconnected")
 
     def test_requests_must_match_a_live_task(self) -> None:
         with self.assertRaises(WorkbenchError) as caught:

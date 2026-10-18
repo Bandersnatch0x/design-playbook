@@ -193,8 +193,10 @@ class PreviewBrowserTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         from playwright.sync_api import sync_playwright
 
+        from tests.harness import launch_browser
+
         cls._playwright = sync_playwright().start()
-        cls._browser = cls._playwright.chromium.launch()
+        cls._browser = launch_browser(cls._playwright)
 
     @classmethod
     def tearDownClass(cls) -> None:

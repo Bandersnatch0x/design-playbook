@@ -133,6 +133,9 @@ def verdict(
 
 def environment_report(*, memory_gib: float | None = None) -> dict[str, Any]:
     """Machine facts the R15 baseline requires to be recorded."""
+    harness_module = _load_module(
+        "dpb_harness_for_perf", PACKAGE_DIR / "tests" / "harness.py"
+    )
     if memory_gib is None:
         try:  # optional: only when the operator has psutil installed
             import psutil  # type: ignore
@@ -145,6 +148,7 @@ def environment_report(*, memory_gib: float | None = None) -> dict[str, Any]:
         "cpuCount": os.cpu_count(),
         "memoryGiB": memory_gib,
         "pythonVersion": platform.python_version(),
+        "browserChannel": harness_module.browser_channel() or "bundled-chromium",
         "recordedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
 
@@ -437,7 +441,7 @@ def run_measurement(
         data_dir=data_dir, consume_bootstrap=False
     )
     playwright = sync_playwright().start()
-    browser = playwright.chromium.launch()
+    browser = harness_module.launch_browser(playwright)
     try:
         project_dir = workspace / "perf-project"
         project_dir.mkdir(parents=True, exist_ok=True)
@@ -469,7 +473,10 @@ def run_measurement(
         page = browser.new_page(viewport={"width": 1440, "height": 1200})
         page.goto(harness.runtime.bootstrap_url)
         page.locator("#session-state").filter(has_text="会话有效").wait_for()
-        page.locator("#project-rows tr .assets-button").first.click()
+        assets_button = page.locator("#project-rows tr .assets-button").first
+        if not assets_button.is_visible():
+            page.locator("#project-rows tr .more-button").first.click()
+        assets_button.click()
         page.locator("#assets-panel").wait_for()
 
         search_values, search_rejected = _measure_search(
@@ -499,7 +506,10 @@ def run_measurement(
             "requestedCanvasNodes": canvas_nodes,
             "source": "service (verified against the running instance)",
         }
-        page.locator("#project-rows tr .canvas-button").first.click()
+        canvas_button = page.locator("#project-rows tr .canvas-button").first
+        if not canvas_button.is_visible():
+            page.locator("#project-rows tr .more-button").first.click()
+        canvas_button.click()
         page.locator("#canvas-panel").wait_for()
         # Select by label rather than assuming how the option value is keyed.
         options = page.evaluate(
@@ -536,7 +546,9 @@ def run_measurement(
             "selectionDrag": verdict(
                 drag_values,
                 budget_ms=BUDGET_SELECTION_DRAG_MS,
-                required_samples=drag_samples,
+                # The CLI value only limits attempts; the judging threshold is
+                # always DRAG_SAMPLES.
+                required_samples=DRAG_SAMPLES,
                 meets_scale=scale["canvasNodes"] >= SPEC_CANVAS_NODES,
                 rejected=drag_rejected,
             ),
@@ -568,7 +580,9 @@ def run_measurement(
         }
         return summarise(
             env=environment_report(),
-            browser_version=f"chromium {browser.version}",
+            browser_version=(
+                f"{harness_module.browser_channel() or 'chromium'} {browser.version}"
+            ),
             scale=scale,
             metrics=metrics,
             method=method,
@@ -589,7 +603,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--canvas-nodes", type=int, default=SPEC_CANVAS_NODES)
     parser.add_argument("--samples", type=int, default=REQUIRED_SAMPLES)
     parser.add_argument("--warmup", type=int, default=WARMUP_SAMPLES)
-    parser.add_argument("--drag-samples", type=int, default=DRAG_SAMPLES)
+    parser.add_argument(
+        "--drag-samples", type=int, default=DRAG_SAMPLES,
+        help=f"Drag attempts; judging still requires {DRAG_SAMPLES} valid samples.",
+    )
     parser.add_argument("--evidence", default=None, help="Write JSON evidence here.")
     return parser
 
@@ -601,6 +618,13 @@ def main(argv: list[str] | None = None) -> int:
         if stream is not None and hasattr(stream, "reconfigure") and not stream.isatty():
             stream.reconfigure(encoding="utf-8", errors="replace")
     args = build_parser().parse_args(argv)
+    if args.drag_samples < DRAG_SAMPLES:
+        print(
+            f"drag-samples below the {DRAG_SAMPLES}-sample judging bar "
+            "can only produce not-run",
+            file=sys.stderr,
+        )
+        return 2
     if args.canvas_nodes > 200:
         print("canvas-nodes exceeds canvas MAX_INSTANCES (200)", file=sys.stderr)
         return 2

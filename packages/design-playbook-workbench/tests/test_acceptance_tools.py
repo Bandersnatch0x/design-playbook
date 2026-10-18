@@ -9,11 +9,15 @@ this file.
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
+import os
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
+from unittest.mock import patch
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
 TOOLS_DIR = PACKAGE_DIR / "tools"
@@ -212,6 +216,23 @@ class SampleTargetsTest(unittest.TestCase):
 
 
 class PerfHarnessTest(unittest.TestCase):
+    def test_environment_report_records_the_selected_browser_channel(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"DESIGN_PLAYBOOK_WORKBENCH_BROWSER_CHANNEL": "  msedge  "},
+        ):
+            report = perf_harness.environment_report(memory_gib=1.0)
+        self.assertEqual(report["browserChannel"], "msedge")
+
+    def test_drag_samples_below_judging_bar_are_rejected(self) -> None:
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = perf_harness.main(
+                ["--drag-samples", str(perf_harness.DRAG_SAMPLES - 1)]
+            )
+        self.assertEqual(result, 2)
+        self.assertIn("can only produce not-run", stderr.getvalue())
+
     def test_percentile_uses_nearest_rank_and_none_for_no_samples(self) -> None:
         # No samples must be None, never 0: a missing measurement must not be
         # mistaken for a fast one.
@@ -251,6 +272,25 @@ class PerfHarnessTest(unittest.TestCase):
         )
         self.assertEqual(failed["status"], "fail")
         self.assertIn("exceeds", failed["reason"])
+
+    def test_drag_verdict_uses_the_fixed_sample_threshold(self) -> None:
+        samples = [1.0] * perf_harness.DRAG_SAMPLES
+        passed = perf_harness.verdict(
+            samples,
+            budget_ms=perf_harness.BUDGET_SELECTION_DRAG_MS,
+            required_samples=perf_harness.DRAG_SAMPLES,
+            meets_scale=True,
+        )
+        self.assertEqual(passed["status"], "pass")
+
+        not_run = perf_harness.verdict(
+            samples,
+            budget_ms=perf_harness.BUDGET_SELECTION_DRAG_MS,
+            required_samples=perf_harness.DRAG_SAMPLES + 1,
+            meets_scale=True,
+        )
+        self.assertEqual(not_run["status"], "not-run")
+        self.assertEqual(not_run["validSamples"], perf_harness.DRAG_SAMPLES)
 
     def test_verdict_no_samples_is_not_run_not_pass(self) -> None:
         result = perf_harness.verdict(

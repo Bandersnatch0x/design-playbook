@@ -160,10 +160,11 @@ def validate_folder_target(value: object, *, data_dir: Path | str) -> FolderCand
 def connection_state(canonical_path: str, identity: str) -> str:
     """Live probe of one recorded binding: never raises, never guesses.
 
-    ``connected`` requires the path to still be a directory and to still
-    carry the recorded identity. Everything else -- missing, replaced by
-    a file, moved, re-pointed at another folder, unreadable -- is
-    ``disconnected``; the same-name folder is never auto-matched.
+    ``connected`` requires the path to still be a directory, to still
+    carry the recorded identity, and to be enumerable by this process.
+    Everything else -- missing, replaced by a file, moved, re-pointed at
+    another folder, denied enumeration -- is ``disconnected``; the same-name
+    folder is never auto-matched.
     """
     try:
         current = Path(canonical_path)
@@ -173,6 +174,11 @@ def connection_state(canonical_path: str, identity: str) -> str:
             return "disconnected"
         if directory_identity(current) != identity:
             return "disconnected"
+        # One directory read catches revoked enumeration rights: the
+        # metadata checks above still succeed for the owner under a
+        # denied ACL, but listing the folder does not.
+        with os.scandir(current) as entries:
+            next(entries, None)
     except (OSError, WorkbenchError, ValueError):
         return "disconnected"
     return "connected"

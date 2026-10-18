@@ -16,7 +16,7 @@ import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 _PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 if str(_PACKAGE_ROOT) not in sys.path:
@@ -520,6 +520,57 @@ class WorkbenchHarness:
         self.stop()
 
 
+def browser_channel() -> str | None:
+    """The branded browser channel selected for this run, if any."""
+    return (
+        os.environ.get("DESIGN_PLAYBOOK_WORKBENCH_BROWSER_CHANNEL") or ""
+    ).strip() or None
+
+
+def launch_browser(playwright: Any) -> Any:
+    """Launch Chromium, honoring the A15 Edge/Chrome channel override."""
+    return playwright.chromium.launch(channel=browser_channel())
+
+
+def revoke_folder_access(path: Path) -> "Callable[[], None] | None":
+    """Deny enumeration access to a folder; return its restore callable.
+
+    Windows denies the current SID's read/execute bits, which blocks
+    listing while leaving metadata probes intact. POSIX clears the mode
+    bits (root bypasses them, so it returns None). Returns None when the
+    host cannot apply the revocation. The restore callable raises when the
+    reset fails, so a leaked probe directory cannot pass silently.
+    """
+    if os.name == "nt":
+        whoami = subprocess.run(
+            ["whoami", "/user", "/fo", "csv", "/nh"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        sid = whoami.rsplit('",', 1)[-1].strip('"')
+        if not sid.startswith("S-1-"):
+            raise RuntimeError(f"unexpected whoami SID output: {whoami!r}")
+        applied = subprocess.run(
+            ["icacls", str(path), "/deny", f"*{sid}:(RD)"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if applied.returncode != 0:
+            return None
+        return lambda: subprocess.run(
+            ["icacls", str(path), "/reset"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    if os.geteuid() == 0:
+        return None
+    os.chmod(path, 0o000)
+    return lambda: os.chmod(path, 0o700)
+
+
 def make_runtime(
     tmp_root: Path,
     *,
@@ -544,7 +595,10 @@ __all__ = [
     "CHROMIUM_RESTRICTED_PORTS",
     "Response",
     "WorkbenchHarness",
+    "browser_channel",
     "http_request",
+    "launch_browser",
     "make_directory_link",
     "make_runtime",
+    "revoke_folder_access",
 ]

@@ -9,10 +9,13 @@ directory symlink.
 """
 from __future__ import annotations
 
+import errno
 import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from design_playbook_workbench.errors import INVALID_TARGET, WorkbenchError
 from design_playbook_workbench.paths import (
@@ -26,16 +29,14 @@ from design_playbook_workbench.paths import (
     validate_folder_target,
 )
 
-from tests.harness import make_directory_link
+from tests.harness import make_directory_link, revoke_folder_access
 
 
 class CanonicalDirectoryTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
         self.base = Path(self._tmp.name).resolve()
-
-    def tearDown(self) -> None:
-        self._tmp.cleanup()
 
     def test_existing_directory_resolves_to_its_canonical_path(self) -> None:
         target = self.base / "project"
@@ -181,6 +182,41 @@ class ConnectionStateTest(unittest.TestCase):
         project.rmdir()
         project.write_text("not a directory", encoding="utf-8")
         self.assertEqual(connection_state(str(project), identity), "disconnected")
+
+    def test_enumeration_failure_disconnects_for_any_oserror(self) -> None:
+        # The contract is "any enumeration failure", not "PermissionError
+        # specifically": a revoked ACL is only one way the probe can fail.
+        project = self.base / "project"
+        project.mkdir()
+        identity = directory_identity(project)
+        with patch(
+            "design_playbook_workbench.paths.os.scandir",
+            side_effect=OSError(errno.EIO, "io"),
+        ):
+            self.assertEqual(
+                connection_state(str(project), identity), "disconnected"
+            )
+
+    def test_denied_access_reports_disconnected(self) -> None:
+        # Revoked enumeration rights must disconnect the binding: metadata
+        # can still be read while the folder's contents cannot. The probe
+        # is deliberately one read of the directory, not a content scan.
+        base = Path(tempfile.mkdtemp(prefix="dpb-acl-test-"))
+        self.addCleanup(shutil.rmtree, base)
+        project = base / "project"
+        project.mkdir()
+        identity = directory_identity(project)
+        self.assertEqual(connection_state(str(project), identity), "connected")
+        restore = revoke_folder_access(project)
+        if restore is None:
+            self.skipTest("this host cannot revoke folder access")
+        self.addCleanup(restore)
+        with self.assertRaises(OSError):
+            with os.scandir(project) as entries:
+                next(entries, None)
+        self.assertEqual(
+            connection_state(str(project), identity), "disconnected"
+        )
 
     def test_junction_to_another_folder_reports_disconnected(self) -> None:
         project = self.base / "project"
