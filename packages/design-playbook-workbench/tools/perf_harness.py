@@ -25,6 +25,9 @@ Method (also written into the evidence so a reader can audit it):
 * ``not-run`` is the correct outcome below R15 scale (5,000 assets / 200 canvas
   nodes) or with too few valid samples. A smaller run still reports its numbers,
   labelled as below scale.
+* Exit codes separate the outcomes: 0 every metric passed, 1 at least one metric
+  failed, 2 the arguments were refused up front, 3 the run was ``not-run``
+  (insufficient scale or samples). A smoke run cannot exit like a pass.
 
 Usage::
 
@@ -648,7 +651,7 @@ def main(argv: list[str] | None = None) -> int:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(text + "\n", encoding="utf-8")
         print(f"\nevidence: {out}")
-    return 0 if evidence["overall"] in ("pass", "not-run") else 1
+    return {"pass": 0, "fail": 1, "not-run": 3}[evidence["overall"]]
 
 
 if __name__ == "__main__":  # pragma: no cover - operator entry

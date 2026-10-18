@@ -18,6 +18,8 @@ branded channel; unset means the bundled Chromium. The evidence then carries
 the same name in `env.browserChannel` and `browserVersion`. The drag verdict
 always requires the full 100 valid samples, and `--drag-samples` below that
 floor is refused, so a shortened smoke run cannot be mistaken for evidence.
+Exit codes carry the outcome: 0 every metric passed, 1 a metric failed, 2 the
+arguments were refused, 3 the run was `not-run`.
 
 Deterministic helpers are covered by
 `tests/test_acceptance_tools.py`; the live flows are operator-driven and their

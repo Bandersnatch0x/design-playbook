@@ -15,7 +15,7 @@ import os
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -277,6 +277,15 @@ class PerfHarnessTest(unittest.TestCase):
             )
         self.assertEqual(result, 2)
         self.assertIn("can only produce not-run", stderr.getvalue())
+
+    def test_not_run_does_not_exit_like_a_pass(self) -> None:
+        # A caller scripting the harness must be able to tell an unmeasured
+        # run from a green one without parsing the JSON.
+        for overall, expected in (("pass", 0), ("fail", 1), ("not-run", 3)):
+            with self.subTest(overall=overall), patch.object(
+                perf_harness, "run_measurement", return_value={"overall": overall}
+            ), redirect_stdout(io.StringIO()):
+                self.assertEqual(perf_harness.main([]), expected)
 
     def test_percentile_uses_nearest_rank_and_none_for_no_samples(self) -> None:
         # No samples must be None, never 0: a missing measurement must not be
