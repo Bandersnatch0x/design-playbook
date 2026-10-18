@@ -319,6 +319,18 @@ jobs:
         run: |
           python -m pytest packages/design-playbook/tests/preview/test_browser_control.py \
             -q -k PreviewServerBindIsolationTests
+      - name: Workbench path and ACL semantics on Windows
+        # The ACL, junction, and case-insensitive alias rules only exercise on
+        # a real Windows filesystem; the Linux jobs take the POSIX chmod
+        # branch, which is not the same contract. The suite needs no Playwright
+        # (same split as the required no-chromium gate). Where the runner's
+        # privileges make a denial impossible, the harness skips the case
+        # rather than asserting a change it could not apply.
+        run: |
+          python -m pytest packages/design-playbook-workbench/tests \
+            --ignore=packages/design-playbook-workbench/tests/test_ui_browser.py \
+            -k "not PreviewBrowserTest" \
+            -q
 
   workbench-python312:
     # R15 names Python 3.12 as the main target. The `validate` job runs the
