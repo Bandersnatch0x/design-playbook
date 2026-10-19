@@ -13,6 +13,7 @@ Usage:
     python scripts/evidence_manifest.py append <run-dir> \
         --criterion L6.2 --artifact audit-page-populated.a11y.txt \
         --request '{"schemaVersion":1,"viewport":{...},"freeze":{...}}' \
+        --observed-state unknown --result captured \
         [--source "execute_capture_plan decision_id=…"]
 
 ``<run-dir>`` is the run root ``.scratch/<run>/`` (the one containing
@@ -23,6 +24,12 @@ A G6-passing row needs the Provider contract echo: pass the
 ``--request '<json>'`` (schemaVersion=1 + viewport + freeze, ADR-0018).
 The snapshot is validated at write time — a row that would fail G6 is
 refused here first.
+
+``--observed-state`` / ``--result`` / ``--error`` carry the rest of the
+Provider return verbatim (SKILL step 9 bind rules): ``unknown`` stays
+``unknown``, never the requested ``state``. G6 does not read them, but a row
+bound from a capture that omits them weakens the evidence audit face below
+what the protocol requires.
 """
 from __future__ import annotations
 
@@ -84,12 +91,17 @@ def append_entry(
     observation: str | None = None,
     interpretation: str | None = None,
     scope: str | None = None,
+    observed_state: str | None = None,
+    result: str | None = None,
+    error: str | None = None,
 ) -> dict:
     """Append one binding line to ``<run_dir>/evidence/manifest.jsonl``.
 
     ``request`` is the Provider contract echo (capture contract v1), stored
     verbatim — G6's read side requires it. ``capture`` optionally holds the
     original provider call; ``source`` is a free-text provenance note.
+    ``observed_state``/``result``/``error`` are the rest of the Provider
+    return, stored verbatim (SKILL step 9: ``unknown`` stays ``unknown``).
     ``method``/``observation``/``interpretation``/``scope`` carry the
     method-semantics keys the orchestrator is required to write at bind time
     (SKILL step 9); when any is present the entry is validated against
@@ -135,6 +147,13 @@ def append_entry(
         entry["capture"] = capture
     if source:
         entry["source"] = source
+    for key, value in (
+        ("observed_state", observed_state),
+        ("result", result),
+        ("error", error),
+    ):
+        if value is not None:
+            entry[key] = value
     semantics = {
         "method": method,
         "observation": observation,
@@ -207,6 +226,25 @@ def main(argv: list[str]) -> int:
              "field, e.g. the decision id)",
     )
     app.add_argument(
+        "--observed-state",
+        default=None,
+        help="Provider return, verbatim (SKILL step 9): the page state the "
+             "adapter probed from `data-state`, else `unknown`. Never the "
+             "requested `state` — `unknown` stays `unknown`",
+    )
+    app.add_argument(
+        "--result",
+        default=None,
+        help="Provider return, verbatim (SKILL step 9): the capture outcome, "
+             "e.g. `captured`",
+    )
+    app.add_argument(
+        "--error",
+        default=None,
+        help="Provider return, verbatim (SKILL step 9): the provider's error "
+             "text, empty when the capture succeeded",
+    )
+    app.add_argument(
         "--method",
         default=None,
         help="method-semantics key (SKILL step 9): nine-value enum, e.g. "
@@ -256,6 +294,9 @@ def main(argv: list[str]) -> int:
             observation=args.observation,
             interpretation=args.interpretation,
             scope=args.scope,
+            observed_state=args.observed_state,
+            result=args.result,
+            error=args.error,
         )
     except ManifestAppendError as exc:
         print(f"INVALID: {exc}", file=sys.stderr)

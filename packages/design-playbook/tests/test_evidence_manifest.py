@@ -127,6 +127,44 @@ class EvidenceManifestTests(unittest.TestCase):
         ])
         self.assertEqual(code, 0)
 
+    def test_provider_return_fields_written_verbatim(self) -> None:
+        """observed_state/result/error ride along as the Provider returned them."""
+        entry = append_entry(
+            self.run, "L6.1", "shot.png", REQ,
+            observed_state="unknown", result="captured", error="",
+        )
+        self.assertEqual(entry["observed_state"], "unknown")
+        self.assertEqual(entry["result"], "captured")
+        self.assertEqual(entry["error"], "")
+        written = manifest_entries(self.run / "evidence")[0]
+        self.assertEqual(written["observed_state"], "unknown")
+
+    def test_provider_return_fields_absent_when_not_passed(self) -> None:
+        entry = append_entry(self.run, "L6.1", "shot.png", REQ)
+        for key in ("observed_state", "result", "error"):
+            self.assertNotIn(key, entry)
+
+    def test_cli_writes_provider_return_and_still_passes_g6(self) -> None:
+        code = main([
+            "evidence_manifest.py", "append", str(self.run),
+            "--criterion", "L6.1", "--artifact", "shot.png",
+            "--request", json.dumps(REQ),
+            "--observed-state", "unknown",
+            "--result", "captured",
+        ])
+        self.assertEqual(code, 0)
+        entry = manifest_entries(self.run / "evidence")[0]
+        self.assertEqual(entry["observed_state"], "unknown")
+        self.assertEqual(entry["result"], "captured")
+        findings = check_evidence(
+            "",
+            1,
+            self.run / "evidence",
+            self.run,
+            observed_rows=[("L6.1", "evidence/shot.png")],
+        )
+        self.assertEqual(findings, [])
+
     def test_method_semantics_keys_written(self) -> None:
         code = main([
             "evidence_manifest.py", "append", str(self.run),
