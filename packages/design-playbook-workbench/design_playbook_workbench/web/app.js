@@ -217,7 +217,6 @@ const elements = {
   canvasClose: document.getElementById("canvas-close"),
   assetCanvasControls: document.getElementById("asset-canvas-controls"),
   assetIntoCanvas: document.getElementById("asset-into-canvas"),
-  assetItemsList: document.getElementById("asset-items"),
   flowFrom: document.getElementById("flow-from"),
   flowTo: document.getElementById("flow-to"),
   flowKind: document.getElementById("flow-kind"),
@@ -1319,32 +1318,53 @@ async function loadAssets() {
   }
 }
 
+// The row markup is #asset-template: parsing it once and repeating it per hit
+// keeps the list a single DOM write instead of one insert per row.
+const ASSET_ROW_HTML = elements.assetTemplate.innerHTML.trim();
+
+function assetMetaText(asset) {
+  const matched = asset.matchedOn === "tag" ? "（按标签匹配）" : "";
+  return (
+    `${labelFor(ASSET_KIND_LABELS, asset.kind)} · ` +
+    `${labelFor(LIFECYCLE_LABELS, asset.lifecycle)} · ` +
+    `${capabilityList(asset.capabilities)}${matched}`
+  );
+}
+
 function renderAssets() {
-  elements.assetItems.textContent = "";
+  // Only the template's own markup reaches the parser. Every per-row value is
+  // written through textContent or dataset, so no asset data is ever parsed as
+  // HTML.
+  elements.assetItems.innerHTML = ASSET_ROW_HTML.repeat(state.assets.length);
   elements.assetsEmpty.hidden = state.assets.length > 0;
-  for (const asset of state.assets) {
-    const fragment = elements.assetTemplate.content.cloneNode(true);
-    const node = fragment.querySelector(".asset-item");
+  // Positions follow the template: li > button.asset-select > name, meta.
+  const rows = elements.assetItems.children;
+  state.assets.forEach((asset, index) => {
+    const node = rows[index];
     node.dataset.assetId = asset.assetId;
     node.dataset.selected = String(asset.assetId === state.selectedAssetId);
-    node.querySelector(".asset-name").textContent = asset.name;
-    const matched =
-      asset.matchedOn === "tag" ? "（按标签匹配）" : "";
-    node.querySelector(".asset-meta").textContent =
-      `${labelFor(ASSET_KIND_LABELS, asset.kind)} · ` +
-      `${labelFor(LIFECYCLE_LABELS, asset.lifecycle)} · ` +
-      `${capabilityList(asset.capabilities)}${matched}`;
-    node
-      .querySelector(".asset-select")
-      .addEventListener("click", () => selectAsset(asset.assetId));
-    elements.assetItems.appendChild(fragment);
+    const button = node.firstElementChild;
+    button.children[0].textContent = asset.name;
+    button.children[1].textContent = assetMetaText(asset);
+  });
+}
+
+// Selection is one attribute on two rows. Rebuilding the list for it would redo
+// the whole render on every row click.
+function paintAssetSelection(previousId, assetId) {
+  for (const node of elements.assetItems.children) {
+    const id = node.dataset.assetId;
+    if (id === previousId || id === assetId) {
+      node.dataset.selected = String(id === assetId);
+    }
   }
 }
 
 async function selectAsset(assetId) {
   const project = state.assetsProject;
+  const previousId = state.selectedAssetId;
   state.selectedAssetId = assetId;
-  renderAssets();
+  paintAssetSelection(previousId, assetId);
   try {
     const payload = await api(
       `/api/v1/projects/${project.projectId}/assets/${assetId}`
@@ -2477,6 +2497,9 @@ function updateCanvasNodeElement(box, node) {
   setCanvasNodeStyle(box, "height", node.layout.height + "px");
   setCanvasNodeStyle(box, "zIndex", String(node.layout.z || 0));
   const label = canvasNodeLabel(node);
+  // The label is the first child by construction: canvasNodeElement builds
+  // label-then-handle. Insert anything before it and this writes the wrong
+  // element, silently, only on the reconciled path.
   const labelElement = box.firstElementChild;
   if (labelElement.textContent !== label) labelElement.textContent = label;
 }
@@ -3394,10 +3417,17 @@ elements.assetIntoCanvas.addEventListener("click", () =>
   placeAssetOnCanvas(state.selectedAsset)
 );
 
+// Row clicks are delegated for the same reason the list is written in one
+// pass: 5000 rows must not mean 5000 listeners.
+elements.assetItems.addEventListener("click", (event) => {
+  const item = event.target.closest(".asset-item");
+  if (item) selectAsset(item.dataset.assetId);
+});
+
 // Dropping an asset on the board creates the fixed-revision instance and
 // adds the node as one gesture.
 let assetDrag = null;
-elements.assetItemsList.addEventListener("pointerdown", (event) => {
+elements.assetItems.addEventListener("pointerdown", (event) => {
   const item = event.target.closest(".asset-item");
   if (!item) return;
   assetDrag = { assetId: item.dataset.assetId };

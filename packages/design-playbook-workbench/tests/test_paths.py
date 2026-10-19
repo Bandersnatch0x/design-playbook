@@ -196,6 +196,15 @@ class ConnectionStateTest(unittest.TestCase):
             self.assertEqual(
                 connection_state(str(project), identity), "disconnected"
             )
+            # The bind-time rule reads the same failure and refuses the folder.
+            with self.assertRaises(WorkbenchError) as refused:
+                validate_folder_target(str(project), data_dir=self.base / "data")
+            self.assertEqual(refused.exception.code, INVALID_TARGET)
+        # Nothing about the failure is recorded: once the directory lists
+        # again, the probe and the bind-time check both recover.
+        self.assertEqual(connection_state(str(project), identity), "connected")
+        candidate = validate_folder_target(str(project), data_dir=self.base / "data")
+        self.assertEqual(candidate.canonical_path, str(project))
 
     def test_denied_access_reports_disconnected(self) -> None:
         # Revoked enumeration rights must disconnect the binding: metadata
