@@ -436,6 +436,56 @@ class DiscoveryTest(AssetTestCase):
         self.assertEqual(reasons["brand.md"], "name")
         self.assertEqual(reasons["chart.tsx"], "tag")
         self.assertEqual(listing["assets"][-1]["name"], "chart.tsx")
+
+    def test_the_listing_joins_each_draft_instead_of_fetching_it_row_by_row(self) -> None:
+        """One query for the whole listing, holding what the per-row reads held.
+
+        The listing asked for the draft once per asset, which at the R15 scale
+        of 5,000 assets is 5,000 queries for a single directory search. The
+        join has to report exactly what those reads reported, including for an
+        asset whose draft row is absent.
+        """
+        self.store.update_draft(
+            asset_id=self.widget["assetId"],
+            tags=["brand", "chart"],
+            attributes=json.loads(
+                self.store.draft(self.widget["assetId"])["attributes_json"]
+            ),
+            now="2026-09-26T12:00:00Z",
+        )
+        # A draft row can be missing; the join's left branch has to keep the
+        # asset in the listing with the empty defaults.
+        with self.store.transaction() as connection:
+            connection.execute(
+                "DELETE FROM asset_drafts WHERE asset_id = ?",
+                (self.tokens["assetId"],),
+            )
+        truth = {
+            row["asset_id"]: self.store.draft(row["asset_id"])
+            for row in self.store.project_assets(self.project_id)
+        }
+        with mock.patch.object(
+            self.store,
+            "draft",
+            side_effect=AssertionError("the listing fetched drafts per row"),
+        ):
+            listing = self.assets.list_assets(self.project_id)["assets"]
+        self.assertEqual(len(listing), 4)
+        self.assertIsNone(truth[self.tokens["assetId"]])
+        for item in listing:
+            draft = truth[item["assetId"]]
+            self.assertEqual(item["tags"], json.loads(draft["tags_json"]) if draft else [])
+            self.assertEqual(
+                item["capabilities"],
+                json.loads(draft["attributes_json"]).get("capabilities", [])
+                if draft
+                else [],
+            )
+        self.assertEqual(
+            next(i for i in listing if i["assetId"] == self.widget["assetId"])["tags"],
+            ["brand", "chart"],
+        )
+
     def test_ordering_is_deterministic_and_detail_is_complete(self) -> None:
         first = [item["assetId"] for item in self.assets.list_assets(self.project_id)["assets"]]
         second = [item["assetId"] for item in self.assets.list_assets(self.project_id)["assets"]]

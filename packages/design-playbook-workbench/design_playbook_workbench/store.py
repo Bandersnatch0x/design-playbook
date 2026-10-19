@@ -913,6 +913,26 @@ class Store:
             ).fetchall()
             return [dict(row) for row in rows]
 
+    def project_assets_with_drafts(self, project_id: str) -> list[dict]:
+        """Listing rows: each asset joined with its draft's tags and attributes.
+
+        The listing needs those two fields for every row, and fetching the
+        draft one asset at a time costs a query per asset: at the R15 scale of
+        5,000 assets that is 5,000 round trips for a single directory search.
+        A row without a draft keeps its asset fields and gets None for both
+        draft columns.
+        """
+        with self.read() as connection:
+            rows = connection.execute(
+                "SELECT a.*, d.tags_json AS draft_tags_json, "
+                "d.attributes_json AS draft_attributes_json "
+                "FROM assets a LEFT JOIN asset_drafts d ON d.asset_id = a.asset_id "
+                "WHERE a.project_id = ? "
+                "ORDER BY a.created_at ASC, a.rowid ASC",
+                (project_id,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
     def set_asset_lifecycle(
         self, *, asset_id: str, lifecycle: str, now: str
     ) -> int:

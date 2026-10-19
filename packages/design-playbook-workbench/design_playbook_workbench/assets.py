@@ -523,12 +523,12 @@ class AssetService:
         self.service.require_project(project_id, scope="read")
         text = query.strip().lower() if isinstance(query, str) else ""
         items: list[dict] = []
-        for row in self.store.project_assets(project_id):
+        for row in self.store.project_assets_with_drafts(project_id):
             asset_id = row["asset_id"]
-            draft = self.store.draft(asset_id)
-            attributes = _loads(draft["attributes_json"]) if draft else {}
+            drafted = row["draft_tags_json"] is not None
+            attributes = _loads(row["draft_attributes_json"]) if drafted else {}
             capabilities = attributes.get("capabilities", [])
-            tags = _loads(draft["tags_json"]) if draft else []
+            tags = _loads(row["draft_tags_json"]) if drafted else []
             if kind and row["kind"] != kind:
                 continue
             if capability and capability not in capabilities:
