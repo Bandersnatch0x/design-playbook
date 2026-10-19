@@ -2406,8 +2406,10 @@ function renderCanvas() {
     elements.canvasBoardSelect.appendChild(option);
   }
   const board = activeBoard();
-  elements.canvasStage.textContent = "";
-  if (!board) return;
+  if (!board) {
+    elements.canvasStage.textContent = "";
+    return;
+  }
   elements.canvasStage.style.width = board.width + "px";
   elements.canvasStage.style.height = board.height + "px";
   elements.canvasStage.style.background = board.background || "var(--canvas-stage-bg)";
@@ -2417,33 +2419,72 @@ function renderCanvas() {
   const ordered = [...board.nodes].sort(
     (left, right) => (left.layout.z || 0) - (right.layout.z || 0)
   );
-  for (const node of ordered) {
-    const box = document.createElement("div");
-    box.className = "canvas-node canvas-node-" + node.type;
-    box.dataset.nodeId = node.id;
-    box.dataset.selected = String(state.canvasSelection.includes(node.id));
-    box.style.left = node.layout.x + "px";
-    box.style.top = node.layout.y + "px";
-    box.style.width = node.layout.width + "px";
-    box.style.height = node.layout.height + "px";
-    box.style.zIndex = String(node.layout.z || 0);
-    box.tabIndex = 0;
-    const label = document.createElement("span");
-    label.className = "canvas-node-label";
-    label.textContent = canvasNodeLabel(node);
-    box.appendChild(label);
-    const handle = document.createElement("span");
-    handle.className = "canvas-resize-handle";
-    handle.title = "拖动缩放";
-    box.appendChild(handle);
-    elements.canvasStage.appendChild(box);
-  }
+  renderCanvasNodes(ordered);
   renderCanvasSelection();
   renderCanvasProps();
   renderFlows();
   renderScheme();
   elements.canvasUndo.disabled = !state.canvasHistory.canUndo;
   elements.canvasRedo.disabled = !state.canvasHistory.canRedo;
+}
+
+function renderCanvasNodes(ordered) {
+  // A drag moves one node and a click flips one attribute, so the stage is
+  // reconciled in place whenever the same nodes are already there in the same
+  // z-order. Rebuilding all of them per pointermove is what made dragging a
+  // large board slow. Any structural change rebuilds instead.
+  const current = Array.from(
+    elements.canvasStage.querySelectorAll(".canvas-node")
+  );
+  const reusable =
+    current.length === ordered.length &&
+    current.every(
+      (element, index) => element.dataset.nodeId === ordered[index].id
+    );
+  if (!reusable) {
+    elements.canvasStage.textContent = "";
+    for (const node of ordered) {
+      elements.canvasStage.appendChild(canvasNodeElement(node));
+    }
+    return;
+  }
+  ordered.forEach((node, index) => updateCanvasNodeElement(current[index], node));
+}
+
+function canvasNodeElement(node) {
+  const box = document.createElement("div");
+  box.dataset.nodeId = node.id;
+  box.tabIndex = 0;
+  const label = document.createElement("span");
+  label.className = "canvas-node-label";
+  box.appendChild(label);
+  const handle = document.createElement("span");
+  handle.className = "canvas-resize-handle";
+  handle.title = "拖动缩放";
+  box.appendChild(handle);
+  updateCanvasNodeElement(box, node);
+  return box;
+}
+
+function updateCanvasNodeElement(box, node) {
+  const className = "canvas-node canvas-node-" + node.type;
+  if (box.className !== className) box.className = className;
+  const selected = String(state.canvasSelection.includes(node.id));
+  if (box.dataset.selected !== selected) box.dataset.selected = selected;
+  setCanvasNodeStyle(box, "left", node.layout.x + "px");
+  setCanvasNodeStyle(box, "top", node.layout.y + "px");
+  setCanvasNodeStyle(box, "width", node.layout.width + "px");
+  setCanvasNodeStyle(box, "height", node.layout.height + "px");
+  setCanvasNodeStyle(box, "zIndex", String(node.layout.z || 0));
+  const label = canvasNodeLabel(node);
+  const labelElement = box.firstElementChild;
+  if (labelElement.textContent !== label) labelElement.textContent = label;
+}
+
+// Writing the same value back still dirties the element's style, so the
+// reconciled path only touches what actually changed.
+function setCanvasNodeStyle(box, property, value) {
+  if (box.style[property] !== value) box.style[property] = value;
 }
 
 function canvasNodeLabel(node) {
@@ -3400,20 +3441,35 @@ function showOrchError(element, error, action) {
 }
 
 function flowEndpointOptions(select, board) {
+  // Rebuilding both dropdowns on every render means a drag recreates 200 options
+  // per select per pointer event, and painting those visible form controls is
+  // what delays the next input. The node set only changes on a structural edit,
+  // so an unchanged list is left alone.
   const previous = select.value;
-  select.textContent = "";
-  for (const node of board.nodes) {
-    const option = document.createElement("option");
-    option.value = node.id;
-    option.textContent = `${canvasNodeLabel(node)} (${node.id})`;
-    select.appendChild(option);
-  }
+  const wanted = board.nodes.map((node) => ({
+    value: node.id,
+    label: `${canvasNodeLabel(node)} (${node.id})`,
+  }));
   for (const other of state.canvasDocument.boards) {
     if (other.id === board.id) continue;
-    const option = document.createElement("option");
-    option.value = other.id;
-    option.textContent = `画板：${other.name}`;
-    select.appendChild(option);
+    wanted.push({ value: other.id, label: `画板：${other.name}` });
+  }
+  const current = Array.from(select.options);
+  const unchanged =
+    current.length === wanted.length &&
+    current.every(
+      (option, index) =>
+        option.value === wanted[index].value &&
+        option.textContent === wanted[index].label
+    );
+  if (!unchanged) {
+    select.textContent = "";
+    for (const row of wanted) {
+      const option = document.createElement("option");
+      option.value = row.value;
+      option.textContent = row.label;
+      select.appendChild(option);
+    }
   }
   if (previous) select.value = previous;
 }

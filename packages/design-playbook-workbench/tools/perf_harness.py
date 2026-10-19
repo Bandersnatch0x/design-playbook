@@ -569,17 +569,17 @@ def run_measurement(
         }
         _click_row_action(page, "#project-rows tr .canvas-button")
         page.locator("#canvas-panel").wait_for()
-        # Select by label rather than assuming how the option value is keyed.
-        options = page.evaluate(
+        # The panel was opened before this run authored its canvas, so its list
+        # is stale. Reload it and load the canvas this run just created: matching
+        # on the name instead picks whichever older canvas shares it, whose nodes
+        # every earlier run has already dragged out of place, so the measurement
+        # would not describe the canvas under test and would drift run to run.
+        page.click("#canvas-reload")
+        page.wait_for_function(
             "() => Array.from(document.querySelectorAll('#canvas-select option'))"
-            ".map((option) => ({value: option.value, label: option.textContent}))"
+            f".some((option) => option.value === {json.dumps(canvas_id)})"
         )
-        target = next(
-            (row for row in options if "perf-canvas" in (row["label"] or "")), None
-        )
-        if target is None:
-            raise SystemExit(f"created canvas not offered in the UI: {options}")
-        page.select_option("#canvas-select", value=target["value"])
+        page.select_option("#canvas-select", value=canvas_id)
         page.wait_for_function(
             f"() => document.querySelectorAll('.canvas-node').length === {canvas_nodes}"
         )

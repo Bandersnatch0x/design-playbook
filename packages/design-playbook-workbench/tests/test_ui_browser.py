@@ -1179,6 +1179,113 @@ class CanvasJourneyTest(unittest.TestCase):
         self.assertEqual(len(stored["document"]["boards"][0]["nodes"]), 200)
 
 
+    def test_a_drag_reconciles_the_stage_instead_of_rebuilding_it(self) -> None:
+        """R15 selection/drag response: one moved node must not recreate the rest.
+
+        Rebuilding all 200 node elements on pointerdown and again on every
+        pointermove is what put the drag response over the R15 budget, and
+        repainting the two 200-option flow dropdowns on the same renders carried
+        the rest. Both are reconciled in place now, so an element survives the
+        whole gesture; a rebuilt one loses the mark this test puts on it.
+        """
+        document = {
+            "name": "满画布",
+            "boards": [
+                {
+                    "id": "b_full",
+                    "name": "满",
+                    "width": 1600,
+                    "height": 1200,
+                    "background": "",
+                    "nodes": [
+                        {
+                            "id": f"n{index + 1}",
+                            "type": "text",
+                            "children": [],
+                            "props": {"text": f"node {index + 1}"},
+                            "layout": {
+                                "x": 40 + (index % 10) * 110,
+                                "y": 40 + (index // 10) * 70,
+                                "width": 100,
+                                "height": 40,
+                                "z": index,
+                            },
+                        }
+                        for index in range(200)
+                    ],
+                    "flowEdges": [],
+                }
+            ],
+        }
+        created = http_request(
+            self.h.runtime,
+            f"/api/v1/projects/{self.project_id}/actions/canvases",
+            method="POST",
+            body={
+                "operation": {
+                    "operationId": "op_ui_drag_reconcile",
+                    "payload": {"action": "canvases"},
+                },
+                "name": "满画布",
+                "document": document,
+            },
+            token=self.h.token,
+            origin=self.h.runtime.origin,
+        )
+        self.assertEqual(created.status, 200, created.text)
+        self.page.click("#canvas-reload")
+        self.page.select_option(
+            "#canvas-select", created.json["result"]["canvas"]["canvasId"]
+        )
+        expect(self.page.locator(".canvas-node")).to_have_count(200)
+        # Both the stage and the flow endpoint lists are rebuilt by a render, so
+        # both carry a mark. The endpoint options are what repainted the two
+        # visible dropdowns on every pointer event.
+        marked_nodes = self.mark(".canvas-node")
+        marked_options = self.mark("#flow-from option")
+        self.assertEqual((marked_nodes, marked_options), (200, 200))
+
+        node_id = self.page.locator(".canvas-node").first.get_attribute("data-node-id")
+        self.page.locator("#canvas-viewport").scroll_into_view_if_needed()
+        box = self.page.locator(f'.canvas-node[data-node-id="{node_id}"]').bounding_box()
+        assert box is not None
+        x = box["x"] + box["width"] / 3
+        y = box["y"] + box["height"] / 3
+        self.page.mouse.move(x, y)
+        self.page.mouse.down()
+        self.page.mouse.move(x + 30, y + 20)
+        # Mid-gesture is the path that has to stay cheap.
+        self.assert_survived(marked_nodes, marked_options)
+        self.page.mouse.up()
+        self.assert_survived(marked_nodes, marked_options)
+        self.wait_saved()
+        self.assert_survived(marked_nodes, marked_options)
+        # The drag still lands where the pointer went, in screen pixels.
+        moved = self.page.locator(f'.canvas-node[data-node-id="{node_id}"]').bounding_box()
+        assert moved is not None
+        self.assertAlmostEqual(moved["x"] - box["x"], 30, delta=3)
+
+    def mark(self, selector: str) -> int:
+        """Tag every element the selector matches, so a rebuild is detectable."""
+        return self.page.evaluate(
+            "(selector) => { const all = document.querySelectorAll(selector);"
+            " for (const el of all) { el.__reused = true; } return all.length; }",
+            selector,
+        )
+
+    def marked(self, selector: str) -> int:
+        """How many elements still carry the mark this test set on them."""
+        return self.page.evaluate(
+            "(selector) => Array.from(document.querySelectorAll(selector))"
+            ".filter((el) => el.__reused === true).length",
+            selector,
+        )
+
+    def assert_survived(self, nodes: int, options: int) -> None:
+        self.assertEqual(self.marked(".canvas-node"), nodes)
+        self.assertEqual(self.marked("#flow-from option"), options)
+
+
 class OrchestrationJourneyTest(unittest.TestCase):
     """WB-08 in the browser: flows, schemes, snapshots, context consent."""
 
