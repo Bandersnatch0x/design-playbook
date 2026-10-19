@@ -686,3 +686,21 @@ def test_every_protocol_call_the_shell_makes_is_on_the_instance() -> None:
     defined = set(re.findall(r"^ {10}([A-Za-z_$][\w$]*):", block, re.M))
     missing = sorted(called - defined)
     assert missing == [], f"called in the shell but not on the instance: {missing}"
+
+
+def test_a_refused_dispatch_leaves_no_sent_mark_behind() -> None:
+    # `commit` marks the draft dispatched before it asks the store to send it. When
+    # the store refuses - not ready, stale, or no target - the mark outlived the
+    # refusal, so the reconnect drain compared the draft against a value it believed
+    # was already on the wire and never resent it. The mark now happens only on a
+    # round the store will accept (T-117).
+    shell = SHELL.read_text(encoding="utf-8")
+    body = shell[shell.index("function commit(property, value, selector) {"):]
+    body = body[:body.index("\n      }")]
+    mark = body.index("protocol.markDispatched(property, value);")
+    # The guard is a return, not just a read. A `state` read whose branch was
+    # dropped leaves the mark in place and the bug alive, so pin the complete
+    # status check before the mark.
+    guard = "var state = protocol.status();\n        if (!state.ready || state.stale) return;"
+    assert guard in body, "commit must return when the protocol refuses a dispatch"
+    assert body.index(guard) < mark, "the ready/stale guard must run before the mark"

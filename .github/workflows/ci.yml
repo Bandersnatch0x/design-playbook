@@ -182,7 +182,8 @@ jobs:
         # chromium` on ubuntu-latest (passwordless sudo for --with-deps
         # apt libs). If the runner image or base changes, revisit.
         run: |
-          python3 -m pip install playwright
+          PLAYWRIGHT_VERSION=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); from _checks import PLAYWRIGHT_VERSION; print(PLAYWRIGHT_VERSION)")
+          python3 -m pip install "playwright==${PLAYWRIGHT_VERSION}"
           python3 -m playwright install --with-deps chromium
 
       - name: Evidence MCP stdio — capture tests (require chromium)

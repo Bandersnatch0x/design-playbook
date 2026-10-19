@@ -332,6 +332,9 @@
           protocol.status().diagnostic === "visual_invalid_value" ? "" : protocol.status().diagnostic }) });
         if (unsupported) return;
         if (value === protocol.acceptedValue(property)) return;
+        // Keep the sent mark aligned with the store's dispatch acceptance gate.
+        var state = protocol.status();
+        if (!state.ready || state.stale) return;
         protocol.markDispatched(property, value);
         applyStyle(property, value);
       }

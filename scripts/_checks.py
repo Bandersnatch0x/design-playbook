@@ -18,6 +18,13 @@ from pathlib import Path, PurePosixPath
 # Bump here only; ci.yml reads this constant instead of a second literal.
 RUFF_VERSION = "0.15.12"
 
+# Pinned Playwright for CI and release gates. The preview browser matrix
+# asserts against the Chromium this version ships, so an unpinned install
+# silently changes the browser under the suite (T-117). Bump here only;
+# both workflows read this constant. A bump requires re-running the
+# preview browser matrix and updating that ticket's version table.
+PLAYWRIGHT_VERSION = "1.60.0"
+
 # Version line → exact shipped command set (ADR-0015 stable main).
 # main is the public install surface, so unreleased capability must never
 # ship under a released version: a new command requires a version entry

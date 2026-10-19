@@ -1131,6 +1131,16 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn('ruff==${RUFF_VERSION}', ci)
         self.assertNotIn(f"ruff=={_checks.RUFF_VERSION}", ci)
 
+    def test_workflows_install_playwright_from_shared_pin(self) -> None:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import _checks
+        for name in ("ci.yml", "release.yml"):
+            text = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
+            self.assertIn("from _checks import PLAYWRIGHT_VERSION", text, name)
+            self.assertIn('playwright==${PLAYWRIGHT_VERSION}', text, name)
+            self.assertNotIn(f"playwright=={_checks.PLAYWRIGHT_VERSION}", text, name)
+            self.assertNotIn("pip install playwright\n", text, name)
+
     def test_windows_job_runs_frontend_review_under_windows_paths(self) -> None:
         ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         windows = ci.split("powershell-quoting:", 1)[1]

@@ -820,7 +820,11 @@ class VisualEditorRegressionTests(unittest.TestCase):
             "secure": True, "documentContext": "undefined", "navigatorContext": "object",
             "detected": True, "methods": ["registerTool", "constructor"], "native": True,
             "getTools": "undefined", "executeTool": "undefined", "provideContext": "undefined",
-        })
+        }, msg=(
+            "This assertion records the native surface of the pinned browser.\n"
+            "A red here after a version bump means the surface moved, not that the product broke.\n"
+            "The product already reads both surfaces in control.react.js; update this expectation and the ticket's version table."
+        ))
         expected = [
             {"name": "preview_get_selection", "inputSchema": {"type": "object", "properties": {}},
              "annotations": {"readOnlyHint": True, "consequentialHint": False}},
