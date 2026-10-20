@@ -58,7 +58,7 @@ def _match_by_directory(service, raw: object) -> str:
             return row["project_id"]
         if identity is not None and binding["directory_identity"] == identity:
             return row["project_id"]
-        if _normalized(binding["canonical_path"]) == normalized:
+        if canonical is None and _normalized(binding["canonical_path"]) == normalized:
             return row["project_id"]
     raise WorkbenchError(INVALID_TARGET)
 
