@@ -96,6 +96,15 @@ class ResolverTest(unittest.TestCase):
         self.assertEqual(caught.exception.code, INVALID_TARGET)
         self.assertEqual(len(self.h.projects()["projects"]), 2)
 
+    def test_an_existing_case_variant_of_a_registered_path_is_refused(self) -> None:
+        stranger = self.h.make_directory("ALPHA")
+        registered = self.h.workspace / "alpha"
+        if stranger.resolve() == registered.resolve():
+            self.skipTest("this filesystem is case-insensitive; the alias cannot exist")
+        with self.assertRaises(WorkbenchError) as caught:
+            self.resolve(project=str(stranger))
+        self.assertEqual(caught.exception.code, INVALID_TARGET)
+
     def test_same_named_projects_stay_distinct(self) -> None:
         by_first = self.resolve(project=str(self.directory))
         by_second = self.resolve(project=str(self.h.workspace / "alpha"))
