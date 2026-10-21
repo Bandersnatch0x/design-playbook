@@ -1751,6 +1751,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             "backflow",
             "project-archive",
             "project-unarchive",
+            "notes-propose",
         ):
             # Authoring, import curation, work-request handoff, owner
             # confirmation/backflow and project archival are maintainer-only
@@ -1808,6 +1809,19 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
                     overrides=payload.get("overrides"),
                     operation=operation,
                 )
+            )
+            return
+        if action == "notes-propose":
+            # R07: the design notes are a repository file, so editing them is
+            # an ordinary proposal against that file, not a direct write.
+            outcome = design_system.propose_notes(
+                project_id,
+                path=payload.get("path"),
+                text=payload.get("text"),
+                operation=operation,
+            )
+            self._send_mutation(
+                {"result": outcome, "counter": None, "replayed": False}
             )
             return
         if action == "proposals":

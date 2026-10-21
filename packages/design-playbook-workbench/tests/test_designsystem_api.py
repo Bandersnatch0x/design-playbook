@@ -265,6 +265,57 @@ class TokenEditApiTest(DesignSystemApiTestCase):
         self.assertEqual(denied_proposal.status, 401)
 
 
+class DesignNotesApiTest(DesignSystemApiTestCase):
+    def propose(self, *, path: str = "DESIGN.md", text: str = "# new notes\n",
+                capability: str | None = None):
+        return http_request(
+            self.h.runtime,
+            f"/api/v1/projects/{self.project_id}/actions/notes-propose",
+            method="POST",
+            body={
+                "operation": {
+                    "operationId": "op_notes_propose_1",
+                    "payload": {"action": "notes-propose"},
+                },
+                "path": path,
+                "text": text,
+            },
+            token=None if capability else self.h.token,
+            capability=capability,
+            origin=None if capability else self.h.runtime.origin,
+        )
+
+    def test_the_route_creates_a_proposal_and_writes_nothing(self) -> None:
+        """R07: the notes route is reachable and lands in an R06 proposal."""
+        before = digest_bytes((self.project_dir / "DESIGN.md").read_bytes())
+        response = self.propose()
+        self.assertEqual(response.status, 200, response.text)
+        outcome = response.json["result"]
+        self.assertEqual(outcome["path"], "DESIGN.md")
+        proposal = outcome["proposal"]
+        self.assertEqual(proposal["state"], "awaiting-authorization")
+        self.assertEqual(proposal["changes"][0]["path"], "DESIGN.md")
+        self.assertEqual(proposal["changes"][0]["baseHash"], before)
+        self.assertEqual(
+            digest_bytes((self.project_dir / "DESIGN.md").read_bytes()), before
+        )
+        # It shows up in the ordinary proposal list, not a separate one.
+        listed = self.h.proposals(self.project_id)
+        self.assertEqual(
+            [row["proposalId"] for row in listed.json["proposals"]],
+            [proposal["proposalId"]],
+        )
+
+    def test_the_notes_route_is_maintainer_only_and_refuses_a_non_markdown_path(
+        self,
+    ) -> None:
+        read_only = self.capability(self.project_id, ["read"])
+        refused = self.propose(capability=read_only)
+        self.assertEqual(refused.status, 401, refused.text)
+        wrong = self.propose(path="tokens/brand.json")
+        self.assertEqual(wrong.status, 400, wrong.text)
+        self.assertEqual(wrong.json["error"]["code"], "invalid-input")
+
 class BaselineProposalApiTest(DesignSystemApiTestCase):
     def propose(self, path: str = "tokens/brand.json"):
         return self.h.asset_action(

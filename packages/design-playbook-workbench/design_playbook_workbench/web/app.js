@@ -135,6 +135,10 @@ const elements = {
   tokensBaselineForm: document.getElementById("tokens-baseline-form"),
   tokensBaselinePath: document.getElementById("tokens-baseline-path"),
   tokensBaselineButton: document.getElementById("tokens-baseline-button"),
+  notesForm: document.getElementById("notes-form"),
+  notesPath: document.getElementById("notes-path"),
+  notesText: document.getElementById("notes-text"),
+  notesResult: document.getElementById("notes-result"),
   tokensBaselineResult: document.getElementById("tokens-baseline-result"),
   tokensClose: document.getElementById("tokens-close"),
   assetDocumentControls: document.getElementById("asset-document-controls"),
@@ -1964,6 +1968,11 @@ async function openDesignSystem(asset) {
   const manifest = asset.manifest || [];
   elements.tokensBaselinePath.value = manifest.length ? manifest[0].path : "";
   elements.tokensBaselineResult.textContent = "";
+  // The notes live in the project, not in this asset: the default path is
+  // the conventional one and the maintainer can point it elsewhere.
+  elements.notesPath.value = "DESIGN.md";
+  elements.notesText.value = "";
+  elements.notesResult.textContent = "";
   elements.tokensStatus.textContent = "";
   elements.tokensValidation.textContent = "";
   elements.tokensValidationErrors.textContent = "";
@@ -2246,12 +2255,52 @@ async function proposeBaseline(event) {
   }
 }
 
+async function proposeNotes(event) {
+  event.preventDefault();
+  const project = state.tokensProject;
+  if (!project) return;
+  const path = elements.notesPath.value.trim();
+  const text = elements.notesText.value;
+  if (!path || !text) {
+    announce("说明提案需要文件路径与内容。");
+    return;
+  }
+  try {
+    const payload = await api(
+      `/api/v1/projects/${project.projectId}/actions/notes-propose`,
+      {
+        method: "POST",
+        body: {
+          operation: mutation(newOperationId(), {
+            action: "notes-propose",
+            projectId: project.projectId,
+            path,
+          }),
+          path,
+          text,
+        },
+      }
+    );
+    const proposal = payload.result.proposal;
+    elements.tokensError.hidden = true;
+    elements.notesResult.textContent =
+      `提案 ${proposal.proposalId} 状态：${proposalStateLabel(proposal.state)} · ` +
+      `目标 ${proposal.changes[0].path}。请到“变更提案”面板复核 diff 并授权；` +
+      "本操作没有写入项目文件。";
+    announce("已生成设计说明提案，等待维护者授权。");
+  } catch (error) {
+    elements.notesResult.textContent = "";
+    showTokensError(error, "生成设计说明提案");
+  }
+}
+
 elements.tokensSave.addEventListener("click", saveTokenDraft);
 elements.tokensPublish.addEventListener("click", publishTokens);
 elements.tokensReload.addEventListener("click", loadTokenDocument);
 elements.tokensPreviewRefresh.addEventListener("click", renderTokenPreview);
 elements.tokensDiffButton.addEventListener("click", loadTokenDiff);
 elements.tokensBaselineForm.addEventListener("submit", proposeBaseline);
+elements.notesForm.addEventListener("submit", proposeNotes);
 elements.tokensClose.addEventListener("click", () => {
   elements.tokensPanel.hidden = true;
   restorePanelTrigger();
@@ -4857,6 +4906,7 @@ async function openSettings() {
   // labelled focus target (aria-labelledby="settings-heading").
   focusIntoPanel(elements.settingsPanel);
   renderDiagnostics();
+  await loadBlobIntegrity();
   announce("已打开设置与备份。");
 }
 
@@ -4871,6 +4921,29 @@ function renderDiagnostics() {
     const item = document.createElement("li");
     item.textContent = text;
     elements.settingsDiagnostics.appendChild(item);
+  }
+}
+
+async function loadBlobIntegrity() {
+  // R14: the startup check reports missing referenced content. The status
+  // route is the only place it is published, so the panel reads it there
+  // instead of leaving the fact to an API client.
+  const item = document.createElement("li");
+  elements.settingsDiagnostics.appendChild(item);
+  try {
+    const status = await api("/api/v1/status");
+    const integrity = status.blobIntegrity;
+    if (!integrity) {
+      item.textContent = "内容完整性：服务未报告（本次启动未检查）。";
+      return;
+    }
+    item.textContent =
+      integrity.missing === 0
+        ? `内容完整性：引用 ${integrity.referenced} 项，缺失 0 项。`
+        : `内容完整性：引用 ${integrity.referenced} 项，缺失 ${integrity.missing} 项` +
+          `（${(integrity.missingHashes || []).join("、")}）。缺失内容需要重新导入或恢复备份。`;
+  } catch (error) {
+    item.textContent = describeFailure(error, "读取内容完整性");
   }
 }
 

@@ -28,6 +28,7 @@ from design_playbook_workbench.errors import (
     CONFLICT,
     INVALID_INPUT,
     INVALID_TARGET,
+    MISSING_DEPENDENCY,
     UNSUPPORTED,
     WorkbenchError,
 )
@@ -342,6 +343,53 @@ class PublishRulesTest(DesignSystemTestCase):
         with self.assertRaises(WorkbenchError) as caught:
             self.design_system.preview(self.project_id, self.asset_id, theme="nope")
         self.assertEqual(caught.exception.code, INVALID_TARGET)
+
+
+class DesignNotesTest(DesignSystemTestCase):
+    def test_editing_the_design_notes_creates_an_ordinary_proposal(self) -> None:
+        """R07: the notes are a repository file, so the edit is a proposal."""
+        before = digest_bytes((self.project / "DESIGN.md").read_bytes())
+        outcome = self.design_system.propose_notes(
+            self.project_id,
+            path="DESIGN.md",
+            text="# Design baseline\n\n新的排版说明。\n",
+            operation=self.operation({"action": "notes-propose"}),
+        )
+        proposal = outcome["proposal"]
+        self.assertEqual(outcome["path"], "DESIGN.md")
+        self.assertEqual(proposal["state"], "awaiting-authorization")
+        self.assertEqual(proposal["changes"][0]["path"], "DESIGN.md")
+        self.assertEqual(proposal["changes"][0]["baseHash"], before)
+        # Nothing was written: the notes still hold their own content, and
+        # the workbench never became a second authority for them.
+        self.assertEqual(
+            digest_bytes((self.project / "DESIGN.md").read_bytes()), before
+        )
+
+    def test_notes_outside_the_project_or_not_markdown_are_refused(self) -> None:
+        for path in ("../outside.md", "tokens/brand.json", "", None):
+            with self.subTest(path=path):
+                with self.assertRaises(WorkbenchError) as caught:
+                    self.design_system.propose_notes(
+                        self.project_id,
+                        path=path,
+                        text="# nope\n",
+                        operation=self.operation({"action": "notes-propose"}),
+                    )
+                self.assertIn(
+                    caught.exception.code,
+                    (INVALID_INPUT, INVALID_TARGET, MISSING_DEPENDENCY),
+                )
+        # A markdown file that does not exist yet is a missing dependency
+        # rather than a silent create.
+        with self.assertRaises(WorkbenchError) as caught:
+            self.design_system.propose_notes(
+                self.project_id,
+                path="docs/missing.md",
+                text="# nope\n",
+                operation=self.operation({"action": "notes-propose"}),
+            )
+        self.assertEqual(caught.exception.code, MISSING_DEPENDENCY)
 
 
 class BaselineProposalTest(DesignSystemTestCase):

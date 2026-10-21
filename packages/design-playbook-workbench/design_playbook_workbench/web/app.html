@@ -245,6 +245,22 @@
       <button type="submit" id="tokens-baseline-button">生成提案</button>
     </form>
     <p id="tokens-baseline-result" class="hint" role="status"></p>
+
+    <h3>编辑设计说明</h3>
+    <p class="hint">
+      设计说明是仓库文件，工作台不另存权威副本。这里的文字会生成一份普通变更提案，
+      由你在“变更提案”面板复核 diff 后授权；授权前项目文件不会被改动。
+    </p>
+    <form id="notes-form" class="row-form" autocomplete="off">
+      <label for="notes-path">说明文件路径</label>
+      <input id="notes-path" name="path" type="text" spellcheck="false"
+             placeholder="DESIGN.md" required>
+      <label for="notes-text">说明内容</label>
+      <textarea id="notes-text" name="text" class="tokens-editor" rows="8"
+                spellcheck="false" required></textarea>
+      <button type="submit" id="notes-propose-button">生成说明提案</button>
+    </form>
+    <p id="notes-result" class="hint" role="status"></p>
   </section>
 
   <section class="panel" id="document-panel" hidden aria-labelledby="document-heading">

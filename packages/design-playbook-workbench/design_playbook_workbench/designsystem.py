@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from typing import Callable
 
 from .assets import AssetService
@@ -609,6 +610,57 @@ class DesignSystemService:
         return outcome
 
     # -- baseline proposal ---------------------------------------------
+
+    def propose_notes(
+        self,
+        project_id: str,
+        *,
+        path: object,
+        text: object,
+        operation: Operation,
+    ) -> dict:
+        """Edit the project's design notes through an ordinary proposal (R07).
+
+        DESIGN.md is a repository file, and the workbench is not a second
+        authority for it: the maintainer's text becomes an R06 change
+        proposal against that file, with the current content as the base
+        hash. Nothing is written until the proposal is applied, and the file
+        keeps whatever owner it already has.
+        """
+        self.service.require_project(project_id, scope="write")
+        if not isinstance(path, str) or not path.strip():
+            raise WorkbenchError(INVALID_INPUT, detail="a notes path is required")
+        if not isinstance(text, str):
+            raise WorkbenchError(INVALID_INPUT, detail="notes must be text")
+        target_path = path.strip()
+        if not target_path.lower().endswith(".md"):
+            raise WorkbenchError(
+                INVALID_INPUT, detail="design notes are a markdown file"
+            )
+        root = self.service.require_project(project_id, scope="read")["canonicalPath"]
+        candidate = Path(root) / target_path
+        if not candidate.is_file():
+            raise WorkbenchError(
+                MISSING_DEPENDENCY, detail="the notes file does not exist yet"
+            )
+        base_hash = digest_bytes(candidate.read_bytes())
+        proposal = self.proposals.create(
+            project_id,
+            changes=[
+                {
+                    "path": target_path,
+                    "operation": "update",
+                    "baseHash": base_hash,
+                    "content": text,
+                }
+            ],
+            summary=f"编辑设计说明 {target_path}",
+            operation=Operation(
+                operation_id=f"{operation.operation_id}:notes",
+                payload={"action": "notes-propose", "path": target_path},
+            ),
+        )["result"]
+        return {"proposal": proposal, "path": target_path}
 
     def propose_baseline(
         self,
