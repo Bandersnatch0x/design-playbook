@@ -854,12 +854,18 @@ class AssetService:
         *,
         operation: Operation,
         verified_by: dict | None = None,
+        dependencies: list[dict] | None = None,
     ) -> dict:
         """Publish a revision.
 
         A capability like ``runnable-verified`` still needs a verification
         record; ``verified_by`` is the owner confirmation bound to the exact
         content hash being published, and nothing else is accepted as proof.
+
+        ``dependencies`` carries declared edges this publish introduces (a
+        page that instantiates components, for instance). They are the same
+        shape ``publish_with_dependencies`` accepts and are recorded in both
+        the revision and the dependency table.
         """
         replayed = self.service._replay(
             operation, kind="asset-publish", entity_id=asset_id, project_id=project_id)
@@ -905,6 +911,15 @@ class AssetService:
         revision_id = str(uuid.uuid4())
         now = self._now()
         locators = _draft_locators(draft, project_id)
+        declared = list(dependencies or [])
+        for dependency in declared:
+            # A declared edge must resolve inside this project: a dangling
+            # one is a missing dependency, not a pointer to trust later.
+            dependency_revision = self.store.revision(dependency.get("revisionId"))
+            if dependency_revision is None or dependency_revision["asset_id"] != dependency.get(
+                "assetId"
+            ):
+                raise WorkbenchError(MISSING_DEPENDENCY)
 
         def apply() -> tuple[dict, int]:
             self.store.insert_revision(
@@ -914,13 +929,17 @@ class AssetService:
                 content_hash=manifest[0]["contentHash"],
                 carrier=attributes.get("carrier", row["kind"]),
                 capabilities=capabilities,
-                dependencies=[],
+                dependencies=declared,
                 source_locators=locators,
                 manifest=manifest,
                 origin={"kind": "import", "importRoots": attributes.get("roots", [])},
                 verified=verified,
                 now=now,
             )
+            if declared:
+                self.store.insert_dependencies(
+                    revision_id=revision_id, dependencies=declared, now=now
+                )
             asset = self.store.asset(asset_id)
             return (
                 self._asset_payload(asset, self.store.draft(asset_id), self.store.latest_revision(asset_id)),

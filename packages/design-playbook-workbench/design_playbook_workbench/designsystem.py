@@ -486,12 +486,15 @@ class DesignSystemService:
                     {"instanceId": instance["instance_id"], "assetId": instance["asset_id"]}
                 )
         components: list[dict] = []
+        affected_component_ids: set[str] = set()
         for other in self.store.project_assets(project_id):
             if other["asset_id"] == asset_id:
                 continue
             for revision in self.store.asset_revisions(other["asset_id"]):
                 for dependency in self.store.dependencies(revision["revision_id"]):
                     if dependency["depends_on_asset_id"] == asset_id:
+                        if other["kind"] == "component":
+                            affected_component_ids.add(other["asset_id"])
                         components.append(
                             {
                                 "assetId": other["asset_id"],
@@ -501,10 +504,34 @@ class DesignSystemService:
                                 "revisionNumber": revision["revision_number"],
                             }
                         )
+        # R07: a page that instantiates one of those components is affected by
+        # the token change too. The dependency is one hop further, so the page
+        # scan follows component edges instead of repeating the token match.
+        pages: list[dict] = []
+        for other in self.store.project_assets(project_id):
+            if other["kind"] != "page":
+                continue
+            for revision in self.store.asset_revisions(other["asset_id"]):
+                dependencies = self.store.dependencies(revision["revision_id"])
+                if any(
+                    dependency["depends_on_asset_id"] == asset_id
+                    or dependency["depends_on_asset_id"] in affected_component_ids
+                    for dependency in dependencies
+                ):
+                    pages.append(
+                        {
+                            "assetId": other["asset_id"],
+                            "name": other["name"],
+                            "kind": other["kind"],
+                            "revisionId": revision["revision_id"],
+                            "revisionNumber": revision["revision_number"],
+                        }
+                    )
         return {
             "assetId": asset_id,
             "instances": dependents,
             "components": components,
+            "pages": pages,
             "note": "发布新版本不会自动升级这些引用；升级需按 WB-04 显式选择。",
         }
 

@@ -37,6 +37,30 @@ from .store import Store, WorkbenchDataDirectory
 RECORD_SCHEMA_VERSION = 1
 
 
+def blob_integrity(store: Store, blobs: BlobStore) -> dict:
+    """Referenced content that is missing from the blob area (R14).
+
+    Startup checks rather than refuses: a missing blob is a fact the
+    maintainer has to see and repair, and refusing to serve would also hide
+    the rest of the workbench from them. The count is reported on the status
+    route instead of failing silently.
+    """
+    present = set(blobs.iter_hashes())
+    referenced = 0
+    missing: list[str] = []
+    for manifest in store.all_revision_manifests():
+        for entry in json.loads(manifest["manifest_json"] or "[]"):
+            referenced += 1
+            content_hash = entry.get("contentHash")
+            if content_hash and content_hash not in present:
+                missing.append(content_hash)
+    return {
+        "referenced": referenced,
+        "missing": len(missing),
+        "missingHashes": sorted(set(missing))[:20],
+    }
+
+
 @dataclass
 class WorkbenchRuntime:
     """One running workbench service and everything it owns."""
@@ -212,6 +236,8 @@ def start_runtime(
             backup=backup,
             preview_origin=preview.origin,
         )
+        # R14: check referenced content once at startup, before serving.
+        server.blob_integrity = blob_integrity(store, blobs)
         preview.start_serving()
         server.start_serving()
     except BaseException:

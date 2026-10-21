@@ -504,6 +504,40 @@ class PageLayoutTest(ComponentsTestCase):
         with self.assertRaises(WorkbenchError):
             self.create_page(unknown_instance, name="未知实例")
 
+    def test_a_published_page_records_the_components_it_instantiates(self) -> None:
+        """R07: a page's revision depends on the components its nodes use."""
+        component = self.create_component(DEFINITION)
+        self.components.publish(
+            self.project_id,
+            component["assetId"],
+            operation=self.operation(
+                {"action": "component-publish"},
+                expected=self.asset_counter(component["assetId"]),
+            ),
+        )
+        page = {
+            "name": "P",
+            "nodes": [
+                {"id": "root", "type": "stack", "children": ["btn"], "props": {}},
+                {"id": "btn", "type": "instance",
+                 "props": {"assetId": component["assetId"], "params": {"label": "保存"}}},
+            ],
+        }
+        created = self.create_page(page)
+        self.components.publish_page(
+            self.project_id,
+            created["assetId"],
+            operation=self.operation(
+                {"action": "page-publish"},
+                expected=self.asset_counter(created["assetId"]),
+            ),
+        )
+        revision = self.store.latest_revision(created["assetId"])
+        edges = self.store.dependencies(revision["revision_id"])
+        self.assertEqual(
+            [edge["depends_on_asset_id"] for edge in edges], [component["assetId"]]
+        )
+
     def test_pages_publish_their_own_document(self) -> None:
         page = self.create_page(PAGE)
         self.assertEqual(

@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 from .credentials import restrict_directory_to_current_user
-from .errors import UNSUPPORTED, WorkbenchError
+from .errors import LIMIT_EXCEEDED, UNSUPPORTED, WorkbenchError
 
 SCHEMA_VERSION = 8
 
@@ -29,6 +29,12 @@ SCHEMA_VERSION = 8
 #: view cannot drift apart. ``created_at`` is the stable key; ``rowid`` breaks
 #: ties between assets written in the same second.
 ASSET_LISTING_ORDER = "a.created_at ASC, a.rowid ASC"
+
+#: R15 acceptance scale, enforced as a capacity limit: a project over either
+#: number refuses the whole transaction with ``limit-exceeded`` rather than
+#: accepting a partial import.
+MAX_ASSETS_PER_PROJECT = 5_000
+MAX_REVISIONS_PER_PROJECT = 20_000
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -903,6 +909,17 @@ class Store:
     ) -> None:
         """Asset plus its first draft row, committed as one transaction."""
         with self.transaction() as connection:
+            # R15: the capacity limit is part of the same transaction, so an
+            # over-capacity import leaves no asset or draft behind.
+            existing = connection.execute(
+                "SELECT COUNT(*) AS n FROM assets WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()
+            if int(existing["n"]) >= MAX_ASSETS_PER_PROJECT:
+                raise WorkbenchError(
+                    LIMIT_EXCEEDED,
+                    detail=f"a project holds at most {MAX_ASSETS_PER_PROJECT} assets",
+                )
             connection.execute(
                 "INSERT INTO assets (asset_id, project_id, kind, name, lifecycle, "
                 "counter, created_at, updated_at) VALUES (?, ?, ?, ?, 'draft', 0, ?, ?)",
@@ -1032,6 +1049,23 @@ class Store:
         now: str,
     ) -> None:
         with self.transaction() as connection:
+            # R15: revisions are counted per project, not per asset, because
+            # the acceptance scale is stated per project. The check shares
+            # the insert's transaction, so a refusal writes nothing.
+            revision_count = connection.execute(
+                "SELECT COUNT(*) AS n FROM revisions r "
+                "JOIN assets a ON a.asset_id = r.asset_id "
+                "WHERE a.project_id = (SELECT project_id FROM assets WHERE asset_id = ?)",
+                (asset_id,),
+            ).fetchone()
+            if int(revision_count["n"]) >= MAX_REVISIONS_PER_PROJECT:
+                raise WorkbenchError(
+                    LIMIT_EXCEEDED,
+                    detail=(
+                        "a project holds at most "
+                        f"{MAX_REVISIONS_PER_PROJECT} revisions"
+                    ),
+                )
             connection.execute(
                 "INSERT INTO revisions (revision_id, asset_id, revision_number, "
                 "content_hash, carrier, capabilities_json, dependencies_json, "

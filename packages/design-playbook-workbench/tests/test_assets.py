@@ -219,6 +219,20 @@ class ImportBoundaryTest(AssetTestCase):
         self.assertEqual(caught.exception.code, LIMIT_EXCEEDED)
         self.assertEqual(self.store.project_assets(self.project_id), [])
 
+    def test_a_project_at_its_asset_capacity_refuses_the_whole_import(self) -> None:
+        """R15: capacity is enforced in the same transaction as the insert."""
+        from design_playbook_workbench import store as store_module
+
+        self.write("first.md", "# first\n")
+        self.import_assets(["first.md"])
+        self.write("second.md", "# second\n")
+        with mock.patch.object(store_module, "MAX_ASSETS_PER_PROJECT", 1):
+            with self.assertRaises(WorkbenchError) as caught:
+                self.import_assets(["second.md"])
+        self.assertEqual(caught.exception.code, LIMIT_EXCEEDED)
+        # The refused import left nothing behind.
+        self.assertEqual(len(self.store.project_assets(self.project_id)), 1)
+
     def test_too_many_files_rejects_the_whole_import(self) -> None:
         many = self.project / "many"
         many.mkdir()

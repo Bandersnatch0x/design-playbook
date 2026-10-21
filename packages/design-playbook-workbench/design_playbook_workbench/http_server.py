@@ -427,15 +427,17 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
 
     def _serve_status(self, session: WorkbenchSession) -> None:
         self._drain_body()
-        self._send_json(
-            200,
-            {
-                "schemaVersion": SCHEMA_VERSION,
-                "service": "design-playbook-workbench",
-                **session.receipt(),
-            },
-            close=True,
-        )
+        payload = {
+            "schemaVersion": SCHEMA_VERSION,
+            "service": "design-playbook-workbench",
+            **session.receipt(),
+        }
+        # R14: the startup check reports missing referenced content here. It
+        # is a fact for the maintainer, not a reason to refuse to serve.
+        integrity = getattr(self.server, "blob_integrity", None)
+        if integrity is not None:
+            payload["blobIntegrity"] = integrity
+        self._send_json(200, payload, close=True)
 
     def _serve_backup(self, backup: "BackupService", principal: Principal) -> None:
         """Backup, verify, and restore are maintainer-only settings actions."""
@@ -2034,6 +2036,7 @@ class WorkbenchHTTPServer(http.server.ThreadingHTTPServer):
         self.lifecycle: LifecycleService | None = None
         self.backup: BackupService | None = None
         self.preview_origin = ""
+        self.blob_integrity: dict | None = None
         self.task_lookup = None
         super().__init__((host, port), WorkbenchRequestHandler)
         self.bind_host = host
