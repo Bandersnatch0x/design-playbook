@@ -1118,6 +1118,14 @@ function renderProposals() {
     const awaiting = detail.state === "awaiting-authorization";
     const recovering = detail.state === "recovery-required";
     const applied = detail.state === "applied";
+    const sync = detail.pendingSync;
+    const syncNote = node.querySelector(".proposal-sync");
+    syncNote.hidden = !(sync && sync.pending);
+    if (sync && sync.pending) {
+      syncNote.textContent =
+        `待同步：${sync.changes.map((change) => change.path).join("、")} ` +
+        "在工作台之外被改动；应用会因基线不符停止，工作台不会覆盖。";
+    }
     node.querySelector(".proposal-recovery").hidden = !recovering;
     node.querySelector(".apply-button").hidden = !awaiting;
     node.querySelector(".reject-button").hidden = !awaiting;

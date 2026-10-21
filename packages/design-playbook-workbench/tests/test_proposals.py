@@ -348,6 +348,42 @@ class ApplyTest(ProposalTestCase):
         )
         self.assertFalse((self.project / "new.txt").exists())
 
+    def test_an_external_edit_is_reported_as_pending_sync(self) -> None:
+        """R06: an outside change produces a notice, not a silent overwrite."""
+        proposal = self.create(
+            [
+                {"path": "index.html", "operation": "update",
+                 "baseHash": self.digest_of("index.html"),
+                 "content": "<h1>from proposal</h1>\n"},
+                {"path": "app.css", "operation": "update",
+                 "baseHash": self.digest_of("app.css"),
+                 "content": "body { color: navy; }\n"},
+            ]
+        )
+        before = self.proposals.detail(
+            self.project_id, proposal["proposalId"]
+        )["proposal"]["pendingSync"]
+        self.assertFalse(before["pending"])
+        self.assertEqual(before["changes"], [])
+
+        self.write("index.html", "<h1>local edit</h1>\n")
+        detail = self.proposals.detail(
+            self.project_id, proposal["proposalId"]
+        )["proposal"]
+        self.assertTrue(detail["pendingSync"]["pending"])
+        self.assertEqual(
+            [change["path"] for change in detail["pendingSync"]["changes"]],
+            ["index.html"],
+        )
+        self.assertNotEqual(
+            detail["pendingSync"]["changes"][0]["currentHash"],
+            detail["pendingSync"]["changes"][0]["recordedBaseHash"],
+        )
+        # Reading the notice changed nothing: the file is still the local one
+        # and the proposal is still awaiting authorization.
+        self.assertEqual(self.read("index.html"), "<h1>local edit</h1>\n")
+        self.assertEqual(detail["state"], "awaiting-authorization")
+
     def test_baseline_drift_after_creation_blocks_the_write(self) -> None:
         proposal = self.create(
             [
