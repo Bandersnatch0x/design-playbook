@@ -131,4 +131,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":  # pragma: no cover - operator entry
+    from design_playbook.scripts.stdio_encoding import configure_piped_utf8
+
+    configure_piped_utf8()
     raise SystemExit(main())
