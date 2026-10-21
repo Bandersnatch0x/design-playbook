@@ -405,6 +405,36 @@
             几何按倍数缩放/移动；一个拖动手势是一事务，键盘与表单编辑走同一命令集。
           </p>
           <div class="row-form">
+            <label for="prop-gap">间距</label>
+            <input id="prop-gap" type="text" placeholder="8px">
+            <label for="prop-padding">内边距</label>
+            <input id="prop-padding" type="text" placeholder="12px">
+          </div>
+          <div class="row-form">
+            <label for="prop-direction">方向</label>
+            <select id="prop-direction">
+              <option value="">（不设置）</option>
+              <option value="vertical">纵向</option>
+              <option value="horizontal">横向</option>
+            </select>
+            <label for="prop-columns">列数</label>
+            <input id="prop-columns" type="number" min="1" step="1">
+          </div>
+          <div class="row-form">
+            <label for="prop-align">对齐</label>
+            <select id="prop-align">
+              <option value="">（不设置）</option>
+              <option value="start">起点</option>
+              <option value="center">居中</option>
+              <option value="end">终点</option>
+              <option value="stretch">拉伸</option>
+            </select>
+            <button type="button" id="prop-spacing-apply">应用间距</button>
+          </div>
+          <p class="hint">
+            间距只写入 stack/grid/container 节点；留空表示不改动该字段。
+          </p>
+          <div class="row-form">
             <label for="prop-content" id="prop-content-label">内容</label>
             <input id="prop-content" type="text">
             <button type="button" id="prop-content-apply">应用内容</button>

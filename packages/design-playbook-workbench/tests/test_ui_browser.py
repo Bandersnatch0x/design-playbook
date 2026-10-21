@@ -751,6 +751,71 @@ class CanvasJourneyTest(unittest.TestCase):
         self.assertEqual(self.page.locator("#scheme-regions").evaluate(
             "el => el.parentElement.querySelector('label').htmlFor"), "scheme-regions")
 
+    def test_a_container_node_edits_its_spacing_from_the_panel(self) -> None:
+        """R09: spacing is editable in the property panel, not only in JSON."""
+        # The UI's new-canvas template holds one text node, so the container
+        # this test needs is created through the API and then loaded.
+        created = self.h.action(
+            self.project_id,
+            "canvases",
+            payload={
+                "name": "间距画布",
+                "document": {
+                    "name": "间距画布",
+                    "boards": [
+                        {
+                            "id": "b1",
+                            "name": "画板 1",
+                            "width": 1200,
+                            "height": 800,
+                            "nodes": [
+                                {
+                                    "id": "root",
+                                    "type": "stack",
+                                    "children": ["title"],
+                                    "props": {"direction": "vertical"},
+                                    "layout": {"x": 40, "y": 40, "width": 400,
+                                               "height": 300, "z": 0},
+                                },
+                                {
+                                    "id": "title",
+                                    "type": "text",
+                                    "children": [],
+                                    "props": {"text": "标题"},
+                                    "layout": {"x": 60, "y": 60, "width": 240,
+                                               "height": 40, "z": 1},
+                                },
+                            ],
+                            "flowEdges": [],
+                        }
+                    ],
+                },
+            },
+        )
+        self.assertEqual(created.status, 200, created.text)
+        self.page.click("#canvas-reload")
+        expect(self.page.locator(".canvas-node")).to_have_count(2)
+
+        root = self.page.locator(".canvas-node").first
+        root.click()
+        root_id = root.get_attribute("data-node-id")
+        self.assertEqual(root_id, "root")
+        expect(self.page.locator("#prop-gap")).to_be_enabled()
+        self.page.fill("#prop-gap", "16px")
+        self.page.fill("#prop-padding", "4px 8px")
+        self.page.click("#prop-spacing-apply")
+        self.wait_for(
+            lambda: self.node("root")["props"].get("gap") == "16px",
+            "the edited gap",
+        )
+        self.wait_saved()
+        self.assertEqual(self.node("root")["props"].get("padding"), "4px 8px")
+
+        # A leaf node has no children to space, so the panel says so by
+        # disabling the fields rather than accepting a write that does nothing.
+        self.page.locator(".canvas-node").last.click()
+        expect(self.page.locator("#prop-gap")).to_be_disabled()
+
     def test_round3_canvas_node_selection_focuses_shortcut_scope(self) -> None:
         self.create_canvas()
         node = self.page.locator(".canvas-node").first

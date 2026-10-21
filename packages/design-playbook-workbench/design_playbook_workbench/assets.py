@@ -12,6 +12,7 @@ extension. Publishing freezes the draft into an immutable revision.
 from __future__ import annotations
 
 import os
+import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -652,6 +653,7 @@ class AssetService:
             if payload["dynamicPreviewEnabled"]
             else None
         )
+        external = self._external_references(entry)
         return {
             "assetId": asset_id,
             "entry": entry["path"],
@@ -667,11 +669,39 @@ class AssetService:
                 "managementApi": "blocked",
                 "sessionCredential": "absent",
             },
+            # R03: the preview policy blocks external resources, so anything
+            # the entry asks for from off-machine will be missing. Naming them
+            # is the difference between "renders differently" and "a file is
+            # silently absent", and the policy is never relaxed to make them
+            # load.
+            "externalResources": external,
             "notes": (
                 "静态预览不执行脚本；动态预览需显式启用，且运行在独立回环来源，"
                 "不携带会话凭证、不能访问管理 API 或外网。"
             ),
         }
+
+    def _external_references(self, entry: dict) -> list[str]:
+        """URLs the preview entry asks for that the policy will refuse."""
+        try:
+            data = self.blobs.read(entry["contentHash"])
+        except (WorkbenchError, KeyError):
+            return []
+        text = data.decode("utf-8", errors="replace")
+        found: list[str] = []
+        for match in re.finditer(
+            r"""(?:src|href|srcset|poster|data)\s*=\s*["']([^"']+)["']""",
+            text,
+            re.IGNORECASE,
+        ):
+            url = match.group(1).strip()
+            if url.startswith(("http://", "https://", "//")):
+                found.append(url)
+        for match in re.finditer(
+            r"""url\(\s*["']?((?:https?:)?//[^)"']+)""", text, re.IGNORECASE
+        ):
+            found.append(match.group(1).strip())
+        return sorted(set(found))
 
     def _preview_entry(self, payload: dict) -> dict:
         manifest = payload.get("manifest") or []

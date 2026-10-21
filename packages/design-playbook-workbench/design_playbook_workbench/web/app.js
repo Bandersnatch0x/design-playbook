@@ -212,6 +212,12 @@ const elements = {
   propContent: document.getElementById("prop-content"),
   propContentLabel: document.getElementById("prop-content-label"),
   propContentApply: document.getElementById("prop-content-apply"),
+  propGap: document.getElementById("prop-gap"),
+  propPadding: document.getElementById("prop-padding"),
+  propDirection: document.getElementById("prop-direction"),
+  propColumns: document.getElementById("prop-columns"),
+  propAlign: document.getElementById("prop-align"),
+  propSpacingApply: document.getElementById("prop-spacing-apply"),
   propToken: document.getElementById("prop-token"),
   propTokenApply: document.getElementById("prop-token-apply"),
   boardWidth: document.getElementById("board-width"),
@@ -2638,6 +2644,24 @@ function renderCanvasProps() {
     elements.propContentLabel.textContent = content.label;
     elements.propContent.value = content.value;
     elements.propToken.value = node.props.tokenRef || "";
+    // Spacing reads back from the node so the panel shows what is set.
+    const spacing = ["stack", "grid", "container"].includes(node.type);
+    elements.propGap.value = spacing ? node.props.gap || "" : "";
+    elements.propPadding.value = spacing ? node.props.padding || "" : "";
+    elements.propDirection.value = spacing ? node.props.direction || "" : "";
+    elements.propAlign.value = spacing ? node.props.align || "" : "";
+    elements.propColumns.value =
+      spacing && node.props.columns != null ? node.props.columns : "";
+    for (const field of [
+      elements.propGap,
+      elements.propPadding,
+      elements.propDirection,
+      elements.propAlign,
+      elements.propColumns,
+      elements.propSpacingApply,
+    ]) {
+      field.disabled = !spacing;
+    }
   }
   if (board) {
     elements.boardWidth.value = board.width;
@@ -3233,6 +3257,37 @@ function applyNodeContent() {
   });
 }
 
+function applyNodeSpacing() {
+  const nodes = selectedNodes();
+  if (nodes.length !== 1) return;
+  const node = nodes[0];
+  const board = activeBoard();
+  // R09: spacing lives on the container nodes; a leaf node has no children
+  // to space, and the panel says so rather than silently doing nothing.
+  if (!["stack", "grid", "container"].includes(node.type)) {
+    announce("间距只适用于 stack / grid / container 节点。");
+    return;
+  }
+  const props = {};
+  const gap = elements.propGap.value.trim();
+  const padding = elements.propPadding.value.trim();
+  const direction = elements.propDirection.value;
+  const align = elements.propAlign.value;
+  const columns = elements.propColumns.value.trim();
+  if (gap) props.gap = gap;
+  if (padding) props.padding = padding;
+  if (direction) props.direction = direction;
+  if (align) props.align = align;
+  if (columns) props.columns = Number(columns);
+  if (Object.keys(props).length === 0) return;
+  queueCanvasCommand({
+    kind: "node-props",
+    boardId: board.id,
+    nodeId: node.id,
+    props,
+  });
+}
+
 function applyNodeToken() {
   const nodes = selectedNodes();
   if (nodes.length !== 1) return;
@@ -3480,6 +3535,7 @@ elements.propWidth.addEventListener("change", applyNodeGeometry);
 elements.propHeight.addEventListener("change", applyNodeGeometry);
 elements.propContentApply.addEventListener("click", applyNodeContent);
 elements.propTokenApply.addEventListener("click", applyNodeToken);
+elements.propSpacingApply.addEventListener("click", applyNodeSpacing);
 for (const button of document.querySelectorAll(".canvas-align")) {
   button.addEventListener("click", () => alignSelection(button.dataset.align));
 }

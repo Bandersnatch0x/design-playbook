@@ -88,6 +88,31 @@ class PreviewOriginHttpTest(unittest.TestCase):
         self.assertIn(b"Carrier", body)
         self.assertNotIn("Set-Cookie", headers)
 
+    def test_external_resources_are_named_rather_than_silently_missing(self) -> None:
+        """R03: the policy blocks the network, so the descriptor names what it blocks."""
+        (self.directory / "external.html").write_text(
+            "<!doctype html><html><body>"
+            '<img src="https://cdn.example.com/hero.png" alt="hero">'
+            '<link rel="stylesheet" href="//fonts.example.com/style.css">'
+            '<div style="background: url(https://img.example.com/bg.png)"></div>'
+            "</body></html>",
+            encoding="utf-8",
+        )
+        asset = self.h.import_assets(self.project_id, ["external.html"]).json["result"]["asset"]
+        descriptor = self.h.asset_preview(self.project_id, asset["assetId"]).json
+        external = descriptor["externalResources"]
+        self.assertEqual(
+            external,
+            [
+                "//fonts.example.com/style.css",
+                "https://cdn.example.com/hero.png",
+                "https://img.example.com/bg.png",
+            ],
+        )
+        # The policy is still the blocking one: naming the resources never
+        # relaxes what the preview allows.
+        self.assertEqual(descriptor["policy"]["network"], "blocked")
+
     def test_the_preview_origin_has_no_management_api(self) -> None:
         for path in (
             "/api/v1/projects",
