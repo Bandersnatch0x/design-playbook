@@ -333,10 +333,15 @@ class LineageTest(ReuseTestCase):
         asset = self.import_and_publish("source", self.source_id, "brand.md")
         reference_revision = self.store.latest_revision(asset["assetId"])
         # Pretend the source revision carried a verified capability: the
-        # copy must start with an empty verification list regardless.
+        # copy must start with neither the record nor the claim.
         self.store.connection.execute(
-            "UPDATE revisions SET verified_json = ? WHERE revision_id = ?",
-            (json.dumps([{"verdict": "pass"}]), reference_revision["revision_id"]),
+            "UPDATE revisions SET verified_json = ?, capabilities_json = ? "
+            "WHERE revision_id = ?",
+            (
+                json.dumps([{"verdict": "pass"}]),
+                json.dumps(["reference", "runnable-verified"]),
+                reference_revision["revision_id"],
+            ),
         )
         copied = self.reuse.derive_or_copy(
             self.source_id,
@@ -347,8 +352,13 @@ class LineageTest(ReuseTestCase):
         copied_revision = self.store.latest_revision(copied["assetId"])
         self.assertEqual(json.loads(copied_revision["verified_json"]), [])
         self.assertEqual(
+            json.loads(copied_revision["capabilities_json"]), ["reference"]
+        )
+        self.assertEqual(
             copied_revision["content_hash"], reference_revision["content_hash"]
         )
+        # The dropped claim must not come back through the draft either.
+        self.assertEqual(copied["capabilities"], ["reference"])
 
     def test_deriving_from_a_foreign_project_asset_is_refused(self) -> None:
         asset = self.import_and_publish("source", self.source_id, "brand.md")
@@ -401,6 +411,53 @@ class CrossProjectReuseTest(ReuseTestCase):
         for excluded in ("其他画布内容", "运行日志与证据", "源项目私有路径"):
             self.assertIn(excluded, plan["excluded"])
         self.assertNotIn(private["assetId"], json.dumps(plan))
+
+    def test_imported_closure_keeps_its_dependencies_resolvable_locally(self) -> None:
+        tokens = self.import_and_publish("source", self.source_id, "tokens/brand.json")
+        tokens_revision = self.store.latest_revision(tokens["assetId"])
+        component = self.import_and_publish(
+            "source",
+            self.source_id,
+            "components/button.md",
+            dependencies=[
+                {"assetId": tokens["assetId"], "revisionId": tokens_revision["revision_id"]}
+            ],
+        )
+        self.grant(self.target_id, ["read", "write"])
+        imported = self.reuse.import_closure(
+            self.source_id,
+            source_asset_id=component["assetId"],
+            source_revision_id=None,
+            mode="copy",
+            target_project_id=self.target_id,
+            operation=self.operation({"import-closure": 1}),
+        )["result"]
+        local_revision = self.store.latest_revision(imported["assetId"])
+        local_dependencies = self.store.dependencies(local_revision["revision_id"])
+        # The imported copy resolves its closure inside the target project,
+        # with local ids rather than the source's revision ids.
+        self.assertEqual(len(local_dependencies), 1)
+        local_dependency = local_dependencies[0]
+        self.assertNotEqual(
+            local_dependency["depends_on_revision_id"], tokens_revision["revision_id"]
+        )
+        dependency_asset = self.store.asset(local_dependency["depends_on_asset_id"])
+        self.assertEqual(dependency_asset["project_id"], self.target_id)
+        # The payload reports the local ids, matching what was written.
+        self.assertEqual(
+            [entry["revisionId"] for entry in imported["dependencies"]],
+            [local_dependency["depends_on_revision_id"]],
+        )
+        # Deleting the source project leaves the target's closure resolvable.
+        shutil.rmtree(self.base / "source")
+        self.assertEqual(
+            self.service.project_target(self.target_id)["connectionState"], "connected"
+        )
+        still_there = self.store.dependencies(local_revision["revision_id"])
+        self.assertEqual(
+            [row["depends_on_revision_id"] for row in still_there],
+            [local_dependency["depends_on_revision_id"]],
+        )
 
     def test_imported_closure_resolves_after_the_source_is_disconnected(self) -> None:
         asset = self.import_and_publish("source", self.source_id, "brand.md")
