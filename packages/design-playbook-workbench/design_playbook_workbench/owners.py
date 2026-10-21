@@ -512,6 +512,10 @@ class OwnerProjectionService:
             object_id=str(object_id),
             role=str(role),
             criterion=match,
+            # R03: the verification record names the environment it ran in.
+            # The projection's runner field is that environment description;
+            # an empty one cannot name where the check happened.
+            environment=str(projection.get("runner") or ""),
             operation=operation,
         )
 
@@ -524,6 +528,7 @@ class OwnerProjectionService:
         object_id: str,
         role: str,
         criterion: dict,
+        environment: str,
         operation: Operation,
     ) -> dict:
         draft = self.store.draft(asset_id)
@@ -573,6 +578,9 @@ class OwnerProjectionService:
                 "runId": run_id,
                 "objectId": object_id,
                 "confirmedAt": confirmation["created_at"],
+                # R03: the record names where the check ran, alongside the
+                # revision and the input hash.
+                "environment": environment,
             },
         )
         outcome["result"]["verifiedBy"] = {
@@ -580,6 +588,7 @@ class OwnerProjectionService:
             "role": confirmation["role"],
             "runId": run_id,
             "objectId": object_id,
+            "environment": environment,
         }
         return outcome
 

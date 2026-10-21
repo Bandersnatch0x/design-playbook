@@ -894,6 +894,10 @@ class AssetService:
                 or verified_by.get("sourceHash") != manifest[0]["contentHash"]
                 or not verified_by.get("confirmationId")
                 or not verified_by.get("role")
+                # R03: a verification record names the environment it ran in.
+                # A hash alone cannot tell a later reader where the check
+                # happened, and re-running it elsewhere is a different fact.
+                or not verified_by.get("environment")
             ):
                 raise WorkbenchError(MISSING_DEPENDENCY)
             verified = [dict(verified_by)]

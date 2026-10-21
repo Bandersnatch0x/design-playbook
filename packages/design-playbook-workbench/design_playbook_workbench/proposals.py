@@ -760,7 +760,11 @@ class ProposalService:
         mode_name = "rollback" if mode in (None, "", "rollback") else mode
         if mode_name not in ("rollback", "finish"):
             raise WorkbenchError(INVALID_INPUT)
-        target = self.service.require_project(project_id, scope="write")
+        # Recovery is the way out of an incomplete journal, so it is the one
+        # write that must still pass while one exists.
+        target = self.service.require_project(
+            project_id, scope="write", allow_incomplete=True
+        )
         row = self._require_proposal(project_id, proposal_id)
         journal = self.store.journal(proposal_id)
         if journal is None or journal["state"] not in (JOURNAL_WRITING, JOURNAL_RECOVERY):

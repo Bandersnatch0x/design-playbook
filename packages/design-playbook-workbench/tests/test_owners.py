@@ -463,6 +463,12 @@ class VerifiedPublishTest(OwnerProjectionTestCase):
         verified = json.loads(revision["verified_json"])
         self.assertEqual(verified[0]["role"], "owner-verified")
         self.assertEqual(verified[0]["sourceHash"], content_hash)
+        # R03: the record binds the environment the check ran in, not only
+        # the revision and the input hash.
+        self.assertEqual(verified[0]["environment"], "design-playbook run-console")
+        self.assertEqual(
+            published["verifiedBy"]["environment"], "design-playbook run-console"
+        )
 
     def test_a_re_run_that_moves_the_owner_fact_makes_the_confirmation_stale(self) -> None:
         asset_id = self.make_asset(["reference", "static-preview", "runnable-verified"])

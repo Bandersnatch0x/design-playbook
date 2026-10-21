@@ -23,6 +23,7 @@ from .errors import (
     DISCONNECTED,
     INVALID_INPUT,
     INVALID_TARGET,
+    RECOVERY_REQUIRED,
     UNAUTHORIZED,
     WorkbenchError,
 )
@@ -294,13 +295,28 @@ class WorkbenchService:
             current = None
         return {"projects": targets, "currentProjectId": current}
 
-    def require_project(self, project_id: str, *, scope: str = "read") -> dict:
-        """The one authorization + liveness gate every project operation uses."""
+    def require_project(
+        self,
+        project_id: str,
+        *,
+        scope: str = "read",
+        allow_incomplete: bool = False,
+    ) -> dict:
+        """The one authorization + liveness gate every project operation uses.
+
+        A write scope also refuses while an apply journal for this project is
+        unfinished: R06 says a half-applied proposal blocks every other write
+        until the maintainer resolves it, not only the next proposal. The
+        recovery path passes ``allow_incomplete`` because it is the way out.
+        """
         target = self.project_target(project_id)
         if scope not in target["grantScopes"]:
             raise WorkbenchError(UNAUTHORIZED)
         if target["connectionState"] != "connected":
             raise WorkbenchError(DISCONNECTED)
+        if scope == "write" and not allow_incomplete:
+            if self.store.incomplete_journal(project_id) is not None:
+                raise WorkbenchError(RECOVERY_REQUIRED)
         return target
 
     # -- project lifecycle ----------------------------------------------

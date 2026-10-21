@@ -588,9 +588,13 @@ class Store:
                 # R14: a database from a newer runtime is never opened and
                 # never downgraded.
                 raise WorkbenchError(UNSUPPORTED)
-            for version in sorted(_MIGRATIONS):
-                if version in applied:
-                    continue
+            pending = [version for version in sorted(_MIGRATIONS) if version not in applied]
+            if pending:
+                # R14: back up before a schema upgrade. A backup of the
+                # pre-upgrade database is the only way back if a migration
+                # fails halfway and leaves an intermediate schema.
+                self._backup_before_migration(newest)
+            for version in pending:
                 with self.transaction() as connection:
                     for statement in _MIGRATIONS[version]:
                         connection.execute(statement)
@@ -599,6 +603,27 @@ class Store:
                         "VALUES (?, ?)",
                         (version, self._now_fn()),
                     )
+
+    def _backup_before_migration(self, from_version: int) -> None:
+        """Write a consistent copy of the pre-upgrade database next to it.
+
+        SQLite's own backup API takes the snapshot under the connection's
+        lock, so a writer cannot slip a page in between. The file is written
+        once and never overwritten: two upgrades keep two pre-images, and the
+        oldest one is still the state the maintainer first ran.
+        """
+        target = self.database_path.with_name(
+            f"{self.database_path.name}.pre-v{from_version}.bak"
+        )
+        if target.exists():  # pragma: no cover - one backup per upgrade path
+            return
+        # sqlite3's connection context manager commits but never closes, and
+        # a still-open handle keeps the file locked on Windows.
+        backup = sqlite3.connect(str(target))
+        try:
+            self._connection.backup(backup)
+        finally:
+            backup.close()
 
     def schema_version(self) -> int:
         with self.read() as connection:

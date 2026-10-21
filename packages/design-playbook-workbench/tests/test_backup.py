@@ -350,6 +350,38 @@ class RestoreTest(BackupTestCase):
 
 
 class MigrationTest(unittest.TestCase):
+    def test_a_schema_upgrade_backs_up_the_pre_upgrade_database(self) -> None:
+        """R14: back up before migrating, so a failed migration has a way back."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        base = Path(tmp.name)
+        old_db = base / "workbench.db"
+        connection = sqlite3.connect(str(old_db))
+        connection.execute(
+            "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, "
+            "applied_at TEXT NOT NULL)"
+        )
+        connection.execute(
+            "INSERT INTO schema_migrations (version, applied_at) VALUES (1, '2026-01-01')"
+        )
+        connection.commit()
+        connection.close()
+        store = Store(old_db)
+        try:
+            self.assertEqual(store.schema_version(), SCHEMA_VERSION)
+        finally:
+            store.close()
+        # The backup is a real database at the pre-upgrade version, not a
+        # copy of the migrated one.
+        backup = base / "workbench.db.pre-v1.bak"
+        self.assertTrue(backup.is_file(), f"no pre-upgrade backup in {list(base.iterdir())}")
+        restored = sqlite3.connect(str(backup))
+        try:
+            row = restored.execute("SELECT MAX(version) FROM schema_migrations").fetchone()
+        finally:
+            restored.close()
+        self.assertEqual(row[0], 1)
+
     def test_an_older_schema_migrates_and_a_newer_one_is_refused(self) -> None:
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
