@@ -1253,13 +1253,6 @@ class Store:
             ).fetchall()
             return [dict(row) for row in rows]
 
-    def all_revision_manifests(self) -> list[dict]:
-        with self.read() as connection:
-            rows = connection.execute(
-                "SELECT revision_id, manifest_json FROM revisions"
-            ).fetchall()
-            return [dict(row) for row in rows]
-
     def referenced_blob_hashes(self) -> list[str]:
         """Every content hash a revision or a draft names, one per entry.
 

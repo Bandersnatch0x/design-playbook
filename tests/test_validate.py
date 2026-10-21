@@ -1148,6 +1148,27 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("python -m pip install pytest", windows)
         self.assertIn("python -m pytest tests/test_frontend_review.py", windows)
 
+    def test_no_windows_job_uses_a_backslash_line_continuation(self) -> None:
+        """A Windows job runs under PowerShell, where `\\` does not continue.
+
+        The failure is a parser error at the first flag on the next line, so
+        the step never even starts the test it was written for.
+        """
+        import yaml
+
+        data = yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        )
+        backslash = chr(92)
+        offenders = []
+        for name, job in data["jobs"].items():
+            if "windows" not in str(job.get("runs-on")):
+                continue
+            for step in job["steps"]:
+                if backslash in (step.get("run") or ""):
+                    offenders.append(f"{name}: {step.get('name')}")
+        self.assertEqual(offenders, [], f"backslash continuations: {offenders}")
+
 
 class GitIgnoreBoundaryTests(unittest.TestCase):
     def test_evidence_runtime_sources_are_trackable_without_run_artifacts(self) -> None:
