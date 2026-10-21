@@ -28,6 +28,7 @@ from design_playbook_workbench.blobs import BlobStore, digest_bytes
 from design_playbook_workbench.errors import (
     CONFLICT,
     CORRUPT_CONTENT,
+    INVALID_INPUT,
     INVALID_TARGET,
     LIMIT_EXCEEDED,
     MISSING_DEPENDENCY,
@@ -157,12 +158,16 @@ class ImportClassificationTest(AssetTestCase):
         self.assertEqual(by_root["tokens/colors.json"]["kind"], "tokens")
         self.assertEqual(by_root["run/run-2026.json"]["kind"], "run-artifact")
 
-    def test_invalid_utf8_text_stays_a_reference_only_binary(self) -> None:
+    def test_invalid_utf8_text_is_refused_with_a_structured_error(self) -> None:
+        # R03: illegal encoding is a structured error, not a silent downgrade.
+        # A reference-only binary would hide the fact that the chosen source
+        # file could not be read as text at all.
         self.write("broken.md", data=b"\xff\xfe\x00 not utf-8")
-        asset = self.import_assets(["broken.md"])["asset"]
-        self.assertEqual(asset["kind"], "binary")
-        self.assertEqual(asset["capabilities"], [CAPABILITY_REFERENCE])
-        self.assertIn("binary", [entry["encoding"] for entry in asset["manifest"]])
+        with self.assertRaises(WorkbenchError) as caught:
+            self.import_assets(["broken.md"])
+        self.assertEqual(caught.exception.code, INVALID_INPUT)
+        # The batch is refused whole: no asset, no revision, no blob record.
+        self.assertEqual(self.store.project_assets(self.project_id), [])
 
     def test_archives_are_refused_rather_than_unpacked(self) -> None:
         self.write("bundle.zip", data=b"PK\x03\x04 fake archive")

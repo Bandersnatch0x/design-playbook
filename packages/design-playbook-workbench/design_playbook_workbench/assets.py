@@ -180,9 +180,12 @@ def classify(relative_path: str, data: bytes) -> tuple[str, str, str, list[str]]
         data.decode("utf-8")
         encoding = "utf-8"
     except UnicodeDecodeError:
-        # Unreadable as text: it stays a reference-only binary, never a
-        # fabricated source or preview capability.
-        return "binary", "application/octet-stream", "binary", [CAPABILITY_REFERENCE]
+        # A text-typed file that is not UTF-8 is a structured refusal, not a
+        # silent downgrade: a maintainer who picked a .md or .js expects a
+        # source asset, and a reference-only binary would hide the mismatch.
+        raise WorkbenchError(
+            INVALID_INPUT, detail="a text file is not valid UTF-8"
+        ) from None
     if suffix in (".md", ".markdown") or name == "design.md":
         return "markdown", "text/markdown", encoding, [CAPABILITY_REFERENCE]
     if suffix == ".json":
