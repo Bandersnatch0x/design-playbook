@@ -582,6 +582,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
                 "runs",
                 "confirmations",
                 "lifecycle",
+                "archive-overview",
                 "deletion-impact",
             )
         ):
@@ -609,6 +610,22 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
                         "schemaVersion": SCHEMA_VERSION,
                         **lifecycle.browse(
                             segments[0], lifecycle=params.get("lifecycle")
+                        ),
+                    },
+                )
+                return
+            if segments[1] == "archive-overview":
+                if query:
+                    raise _Rejection(INVALID_INPUT)
+                self._send_json(
+                    200,
+                    {
+                        "schemaVersion": SCHEMA_VERSION,
+                        **lifecycle.archive_overview(
+                            segments[0],
+                            canvases=canvases,
+                            proposals=proposals,
+                            owners=owners,
                         ),
                     },
                 )

@@ -453,6 +453,51 @@ class LifecycleService:
             )
         return {"result": result, "replayed": False, "counter": counter}
 
+    def archive_overview(
+        self,
+        project_id: str,
+        *,
+        canvases,
+        proposals,
+        owners,
+    ) -> dict:
+        """One view of the project, its pages, its schemes, and its runs (R13).
+
+        R13 asks for unified browsing across the four things a maintainer
+        looks for when deciding what to keep. Each stays owned by its own
+        service -- this only names them together, newest first, and never
+        writes or re-ranks anything.
+        """
+        self.service.require_project(project_id, scope="read")
+        project = self.store.project(project_id)
+        pages = [
+            {
+                "assetId": row["asset_id"],
+                "name": row["name"],
+                "kind": row["kind"],
+                "lifecycle": row["lifecycle"],
+                "revisionNumber": (
+                    int(self.store.latest_revision(row["asset_id"])["revision_number"])
+                    if self.store.latest_revision(row["asset_id"]) is not None
+                    else None
+                ),
+                "updatedAt": row["updated_at"],
+            }
+            for row in self.store.project_assets(project_id)
+            if row["kind"] == "page"
+        ]
+        return {
+            "project": {
+                "projectId": project["project_id"],
+                "name": project["name"],
+                "archived": bool(project["archived"]),
+            },
+            "pages": pages,
+            "schemes": canvases.list_for_project(project_id)["canvases"],
+            "proposals": proposals.list_for_project(project_id)["proposals"],
+            "runs": owners.list_runs(project_id)["runs"],
+        }
+
     def project_deletion_impact(self, project_id: str) -> dict:
         """What deleting the workbench project data would remove.
 
