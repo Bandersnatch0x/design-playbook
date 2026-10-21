@@ -2116,11 +2116,12 @@ async function saveTokenDraft() {
     );
     renderTokenValidation(payload.result.validation);
     elements.tokensError.hidden = true;
+    // The write advanced the asset's counter. Refresh it before announcing
+    // the save: the status text is what a caller waits on, and a publish
+    // issued the moment it appears must already carry the new counter (R04).
+    await refreshAssetCounter(state.tokensAsset);
     elements.tokensStatus.textContent =
       "草稿已保存并通过校验；发布新版本后才会成为固定修订。";
-    // The write advanced the asset's counter; keep the local copy current so
-    // the next write sends the value it is actually based on (R04).
-    await refreshAssetCounter(state.tokensAsset);
     announce("tokens 草稿已保存。");
   } catch (error) {
     showTokensError(error, "保存 tokens 草稿");
@@ -2149,9 +2150,11 @@ async function publishTokens() {
     const result = payload.result;
     elements.tokensError.hidden = true;
     renderTokenValidation(result.validation);
+    // Refresh before the status line, for the same reason the save path does:
+    // the next write must carry the counter this publish produced (R04).
+    await refreshAssetCounter(asset);
     elements.tokensStatus.textContent =
       `已发布第 ${result.revisionNumber} 次修订；引用与项目基线都不会自动升级。`;
-    await refreshAssetCounter(asset);
     announce(`已发布第 ${result.revisionNumber} 次 tokens 修订。`);
     await loadTokenAffected();
   } catch (error) {
@@ -4752,7 +4755,18 @@ async function lifeVerb(verb, body) {
       }
     );
     elements.lifeError.hidden = true;
+    // A transition advanced this asset's counter, so the cached selection is
+    // stale. Re-select the same asset from the refreshed list before the next
+    // verb, or that verb would be refused as a stale-counter conflict.
     await loadLifecycle();
+    const refreshed = (state.lifeData.assets || {});
+    for (const bucket of Object.values(refreshed)) {
+      const match = (bucket || []).find((row) => row.assetId === asset.assetId);
+      if (match) {
+        selectLifeAsset(match);
+        break;
+      }
+    }
     announce(`已执行 ${verb}。`);
   } catch (error) {
     showLifeError(error, verb);
