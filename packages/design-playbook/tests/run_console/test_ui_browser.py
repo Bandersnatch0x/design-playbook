@@ -306,6 +306,16 @@ class StateMachineTest(BrowserTestCase):
             self.assertEqual(
                 self.page.locator("#main").get_attribute("aria-busy"), "true"
             )
+            # The token comes from tokens.css, a separate request. Polling the
+            # computed value waits for that request instead of racing it: on a
+            # slower runner the stylesheet had not arrived when this ran, so
+            # the body legitimately had no background yet and the assertion
+            # read as a white flash that never happened.
+            self.page.wait_for_function(
+                "() => getComputedStyle(document.body).backgroundColor"
+                " !== 'rgba(0, 0, 0, 0)'",
+                timeout=5000,
+            )
             background = self.page.evaluate(
                 "() => getComputedStyle(document.body).backgroundColor"
             )
