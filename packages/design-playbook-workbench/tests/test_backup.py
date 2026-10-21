@@ -38,7 +38,12 @@ from design_playbook_workbench.errors import (
     WorkbenchError,
 )
 from design_playbook_workbench.service import Operation, WorkbenchService
-from design_playbook_workbench.store import SCHEMA_VERSION, Store, WorkbenchDataDirectory
+from design_playbook_workbench.store import (
+    _MIGRATIONS,
+    SCHEMA_VERSION,
+    Store,
+    WorkbenchDataDirectory,
+)
 
 
 class BackupTestCase(unittest.TestCase):
@@ -349,6 +354,28 @@ class RestoreTest(BackupTestCase):
         self.assertEqual(caught.exception.code, INVALID_INPUT)
 
 
+def _write_v1_database(path: Path) -> None:
+    """A genuine schema-version-1 database.
+
+    The ledger alone is not a v1 database: a later migration may alter a
+    table v1 created, so the fixture has to create what v1 created.
+    """
+    connection = sqlite3.connect(str(path))
+    try:
+        connection.execute(
+            "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, "
+            "applied_at TEXT NOT NULL)"
+        )
+        for statement in _MIGRATIONS[1]:
+            connection.execute(statement)
+        connection.execute(
+            "INSERT INTO schema_migrations (version, applied_at) VALUES (1, '2026-01-01')"
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
 class MigrationTest(unittest.TestCase):
     def test_a_schema_upgrade_backs_up_the_pre_upgrade_database(self) -> None:
         """R14: back up before migrating, so a failed migration has a way back."""
@@ -356,16 +383,7 @@ class MigrationTest(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         base = Path(tmp.name)
         old_db = base / "workbench.db"
-        connection = sqlite3.connect(str(old_db))
-        connection.execute(
-            "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, "
-            "applied_at TEXT NOT NULL)"
-        )
-        connection.execute(
-            "INSERT INTO schema_migrations (version, applied_at) VALUES (1, '2026-01-01')"
-        )
-        connection.commit()
-        connection.close()
+        _write_v1_database(old_db)
         store = Store(old_db)
         try:
             self.assertEqual(store.schema_version(), SCHEMA_VERSION)
@@ -386,18 +404,9 @@ class MigrationTest(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         base = Path(tmp.name)
-        # A minimal v1 database: only the migration ledger says version 1.
+        # A real v1 database: the v1 schema plus its ledger row.
         old_db = base / "old.db"
-        connection = sqlite3.connect(str(old_db))
-        connection.execute(
-            "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, "
-            "applied_at TEXT NOT NULL)"
-        )
-        connection.execute(
-            "INSERT INTO schema_migrations (version, applied_at) VALUES (1, '2026-01-01')"
-        )
-        connection.commit()
-        connection.close()
+        _write_v1_database(old_db)
         # Opening it runs migrations 2..N forward.
         store = Store(old_db)
         try:

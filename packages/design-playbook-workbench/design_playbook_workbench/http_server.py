@@ -77,7 +77,7 @@ _DUPLICATED = object()
 #: Project actions the browser may perform; a slash capability may never
 #: create, rename, re-grant, rebind, or remove a project.
 _BROWSER_ONLY_ACTIONS = frozenset(
-    {"open", "rename", "rebind", "grants", "remove"}
+    {"open", "rename", "rebind", "grants", "remove", "delete-data"}
 )
 
 #: Proposal transitions that are a maintainer authorization decision. An
@@ -1775,6 +1775,12 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             return
         if action == "remove":
             self._send_mutation(service.remove_project(project_id, operation=operation))
+            return
+        if action == "delete-data":
+            # R13: the explicit second act after unregistration.
+            self._send_mutation(
+                service.delete_project_data(project_id, operation=operation)
+            )
             return
         if action == "instances":
             self._send_mutation(

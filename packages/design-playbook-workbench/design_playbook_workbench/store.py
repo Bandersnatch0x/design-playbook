@@ -23,7 +23,7 @@ from typing import Callable, Iterator
 from .credentials import restrict_directory_to_current_user
 from .errors import LIMIT_EXCEEDED, UNSUPPORTED, WorkbenchError
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 #: One ordering for every asset listing, so the directory view and the detail
 #: view cannot drift apart. ``created_at`` is the stable key; ``rowid`` breaks
@@ -437,6 +437,12 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
             ON owner_confirmations (project_id, run_id, object_type, object_id)
         """,
     ),
+    9: (
+        # R13: unregistering a project and deleting its workbench data are two
+        # actions. The flag keeps the row (and its data) after unregistration
+        # so the second action has something to act on.
+        "ALTER TABLE projects ADD COLUMN removed INTEGER NOT NULL DEFAULT 0",
+    ),
 }
 
 DEFAULT_DATA_DIR_NAME = "design-playbook-workbench"
@@ -756,7 +762,8 @@ class Store:
     def project(self, project_id: str) -> dict:
         with self.read() as connection:
             row = connection.execute(
-                "SELECT * FROM projects WHERE project_id = ?", (project_id,)
+                "SELECT * FROM projects WHERE project_id = ? AND removed = 0",
+                (project_id,),
             ).fetchone()
             if row is None:
                 raise KeyError(project_id)
@@ -765,7 +772,7 @@ class Store:
     def project_exists(self, project_id: str) -> bool:
         with self.read() as connection:
             row = connection.execute(
-                "SELECT 1 AS present FROM projects WHERE project_id = ?",
+                "SELECT 1 AS present FROM projects WHERE project_id = ? AND removed = 0",
                 (project_id,),
             ).fetchone()
             return row is not None
@@ -773,9 +780,57 @@ class Store:
     def list_projects(self) -> list[dict]:
         with self.read() as connection:
             rows = connection.execute(
-                "SELECT * FROM projects ORDER BY created_at ASC, project_id ASC"
+                "SELECT * FROM projects WHERE removed = 0 "
+                "ORDER BY created_at ASC, project_id ASC"
             ).fetchall()
             return [dict(row) for row in rows]
+
+    def unregister_project(self, *, project_id: str, now: str) -> None:
+        """R13: unregister only -- the row and its data stay for a second act.
+
+        The binding and the grants are what "registration and authorization"
+        mean; both go. The project row is flagged so every lookup treats it
+        as gone, while the data it holds remains until the maintainer
+        explicitly deletes it.
+        """
+        with self.transaction() as connection:
+            cursor = connection.execute(
+                "UPDATE projects SET removed = 1, counter = counter + 1, "
+                "updated_at = ? WHERE project_id = ? AND removed = 0",
+                (now, project_id),
+            )
+            if cursor.rowcount == 0:
+                raise KeyError(project_id)
+            connection.execute(
+                "DELETE FROM grants WHERE project_id = ?", (project_id,)
+            )
+            connection.execute(
+                "DELETE FROM folder_bindings WHERE project_id = ?", (project_id,)
+            )
+
+    def list_removed_projects(self) -> list[dict]:
+        with self.read() as connection:
+            rows = connection.execute(
+                "SELECT * FROM projects WHERE removed = 1 "
+                "ORDER BY updated_at ASC, project_id ASC"
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def removed_project(self, project_id: str) -> dict | None:
+        """An unregistered project row, for the explicit data deletion."""
+        with self.read() as connection:
+            row = connection.execute(
+                "SELECT * FROM projects WHERE project_id = ? AND removed = 1",
+                (project_id,),
+            ).fetchone()
+            return dict(row) if row is not None else None
+
+    def delete_project_data(self, project_id: str) -> None:
+        """The explicit second act: delete this project's workbench data."""
+        with self.transaction() as connection:
+            connection.execute(
+                "DELETE FROM projects WHERE project_id = ?", (project_id,)
+            )
 
     def active_binding(self, project_id: str) -> dict | None:
         with self.read() as connection:

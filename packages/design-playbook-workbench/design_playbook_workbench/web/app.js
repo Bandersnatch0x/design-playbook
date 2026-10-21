@@ -45,6 +45,7 @@ const state = {
   lifeData: null,
   lifeSelected: null,
   lifeRefReport: null,
+  removedProjects: [],
 };
 
 const elements = {
@@ -67,6 +68,8 @@ const elements = {
   listError: document.getElementById("list-error"),
   table: document.getElementById("project-table"),
   rows: document.getElementById("project-rows"),
+  removedProjects: document.getElementById("removed-projects"),
+  removedProjectList: document.getElementById("removed-project-list"),
   rowTemplate: document.getElementById("project-row-template"),
   live: document.getElementById("live"),
   proposalsPanel: document.getElementById("proposals-panel"),
@@ -703,6 +706,54 @@ function renderProjects() {
     row.querySelector(".remove-button").addEventListener("click", () => removeProject(project));
     elements.rows.appendChild(fragment);
   }
+  renderRemovedProjects();
+}
+
+function renderRemovedProjects() {
+  const removed = state.removedProjects || [];
+  elements.removedProjects.hidden = removed.length === 0;
+  elements.removedProjectList.textContent = "";
+  for (const project of removed) {
+    const item = document.createElement("li");
+    const label = document.createElement("span");
+    label.textContent = `${project.name}（已解除登记）`;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "danger";
+    button.textContent = "删除工作台项目数据";
+    button.addEventListener("click", () => deleteProjectData(project));
+    item.append(label, button);
+    elements.removedProjectList.appendChild(item);
+  }
+}
+
+async function deleteProjectData(project) {
+  const confirmed = await askConfirm(
+    `永久删除「${project.name}」的工作台数据？
+
+` +
+      "这会移除资产、修订、画布和任务记录。本地源目录与已导出的备份不受影响，此操作不可撤销。"
+  );
+  if (!confirmed) return;
+  try {
+    await api(
+      `/api/v1/projects/${project.projectId}/actions/delete-data`,
+      {
+        method: "POST",
+        body: {
+          operation: mutation(newOperationId(), {
+            action: "delete-data",
+            projectId: project.projectId,
+          }),
+        },
+      }
+    );
+    announce("工作台项目数据已删除，本地文件未改动。");
+    await loadProjects();
+  } catch (error) {
+    elements.listError.hidden = false;
+    elements.listError.textContent = describeFailure(error, "删除项目数据");
+  }
 }
 
 function wireRowMenu(row) {
@@ -754,6 +805,7 @@ async function loadProjects() {
   try {
     const payload = await api("/api/v1/projects");
     state.projects = payload.projects || [];
+    state.removedProjects = payload.removedProjects || [];
     state.currentProjectId = payload.currentProjectId || null;
     elements.listError.hidden = true;
     renderProjects();

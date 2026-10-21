@@ -378,6 +378,56 @@ class LifecycleTest(ServiceTestCase):
         self.assertIsNone(self.store.get_setting("currentProjectId"))
         self.assertIsNone(self.store.active_binding(project_id))
 
+    def test_unregistering_keeps_the_data_until_it_is_deleted_explicitly(self) -> None:
+        """R13: two actions, and neither one touches the source folder."""
+        target, candidate = self.register("alpha")
+        project_id = target["projectId"]
+        keep = Path(candidate.canonical_path) / "keep-me.txt"
+        keep.write_text("maintainer content", encoding="utf-8")
+        # One workbench record under this project, so "data" is observable.
+        self.store.create_asset(
+            asset_id="asset-1",
+            project_id=project_id,
+            kind="markdown",
+            name="notes.md",
+            tags=[],
+            attributes={"manifest": []},
+            now="2026-09-26T12:00:00Z",
+        )
+
+        self.service.remove_project(
+            project_id, operation=self.operation({"action": "remove"}, expected=0)
+        )
+        # Unregistered: no longer listed, no binding, no grants.
+        self.assertFalse(self.store.project_exists(project_id))
+        self.assertIsNone(self.store.active_binding(project_id))
+        self.assertEqual(self.store.grants(project_id), [])
+        # But its workbench data is still there for the second action.
+        self.assertEqual(len(self.store.project_assets(project_id)), 1)
+        overview = self.service.projects_overview()
+        self.assertEqual(
+            [row["projectId"] for row in overview["removedProjects"]], [project_id]
+        )
+
+        # The data cannot be deleted while the project is still registered.
+        other, _ = self.register("beta")
+        with self.assertRaises(WorkbenchError) as caught:
+            self.service.delete_project_data(
+                other["projectId"],
+                operation=self.operation({"action": "delete-data"}),
+            )
+        self.assertEqual(caught.exception.code, CONFLICT)
+
+        deleted = self.service.delete_project_data(
+            project_id, operation=self.operation({"action": "delete-data"})
+        )
+        self.assertEqual(deleted["result"], {"projectId": project_id, "deleted": True})
+        self.assertEqual(self.store.project_assets(project_id), [])
+        self.assertIsNone(self.store.removed_project(project_id))
+        # The source folder was never touched by either action.
+        self.assertTrue(keep.exists())
+        self.assertEqual(keep.read_text(encoding="utf-8"), "maintainer content")
+
     def test_overview_drops_a_dangling_current_pointer(self) -> None:
         target, _ = self.register("alpha")
         self.store.set_setting("currentProjectId", "00000000-0000-0000-0000-000000000000")
