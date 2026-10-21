@@ -2095,6 +2095,11 @@ class BackupSettingsJourneyTest(unittest.TestCase):
     def test_create_verify_and_restore_from_the_settings_panel(self) -> None:
         self.page.click("#settings-open")
         expect(self.page.locator("#settings-panel")).to_be_visible()
+        # R14: the startup check's result is visible to the maintainer, not
+        # only to an API client.
+        expect(self.page.locator("#settings-diagnostics")).to_contain_text(
+            "内容完整性"
+        )
         dest = str(self.h.base / "ui-backup.dpwb.zip")
         self.page.fill("#backup-dest", dest)
         self.page.click("#backup-create")

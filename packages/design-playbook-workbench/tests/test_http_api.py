@@ -321,6 +321,9 @@ class TransportPolicyTest(unittest.TestCase):
         integrity = authorized.json["blobIntegrity"]
         self.assertEqual(integrity["missing"], 0)
         self.assertIn("referenced", integrity)
+        # The scan runs once, so the payload says when instead of reading
+        # as a live fact.
+        self.assertTrue(integrity["checkedAt"])
 
 
 class RejectionLeakTest(unittest.TestCase):

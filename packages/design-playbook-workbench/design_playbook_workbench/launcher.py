@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -44,20 +45,25 @@ def blob_integrity(store: Store, blobs: BlobStore) -> dict:
     maintainer has to see and repair, and refusing to serve would also hide
     the rest of the workbench from them. The count is reported on the status
     route instead of failing silently.
+
+    A draft references blobs too, and does so before it is ever published,
+    so both surfaces are scanned: a draft whose content vanished would
+    otherwise read as healthy until the publish that needs it.
     """
     present = set(blobs.iter_hashes())
     referenced = 0
     missing: list[str] = []
-    for manifest in store.all_revision_manifests():
-        for entry in json.loads(manifest["manifest_json"] or "[]"):
-            referenced += 1
-            content_hash = entry.get("contentHash")
-            if content_hash and content_hash not in present:
-                missing.append(content_hash)
+    for content_hash in store.referenced_blob_hashes():
+        referenced += 1
+        if content_hash not in present:
+            missing.append(content_hash)
     return {
         "referenced": referenced,
         "missing": len(missing),
         "missingHashes": sorted(set(missing))[:20],
+        # The scan runs once at startup, so the payload says when it ran
+        # instead of reading as a live fact.
+        "checkedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
 
 

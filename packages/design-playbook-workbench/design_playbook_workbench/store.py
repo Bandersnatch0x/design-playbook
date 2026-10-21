@@ -601,10 +601,11 @@ class Store:
                 # never downgraded.
                 raise WorkbenchError(UNSUPPORTED)
             pending = [version for version in sorted(_MIGRATIONS) if version not in applied]
-            if pending:
+            if pending and newest:
                 # R14: back up before a schema upgrade. A backup of the
                 # pre-upgrade database is the only way back if a migration
-                # fails halfway and leaves an intermediate schema.
+                # fails halfway and leaves an intermediate schema. A brand
+                # new database has no pre-image worth keeping.
                 self._backup_before_migration(newest)
             for version in pending:
                 with self.transaction() as connection:
@@ -623,19 +624,33 @@ class Store:
         lock, so a writer cannot slip a page in between. The file is written
         once and never overwritten: two upgrades keep two pre-images, and the
         oldest one is still the state the maintainer first ran.
+
+        The copy lands under a temporary name and is renamed into place only
+        after SQLite closed it. A failure halfway leaves no file at all, so a
+        later start cannot mistake a half-written image for the backup and
+        migrate without one.
         """
         target = self.database_path.with_name(
             f"{self.database_path.name}.pre-v{from_version}.bak"
         )
         if target.exists():  # pragma: no cover - one backup per upgrade path
             return
+        partial = target.with_name(target.name + ".partial")
         # sqlite3's connection context manager commits but never closes, and
         # a still-open handle keeps the file locked on Windows.
-        backup = sqlite3.connect(str(target))
         try:
-            self._connection.backup(backup)
-        finally:
-            backup.close()
+            backup = sqlite3.connect(str(partial))
+            try:
+                self._connection.backup(backup)
+            finally:
+                backup.close()
+            os.replace(partial, target)
+        except BaseException:
+            try:
+                partial.unlink(missing_ok=True)
+            except OSError:  # pragma: no cover - best effort on a failing disk
+                pass
+            raise
 
     def schema_version(self) -> int:
         with self.read() as connection:
@@ -1244,6 +1259,30 @@ class Store:
                 "SELECT revision_id, manifest_json FROM revisions"
             ).fetchall()
             return [dict(row) for row in rows]
+
+    def referenced_blob_hashes(self) -> list[str]:
+        """Every content hash a revision or a draft names, one per entry.
+
+        Both surfaces are read: a draft references blobs before it is ever
+        published, so a scan of revisions alone reports healthy content that
+        the next publish cannot find.
+        """
+        with self.read() as connection:
+            rows = connection.execute(
+                "SELECT manifest_json AS raw FROM revisions "
+                "UNION ALL SELECT attributes_json AS raw FROM asset_drafts"
+            ).fetchall()
+        hashes: list[str] = []
+        for row in rows:
+            parsed = json.loads(row["raw"] or "{}")
+            # A revision row stores the manifest list itself; a draft row
+            # stores its attributes with the manifest inside.
+            entries = parsed if isinstance(parsed, list) else parsed.get("manifest") or []
+            for entry in entries:
+                content_hash = entry.get("contentHash")
+                if content_hash:
+                    hashes.append(content_hash)
+        return hashes
 
     # -- instances, lineage, dependencies, closures (WB-04) ------------
 

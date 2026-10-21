@@ -25,6 +25,7 @@ from design_playbook_workbench.assets import (
     AssetService,
 )
 from design_playbook_workbench.blobs import BlobStore, digest_bytes
+from design_playbook_workbench.launcher import blob_integrity
 from design_playbook_workbench.errors import (
     CONFLICT,
     CORRUPT_CONTENT,
@@ -233,6 +234,21 @@ class ImportBoundaryTest(AssetTestCase):
         # The refused import left nothing behind.
         self.assertEqual(len(self.store.project_assets(self.project_id)), 1)
 
+    def test_a_project_at_its_revision_capacity_refuses_the_publish(self) -> None:
+        """R15: the revision cap shares the publish's transaction too."""
+        from design_playbook_workbench import store as store_module
+
+        self.write("notes.md", "# notes\n")
+        asset = self.import_assets(["notes.md"])["asset"]
+        self.publish(asset["assetId"])
+        with mock.patch.object(store_module, "MAX_REVISIONS_PER_PROJECT", 1):
+            with self.assertRaises(WorkbenchError) as caught:
+                self.publish(asset["assetId"])
+        self.assertEqual(caught.exception.code, LIMIT_EXCEEDED)
+        # The refused publish wrote no revision and left the draft untouched.
+        self.assertEqual(len(self.store.asset_revisions(asset["assetId"])), 1)
+        self.assertEqual(int(self.store.draft(asset["assetId"])["revision_counter"]), 1)
+
     def test_too_many_files_rejects_the_whole_import(self) -> None:
         many = self.project / "many"
         many.mkdir()
@@ -354,6 +370,23 @@ class BlobContractTest(AssetTestCase):
             with self.subTest(bad=bad):
                 with self.assertRaises(WorkbenchError):
                     self.blobs.read(bad)
+
+    def test_a_draft_reference_is_scanned_before_it_is_published(self) -> None:
+        """R14: a draft names blobs too, so the scan must not wait for publish.
+
+        Reading only revisions would report this database as healthy while
+        the next publish is guaranteed to fail on the missing content.
+        """
+        self.write("notes.md", "# notes\n")
+        asset = self.import_assets(["notes.md"])["asset"]
+        content_hash = asset["manifest"][0]["contentHash"]
+        self.assertEqual(self.store.referenced_blob_hashes(), [content_hash])
+        self.assertEqual(blob_integrity(self.store, self.blobs)["missing"], 0)
+        self.blobs.path_for(content_hash).unlink()
+        report = blob_integrity(self.store, self.blobs)
+        self.assertEqual(report["missing"], 1)
+        self.assertEqual(report["missingHashes"], [content_hash])
+        self.assertTrue(report["checkedAt"])
 
 
 class PublishTest(AssetTestCase):

@@ -44,6 +44,7 @@ from design_playbook_workbench.store import (
     Store,
     WorkbenchDataDirectory,
 )
+from design_playbook_workbench import store as store_module
 
 
 class BackupTestCase(unittest.TestCase):
@@ -399,6 +400,63 @@ class MigrationTest(unittest.TestCase):
         finally:
             restored.close()
         self.assertEqual(row[0], 1)
+
+    def test_a_failed_pre_upgrade_backup_leaves_no_file_and_no_migration(self) -> None:
+        """R14: a half-written pre-image is worse than none.
+
+        If the copy is left at its final name, the next start sees it, skips
+        the backup, and migrates a database that has no way back.
+        """
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        base = Path(tmp.name)
+        old_db = base / "workbench.db"
+        _write_v1_database(old_db)
+        real_connect = sqlite3.connect
+        snapshots = []
+
+        class _FailingBackup(sqlite3.Connection):
+            """The live connection, whose snapshot fails partway."""
+
+            def backup(self, target: object, *args: object, **kwargs: object) -> None:
+                snapshots.append(str(target))
+                raise sqlite3.OperationalError("disk full")
+
+        def connect(path: object, *args: object, **kwargs: object) -> object:
+            # Only the store's own connection takes the failing factory; the
+            # copy's connection is a plain one, as in production.
+            if str(path) == str(old_db):
+                kwargs["factory"] = _FailingBackup
+            return real_connect(path, *args, **kwargs)
+
+        with patch.object(store_module.sqlite3, "connect", connect):
+            with self.assertRaises(sqlite3.OperationalError):
+                Store(old_db)
+        self.assertTrue(snapshots, "the pre-upgrade snapshot never ran")
+        self.assertEqual(
+            [item.name for item in base.iterdir() if ".bak" in item.name], []
+        )
+        # The database is still at v1, so the failed start changed nothing.
+        connection = sqlite3.connect(str(old_db))
+        try:
+            version = connection.execute(
+                "SELECT MAX(version) FROM schema_migrations"
+            ).fetchone()[0]
+        finally:
+            connection.close()
+        self.assertEqual(version, 1)
+
+    def test_a_brand_new_database_keeps_no_pre_upgrade_image(self) -> None:
+        """R14: there is nothing to restore on a first start, so nothing is kept."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        base = Path(tmp.name)
+        store = Store(base / "workbench.db")
+        try:
+            self.assertEqual(store.schema_version(), SCHEMA_VERSION)
+        finally:
+            store.close()
+        self.assertEqual([item.name for item in base.iterdir() if ".bak" in item.name], [])
 
     def test_an_older_schema_migrates_and_a_newer_one_is_refused(self) -> None:
         tmp = tempfile.TemporaryDirectory()
