@@ -45,6 +45,9 @@ class LifecycleApiTestCase(unittest.TestCase):
             "operationId": f"op_life_api_{verb}_{self._operations}",
             "payload": {"action": verb, "assetId": asset_id, **(payload or {})},
         }
+        counter = self.h.asset_counter(self.project_id, asset_id)
+        if counter is not None:
+            operation["expectedCounter"] = counter
         return http_request(
             self.h.runtime,
             f"/api/v1/projects/{self.project_id}/actions/assets/{asset_id}/{verb}",

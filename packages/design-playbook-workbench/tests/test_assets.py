@@ -101,8 +101,16 @@ class AssetTestCase(unittest.TestCase):
     def publish(self, asset_id: str) -> dict:
         self.grant(["read", "write"])
         return self.assets.publish_revision(
-            self.project_id, asset_id, operation=self.operation({"publish": asset_id})
+            self.project_id,
+            asset_id,
+            operation=self.operation(
+                {"publish": asset_id}, expected=self.asset_counter(asset_id)
+            ),
         )["result"]
+
+    def asset_counter(self, asset_id: str) -> int:
+        """The asset's current counter: an existing-asset write needs it (R04)."""
+        return int(self.store.asset(asset_id)["counter"])
 
 
 class ImportClassificationTest(AssetTestCase):
@@ -357,6 +365,38 @@ class PublishTest(AssetTestCase):
             self.blobs.read(manifest[0]["contentHash"]), b"<h1>Changed on disk</h1>\n"
         )
 
+    def test_an_asset_write_requires_a_current_counter(self) -> None:
+        """R04: every mutable asset write carries the counter it read.
+
+        A write with no counter, or with one that another write already
+        advanced, is refused instead of applying on top of newer state.
+        """
+        self.write("notes.md", "# notes\n")
+        asset = self.import_assets(["notes.md"])["asset"]
+        asset_id = asset["assetId"]
+        self.grant(["read", "write"])
+        # No counter at all is a malformed request, not a last-write-wins.
+        with self.assertRaises(WorkbenchError) as missing:
+            self.assets.publish_revision(
+                self.project_id, asset_id, operation=self.operation({"publish": "none"})
+            )
+        self.assertEqual(missing.exception.code, INVALID_INPUT)
+        # The counter read before the first publish is stale for the second.
+        stale = self.asset_counter(asset_id)
+        self.assets.publish_revision(
+            self.project_id,
+            asset_id,
+            operation=self.operation({"publish": 1}, expected=stale),
+        )
+        with self.assertRaises(WorkbenchError) as stale_refused:
+            self.assets.publish_revision(
+                self.project_id,
+                asset_id,
+                operation=self.operation({"publish": 2}, expected=stale),
+            )
+        self.assertEqual(stale_refused.exception.code, CONFLICT)
+        self.assertEqual(len(self.store.asset_revisions(asset_id)), 1)
+
     def test_publishing_requires_write_scope_and_valid_content(self) -> None:
         self.write("notes.md", "# notes\n")
         asset = self.import_assets(["notes.md"])["asset"]
@@ -370,7 +410,11 @@ class PublishTest(AssetTestCase):
         self.blobs.path_for(blob).unlink()
         with self.assertRaises(WorkbenchError) as caught:
             self.assets.publish_revision(
-                self.project_id, asset["assetId"], operation=self.operation({"publish": 2})
+                self.project_id,
+                asset["assetId"],
+                operation=self.operation(
+                    {"publish": 2}, expected=self.asset_counter(asset["assetId"])
+                ),
             )
         self.assertEqual(caught.exception.code, CORRUPT_CONTENT)
 
@@ -389,7 +433,11 @@ class PublishTest(AssetTestCase):
         self.grant(["read", "write"])
         with self.assertRaises(WorkbenchError) as caught:
             self.assets.publish_revision(
-                self.project_id, asset["assetId"], operation=self.operation({"publish": 3})
+                self.project_id,
+                asset["assetId"],
+                operation=self.operation(
+                    {"publish": 3}, expected=self.asset_counter(asset["assetId"])
+                ),
             )
         self.assertEqual(caught.exception.code, MISSING_DEPENDENCY)
         self.assertEqual(self.store.asset_revisions(asset["assetId"]), [])
@@ -532,7 +580,10 @@ class MutationReplayBindingTest(AssetTestCase):
         self.write("brand.md", "# Brand\n")
         asset_id = self.import_assets(["brand.md"])["asset"]["assetId"]
         self.grant(["read", "write"])
-        operation = self.operation({"action": "publish", "assetId": asset_id})
+        operation = self.operation(
+            {"action": "publish", "assetId": asset_id},
+            expected=self.asset_counter(asset_id),
+        )
 
         first = self.assets.publish_revision(self.project_id, asset_id, operation=operation)
         self.assertFalse(first["replayed"])

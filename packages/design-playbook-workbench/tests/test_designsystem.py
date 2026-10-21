@@ -117,6 +117,10 @@ class DesignSystemTestCase(unittest.TestCase):
             operation_id=operation_id, payload=payload, expected_counter=expected
         )
 
+    def asset_counter(self, asset_id: str) -> int:
+        """The asset's current counter: an existing-asset write needs it (R04)."""
+        return int(self.store.asset(asset_id)["counter"])
+
     def grant(self, scopes: list[str]) -> None:
         counter = int(self.store.project(self.project_id)["counter"])
         self.service.set_grants(
@@ -132,7 +136,9 @@ class DesignSystemTestCase(unittest.TestCase):
         operation_obj = Operation(
             operation_id=operation_id or f"op_{verb}_{self._operations:08d}",
             payload={"action": verb, "assetId": asset_id, **(payload or {})},
-            expected_counter=None,
+            # Every verb here writes an existing asset row, so the counter
+            # the caller is working from is the one to send (R04).
+            expected_counter=self.asset_counter(asset_id),
         )
         if verb in ("tokens-update",):
             return self.design_system.update_tokens(

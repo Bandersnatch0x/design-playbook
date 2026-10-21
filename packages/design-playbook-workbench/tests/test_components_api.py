@@ -72,6 +72,12 @@ class ComponentApiTestCase(unittest.TestCase):
             "operationId": operation_id or f"op_api_{verb}_{self._operations:04d}",
             "payload": {"action": verb, **({"assetId": asset_id} if asset_id else {}), **(payload or {})},
         }
+        if asset_id:
+            # Asset verbs write an existing row, so the caller's counter is
+            # required (R04); read it fresh for this request.
+            counter = self.h.asset_counter(project_id, asset_id)
+            if counter is not None:
+                operation["expectedCounter"] = counter
         path = (
             f"/api/v1/projects/{project_id}/actions/assets/{asset_id}/{verb}"
             if asset_id

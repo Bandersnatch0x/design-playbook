@@ -98,6 +98,9 @@ class LifecycleService:
                     "name": row["name"],
                     "kind": row["kind"],
                     "lifecycle": row["lifecycle"],
+                    # The browse row carries its counter so the transition
+                    # button can send the value it was looking at (R04).
+                    "counter": int(row["counter"]),
                     "updatedAt": row["updated_at"],
                 }
             )
@@ -247,6 +250,7 @@ class LifecycleService:
             return replayed
         self.service.require_project(project_id, scope="write")
         row = self._asset(project_id, asset_id)
+        self.assets._check_counter(row, operation)
         if row["lifecycle"] not in allowed_from:
             raise WorkbenchError(
                 CONFLICT, detail=f"asset is {row['lifecycle']}, not {allowed_from}"
@@ -373,6 +377,7 @@ class LifecycleService:
             return replayed
         self.service.require_project(project_id, scope="write")
         row = self._asset(project_id, asset_id)
+        self.assets._check_counter(row, operation)
         if confirm is not True:
             # A permanent delete is a second, explicit confirmation.
             raise WorkbenchError(INVALID_INPUT, detail="confirm must be true")

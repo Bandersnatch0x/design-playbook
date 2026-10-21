@@ -20,7 +20,10 @@ class ReplayClosureTest(asset_tests.AssetTestCase):
         self.write("brand.md", "# Brand\n")
         asset = self.import_assets(["brand.md"])["asset"]["assetId"]
         self.grant(["read", "write"])
-        op = self.operation({"action": "publish", "assetId": asset})
+        op = self.operation(
+            {"action": "publish", "assetId": asset},
+            expected=self.asset_counter(asset),
+        )
         self.assets.publish_revision(self.project_id, asset, operation=op)
         with self.assertRaises(WorkbenchError) as caught:
             self.assets.publish_revision("another-project", asset, operation=op)

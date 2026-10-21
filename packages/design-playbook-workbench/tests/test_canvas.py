@@ -336,6 +336,10 @@ class CanvasServiceTest(unittest.TestCase):
         self.store.close()
         self._tmp.cleanup()
 
+    def asset_counter(self, asset_id: str) -> int:
+        """The asset's current counter: an existing-asset write needs it (R04)."""
+        return int(self.store.asset(asset_id)["counter"])
+
     def operation(self, payload: dict, *, expected: int | None = None) -> Operation:
         self._operations += 1
         return Operation(
@@ -594,7 +598,10 @@ class CanvasServiceTest(unittest.TestCase):
         published = self.assets.publish_revision(
             self.project_id,
             asset["assetId"],
-            operation=self.operation({"action": "publish"}),
+            operation=self.operation(
+                {"action": "publish"},
+                expected=self.asset_counter(asset["assetId"]),
+            ),
         )["result"]
         created = self.create()
         canvas_id = created["canvas"]["canvasId"]

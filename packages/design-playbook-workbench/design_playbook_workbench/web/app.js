@@ -1319,8 +1319,16 @@ async function loadAssets() {
 }
 
 // The row markup is #asset-template: parsing it once and repeating it per hit
-// keeps the list a single DOM write instead of one insert per row.
-const ASSET_ROW_HTML = elements.assetTemplate.innerHTML.trim();
+// keeps the list a single DOM write instead of one insert per row. Read lazily
+// so a missing template breaks the asset list, not the whole shell.
+let assetRowHtml = null;
+
+function assetRowMarkup() {
+  if (assetRowHtml === null) {
+    assetRowHtml = elements.assetTemplate.innerHTML.trim();
+  }
+  return assetRowHtml;
+}
 
 function assetMetaText(asset) {
   const matched = asset.matchedOn === "tag" ? "（按标签匹配）" : "";
@@ -1335,7 +1343,7 @@ function renderAssets() {
   // Only the template's own markup reaches the parser. Every per-row value is
   // written through textContent or dataset, so no asset data is ever parsed as
   // HTML.
-  elements.assetItems.innerHTML = ASSET_ROW_HTML.repeat(state.assets.length);
+  elements.assetItems.innerHTML = assetRowMarkup().repeat(state.assets.length);
   elements.assetsEmpty.hidden = state.assets.length > 0;
   // Positions follow the template: li > button.asset-select > name, meta.
   const rows = elements.assetItems.children;
@@ -1374,6 +1382,23 @@ async function selectAsset(assetId) {
   } catch (error) {
     elements.assetsError.hidden = false;
     elements.assetsError.textContent = describeFailure(error, "读取资产详情");
+  }
+}
+
+async function refreshAssetCounter(asset) {
+  const project = state.assetsProject;
+  if (!project || !asset) return;
+  try {
+    const payload = await api(
+      `/api/v1/projects/${project.projectId}/assets/${asset.assetId}`
+    );
+    asset.counter = payload.asset.counter;
+    if (state.selectedAsset && state.selectedAsset.assetId === asset.assetId) {
+      state.selectedAsset.counter = payload.asset.counter;
+    }
+  } catch (error) {
+    // A failed refresh only means the next write may be refused as stale,
+    // which the server reports honestly; it is not a silent success.
   }
 }
 
@@ -1470,10 +1495,11 @@ async function enableDynamicPreview() {
       {
         method: "POST",
         body: {
-          operation: mutation(newOperationId(), {
-            action: "preview-enable",
-            assetId: asset.assetId,
-          }),
+          operation: mutation(
+            newOperationId(),
+            { action: "preview-enable", assetId: asset.assetId },
+            asset.counter
+          ),
         },
       }
     );
@@ -1631,10 +1657,11 @@ async function saveDocument() {
       {
         method: "POST",
         body: {
-          operation: mutation(newOperationId(), {
-            action: DOCUMENT_LABELS[kind].update,
-            assetId: asset.assetId,
-          }),
+          operation: mutation(
+            newOperationId(),
+            { action: DOCUMENT_LABELS[kind].update, assetId: asset.assetId },
+            asset.counter
+          ),
           ...fields,
         },
       }
@@ -1643,6 +1670,9 @@ async function saveDocument() {
     renderDocumentValidation(payload.result.validation, kind);
     elements.documentStatus.textContent =
       "草稿已保存并通过校验；发布新版本后才会成为固定修订。";
+    // The write advanced the asset's counter; the publish button below must
+    // send the value it is actually based on (R04).
+    asset.counter = payload.result.counter;
     announce("文档草稿已保存。");
     await loadAssets();
   } catch (error) {
@@ -1663,10 +1693,11 @@ async function publishDocument() {
       {
         method: "POST",
         body: {
-          operation: mutation(newOperationId(), {
-            action: verb,
-            assetId: asset.assetId,
-          }),
+          operation: mutation(
+            newOperationId(),
+            { action: verb, assetId: asset.assetId },
+            asset.counter
+          ),
         },
       }
     );
@@ -1978,11 +2009,11 @@ async function loadTokenAffected() {
 }
 
 function tokensMutation(payload) {
-  return mutation(newOperationId(), {
-    action: "tokens-update",
-    assetId: state.tokensAsset.assetId,
-    ...payload,
-  });
+  return mutation(
+    newOperationId(),
+    { action: "tokens-update", assetId: state.tokensAsset.assetId, ...payload },
+    state.tokensAsset.counter
+  );
 }
 
 async function saveTokenDraft() {
@@ -2012,6 +2043,9 @@ async function saveTokenDraft() {
     elements.tokensError.hidden = true;
     elements.tokensStatus.textContent =
       "草稿已保存并通过校验；发布新版本后才会成为固定修订。";
+    // The write advanced the asset's counter; keep the local copy current so
+    // the next write sends the value it is actually based on (R04).
+    await refreshAssetCounter(state.tokensAsset);
     announce("tokens 草稿已保存。");
   } catch (error) {
     showTokensError(error, "保存 tokens 草稿");
@@ -2029,10 +2063,11 @@ async function publishTokens() {
       {
         method: "POST",
         body: {
-          operation: mutation(newOperationId(), {
-            action: "tokens-publish",
-            assetId: asset.assetId,
-          }),
+          operation: mutation(
+            newOperationId(),
+            { action: "tokens-publish", assetId: asset.assetId },
+            asset.counter
+          ),
         },
       }
     );
@@ -2041,6 +2076,7 @@ async function publishTokens() {
     renderTokenValidation(result.validation);
     elements.tokensStatus.textContent =
       `已发布第 ${result.revisionNumber} 次修订；引用与项目基线都不会自动升级。`;
+    await refreshAssetCounter(asset);
     announce(`已发布第 ${result.revisionNumber} 次 tokens 修订。`);
     await loadTokenAffected();
   } catch (error) {
@@ -3216,6 +3252,10 @@ async function upgradeInstance() {
   const nodes = selectedNodes();
   if (nodes.length !== 1 || nodes[0].type !== "instance") return;
   const project = state.canvasProject;
+  if (!project) return;
+  // The upgrade writes the asset row, so read its counter now instead of
+  // trusting one cached when the canvas opened (R04).
+  await loadProjectInstances();
   const row = state.canvasInstances.get(nodes[0].props.instanceId);
   if (!row) return;
   try {
@@ -3226,11 +3266,15 @@ async function upgradeInstance() {
       {
         method: "POST",
         body: {
-          operation: mutation(newOperationId(), {
-            action: "upgrade",
-            assetId: row.assetId,
-            instanceIds: [nodes[0].props.instanceId],
-          }),
+          operation: mutation(
+            newOperationId(),
+            {
+              action: "upgrade",
+              assetId: row.assetId,
+              instanceIds: [nodes[0].props.instanceId],
+            },
+            row.assetCounter
+          ),
           instanceIds: [nodes[0].props.instanceId],
         },
       }
@@ -4533,10 +4577,11 @@ async function lifeVerb(verb, body) {
       {
         method: "POST",
         body: {
-          operation: mutation(newOperationId(), {
-            action: verb,
-            assetId: asset.assetId,
-          }),
+          operation: mutation(
+            newOperationId(),
+            { action: verb, assetId: asset.assetId },
+            asset.counter
+          ),
           ...(body || {}),
         },
       }

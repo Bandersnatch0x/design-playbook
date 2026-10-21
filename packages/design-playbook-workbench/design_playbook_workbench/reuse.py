@@ -993,6 +993,7 @@ class ReuseService:
         if replayed is not None:
             return replayed
         self.service.require_project(project_id, scope="write")
+        self.assets._check_counter(self.store.asset(asset_id), operation)
         if not isinstance(instance_ids, list) or not instance_ids:
             raise WorkbenchError(INVALID_INPUT)
         plan = self.upgrade_plan(project_id, asset_id, to_revision_id=to_revision_id)
@@ -1090,6 +1091,7 @@ class ReuseService:
         if replayed is not None:
             return replayed
         self.service.require_project(project_id, scope="write")
+        self.assets._check_counter(self.store.asset(asset_id), operation)
         if not isinstance(instance_ids, list) or not instance_ids:
             raise WorkbenchError(INVALID_INPUT)
         revision = self.store.revision(str(to_revision_id))

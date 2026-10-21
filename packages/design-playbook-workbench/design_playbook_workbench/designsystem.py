@@ -518,7 +518,7 @@ class DesignSystemService:
         if replayed is not None:
             return replayed
         self.service.require_project(project_id, scope="write")
-        self._tokens_asset(project_id, asset_id)
+        self.assets._check_counter(self._tokens_asset(project_id, asset_id), operation)
         parsed = parse_document(document)
         verdict = validate_document(parsed)
         if not verdict["valid"]:

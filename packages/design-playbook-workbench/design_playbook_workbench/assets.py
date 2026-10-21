@@ -19,6 +19,7 @@ from typing import Callable
 
 from .blobs import BlobStore, digest_bytes
 from .errors import (
+    CONFLICT,
     CORRUPT_CONTENT,
     INVALID_INPUT,
     INVALID_TARGET,
@@ -243,6 +244,20 @@ def _carrier_kind(records: list[FileRecord]) -> tuple[str, list[str]]:
 
 class AssetService:
     """The one owner of asset import, discovery, and revision publication."""
+
+    def _check_counter(self, row: dict, operation: Operation) -> int:
+        """R04: an explicit expected counter is required, never last-write-wins.
+
+        Only writes that change an existing asset row take this check; a
+        create has no prior counter to be stale against.
+        """
+        if operation.expected_counter is None:
+            raise WorkbenchError(
+                INVALID_INPUT, detail="asset writes require an expected counter"
+            )
+        if int(operation.expected_counter) != int(row["counter"]):
+            raise WorkbenchError(CONFLICT, operation_id=operation.operation_id)
+        return int(row["counter"])
 
     def __init__(
         self,
@@ -559,6 +574,9 @@ class AssetService:
                     "name": row["name"],
                     "kind": row["kind"],
                     "lifecycle": row["lifecycle"],
+                    # The listing row carries its counter so a write from the
+                    # list can send the value it was looking at (R04).
+                    "counter": int(row["counter"]),
                     "capabilities": capabilities,
                     "tags": tags,
                     "updatedAt": row["updated_at"],
@@ -681,6 +699,7 @@ class AssetService:
         row = self.store.asset(asset_id)
         if row is None or row["project_id"] != project_id:
             raise WorkbenchError(INVALID_TARGET)
+        self._check_counter(row, operation)
         draft = self.store.draft(asset_id)
         attributes = _loads(draft["attributes_json"])
         if CAPABILITY_STATIC_PREVIEW not in attributes.get("capabilities", []):
@@ -732,6 +751,7 @@ class AssetService:
         row = self.store.asset(asset_id)
         if row is None or row["project_id"] != project_id:
             raise WorkbenchError(INVALID_TARGET)
+        self._check_counter(row, operation)
         draft = self.store.draft(asset_id)
         attributes = _loads(draft["attributes_json"])
         roots = attributes.get("roots") or []
@@ -849,6 +869,7 @@ class AssetService:
         row = self.store.asset(asset_id)
         if row is None or row["project_id"] != project_id:
             raise WorkbenchError(INVALID_TARGET)
+        self._check_counter(row, operation)
         draft = self.store.draft(asset_id)
         attributes = _loads(draft["attributes_json"])
         manifest = attributes.get("manifest") or []

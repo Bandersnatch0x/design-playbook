@@ -109,8 +109,14 @@ class LifecycleTestCase(unittest.TestCase):
         return self.assets.publish_revision(
             project_id or self.project_id,
             asset_id,
-            operation=self.operation({"action": "publish"}),
+            operation=self.operation(
+                {"action": "publish"}, expected=self.asset_counter(asset_id)
+            ),
         )["result"]
+
+    def asset_counter(self, asset_id: str) -> int:
+        """The asset's current counter: an existing-asset write needs it (R04)."""
+        return int(self.store.asset(asset_id)["counter"])
 
 
 class ArchiveTrashRestoreTest(LifecycleTestCase):
@@ -120,7 +126,7 @@ class ArchiveTrashRestoreTest(LifecycleTestCase):
         revision = self.store.latest_revision(asset["assetId"])
         archived = self.lifecycle.archive(
             self.project_id, asset["assetId"],
-            operation=self.operation({"action": "archive"}),
+            operation=self.operation({"action": "archive"}, expected=self.asset_counter(asset["assetId"])),
         )["result"]
         self.assertEqual(archived["lifecycle"], "archived")
         # The published revision is still readable while archived.
@@ -134,7 +140,7 @@ class ArchiveTrashRestoreTest(LifecycleTestCase):
 
         restored = self.lifecycle.unarchive(
             self.project_id, asset["assetId"],
-            operation=self.operation({"action": "unarchive"}),
+            operation=self.operation({"action": "unarchive"}, expected=self.asset_counter(asset["assetId"])),
         )["result"]
         self.assertEqual(restored["lifecycle"], "published")
 
@@ -143,14 +149,14 @@ class ArchiveTrashRestoreTest(LifecycleTestCase):
         self.publish(asset["assetId"])
         self.lifecycle.trash(
             self.project_id, asset["assetId"],
-            operation=self.operation({"action": "trash"}),
+            operation=self.operation({"action": "trash"}, expected=self.asset_counter(asset["assetId"])),
         )
         self.assertEqual(
             self.lifecycle.browse(self.project_id)["counts"]["trashed"], 1
         )
         restored = self.lifecycle.restore(
             self.project_id, asset["assetId"],
-            operation=self.operation({"action": "restore"}),
+            operation=self.operation({"action": "restore"}, expected=self.asset_counter(asset["assetId"])),
         )["result"]
         self.assertEqual(restored["assetId"], asset["assetId"])
         self.assertEqual(restored["lifecycle"], "published")
@@ -161,7 +167,7 @@ class ArchiveTrashRestoreTest(LifecycleTestCase):
         self.publish(first["assetId"])
         self.lifecycle.trash(
             self.project_id, first["assetId"],
-            operation=self.operation({"action": "trash"}),
+            operation=self.operation({"action": "trash"}, expected=self.asset_counter(first["assetId"])),
         )
         # A new asset takes the same name while the first is in the bin.
         second = self.import_asset("brand.md")
@@ -169,19 +175,19 @@ class ArchiveTrashRestoreTest(LifecycleTestCase):
         with self.assertRaises(WorkbenchError) as caught:
             self.lifecycle.restore(
                 self.project_id, first["assetId"],
-                operation=self.operation({"action": "restore"}),
+                operation=self.operation({"action": "restore"}, expected=self.asset_counter(first["assetId"])),
             )
         self.assertEqual(caught.exception.code, CONFLICT)
         # A conflicting new name is refused too.
         with self.assertRaises(WorkbenchError) as caught:
             self.lifecycle.restore(
                 self.project_id, first["assetId"], name=second["name"],
-                operation=self.operation({"action": "restore"}),
+                operation=self.operation({"action": "restore"}, expected=self.asset_counter(first["assetId"])),
             )
         self.assertEqual(caught.exception.code, CONFLICT)
         restored = self.lifecycle.restore(
             self.project_id, first["assetId"], name="brand-restored.md",
-            operation=self.operation({"action": "restore"}),
+            operation=self.operation({"action": "restore"}, expected=self.asset_counter(first["assetId"])),
         )["result"]
         self.assertTrue(restored["renamed"])
         self.assertEqual(restored["name"], "brand-restored.md")
@@ -191,24 +197,24 @@ class ArchiveTrashRestoreTest(LifecycleTestCase):
         self.publish(asset["assetId"])
         self.lifecycle.trash(
             self.project_id, asset["assetId"],
-            operation=self.operation({"action": "trash"}),
+            operation=self.operation({"action": "trash"}, expected=self.asset_counter(asset["assetId"])),
         )
         # Cannot archive from the recycle bin, and cannot restore something
         # that is not trashed.
         with self.assertRaises(WorkbenchError) as caught:
             self.lifecycle.archive(
                 self.project_id, asset["assetId"],
-                operation=self.operation({"action": "archive"}),
+                operation=self.operation({"action": "archive"}, expected=self.asset_counter(asset["assetId"])),
             )
         self.assertEqual(caught.exception.code, CONFLICT)
         self.lifecycle.restore(
             self.project_id, asset["assetId"],
-            operation=self.operation({"action": "restore"}),
+            operation=self.operation({"action": "restore"}, expected=self.asset_counter(asset["assetId"])),
         )
         with self.assertRaises(WorkbenchError) as caught:
             self.lifecycle.restore(
                 self.project_id, asset["assetId"],
-                operation=self.operation({"action": "restore"}),
+                operation=self.operation({"action": "restore"}, expected=self.asset_counter(asset["assetId"])),
             )
         self.assertEqual(caught.exception.code, CONFLICT)
 
@@ -308,12 +314,12 @@ class HardDeleteTest(LifecycleTestCase):
         with self.assertRaises(WorkbenchError) as caught:
             self.lifecycle.hard_delete(
                 self.project_id, asset["assetId"], confirm=False,
-                operation=self.operation({"action": "hard-delete"}),
+                operation=self.operation({"action": "hard-delete"}, expected=self.asset_counter(asset["assetId"])),
             )
         self.assertEqual(caught.exception.code, INVALID_INPUT)
         deleted = self.lifecycle.hard_delete(
             self.project_id, asset["assetId"], confirm=True,
-            operation=self.operation({"action": "hard-delete"}),
+            operation=self.operation({"action": "hard-delete"}, expected=self.asset_counter(asset["assetId"])),
         )["result"]
         self.assertEqual(deleted["assetId"], asset["assetId"])
         self.assertIsNone(self.store.asset(asset["assetId"]))
@@ -333,7 +339,7 @@ class HardDeleteTest(LifecycleTestCase):
         with self.assertRaises(WorkbenchError) as caught:
             self.lifecycle.hard_delete(
                 self.project_id, component["assetId"], confirm=True,
-                operation=self.operation({"action": "hard-delete"}),
+                operation=self.operation({"action": "hard-delete"}, expected=self.asset_counter(component["assetId"])),
             )
         self.assertEqual(caught.exception.code, CONFLICT)
         self.assertIsNotNone(self.store.asset(component["assetId"]))
@@ -341,7 +347,7 @@ class HardDeleteTest(LifecycleTestCase):
         self.store.delete_instance(instance["instanceId"])
         deleted = self.lifecycle.hard_delete(
             self.project_id, component["assetId"], confirm=True,
-            operation=self.operation({"action": "hard-delete"}),
+            operation=self.operation({"action": "hard-delete"}, expected=self.asset_counter(component["assetId"])),
         )["result"]
         self.assertEqual(deleted["assetId"], component["assetId"])
 
@@ -366,7 +372,7 @@ class HardDeleteTest(LifecycleTestCase):
         # copy is untouched after the source is gone.
         deleted = self.lifecycle.hard_delete(
             self.project_id, source["assetId"], confirm=True,
-            operation=self.operation({"action": "hard-delete"}),
+            operation=self.operation({"action": "hard-delete"}, expected=self.asset_counter(source["assetId"])),
         )["result"]
         self.assertEqual(len(deleted["crossProjectCopies"]), 1)
         self.assertIsNone(self.store.asset(source["assetId"]))
