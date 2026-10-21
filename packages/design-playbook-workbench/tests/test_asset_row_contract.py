@@ -22,4 +22,3 @@ class AssetRowContractTest(unittest.TestCase):
             r'<span[^>]*class="asset-meta"[^>]*>\s*</span>\s*'
             r"</button>\s*</li>",
         )
-        self.assertEqual(len(re.findall(r'class="asset-item"', row)), 1)

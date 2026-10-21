@@ -25,6 +25,11 @@ from .errors import UNSUPPORTED, WorkbenchError
 
 SCHEMA_VERSION = 8
 
+#: One ordering for every asset listing, so the directory view and the detail
+#: view cannot drift apart. ``created_at`` is the stable key; ``rowid`` breaks
+#: ties between assets written in the same second.
+ASSET_LISTING_ORDER = "a.created_at ASC, a.rowid ASC"
+
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
         """
@@ -907,8 +912,8 @@ class Store:
     def project_assets(self, project_id: str) -> list[dict]:
         with self.read() as connection:
             rows = connection.execute(
-                "SELECT * FROM assets WHERE project_id = ? "
-                "ORDER BY created_at ASC, rowid ASC",
+                "SELECT * FROM assets a WHERE a.project_id = ? "
+                f"ORDER BY {ASSET_LISTING_ORDER}",
                 (project_id,),
             ).fetchall()
             return [dict(row) for row in rows]
@@ -928,7 +933,7 @@ class Store:
                 "d.attributes_json AS draft_attributes_json "
                 "FROM assets a LEFT JOIN asset_drafts d ON d.asset_id = a.asset_id "
                 "WHERE a.project_id = ? "
-                "ORDER BY a.created_at ASC, a.rowid ASC",
+                f"ORDER BY {ASSET_LISTING_ORDER}",
                 (project_id,),
             ).fetchall()
             return [dict(row) for row in rows]

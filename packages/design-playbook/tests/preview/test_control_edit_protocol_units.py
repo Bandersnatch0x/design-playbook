@@ -697,10 +697,15 @@ def test_a_refused_dispatch_leaves_no_sent_mark_behind() -> None:
     shell = SHELL.read_text(encoding="utf-8")
     body = shell[shell.index("function commit(property, value, selector) {"):]
     body = body[:body.index("\n      }")]
-    mark = body.index("protocol.markDispatched(property, value);")
     # The guard is a return, not just a read. A `state` read whose branch was
     # dropped leaves the mark in place and the bug alive, so pin the complete
-    # status check before the mark.
-    guard = "var state = protocol.status();\n        if (!state.ready || state.stale) return;"
-    assert guard in body, "commit must return when the protocol refuses a dispatch"
-    assert body.index(guard) < mark, "the ready/stale guard must run before the mark"
+    # status check before the mark. Whitespace is collapsed so a reindent
+    # cannot fail the test while the behavior stays correct.
+    guard = re.sub(
+        r"\s+", " ", "var state = protocol.status(); if (!state.ready || state.stale) return;"
+    )
+    flattened = re.sub(r"\s+", " ", body)
+    assert guard in flattened, "commit must return when the protocol refuses a dispatch"
+    assert flattened.index(guard) < flattened.index(
+        "protocol.markDispatched(property, value);"
+    ), "the ready/stale guard must run before the mark"

@@ -14,12 +14,15 @@ part of the shipped distribution: the wheel carries only
 
 `perf_harness.py` records the browser it actually drove. Set
 `DESIGN_PLAYBOOK_WORKBENCH_BROWSER_CHANNEL` (`msedge`, `chrome`, …) to use a
-branded channel; unset means the bundled Chromium. The evidence then carries
-the same name in `env.browserChannel` and `browserVersion`. The drag verdict
+branded channel; unset means the bundled Chromium. The evidence records the
+channel as `env.browserChannel` and the version as the top-level `browser`
+field. The drag verdict
 always requires the full 100 valid samples, and `--drag-samples` below that
 floor is refused, so a shortened smoke run cannot be mistaken for evidence.
 Exit codes carry the outcome: 0 every metric passed, 1 a metric failed, 2 the
-arguments were refused, 3 the run was `not-run`.
+arguments were refused, 3 the run was `not-run`, 4 a precondition failed
+(the fixture was not seeded, or the UI was not in the expected state), so a
+broken fixture is never recorded as a performance regression.
 
 Deterministic helpers are covered by
 `tests/test_acceptance_tools.py`; the live flows are operator-driven and their

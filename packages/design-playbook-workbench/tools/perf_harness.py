@@ -27,7 +27,9 @@ Method (also written into the evidence so a reader can audit it):
   labelled as below scale.
 * Exit codes separate the outcomes: 0 every metric passed, 1 at least one metric
   failed, 2 the arguments were refused up front, 3 the run was ``not-run``
-  (insufficient scale or samples). A smoke run cannot exit like a pass.
+  (insufficient scale or samples), 4 a precondition failed (the fixture was not
+  seeded or the UI was not in the expected state). A smoke run cannot exit like
+  a pass, and a broken fixture cannot be recorded as a regression.
 
 Usage::
 
@@ -354,12 +356,14 @@ def _search_expectations(harness: Any, project_id: str) -> dict[str, int]:
     """What the service says each query matches, so the UI must show it."""
     expectations: dict[str, int] = {}
     for query in SEARCH_QUERIES:
-        response = harness.assets(project_id, query=f"query={query}")
-        assert response.status == 200, response.text
+        response = _require_ok(
+            harness.assets(project_id, query=f"query={query}"),
+            f"asset listing for query {query!r}",
+        )
         expectations[query] = len(response.json["assets"])
     empty = [q for q, count in expectations.items() if count == 0]
     if empty:
-        raise SystemExit(
+        raise PreconditionError(
             f"fixture has no assets matching {empty}; seed the fixture first"
         )
     return expectations
@@ -461,20 +465,55 @@ def _measure_selection_drag(
 
 
 def _click_row_action(page: Any, selector: str) -> None:
-    """Click a row action, opening the row menu first when it is hidden."""
-    action = page.locator(selector).first
+    """Click one row's action, opening that row's menu first when it is hidden.
+
+    Both the action and the menu button are scoped to a single row. A global
+    ``.first`` would silently pick whichever row happened to be first, which
+    only looks right while the fixture holds one project row.
+    """
+    row_selector, _, action_selector = selector.rpartition(" ")
+    if not row_selector or not action_selector:
+        raise PreconditionError(f"row action selector needs a row scope: {selector!r}")
+    row = page.locator(row_selector).first
+    if row.count() == 0:
+        raise PreconditionError(f"no row matches {row_selector!r}; seed the fixture first")
+    action = row.locator(action_selector).first
     if not action.is_visible():
-        page.locator("#project-rows tr .more-button").first.click()
+        row.locator(".more-button").first.click()
     action.click()
 
 
 def _load_module(name: str, path: Path):
+    """Load one helper module once per process.
+
+    Both the environment report and the measurement load ``harness.py``; a
+    second exec would create a second module object with its own globals.
+    """
+    existing = sys.modules.get(name)
+    if existing is not None:
+        return existing
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+class PreconditionError(RuntimeError):
+    """The run cannot measure anything: the fixture or the UI is not ready.
+
+    This is deliberately not a metric failure. Recording an unseeded fixture
+    as a regression would send the next reader after a performance bug that
+    does not exist.
+    """
+
+
+def _require_ok(response: Any, what: str) -> Any:
+    """A fixture call that must succeed before measuring anything."""
+    if response.status != 200:
+        raise PreconditionError(f"{what} failed: {response.status} {response.text}")
+    return response
 
 
 def run_measurement(
@@ -511,27 +550,32 @@ def run_measurement(
         project_dir.mkdir(parents=True, exist_ok=True)
         preseeded = data_dir is not None and (data_dir / "workbench.db").is_file()
         if preseeded:
-            project_id = harness.projects()["projects"][0]["projectId"]
+            rows = harness.projects()["projects"]
+            if not rows:
+                raise PreconditionError("the data directory holds no project; seed the fixture first")
+            project_id = rows[0]["projectId"]
         else:
             for index in range(assets):
                 name = seed_module.asset_name(index)
                 (project_dir / name).write_text(
                     seed_module.asset_content(index, 1), encoding="utf-8"
                 )
-            project = harness.register(project_dir, name="perf")
-            assert project.status == 200, project.text
+            project = _require_ok(harness.register(project_dir, name="perf"), "project registration")
             project_id = project.json["result"]["projectId"]
-            granted = harness.grant(project_id, ["read", "write"], expected_counter=0)
-            assert granted.status == 200, granted.text
+            _require_ok(
+                harness.grant(project_id, ["read", "write"], expected_counter=0),
+                "write grant",
+            )
             for index in range(assets):
-                imported = harness.import_assets(project_id, [seed_module.asset_name(index)])
-                assert imported.status == 200, imported.text
+                _require_ok(
+                    harness.import_assets(project_id, [seed_module.asset_name(index)]),
+                    f"asset import {index}",
+                )
 
         # The scale is whatever the service actually holds, never the requested
         # CLI numbers: a pre-seeded fixture may differ, and reporting the
         # request instead of the reality would let a tiny fixture pass.
-        listed = harness.assets(project_id)
-        assert listed.status == 200, listed.text
+        listed = _require_ok(harness.assets(project_id), "asset listing")
         actual_assets = len(listed.json["assets"])
 
         page = browser.new_page(viewport={"width": 1440, "height": 1200})
@@ -546,19 +590,23 @@ def run_measurement(
 
         # The 200-node canvas is authored through the API, then loaded in the UI.
         document = seed_module.canvas_document("perf-canvas", canvas_nodes)
-        created = harness.action(
-            project_id,
-            "canvases",
-            payload={"name": "perf-canvas", "document": document},
+        created = _require_ok(
+            harness.action(
+                project_id,
+                "canvases",
+                payload={"name": "perf-canvas", "document": document},
+            ),
+            "canvas creation",
         )
-        assert created.status == 200, created.text
         canvas_id = created.json["result"]["canvas"]["canvasId"]
-        stored = harness_module.http_request(
-            harness.runtime,
-            f"/api/v1/projects/{project_id}/canvases/{canvas_id}",
-            token=harness.token,
+        stored = _require_ok(
+            harness_module.http_request(
+                harness.runtime,
+                f"/api/v1/projects/{project_id}/canvases/{canvas_id}",
+                token=harness.token,
+            ),
+            "canvas read-back",
         )
-        assert stored.status == 200, stored.text
         actual_nodes = len(stored.json["document"]["boards"][0]["nodes"])
         scale = {
             "assets": actual_assets,
@@ -674,14 +722,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.canvas_nodes > 200:
         print("canvas-nodes exceeds canvas MAX_INSTANCES (200)", file=sys.stderr)
         return 2
-    evidence = run_measurement(
-        data_dir=Path(args.data_dir).resolve() if args.data_dir else None,
-        assets=args.assets,
-        canvas_nodes=args.canvas_nodes,
-        samples=args.samples,
-        warmup=args.warmup,
-        drag_samples=args.drag_samples,
-    )
+    try:
+        evidence = run_measurement(
+            data_dir=Path(args.data_dir).resolve() if args.data_dir else None,
+            assets=args.assets,
+            canvas_nodes=args.canvas_nodes,
+            samples=args.samples,
+            warmup=args.warmup,
+            drag_samples=args.drag_samples,
+        )
+    except PreconditionError as error:
+        # No evidence file is written: an unseeded fixture is not a run, and
+        # its JSON must never be read later as a measured regression.
+        print(f"precondition failed: {error}", file=sys.stderr)
+        return 4
     text = json.dumps(evidence, indent=2, ensure_ascii=False)
     print(text)
     if args.evidence:

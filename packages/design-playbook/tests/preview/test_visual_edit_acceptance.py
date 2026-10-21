@@ -11,7 +11,8 @@ Two halves:
    stale batches, tampered hashes, over-privileged locators, and the Phase 2
    rule that any future collaboration layer must not fork batch authority.
 
-The Phase-1 report is `.agents/research/visual-edit-phase1-acceptance.md`.
+The Phase-1 acceptance report is a local maintainer artifact and is not
+tracked in this repository.
 """
 from __future__ import annotations
 

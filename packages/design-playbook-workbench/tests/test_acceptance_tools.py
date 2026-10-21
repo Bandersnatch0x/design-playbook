@@ -235,18 +235,29 @@ class PerfHarnessTest(unittest.TestCase):
 
     def test_row_action_opens_the_row_menu_only_when_hidden(self) -> None:
         clicks: list[str] = []
+        lookups: list[str] = []
 
         class FakeLocator:
-            def __init__(self, name: str, visible: bool) -> None:
+            def __init__(self, name: str, visible: bool, page: "FakePage") -> None:
                 self.name = name
                 self.visible = visible
+                self.page = page
 
             @property
             def first(self) -> "FakeLocator":
                 return self
 
+            def count(self) -> int:
+                return 1
+
             def is_visible(self) -> bool:
                 return self.visible
+
+            def locator(self, selector: str) -> "FakeLocator":
+                lookups.append(selector)
+                if selector.endswith(".more-button"):
+                    return FakeLocator("more", True, self.page)
+                return FakeLocator("action", self.page.action_visible, self.page)
 
             def click(self) -> None:
                 clicks.append(self.name)
@@ -256,18 +267,22 @@ class PerfHarnessTest(unittest.TestCase):
                 self.action_visible = action_visible
 
             def locator(self, selector: str) -> FakeLocator:
-                if selector.endswith(".more-button"):
-                    return FakeLocator("more", True)
-                return FakeLocator("action", self.action_visible)
+                lookups.append(selector)
+                return FakeLocator("row", True, self)
 
         for action_visible in (False, True):
             with self.subTest(action_visible=action_visible):
                 clicks.clear()
+                lookups.clear()
                 perf_harness._click_row_action(
                     FakePage(action_visible), "#project-rows tr .assets-button"
                 )
                 expected = ["action"] if action_visible else ["more", "action"]
                 self.assertEqual(clicks, expected)
+                # Both the row and the action stay inside the same row scope:
+                # a global lookup would click whichever row came first.
+                self.assertEqual(lookups[0], "#project-rows tr")
+                self.assertNotIn(".assets-button", lookups[0])
 
     def test_drag_samples_below_judging_bar_are_rejected(self) -> None:
         stderr = io.StringIO()
