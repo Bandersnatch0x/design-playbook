@@ -317,6 +317,13 @@ class TransportPolicyTest(unittest.TestCase):
         )
         self.assertEqual(authorized.status, 200)
         self.assertEqual(authorized.json["bootId"], self.h.runtime.session.boot_id)
+        # R14: the startup check reports referenced content it could not find.
+        integrity = authorized.json["blobIntegrity"]
+        self.assertEqual(integrity["missing"], 0)
+        self.assertIn("referenced", integrity)
+        # The scan runs once, so the payload says when instead of reading
+        # as a live fact.
+        self.assertTrue(integrity["checkedAt"])
 
 
 class RejectionLeakTest(unittest.TestCase):

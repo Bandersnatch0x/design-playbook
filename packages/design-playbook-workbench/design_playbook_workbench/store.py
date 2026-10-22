@@ -21,9 +21,20 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 from .credentials import restrict_directory_to_current_user
-from .errors import UNSUPPORTED, WorkbenchError
+from .errors import LIMIT_EXCEEDED, UNSUPPORTED, WorkbenchError
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
+
+#: One ordering for every asset listing, so the directory view and the detail
+#: view cannot drift apart. ``created_at`` is the stable key; ``rowid`` breaks
+#: ties between assets written in the same second.
+ASSET_LISTING_ORDER = "a.created_at ASC, a.rowid ASC"
+
+#: R15 acceptance scale, enforced as a capacity limit: a project over either
+#: number refuses the whole transaction with ``limit-exceeded`` rather than
+#: accepting a partial import.
+MAX_ASSETS_PER_PROJECT = 5_000
+MAX_REVISIONS_PER_PROJECT = 20_000
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -426,6 +437,12 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
             ON owner_confirmations (project_id, run_id, object_type, object_id)
         """,
     ),
+    9: (
+        # R13: unregistering a project and deleting its workbench data are two
+        # actions. The flag keeps the row (and its data) after unregistration
+        # so the second action has something to act on.
+        "ALTER TABLE projects ADD COLUMN removed INTEGER NOT NULL DEFAULT 0",
+    ),
 }
 
 DEFAULT_DATA_DIR_NAME = "design-playbook-workbench"
@@ -583,9 +600,14 @@ class Store:
                 # R14: a database from a newer runtime is never opened and
                 # never downgraded.
                 raise WorkbenchError(UNSUPPORTED)
-            for version in sorted(_MIGRATIONS):
-                if version in applied:
-                    continue
+            pending = [version for version in sorted(_MIGRATIONS) if version not in applied]
+            if pending and newest:
+                # R14: back up before a schema upgrade. A backup of the
+                # pre-upgrade database is the only way back if a migration
+                # fails halfway and leaves an intermediate schema. A brand
+                # new database has no pre-image worth keeping.
+                self._backup_before_migration(newest)
+            for version in pending:
                 with self.transaction() as connection:
                     for statement in _MIGRATIONS[version]:
                         connection.execute(statement)
@@ -594,6 +616,41 @@ class Store:
                         "VALUES (?, ?)",
                         (version, self._now_fn()),
                     )
+
+    def _backup_before_migration(self, from_version: int) -> None:
+        """Write a consistent copy of the pre-upgrade database next to it.
+
+        SQLite's own backup API takes the snapshot under the connection's
+        lock, so a writer cannot slip a page in between. The file is written
+        once and never overwritten: two upgrades keep two pre-images, and the
+        oldest one is still the state the maintainer first ran.
+
+        The copy lands under a temporary name and is renamed into place only
+        after SQLite closed it. A failure halfway leaves no file at all, so a
+        later start cannot mistake a half-written image for the backup and
+        migrate without one.
+        """
+        target = self.database_path.with_name(
+            f"{self.database_path.name}.pre-v{from_version}.bak"
+        )
+        if target.exists():  # pragma: no cover - one backup per upgrade path
+            return
+        partial = target.with_name(target.name + ".partial")
+        # sqlite3's connection context manager commits but never closes, and
+        # a still-open handle keeps the file locked on Windows.
+        try:
+            backup = sqlite3.connect(str(partial))
+            try:
+                self._connection.backup(backup)
+            finally:
+                backup.close()
+            os.replace(partial, target)
+        except BaseException:
+            try:
+                partial.unlink(missing_ok=True)
+            except OSError:  # pragma: no cover - best effort on a failing disk
+                pass
+            raise
 
     def schema_version(self) -> int:
         with self.read() as connection:
@@ -720,7 +777,8 @@ class Store:
     def project(self, project_id: str) -> dict:
         with self.read() as connection:
             row = connection.execute(
-                "SELECT * FROM projects WHERE project_id = ?", (project_id,)
+                "SELECT * FROM projects WHERE project_id = ? AND removed = 0",
+                (project_id,),
             ).fetchone()
             if row is None:
                 raise KeyError(project_id)
@@ -729,7 +787,7 @@ class Store:
     def project_exists(self, project_id: str) -> bool:
         with self.read() as connection:
             row = connection.execute(
-                "SELECT 1 AS present FROM projects WHERE project_id = ?",
+                "SELECT 1 AS present FROM projects WHERE project_id = ? AND removed = 0",
                 (project_id,),
             ).fetchone()
             return row is not None
@@ -737,9 +795,57 @@ class Store:
     def list_projects(self) -> list[dict]:
         with self.read() as connection:
             rows = connection.execute(
-                "SELECT * FROM projects ORDER BY created_at ASC, project_id ASC"
+                "SELECT * FROM projects WHERE removed = 0 "
+                "ORDER BY created_at ASC, project_id ASC"
             ).fetchall()
             return [dict(row) for row in rows]
+
+    def unregister_project(self, *, project_id: str, now: str) -> None:
+        """R13: unregister only -- the row and its data stay for a second act.
+
+        The binding and the grants are what "registration and authorization"
+        mean; both go. The project row is flagged so every lookup treats it
+        as gone, while the data it holds remains until the maintainer
+        explicitly deletes it.
+        """
+        with self.transaction() as connection:
+            cursor = connection.execute(
+                "UPDATE projects SET removed = 1, counter = counter + 1, "
+                "updated_at = ? WHERE project_id = ? AND removed = 0",
+                (now, project_id),
+            )
+            if cursor.rowcount == 0:
+                raise KeyError(project_id)
+            connection.execute(
+                "DELETE FROM grants WHERE project_id = ?", (project_id,)
+            )
+            connection.execute(
+                "DELETE FROM folder_bindings WHERE project_id = ?", (project_id,)
+            )
+
+    def list_removed_projects(self) -> list[dict]:
+        with self.read() as connection:
+            rows = connection.execute(
+                "SELECT * FROM projects WHERE removed = 1 "
+                "ORDER BY updated_at ASC, project_id ASC"
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def removed_project(self, project_id: str) -> dict | None:
+        """An unregistered project row, for the explicit data deletion."""
+        with self.read() as connection:
+            row = connection.execute(
+                "SELECT * FROM projects WHERE project_id = ? AND removed = 1",
+                (project_id,),
+            ).fetchone()
+            return dict(row) if row is not None else None
+
+    def delete_project_data(self, project_id: str) -> None:
+        """The explicit second act: delete this project's workbench data."""
+        with self.transaction() as connection:
+            connection.execute(
+                "DELETE FROM projects WHERE project_id = ?", (project_id,)
+            )
 
     def active_binding(self, project_id: str) -> dict | None:
         with self.read() as connection:
@@ -873,6 +979,17 @@ class Store:
     ) -> None:
         """Asset plus its first draft row, committed as one transaction."""
         with self.transaction() as connection:
+            # R15: the capacity limit is part of the same transaction, so an
+            # over-capacity import leaves no asset or draft behind.
+            existing = connection.execute(
+                "SELECT COUNT(*) AS n FROM assets WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()
+            if int(existing["n"]) >= MAX_ASSETS_PER_PROJECT:
+                raise WorkbenchError(
+                    LIMIT_EXCEEDED,
+                    detail=f"a project holds at most {MAX_ASSETS_PER_PROJECT} assets",
+                )
             connection.execute(
                 "INSERT INTO assets (asset_id, project_id, kind, name, lifecycle, "
                 "counter, created_at, updated_at) VALUES (?, ?, ?, ?, 'draft', 0, ?, ?)",
@@ -907,8 +1024,8 @@ class Store:
     def project_assets(self, project_id: str) -> list[dict]:
         with self.read() as connection:
             rows = connection.execute(
-                "SELECT * FROM assets WHERE project_id = ? "
-                "ORDER BY created_at ASC, rowid ASC",
+                "SELECT * FROM assets a WHERE a.project_id = ? "
+                f"ORDER BY {ASSET_LISTING_ORDER}",
                 (project_id,),
             ).fetchall()
             return [dict(row) for row in rows]
@@ -928,7 +1045,7 @@ class Store:
                 "d.attributes_json AS draft_attributes_json "
                 "FROM assets a LEFT JOIN asset_drafts d ON d.asset_id = a.asset_id "
                 "WHERE a.project_id = ? "
-                "ORDER BY a.created_at ASC, a.rowid ASC",
+                f"ORDER BY {ASSET_LISTING_ORDER}",
                 (project_id,),
             ).fetchall()
             return [dict(row) for row in rows]
@@ -1002,6 +1119,23 @@ class Store:
         now: str,
     ) -> None:
         with self.transaction() as connection:
+            # R15: revisions are counted per project, not per asset, because
+            # the acceptance scale is stated per project. The check shares
+            # the insert's transaction, so a refusal writes nothing.
+            revision_count = connection.execute(
+                "SELECT COUNT(*) AS n FROM revisions r "
+                "JOIN assets a ON a.asset_id = r.asset_id "
+                "WHERE a.project_id = (SELECT project_id FROM assets WHERE asset_id = ?)",
+                (asset_id,),
+            ).fetchone()
+            if int(revision_count["n"]) >= MAX_REVISIONS_PER_PROJECT:
+                raise WorkbenchError(
+                    LIMIT_EXCEEDED,
+                    detail=(
+                        "a project holds at most "
+                        f"{MAX_REVISIONS_PER_PROJECT} revisions"
+                    ),
+                )
             connection.execute(
                 "INSERT INTO revisions (revision_id, asset_id, revision_number, "
                 "content_hash, carrier, capabilities_json, dependencies_json, "
@@ -1119,12 +1253,29 @@ class Store:
             ).fetchall()
             return [dict(row) for row in rows]
 
-    def all_revision_manifests(self) -> list[dict]:
+    def referenced_blob_hashes(self) -> list[str]:
+        """Every content hash a revision or a draft names, one per entry.
+
+        Both surfaces are read: a draft references blobs before it is ever
+        published, so a scan of revisions alone reports healthy content that
+        the next publish cannot find.
+        """
         with self.read() as connection:
             rows = connection.execute(
-                "SELECT revision_id, manifest_json FROM revisions"
+                "SELECT manifest_json AS raw FROM revisions "
+                "UNION ALL SELECT attributes_json AS raw FROM asset_drafts"
             ).fetchall()
-            return [dict(row) for row in rows]
+        hashes: list[str] = []
+        for row in rows:
+            parsed = json.loads(row["raw"] or "{}")
+            # A revision row stores the manifest list itself; a draft row
+            # stores its attributes with the manifest inside.
+            entries = parsed if isinstance(parsed, list) else parsed.get("manifest") or []
+            for entry in entries:
+                content_hash = entry.get("contentHash")
+                if content_hash:
+                    hashes.append(content_hash)
+        return hashes
 
     # -- instances, lineage, dependencies, closures (WB-04) ------------
 

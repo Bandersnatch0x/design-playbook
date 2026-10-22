@@ -25,9 +25,11 @@ from design_playbook_workbench.assets import (
     AssetService,
 )
 from design_playbook_workbench.blobs import BlobStore, digest_bytes
+from design_playbook_workbench.launcher import blob_integrity
 from design_playbook_workbench.errors import (
     CONFLICT,
     CORRUPT_CONTENT,
+    INVALID_INPUT,
     INVALID_TARGET,
     LIMIT_EXCEEDED,
     MISSING_DEPENDENCY,
@@ -100,8 +102,16 @@ class AssetTestCase(unittest.TestCase):
     def publish(self, asset_id: str) -> dict:
         self.grant(["read", "write"])
         return self.assets.publish_revision(
-            self.project_id, asset_id, operation=self.operation({"publish": asset_id})
+            self.project_id,
+            asset_id,
+            operation=self.operation(
+                {"publish": asset_id}, expected=self.asset_counter(asset_id)
+            ),
         )["result"]
+
+    def asset_counter(self, asset_id: str) -> int:
+        """The asset's current counter: an existing-asset write needs it (R04)."""
+        return int(self.store.asset(asset_id)["counter"])
 
 
 class ImportClassificationTest(AssetTestCase):
@@ -157,12 +167,16 @@ class ImportClassificationTest(AssetTestCase):
         self.assertEqual(by_root["tokens/colors.json"]["kind"], "tokens")
         self.assertEqual(by_root["run/run-2026.json"]["kind"], "run-artifact")
 
-    def test_invalid_utf8_text_stays_a_reference_only_binary(self) -> None:
+    def test_invalid_utf8_text_is_refused_with_a_structured_error(self) -> None:
+        # R03: illegal encoding is a structured error, not a silent downgrade.
+        # A reference-only binary would hide the fact that the chosen source
+        # file could not be read as text at all.
         self.write("broken.md", data=b"\xff\xfe\x00 not utf-8")
-        asset = self.import_assets(["broken.md"])["asset"]
-        self.assertEqual(asset["kind"], "binary")
-        self.assertEqual(asset["capabilities"], [CAPABILITY_REFERENCE])
-        self.assertIn("binary", [entry["encoding"] for entry in asset["manifest"]])
+        with self.assertRaises(WorkbenchError) as caught:
+            self.import_assets(["broken.md"])
+        self.assertEqual(caught.exception.code, INVALID_INPUT)
+        # The batch is refused whole: no asset, no revision, no blob record.
+        self.assertEqual(self.store.project_assets(self.project_id), [])
 
     def test_archives_are_refused_rather_than_unpacked(self) -> None:
         self.write("bundle.zip", data=b"PK\x03\x04 fake archive")
@@ -205,6 +219,35 @@ class ImportBoundaryTest(AssetTestCase):
                 self.import_assets([f"part-{index}.md" for index in range(3)])
         self.assertEqual(caught.exception.code, LIMIT_EXCEEDED)
         self.assertEqual(self.store.project_assets(self.project_id), [])
+
+    def test_a_project_at_its_asset_capacity_refuses_the_whole_import(self) -> None:
+        """R15: capacity is enforced in the same transaction as the insert."""
+        from design_playbook_workbench import store as store_module
+
+        self.write("first.md", "# first\n")
+        self.import_assets(["first.md"])
+        self.write("second.md", "# second\n")
+        with mock.patch.object(store_module, "MAX_ASSETS_PER_PROJECT", 1):
+            with self.assertRaises(WorkbenchError) as caught:
+                self.import_assets(["second.md"])
+        self.assertEqual(caught.exception.code, LIMIT_EXCEEDED)
+        # The refused import left nothing behind.
+        self.assertEqual(len(self.store.project_assets(self.project_id)), 1)
+
+    def test_a_project_at_its_revision_capacity_refuses_the_publish(self) -> None:
+        """R15: the revision cap shares the publish's transaction too."""
+        from design_playbook_workbench import store as store_module
+
+        self.write("notes.md", "# notes\n")
+        asset = self.import_assets(["notes.md"])["asset"]
+        self.publish(asset["assetId"])
+        with mock.patch.object(store_module, "MAX_REVISIONS_PER_PROJECT", 1):
+            with self.assertRaises(WorkbenchError) as caught:
+                self.publish(asset["assetId"])
+        self.assertEqual(caught.exception.code, LIMIT_EXCEEDED)
+        # The refused publish wrote no revision and left the draft untouched.
+        self.assertEqual(len(self.store.asset_revisions(asset["assetId"])), 1)
+        self.assertEqual(int(self.store.draft(asset["assetId"])["revision_counter"]), 1)
 
     def test_too_many_files_rejects_the_whole_import(self) -> None:
         many = self.project / "many"
@@ -328,6 +371,23 @@ class BlobContractTest(AssetTestCase):
                 with self.assertRaises(WorkbenchError):
                     self.blobs.read(bad)
 
+    def test_a_draft_reference_is_scanned_before_it_is_published(self) -> None:
+        """R14: a draft names blobs too, so the scan must not wait for publish.
+
+        Reading only revisions would report this database as healthy while
+        the next publish is guaranteed to fail on the missing content.
+        """
+        self.write("notes.md", "# notes\n")
+        asset = self.import_assets(["notes.md"])["asset"]
+        content_hash = asset["manifest"][0]["contentHash"]
+        self.assertEqual(self.store.referenced_blob_hashes(), [content_hash])
+        self.assertEqual(blob_integrity(self.store, self.blobs)["missing"], 0)
+        self.blobs.path_for(content_hash).unlink()
+        report = blob_integrity(self.store, self.blobs)
+        self.assertEqual(report["missing"], 1)
+        self.assertEqual(report["missingHashes"], [content_hash])
+        self.assertTrue(report["checkedAt"])
+
 
 class PublishTest(AssetTestCase):
     def test_publishing_freezes_an_immutable_revision(self) -> None:
@@ -352,6 +412,38 @@ class PublishTest(AssetTestCase):
             self.blobs.read(manifest[0]["contentHash"]), b"<h1>Changed on disk</h1>\n"
         )
 
+    def test_an_asset_write_requires_a_current_counter(self) -> None:
+        """R04: every mutable asset write carries the counter it read.
+
+        A write with no counter, or with one that another write already
+        advanced, is refused instead of applying on top of newer state.
+        """
+        self.write("notes.md", "# notes\n")
+        asset = self.import_assets(["notes.md"])["asset"]
+        asset_id = asset["assetId"]
+        self.grant(["read", "write"])
+        # No counter at all is a malformed request, not a last-write-wins.
+        with self.assertRaises(WorkbenchError) as missing:
+            self.assets.publish_revision(
+                self.project_id, asset_id, operation=self.operation({"publish": "none"})
+            )
+        self.assertEqual(missing.exception.code, INVALID_INPUT)
+        # The counter read before the first publish is stale for the second.
+        stale = self.asset_counter(asset_id)
+        self.assets.publish_revision(
+            self.project_id,
+            asset_id,
+            operation=self.operation({"publish": 1}, expected=stale),
+        )
+        with self.assertRaises(WorkbenchError) as stale_refused:
+            self.assets.publish_revision(
+                self.project_id,
+                asset_id,
+                operation=self.operation({"publish": 2}, expected=stale),
+            )
+        self.assertEqual(stale_refused.exception.code, CONFLICT)
+        self.assertEqual(len(self.store.asset_revisions(asset_id)), 1)
+
     def test_publishing_requires_write_scope_and_valid_content(self) -> None:
         self.write("notes.md", "# notes\n")
         asset = self.import_assets(["notes.md"])["asset"]
@@ -365,7 +457,11 @@ class PublishTest(AssetTestCase):
         self.blobs.path_for(blob).unlink()
         with self.assertRaises(WorkbenchError) as caught:
             self.assets.publish_revision(
-                self.project_id, asset["assetId"], operation=self.operation({"publish": 2})
+                self.project_id,
+                asset["assetId"],
+                operation=self.operation(
+                    {"publish": 2}, expected=self.asset_counter(asset["assetId"])
+                ),
             )
         self.assertEqual(caught.exception.code, CORRUPT_CONTENT)
 
@@ -384,7 +480,11 @@ class PublishTest(AssetTestCase):
         self.grant(["read", "write"])
         with self.assertRaises(WorkbenchError) as caught:
             self.assets.publish_revision(
-                self.project_id, asset["assetId"], operation=self.operation({"publish": 3})
+                self.project_id,
+                asset["assetId"],
+                operation=self.operation(
+                    {"publish": 3}, expected=self.asset_counter(asset["assetId"])
+                ),
             )
         self.assertEqual(caught.exception.code, MISSING_DEPENDENCY)
         self.assertEqual(self.store.asset_revisions(asset["assetId"]), [])
@@ -527,7 +627,10 @@ class MutationReplayBindingTest(AssetTestCase):
         self.write("brand.md", "# Brand\n")
         asset_id = self.import_assets(["brand.md"])["asset"]["assetId"]
         self.grant(["read", "write"])
-        operation = self.operation({"action": "publish", "assetId": asset_id})
+        operation = self.operation(
+            {"action": "publish", "assetId": asset_id},
+            expected=self.asset_counter(asset_id),
+        )
 
         first = self.assets.publish_revision(self.project_id, asset_id, operation=operation)
         self.assertFalse(first["replayed"])

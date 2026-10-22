@@ -219,7 +219,17 @@ class ConnectionStateTest(unittest.TestCase):
         restore = revoke_folder_access(project)
         if restore is None:
             self.skipTest("this host cannot revoke folder access")
-        self.addCleanup(restore)
+        # Restore runs once: either explicitly below, or from cleanup when an
+        # assertion fails first. Calling it twice would reset the ACL twice.
+        restored = []
+
+        def restore_once() -> None:
+            if restored:
+                return
+            restored.append(True)
+            restore()
+
+        self.addCleanup(restore_once)
         with self.assertRaises(OSError):
             with os.scandir(project) as entries:
                 next(entries, None)
@@ -232,7 +242,7 @@ class ConnectionStateTest(unittest.TestCase):
             validate_folder_target(str(project), data_dir=base / "data")
         self.assertEqual(refused.exception.code, INVALID_TARGET)
         # The probe is stateless: restoring access brings the binding back.
-        restore()
+        restore_once()
         self.assertEqual(connection_state(str(project), identity), "connected")
 
     def test_junction_to_another_folder_reports_disconnected(self) -> None:

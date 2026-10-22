@@ -65,6 +65,10 @@ class ReuseTestCase(unittest.TestCase):
             operation_id=operation_id, payload=payload, expected_counter=expected
         )
 
+    def asset_counter(self, asset_id: str) -> int:
+        """The asset's current counter: an existing-asset write needs it (R04)."""
+        return int(self.store.asset(asset_id)["counter"])
+
     def _project(self, name: str) -> dict:
         path = self.base / name
         path.mkdir()
@@ -100,14 +104,21 @@ class ReuseTestCase(unittest.TestCase):
             operation=self.operation({"selections": [relative]}),
         )["result"]["asset"]
         self.assets.publish_revision(
-            project_id, asset["assetId"], operation=self.operation({"publish": 1})
+            project_id,
+            asset["assetId"],
+            operation=self.operation(
+                {"publish": 1}, expected=self.asset_counter(asset["assetId"])
+            ),
         )
         if dependencies is not None:
             self.reuse.publish_with_dependencies(
                 project_id,
                 asset["assetId"],
                 dependencies=dependencies,
-                operation=self.operation({"publish-deps": 1}),
+                operation=self.operation(
+                    {"publish-deps": 1},
+                    expected=self.asset_counter(asset["assetId"]),
+                ),
             )
         return self.assets.asset_detail(project_id, asset["assetId"])["asset"]
 
@@ -128,10 +139,18 @@ class RevisionImmutabilityTest(ReuseTestCase):
         )
         self.write("source", "spec.md", "# changed on disk\n")
         self.assets.refresh_draft(
-            self.source_id, asset_id, operation=self.operation({"refresh": 1})
+            self.source_id,
+            asset_id,
+            operation=self.operation(
+                {"refresh": 1}, expected=self.asset_counter(asset_id)
+            ),
         )
         self.assets.publish_revision(
-            self.source_id, asset_id, operation=self.operation({"publish": 2})
+            self.source_id,
+            asset_id,
+            operation=self.operation(
+                {"publish": 2}, expected=self.asset_counter(asset_id)
+            ),
         )
         revisions = self.store.asset_revisions(asset_id)
         self.assertEqual([row["revision_number"] for row in revisions], [1, 2])
@@ -152,7 +171,11 @@ class RevisionImmutabilityTest(ReuseTestCase):
         first = self.store.latest_revision(asset_id)
         self.write("source", "spec.md", "# silently changed on disk\n")
         self.assets.publish_revision(
-            self.source_id, asset_id, operation=self.operation({"publish": "no-refresh"})
+            self.source_id,
+            asset_id,
+            operation=self.operation(
+                {"publish": "no-refresh"}, expected=self.asset_counter(asset_id)
+            ),
         )
         revisions = self.store.asset_revisions(asset_id)
         self.assertEqual(len(revisions), 2)
@@ -162,7 +185,11 @@ class RevisionImmutabilityTest(ReuseTestCase):
         # The draft still holds the snapshot it was imported with, and the
         # refreshed draft is what changes it.
         refreshed = self.assets.refresh_draft(
-            self.source_id, asset_id, operation=self.operation({"refresh": "after"})
+            self.source_id,
+            asset_id,
+            operation=self.operation(
+                {"refresh": "after"}, expected=self.asset_counter(asset_id)
+            ),
         )["result"]
         self.assertNotEqual(
             refreshed["manifest"][0]["contentHash"], first["content_hash"]
@@ -173,7 +200,11 @@ class RevisionImmutabilityTest(ReuseTestCase):
         (self.base / "source" / "spec.md").unlink()
         with self.assertRaises(WorkbenchError) as caught:
             self.assets.refresh_draft(
-                self.source_id, asset["assetId"], operation=self.operation({"refresh": "gone"})
+                self.source_id,
+                asset["assetId"],
+                operation=self.operation(
+                    {"refresh": "gone"}, expected=self.asset_counter(asset["assetId"])
+                ),
             )
         self.assertEqual(caught.exception.code, INVALID_TARGET)
 
@@ -185,15 +216,22 @@ class RevisionImmutabilityTest(ReuseTestCase):
         self.blobs.path_for(manifest[0]["contentHash"]).write_bytes(b"tampered")
         with self.assertRaises(WorkbenchError) as caught:
             self.assets.publish_revision(
-                self.source_id, asset_id, operation=self.operation({"publish": 3})
+                self.source_id,
+                asset_id,
+                operation=self.operation(
+                    {"publish": 3}, expected=self.asset_counter(asset_id)
+                ),
             )
         self.assertEqual(caught.exception.code, CORRUPT_CONTENT)
 
     def test_stale_counter_and_reused_operation_ids_behave_as_specified(self) -> None:
         asset = self.import_and_publish("source", self.source_id, "spec.md")
         asset_id = asset["assetId"]
+        stale = self.asset_counter(asset_id)
         operation = self.operation(
-            {"publish": asset_id}, operation_id="op_publish_same_1"
+            {"publish": asset_id},
+            expected=stale,
+            operation_id="op_publish_same_1",
         )
         first = self.assets.publish_revision(
             self.source_id, asset_id, operation=operation
@@ -204,12 +242,26 @@ class RevisionImmutabilityTest(ReuseTestCase):
         self.assertFalse(first["replayed"])
         self.assertTrue(replay["replayed"])
         self.assertEqual(len(self.store.asset_revisions(asset_id)), 2)
+        # The same counter that was current before the first publish is now
+        # stale: a new operation must be refused, never applied on top.
+        with self.assertRaises(WorkbenchError) as caught:
+            self.assets.publish_revision(
+                self.source_id,
+                asset_id,
+                operation=self.operation({"publish": "stale"}, expected=stale),
+            )
+        self.assertEqual(caught.exception.code, CONFLICT)
+        self.assertEqual(len(self.store.asset_revisions(asset_id)), 2)
+        # A reused operation ID with a different payload is a conflict, not
+        # a second success.
         with self.assertRaises(WorkbenchError) as caught:
             self.assets.publish_revision(
                 self.source_id,
                 asset_id,
                 operation=self.operation(
-                    {"publish": "different"}, operation_id="op_publish_same_1"
+                    {"publish": "different"},
+                    expected=self.asset_counter(asset_id),
+                    operation_id="op_publish_same_1",
                 ),
             )
         self.assertEqual(caught.exception.code, CONFLICT)
@@ -333,10 +385,15 @@ class LineageTest(ReuseTestCase):
         asset = self.import_and_publish("source", self.source_id, "brand.md")
         reference_revision = self.store.latest_revision(asset["assetId"])
         # Pretend the source revision carried a verified capability: the
-        # copy must start with an empty verification list regardless.
+        # copy must start with neither the record nor the claim.
         self.store.connection.execute(
-            "UPDATE revisions SET verified_json = ? WHERE revision_id = ?",
-            (json.dumps([{"verdict": "pass"}]), reference_revision["revision_id"]),
+            "UPDATE revisions SET verified_json = ?, capabilities_json = ? "
+            "WHERE revision_id = ?",
+            (
+                json.dumps([{"verdict": "pass"}]),
+                json.dumps(["reference", "runnable-verified"]),
+                reference_revision["revision_id"],
+            ),
         )
         copied = self.reuse.derive_or_copy(
             self.source_id,
@@ -347,7 +404,14 @@ class LineageTest(ReuseTestCase):
         copied_revision = self.store.latest_revision(copied["assetId"])
         self.assertEqual(json.loads(copied_revision["verified_json"]), [])
         self.assertEqual(
+            json.loads(copied_revision["capabilities_json"]), ["reference"]
+        )
+        self.assertEqual(
             copied_revision["content_hash"], reference_revision["content_hash"]
+        )
+        # The dropped claim must not come back through the draft either.
+        self.assertEqual(
+            copied["capabilities"], ["reference"]
         )
 
     def test_deriving_from_a_foreign_project_asset_is_refused(self) -> None:
@@ -401,6 +465,51 @@ class CrossProjectReuseTest(ReuseTestCase):
         for excluded in ("其他画布内容", "运行日志与证据", "源项目私有路径"):
             self.assertIn(excluded, plan["excluded"])
         self.assertNotIn(private["assetId"], json.dumps(plan))
+
+    def test_imported_closure_keeps_its_dependencies_resolvable_locally(self) -> None:
+        tokens = self.import_and_publish("source", self.source_id, "tokens/brand.json")
+        tokens_revision = self.store.latest_revision(tokens["assetId"])
+        component = self.import_and_publish(
+            "source",
+            self.source_id,
+            "components/button.md",
+            dependencies=[
+                {"assetId": tokens["assetId"], "revisionId": tokens_revision["revision_id"]}
+            ],
+        )
+        self.grant(self.target_id, ["read", "write"])
+        imported = self.reuse.import_closure(
+            self.source_id,
+            source_asset_id=component["assetId"],
+            source_revision_id=None,
+            mode="copy",
+            target_project_id=self.target_id,
+            operation=self.operation({"import-closure": 1}),
+        )["result"]
+        local_revision = self.store.latest_revision(imported["assetId"])
+        local_dependencies = self.store.dependencies(local_revision["revision_id"])
+        # The imported copy resolves its closure inside the target project,
+        # with local ids rather than the source's revision ids.
+        self.assertEqual(len(local_dependencies), 1)
+        local_dependency = local_dependencies[0]
+        self.assertNotEqual(local_dependency["depends_on_revision_id"], tokens_revision["revision_id"])
+        dependency_asset = self.store.asset(local_dependency["depends_on_asset_id"])
+        self.assertEqual(dependency_asset["project_id"], self.target_id)
+        # The payload reports the local ids, matching what was written.
+        self.assertEqual(
+            [entry["revisionId"] for entry in imported["dependencies"]],
+            [local_dependency["depends_on_revision_id"]],
+        )
+        # Deleting the source project leaves the target's closure resolvable.
+        shutil.rmtree(self.base / "source")
+        self.assertEqual(
+            self.service.project_target(self.target_id)["connectionState"], "connected"
+        )
+        still_there = self.store.dependencies(local_revision["revision_id"])
+        self.assertEqual(
+            [row["depends_on_revision_id"] for row in still_there],
+            [local_dependency["depends_on_revision_id"]],
+        )
 
     def test_imported_closure_resolves_after_the_source_is_disconnected(self) -> None:
         asset = self.import_and_publish("source", self.source_id, "brand.md")
@@ -483,10 +592,18 @@ class UpgradeTest(ReuseTestCase):
     def _new_revision(self, text: str) -> dict:
         self.write("source", "brand.md", text)
         self.assets.refresh_draft(
-            self.source_id, self.asset_id, operation=self.operation({"refresh": text[:8]})
+            self.source_id,
+            self.asset_id,
+            operation=self.operation(
+                {"refresh": text[:8]}, expected=self.asset_counter(self.asset_id)
+            ),
         )
         self.assets.publish_revision(
-            self.source_id, self.asset_id, operation=self.operation({"publish": text[:8]})
+            self.source_id,
+            self.asset_id,
+            operation=self.operation(
+                {"publish": text[:8]}, expected=self.asset_counter(self.asset_id)
+            ),
         )
         return self.store.latest_revision(self.asset_id)
 
@@ -520,7 +637,9 @@ class UpgradeTest(ReuseTestCase):
             self.source_id,
             self.asset_id,
             instance_ids=[older["instanceId"]],
-            operation=self.operation({"upgrade": 1}),
+            operation=self.operation(
+                {"upgrade": 1}, expected=self.asset_counter(self.asset_id)
+            ),
         )["result"]
         self.assertEqual(outcome["updatedInstanceIds"], [older["instanceId"]])
         self.assertEqual(outcome["untouchedInstanceIds"], [])
@@ -553,7 +672,9 @@ class UpgradeTest(ReuseTestCase):
             self.asset_id,
             instance_ids=[other["instanceId"]],
             to_revision_id=second["revision_id"],
-            operation=self.operation({"upgrade": 2}),
+            operation=self.operation(
+                {"upgrade": 2}, expected=self.asset_counter(self.asset_id)
+            ),
         )["result"]
         by_id = {row["instanceId"]: row for row in outcome["instances"]}
         self.assertEqual(by_id[keep["instanceId"]]["revisionId"], first["revision_id"])
@@ -589,7 +710,9 @@ class UpgradeTest(ReuseTestCase):
                 self.asset_id,
                 instance_ids=[good["instanceId"]],
                 to_revision_id=second["revision_id"],
-                operation=self.operation({"upgrade": 3}),
+                operation=self.operation(
+                    {"upgrade": 3}, expected=self.asset_counter(self.asset_id)
+                ),
             )
         self.assertEqual(caught.exception.code, CONFLICT)
         plan = self.reuse.upgrade_plan(
@@ -618,14 +741,18 @@ class UpgradeTest(ReuseTestCase):
             self.asset_id,
             instance_ids=[instance["instanceId"]],
             to_revision_id=second["revision_id"],
-            operation=self.operation({"upgrade": 4}),
+            operation=self.operation(
+                {"upgrade": 4}, expected=self.asset_counter(self.asset_id)
+            ),
         )
         outcome = self.reuse.rollback_instances(
             self.source_id,
             self.asset_id,
             instance_ids=[instance["instanceId"]],
             to_revision_id=first["revision_id"],
-            operation=self.operation({"rollback": 1}),
+            operation=self.operation(
+                {"rollback": 1}, expected=self.asset_counter(self.asset_id)
+            ),
         )["result"]
         self.assertEqual(outcome["restoredRevisionId"], first["revision_id"])
         # History is additive: the upgrade record survives alongside it.
@@ -650,7 +777,9 @@ class UpgradeTest(ReuseTestCase):
                 self.asset_id,
                 instance_ids=[instance["instanceId"]],
                 to_revision_id="00000000-0000-4000-8000-000000000000",
-                operation=self.operation({"rollback": 2}),
+                operation=self.operation(
+                    {"rollback": 2}, expected=self.asset_counter(self.asset_id)
+                ),
             )
         self.assertEqual(caught.exception.code, CORRUPT_CONTENT)
 
@@ -662,7 +791,9 @@ class UpgradeTest(ReuseTestCase):
                 self.asset_id,
                 instance_ids=[instance["instanceId"]],
                 to_revision_id=first["revision_id"],
-                operation=self.operation({"rollback": 3}),
+                operation=self.operation(
+                    {"rollback": 3}, expected=self.asset_counter(self.asset_id)
+                ),
             )
         self.assertEqual(caught.exception.code, CORRUPT_CONTENT)
 
@@ -702,7 +833,11 @@ class UpgradeTest(ReuseTestCase):
             operation=self.operation({"instance": "idem"}),
         )["result"]
         second = self._new_revision("# v2\n")
-        operation = self.operation({"upgrade": "idem"}, operation_id="op_upgrade_idem_1")
+        operation = self.operation(
+            {"upgrade": "idem"},
+            expected=self.asset_counter(self.asset_id),
+            operation_id="op_upgrade_idem_1",
+        )
         first_run = self.reuse.upgrade_instances(
             self.source_id,
             self.asset_id,
@@ -725,7 +860,9 @@ class UpgradeTest(ReuseTestCase):
                 self.asset_id,
                 instance_ids=["00000000-0000-4000-8000-000000000000"],
                 to_revision_id=second["revision_id"],
-                operation=self.operation({"upgrade": "unknown"}),
+                operation=self.operation(
+                    {"upgrade": "unknown"}, expected=self.asset_counter(self.asset_id)
+                ),
             )
         self.assertEqual(caught.exception.code, INVALID_TARGET)
 

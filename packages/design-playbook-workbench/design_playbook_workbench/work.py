@@ -84,6 +84,7 @@ ATTEMPT_STATES = frozenset(
         "running",
         "interrupted",
         "failed",
+        "cancel-requested",
         "cancelled",
         "result-submitted",
         "rejected",
@@ -504,8 +505,12 @@ class WorkRequestService:
             )
             attempt = self.store.latest_work_attempt(request_id)
             if attempt is not None and attempt["state"] in ("waiting", "running"):
+                # R11: the attempt stops being accepted here, but it is not
+                # ``cancelled`` until the host confirms the process stopped.
+                # Claiming that now would show a stopped process the host
+                # never reported.
                 self.store.update_work_attempt(
-                    attempt_id=attempt["attempt_id"], state="cancelled", now=now
+                    attempt_id=attempt["attempt_id"], state="cancel-requested", now=now
                 )
             return self._request_payload(self.store.work_request(request_id)), counter
 
@@ -540,6 +545,13 @@ class WorkRequestService:
             counter = self.store.set_work_request_state(
                 request_id=request_id, state="cancelled", now=now
             )
+            # The host has confirmed the stop: only now does the attempt say
+            # ``cancelled``. Until this point it stays ``cancel-requested``.
+            attempt = self.store.latest_work_attempt(request_id)
+            if attempt is not None and attempt["state"] == "cancel-requested":
+                self.store.update_work_attempt(
+                    attempt_id=attempt["attempt_id"], state="cancelled", now=now
+                )
             remove_private_file(self.claim_record_path(request_id))
             return self._request_payload(self.store.work_request(request_id)), counter
 
@@ -564,7 +576,11 @@ class WorkRequestService:
             return replayed
         self.service.require_project(project_id, scope="write")
         row = self._request_row(project_id, request_id)
-        if row["state"] not in ("failed", "interrupted", "running", "waiting-for-agent"):
+        # R11: a retry follows a failure. ``running`` is not a failure -- an
+        # agent may still be holding that lease -- so it is not a retry
+        # source. An interrupted or failed request is, and so is one whose
+        # agent never accepted it.
+        if row["state"] not in ("failed", "interrupted", "waiting-for-agent"):
             raise WorkbenchError(CONFLICT, detail=f"request is {row['state']}")
         token, capability_id = self.session.issue_request_capability(
             project_id=project_id,

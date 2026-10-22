@@ -77,7 +77,7 @@ _DUPLICATED = object()
 #: Project actions the browser may perform; a slash capability may never
 #: create, rename, re-grant, rebind, or remove a project.
 _BROWSER_ONLY_ACTIONS = frozenset(
-    {"open", "rename", "rebind", "grants", "remove"}
+    {"open", "rename", "rebind", "grants", "remove", "delete-data"}
 )
 
 #: Proposal transitions that are a maintainer authorization decision. An
@@ -427,15 +427,17 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
 
     def _serve_status(self, session: WorkbenchSession) -> None:
         self._drain_body()
-        self._send_json(
-            200,
-            {
-                "schemaVersion": SCHEMA_VERSION,
-                "service": "design-playbook-workbench",
-                **session.receipt(),
-            },
-            close=True,
-        )
+        payload = {
+            "schemaVersion": SCHEMA_VERSION,
+            "service": "design-playbook-workbench",
+            **session.receipt(),
+        }
+        # R14: the startup check reports missing referenced content here. It
+        # is a fact for the maintainer, not a reason to refuse to serve.
+        integrity = getattr(self.server, "blob_integrity", None)
+        if integrity is not None:
+            payload["blobIntegrity"] = integrity
+        self._send_json(200, payload, close=True)
 
     def _serve_backup(self, backup: "BackupService", principal: Principal) -> None:
         """Backup, verify, and restore are maintainer-only settings actions."""
@@ -580,6 +582,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
                 "runs",
                 "confirmations",
                 "lifecycle",
+                "archive-overview",
                 "deletion-impact",
             )
         ):
@@ -607,6 +610,22 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
                         "schemaVersion": SCHEMA_VERSION,
                         **lifecycle.browse(
                             segments[0], lifecycle=params.get("lifecycle")
+                        ),
+                    },
+                )
+                return
+            if segments[1] == "archive-overview":
+                if query:
+                    raise _Rejection(INVALID_INPUT)
+                self._send_json(
+                    200,
+                    {
+                        "schemaVersion": SCHEMA_VERSION,
+                        **lifecycle.archive_overview(
+                            segments[0],
+                            canvases=canvases,
+                            proposals=proposals,
+                            owners=owners,
                         ),
                     },
                 )
@@ -1732,6 +1751,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             "backflow",
             "project-archive",
             "project-unarchive",
+            "notes-propose",
         ):
             # Authoring, import curation, work-request handoff, owner
             # confirmation/backflow and project archival are maintainer-only
@@ -1774,6 +1794,12 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
         if action == "remove":
             self._send_mutation(service.remove_project(project_id, operation=operation))
             return
+        if action == "delete-data":
+            # R13: the explicit second act after unregistration.
+            self._send_mutation(
+                service.delete_project_data(project_id, operation=operation)
+            )
+            return
         if action == "instances":
             self._send_mutation(
                 reuse.create_instance(
@@ -1783,6 +1809,19 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
                     overrides=payload.get("overrides"),
                     operation=operation,
                 )
+            )
+            return
+        if action == "notes-propose":
+            # R07: the design notes are a repository file, so editing them is
+            # an ordinary proposal against that file, not a direct write.
+            outcome = design_system.propose_notes(
+                project_id,
+                path=payload.get("path"),
+                text=payload.get("text"),
+                operation=operation,
+            )
+            self._send_mutation(
+                {"result": outcome, "counter": None, "replayed": False}
             )
             return
         if action == "proposals":
@@ -2034,6 +2073,7 @@ class WorkbenchHTTPServer(http.server.ThreadingHTTPServer):
         self.lifecycle: LifecycleService | None = None
         self.backup: BackupService | None = None
         self.preview_origin = ""
+        self.blob_integrity: dict | None = None
         self.task_lookup = None
         super().__init__((host, port), WorkbenchRequestHandler)
         self.bind_host = host

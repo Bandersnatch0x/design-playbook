@@ -38,7 +38,13 @@ from design_playbook_workbench.errors import (
     WorkbenchError,
 )
 from design_playbook_workbench.service import Operation, WorkbenchService
-from design_playbook_workbench.store import SCHEMA_VERSION, Store, WorkbenchDataDirectory
+from design_playbook_workbench.store import (
+    _MIGRATIONS,
+    SCHEMA_VERSION,
+    Store,
+    WorkbenchDataDirectory,
+)
+from design_playbook_workbench import store as store_module
 
 
 class BackupTestCase(unittest.TestCase):
@@ -84,8 +90,12 @@ class BackupTestCase(unittest.TestCase):
             operation=self.operation({"action": "imports"}),
         )["result"]["asset"]
         self.assets.publish_revision(
-            self.project_id, asset["assetId"],
-            operation=self.operation({"action": "publish"}),
+            self.project_id,
+            asset["assetId"],
+            operation=self.operation(
+                {"action": "publish"},
+                expected=self.asset_counter(asset["assetId"]),
+            ),
         )
         self.asset_id = asset["assetId"]
 
@@ -93,11 +103,17 @@ class BackupTestCase(unittest.TestCase):
         self.store.close()
         self._tmp.cleanup()
 
-    def operation(self, payload: dict) -> Operation:
+    def operation(self, payload: dict, *, expected: int | None = None) -> Operation:
         self._operations += 1
         return Operation(
-            operation_id=f"op_backup_{self._operations:08d}", payload=payload
+            operation_id=f"op_backup_{self._operations:08d}",
+            payload=payload,
+            expected_counter=expected,
         )
+
+    def asset_counter(self, asset_id: str) -> int:
+        """The asset's current counter: an existing-asset write needs it (R04)."""
+        return int(self.store.asset(asset_id)["counter"])
 
     def make_backup(self) -> dict:
         return self.backup.create(
@@ -339,23 +355,116 @@ class RestoreTest(BackupTestCase):
         self.assertEqual(caught.exception.code, INVALID_INPUT)
 
 
-class MigrationTest(unittest.TestCase):
-    def test_an_older_schema_migrates_and_a_newer_one_is_refused(self) -> None:
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        base = Path(tmp.name)
-        # A minimal v1 database: only the migration ledger says version 1.
-        old_db = base / "old.db"
-        connection = sqlite3.connect(str(old_db))
+def _write_v1_database(path: Path) -> None:
+    """A genuine schema-version-1 database.
+
+    The ledger alone is not a v1 database: a later migration may alter a
+    table v1 created, so the fixture has to create what v1 created.
+    """
+    connection = sqlite3.connect(str(path))
+    try:
         connection.execute(
             "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, "
             "applied_at TEXT NOT NULL)"
         )
+        for statement in _MIGRATIONS[1]:
+            connection.execute(statement)
         connection.execute(
             "INSERT INTO schema_migrations (version, applied_at) VALUES (1, '2026-01-01')"
         )
         connection.commit()
+    finally:
         connection.close()
+
+
+class MigrationTest(unittest.TestCase):
+    def test_a_schema_upgrade_backs_up_the_pre_upgrade_database(self) -> None:
+        """R14: back up before migrating, so a failed migration has a way back."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        base = Path(tmp.name)
+        old_db = base / "workbench.db"
+        _write_v1_database(old_db)
+        store = Store(old_db)
+        try:
+            self.assertEqual(store.schema_version(), SCHEMA_VERSION)
+        finally:
+            store.close()
+        # The backup is a real database at the pre-upgrade version, not a
+        # copy of the migrated one.
+        backup = base / "workbench.db.pre-v1.bak"
+        self.assertTrue(backup.is_file(), f"no pre-upgrade backup in {list(base.iterdir())}")
+        restored = sqlite3.connect(str(backup))
+        try:
+            row = restored.execute("SELECT MAX(version) FROM schema_migrations").fetchone()
+        finally:
+            restored.close()
+        self.assertEqual(row[0], 1)
+
+    def test_a_failed_pre_upgrade_backup_leaves_no_file_and_no_migration(self) -> None:
+        """R14: a half-written pre-image is worse than none.
+
+        If the copy is left at its final name, the next start sees it, skips
+        the backup, and migrates a database that has no way back.
+        """
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        base = Path(tmp.name)
+        old_db = base / "workbench.db"
+        _write_v1_database(old_db)
+        real_connect = sqlite3.connect
+        snapshots = []
+
+        class _FailingBackup(sqlite3.Connection):
+            """The live connection, whose snapshot fails partway."""
+
+            def backup(self, target: object, *args: object, **kwargs: object) -> None:
+                snapshots.append(str(target))
+                raise sqlite3.OperationalError("disk full")
+
+        def connect(path: object, *args: object, **kwargs: object) -> object:
+            # Only the store's own connection takes the failing factory; the
+            # copy's connection is a plain one, as in production.
+            if str(path) == str(old_db):
+                kwargs["factory"] = _FailingBackup
+            return real_connect(path, *args, **kwargs)
+
+        with patch.object(store_module.sqlite3, "connect", connect):
+            with self.assertRaises(sqlite3.OperationalError):
+                Store(old_db)
+        self.assertTrue(snapshots, "the pre-upgrade snapshot never ran")
+        self.assertEqual(
+            [item.name for item in base.iterdir() if ".bak" in item.name], []
+        )
+        # The database is still at v1, so the failed start changed nothing.
+        connection = sqlite3.connect(str(old_db))
+        try:
+            version = connection.execute(
+                "SELECT MAX(version) FROM schema_migrations"
+            ).fetchone()[0]
+        finally:
+            connection.close()
+        self.assertEqual(version, 1)
+
+    def test_a_brand_new_database_keeps_no_pre_upgrade_image(self) -> None:
+        """R14: there is nothing to restore on a first start, so nothing is kept."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        base = Path(tmp.name)
+        store = Store(base / "workbench.db")
+        try:
+            self.assertEqual(store.schema_version(), SCHEMA_VERSION)
+        finally:
+            store.close()
+        self.assertEqual([item.name for item in base.iterdir() if ".bak" in item.name], [])
+
+    def test_an_older_schema_migrates_and_a_newer_one_is_refused(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        base = Path(tmp.name)
+        # A real v1 database: the v1 schema plus its ledger row.
+        old_db = base / "old.db"
+        _write_v1_database(old_db)
         # Opening it runs migrations 2..N forward.
         store = Store(old_db)
         try:

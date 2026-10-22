@@ -22,7 +22,8 @@ RUFF_VERSION = "0.15.12"
 # asserts against the Chromium this version ships, so an unpinned install
 # silently changes the browser under the suite (T-117). Bump here only;
 # both workflows read this constant. A bump requires re-running the
-# preview browser matrix and updating that ticket's version table.
+# preview browser matrix and updating the version table in
+# tests/preview/test_visual_edit_acceptance.py.
 PLAYWRIGHT_VERSION = "1.60.0"
 
 # Version line → exact shipped command set (ADR-0015 stable main).

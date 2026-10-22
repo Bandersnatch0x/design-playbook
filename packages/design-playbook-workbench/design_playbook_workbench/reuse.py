@@ -34,6 +34,13 @@ MAX_CLOSURE_REVISIONS = 200
 RELATIONS = ("derived-from", "copied-from")
 MODES = ("reference", "derive", "copy")
 
+#: Capabilities that mean "someone verified this content". A copy or an
+#: imported revision carries the content, never the verification: the tags
+#: are dropped so the new asset cannot claim a check nobody ran on it.
+_VERIFIED_CAPABILITIES = frozenset(
+    {"runnable-verified", "native-editable"}
+)
+
 
 def _loads(text: object) -> object:
     if isinstance(text, (list, dict)):
@@ -44,6 +51,20 @@ def _loads(text: object) -> object:
         return json.loads(text)
     except json.JSONDecodeError:  # pragma: no cover - stored by us
         return []
+
+
+def _importable_capabilities(raw: object) -> list[str]:
+    """The source capabilities a copy or import may keep.
+
+    A verified capability means a record bound to this exact revision was
+    confirmed. The new asset has no such record, so the tag is dropped
+    instead of being carried across with an empty verification list.
+    """
+    return [
+        capability
+        for capability in _loads(raw)
+        if capability not in _VERIFIED_CAPABILITIES
+    ]
 
 
 class ReuseService:
@@ -377,6 +398,9 @@ class ReuseService:
             "projectId": row["project_id"],
             "assetId": row["asset_id"],
             "assetName": asset["name"] if asset else None,
+            # The instance names its asset, and an upgrade writes that asset
+            # row, so the row's counter travels with it (R04).
+            "assetCounter": int(asset["counter"]) if asset else None,
             "revisionId": row["revision_id"],
             "revisionNumber": revision["revision_number"] if revision else None,
             "overrides": _loads(row["overrides_json"]),
@@ -419,6 +443,14 @@ class ReuseService:
             raise WorkbenchError(MISSING_DEPENDENCY)
         draft = self.store.draft(asset_id)
         attributes = _loads(draft["attributes_json"])
+        # The draft carries the same capability list as the revision; a
+        # verified tag dropped from the revision must not survive here and
+        # reappear on the next publish.
+        attributes["capabilities"] = [
+            capability
+            for capability in attributes.get("capabilities", [])
+            if capability not in _VERIFIED_CAPABILITIES
+        ]
         new_name = (
             f"{source['name']} copy" if name in (None, "") else str(name)
         )[:120]
@@ -451,13 +483,22 @@ class ReuseService:
                 if not self.blobs.verify(entry["contentHash"]):
                     raise WorkbenchError(CORRUPT_CONTENT)
             revision_id = str(uuid.uuid4())
+            # A copy keeps the content but not the approval. A verified
+            # capability without its record would claim the new asset was
+            # run-verified by someone, so those tags are dropped rather than
+            # carried across with an empty `verified` list.
+            copied_capabilities = [
+                capability
+                for capability in _loads(revision["capabilities_json"])
+                if capability not in _VERIFIED_CAPABILITIES
+            ]
             self.store.insert_revision(
                 revision_id=revision_id,
                 asset_id=new_asset_id,
                 revision_number=1,
                 content_hash=revision["content_hash"],
                 carrier=revision["carrier"],
-                capabilities=_loads(revision["capabilities_json"]),
+                capabilities=copied_capabilities,
                 dependencies=_loads(revision["dependencies_json"]),
                 source_locators=_loads(revision["source_locators_json"]),
                 manifest=_loads(revision["manifest_json"]),
@@ -647,6 +688,118 @@ class ReuseService:
         ]
 
         def apply() -> tuple[dict, int]:
+            # The closure is what makes the import independently resolvable:
+            # every dependency revision becomes its own local asset, deepest
+            # first, so each local revision can point at local ids instead of
+            # at revisions the target project cannot resolve.
+            local_asset_by_source: dict[str, str] = {}
+            local_revision_by_source: dict[str, str] = {}
+            for entry in plan["dependencies"]:
+                source_dependency = self.store.revision(entry["revisionId"])
+                if source_dependency is None:  # pragma: no cover - plan validated
+                    raise WorkbenchError(MISSING_DEPENDENCY)
+                dependency_asset = self.store.asset(source_dependency["asset_id"])
+                if dependency_asset is None:  # pragma: no cover - plan validated
+                    raise WorkbenchError(MISSING_DEPENDENCY)
+                dependency_manifest = _loads(source_dependency["manifest_json"])
+                dependency_capabilities = _importable_capabilities(
+                    source_dependency["capabilities_json"]
+                )
+                local_dependency_asset_id = str(uuid.uuid4())
+                local_dependency_revision_id = str(uuid.uuid4())
+                self.store.create_asset(
+                    asset_id=local_dependency_asset_id,
+                    project_id=target_id,
+                    kind=dependency_asset["kind"],
+                    name=dependency_asset["name"],
+                    tags=[],
+                    attributes={
+                        "manifest": dependency_manifest,
+                        "carrier": source_dependency["carrier"],
+                        "capabilities": dependency_capabilities,
+                        "roots": [],
+                        "warnings": [],
+                        "dynamicPreviewEnabled": False,
+                    },
+                    now=now,
+                )
+                local_edges = []
+                for edge in self.store.dependencies(source_dependency["revision_id"]):
+                    parent_asset = local_asset_by_source.get(edge["depends_on_asset_id"])
+                    parent_revision = local_revision_by_source.get(
+                        edge["depends_on_revision_id"]
+                    )
+                    if parent_asset is None or parent_revision is None:
+                        # The closure is ordered deepest first, so a missing
+                        # local parent means the plan was not a closure.
+                        raise WorkbenchError(MISSING_DEPENDENCY)
+                    local_edges.append(
+                        {
+                            "assetId": parent_asset,
+                            "revisionId": parent_revision,
+                            "revisionNumber": 1,
+                        }
+                    )
+                self.store.insert_revision(
+                    revision_id=local_dependency_revision_id,
+                    asset_id=local_dependency_asset_id,
+                    revision_number=1,
+                    content_hash=source_dependency["content_hash"],
+                    carrier=source_dependency["carrier"],
+                    capabilities=dependency_capabilities,
+                    dependencies=local_edges,
+                    source_locators=[
+                        {
+                            "kind": "imported-revision",
+                            "projectId": project_id,
+                            "assetId": source_dependency["asset_id"],
+                            "revisionId": source_dependency["revision_id"],
+                            "sourceHash": source_dependency["content_hash"],
+                            "run": None,
+                            "objectType": "revision",
+                            "objectId": source_dependency["revision_id"],
+                        }
+                    ],
+                    manifest=dependency_manifest,
+                    origin={
+                        "kind": "imported",
+                        "mode": plan["mode"],
+                        "sourceProjectId": project_id,
+                        "sourceAssetId": source_dependency["asset_id"],
+                        "sourceRevisionId": source_dependency["revision_id"],
+                        "dependencyOf": plan["source"]["assetId"],
+                    },
+                    now=now,
+                )
+                if local_edges:
+                    self.store.insert_dependencies(
+                        revision_id=local_dependency_revision_id,
+                        dependencies=local_edges,
+                        now=now,
+                    )
+                local_asset_by_source[source_dependency["asset_id"]] = (
+                    local_dependency_asset_id
+                )
+                local_revision_by_source[source_dependency["revision_id"]] = (
+                    local_dependency_revision_id
+                )
+
+            imported_dependencies = []
+            for edge in self.store.dependencies(revision["revision_id"]):
+                local_asset = local_asset_by_source.get(edge["depends_on_asset_id"])
+                local_revision = local_revision_by_source.get(
+                    edge["depends_on_revision_id"]
+                )
+                if local_asset is None or local_revision is None:
+                    raise WorkbenchError(MISSING_DEPENDENCY)
+                imported_dependencies.append(
+                    {
+                        "assetId": local_asset,
+                        "revisionId": local_revision,
+                        "revisionNumber": 1,
+                    }
+                )
+
             self.store.create_asset(
                 asset_id=local_asset_id,
                 project_id=target_id,
@@ -656,7 +809,9 @@ class ReuseService:
                 attributes={
                     "manifest": plan["manifest"],
                     "carrier": revision["carrier"],
-                    "capabilities": _loads(revision["capabilities_json"]),
+                    "capabilities": _importable_capabilities(
+                        revision["capabilities_json"]
+                    ),
                     "roots": [],
                     "warnings": [],
                     "dynamicPreviewEnabled": False,
@@ -669,8 +824,8 @@ class ReuseService:
                 revision_number=1,
                 content_hash=revision["content_hash"],
                 carrier=revision["carrier"],
-                capabilities=_loads(revision["capabilities_json"]),
-                dependencies=[],
+                capabilities=_importable_capabilities(revision["capabilities_json"]),
+                dependencies=imported_dependencies,
                 source_locators=locators,
                 manifest=plan["manifest"],
                 origin={
@@ -682,6 +837,12 @@ class ReuseService:
                 },
                 now=now,
             )
+            if imported_dependencies:
+                self.store.insert_dependencies(
+                    revision_id=local_revision_id,
+                    dependencies=imported_dependencies,
+                    now=now,
+                )
             self.store.insert_import_closure(
                 import_closure_id=closure_id,
                 project_id=target_id,
@@ -698,7 +859,7 @@ class ReuseService:
             payload["importClosureId"] = closure_id
             payload["mode"] = plan["mode"]
             payload["source"] = plan["source"]
-            payload["dependencies"] = plan["dependencies"]
+            payload["dependencies"] = imported_dependencies
             return payload, 0
 
         with self.store.transaction():
@@ -832,6 +993,7 @@ class ReuseService:
         if replayed is not None:
             return replayed
         self.service.require_project(project_id, scope="write")
+        self.assets._check_counter(self.store.asset(asset_id), operation)
         if not isinstance(instance_ids, list) or not instance_ids:
             raise WorkbenchError(INVALID_INPUT)
         plan = self.upgrade_plan(project_id, asset_id, to_revision_id=to_revision_id)
@@ -929,6 +1091,7 @@ class ReuseService:
         if replayed is not None:
             return replayed
         self.service.require_project(project_id, scope="write")
+        self.assets._check_counter(self.store.asset(asset_id), operation)
         if not isinstance(instance_ids, list) or not instance_ids:
             raise WorkbenchError(INVALID_INPUT)
         revision = self.store.revision(str(to_revision_id))

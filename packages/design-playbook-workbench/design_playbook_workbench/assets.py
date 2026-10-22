@@ -12,6 +12,7 @@ extension. Publishing freezes the draft into an immutable revision.
 from __future__ import annotations
 
 import os
+import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,7 @@ from typing import Callable
 
 from .blobs import BlobStore, digest_bytes
 from .errors import (
+    CONFLICT,
     CORRUPT_CONTENT,
     INVALID_INPUT,
     INVALID_TARGET,
@@ -180,9 +182,12 @@ def classify(relative_path: str, data: bytes) -> tuple[str, str, str, list[str]]
         data.decode("utf-8")
         encoding = "utf-8"
     except UnicodeDecodeError:
-        # Unreadable as text: it stays a reference-only binary, never a
-        # fabricated source or preview capability.
-        return "binary", "application/octet-stream", "binary", [CAPABILITY_REFERENCE]
+        # A text-typed file that is not UTF-8 is a structured refusal, not a
+        # silent downgrade: a maintainer who picked a .md or .js expects a
+        # source asset, and a reference-only binary would hide the mismatch.
+        raise WorkbenchError(
+            INVALID_INPUT, detail="a text file is not valid UTF-8"
+        ) from None
     if suffix in (".md", ".markdown") or name == "design.md":
         return "markdown", "text/markdown", encoding, [CAPABILITY_REFERENCE]
     if suffix == ".json":
@@ -240,6 +245,20 @@ def _carrier_kind(records: list[FileRecord]) -> tuple[str, list[str]]:
 
 class AssetService:
     """The one owner of asset import, discovery, and revision publication."""
+
+    def _check_counter(self, row: dict, operation: Operation) -> int:
+        """R04: an explicit expected counter is required, never last-write-wins.
+
+        Only writes that change an existing asset row take this check; a
+        create has no prior counter to be stale against.
+        """
+        if operation.expected_counter is None:
+            raise WorkbenchError(
+                INVALID_INPUT, detail="asset writes require an expected counter"
+            )
+        if int(operation.expected_counter) != int(row["counter"]):
+            raise WorkbenchError(CONFLICT, operation_id=operation.operation_id)
+        return int(row["counter"])
 
     def __init__(
         self,
@@ -556,6 +575,9 @@ class AssetService:
                     "name": row["name"],
                     "kind": row["kind"],
                     "lifecycle": row["lifecycle"],
+                    # The listing row carries its counter so a write from the
+                    # list can send the value it was looking at (R04).
+                    "counter": int(row["counter"]),
                     "capabilities": capabilities,
                     "tags": tags,
                     "updatedAt": row["updated_at"],
@@ -631,6 +653,7 @@ class AssetService:
             if payload["dynamicPreviewEnabled"]
             else None
         )
+        external = self._external_references(entry)
         return {
             "assetId": asset_id,
             "entry": entry["path"],
@@ -646,11 +669,39 @@ class AssetService:
                 "managementApi": "blocked",
                 "sessionCredential": "absent",
             },
+            # R03: the preview policy blocks external resources, so anything
+            # the entry asks for from off-machine will be missing. Naming them
+            # is the difference between "renders differently" and "a file is
+            # silently absent", and the policy is never relaxed to make them
+            # load.
+            "externalResources": external,
             "notes": (
                 "静态预览不执行脚本；动态预览需显式启用，且运行在独立回环来源，"
                 "不携带会话凭证、不能访问管理 API 或外网。"
             ),
         }
+
+    def _external_references(self, entry: dict) -> list[str]:
+        """URLs the preview entry asks for that the policy will refuse."""
+        try:
+            data = self.blobs.read(entry["contentHash"])
+        except (WorkbenchError, KeyError):
+            return []
+        text = data.decode("utf-8", errors="replace")
+        found: list[str] = []
+        for match in re.finditer(
+            r"""(?:src|href|srcset|poster|data)\s*=\s*["']([^"']+)["']""",
+            text,
+            re.IGNORECASE,
+        ):
+            url = match.group(1).strip()
+            if url.startswith(("http://", "https://", "//")):
+                found.append(url)
+        for match in re.finditer(
+            r"""url\(\s*["']?((?:https?:)?//[^)"']+)""", text, re.IGNORECASE
+        ):
+            found.append(match.group(1).strip())
+        return sorted(set(found))
 
     def _preview_entry(self, payload: dict) -> dict:
         manifest = payload.get("manifest") or []
@@ -678,6 +729,7 @@ class AssetService:
         row = self.store.asset(asset_id)
         if row is None or row["project_id"] != project_id:
             raise WorkbenchError(INVALID_TARGET)
+        self._check_counter(row, operation)
         draft = self.store.draft(asset_id)
         attributes = _loads(draft["attributes_json"])
         if CAPABILITY_STATIC_PREVIEW not in attributes.get("capabilities", []):
@@ -729,6 +781,7 @@ class AssetService:
         row = self.store.asset(asset_id)
         if row is None or row["project_id"] != project_id:
             raise WorkbenchError(INVALID_TARGET)
+        self._check_counter(row, operation)
         draft = self.store.draft(asset_id)
         attributes = _loads(draft["attributes_json"])
         roots = attributes.get("roots") or []
@@ -831,12 +884,18 @@ class AssetService:
         *,
         operation: Operation,
         verified_by: dict | None = None,
+        dependencies: list[dict] | None = None,
     ) -> dict:
         """Publish a revision.
 
         A capability like ``runnable-verified`` still needs a verification
         record; ``verified_by`` is the owner confirmation bound to the exact
         content hash being published, and nothing else is accepted as proof.
+
+        ``dependencies`` carries declared edges this publish introduces (a
+        page that instantiates components, for instance). They are the same
+        shape ``publish_with_dependencies`` accepts and are recorded in both
+        the revision and the dependency table.
         """
         replayed = self.service._replay(
             operation, kind="asset-publish", entity_id=asset_id, project_id=project_id)
@@ -846,6 +905,7 @@ class AssetService:
         row = self.store.asset(asset_id)
         if row is None or row["project_id"] != project_id:
             raise WorkbenchError(INVALID_TARGET)
+        self._check_counter(row, operation)
         draft = self.store.draft(asset_id)
         attributes = _loads(draft["attributes_json"])
         manifest = attributes.get("manifest") or []
@@ -870,6 +930,10 @@ class AssetService:
                 or verified_by.get("sourceHash") != manifest[0]["contentHash"]
                 or not verified_by.get("confirmationId")
                 or not verified_by.get("role")
+                # R03: a verification record names the environment it ran in.
+                # A hash alone cannot tell a later reader where the check
+                # happened, and re-running it elsewhere is a different fact.
+                or not verified_by.get("environment")
             ):
                 raise WorkbenchError(MISSING_DEPENDENCY)
             verified = [dict(verified_by)]
@@ -877,6 +941,15 @@ class AssetService:
         revision_id = str(uuid.uuid4())
         now = self._now()
         locators = _draft_locators(draft, project_id)
+        declared = list(dependencies or [])
+        for dependency in declared:
+            # A declared edge must resolve inside this project: a dangling
+            # one is a missing dependency, not a pointer to trust later.
+            dependency_revision = self.store.revision(dependency.get("revisionId"))
+            if dependency_revision is None or dependency_revision["asset_id"] != dependency.get(
+                "assetId"
+            ):
+                raise WorkbenchError(MISSING_DEPENDENCY)
 
         def apply() -> tuple[dict, int]:
             self.store.insert_revision(
@@ -886,13 +959,17 @@ class AssetService:
                 content_hash=manifest[0]["contentHash"],
                 carrier=attributes.get("carrier", row["kind"]),
                 capabilities=capabilities,
-                dependencies=[],
+                dependencies=declared,
                 source_locators=locators,
                 manifest=manifest,
                 origin={"kind": "import", "importRoots": attributes.get("roots", [])},
                 verified=verified,
                 now=now,
             )
+            if declared:
+                self.store.insert_dependencies(
+                    revision_id=revision_id, dependencies=declared, now=now
+                )
             asset = self.store.asset(asset_id)
             return (
                 self._asset_payload(asset, self.store.draft(asset_id), self.store.latest_revision(asset_id)),

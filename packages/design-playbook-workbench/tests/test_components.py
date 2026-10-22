@@ -103,11 +103,17 @@ class ComponentsTestCase(unittest.TestCase):
         self.store.close()
         self._tmp.cleanup()
 
-    def operation(self, payload: dict) -> Operation:
+    def operation(self, payload: dict, *, expected: int | None = None) -> Operation:
         self._operations += 1
         return Operation(
-            operation_id=f"op_comp_{self._operations:08d}", payload=payload
+            operation_id=f"op_comp_{self._operations:08d}",
+            payload=payload,
+            expected_counter=expected,
         )
+
+    def asset_counter(self, asset_id: str) -> int:
+        """The asset's current counter: an existing-asset write needs it (R04)."""
+        return int(self.store.asset(asset_id)["counter"])
 
     def grant(self, scopes: list[str]) -> None:
         counter = int(self.store.project(self.project_id)["counter"])
@@ -254,13 +260,13 @@ class ComponentLifecycleTest(ComponentsTestCase):
             self.project_id,
             component["assetId"],
             definition=definition,
-            operation=self.operation({"action": "component-update"}),
+            operation=self.operation({"action": "component-update"}, expected=self.asset_counter(component["assetId"])),
         )
         self.assertTrue(updated["result"]["validation"]["valid"])
         published = self.components.publish(
             self.project_id,
             component["assetId"],
-            operation=self.operation({"action": "component-publish"}),
+            operation=self.operation({"action": "component-publish"}, expected=self.asset_counter(component["assetId"])),
         )
         self.assertEqual(published["result"]["revisionNumber"], 1)
         revision = self.store.latest_revision(component["assetId"])
@@ -282,13 +288,13 @@ class ComponentLifecycleTest(ComponentsTestCase):
             self.project_id,
             component["assetId"],
             definition=missing,
-            operation=self.operation({"action": "component-update"}),
+            operation=self.operation({"action": "component-update"}, expected=self.asset_counter(component["assetId"])),
         )
         with self.assertRaises(WorkbenchError) as caught:
             self.components.publish(
                 self.project_id,
                 component["assetId"],
-                operation=self.operation({"action": "component-publish"}),
+                operation=self.operation({"action": "component-publish"}, expected=self.asset_counter(component["assetId"])),
             )
         self.assertEqual(caught.exception.code, MISSING_DEPENDENCY)
         self.assertEqual(self.store.asset_revisions(component["assetId"]), [])
@@ -307,7 +313,7 @@ class ComponentLifecycleTest(ComponentsTestCase):
             self.components.publish(
                 self.project_id,
                 component["assetId"],
-                operation=self.operation({"action": "component-publish-2"}),
+                operation=self.operation({"action": "component-publish-2"}, expected=self.asset_counter(component["assetId"])),
             )
         self.assertEqual(caught.exception.code, MISSING_DEPENDENCY)
         self.assertEqual(self.store.asset_revisions(component["assetId"]), [])
@@ -321,7 +327,10 @@ class ComponentLifecycleTest(ComponentsTestCase):
                 DEFINITION,
                 dependencies={"tokens": [], "components": [component["assetId"]]},
             ),
-            operation=self.operation({"action": "component-update"}),
+            operation=self.operation(
+                {"action": "component-update"},
+                expected=self.asset_counter(component["assetId"]),
+            ),
         )
         detail = self.components.component(self.project_id, component["assetId"])
         self.assertIn(
@@ -332,7 +341,7 @@ class ComponentLifecycleTest(ComponentsTestCase):
             self.components.publish(
                 self.project_id,
                 component["assetId"],
-                operation=self.operation({"action": "component-publish"}),
+                operation=self.operation({"action": "component-publish"}, expected=self.asset_counter(component["assetId"])),
             )
         self.assertEqual(caught.exception.code, MISSING_DEPENDENCY)
         self.assertEqual(self.store.asset_revisions(component["assetId"]), [])
@@ -349,7 +358,10 @@ class ComponentLifecycleTest(ComponentsTestCase):
         self.assets.publish_revision(
             self.project_id,
             imported["assetId"],
-            operation=self.operation({"action": "publish"}),
+            operation=self.operation(
+                {"action": "publish"},
+                expected=self.asset_counter(imported["assetId"]),
+            ),
         )
         return imported["assetId"]
 
@@ -474,7 +486,7 @@ class PageLayoutTest(ComponentsTestCase):
 
         self.components.publish(
             self.project_id, component["assetId"],
-            operation=self.operation({"action": "component-publish"}),
+            operation=self.operation({"action": "component-publish"}, expected=self.asset_counter(component["assetId"])),
         )
         created = self.create_page(page)
         detail = self.components.page_layout(self.project_id, created["assetId"])
@@ -492,6 +504,40 @@ class PageLayoutTest(ComponentsTestCase):
         with self.assertRaises(WorkbenchError):
             self.create_page(unknown_instance, name="未知实例")
 
+    def test_a_published_page_records_the_components_it_instantiates(self) -> None:
+        """R07: a page's revision depends on the components its nodes use."""
+        component = self.create_component(DEFINITION)
+        self.components.publish(
+            self.project_id,
+            component["assetId"],
+            operation=self.operation(
+                {"action": "component-publish"},
+                expected=self.asset_counter(component["assetId"]),
+            ),
+        )
+        page = {
+            "name": "P",
+            "nodes": [
+                {"id": "root", "type": "stack", "children": ["btn"], "props": {}},
+                {"id": "btn", "type": "instance",
+                 "props": {"assetId": component["assetId"], "params": {"label": "保存"}}},
+            ],
+        }
+        created = self.create_page(page)
+        self.components.publish_page(
+            self.project_id,
+            created["assetId"],
+            operation=self.operation(
+                {"action": "page-publish"},
+                expected=self.asset_counter(created["assetId"]),
+            ),
+        )
+        revision = self.store.latest_revision(created["assetId"])
+        edges = self.store.dependencies(revision["revision_id"])
+        self.assertEqual(
+            [edge["depends_on_asset_id"] for edge in edges], [component["assetId"]]
+        )
+
     def test_pages_publish_their_own_document(self) -> None:
         page = self.create_page(PAGE)
         self.assertEqual(
@@ -500,7 +546,7 @@ class PageLayoutTest(ComponentsTestCase):
         )
         published = self.components.publish_page(
             self.project_id, page["assetId"],
-            operation=self.operation({"action": "page-publish"}),
+            operation=self.operation({"action": "page-publish"}, expected=self.asset_counter(page["assetId"])),
         )
         self.assertEqual(published["result"]["revisionNumber"], 1)
         self.assertTrue(published["result"]["validation"]["valid"])
@@ -522,7 +568,10 @@ class DistillCandidateTest(ComponentsTestCase):
         self.components.publish_page(
             self.project_id,
             self.page["assetId"],
-            operation=self.operation({"action": "page-publish"}),
+            operation=self.operation(
+                {"action": "page-publish"},
+                expected=self.asset_counter(self.page["assetId"]),
+            ),
         )
         self.page_revision = self.store.latest_revision(self.page["assetId"])
         self.before_layout = self._page_bytes()
@@ -559,7 +608,7 @@ class DistillCandidateTest(ComponentsTestCase):
             self.components.publish(
                 self.project_id,
                 result["assetId"],
-                operation=self.operation({"action": "component-publish"}),
+                operation=self.operation({"action": "component-publish"}, expected=self.asset_counter(result["assetId"])),
             )
         self.assertEqual(caught.exception.code, INVALID_INPUT)
         self.assertEqual(self.store.asset_revisions(result["assetId"]), [])
@@ -590,12 +639,12 @@ class DistillCandidateTest(ComponentsTestCase):
                     "complete": True,
                 },
             },
-            operation=self.operation({"action": "component-update"}),
+            operation=self.operation({"action": "component-update"}, expected=self.asset_counter(result["assetId"])),
         )
         published = self.components.publish(
             self.project_id,
             result["assetId"],
-            operation=self.operation({"action": "component-publish"}),
+            operation=self.operation({"action": "component-publish"}, expected=self.asset_counter(result["assetId"])),
         )
         self.assertEqual(published["result"]["revisionNumber"], 1)
         self.assertNotIn(
@@ -618,7 +667,7 @@ class DistillCandidateTest(ComponentsTestCase):
                 self.project_id,
                 component["assetId"],
                 node_ids=["root"],
-                operation=self.operation({"action": "distill-wrong-kind"}),
+                operation=self.operation({"action": "distill-wrong-kind"}, expected=self.asset_counter(component["assetId"])),
             )
         self.assertEqual(caught.exception.code, UNSUPPORTED)
         with self.assertRaises(WorkbenchError) as caught:

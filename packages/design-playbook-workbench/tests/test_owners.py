@@ -134,6 +134,10 @@ class OwnerProjectionTestCase(unittest.TestCase):
         self.store.close()
         self._tmp.cleanup()
 
+    def asset_counter(self, asset_id: str) -> int:
+        """The asset's current counter: an existing-asset write needs it (R04)."""
+        return int(self.store.asset(asset_id)["counter"])
+
     def operation(self, payload: dict, *, expected: int | None = None) -> Operation:
         self._operations += 1
         return Operation(
@@ -412,7 +416,7 @@ class VerifiedPublishTest(OwnerProjectionTestCase):
         with self.assertRaises(WorkbenchError) as caught:
             self.owners.publish_verified(
                 self.project_id, asset_id, run_id="run-1", object_id="c-1",
-                operation=self.operation({"action": "publish-verified"}),
+                operation=self.operation({"action": "publish-verified"}, expected=self.asset_counter(asset_id)),
             )
         self.assertEqual(caught.exception.code, STALE_EVIDENCE)
         self.assertEqual(self.store.asset_revisions(asset_id), [])
@@ -443,7 +447,7 @@ class VerifiedPublishTest(OwnerProjectionTestCase):
         with self.assertRaises(WorkbenchError) as caught:
             self.owners.publish_verified(
                 self.project_id, other["assetId"], run_id="run-1", object_id="c-1",
-                operation=self.operation({"action": "publish-verified"}),
+                operation=self.operation({"action": "publish-verified"}, expected=self.asset_counter(other["assetId"])),
             )
         self.assertEqual(caught.exception.code, STALE_EVIDENCE)
 
@@ -451,7 +455,7 @@ class VerifiedPublishTest(OwnerProjectionTestCase):
         # revision records who verified it.
         published = self.owners.publish_verified(
             self.project_id, asset_id, run_id="run-1", object_id="c-1",
-            operation=self.operation({"action": "publish-verified"}),
+            operation=self.operation({"action": "publish-verified"}, expected=self.asset_counter(asset_id)),
         )["result"]
         self.assertEqual(published["revisionNumber"], 1)
         self.assertEqual(published["verifiedBy"]["runId"], "run-1")
@@ -459,6 +463,12 @@ class VerifiedPublishTest(OwnerProjectionTestCase):
         verified = json.loads(revision["verified_json"])
         self.assertEqual(verified[0]["role"], "owner-verified")
         self.assertEqual(verified[0]["sourceHash"], content_hash)
+        # R03: the record binds the environment the check ran in, not only
+        # the revision and the input hash.
+        self.assertEqual(verified[0]["environment"], "design-playbook run-console")
+        self.assertEqual(
+            published["verifiedBy"]["environment"], "design-playbook run-console"
+        )
 
     def test_a_re_run_that_moves_the_owner_fact_makes_the_confirmation_stale(self) -> None:
         asset_id = self.make_asset(["reference", "static-preview", "runnable-verified"])
@@ -499,7 +509,7 @@ class VerifiedPublishTest(OwnerProjectionTestCase):
         with self.assertRaises(WorkbenchError) as caught:
             self.owners.publish_verified(
                 self.project_id, asset_id, run_id="run-9", object_id="c-1",
-                operation=self.operation({"action": "publish-verified"}),
+                operation=self.operation({"action": "publish-verified"}, expected=self.asset_counter(asset_id)),
             )
         self.assertEqual(caught.exception.code, STALE_EVIDENCE)
 
@@ -518,7 +528,7 @@ class VerifiedPublishTest(OwnerProjectionTestCase):
         with self.assertRaises(WorkbenchError) as caught:
             self.owners.publish_verified(
                 self.project_id, asset_id, run_id="run-9", object_id="c-1",
-                operation=self.operation({"action": "publish-verified"}),
+                operation=self.operation({"action": "publish-verified"}, expected=self.asset_counter(asset_id)),
             )
         self.assertEqual(caught.exception.code, STALE_EVIDENCE)
         self.assertEqual(self.store.asset_revisions(asset_id), [])
@@ -536,7 +546,7 @@ class VerifiedPublishTest(OwnerProjectionTestCase):
         )
         published = self.owners.publish_verified(
             self.project_id, asset_id, run_id="run-9", object_id="c-1",
-            operation=self.operation({"action": "publish-verified"}),
+            operation=self.operation({"action": "publish-verified"}, expected=self.asset_counter(asset_id)),
         )["result"]
         self.assertEqual(published["revisionNumber"], 1)
 
@@ -568,8 +578,11 @@ class VerifiedPublishTest(OwnerProjectionTestCase):
         )
         asset_id = self.make_asset(["reference", "source-unverified"])
         published = self.assets.publish_revision(
-            self.project_id, asset_id,
-            operation=self.operation({"action": "publish"}),
+            self.project_id,
+            asset_id,
+            operation=self.operation(
+                {"action": "publish"}, expected=self.asset_counter(asset_id)
+            ),
         )["result"]
         self.assertNotIn("runnable-verified", published["capabilities"])
         self.assertEqual(
@@ -586,7 +599,7 @@ class VerifiedPublishTest(OwnerProjectionTestCase):
         with self.assertRaises(WorkbenchError) as caught:
             self.owners.publish_verified(
                 self.project_id, asset_id, run_id="run-2", object_id="c-1",
-                operation=self.operation({"action": "publish-verified"}),
+                operation=self.operation({"action": "publish-verified"}, expected=self.asset_counter(asset_id)),
             )
         self.assertEqual(caught.exception.code, STALE_EVIDENCE)
 

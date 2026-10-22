@@ -507,6 +507,9 @@ class CancelAndRetryTest(WorkRequestTestCase):
             operation=self.operation({"action": "cancel"}),
         )["result"]
         self.assertEqual(asked["state"], "cancel-requested")
+        # R11: the attempt is not called cancelled until the host confirms
+        # the stop; before that it only records that a stop was requested.
+        self.assertEqual(asked["attempt"]["state"], "cancel-requested")
         # New write-backs are refused immediately, and nothing claims the
         # process stopped.
         with self.assertRaises(WorkbenchError) as caught:
@@ -536,9 +539,26 @@ class CancelAndRetryTest(WorkRequestTestCase):
             operation=self.operation({"action": "confirm-cancelled"}),
         )["result"]
         self.assertEqual(confirmed["state"], "cancelled")
+        self.assertEqual(confirmed["attempt"]["state"], "cancelled")
         self.assertFalse(
             (self.data_dir.session_dir / f"claim-{request['requestId']}.json").exists()
         )
+
+    def test_a_running_request_is_not_a_retry_source(self) -> None:
+        """R11: a retry follows a failure, and ``running`` is not one.
+
+        The agent may still hold that lease; retiring it from under the host
+        would let a second attempt run while the first is alive.
+        """
+        selection = self.confirmed_context()
+        request = self.create_request(selection)
+        self.claimed(request)
+        with self.assertRaises(WorkbenchError) as caught:
+            self.work.retry(
+                self.project_id, request["requestId"],
+                operation=self.operation({"action": "retry"}),
+            )
+        self.assertEqual(caught.exception.code, CONFLICT)
 
     def test_retry_creates_a_new_attempt_and_retires_the_old_capability(self) -> None:
         selection = self.confirmed_context()

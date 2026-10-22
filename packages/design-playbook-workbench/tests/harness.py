@@ -428,11 +428,21 @@ class WorkbenchHarness:
         payload: dict | None = None,
         capability: str | None = None,
         operation_id: str | None = None,
+        expected_counter: int | None = None,
     ) -> Response:
-        operation = {
+        operation: dict[str, Any] = {
             "operationId": operation_id or _new_operation_id(verb),
             "payload": {"action": verb, "assetId": asset_id, **(payload or {})},
         }
+        if expected_counter is not None:
+            operation["expectedCounter"] = expected_counter
+        else:
+            # An asset write against an existing asset needs a counter (R04).
+            # Callers that do not care about the race read the current one, so
+            # every test exercises the same envelope the UI sends.
+            counter = self.asset_counter(project_id, asset_id)
+            if counter is not None:
+                operation["expectedCounter"] = counter
         use_capability = capability is not None
         return http_request(
             self.runtime,
@@ -443,6 +453,17 @@ class WorkbenchHarness:
             capability=capability,
             origin=None if use_capability else self.runtime.origin,
         )
+
+    def asset_counter(self, project_id: str, asset_id: str) -> int | None:
+        """The asset row's current counter, or None when it does not exist yet."""
+        response = http_request(
+            self.runtime,
+            f"/api/v1/projects/{project_id}/assets/{asset_id}",
+            token=self.token,
+        )
+        if response.status != 200:
+            return None
+        return int(response.json["asset"]["counter"])
 
     def asset_action_import_closure(
         self,
@@ -551,8 +572,11 @@ def revoke_folder_access(path: Path) -> "Callable[[], None] | None":
     host cannot apply the revocation, or when the applied change does not
     actually block enumeration (a capability or privilege bypass): the
     caller should skip rather than assert a denial that never happened.
-    The restore callable puts the original access back and raises when the
-    reset fails, so a leaked probe directory cannot pass silently.
+    The restore callable makes the folder listable again and raises when the
+    reset fails, so a leaked probe directory cannot pass silently. On Windows
+    it runs ``icacls /reset``, which restores the inherited entries rather than
+    the folder's previous explicit ones; a probe directory that needs its exact
+    ACL preserved should be saved and restored instead.
     """
     if os.name == "nt":
         whoami = subprocess.run(

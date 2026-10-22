@@ -45,6 +45,7 @@ const state = {
   lifeData: null,
   lifeSelected: null,
   lifeRefReport: null,
+  removedProjects: [],
 };
 
 const elements = {
@@ -67,6 +68,8 @@ const elements = {
   listError: document.getElementById("list-error"),
   table: document.getElementById("project-table"),
   rows: document.getElementById("project-rows"),
+  removedProjects: document.getElementById("removed-projects"),
+  removedProjectList: document.getElementById("removed-project-list"),
   rowTemplate: document.getElementById("project-row-template"),
   live: document.getElementById("live"),
   proposalsPanel: document.getElementById("proposals-panel"),
@@ -132,6 +135,10 @@ const elements = {
   tokensBaselineForm: document.getElementById("tokens-baseline-form"),
   tokensBaselinePath: document.getElementById("tokens-baseline-path"),
   tokensBaselineButton: document.getElementById("tokens-baseline-button"),
+  notesForm: document.getElementById("notes-form"),
+  notesPath: document.getElementById("notes-path"),
+  notesText: document.getElementById("notes-text"),
+  notesResult: document.getElementById("notes-result"),
   tokensBaselineResult: document.getElementById("tokens-baseline-result"),
   tokensClose: document.getElementById("tokens-close"),
   assetDocumentControls: document.getElementById("asset-document-controls"),
@@ -209,6 +216,12 @@ const elements = {
   propContent: document.getElementById("prop-content"),
   propContentLabel: document.getElementById("prop-content-label"),
   propContentApply: document.getElementById("prop-content-apply"),
+  propGap: document.getElementById("prop-gap"),
+  propPadding: document.getElementById("prop-padding"),
+  propDirection: document.getElementById("prop-direction"),
+  propColumns: document.getElementById("prop-columns"),
+  propAlign: document.getElementById("prop-align"),
+  propSpacingApply: document.getElementById("prop-spacing-apply"),
   propToken: document.getElementById("prop-token"),
   propTokenApply: document.getElementById("prop-token-apply"),
   boardWidth: document.getElementById("board-width"),
@@ -703,6 +716,54 @@ function renderProjects() {
     row.querySelector(".remove-button").addEventListener("click", () => removeProject(project));
     elements.rows.appendChild(fragment);
   }
+  renderRemovedProjects();
+}
+
+function renderRemovedProjects() {
+  const removed = state.removedProjects || [];
+  elements.removedProjects.hidden = removed.length === 0;
+  elements.removedProjectList.textContent = "";
+  for (const project of removed) {
+    const item = document.createElement("li");
+    const label = document.createElement("span");
+    label.textContent = `${project.name}（已解除登记）`;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "danger";
+    button.textContent = "删除工作台项目数据";
+    button.addEventListener("click", () => deleteProjectData(project));
+    item.append(label, button);
+    elements.removedProjectList.appendChild(item);
+  }
+}
+
+async function deleteProjectData(project) {
+  const confirmed = await askConfirm(
+    `永久删除「${project.name}」的工作台数据？
+
+` +
+      "这会移除资产、修订、画布和任务记录。本地源目录与已导出的备份不受影响，此操作不可撤销。"
+  );
+  if (!confirmed) return;
+  try {
+    await api(
+      `/api/v1/projects/${project.projectId}/actions/delete-data`,
+      {
+        method: "POST",
+        body: {
+          operation: mutation(newOperationId(), {
+            action: "delete-data",
+            projectId: project.projectId,
+          }),
+        },
+      }
+    );
+    announce("工作台项目数据已删除，本地文件未改动。");
+    await loadProjects();
+  } catch (error) {
+    elements.listError.hidden = false;
+    elements.listError.textContent = describeFailure(error, "删除项目数据");
+  }
 }
 
 function wireRowMenu(row) {
@@ -754,6 +815,7 @@ async function loadProjects() {
   try {
     const payload = await api("/api/v1/projects");
     state.projects = payload.projects || [];
+    state.removedProjects = payload.removedProjects || [];
     state.currentProjectId = payload.currentProjectId || null;
     elements.listError.hidden = true;
     renderProjects();
@@ -1060,6 +1122,14 @@ function renderProposals() {
     const awaiting = detail.state === "awaiting-authorization";
     const recovering = detail.state === "recovery-required";
     const applied = detail.state === "applied";
+    const sync = detail.pendingSync;
+    const syncNote = node.querySelector(".proposal-sync");
+    syncNote.hidden = !(sync && sync.pending);
+    if (sync && sync.pending) {
+      syncNote.textContent =
+        `待同步：${sync.changes.map((change) => change.path).join("、")} ` +
+        "在工作台之外被改动；应用会因基线不符停止，工作台不会覆盖。";
+    }
     node.querySelector(".proposal-recovery").hidden = !recovering;
     node.querySelector(".apply-button").hidden = !awaiting;
     node.querySelector(".reject-button").hidden = !awaiting;
@@ -1319,8 +1389,16 @@ async function loadAssets() {
 }
 
 // The row markup is #asset-template: parsing it once and repeating it per hit
-// keeps the list a single DOM write instead of one insert per row.
-const ASSET_ROW_HTML = elements.assetTemplate.innerHTML.trim();
+// keeps the list a single DOM write instead of one insert per row. Read lazily
+// so a missing template breaks the asset list, not the whole shell.
+let assetRowHtml = null;
+
+function assetRowMarkup() {
+  if (assetRowHtml === null) {
+    assetRowHtml = elements.assetTemplate.innerHTML.trim();
+  }
+  return assetRowHtml;
+}
 
 function assetMetaText(asset) {
   const matched = asset.matchedOn === "tag" ? "（按标签匹配）" : "";
@@ -1335,7 +1413,7 @@ function renderAssets() {
   // Only the template's own markup reaches the parser. Every per-row value is
   // written through textContent or dataset, so no asset data is ever parsed as
   // HTML.
-  elements.assetItems.innerHTML = ASSET_ROW_HTML.repeat(state.assets.length);
+  elements.assetItems.innerHTML = assetRowMarkup().repeat(state.assets.length);
   elements.assetsEmpty.hidden = state.assets.length > 0;
   // Positions follow the template: li > button.asset-select > name, meta.
   const rows = elements.assetItems.children;
@@ -1374,6 +1452,23 @@ async function selectAsset(assetId) {
   } catch (error) {
     elements.assetsError.hidden = false;
     elements.assetsError.textContent = describeFailure(error, "读取资产详情");
+  }
+}
+
+async function refreshAssetCounter(asset) {
+  const project = state.assetsProject;
+  if (!project || !asset) return;
+  try {
+    const payload = await api(
+      `/api/v1/projects/${project.projectId}/assets/${asset.assetId}`
+    );
+    asset.counter = payload.asset.counter;
+    if (state.selectedAsset && state.selectedAsset.assetId === asset.assetId) {
+      state.selectedAsset.counter = payload.asset.counter;
+    }
+  } catch (error) {
+    // A failed refresh only means the next write may be refused as stale,
+    // which the server reports honestly; it is not a silent success.
   }
 }
 
@@ -1470,10 +1565,11 @@ async function enableDynamicPreview() {
       {
         method: "POST",
         body: {
-          operation: mutation(newOperationId(), {
-            action: "preview-enable",
-            assetId: asset.assetId,
-          }),
+          operation: mutation(
+            newOperationId(),
+            { action: "preview-enable", assetId: asset.assetId },
+            asset.counter
+          ),
         },
       }
     );
@@ -1631,10 +1727,11 @@ async function saveDocument() {
       {
         method: "POST",
         body: {
-          operation: mutation(newOperationId(), {
-            action: DOCUMENT_LABELS[kind].update,
-            assetId: asset.assetId,
-          }),
+          operation: mutation(
+            newOperationId(),
+            { action: DOCUMENT_LABELS[kind].update, assetId: asset.assetId },
+            asset.counter
+          ),
           ...fields,
         },
       }
@@ -1643,6 +1740,9 @@ async function saveDocument() {
     renderDocumentValidation(payload.result.validation, kind);
     elements.documentStatus.textContent =
       "草稿已保存并通过校验；发布新版本后才会成为固定修订。";
+    // The write advanced the asset's counter; the publish button below must
+    // send the value it is actually based on (R04).
+    asset.counter = payload.result.counter;
     announce("文档草稿已保存。");
     await loadAssets();
   } catch (error) {
@@ -1663,10 +1763,11 @@ async function publishDocument() {
       {
         method: "POST",
         body: {
-          operation: mutation(newOperationId(), {
-            action: verb,
-            assetId: asset.assetId,
-          }),
+          operation: mutation(
+            newOperationId(),
+            { action: verb, assetId: asset.assetId },
+            asset.counter
+          ),
         },
       }
     );
@@ -1867,6 +1968,11 @@ async function openDesignSystem(asset) {
   const manifest = asset.manifest || [];
   elements.tokensBaselinePath.value = manifest.length ? manifest[0].path : "";
   elements.tokensBaselineResult.textContent = "";
+  // The notes live in the project, not in this asset: the default path is
+  // the conventional one and the maintainer can point it elsewhere.
+  elements.notesPath.value = "DESIGN.md";
+  elements.notesText.value = "";
+  elements.notesResult.textContent = "";
   elements.tokensStatus.textContent = "";
   elements.tokensValidation.textContent = "";
   elements.tokensValidationErrors.textContent = "";
@@ -1978,11 +2084,11 @@ async function loadTokenAffected() {
 }
 
 function tokensMutation(payload) {
-  return mutation(newOperationId(), {
-    action: "tokens-update",
-    assetId: state.tokensAsset.assetId,
-    ...payload,
-  });
+  return mutation(
+    newOperationId(),
+    { action: "tokens-update", assetId: state.tokensAsset.assetId, ...payload },
+    state.tokensAsset.counter
+  );
 }
 
 async function saveTokenDraft() {
@@ -2010,6 +2116,10 @@ async function saveTokenDraft() {
     );
     renderTokenValidation(payload.result.validation);
     elements.tokensError.hidden = true;
+    // The write advanced the asset's counter. Refresh it before announcing
+    // the save: the status text is what a caller waits on, and a publish
+    // issued the moment it appears must already carry the new counter (R04).
+    await refreshAssetCounter(state.tokensAsset);
     elements.tokensStatus.textContent =
       "草稿已保存并通过校验；发布新版本后才会成为固定修订。";
     announce("tokens 草稿已保存。");
@@ -2029,16 +2139,20 @@ async function publishTokens() {
       {
         method: "POST",
         body: {
-          operation: mutation(newOperationId(), {
-            action: "tokens-publish",
-            assetId: asset.assetId,
-          }),
+          operation: mutation(
+            newOperationId(),
+            { action: "tokens-publish", assetId: asset.assetId },
+            asset.counter
+          ),
         },
       }
     );
     const result = payload.result;
     elements.tokensError.hidden = true;
     renderTokenValidation(result.validation);
+    // Refresh before the status line, for the same reason the save path does:
+    // the next write must carry the counter this publish produced (R04).
+    await refreshAssetCounter(asset);
     elements.tokensStatus.textContent =
       `已发布第 ${result.revisionNumber} 次修订；引用与项目基线都不会自动升级。`;
     announce(`已发布第 ${result.revisionNumber} 次 tokens 修订。`);
@@ -2144,12 +2258,52 @@ async function proposeBaseline(event) {
   }
 }
 
+async function proposeNotes(event) {
+  event.preventDefault();
+  const project = state.tokensProject;
+  if (!project) return;
+  const path = elements.notesPath.value.trim();
+  const text = elements.notesText.value;
+  if (!path || !text) {
+    announce("说明提案需要文件路径与内容。");
+    return;
+  }
+  try {
+    const payload = await api(
+      `/api/v1/projects/${project.projectId}/actions/notes-propose`,
+      {
+        method: "POST",
+        body: {
+          operation: mutation(newOperationId(), {
+            action: "notes-propose",
+            projectId: project.projectId,
+            path,
+          }),
+          path,
+          text,
+        },
+      }
+    );
+    const proposal = payload.result.proposal;
+    elements.tokensError.hidden = true;
+    elements.notesResult.textContent =
+      `提案 ${proposal.proposalId} 状态：${proposalStateLabel(proposal.state)} · ` +
+      `目标 ${proposal.changes[0].path}。请到“变更提案”面板复核 diff 并授权；` +
+      "本操作没有写入项目文件。";
+    announce("已生成设计说明提案，等待维护者授权。");
+  } catch (error) {
+    elements.notesResult.textContent = "";
+    showTokensError(error, "生成设计说明提案");
+  }
+}
+
 elements.tokensSave.addEventListener("click", saveTokenDraft);
 elements.tokensPublish.addEventListener("click", publishTokens);
 elements.tokensReload.addEventListener("click", loadTokenDocument);
 elements.tokensPreviewRefresh.addEventListener("click", renderTokenPreview);
 elements.tokensDiffButton.addEventListener("click", loadTokenDiff);
 elements.tokensBaselineForm.addEventListener("submit", proposeBaseline);
+elements.notesForm.addEventListener("submit", proposeNotes);
 elements.tokensClose.addEventListener("click", () => {
   elements.tokensPanel.hidden = true;
   restorePanelTrigger();
@@ -2550,6 +2704,24 @@ function renderCanvasProps() {
     elements.propContentLabel.textContent = content.label;
     elements.propContent.value = content.value;
     elements.propToken.value = node.props.tokenRef || "";
+    // Spacing reads back from the node so the panel shows what is set.
+    const spacing = ["stack", "grid", "container"].includes(node.type);
+    elements.propGap.value = spacing ? node.props.gap || "" : "";
+    elements.propPadding.value = spacing ? node.props.padding || "" : "";
+    elements.propDirection.value = spacing ? node.props.direction || "" : "";
+    elements.propAlign.value = spacing ? node.props.align || "" : "";
+    elements.propColumns.value =
+      spacing && node.props.columns != null ? node.props.columns : "";
+    for (const field of [
+      elements.propGap,
+      elements.propPadding,
+      elements.propDirection,
+      elements.propAlign,
+      elements.propColumns,
+      elements.propSpacingApply,
+    ]) {
+      field.disabled = !spacing;
+    }
   }
   if (board) {
     elements.boardWidth.value = board.width;
@@ -3145,6 +3317,37 @@ function applyNodeContent() {
   });
 }
 
+function applyNodeSpacing() {
+  const nodes = selectedNodes();
+  if (nodes.length !== 1) return;
+  const node = nodes[0];
+  const board = activeBoard();
+  // R09: spacing lives on the container nodes; a leaf node has no children
+  // to space, and the panel says so rather than silently doing nothing.
+  if (!["stack", "grid", "container"].includes(node.type)) {
+    announce("间距只适用于 stack / grid / container 节点。");
+    return;
+  }
+  const props = {};
+  const gap = elements.propGap.value.trim();
+  const padding = elements.propPadding.value.trim();
+  const direction = elements.propDirection.value;
+  const align = elements.propAlign.value;
+  const columns = elements.propColumns.value.trim();
+  if (gap) props.gap = gap;
+  if (padding) props.padding = padding;
+  if (direction) props.direction = direction;
+  if (align) props.align = align;
+  if (columns) props.columns = Number(columns);
+  if (Object.keys(props).length === 0) return;
+  queueCanvasCommand({
+    kind: "node-props",
+    boardId: board.id,
+    nodeId: node.id,
+    props,
+  });
+}
+
 function applyNodeToken() {
   const nodes = selectedNodes();
   if (nodes.length !== 1) return;
@@ -3216,6 +3419,10 @@ async function upgradeInstance() {
   const nodes = selectedNodes();
   if (nodes.length !== 1 || nodes[0].type !== "instance") return;
   const project = state.canvasProject;
+  if (!project) return;
+  // The upgrade writes the asset row, so read its counter now instead of
+  // trusting one cached when the canvas opened (R04).
+  await loadProjectInstances();
   const row = state.canvasInstances.get(nodes[0].props.instanceId);
   if (!row) return;
   try {
@@ -3226,11 +3433,15 @@ async function upgradeInstance() {
       {
         method: "POST",
         body: {
-          operation: mutation(newOperationId(), {
-            action: "upgrade",
-            assetId: row.assetId,
-            instanceIds: [nodes[0].props.instanceId],
-          }),
+          operation: mutation(
+            newOperationId(),
+            {
+              action: "upgrade",
+              assetId: row.assetId,
+              instanceIds: [nodes[0].props.instanceId],
+            },
+            row.assetCounter
+          ),
           instanceIds: [nodes[0].props.instanceId],
         },
       }
@@ -3384,6 +3595,7 @@ elements.propWidth.addEventListener("change", applyNodeGeometry);
 elements.propHeight.addEventListener("change", applyNodeGeometry);
 elements.propContentApply.addEventListener("click", applyNodeContent);
 elements.propTokenApply.addEventListener("click", applyNodeToken);
+elements.propSpacingApply.addEventListener("click", applyNodeSpacing);
 for (const button of document.querySelectorAll(".canvas-align")) {
   button.addEventListener("click", () => alignSelection(button.dataset.align));
 }
@@ -4533,16 +4745,28 @@ async function lifeVerb(verb, body) {
       {
         method: "POST",
         body: {
-          operation: mutation(newOperationId(), {
-            action: verb,
-            assetId: asset.assetId,
-          }),
+          operation: mutation(
+            newOperationId(),
+            { action: verb, assetId: asset.assetId },
+            asset.counter
+          ),
           ...(body || {}),
         },
       }
     );
     elements.lifeError.hidden = true;
+    // A transition advanced this asset's counter, so the cached selection is
+    // stale. Re-select the same asset from the refreshed list before the next
+    // verb, or that verb would be refused as a stale-counter conflict.
     await loadLifecycle();
+    const refreshed = (state.lifeData.assets || {});
+    for (const bucket of Object.values(refreshed)) {
+      const match = (bucket || []).find((row) => row.assetId === asset.assetId);
+      if (match) {
+        selectLifeAsset(match);
+        break;
+      }
+    }
     announce(`已执行 ${verb}。`);
   } catch (error) {
     showLifeError(error, verb);
@@ -4696,6 +4920,7 @@ async function openSettings() {
   // labelled focus target (aria-labelledby="settings-heading").
   focusIntoPanel(elements.settingsPanel);
   renderDiagnostics();
+  await loadBlobIntegrity();
   announce("已打开设置与备份。");
 }
 
@@ -4710,6 +4935,29 @@ function renderDiagnostics() {
     const item = document.createElement("li");
     item.textContent = text;
     elements.settingsDiagnostics.appendChild(item);
+  }
+}
+
+async function loadBlobIntegrity() {
+  // R14: the startup check reports missing referenced content. The status
+  // route is the only place it is published, so the panel reads it there
+  // instead of leaving the fact to an API client.
+  const item = document.createElement("li");
+  elements.settingsDiagnostics.appendChild(item);
+  try {
+    const status = await api("/api/v1/status");
+    const integrity = status.blobIntegrity;
+    if (!integrity) {
+      item.textContent = "内容完整性：服务未报告（本次启动未检查）。";
+      return;
+    }
+    item.textContent =
+      integrity.missing === 0
+        ? `内容完整性：引用 ${integrity.referenced} 项，缺失 0 项。`
+        : `内容完整性：引用 ${integrity.referenced} 项，缺失 ${integrity.missing} 项` +
+          `（${(integrity.missingHashes || []).join("、")}）。缺失内容需要重新导入或恢复备份。`;
+  } catch (error) {
+    item.textContent = describeFailure(error, "读取内容完整性");
   }
 }
 

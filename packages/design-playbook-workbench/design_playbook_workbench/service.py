@@ -23,6 +23,7 @@ from .errors import (
     DISCONNECTED,
     INVALID_INPUT,
     INVALID_TARGET,
+    RECOVERY_REQUIRED,
     UNAUTHORIZED,
     WorkbenchError,
 )
@@ -292,15 +293,44 @@ class WorkbenchService:
             # "current project" pointer behind.
             self.store.clear_setting(CURRENT_PROJECT_SETTING)
             current = None
-        return {"projects": targets, "currentProjectId": current}
+        return {
+            "projects": targets,
+            "currentProjectId": current,
+            # R13: an unregistered project keeps its data until the maintainer
+            # explicitly deletes it, so it stays visible as a deletion target
+            # rather than disappearing while its records still exist.
+            "removedProjects": [
+                {
+                    "projectId": row["project_id"],
+                    "name": row["name"],
+                    "removedAt": row["updated_at"],
+                }
+                for row in self.store.list_removed_projects()
+            ],
+        }
 
-    def require_project(self, project_id: str, *, scope: str = "read") -> dict:
-        """The one authorization + liveness gate every project operation uses."""
+    def require_project(
+        self,
+        project_id: str,
+        *,
+        scope: str = "read",
+        allow_incomplete: bool = False,
+    ) -> dict:
+        """The one authorization + liveness gate every project operation uses.
+
+        A write scope also refuses while an apply journal for this project is
+        unfinished: R06 says a half-applied proposal blocks every other write
+        until the maintainer resolves it, not only the next proposal. The
+        recovery path passes ``allow_incomplete`` because it is the way out.
+        """
         target = self.project_target(project_id)
         if scope not in target["grantScopes"]:
             raise WorkbenchError(UNAUTHORIZED)
         if target["connectionState"] != "connected":
             raise WorkbenchError(DISCONNECTED)
+        if scope == "write" and not allow_incomplete:
+            if self.store.incomplete_journal(project_id) is not None:
+                raise WorkbenchError(RECOVERY_REQUIRED)
         return target
 
     # -- project lifecycle ----------------------------------------------
@@ -446,18 +476,24 @@ class WorkbenchService:
         )
 
     def remove_project(self, project_id: str, *, operation: Operation) -> dict:
-        """Unregister only: the maintainer's source files are never touched."""
+        """Unregister only: the maintainer's source files and data are untouched.
+
+        R13 splits this from deleting the project's workbench data. The row
+        and everything under it stay; only the registration (binding) and the
+        authorization (grants) go away, so the data is still there for a
+        separate, explicit deletion.
+        """
         replayed = self._replay(operation, kind="project-removal", project_id=project_id)
         if replayed is not None:
-            # The entity is already gone; the retry still gets its original
-            # result instead of a misleading invalid-target.
+            # The entity is already unregistered; the retry still gets its
+            # original result instead of a misleading invalid-target.
             return replayed
         self._require_exists(project_id)
         was_current = self.store.get_setting(CURRENT_PROJECT_SETTING) == project_id
         counter_before = int(self.store.project(project_id)["counter"])
 
         def apply() -> tuple[dict, int]:
-            self.store.delete_project(project_id)
+            self.store.unregister_project(project_id=project_id, now=self._now())
             if was_current:
                 self.store.clear_setting(CURRENT_PROJECT_SETTING)
             return {"removed": project_id}, counter_before + 1
@@ -471,6 +507,36 @@ class WorkbenchService:
             apply=apply,
         )
         return outcome
+
+    def delete_project_data(self, project_id: str, *, operation: Operation) -> dict:
+        """Delete this project's workbench data, explicitly and irrevocably.
+
+        Only an unregistered project can be deleted, so one action never
+        silently performs the other. The source folder is never touched.
+        """
+        replayed = self._replay(
+            operation, kind="project-data-deletion", project_id=project_id
+        )
+        if replayed is not None:
+            return replayed
+        if self.store.project_exists(project_id):
+            raise WorkbenchError(CONFLICT, detail="unregister the project first")
+        row = self.store.removed_project(project_id)
+        if row is None:
+            raise WorkbenchError(INVALID_TARGET)
+        self.store.delete_project_data(project_id)
+        result = {"projectId": project_id, "deleted": True}
+        self.store.record_mutation(
+            operation_id=operation.operation_id,
+            entity_kind="project-data-deletion",
+            entity_id=project_id,
+            payload_digest=operation.digest,
+            resulting_counter=None,
+            result_json=json.dumps(result, separators=(",", ":"), sort_keys=True),
+            project_id=None,
+            now=self._now(),
+        )
+        return {"result": result, "counter": None, "replayed": False}
 
     # -- capability issuance -------------------------------------------
 

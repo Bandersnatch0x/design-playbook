@@ -45,6 +45,9 @@ class LifecycleApiTestCase(unittest.TestCase):
             "operationId": f"op_life_api_{verb}_{self._operations}",
             "payload": {"action": verb, "assetId": asset_id, **(payload or {})},
         }
+        counter = self.h.asset_counter(self.project_id, asset_id)
+        if counter is not None:
+            operation["expectedCounter"] = counter
         return http_request(
             self.h.runtime,
             f"/api/v1/projects/{self.project_id}/actions/assets/{asset_id}/{verb}",
@@ -116,6 +119,32 @@ class LifecycleApiTest(LifecycleApiTestCase):
         self.assertTrue(any("源仓库" in b for b in deleted.json["result"]["boundaries"]))
         # The source file remains on disk.
         self.assertTrue((self.project_dir / "brand.md").exists())
+
+    def test_the_archive_overview_names_all_four_kinds_in_one_read(self) -> None:
+        """R13: project, pages, schemes, and runs are browsable together."""
+        self.import_and_publish()
+        overview = http_request(
+            self.h.runtime,
+            f"/api/v1/projects/{self.project_id}/archive-overview",
+            token=self.h.token,
+        )
+        self.assertEqual(overview.status, 200, overview.text)
+        payload = overview.json
+        self.assertEqual(
+            payload["project"]["projectId"], self.project_id
+        )
+        for key in ("pages", "schemes", "proposals", "runs"):
+            self.assertIn(key, payload)
+            self.assertIsInstance(payload[key], list)
+        # A read-only capability can see the same overview; the view is not
+        # a maintainer-only surface.
+        read_only = self.capability(self.project_id, ["read"])
+        same = http_request(
+            self.h.runtime,
+            f"/api/v1/projects/{self.project_id}/archive-overview",
+            capability=read_only,
+        )
+        self.assertEqual(same.status, 200, same.text)
 
     def test_project_archive_and_deletion_impact(self) -> None:
         self.import_and_publish()

@@ -317,21 +317,19 @@ jobs:
         # SO_REUSEADDR makes a second bind alias a live port on Windows only, so
         # this regression can only fail on a real Windows runner. It lives in a
         # module the no-chromium gate also collects, hence the class selection.
-        run: |
-          python -m pytest packages/design-playbook/tests/preview/test_browser_control.py \
-            -q -k PreviewServerBindIsolationTests
+        # One line on purpose: this job runs under PowerShell, where a
+        # trailing backslash is not a line continuation.
+        run: python -m pytest packages/design-playbook/tests/preview/test_browser_control.py -q -k PreviewServerBindIsolationTests
       - name: Workbench path and ACL semantics on Windows
         # The ACL, junction, and case-insensitive alias rules only exercise on
         # a real Windows filesystem; the Linux jobs take the POSIX chmod
         # branch, which is not the same contract. The suite needs no Playwright
         # (same split as the required no-chromium gate). Where the runner's
         # privileges make a denial impossible, the harness skips the case
-        # rather than asserting a change it could not apply.
-        run: |
-          python -m pytest packages/design-playbook-workbench/tests \
-            --ignore=packages/design-playbook-workbench/tests/test_ui_browser.py \
-            -k "not PreviewBrowserTest" \
-            -q
+        # rather than asserting a change it could not apply. One line on
+        # purpose: this job runs under PowerShell, where a trailing backslash
+        # is not a line continuation.
+        run: python -m pytest packages/design-playbook-workbench/tests --ignore=packages/design-playbook-workbench/tests/test_ui_browser.py -k "not PreviewBrowserTest" -q
 
   workbench-python312:
     # R15 names Python 3.12 as the main target. The `validate` job runs the

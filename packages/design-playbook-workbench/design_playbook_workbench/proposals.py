@@ -455,7 +455,48 @@ class ProposalService:
         payload["state"] = self._effective_state(row)
         journal = self.store.journal(proposal_id)
         payload["journalState"] = journal["state"] if journal is not None else None
+        payload["pendingSync"] = self._pending_sync(project_id, payload)
         return {"proposal": payload}
+
+    def _pending_sync(self, project_id: str, payload: dict) -> dict | None:
+        """Which files changed outside the workbench since this proposal.
+
+        R06: a web edit never overwrites the repository in the background, and
+        an external change produces a pending-sync notice. This is a read: it
+        compares the recorded base hashes with the files on disk now and
+        reports the drift. Nothing is written, and the proposal is not
+        rewritten to match.
+        """
+        try:
+            target = self.service.project_target(project_id)
+        except WorkbenchError:
+            # A disconnected project cannot be compared; the caller already
+            # sees disconnected from the target, so nothing is claimed here.
+            return None
+        root = Path(target["canonicalPath"])
+        drifted: list[dict] = []
+        for change in payload.get("changes", []):
+            try:
+                _, resolved = self._resolve(root, change["path"])
+            except WorkbenchError:  # pragma: no cover - validated at creation
+                continue
+            current = _current_hash(resolved)
+            if current != change.get("baseHash"):
+                drifted.append(
+                    {
+                        "path": change["path"],
+                        "recordedBaseHash": change.get("baseHash"),
+                        "currentHash": current,
+                    }
+                )
+        return {
+            "pending": bool(drifted),
+            "changes": drifted,
+            "note": (
+                "这些文件在提案建立后被工作台之外改动；应用会因基线不符而停止，"
+                "请先决定保留哪一边，工作台不会自动覆盖。"
+            ),
+        }
 
     def list_for_project(self, project_id: str) -> dict:
         self.service.require_project(project_id, scope="read")
@@ -760,7 +801,11 @@ class ProposalService:
         mode_name = "rollback" if mode in (None, "", "rollback") else mode
         if mode_name not in ("rollback", "finish"):
             raise WorkbenchError(INVALID_INPUT)
-        target = self.service.require_project(project_id, scope="write")
+        # Recovery is the way out of an incomplete journal, so it is the one
+        # write that must still pass while one exists.
+        target = self.service.require_project(
+            project_id, scope="write", allow_incomplete=True
+        )
         row = self._require_proposal(project_id, proposal_id)
         journal = self.store.journal(proposal_id)
         if journal is None or journal["state"] not in (JOURNAL_WRITING, JOURNAL_RECOVERY):

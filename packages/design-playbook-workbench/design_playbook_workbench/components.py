@@ -943,13 +943,16 @@ class ComponentService:
         if replayed is not None:
             return replayed
         self.service.require_project(project_id, scope="write")
-        self._require_asset(project_id, asset_id, kind=KIND_COMPONENT)
+        row = self._require_asset(project_id, asset_id, kind=KIND_COMPONENT)
         parsed = parse_definition(definition)
         verdict = validate_definition(parsed)
         if not verdict["valid"]:
             raise WorkbenchError(
                 INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False)
             )
+        # The counter is checked after the document is known to be valid, so a
+        # malformed definition reports its own error instead of a counter one.
+        self.assets._check_counter(row, operation)
         draft = self.store.draft(asset_id)
         attributes = json.loads(draft["attributes_json"])
         outcome = self._write_document(
@@ -994,6 +997,7 @@ class ComponentService:
             operation=Operation(
                 operation_id=f"{operation.operation_id}:dependencies",
                 payload={"action": "publish-with-deps", "assetId": asset_id},
+                expected_counter=operation.expected_counter,
             ),
         )
         result = outcome["result"]
@@ -1159,7 +1163,7 @@ class ComponentService:
         if replayed is not None:
             return replayed
         self.service.require_project(project_id, scope="write")
-        self._require_asset(project_id, asset_id, kind=KIND_PAGE)
+        row = self._require_asset(project_id, asset_id, kind=KIND_PAGE)
         data, _ = self._document_bytes(asset_id)
         layout = parse_layout(data)
         verdict = validate_layout(
@@ -1169,16 +1173,52 @@ class ComponentService:
             raise WorkbenchError(
                 INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False)
             )
+        self.assets._check_counter(row, operation)
+        # R07: a page that instantiates components depends on them. Recording
+        # those edges is what lets the affected list name pages, and what
+        # makes a reuse plan show a page's real closure.
+        dependencies = self._page_dependencies(layout)
         outcome = self.assets.publish_revision(
             project_id,
             asset_id,
             operation=Operation(
                 operation_id=f"{operation.operation_id}:revision",
                 payload={"action": "publish", "assetId": asset_id},
+                expected_counter=operation.expected_counter,
             ),
+            dependencies=dependencies,
         )
         outcome["result"]["validation"] = verdict
         return outcome
+
+    def _page_dependencies(self, layout: dict) -> list[dict]:
+        """The published component revisions one page's nodes instantiate."""
+        wanted: set[str] = set()
+        for node in layout["nodes"]:
+            if node.get("type") != "instance":
+                continue
+            payload = node.get("props") or {}
+            asset_id = payload.get("assetId")
+            if isinstance(asset_id, str) and asset_id:
+                wanted.add(asset_id)
+                continue
+            instance_id = payload.get("instanceId")
+            if isinstance(instance_id, str) and instance_id:
+                instance = self.store.instance(instance_id)
+                if instance is not None:
+                    wanted.add(instance["asset_id"])
+        dependencies: list[dict] = []
+        for dependency_asset_id in sorted(wanted):
+            revision = self.store.latest_revision(dependency_asset_id)
+            if revision is None:
+                continue
+            dependencies.append(
+                {
+                    "assetId": dependency_asset_id,
+                    "revisionId": revision["revision_id"],
+                }
+            )
+        return dependencies
 
     # -- page block to component candidate ------------------------------
 

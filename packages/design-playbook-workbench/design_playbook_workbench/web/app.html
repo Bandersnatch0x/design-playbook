@@ -90,6 +90,14 @@
       </thead>
       <tbody id="project-rows"></tbody>
     </table>
+    <div id="removed-projects" hidden>
+      <h3>已解除登记的项目</h3>
+      <p class="hint">
+        这些项目已不再登记，也不再授权；工作台数据仍在，只有显式删除才会清除。
+        本地源目录永远不会被改动。
+      </p>
+      <ul id="removed-project-list"></ul>
+    </div>
   </section>
 
   <section class="panel" id="assets-panel" hidden aria-labelledby="assets-heading">
@@ -237,6 +245,22 @@
       <button type="submit" id="tokens-baseline-button">生成提案</button>
     </form>
     <p id="tokens-baseline-result" class="hint" role="status"></p>
+
+    <h3>编辑设计说明</h3>
+    <p class="hint">
+      设计说明是仓库文件，工作台不另存权威副本。这里的文字会生成一份普通变更提案，
+      由你在“变更提案”面板复核 diff 后授权；授权前项目文件不会被改动。
+    </p>
+    <form id="notes-form" class="row-form" autocomplete="off">
+      <label for="notes-path">说明文件路径</label>
+      <input id="notes-path" name="path" type="text" spellcheck="false"
+             placeholder="DESIGN.md" required>
+      <label for="notes-text">说明内容</label>
+      <textarea id="notes-text" name="text" class="tokens-editor" rows="8"
+                spellcheck="false" required></textarea>
+      <button type="submit" id="notes-propose-button">生成说明提案</button>
+    </form>
+    <p id="notes-result" class="hint" role="status"></p>
   </section>
 
   <section class="panel" id="document-panel" hidden aria-labelledby="document-heading">
@@ -395,6 +419,36 @@
           </div>
           <p class="hint">
             几何按倍数缩放/移动；一个拖动手势是一事务，键盘与表单编辑走同一命令集。
+          </p>
+          <div class="row-form">
+            <label for="prop-gap">间距</label>
+            <input id="prop-gap" type="text" placeholder="8px">
+            <label for="prop-padding">内边距</label>
+            <input id="prop-padding" type="text" placeholder="12px">
+          </div>
+          <div class="row-form">
+            <label for="prop-direction">方向</label>
+            <select id="prop-direction">
+              <option value="">（不设置）</option>
+              <option value="vertical">纵向</option>
+              <option value="horizontal">横向</option>
+            </select>
+            <label for="prop-columns">列数</label>
+            <input id="prop-columns" type="number" min="1" step="1">
+          </div>
+          <div class="row-form">
+            <label for="prop-align">对齐</label>
+            <select id="prop-align">
+              <option value="">（不设置）</option>
+              <option value="start">起点</option>
+              <option value="center">居中</option>
+              <option value="end">终点</option>
+              <option value="stretch">拉伸</option>
+            </select>
+            <button type="button" id="prop-spacing-apply">应用间距</button>
+          </div>
+          <p class="hint">
+            间距只写入 stack/grid/container 节点；留空表示不改动该字段。
           </p>
           <div class="row-form">
             <label for="prop-content" id="prop-content-label">内容</label>
@@ -771,6 +825,7 @@
       <span class="proposal-state state-badge"></span>
     </div>
     <p class="proposal-meta hint"></p>
+    <p class="proposal-sync hint" hidden></p>
     <p class="proposal-recovery hint" hidden>
       上一次应用在写入途中失败。请先选择“恢复回滚”（还原为应用前内容）或“恢复完成”
       （继续剩余写入）；恢复前会重查每个文件的 hash，外部已改动即停止且不覆盖。

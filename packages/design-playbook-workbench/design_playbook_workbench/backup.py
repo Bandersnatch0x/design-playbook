@@ -406,12 +406,15 @@ class BackupService:
         try:
             blobs = BlobStore(restored.blob_dir)
             present = set(blobs.iter_hashes())
-            missing: list[str] = []
-            for manifest in store.all_revision_manifests():
-                for entry in json.loads(manifest["manifest_json"]):
-                    content_hash = entry.get("contentHash")
-                    if content_hash and content_hash not in present:
-                        missing.append(content_hash)
+            # The same surface the startup check reads: drafts reference
+            # blobs before they are published, and a restore that only
+            # checked revisions would accept a database whose drafts are
+            # already broken.
+            missing = [
+                content_hash
+                for content_hash in store.referenced_blob_hashes()
+                if content_hash not in present
+            ]
             incomplete_journal = store.incomplete_journal_count()
         finally:
             store.close()

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from typing import Callable
 
 from .assets import AssetService
@@ -486,12 +487,15 @@ class DesignSystemService:
                     {"instanceId": instance["instance_id"], "assetId": instance["asset_id"]}
                 )
         components: list[dict] = []
+        affected_component_ids: set[str] = set()
         for other in self.store.project_assets(project_id):
             if other["asset_id"] == asset_id:
                 continue
             for revision in self.store.asset_revisions(other["asset_id"]):
                 for dependency in self.store.dependencies(revision["revision_id"]):
                     if dependency["depends_on_asset_id"] == asset_id:
+                        if other["kind"] == "component":
+                            affected_component_ids.add(other["asset_id"])
                         components.append(
                             {
                                 "assetId": other["asset_id"],
@@ -501,10 +505,34 @@ class DesignSystemService:
                                 "revisionNumber": revision["revision_number"],
                             }
                         )
+        # R07: a page that instantiates one of those components is affected by
+        # the token change too. The dependency is one hop further, so the page
+        # scan follows component edges instead of repeating the token match.
+        pages: list[dict] = []
+        for other in self.store.project_assets(project_id):
+            if other["kind"] != "page":
+                continue
+            for revision in self.store.asset_revisions(other["asset_id"]):
+                dependencies = self.store.dependencies(revision["revision_id"])
+                if any(
+                    dependency["depends_on_asset_id"] == asset_id
+                    or dependency["depends_on_asset_id"] in affected_component_ids
+                    for dependency in dependencies
+                ):
+                    pages.append(
+                        {
+                            "assetId": other["asset_id"],
+                            "name": other["name"],
+                            "kind": other["kind"],
+                            "revisionId": revision["revision_id"],
+                            "revisionNumber": revision["revision_number"],
+                        }
+                    )
         return {
             "assetId": asset_id,
             "instances": dependents,
             "components": components,
+            "pages": pages,
             "note": "发布新版本不会自动升级这些引用；升级需按 WB-04 显式选择。",
         }
 
@@ -518,7 +546,7 @@ class DesignSystemService:
         if replayed is not None:
             return replayed
         self.service.require_project(project_id, scope="write")
-        self._tokens_asset(project_id, asset_id)
+        self.assets._check_counter(self._tokens_asset(project_id, asset_id), operation)
         parsed = parse_document(document)
         verdict = validate_document(parsed)
         if not verdict["valid"]:
@@ -582,6 +610,57 @@ class DesignSystemService:
         return outcome
 
     # -- baseline proposal ---------------------------------------------
+
+    def propose_notes(
+        self,
+        project_id: str,
+        *,
+        path: object,
+        text: object,
+        operation: Operation,
+    ) -> dict:
+        """Edit the project's design notes through an ordinary proposal (R07).
+
+        DESIGN.md is a repository file, and the workbench is not a second
+        authority for it: the maintainer's text becomes an R06 change
+        proposal against that file, with the current content as the base
+        hash. Nothing is written until the proposal is applied, and the file
+        keeps whatever owner it already has.
+        """
+        self.service.require_project(project_id, scope="write")
+        if not isinstance(path, str) or not path.strip():
+            raise WorkbenchError(INVALID_INPUT, detail="a notes path is required")
+        if not isinstance(text, str):
+            raise WorkbenchError(INVALID_INPUT, detail="notes must be text")
+        target_path = path.strip()
+        if not target_path.lower().endswith(".md"):
+            raise WorkbenchError(
+                INVALID_INPUT, detail="design notes are a markdown file"
+            )
+        root = self.service.require_project(project_id, scope="read")["canonicalPath"]
+        candidate = Path(root) / target_path
+        if not candidate.is_file():
+            raise WorkbenchError(
+                MISSING_DEPENDENCY, detail="the notes file does not exist yet"
+            )
+        base_hash = digest_bytes(candidate.read_bytes())
+        proposal = self.proposals.create(
+            project_id,
+            changes=[
+                {
+                    "path": target_path,
+                    "operation": "update",
+                    "baseHash": base_hash,
+                    "content": text,
+                }
+            ],
+            summary=f"编辑设计说明 {target_path}",
+            operation=Operation(
+                operation_id=f"{operation.operation_id}:notes",
+                payload={"action": "notes-propose", "path": target_path},
+            ),
+        )["result"]
+        return {"proposal": proposal, "path": target_path}
 
     def propose_baseline(
         self,
