@@ -33,3 +33,15 @@ $ARGUMENTS
 - A project-level install binds the project that carries the install marker. A user-level install must name the target on every call: an absolute directory, or a project already registered in the local workbench. The home directory, this plugin's install directory, the current working directory, and the previously used target are never used as a fallback.
 - Without a `request`, an explicit absolute directory still resolves while the service is stopped: the script reports that directory and creates no offline copy of the project's assets or a second identity. With a `request` the service must be running and must match the project; if it is not, the script exits `unavailable` — stop.
 - If resolution is refused (`invalid-target`, `disconnected`) or the request does not belong to the resolved project, stop and say which input is missing. Read and write nothing in that case.
+
+## Workbench task (claim before any project read or write)
+
+When the target carries `request="<request-id>"`, this is a workbench task and the run may only act inside that request's capability. Claim it before any project read or write:
+
+```text
+python "${CLAUDE_PLUGIN_ROOT}/scripts/workbench_claim.py" --request "<request-id>"
+```
+
+The script reads the OS-protected claim record the service wrote when the maintainer confirmed the send scope, then claims the request through the same typed Workbench API the browser uses. Report the lease it returns, including the heartbeat interval.
+
+A missing record means the send scope was never confirmed. A refused claim means the request is not claimable now. Say which one it is and stop. Never pass the capability on a command line, and never widen it past the one request.

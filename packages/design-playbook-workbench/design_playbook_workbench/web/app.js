@@ -105,6 +105,7 @@ const elements = {
   assetWarnings: document.getElementById("asset-warnings"),
   assetPreviewFrame: document.getElementById("asset-preview-frame"),
   assetPreviewNote: document.getElementById("asset-preview-note"),
+  assetPreviewExternal: document.getElementById("asset-preview-external"),
   assetPreviewStatic: document.getElementById("asset-preview-static"),
   assetPreviewDynamic: document.getElementById("asset-preview-dynamic"),
   assetPreviewEnable: document.getElementById("asset-preview-enable"),
@@ -323,6 +324,9 @@ const elements = {
   lifeProjectArchive: document.getElementById("life-project-archive"),
   lifeProjectUnarchive: document.getElementById("life-project-unarchive"),
   lifeProjectNote: document.getElementById("life-project-note"),
+  lifeOverviewLoad: document.getElementById("life-overview-load"),
+  lifeOverviewNote: document.getElementById("life-overview-note"),
+  lifeOverviewList: document.getElementById("life-overview-list"),
   lifeList: document.getElementById("life-list"),
   lifeDetail: document.getElementById("life-detail"),
   lifeDetailName: document.getElementById("life-detail-name"),
@@ -1520,6 +1524,28 @@ function renderAssetDetail(asset) {
   elements.assetPreviewFrame.removeAttribute("src");
   elements.assetPreviewNote.textContent =
     "预览在独立回环来源运行：不带会话凭证、不能访问管理 API 或外网。";
+  elements.assetPreviewExternal.hidden = true;
+  elements.assetPreviewExternal.textContent = "";
+}
+
+// R03: the preview policy blocks off-machine resources, so an entry that asks
+// for one renders with that resource missing. Naming each missing URL is the
+// difference between "renders differently" and "a file vanished", and the
+// policy is never relaxed to make them load.
+function renderPreviewExternal(descriptor) {
+  const external = Array.isArray(descriptor.externalResources)
+    ? descriptor.externalResources
+    : [];
+  if (external.length === 0) {
+    elements.assetPreviewExternal.hidden = true;
+    elements.assetPreviewExternal.textContent = "";
+    return;
+  }
+  elements.assetPreviewExternal.hidden = false;
+  elements.assetPreviewExternal.textContent =
+    `该预览请求 ${external.length} 个外部资源，预览策略一律拒绝加载，` +
+    `缺失不会自动放宽策略：` +
+    external.join("；");
 }
 
 async function showAssetPreview(mode) {
@@ -1532,6 +1558,7 @@ async function showAssetPreview(mode) {
     );
     elements.assetPreviewEnable.hidden =
       descriptor.dynamicAvailable === false || descriptor.dynamicUrl !== null;
+    renderPreviewExternal(descriptor);
     const url = mode === "dynamic" ? descriptor.dynamicUrl : descriptor.staticUrl;
     if (!url) {
       elements.assetPreviewNote.textContent =
@@ -1556,6 +1583,7 @@ async function showAssetPreview(mode) {
   } catch (error) {
     elements.assetsError.hidden = false;
     elements.assetsError.textContent = describeFailure(error, "打开预览");
+    elements.assetPreviewExternal.hidden = true;
   }
 }
 
@@ -4662,6 +4690,8 @@ async function openLifecycle(project) {
     `项目：${project.name} · 目录：${project.canonicalPath}`;
   elements.lifeError.hidden = true;
   elements.lifeDetail.hidden = true;
+  elements.lifeOverviewNote.textContent = "";
+  elements.lifeOverviewList.textContent = "";
   elements.lifePanel.hidden = false;
   focusIntoPanel(elements.lifeHeading);
   await loadLifecycle();
@@ -4721,6 +4751,49 @@ function renderLifeList() {
     button.addEventListener("click", () => selectLifeAsset(asset));
     item.appendChild(button);
     elements.lifeList.appendChild(item);
+  }
+}
+
+// R13: one view across the four things a maintainer weighs when deciding
+// what to keep -- the project, its pages, its schemes, and its runs. Each
+// stays owned by its own service; this only names them together.
+async function loadArchiveOverview() {
+  const project = state.lifeProject;
+  if (!project) return;
+  try {
+    const payload = await api(lifePath("/archive-overview"));
+    renderArchiveOverview(payload);
+    elements.lifeOverviewNote.textContent =
+      `项目：${payload.project.name}${payload.project.archived ? "（已归档）" : ""} · ` +
+      `页面 ${payload.pages.length} · 方案 ${payload.schemes.length} · ` +
+      `提案 ${payload.proposals.length} · 运行 ${payload.runs.length}`;
+    announce("已载入归档总览。");
+  } catch (error) {
+    showLifeError(error, "载入归档总览");
+  }
+}
+
+function renderArchiveOverview(payload) {
+  elements.lifeOverviewList.textContent = "";
+  const groups = [
+    ["页面", payload.pages, (row) => row.name],
+    ["方案", payload.schemes, (row) => row.name],
+    ["提案", payload.proposals, (row) => row.summary],
+    ["运行", payload.runs, (row) => row.runId],
+  ];
+  for (const [label, rows, nameOf] of groups) {
+    for (const row of rows || []) {
+      const state = row.state || row.lifecycle || "";
+      const item = document.createElement("li");
+      item.textContent =
+        `[${label}] ${nameOf(row) || "（未命名）"}${state ? ` · ${state}` : ""}`;
+      elements.lifeOverviewList.appendChild(item);
+    }
+  }
+  if (elements.lifeOverviewList.childElementCount === 0) {
+    const item = document.createElement("li");
+    item.textContent = "该项目还没有页面、方案、提案或运行记录。";
+    elements.lifeOverviewList.appendChild(item);
   }
 }
 
@@ -4909,6 +4982,7 @@ elements.lifePanel.addEventListener("keydown", (event) => {
     cancelHardDeleteLifeAsset();
   }
 });
+elements.lifeOverviewLoad.addEventListener("click", () => loadArchiveOverview());
 elements.lifeProjectArchive.addEventListener("click", () => projectArchive(true));
 elements.lifeProjectUnarchive.addEventListener("click", () => projectArchive(false));
 elements.lifeClose.addEventListener("click", () => {

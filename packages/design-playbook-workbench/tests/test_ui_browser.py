@@ -231,7 +231,9 @@ class AssetsPanelJourneyTest(unittest.TestCase):
         self.directory = self.h.make_directory("assets-ui")
         (self.directory / "site").mkdir()
         (self.directory / "site" / "index.html").write_text(
-            "<!doctype html><h1>Imported page</h1><script>document.title='ran'</script>",
+            "<!doctype html><h1>Imported page</h1>"
+            "<img src=\"https://cdn.example.com/logo.png\" alt=\"\">"
+            "<script>document.title='ran'</script>",
             encoding="utf-8",
         )
         (self.directory / "brand.md").write_text("# Brand\n", encoding="utf-8")
@@ -339,6 +341,15 @@ class AssetsPanelJourneyTest(unittest.TestCase):
         self.page.locator(".asset-item").first.locator(".asset-select").click()
         self.page.click("#asset-preview-static")
         expect(self.page.locator("#asset-preview-enable")).to_be_hidden()
+
+    def test_the_preview_names_the_external_resources_it_blocks(self) -> None:
+        """R03: an off-machine resource is marked, never silently dropped."""
+        self._open_static_package()
+        self.page.click("#asset-preview-static")
+        external = self.page.locator("#asset-preview-external")
+        expect(external).to_be_visible()
+        expect(external).to_contain_text("https://cdn.example.com/logo.png")
+        expect(external).to_contain_text("不会自动放宽策略")
 
 
 
@@ -1982,6 +1993,31 @@ class LifecycleJourneyTest(unittest.TestCase):
     def select_asset(self) -> None:
         self.page.locator("#life-list button").first.click()
         expect(self.page.locator("#life-detail")).to_be_visible()
+
+    def test_the_archive_overview_names_pages_and_schemes_together(self) -> None:
+        """R13: one browse across the project, its pages, and its runs."""
+        page = self.h.action(
+            self.project_id,
+            "pages",
+            payload={
+                "action": "pages",
+                "name": "Landing",
+                "layout": {
+                    "name": "Landing",
+                    "nodes": [
+                        {"id": "root", "type": "stack", "children": [], "props": {}}
+                    ],
+                },
+            },
+        )
+        self.assertEqual(page.status, 200, page.text)
+        self.page.click("#life-overview-load")
+        note = self.page.locator("#life-overview-note")
+        expect(note).to_contain_text("项目：Design")
+        expect(note).to_contain_text("页面 1")
+        expect(self.page.locator("#life-overview-list")).to_contain_text(
+            "[页面] Landing"
+        )
 
     def test_round3_lifecycle_actions_match_state(self) -> None:
         for lifecycle, action, visible in (

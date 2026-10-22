@@ -16,6 +16,7 @@ from pathlib import Path
 
 from design_playbook_workbench.assets import AssetService
 from design_playbook_workbench.blobs import BlobStore, digest_bytes
+from design_playbook_workbench.components import ComponentService
 from design_playbook_workbench.designsystem import (
     DesignSystemService,
     diff_documents,
@@ -52,6 +53,11 @@ TOKENS = {
     "theme": {
         "dark": {"color": {"surface": "#101216", "ink": "#eceff4"}},
     },
+}
+
+COMPONENT = {
+    "name": "Button",
+    "props": [{"name": "label", "type": "string", "default": "确定"}],
 }
 
 
@@ -311,10 +317,20 @@ class PublishRulesTest(DesignSystemTestCase):
         self.assertEqual(diff["counts"]["removed"], 0)
 
         # A component that depends on the token set shows up as affected.
+        self.components = ComponentService(
+            store=self.store,
+            service=self.service,
+            assets=self.assets,
+            reuse=self.reuse,
+            blobs=self.blobs,
+        )
         revision = self.store.latest_revision(self.asset_id)
-        (self.project / "components").mkdir(parents=True, exist_ok=True)
-        (self.project / "components/button.md").write_bytes(b"# Button\n")
-        component = self.import_assets(["components/button.md"])
+        component = self.components.create_component(
+            self.project_id,
+            name="Button",
+            definition=COMPONENT,
+            operation=self.operation({"action": "component-create"}),
+        )["result"]
         self.reuse.publish_with_dependencies(
             self.project_id,
             component["assetId"],
@@ -331,7 +347,45 @@ class PublishRulesTest(DesignSystemTestCase):
             [entry["assetId"] for entry in affected["components"]],
             [component["assetId"]],
         )
+        self.assertEqual(affected["pages"], [])
         self.assertIn("不会自动升级", affected["note"])
+
+        # A page that instantiates the component is one hop further out and is
+        # named in `pages`, not in `components` (R07: the page hop is separate
+        # because a page is not a thing you upgrade -- it is republished).
+        page = self.components.create_page(
+            self.project_id,
+            name="P",
+            layout={
+                "name": "P",
+                "nodes": [
+                    {"id": "root", "type": "stack", "children": ["btn"], "props": {}},
+                    {
+                        "id": "btn",
+                        "type": "instance",
+                        "props": {"assetId": component["assetId"]},
+                    },
+                ],
+            },
+            operation=self.operation({"action": "page-create"}),
+        )["result"]
+        self.components.publish_page(
+            self.project_id,
+            page["assetId"],
+            operation=self.operation(
+                {"action": "page-publish"},
+                expected=self.asset_counter(page["assetId"]),
+            ),
+        )
+        after = self.design_system.affected(self.project_id, self.asset_id)
+        self.assertEqual(
+            [entry["assetId"] for entry in after["pages"]], [page["assetId"]]
+        )
+        self.assertEqual(
+            [entry["assetId"] for entry in after["components"]],
+            [component["assetId"]],
+            "a page must not be listed twice, once as a component",
+        )
 
     def test_the_preview_is_generated_from_the_published_values(self) -> None:
         self.asset_action(self.asset_id, "tokens-publish")

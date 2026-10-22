@@ -575,6 +575,12 @@ class RunHandoffHonestyAndOutputTests(unittest.TestCase):
         self.assertIn("run_handoff.py", text)
         self.assertIn("$ARGUMENTS", text)
 
+    def test_command_claims_the_request_before_acting(self) -> None:
+        """R11: a workbench task is claimed with its credential, never assumed."""
+        text = COMMAND.read_text(encoding="utf-8")
+        self.assertIn("workbench_claim.py", text)
+        self.assertIn("--request", text)
+
 
 if __name__ == "__main__":
     unittest.main()
