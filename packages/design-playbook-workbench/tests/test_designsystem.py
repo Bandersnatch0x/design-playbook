@@ -366,8 +366,34 @@ class DesignNotesTest(DesignSystemTestCase):
             digest_bytes((self.project / "DESIGN.md").read_bytes()), before
         )
 
-    def test_notes_outside_the_project_or_not_markdown_are_refused(self) -> None:
-        for path in ("../outside.md", "tokens/brand.json", "", None):
+    def test_notes_outside_the_project_are_refused_by_containment(self) -> None:
+        """The containment rule is what refuses these, not the missing-file one.
+
+        An earlier version accepted any of three codes, so it stayed green even
+        when the refusal came from "no such file" rather than from the path
+        rule. The file below exists, so only containment can refuse it.
+        """
+        outside = self.base / "outside-notes.md"
+        outside.write_text("# outside\n", encoding="utf-8")
+        for path in (
+            "../outside-notes.md",
+            str(outside),
+            "docs/../../outside-notes.md",
+        ):
+            with self.subTest(path=path):
+                with self.assertRaises(WorkbenchError) as caught:
+                    self.design_system.propose_notes(
+                        self.project_id,
+                        path=path,
+                        text="# nope\n",
+                        operation=self.operation({"action": "notes-propose"}),
+                    )
+                self.assertEqual(caught.exception.code, INVALID_TARGET)
+        # Nothing was read or written outside the project.
+        self.assertEqual(outside.read_text(encoding="utf-8"), "# outside\n")
+
+    def test_notes_that_are_not_markdown_or_do_not_exist_are_refused(self) -> None:
+        for path in ("tokens/brand.json", "", None):
             with self.subTest(path=path):
                 with self.assertRaises(WorkbenchError) as caught:
                     self.design_system.propose_notes(
@@ -377,8 +403,7 @@ class DesignNotesTest(DesignSystemTestCase):
                         operation=self.operation({"action": "notes-propose"}),
                     )
                 self.assertIn(
-                    caught.exception.code,
-                    (INVALID_INPUT, INVALID_TARGET, MISSING_DEPENDENCY),
+                    caught.exception.code, (INVALID_INPUT, MISSING_DEPENDENCY)
                 )
         # A markdown file that does not exist yet is a missing dependency
         # rather than a silent create.

@@ -470,22 +470,23 @@ class LifecycleService:
         """
         self.service.require_project(project_id, scope="read")
         project = self.store.project(project_id)
-        pages = [
-            {
-                "assetId": row["asset_id"],
-                "name": row["name"],
-                "kind": row["kind"],
-                "lifecycle": row["lifecycle"],
-                "revisionNumber": (
-                    int(self.store.latest_revision(row["asset_id"])["revision_number"])
-                    if self.store.latest_revision(row["asset_id"]) is not None
-                    else None
-                ),
-                "updatedAt": row["updated_at"],
-            }
-            for row in self.store.project_assets(project_id)
-            if row["kind"] == "page"
-        ]
+        pages = []
+        for row in self.store.project_assets(project_id):
+            if row["kind"] != "page":
+                continue
+            revision = self.store.latest_revision(row["asset_id"])
+            pages.append(
+                {
+                    "assetId": row["asset_id"],
+                    "name": row["name"],
+                    "kind": row["kind"],
+                    "lifecycle": row["lifecycle"],
+                    "revisionNumber": (
+                        int(revision["revision_number"]) if revision is not None else None
+                    ),
+                    "updatedAt": row["updated_at"],
+                }
+            )
         return {
             "project": {
                 "projectId": project["project_id"],

@@ -24,7 +24,8 @@ from .errors import (
     UNSUPPORTED,
     WorkbenchError,
 )
-from .proposals import ProposalService
+from .paths import assert_contained
+from .proposals import ProposalService, relative_parts
 from .service import Operation, WorkbenchService, utc_now
 from .store import Store
 
@@ -486,48 +487,57 @@ class DesignSystemService:
                 dependents.append(
                     {"instanceId": instance["instance_id"], "assetId": instance["asset_id"]}
                 )
+        # One pass over the project's assets: each asset's dependency set and
+        # its latest revision are read once and reused, so the page hop below
+        # does not repeat the queries the component scan already made.
         components: list[dict] = []
         affected_component_ids: set[str] = set()
-        for other in self.store.project_assets(project_id):
-            if other["asset_id"] == asset_id:
-                continue
+        depends_on: dict[str, set[str]] = {}
+        latest: dict[str, dict | None] = {}
+        pages_by_id: dict[str, dict] = {}
+        others = [
+            row for row in self.store.project_assets(project_id) if row["asset_id"] != asset_id
+        ]
+        for other in others:
+            reachable: set[str] = set()
+            newest: dict | None = None
             for revision in self.store.asset_revisions(other["asset_id"]):
+                newest = revision
                 for dependency in self.store.dependencies(revision["revision_id"]):
-                    if dependency["depends_on_asset_id"] == asset_id:
-                        if other["kind"] == "component":
-                            affected_component_ids.add(other["asset_id"])
-                        components.append(
-                            {
-                                "assetId": other["asset_id"],
-                                "name": other["name"],
-                                "kind": other["kind"],
-                                "revisionId": revision["revision_id"],
-                                "revisionNumber": revision["revision_number"],
-                            }
-                        )
-        # R07: a page that instantiates one of those components is affected by
-        # the token change too. The dependency is one hop further, so the page
-        # scan follows component edges instead of repeating the token match.
-        pages: list[dict] = []
-        for other in self.store.project_assets(project_id):
-            if other["kind"] != "page":
+                    reachable.add(dependency["depends_on_asset_id"])
+            depends_on[other["asset_id"]] = reachable
+            latest[other["asset_id"]] = newest
+            if asset_id not in reachable:
                 continue
-            for revision in self.store.asset_revisions(other["asset_id"]):
-                dependencies = self.store.dependencies(revision["revision_id"])
-                if any(
-                    dependency["depends_on_asset_id"] == asset_id
-                    or dependency["depends_on_asset_id"] in affected_component_ids
-                    for dependency in dependencies
-                ):
-                    pages.append(
-                        {
-                            "assetId": other["asset_id"],
-                            "name": other["name"],
-                            "kind": other["kind"],
-                            "revisionId": revision["revision_id"],
-                            "revisionNumber": revision["revision_number"],
-                        }
-                    )
+            entry = {
+                "assetId": other["asset_id"],
+                "name": other["name"],
+                "kind": other["kind"],
+                "revisionId": newest["revision_id"] if newest else None,
+                "revisionNumber": newest["revision_number"] if newest else None,
+            }
+            if other["kind"] == "component":
+                affected_component_ids.add(other["asset_id"])
+            if other["kind"] == "page":
+                pages_by_id[other["asset_id"]] = entry
+            else:
+                components.append(entry)
+        # R07: a page that instantiates one of those components is affected by
+        # the token change too, one hop further out.
+        for other in others:
+            if other["kind"] != "page" or other["asset_id"] in pages_by_id:
+                continue
+            if not depends_on.get(other["asset_id"], set()) & affected_component_ids:
+                continue
+            newest = latest.get(other["asset_id"])
+            pages_by_id[other["asset_id"]] = {
+                "assetId": other["asset_id"],
+                "name": other["name"],
+                "kind": other["kind"],
+                "revisionId": newest["revision_id"] if newest else None,
+                "revisionNumber": newest["revision_number"] if newest else None,
+            }
+        pages = list(pages_by_id.values())
         return {
             "assetId": asset_id,
             "instances": dependents,
@@ -637,8 +647,12 @@ class DesignSystemService:
             raise WorkbenchError(
                 INVALID_INPUT, detail="design notes are a markdown file"
             )
+        # Validate the path before touching the filesystem: a project-relative
+        # path with `..`, a drive, or a leading slash is refused here rather
+        # than read first and rejected later by the proposal layer.
+        relative_parts(target_path)
         root = self.service.require_project(project_id, scope="read")["canonicalPath"]
-        candidate = Path(root) / target_path
+        candidate = assert_contained(Path(root) / target_path, root)
         if not candidate.is_file():
             raise WorkbenchError(
                 MISSING_DEPENDENCY, detail="the notes file does not exist yet"
@@ -657,7 +671,13 @@ class DesignSystemService:
             summary=f"编辑设计说明 {target_path}",
             operation=Operation(
                 operation_id=f"{operation.operation_id}:notes",
-                payload={"action": "notes-propose", "path": target_path},
+                # The text is part of the payload: an operation id reused with
+                # different notes must conflict, not replay the first one.
+                payload={
+                    "action": "notes-propose",
+                    "path": target_path,
+                    "text": text,
+                },
             ),
         )["result"]
         return {"proposal": proposal, "path": target_path}

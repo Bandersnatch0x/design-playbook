@@ -171,6 +171,26 @@ class LifecycleApiTest(LifecycleApiTestCase):
         self.assertEqual(impact.status, 200, impact.text)
         self.assertEqual(impact.json["assetCount"], 1)
 
+    def test_a_write_against_an_unknown_asset_is_a_client_error(self) -> None:
+        """A bad target is refused, not reported as a server fault.
+
+        The counter gate reads the asset row, so a missing one used to raise
+        inside it and surface as HTTP 500 `internal-error`.
+        """
+        # `upgrade` reads the asset row inside the counter gate itself, with
+        # no existence check before it, so this is the verb that used to
+        # surface a missing target as a 500.
+        unknown = "00000000-0000-4000-8000-000000000000"
+        response = self.h.asset_action(
+            self.project_id,
+            unknown,
+            "upgrade",
+            payload={"instanceIds": [unknown]},
+            expected_counter=0,
+        )
+        self.assertEqual(response.status, 400, response.text)
+        self.assertEqual(response.error_code, "invalid-target")
+
     def test_capability_scopes_and_maintainer_only_verbs(self) -> None:
         asset_id = self.import_and_publish()
         read_only = self.capability(self.project_id, ["read"])

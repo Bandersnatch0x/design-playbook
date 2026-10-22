@@ -246,12 +246,16 @@ def _carrier_kind(records: list[FileRecord]) -> tuple[str, list[str]]:
 class AssetService:
     """The one owner of asset import, discovery, and revision publication."""
 
-    def _check_counter(self, row: dict, operation: Operation) -> int:
+    def _check_counter(self, row: dict | None, operation: Operation) -> int:
         """R04: an explicit expected counter is required, never last-write-wins.
 
         Only writes that change an existing asset row take this check; a
-        create has no prior counter to be stale against.
+        create has no prior counter to be stale against. A caller that passes
+        a missing row is a bad target, not a server fault: reading through it
+        would raise TypeError and surface as a 500.
         """
+        if row is None:
+            raise WorkbenchError(INVALID_TARGET)
         if operation.expected_counter is None:
             raise WorkbenchError(
                 INVALID_INPUT, detail="asset writes require an expected counter"

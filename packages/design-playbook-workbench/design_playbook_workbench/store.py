@@ -926,12 +926,6 @@ class Store:
             ).fetchone()
             return int(row["counter"])
 
-    def delete_project(self, project_id: str) -> None:
-        with self.transaction() as connection:
-            connection.execute(
-                "DELETE FROM projects WHERE project_id = ?", (project_id,)
-            )
-
     # -- grants --------------------------------------------------------
 
     def set_grants(
@@ -1267,11 +1261,25 @@ class Store:
             ).fetchall()
         hashes: list[str] = []
         for row in rows:
-            parsed = json.loads(row["raw"] or "{}")
+            try:
+                parsed = json.loads(row["raw"] or "{}")
+            except json.JSONDecodeError:
+                # A row that cannot be read is not a reason to refuse to
+                # start: the startup check reports what it found, and its
+                # whole point is to describe a damaged database rather than
+                # to become another failure of one.
+                continue
             # A revision row stores the manifest list itself; a draft row
             # stores its attributes with the manifest inside.
-            entries = parsed if isinstance(parsed, list) else parsed.get("manifest") or []
+            if isinstance(parsed, list):
+                entries = parsed
+            elif isinstance(parsed, dict):
+                entries = parsed.get("manifest") or []
+            else:
+                continue
             for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
                 content_hash = entry.get("contentHash")
                 if content_hash:
                     hashes.append(content_hash)

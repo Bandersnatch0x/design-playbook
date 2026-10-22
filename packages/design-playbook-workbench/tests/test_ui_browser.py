@@ -661,6 +661,18 @@ class ComponentDocumentJourneyTest(unittest.TestCase):
         )
         expect(self.page.locator("#document-validation-errors")).to_be_empty()
 
+        # R04: the publish advanced the counter, so the very next write from
+        # this panel must carry the new one. A panel that kept the counter it
+        # had before the publish would be refused here as a stale conflict.
+        self.page.click("#document-save")
+        expect(self.page.locator("#document-status")).to_contain_text("草稿已保存")
+        expect(self.page.locator("#document-error")).to_be_hidden()
+        self.page.click("#document-publish")
+        expect(self.page.locator("#document-status")).to_contain_text("已发布第 2 次修订")
+        self.assertEqual(
+            len(self.h.runtime.store.asset_revisions(component_id)), 2
+        )
+
     def test_create_a_page_and_distill_a_candidate_without_touching_it(self) -> None:
         self.page.click("#create-page")
         expect(self.page.locator("#document-panel")).to_be_visible()

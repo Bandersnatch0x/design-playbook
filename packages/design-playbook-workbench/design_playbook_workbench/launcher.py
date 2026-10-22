@@ -51,16 +51,15 @@ def blob_integrity(store: Store, blobs: BlobStore) -> dict:
     otherwise read as healthy until the publish that needs it.
     """
     present = set(blobs.iter_hashes())
-    referenced = 0
-    missing: list[str] = []
-    for content_hash in store.referenced_blob_hashes():
-        referenced += 1
-        if content_hash not in present:
-            missing.append(content_hash)
+    referenced = set(store.referenced_blob_hashes())
+    missing = sorted(content_hash for content_hash in referenced if content_hash not in present)
     return {
-        "referenced": referenced,
+        # Both counts are distinct blobs. The reader compares the number with
+        # the list beside it, so counting references instead would report
+        # "missing 10 (abc…)" for one hash that ten revisions name.
+        "referenced": len(referenced),
         "missing": len(missing),
-        "missingHashes": sorted(set(missing))[:20],
+        "missingHashes": missing[:20],
         # The scan runs once at startup, so the payload says when it ran
         # instead of reading as a live fact.
         "checkedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),

@@ -1455,6 +1455,18 @@ async function selectAsset(assetId) {
   }
 }
 
+function applyAssetCounter(asset, counter) {
+  // Every asset-payload response carries the row's post-write counter, so a
+  // write can adopt it without a second request and without a window where
+  // the next write would send the value from before this one.
+  if (typeof counter !== "number" || !asset) return false;
+  asset.counter = counter;
+  if (state.selectedAsset && state.selectedAsset.assetId === asset.assetId) {
+    state.selectedAsset.counter = counter;
+  }
+  return true;
+}
+
 async function refreshAssetCounter(asset) {
   const project = state.assetsProject;
   if (!project || !asset) return;
@@ -1462,10 +1474,7 @@ async function refreshAssetCounter(asset) {
     const payload = await api(
       `/api/v1/projects/${project.projectId}/assets/${asset.assetId}`
     );
-    asset.counter = payload.asset.counter;
-    if (state.selectedAsset && state.selectedAsset.assetId === asset.assetId) {
-      state.selectedAsset.counter = payload.asset.counter;
-    }
+    applyAssetCounter(asset, payload.asset.counter);
   } catch (error) {
     // A failed refresh only means the next write may be refused as stale,
     // which the server reports honestly; it is not a silent success.
@@ -1742,7 +1751,7 @@ async function saveDocument() {
       "草稿已保存并通过校验；发布新版本后才会成为固定修订。";
     // The write advanced the asset's counter; the publish button below must
     // send the value it is actually based on (R04).
-    asset.counter = payload.result.counter;
+    applyAssetCounter(asset, payload.result.counter);
     announce("文档草稿已保存。");
     await loadAssets();
   } catch (error) {
@@ -1773,6 +1782,9 @@ async function publishDocument() {
     );
     elements.documentError.hidden = true;
     renderDocumentValidation(payload.result.validation, kind);
+    // A publish advances the counter too, so the next save or publish must
+    // adopt it here or the service refuses it as stale (R04).
+    applyAssetCounter(asset, payload.result.counter);
     elements.documentStatus.textContent =
       `已发布第 ${payload.result.revisionNumber} 次修订。`;
     announce(`已发布第 ${payload.result.revisionNumber} 次修订。`);
@@ -2116,10 +2128,10 @@ async function saveTokenDraft() {
     );
     renderTokenValidation(payload.result.validation);
     elements.tokensError.hidden = true;
-    // The write advanced the asset's counter. Refresh it before announcing
-    // the save: the status text is what a caller waits on, and a publish
-    // issued the moment it appears must already carry the new counter (R04).
-    await refreshAssetCounter(state.tokensAsset);
+    // The write advanced the asset's counter. Adopt it before announcing the
+    // save: the status text is what a caller waits on, and a publish issued
+    // the moment it appears must already carry the new counter (R04).
+    applyAssetCounter(state.tokensAsset, payload.result.counter);
     elements.tokensStatus.textContent =
       "草稿已保存并通过校验；发布新版本后才会成为固定修订。";
     announce("tokens 草稿已保存。");
@@ -2150,9 +2162,9 @@ async function publishTokens() {
     const result = payload.result;
     elements.tokensError.hidden = true;
     renderTokenValidation(result.validation);
-    // Refresh before the status line, for the same reason the save path does:
+    // Adopt before the status line, for the same reason the save path does:
     // the next write must carry the counter this publish produced (R04).
-    await refreshAssetCounter(asset);
+    applyAssetCounter(asset, payload.result.counter);
     elements.tokensStatus.textContent =
       `已发布第 ${result.revisionNumber} 次修订；引用与项目基线都不会自动升级。`;
     announce(`已发布第 ${result.revisionNumber} 次 tokens 修订。`);
