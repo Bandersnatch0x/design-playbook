@@ -213,6 +213,9 @@ class ReuseService:
             project_id=project_id, asset_id=asset_id, dependencies=parsed
         ):
             raise WorkbenchError(MISSING_DEPENDENCY, detail="dependency cycle")
+        # The counter is checked after the document's own rules, so a broken
+        # dependency reports its real reason instead of a stale-counter one.
+        self.assets._check_counter(row, operation)
         draft = self.store.draft(asset_id)
         manifest = _loads(draft["attributes_json"]).get("manifest", [])
         for entry in manifest:

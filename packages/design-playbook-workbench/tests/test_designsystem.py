@@ -321,7 +321,10 @@ class PublishRulesTest(DesignSystemTestCase):
             dependencies=[
                 {"assetId": self.asset_id, "revisionId": revision["revision_id"]}
             ],
-            operation=self.operation({"publish-deps": "component"}),
+            operation=self.operation(
+                {"publish-deps": "component"},
+                expected=self.asset_counter(component["assetId"]),
+            ),
         )
         affected = self.design_system.affected(self.project_id, self.asset_id)
         self.assertEqual(

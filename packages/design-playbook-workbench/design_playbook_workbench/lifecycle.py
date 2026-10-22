@@ -310,6 +310,7 @@ class LifecycleService:
             return replayed
         self.service.require_project(project_id, scope="write")
         row = self._asset(project_id, asset_id)
+        self.assets._check_counter(row, operation)
         if row["lifecycle"] != "trashed":
             raise WorkbenchError(CONFLICT, detail="asset is not in the recycle bin")
         target = (

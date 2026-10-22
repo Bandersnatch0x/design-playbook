@@ -543,7 +543,10 @@ class CanvasServiceTest(unittest.TestCase):
         )["result"]
         self.components.publish(
             self.project_id, component["assetId"],
-            operation=self.operation({"action": "component-publish"}),
+            operation=self.operation(
+                {"action": "component-publish"},
+                expected=self.asset_counter(component["assetId"]),
+            ),
         )
         instance = self.reuse.create_instance(
             self.project_id,
