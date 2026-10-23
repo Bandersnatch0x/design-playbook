@@ -793,6 +793,26 @@ class CanvasJourneyTest(unittest.TestCase):
 
     # -- helpers ---------------------------------------------------------
 
+    def reload_canvases(self) -> None:
+        """Click reload and refuse to go on if the panel reported a failure.
+
+        Without this a failed list read looks like an empty `<select>` and the
+        next step times out with no reason; the panel already holds the real
+        one in #canvas-error.
+        """
+        self.page.click("#canvas-reload")
+        error = self.page.locator("#canvas-error")
+        deadline = time.time() + 25.0
+        while time.time() < deadline:
+            if error.is_visible():
+                raise AssertionError(f"canvas reload failed: {error.inner_text()}")
+            if self.page.locator("#canvas-select option").count() > 0:
+                return
+            self.page.wait_for_timeout(120)
+        raise AssertionError(
+            "canvas reload produced neither a list nor an error in 25 s"
+        )
+
     def create_canvas(self, name: str = "首页方案") -> None:
         self.page.fill("#canvas-name", name)
         self.page.click("#canvas-create")
@@ -868,7 +888,7 @@ class CanvasJourneyTest(unittest.TestCase):
             },
         )
         self.assertEqual(created.status, 200, created.text)
-        self.page.click("#canvas-reload")
+        self.reload_canvases()
         expect(self.page.locator(".canvas-node")).to_have_count(2)
 
         root = self.page.locator(".canvas-node").first
@@ -1297,7 +1317,7 @@ class CanvasJourneyTest(unittest.TestCase):
         )
         self.assertEqual(created_canvas.status, 200, created_canvas.text)
         new_canvas_id = created_canvas.json["result"]["canvas"]["canvasId"]
-        self.page.click("#canvas-reload")
+        self.reload_canvases()
         expect(self.page.locator("#canvas-select option")).to_have_count(1)
         self.page.select_option("#canvas-select", new_canvas_id)
         expect(self.page.locator(".canvas-node")).to_have_count(200)
@@ -1373,7 +1393,7 @@ class CanvasJourneyTest(unittest.TestCase):
             origin=self.h.runtime.origin,
         )
         self.assertEqual(created.status, 200, created.text)
-        self.page.click("#canvas-reload")
+        self.reload_canvases()
         self.page.select_option(
             "#canvas-select", created.json["result"]["canvas"]["canvasId"]
         )
