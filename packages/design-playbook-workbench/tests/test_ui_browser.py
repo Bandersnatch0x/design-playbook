@@ -144,6 +144,52 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         answer_dialog(self.page, "read, write")
         expect(row.locator(".grant-list")).to_contain_text("写入")
 
+    def test_the_asset_flow_is_completable_from_the_keyboard(self) -> None:
+        """R15: the core flow stays completable without a pointer."""
+        self._open_session()
+        directory = self.h.make_directory("keyboard-flow")
+        (directory / "brand.md").write_text("# Brand\n", encoding="utf-8")
+
+        # Registration from the keyboard: Enter submits the path and lands on
+        # the confirm control, so a second Enter registers.
+        self.page.fill("#project-path", str(directory))
+        self.page.press("#project-path", "Enter")
+        expect(self.page.locator("#register-button")).to_be_focused()
+        self.page.keyboard.press("Enter")
+        row = self.page.locator("#project-rows tr").first
+        expect(row).to_be_visible()
+
+        project_id = next(
+            entry["projectId"]
+            for entry in self.h.projects()["projects"]
+            if entry["canonicalPath"] == str(directory.resolve())
+        )
+        imported = self.h.import_assets(project_id, ["brand.md"])
+        assert imported.status == 200, imported.text
+
+        # Reach the assets panel through the row menu, arrow keys only.
+        more = row.locator(".more-button")
+        more.focus()
+        self.page.keyboard.press("ArrowDown")
+        for _ in range(12):
+            focused = self.page.evaluate(
+                "() => (document.activeElement || {}).className || ''"
+            )
+            if focused.startswith("assets-button"):
+                break
+            self.page.keyboard.press("ArrowDown")
+        self.page.keyboard.press("Enter")
+        expect(self.page.locator("#assets-panel")).to_be_visible()
+
+        # Search and select, still without a pointer.
+        self.page.fill("#assets-query", "brand")
+        self.page.press("#assets-query", "Enter")
+        expect(self.page.locator(".asset-item")).to_have_count(1)
+        self.page.locator(".asset-item .asset-select").first.focus()
+        self.page.keyboard.press("Enter")
+        expect(self.page.locator("#asset-detail")).to_be_visible()
+        expect(self.page.locator("#asset-detail-heading")).to_have_text("brand.md")
+
     def test_disconnected_rebind_and_removal_journey(self) -> None:
         self._open_session()
         directory = self.h.make_directory("vanish")
