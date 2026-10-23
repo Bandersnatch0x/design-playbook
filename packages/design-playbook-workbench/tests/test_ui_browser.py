@@ -2581,5 +2581,127 @@ class IndependentReviewRegressionTest(unittest.TestCase):
         )
 
 
+_OCCLUSION_JS = """(sels) => sels.map((sel) => {
+  const el = document.querySelector(sel);
+  if (!el) return {sel, present: false};
+  const r = el.getBoundingClientRect();
+  const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return {sel, present: true,
+          inViewport: r.top >= 0 && r.left >= 0
+            && r.bottom <= innerHeight + 1 && r.right <= innerWidth + 1,
+          occludedBy: top && !el.contains(top) && top !== el
+            ? (top.id || top.className || top.tagName) : null};
+})"""
+
+# A focus indicator is any computed change on focus: an outline, a box
+# shadow, or a border/background shift. Asserting a literal outline would
+# fail the elements this shell styles with a shadow instead.
+_FOCUS_INDICATOR_JS = """() => {
+  const sel = 'button, input, select, textarea, a[href], [role=button],'
+    + ' [tabindex]:not([tabindex="-1"])';
+  const snap = (el) => { const cs = getComputedStyle(el);
+    return [cs.outlineStyle, cs.outlineWidth, cs.outlineColor, cs.boxShadow,
+            cs.borderColor, cs.backgroundColor, cs.textDecorationLine].join('|'); };
+  const out = [];
+  for (const el of document.querySelectorAll(sel)) {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) continue;
+    const before = snap(el);
+    const previous = document.activeElement;
+    el.focus();
+    const after = snap(el);
+    const focusable = document.activeElement === el;
+    if (previous && previous.focus) previous.focus();
+    out.push({id: el.id || el.tagName.toLowerCase(), focusable,
+              indicatorChanged: before !== after});
+  }
+  return out;
+}"""
+
+
+class DesktopViewportAndZoomJourneyTest(unittest.TestCase):
+    """R15: both desktop viewports and 200% zoom keep the main flow usable.
+
+    The acceptance asks for 1366x768 and 1920x1080 with no key control
+    occluded, and for the main flow to stay completable at 200% zoom. The
+    review measured this by hand; these are the same criteria, committed so
+    a regression fails the matrix instead of a screenshot.
+    """
+
+    VIEWS = (
+        ("1920x1080", 1920, 1080, 1),
+        ("1366x768", 1366, 768, 1),
+        ("zoom200", 683, 384, 2),
+    )
+
+    def setUp(self) -> None:
+        self.h = WorkbenchHarness(consume_bootstrap=False)
+        self.addCleanup(self.h.stop)
+        self.page = _BROWSER.new_page(viewport={"width": 1920, "height": 1080})
+        self.addCleanup(self.page.close)
+        self.directory = self.h.make_directory("viewport-target")
+        (self.directory / "brand.md").write_text("# Brand\n", encoding="utf-8")
+        registered = self.h.register(self.directory, name="Viewport")
+        assert registered.status == 200, registered.text
+        self.project_id = registered.json["result"]["projectId"]
+        granted = self.h.grant(self.project_id, ["read", "write"], expected_counter=0)
+        assert granted.status == 200, granted.text
+        self.page.goto(self.h.runtime.bootstrap_url)
+        expect(self.page.locator("#session-state")).to_contain_text("会话有效")
+        self.cdp = self.page.context.new_cdp_session(self.page)
+
+    def _view(self, width: int, height: int, scale: int) -> None:
+        self.cdp.send(
+            "Emulation.setDeviceMetricsOverride",
+            {"width": width, "height": height, "deviceScaleFactor": scale,
+             "mobile": False},
+        )
+        self.page.wait_for_timeout(200)
+
+    def test_neither_desktop_viewport_overflows(self) -> None:
+        for label, width, height, scale in self.VIEWS:
+            self._view(width, height, scale)
+            overflow = self.page.evaluate(
+                "() => document.documentElement.scrollWidth"
+                " > document.documentElement.clientWidth + 1"
+            )
+            self.assertFalse(overflow, f"{label} overflows horizontally")
+
+    def test_key_controls_stay_reachable_at_every_view(self) -> None:
+        # The register button lives in the candidate panel, which is hidden
+        # until a probe succeeds; reveal it so the check covers the flow the
+        # maintainer actually walks.
+        second = self.h.make_directory("viewport-target-second")
+        self.page.fill("#project-path", str(second))
+        self.page.click("#probe-button")
+        expect(self.page.locator("#candidate")).to_be_visible()
+        controls = ["#project-path", "#probe-button", "#register-button"]
+        for label, width, height, scale in self.VIEWS:
+            self._view(width, height, scale)
+            for selector in controls:
+                # At 200% zoom the viewport is only 384 CSS px tall, so
+                # reachable means "scrolls into view and is not occluded
+                # there", not "visible without scrolling".
+                self.page.locator(selector).scroll_into_view_if_needed()
+                row = self.page.evaluate(_OCCLUSION_JS, [selector])[0]
+                self.assertTrue(row["present"], f"{label}: {selector} missing")
+                self.assertTrue(
+                    row["inViewport"], f"{label}: {selector} off-screen after scroll"
+                )
+                self.assertIsNone(
+                    row["occludedBy"], f"{label}: {selector} is occluded"
+                )
+
+    def test_every_focusable_control_shows_a_focus_indicator(self) -> None:
+        self._view(1366, 768, 1)
+        stops = self.page.evaluate(_FOCUS_INDICATOR_JS)
+        self.assertTrue(stops, "the shell exposed no focusable control")
+        missing = [
+            row["id"] for row in stops
+            if row["focusable"] and not row["indicatorChanged"]
+        ]
+        self.assertEqual(missing, [], "focusable controls without a focus indicator")
+
+
 if __name__ == "__main__":  # pragma: no cover - manual run
     unittest.main()
