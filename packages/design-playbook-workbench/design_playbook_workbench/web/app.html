@@ -21,7 +21,9 @@
   <button type="button" id="settings-open" class="secondary">设置与备份</button>
 </header>
 
-<main id="main">
+<!-- tabindex="-1" is what lets the skip link move focus here; without it the
+     link changes the hash and leaves focus at the top of the page. -->
+<main id="main" tabindex="-1">
   <section class="panel" id="session-error" hidden aria-labelledby="session-error-heading">
     <h2 id="session-error-heading">会话不可用</h2>
     <p id="session-error-message"></p>

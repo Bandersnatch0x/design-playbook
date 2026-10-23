@@ -2470,6 +2470,36 @@ class UiReviewRegressionTest(unittest.TestCase):
         expect(self.page.locator(".more-button").first).to_be_focused()
         expect(self.page.locator("#assets-panel")).to_be_hidden()
 
+    def test_the_skip_link_moves_focus_past_the_header(self) -> None:
+        """R15: a skip link that leaves focus where it was is decoration."""
+        self.page.evaluate("() => document.activeElement && document.activeElement.blur()")
+        self.page.keyboard.press("Tab")
+        expect(self.page.locator(".skip-link")).to_be_focused()
+        self.page.keyboard.press("Enter")
+        self.page.wait_for_timeout(200)
+        focused = self.page.evaluate(
+            "() => { const a = document.activeElement;"
+            " return a ? (a.id || a.tagName.toLowerCase()) : null; }")
+        self.assertEqual(focused, "main",
+                         "the skip link must move focus to the main region")
+
+    def test_tab_order_follows_the_reading_order(self) -> None:
+        """R15: the first flow a maintainer meets comes first, in its own order."""
+        self.page.evaluate("() => document.activeElement && document.activeElement.blur()")
+        seen: list[str] = []
+        for _ in range(8):
+            self.page.keyboard.press("Tab")
+            seen.append(self.page.evaluate(
+                "() => { const a = document.activeElement;"
+                " return a ? (a.id || a.className || a.tagName.toLowerCase()) : ''; }"))
+        for expected, actual in (
+            ("project-path", seen[2]), ("probe-button", seen[3]),
+            ("refresh-button", seen[4]), ("open-button", seen[5]),
+        ):
+            self.assertEqual(actual, expected,
+                             f"tab order drifted: {seen}")
+        self.assertTrue(seen[6].startswith("more-button"), seen)
+
     def test_every_panel_closes_from_the_keyboard(self) -> None:
         """R15: Escape closes a panel without reaching for the mouse."""
         for opener, panel, close, return_to in (
