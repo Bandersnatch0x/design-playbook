@@ -804,6 +804,10 @@ class CanvasJourneyTest(unittest.TestCase):
         next step times out with no reason; the panel already holds the real
         one in #canvas-error.
         """
+        # openCanvas sets the scope text before it awaits its two loads, so a
+        # click here before the scope is filled lands while the panel is still
+        # opening: loadCanvases sees no project and returns without a list.
+        expect(self.page.locator("#canvas-scope")).not_to_be_empty()
         self.page.click("#canvas-reload")
         error = self.page.locator("#canvas-error")
         deadline = time.time() + 25.0

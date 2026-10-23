@@ -3165,7 +3165,13 @@ function layerSelection(action) {
 
 async function loadCanvases() {
   const project = state.canvasProject;
-  if (!project) return;
+  if (!project) {
+    // A reload before the panel finished opening has nothing to load. Say so
+    // instead of returning silently, or the list stays empty with no reason
+    // and a caller cannot tell "not ready" from "nothing there".
+    setCanvasSaveState("idle", "画布尚未就绪：正在打开项目。");
+    return;
+  }
   try {
     const payload = await api(canvasPath(""));
     state.canvases = payload.canvases || [];
