@@ -2367,6 +2367,10 @@ class UiReviewRegressionTest(unittest.TestCase):
 
     def test_round3_mobile_project_labels_and_no_overflow(self) -> None:
         self.page.set_viewport_size({"width": 320, "height": 800})
+        # Resizing re-renders the table, so the row is briefly absent. Wait
+        # for it back before measuring, or a loaded CI host reads the empty
+        # frame and sees zero cells.
+        expect(self.page.locator("#project-rows tr").first).to_be_visible()
         self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 320)
         headers = self.page.locator(".project-table th").all_text_contents()
         cells = self.page.locator("#project-rows tr").first.locator("td")
