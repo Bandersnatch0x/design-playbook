@@ -4977,10 +4977,17 @@ elements.lifeDeleteConfirmButton.addEventListener(
   confirmHardDeleteLifeAsset
 );
 elements.lifePanel.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !elements.lifeDeleteConfirm.hidden) {
+  if (event.key !== "Escape") return;
+  // The delete confirmation is the first thing Escape must dismiss; closing
+  // the whole panel while a destructive step is pending would lose that step.
+  if (!elements.lifeDeleteConfirm.hidden) {
     event.preventDefault();
     cancelHardDeleteLifeAsset();
+    return;
   }
+  if (event.defaultPrevented || document.querySelector("#dpb-dialog")) return;
+  event.preventDefault();
+  elements.lifeClose.click();
 });
 elements.lifeOverviewLoad.addEventListener("click", () => loadArchiveOverview());
 elements.lifeProjectArchive.addEventListener("click", () => projectArchive(true));
@@ -5181,5 +5188,28 @@ elements.refreshButton.addEventListener("click", () => {
   announce("已重新探测项目连接状态。");
 });
 elements.sessionError.hidden = true;
+
+// R15: every panel closes from the keyboard. The canvas and lifecycle panels
+// handle Escape themselves (they have unsaved edits and a two-step delete to
+// consider). The rest route Escape to their own close button, so each panel
+// keeps its one close path instead of growing a second copy of the logic.
+for (const [panel, close] of [
+  [elements.proposalsPanel, elements.proposalsClose],
+  [elements.assetsPanel, elements.assetsClose],
+  [elements.tokensPanel, elements.tokensClose],
+  [elements.documentPanel, elements.documentClose],
+  [elements.workPanel, elements.workClose],
+  [elements.ownerPanel, elements.ownerClose],
+  [elements.settingsPanel, elements.settingsClose],
+]) {
+  if (!panel || !close) continue;
+  panel.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    // An open dialog or row menu has already taken this Escape.
+    if (document.querySelector("#dpb-dialog")) return;
+    event.preventDefault();
+    close.click();
+  });
+}
 
 startSession();

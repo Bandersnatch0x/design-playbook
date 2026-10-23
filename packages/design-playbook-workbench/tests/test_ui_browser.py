@@ -2470,6 +2470,29 @@ class UiReviewRegressionTest(unittest.TestCase):
         expect(self.page.locator(".more-button").first).to_be_focused()
         expect(self.page.locator("#assets-panel")).to_be_hidden()
 
+    def test_every_panel_closes_from_the_keyboard(self) -> None:
+        """R15: Escape closes a panel without reaching for the mouse."""
+        for opener, panel, close, return_to in (
+            ("assets", "#assets-panel", "#assets-close", None),
+            ("proposals", "#proposals-panel", "#proposals-close", None),
+            ("work", "#work-panel", "#work-close", None),
+            ("owner", "#owner-panel", "#owner-close", None),
+            ("life", "#life-panel", "#life-close", None),
+            # Settings has its own toolbar entry, not a row-menu action, so
+            # focus returns there instead of to the row's menu button.
+            ("settings", "#settings-panel", "#settings-close", "#settings-open"),
+        ):
+            if return_to is None:
+                row_action(self.page, opener).click()
+            else:
+                self.page.click(return_to)
+            expect(self.page.locator(panel)).to_be_visible()
+            self.page.locator(close).focus()
+            self.page.keyboard.press("Escape")
+            expect(self.page.locator(panel)).to_be_hidden()
+            focused = return_to or ".more-button"
+            expect(self.page.locator(focused).first).to_be_focused()
+
     def test_the_flow_edge_note_has_an_accessible_name(self) -> None:
         # F1: every control in the flow row announces what it is; the note was
         # the only one relying on a placeholder, which is not a name.
