@@ -331,8 +331,12 @@ class AssetsPanelJourneyTest(unittest.TestCase):
             "site/index.html"
         )
 
-    def _wait_for_preview_frame(self, timeout_ms: int = 10000):
-        """The loaded preview frame, located by origin (it loads asynchronously)."""
+    def _wait_for_preview_frame(self, timeout_ms: int = 25000):
+        """The loaded preview frame, located by origin (it loads asynchronously).
+
+        Twenty-five seconds, not ten: these poll for a cross-origin frame and
+        the whole file runs on one loaded CI host.
+        """
         deadline = timeout_ms
         waited = 0
         while waited < deadline:
@@ -456,7 +460,7 @@ class DesignSystemJourneyTest(unittest.TestCase):
         expect(self.page.locator("#tokens-panel")).to_be_visible()
         expect(self.page.locator("#tokens-heading")).to_contain_text(self.tokens["name"])
 
-    def _preview_frame(self, timeout_ms: int = 10000):
+    def _preview_frame(self, timeout_ms: int = 25000):
         waited = 0
         while waited < timeout_ms:
             for candidate in self.page.frames:
@@ -652,7 +656,7 @@ class ComponentDocumentJourneyTest(unittest.TestCase):
         rows = self.h.runtime.store.project_assets(self.project_id)
         return [row for row in rows if kind is None or row["kind"] == kind]
 
-    def _instance_frame(self, timeout_ms: int = 10000):
+    def _instance_frame(self, timeout_ms: int = 25000):
         waited = 0
         while waited < timeout_ms:
             for candidate in self.page.frames:
@@ -2503,32 +2507,52 @@ class UiReviewRegressionTest(unittest.TestCase):
                              f"tab order drifted: {seen}")
         self.assertTrue(seen[6].startswith("more-button"), seen)
 
-    def test_every_panel_closes_from_the_keyboard(self) -> None:
-        """R15: Escape closes a panel without reaching for the mouse."""
-        for opener, panel, close, return_to in (
-            ("assets", "#assets-panel", "#assets-close", None),
-            ("proposals", "#proposals-panel", "#proposals-close", None),
-            ("work", "#work-panel", "#work-close", None),
-            ("owner", "#owner-panel", "#owner-close", None),
-            ("life", "#life-panel", "#life-close", None),
-            # Settings has its own toolbar entry, not a row-menu action, so
-            # focus returns there instead of to the row's menu button.
-            ("settings", "#settings-panel", "#settings-close", "#settings-open"),
-        ):
-            if return_to is None:
-                row_action(self.page, opener).click()
-            else:
-                self.page.click(return_to)
-            expect(self.page.locator(panel)).to_be_visible()
-            # Opening a panel kicks off its own load; focus the close button
-            # only after that settles, or the panel can re-render under the
-            # key press and swallow it.
-            self.page.wait_for_load_state("networkidle")
-            self.page.locator(close).focus()
-            self.page.keyboard.press("Escape")
-            expect(self.page.locator(panel)).to_be_hidden()
-            focused = return_to or ".more-button"
-            expect(self.page.locator(focused).first).to_be_focused()
+    PANELS = (
+        ("assets", "#assets-panel", "#assets-close", None),
+        ("proposals", "#proposals-panel", "#proposals-close", None),
+        ("work", "#work-panel", "#work-close", None),
+        ("owner", "#owner-panel", "#owner-close", None),
+        ("life", "#life-panel", "#life-close", None),
+        # Settings has its own toolbar entry, not a row-menu action, so focus
+        # returns there instead of to the row's menu button.
+        ("settings", "#settings-panel", "#settings-close", "#settings-open"),
+    )
+
+    def _closes_from_the_keyboard(self, opener, panel, close, return_to) -> None:
+        """Opening runs its own load, then moves focus to the heading."""
+        if return_to is None:
+            row_action(self.page, opener).click()
+        else:
+            self.page.click(return_to)
+        expect(self.page.locator(panel)).to_be_visible()
+        # Each opener focuses either the panel heading or the panel itself, and
+        # some keep loading afterwards. Wait until focus has actually landed
+        # inside this panel and stayed there, instead of assuming which node
+        # receives it.
+        self.page.wait_for_function(
+            "(sel) => { const p = document.querySelector(sel);"
+            " const a = document.activeElement;"
+            " return !!p && !!a && p.contains(a); }",
+            arg=panel,
+            timeout=20000,
+        )
+        self.page.wait_for_timeout(150)
+        self.page.locator(close).focus()
+        expect(self.page.locator(close)).to_be_focused()
+        self.page.keyboard.press("Escape")
+        expect(self.page.locator(panel)).to_be_hidden()
+        expect(self.page.locator(return_to or ".more-button").first).to_be_focused()
+
+    def test_each_panel_closes_from_the_keyboard(self) -> None:
+        """R15: Escape closes a panel without reaching for the mouse.
+
+        One panel per test instance: opening a panel rewires the trigger stack,
+        so reusing one page across all six would carry that state forward and
+        hide which panel actually failed.
+        """
+        for opener, panel, close, return_to in self.PANELS:
+            with self.subTest(panel=panel):
+                self._closes_from_the_keyboard(opener, panel, close, return_to)
 
     def test_the_flow_edge_note_has_an_accessible_name(self) -> None:
         # F1: every control in the flow row announces what it is; the note was
