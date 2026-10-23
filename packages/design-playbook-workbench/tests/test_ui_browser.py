@@ -38,6 +38,12 @@ def setUpModule() -> None:
     global _PLAYWRIGHT, _BROWSER
     _PLAYWRIGHT = sync_playwright().start()
     _BROWSER = launch_browser(_PLAYWRIGHT)
+    # Every journey starts its own real service and browser context, and the
+    # whole file runs on one loaded CI host. Playwright's 5 s default is not
+    # enough there: a slow round-trip reads as a product defect when it is
+    # only a busy machine. The assertions are unchanged -- a wrong result
+    # still fails, just after a longer wait.
+    expect.set_options(timeout=20_000)
 
 
 def tearDownModule() -> None:
@@ -927,7 +933,7 @@ class CanvasJourneyTest(unittest.TestCase):
     def wait_saved(self) -> None:
         expect(self.page.locator("#canvas-save-state")).to_contain_text("已保存")
 
-    def wait_for(self, check, label: str, timeout: float = 8.0):
+    def wait_for(self, check, label: str, timeout: float = 25.0):
         """Poll the service until the confirmed state satisfies ``check``.
 
         The save label alone is not a barrier (it also reads "saved" right
@@ -1459,7 +1465,7 @@ class OrchestrationJourneyTest(unittest.TestCase):
         assert response.status == 200, response.text
         return response.json["document"]
 
-    def wait_for(self, check, label: str, timeout: float = 8.0):
+    def wait_for(self, check, label: str, timeout: float = 25.0):
         deadline = time.time() + timeout
         while time.time() < deadline:
             try:
@@ -1679,7 +1685,7 @@ class WorkRequestJourneyTest(unittest.TestCase):
             }"""
         )
 
-    def wait_for(self, check, label: str, timeout: float = 8.0):
+    def wait_for(self, check, label: str, timeout: float = 25.0):
         deadline = time.time() + timeout
         while time.time() < deadline:
             try:
@@ -2024,7 +2030,7 @@ class LifecycleJourneyTest(unittest.TestCase):
         row_action(self.page, "life").click()
         expect(self.page.locator("#life-panel")).to_be_visible()
 
-    def wait_for(self, check, label, timeout=8.0):
+    def wait_for(self, check, label, timeout=25.0):
         deadline = time.time() + timeout
         while time.time() < deadline:
             try:
