@@ -433,3 +433,22 @@ specification prerequisites (Stage S): the listed registry entries, the
 `threshold` field and the registry-level checks. Every later stage needs its
 own dated amendment there. This pointer changes no boundary above, and the
 ADR-0045 spend gate otherwise remains in force.
+
+## Release authorization
+
+The gate above requires a separate maintainer decision for each release. The
+record below is that decision; `scripts/release.py` reads exactly one fenced
+block and refuses the tag when it is missing, malformed, or names another tag.
+
+```release-authorization
+{
+  "tag": "v0.25.5",
+  "decision": "approved",
+  "authority": "maintainer",
+  "reason": "Lands the preview control shell consolidation and the personal asset workbench, which ships as its own package rather than in the plugin artifact. The maintainer reviewed the workbench's A01-A15 ledger and accepted that two items stay not-run: human keyboard acceptance (two subjective checks) and a second physical clean machine. Both are recorded as not-run in the delivery ticket, not as passes."
+}
+```
+
+The record is tag-only: it does not bind to a content hash, so a change after
+this decision does not silently invalidate it. A release whose content matters
+to the approver should add `contentSha256`.
