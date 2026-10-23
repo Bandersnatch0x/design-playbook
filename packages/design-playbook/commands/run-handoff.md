@@ -45,3 +45,31 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/workbench_claim.py" --request "<request-id
 The script reads the OS-protected claim record the service wrote when the maintainer confirmed the send scope, then claims the request through the same typed Workbench API the browser uses. Report the lease it returns, including the heartbeat interval.
 
 A missing record means the send scope was never confirmed. A refused claim means the request is not claimable now. Say which one it is and stop. Never pass the capability on a command line, and never widen it past the one request.
+
+After claiming, read the request before working:
+
+```text
+python "${CLAUDE_PLUGIN_ROOT}/scripts/workbench_task.py" read --request "<request-id>"
+```
+
+Use its context, plan, allowed actions, and result schema. Keep the claim's `attemptId`, `leaseId`, and `sequence` for every report. At the returned heartbeat interval, report the stage and completed work count you actually observed:
+
+```text
+python "${CLAUDE_PLUGIN_ROOT}/scripts/workbench_task.py" heartbeat --request "<request-id>" --attempt-id "<attempt-id>" --lease-id "<lease-id>" --sequence <sequence> --stage "<observed-stage>" --count <observed-count>
+```
+
+Do not invent progress or heartbeat after losing the lease. Stop on a refused report and relay the service's reason. Each mutation accepts `--operation-id`; retain it when retrying the same report and use a new one for a new report. Both scripts accept `--data-dir` for an explicit workbench data directory.
+
+Submit the actual result as a UTF-8 JSON file matching `resultSchema`. The service validates it:
+
+```text
+python "${CLAUDE_PLUGIN_ROOT}/scripts/workbench_task.py" result --request "<request-id>" --attempt-id "<attempt-id>" --lease-id "<lease-id>" --sequence <sequence> --result "<result-file>"
+```
+
+`--result -` also reads UTF-8 JSON from stdin. If the task fails while the lease is live, report the observed reason:
+
+```text
+python "${CLAUDE_PLUGIN_ROOT}/scripts/workbench_task.py" fail --request "<request-id>" --attempt-id "<attempt-id>" --lease-id "<lease-id>" --sequence <sequence> --reason "<failure-reason>"
+```
+
+Submitting a result does not approve or verify it. Report the service's state verbatim and leave proposal approval to the maintainer. Never approve your own result.

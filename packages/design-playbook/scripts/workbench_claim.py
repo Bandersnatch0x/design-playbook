@@ -63,35 +63,46 @@ def read_claim_record(data_dir: Path | str, request_id: str) -> dict:
     return record
 
 
-def claim_request(
+def request_task(
     *,
     request_id: str,
     data_dir: Path | str | None = None,
-    lease_seconds: int | None = None,
+    verb: str | None = None,
+    payload: dict | None = None,
     operation_id: str | None = None,
     opener=urllib.request.urlopen,
 ) -> dict:
-    """Claim one request and return the service's lease payload."""
+    """Read or report one task using only its protected claim credential."""
+    if verb not in (None, "claim", "heartbeat", "result", "fail"):
+        raise ClaimError("unsupported agent task verb")
     root = Path(data_dir) if data_dir is not None else _workbench_data_dir()
     record = read_claim_record(root, request_id)
+    if record["requestId"] != request_id:
+        raise ClaimError("the claim record belongs to a different request")
     try:
         session_record = read_session_record(root)
     except ServiceUnavailable as error:
         raise ClaimError(str(error)) from None
     authority = session_record["authority"]
-    body: dict = {
-        "operation": {
-            "operationId": operation_id or f"claim-{uuid.uuid4()}",
-            "payload": {"action": "claim", "requestId": request_id},
+    project_url = f"{authority}/api/v1/projects/{record['projectId']}"
+    data = None
+    if verb is not None:
+        fields = payload or {}
+        body = {
+            **fields,
+            "operation": {
+                "operationId": operation_id or f"{verb}-{uuid.uuid4()}",
+                "payload": {"action": verb, "requestId": request_id, **fields},
+            },
         }
-    }
-    if lease_seconds is not None:
-        body["leaseSeconds"] = lease_seconds
+        data = json.dumps(body).encode("utf-8")
+        url = f"{project_url}/actions/requests/{request_id}/{verb}"
+    else:
+        url = f"{project_url}/requests/{request_id}"
     request = urllib.request.Request(
-        f"{authority}/api/v1/projects/{record['projectId']}/actions/requests/"
-        f"{request_id}/claim",
-        data=json.dumps(body).encode("utf-8"),
-        method="POST",
+        url,
+        data=data,
+        method="POST" if verb else "GET",
         headers={
             "Content-Type": "application/json",
             CAPABILITY_HEADER: record["token"],
@@ -102,9 +113,28 @@ def claim_request(
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", errors="replace")
-        raise ClaimError(f"the service refused the claim: {detail}") from None
+        raise ClaimError(f"the service refused the {verb or 'request read'}: {detail}") from None
     except (urllib.error.URLError, OSError) as error:
         raise ClaimError(f"the workbench service is not reachable: {error}") from None
+
+
+def claim_request(
+    *,
+    request_id: str,
+    data_dir: Path | str | None = None,
+    lease_seconds: int | None = None,
+    operation_id: str | None = None,
+    opener=urllib.request.urlopen,
+) -> dict:
+    """Claim one request and return the service's lease payload."""
+    return request_task(
+        request_id=request_id,
+        data_dir=data_dir,
+        verb="claim",
+        payload={"leaseSeconds": lease_seconds} if lease_seconds is not None else {},
+        operation_id=operation_id,
+        opener=opener,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
