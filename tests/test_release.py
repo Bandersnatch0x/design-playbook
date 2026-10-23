@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -33,6 +34,13 @@ CURRENT_VERSION = _current_version()
 CURRENT_TAG = f"v{CURRENT_VERSION}"
 CURRENT_NOTES_REL = f"docs/releases/{CURRENT_TAG}.md"
 AUTHORIZATION_REL = "docs/adr/0045-external-evidence-spend-gate.md"
+
+
+def _strip_authorization_record(text: str) -> str:
+    """The ADR text with every release-authorization block removed."""
+    return re.sub(
+        r"\n```release-authorization\n.*?\n```\n", "\n", text, flags=re.S
+    )
 
 
 def _authorization_content_digest(root: Path) -> str:
@@ -157,7 +165,13 @@ class ReleaseGateTests(unittest.TestCase):
         )
         self.authorization = self.root / "docs/adr/0045-external-evidence-spend-gate.md"
         self.authorization.parent.mkdir(parents=True)
-        self.freeze = (ROOT / "docs/adr/0045-external-evidence-spend-gate.md").read_text(encoding="utf-8")
+        # The freeze baseline is the ADR *without* a release-authorization
+        # record. The real ADR carries the maintainer's live record, so copy
+        # the text and strip any record block; otherwise "no record refuses"
+        # would assert against the repository's own approval.
+        self.freeze = _strip_authorization_record(
+            (ROOT / AUTHORIZATION_REL).read_text(encoding="utf-8")
+        )
         self.record = {
             "tag": CURRENT_TAG, "decision": "approved",
             "authority": "maintainer", "reason": "Fixture-only release decision",
