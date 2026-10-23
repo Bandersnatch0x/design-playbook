@@ -2485,6 +2485,9 @@ class UiReviewRegressionTest(unittest.TestCase):
 
     def test_tab_order_follows_the_reading_order(self) -> None:
         """R15: the first flow a maintainer meets comes first, in its own order."""
+        # The row's controls only enter the tab order once the list has
+        # rendered; tabbing before that walks the shell alone.
+        expect(self.page.locator("#project-rows tr")).to_have_count(1)
         self.page.evaluate("() => document.activeElement && document.activeElement.blur()")
         seen: list[str] = []
         for _ in range(8):
@@ -2517,6 +2520,10 @@ class UiReviewRegressionTest(unittest.TestCase):
             else:
                 self.page.click(return_to)
             expect(self.page.locator(panel)).to_be_visible()
+            # Opening a panel kicks off its own load; focus the close button
+            # only after that settles, or the panel can re-render under the
+            # key press and swallow it.
+            self.page.wait_for_load_state("networkidle")
             self.page.locator(close).focus()
             self.page.keyboard.press("Escape")
             expect(self.page.locator(panel)).to_be_hidden()
