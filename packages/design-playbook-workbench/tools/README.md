@@ -36,8 +36,11 @@ against the real service but reports `not-run` below R15 scale or with too few
 valid samples, and rejects samples that cannot be proven (a stale save label, a
 drag that never moved). `install_smoke.py` reports exactly one A15 item and
 lists what it does not cover. `sample_targets.py` writes source scaffolding and
-proves no journey. A11, A12 and the rest of A15 stay `blocked`/`not-run` until
-a real host produces the evidence.
+proves no journey. A11 and A12 were closed on 2026-10-22/23 by real host
+journeys on both targets (static HTML and React/TS), so they no longer wait on
+this tooling; the rest of A15 (clean target machine, Ubuntu CI, human keyboard
+acceptance, runtime owner integration) stays `not-run` until that environment
+produces the evidence.
 
 ## Typical acceptance run
 
