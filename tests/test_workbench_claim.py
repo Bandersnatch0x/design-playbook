@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -62,7 +64,7 @@ def _load_workbench_harness():
 HARNESS = _load_workbench_harness()
 
 
-class WorkbenchClaimTest(unittest.TestCase):
+class WorkbenchClaimTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.h = HARNESS.WorkbenchHarness()
         self.addCleanup(self.h.stop)
@@ -162,6 +164,8 @@ class WorkbenchClaimTest(unittest.TestCase):
         assert consented.status == 200, consented.text
         return consented.json["result"]
 
+
+class WorkbenchClaimTest(WorkbenchClaimTestCase):
     def test_claiming_without_a_record_refuses_and_says_why(self) -> None:
         request = self._create_request()
         with self.assertRaises(workbench_claim.ClaimError) as caught:
@@ -199,6 +203,151 @@ class WorkbenchClaimTest(unittest.TestCase):
             workbench_claim.claim_request(
                 request_id=request["requestId"], data_dir=self.data_dir
             )
+
+
+class WorkbenchTaskTest(WorkbenchClaimTestCase):
+    def ready(self) -> tuple[dict, dict]:
+        request = self._create_request()
+        self._consent(request)
+        claimed = workbench_claim.claim_request(
+            request_id=request["requestId"], data_dir=self.data_dir
+        )
+        return request, claimed["result"]["lease"]
+
+    def cli(self, action: str, request_id: str, *extra: str, stdin: bytes | None = None):
+        return subprocess.run(
+            [sys.executable, str(PLUGIN_DIR / "scripts" / "workbench_task.py"),
+             action, "--request", request_id, "--data-dir", str(self.data_dir), *extra],
+            input=stdin,
+            capture_output=True,
+            timeout=20,
+            env={**os.environ, "PYTHONIOENCODING": "cp1252"},
+        )
+
+    @staticmethod
+    def lease_args(lease: dict) -> list[str]:
+        return ["--attempt-id", lease["attemptId"], "--lease-id", lease["leaseId"],
+                "--sequence", str(lease["sequence"])]
+
+    def test_read_heartbeat_result_and_maintainer_approval(self) -> None:
+        request, lease = self.ready()
+        rid = request["requestId"]
+        read = self.cli("read", rid)
+        self.assertEqual(read.returncode, 0, read.stderr)
+        detail = json.loads(read.stdout.decode("utf-8"))["request"]
+        for field in ("context", "plan", "allowedActions", "resultSchema"):
+            self.assertTrue(detail[field])
+        self.assertEqual(detail["goal"], request["goal"])
+        beat = self.cli("heartbeat", rid, *self.lease_args(lease),
+                        "--stage", "完成标题", "--count", "1", "--operation-id", "task-beat")
+        self.assertEqual(beat.returncode, 0, beat.stderr)
+        conflicting = self.cli("heartbeat", rid, *self.lease_args(lease),
+                               "--stage", "完成标题", "--count", "2", "--operation-id", "task-beat")
+        self.assertEqual(conflicting.returncode, 1)
+        self.assertIn(b"conflict", conflicting.stderr)
+        after = self.cli("read", rid)
+        progress = json.loads(after.stdout.decode("utf-8"))["request"]["attempt"]["progress"]
+        self.assertEqual(progress, {"stage": "完成标题", "count": 1})
+        result = {"summary": "改写标题", "changes": [
+            {"path": "index.html", "operation": "create", "content": "<h1>新标题</h1>"}
+        ]}
+        submitted = self.cli("result", rid, *self.lease_args(lease), "--result", "-",
+                             stdin=json.dumps(result, ensure_ascii=False).encode("utf-8"))
+        self.assertEqual(submitted.returncode, 0, submitted.stderr)
+        payload = json.loads(submitted.stdout.decode("utf-8"))["result"]
+        self.assertEqual(payload["state"], "proposal-ready")
+        self.assertFalse(payload["verified"])
+        self.assertFalse((self.project_dir / "index.html").exists())
+        proposal = self.h.proposal_detail(self.project_id, payload["proposalId"]).json["proposal"]
+        record = workbench_claim.read_claim_record(self.data_dir, rid)
+        denied = self.h.proposal_action(
+            self.project_id, payload["proposalId"], "apply",
+            digest=proposal["digest"], capability=record["token"],
+        )
+        self.assertEqual(denied.status, 401, denied.text)
+        applied = self.h.proposal_action(
+            self.project_id, payload["proposalId"], "apply", digest=proposal["digest"]
+        )
+        self.assertEqual(applied.status, 200, applied.text)
+        self.assertEqual((self.project_dir / "index.html").read_text(encoding="utf-8"),
+                         "<h1>新标题</h1>")
+        for output in (read.stdout, beat.stdout, submitted.stdout, submitted.stderr):
+            self.assertNotIn(record["token"].encode(), output)
+
+    def test_failure_reports_the_observed_reason(self) -> None:
+        request, lease = self.ready()
+        failed = self.cli("fail", request["requestId"], *self.lease_args(lease),
+                          "--reason", "构建失败", "--operation-id", "task-fail")
+        self.assertEqual(failed.returncode, 0, failed.stderr)
+        result = json.loads(failed.stdout.decode("utf-8"))["result"]
+        self.assertEqual(result["state"], "failed")
+        self.assertEqual(result["attempt"]["progress"]["note"], "构建失败")
+
+    def test_result_file_and_service_schema_refusal(self) -> None:
+        request, lease = self.ready()
+        path = self.h.base / "result.json"
+        path.write_text('{"notes": "缺少 summary"}', encoding="utf-8")
+        args = (*self.lease_args(lease), "--result", str(path), "--operation-id", "task-result")
+        refused = self.cli("result", request["requestId"], *args)
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("result is missing: summary", refused.stderr.decode("utf-8"))
+        path.write_text('{"summary": "完成"}', encoding="utf-8")
+        accepted = self.cli("result", request["requestId"], *args)
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        replayed = self.cli("result", request["requestId"], *args)
+        self.assertEqual(replayed.returncode, 0, replayed.stderr)
+        self.assertTrue(json.loads(replayed.stdout)["replayed"])
+
+    def test_stale_lease_and_missing_claim_refuse(self) -> None:
+        missing = self.cli("read", "missing-request")
+        self.assertEqual(missing.returncode, 1)
+        self.assertIn(b"confirm the send scope", missing.stderr)
+        request, lease = self.ready()
+        stale = {**lease, "sequence": lease["sequence"] + 1}
+        refused = self.cli("heartbeat", request["requestId"], *self.lease_args(stale),
+                           "--stage", "editing", "--count", "1")
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn(b"conflict", refused.stderr)
+
+    def test_request_read_cannot_use_another_requests_credential(self) -> None:
+        request, _ = self.ready()
+        rid = request["requestId"]
+        record = workbench_claim.read_claim_record(self.data_dir, rid)
+        foreign_id = "00000000-0000-4000-8000-000000000000"
+        foreign = {**record, "requestId": foreign_id}
+        workbench_claim.claim_record_path(self.data_dir, foreign_id).write_text(
+            json.dumps(foreign), encoding="utf-8"
+        )
+        denied = self.cli("read", foreign_id)
+        self.assertEqual(denied.returncode, 1)
+        self.assertIn(b"unauthorized", denied.stderr)
+        self.assertNotIn(record["token"].encode(), denied.stderr)
+        workbench_claim.claim_record_path(self.data_dir, rid).write_text(
+            json.dumps(foreign), encoding="utf-8"
+        )
+        mismatched = self.cli("read", rid)
+        self.assertEqual(mismatched.returncode, 1)
+        self.assertIn(b"different request", mismatched.stderr)
+
+    def test_invalid_reports_are_rejected_before_sending(self) -> None:
+        request, lease = self.ready()
+        rid = request["requestId"]
+        for action, extra in (
+            ("heartbeat", ["--stage", "editing", "--count", "-1"]),
+            ("heartbeat", ["--count", "0"]),
+            ("fail", ["--reason", " "]),
+            ("result", []),
+        ):
+            with self.subTest(action=action, extra=extra):
+                invalid = self.cli(action, rid, *self.lease_args(lease), *extra)
+                self.assertEqual(invalid.returncode, 2, invalid.stderr)
+        for raw in (b"{", b"[]", b"\xff"):
+            with self.subTest(raw=raw):
+                invalid = self.cli("result", rid, *self.lease_args(lease),
+                                   "--result", "-", stdin=raw)
+                self.assertEqual(invalid.returncode, 1, invalid.stderr)
+        missing_lease = self.cli("fail", rid, "--reason", "failed")
+        self.assertEqual(missing_lease.returncode, 2)
 
 
 if __name__ == "__main__":  # pragma: no cover - manual run

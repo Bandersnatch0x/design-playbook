@@ -16,6 +16,7 @@ from pathlib import Path
 
 from design_playbook_workbench.assets import AssetService
 from design_playbook_workbench.blobs import BlobStore, digest_bytes
+from design_playbook_workbench.components import ComponentService
 from design_playbook_workbench.designsystem import (
     DesignSystemService,
     diff_documents,
@@ -52,6 +53,11 @@ TOKENS = {
     "theme": {
         "dark": {"color": {"surface": "#101216", "ink": "#eceff4"}},
     },
+}
+
+COMPONENT = {
+    "name": "Button",
+    "props": [{"name": "label", "type": "string", "default": "确定"}],
 }
 
 
@@ -311,24 +317,75 @@ class PublishRulesTest(DesignSystemTestCase):
         self.assertEqual(diff["counts"]["removed"], 0)
 
         # A component that depends on the token set shows up as affected.
+        self.components = ComponentService(
+            store=self.store,
+            service=self.service,
+            assets=self.assets,
+            reuse=self.reuse,
+            blobs=self.blobs,
+        )
         revision = self.store.latest_revision(self.asset_id)
-        (self.project / "components").mkdir(parents=True, exist_ok=True)
-        (self.project / "components/button.md").write_bytes(b"# Button\n")
-        component = self.import_assets(["components/button.md"])
+        component = self.components.create_component(
+            self.project_id,
+            name="Button",
+            definition=COMPONENT,
+            operation=self.operation({"action": "component-create"}),
+        )["result"]
         self.reuse.publish_with_dependencies(
             self.project_id,
             component["assetId"],
             dependencies=[
                 {"assetId": self.asset_id, "revisionId": revision["revision_id"]}
             ],
-            operation=self.operation({"publish-deps": "component"}),
+            operation=self.operation(
+                {"publish-deps": "component"},
+                expected=self.asset_counter(component["assetId"]),
+            ),
         )
         affected = self.design_system.affected(self.project_id, self.asset_id)
         self.assertEqual(
             [entry["assetId"] for entry in affected["components"]],
             [component["assetId"]],
         )
+        self.assertEqual(affected["pages"], [])
         self.assertIn("不会自动升级", affected["note"])
+
+        # A page that instantiates the component is one hop further out and is
+        # named in `pages`, not in `components` (R07: the page hop is separate
+        # because a page is not a thing you upgrade -- it is republished).
+        page = self.components.create_page(
+            self.project_id,
+            name="P",
+            layout={
+                "name": "P",
+                "nodes": [
+                    {"id": "root", "type": "stack", "children": ["btn"], "props": {}},
+                    {
+                        "id": "btn",
+                        "type": "instance",
+                        "props": {"assetId": component["assetId"]},
+                    },
+                ],
+            },
+            operation=self.operation({"action": "page-create"}),
+        )["result"]
+        self.components.publish_page(
+            self.project_id,
+            page["assetId"],
+            operation=self.operation(
+                {"action": "page-publish"},
+                expected=self.asset_counter(page["assetId"]),
+            ),
+        )
+        after = self.design_system.affected(self.project_id, self.asset_id)
+        self.assertEqual(
+            [entry["assetId"] for entry in after["pages"]], [page["assetId"]]
+        )
+        self.assertEqual(
+            [entry["assetId"] for entry in after["components"]],
+            [component["assetId"]],
+            "a page must not be listed twice, once as a component",
+        )
 
     def test_the_preview_is_generated_from_the_published_values(self) -> None:
         self.asset_action(self.asset_id, "tokens-publish")
@@ -366,8 +423,34 @@ class DesignNotesTest(DesignSystemTestCase):
             digest_bytes((self.project / "DESIGN.md").read_bytes()), before
         )
 
-    def test_notes_outside_the_project_or_not_markdown_are_refused(self) -> None:
-        for path in ("../outside.md", "tokens/brand.json", "", None):
+    def test_notes_outside_the_project_are_refused_by_containment(self) -> None:
+        """The containment rule is what refuses these, not the missing-file one.
+
+        An earlier version accepted any of three codes, so it stayed green even
+        when the refusal came from "no such file" rather than from the path
+        rule. The file below exists, so only containment can refuse it.
+        """
+        outside = self.base / "outside-notes.md"
+        outside.write_text("# outside\n", encoding="utf-8")
+        for path in (
+            "../outside-notes.md",
+            str(outside),
+            "docs/../../outside-notes.md",
+        ):
+            with self.subTest(path=path):
+                with self.assertRaises(WorkbenchError) as caught:
+                    self.design_system.propose_notes(
+                        self.project_id,
+                        path=path,
+                        text="# nope\n",
+                        operation=self.operation({"action": "notes-propose"}),
+                    )
+                self.assertEqual(caught.exception.code, INVALID_TARGET)
+        # Nothing was read or written outside the project.
+        self.assertEqual(outside.read_text(encoding="utf-8"), "# outside\n")
+
+    def test_notes_that_are_not_markdown_or_do_not_exist_are_refused(self) -> None:
+        for path in ("tokens/brand.json", "", None):
             with self.subTest(path=path):
                 with self.assertRaises(WorkbenchError) as caught:
                     self.design_system.propose_notes(
@@ -377,8 +460,7 @@ class DesignNotesTest(DesignSystemTestCase):
                         operation=self.operation({"action": "notes-propose"}),
                     )
                 self.assertIn(
-                    caught.exception.code,
-                    (INVALID_INPUT, INVALID_TARGET, MISSING_DEPENDENCY),
+                    caught.exception.code, (INVALID_INPUT, MISSING_DEPENDENCY)
                 )
         # A markdown file that does not exist yet is a missing dependency
         # rather than a silent create.

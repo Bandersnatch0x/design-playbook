@@ -1211,7 +1211,12 @@ class ComponentService:
         for dependency_asset_id in sorted(wanted):
             revision = self.store.latest_revision(dependency_asset_id)
             if revision is None:
-                continue
+                # validate_layout already refused an unpublished instance, so
+                # a component without a revision cannot reach here. Failing
+                # loudly keeps a future gap from silently dropping an edge.
+                raise WorkbenchError(
+                    MISSING_DEPENDENCY, detail="an instantiated component is unpublished"
+                )
             dependencies.append(
                 {
                     "assetId": dependency_asset_id,

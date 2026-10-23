@@ -38,6 +38,12 @@ def setUpModule() -> None:
     global _PLAYWRIGHT, _BROWSER
     _PLAYWRIGHT = sync_playwright().start()
     _BROWSER = launch_browser(_PLAYWRIGHT)
+    # Every journey starts its own real service and browser context, and the
+    # whole file runs on one loaded CI host. Playwright's 5 s default is not
+    # enough there: a slow round-trip reads as a product defect when it is
+    # only a busy machine. The assertions are unchanged -- a wrong result
+    # still fails, just after a longer wait.
+    expect.set_options(timeout=20_000)
 
 
 def tearDownModule() -> None:
@@ -144,6 +150,52 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         answer_dialog(self.page, "read, write")
         expect(row.locator(".grant-list")).to_contain_text("写入")
 
+    def test_the_asset_flow_is_completable_from_the_keyboard(self) -> None:
+        """R15: the core flow stays completable without a pointer."""
+        self._open_session()
+        directory = self.h.make_directory("keyboard-flow")
+        (directory / "brand.md").write_text("# Brand\n", encoding="utf-8")
+
+        # Registration from the keyboard: Enter submits the path and lands on
+        # the confirm control, so a second Enter registers.
+        self.page.fill("#project-path", str(directory))
+        self.page.press("#project-path", "Enter")
+        expect(self.page.locator("#register-button")).to_be_focused()
+        self.page.keyboard.press("Enter")
+        row = self.page.locator("#project-rows tr").first
+        expect(row).to_be_visible()
+
+        project_id = next(
+            entry["projectId"]
+            for entry in self.h.projects()["projects"]
+            if entry["canonicalPath"] == str(directory.resolve())
+        )
+        imported = self.h.import_assets(project_id, ["brand.md"])
+        assert imported.status == 200, imported.text
+
+        # Reach the assets panel through the row menu, arrow keys only.
+        more = row.locator(".more-button")
+        more.focus()
+        self.page.keyboard.press("ArrowDown")
+        for _ in range(12):
+            focused = self.page.evaluate(
+                "() => (document.activeElement || {}).className || ''"
+            )
+            if focused.startswith("assets-button"):
+                break
+            self.page.keyboard.press("ArrowDown")
+        self.page.keyboard.press("Enter")
+        expect(self.page.locator("#assets-panel")).to_be_visible()
+
+        # Search and select, still without a pointer.
+        self.page.fill("#assets-query", "brand")
+        self.page.press("#assets-query", "Enter")
+        expect(self.page.locator(".asset-item")).to_have_count(1)
+        self.page.locator(".asset-item .asset-select").first.focus()
+        self.page.keyboard.press("Enter")
+        expect(self.page.locator("#asset-detail")).to_be_visible()
+        expect(self.page.locator("#asset-detail-heading")).to_have_text("brand.md")
+
     def test_disconnected_rebind_and_removal_journey(self) -> None:
         self._open_session()
         directory = self.h.make_directory("vanish")
@@ -231,7 +283,9 @@ class AssetsPanelJourneyTest(unittest.TestCase):
         self.directory = self.h.make_directory("assets-ui")
         (self.directory / "site").mkdir()
         (self.directory / "site" / "index.html").write_text(
-            "<!doctype html><h1>Imported page</h1><script>document.title='ran'</script>",
+            "<!doctype html><h1>Imported page</h1>"
+            "<img src=\"https://cdn.example.com/logo.png\" alt=\"\">"
+            "<script>document.title='ran'</script>",
             encoding="utf-8",
         )
         (self.directory / "brand.md").write_text("# Brand\n", encoding="utf-8")
@@ -277,8 +331,12 @@ class AssetsPanelJourneyTest(unittest.TestCase):
             "site/index.html"
         )
 
-    def _wait_for_preview_frame(self, timeout_ms: int = 10000):
-        """The loaded preview frame, located by origin (it loads asynchronously)."""
+    def _wait_for_preview_frame(self, timeout_ms: int = 25000):
+        """The loaded preview frame, located by origin (it loads asynchronously).
+
+        Twenty-five seconds, not ten: these poll for a cross-origin frame and
+        the whole file runs on one loaded CI host.
+        """
         deadline = timeout_ms
         waited = 0
         while waited < deadline:
@@ -340,6 +398,15 @@ class AssetsPanelJourneyTest(unittest.TestCase):
         self.page.click("#asset-preview-static")
         expect(self.page.locator("#asset-preview-enable")).to_be_hidden()
 
+    def test_the_preview_names_the_external_resources_it_blocks(self) -> None:
+        """R03: an off-machine resource is marked, never silently dropped."""
+        self._open_static_package()
+        self.page.click("#asset-preview-static")
+        external = self.page.locator("#asset-preview-external")
+        expect(external).to_be_visible()
+        expect(external).to_contain_text("https://cdn.example.com/logo.png")
+        expect(external).to_contain_text("不会自动放宽策略")
+
 
 
 class DesignSystemJourneyTest(unittest.TestCase):
@@ -393,7 +460,7 @@ class DesignSystemJourneyTest(unittest.TestCase):
         expect(self.page.locator("#tokens-panel")).to_be_visible()
         expect(self.page.locator("#tokens-heading")).to_contain_text(self.tokens["name"])
 
-    def _preview_frame(self, timeout_ms: int = 10000):
+    def _preview_frame(self, timeout_ms: int = 25000):
         waited = 0
         while waited < timeout_ms:
             for candidate in self.page.frames:
@@ -589,7 +656,7 @@ class ComponentDocumentJourneyTest(unittest.TestCase):
         rows = self.h.runtime.store.project_assets(self.project_id)
         return [row for row in rows if kind is None or row["kind"] == kind]
 
-    def _instance_frame(self, timeout_ms: int = 10000):
+    def _instance_frame(self, timeout_ms: int = 25000):
         waited = 0
         while waited < timeout_ms:
             for candidate in self.page.frames:
@@ -661,6 +728,18 @@ class ComponentDocumentJourneyTest(unittest.TestCase):
         )
         expect(self.page.locator("#document-validation-errors")).to_be_empty()
 
+        # R04: the publish advanced the counter, so the very next write from
+        # this panel must carry the new one. A panel that kept the counter it
+        # had before the publish would be refused here as a stale conflict.
+        self.page.click("#document-save")
+        expect(self.page.locator("#document-status")).to_contain_text("草稿已保存")
+        expect(self.page.locator("#document-error")).to_be_hidden()
+        self.page.click("#document-publish")
+        expect(self.page.locator("#document-status")).to_contain_text("已发布第 2 次修订")
+        self.assertEqual(
+            len(self.h.runtime.store.asset_revisions(component_id)), 2
+        )
+
     def test_create_a_page_and_distill_a_candidate_without_touching_it(self) -> None:
         self.page.click("#create-page")
         expect(self.page.locator("#document-panel")).to_be_visible()
@@ -717,6 +796,26 @@ class CanvasJourneyTest(unittest.TestCase):
         expect(self.page.locator("#canvas-panel")).to_be_visible()
 
     # -- helpers ---------------------------------------------------------
+
+    def reload_canvases(self) -> None:
+        """Click reload and refuse to go on if the panel reported a failure.
+
+        Without this a failed list read looks like an empty `<select>` and the
+        next step times out with no reason; the panel already holds the real
+        one in #canvas-error.
+        """
+        self.page.click("#canvas-reload")
+        error = self.page.locator("#canvas-error")
+        deadline = time.time() + 25.0
+        while time.time() < deadline:
+            if error.is_visible():
+                raise AssertionError(f"canvas reload failed: {error.inner_text()}")
+            if self.page.locator("#canvas-select option").count() > 0:
+                return
+            self.page.wait_for_timeout(120)
+        raise AssertionError(
+            "canvas reload produced neither a list nor an error in 25 s"
+        )
 
     def create_canvas(self, name: str = "首页方案") -> None:
         self.page.fill("#canvas-name", name)
@@ -793,7 +892,7 @@ class CanvasJourneyTest(unittest.TestCase):
             },
         )
         self.assertEqual(created.status, 200, created.text)
-        self.page.click("#canvas-reload")
+        self.reload_canvases()
         expect(self.page.locator(".canvas-node")).to_have_count(2)
 
         root = self.page.locator(".canvas-node").first
@@ -858,7 +957,7 @@ class CanvasJourneyTest(unittest.TestCase):
     def wait_saved(self) -> None:
         expect(self.page.locator("#canvas-save-state")).to_contain_text("已保存")
 
-    def wait_for(self, check, label: str, timeout: float = 8.0):
+    def wait_for(self, check, label: str, timeout: float = 25.0):
         """Poll the service until the confirmed state satisfies ``check``.
 
         The save label alone is not a barrier (it also reads "saved" right
@@ -1222,7 +1321,7 @@ class CanvasJourneyTest(unittest.TestCase):
         )
         self.assertEqual(created_canvas.status, 200, created_canvas.text)
         new_canvas_id = created_canvas.json["result"]["canvas"]["canvasId"]
-        self.page.click("#canvas-reload")
+        self.reload_canvases()
         expect(self.page.locator("#canvas-select option")).to_have_count(1)
         self.page.select_option("#canvas-select", new_canvas_id)
         expect(self.page.locator(".canvas-node")).to_have_count(200)
@@ -1298,7 +1397,7 @@ class CanvasJourneyTest(unittest.TestCase):
             origin=self.h.runtime.origin,
         )
         self.assertEqual(created.status, 200, created.text)
-        self.page.click("#canvas-reload")
+        self.reload_canvases()
         self.page.select_option(
             "#canvas-select", created.json["result"]["canvas"]["canvasId"]
         )
@@ -1390,7 +1489,7 @@ class OrchestrationJourneyTest(unittest.TestCase):
         assert response.status == 200, response.text
         return response.json["document"]
 
-    def wait_for(self, check, label: str, timeout: float = 8.0):
+    def wait_for(self, check, label: str, timeout: float = 25.0):
         deadline = time.time() + timeout
         while time.time() < deadline:
             try:
@@ -1610,7 +1709,7 @@ class WorkRequestJourneyTest(unittest.TestCase):
             }"""
         )
 
-    def wait_for(self, check, label: str, timeout: float = 8.0):
+    def wait_for(self, check, label: str, timeout: float = 25.0):
         deadline = time.time() + timeout
         while time.time() < deadline:
             try:
@@ -1955,7 +2054,7 @@ class LifecycleJourneyTest(unittest.TestCase):
         row_action(self.page, "life").click()
         expect(self.page.locator("#life-panel")).to_be_visible()
 
-    def wait_for(self, check, label, timeout=8.0):
+    def wait_for(self, check, label, timeout=25.0):
         deadline = time.time() + timeout
         while time.time() < deadline:
             try:
@@ -1970,6 +2069,31 @@ class LifecycleJourneyTest(unittest.TestCase):
     def select_asset(self) -> None:
         self.page.locator("#life-list button").first.click()
         expect(self.page.locator("#life-detail")).to_be_visible()
+
+    def test_the_archive_overview_names_pages_and_schemes_together(self) -> None:
+        """R13: one browse across the project, its pages, and its runs."""
+        page = self.h.action(
+            self.project_id,
+            "pages",
+            payload={
+                "action": "pages",
+                "name": "Landing",
+                "layout": {
+                    "name": "Landing",
+                    "nodes": [
+                        {"id": "root", "type": "stack", "children": [], "props": {}}
+                    ],
+                },
+            },
+        )
+        self.assertEqual(page.status, 200, page.text)
+        self.page.click("#life-overview-load")
+        note = self.page.locator("#life-overview-note")
+        expect(note).to_contain_text("项目：Design")
+        expect(note).to_contain_text("页面 1")
+        expect(self.page.locator("#life-overview-list")).to_contain_text(
+            "[页面] Landing"
+        )
 
     def test_round3_lifecycle_actions_match_state(self) -> None:
         for lifecycle, action, visible in (
@@ -2319,6 +2443,10 @@ class UiReviewRegressionTest(unittest.TestCase):
 
     def test_round3_mobile_project_labels_and_no_overflow(self) -> None:
         self.page.set_viewport_size({"width": 320, "height": 800})
+        # Resizing re-renders the table, so the row is briefly absent. Wait
+        # for it back before measuring, or a loaded CI host reads the empty
+        # frame and sees zero cells.
+        expect(self.page.locator("#project-rows tr").first).to_be_visible()
         self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 320)
         headers = self.page.locator(".project-table th").all_text_contents()
         cells = self.page.locator("#project-rows tr").first.locator("td")
@@ -2345,6 +2473,86 @@ class UiReviewRegressionTest(unittest.TestCase):
         self.page.locator("#life-close").click()
         expect(self.page.locator(".more-button").first).to_be_focused()
         expect(self.page.locator("#assets-panel")).to_be_hidden()
+
+    def test_the_skip_link_moves_focus_past_the_header(self) -> None:
+        """R15: a skip link that leaves focus where it was is decoration."""
+        self.page.evaluate("() => document.activeElement && document.activeElement.blur()")
+        self.page.keyboard.press("Tab")
+        expect(self.page.locator(".skip-link")).to_be_focused()
+        self.page.keyboard.press("Enter")
+        self.page.wait_for_timeout(200)
+        focused = self.page.evaluate(
+            "() => { const a = document.activeElement;"
+            " return a ? (a.id || a.tagName.toLowerCase()) : null; }")
+        self.assertEqual(focused, "main",
+                         "the skip link must move focus to the main region")
+
+    def test_tab_order_follows_the_reading_order(self) -> None:
+        """R15: the first flow a maintainer meets comes first, in its own order."""
+        # The row's controls only enter the tab order once the list has
+        # rendered; tabbing before that walks the shell alone.
+        expect(self.page.locator("#project-rows tr")).to_have_count(1)
+        self.page.evaluate("() => document.activeElement && document.activeElement.blur()")
+        seen: list[str] = []
+        for _ in range(8):
+            self.page.keyboard.press("Tab")
+            seen.append(self.page.evaluate(
+                "() => { const a = document.activeElement;"
+                " return a ? (a.id || a.className || a.tagName.toLowerCase()) : ''; }"))
+        for expected, actual in (
+            ("project-path", seen[2]), ("probe-button", seen[3]),
+            ("refresh-button", seen[4]), ("open-button", seen[5]),
+        ):
+            self.assertEqual(actual, expected,
+                             f"tab order drifted: {seen}")
+        self.assertTrue(seen[6].startswith("more-button"), seen)
+
+    PANELS = (
+        ("assets", "#assets-panel", "#assets-close", None),
+        ("proposals", "#proposals-panel", "#proposals-close", None),
+        ("work", "#work-panel", "#work-close", None),
+        ("owner", "#owner-panel", "#owner-close", None),
+        ("life", "#life-panel", "#life-close", None),
+        # Settings has its own toolbar entry, not a row-menu action, so focus
+        # returns there instead of to the row's menu button.
+        ("settings", "#settings-panel", "#settings-close", "#settings-open"),
+    )
+
+    def _closes_from_the_keyboard(self, opener, panel, close, return_to) -> None:
+        """Opening runs its own load, then moves focus to the heading."""
+        if return_to is None:
+            row_action(self.page, opener).click()
+        else:
+            self.page.click(return_to)
+        expect(self.page.locator(panel)).to_be_visible()
+        # Each opener focuses either the panel heading or the panel itself, and
+        # some keep loading afterwards. Wait until focus has actually landed
+        # inside this panel and stayed there, instead of assuming which node
+        # receives it.
+        self.page.wait_for_function(
+            "(sel) => { const p = document.querySelector(sel);"
+            " const a = document.activeElement;"
+            " return !!p && !!a && p.contains(a); }",
+            arg=panel,
+            timeout=20000,
+        )
+        self.page.wait_for_timeout(150)
+        self.page.locator(close).focus()
+        expect(self.page.locator(close)).to_be_focused()
+        self.page.keyboard.press("Escape")
+        expect(self.page.locator(panel)).to_be_hidden()
+        expect(self.page.locator(return_to or ".more-button").first).to_be_focused()
+
+    def test_each_panel_closes_from_the_keyboard(self) -> None:
+        """R15: Escape closes a panel without reaching for the mouse.
+
+        One panel per test instance: opening a panel rewires the trigger stack,
+        so reusing one page across all six would carry that state forward and
+        hide which panel actually failed.
+        """
+        for opener, panel, close, return_to in self.PANELS:
+            with self.subTest(panel=panel):
+                self._closes_from_the_keyboard(opener, panel, close, return_to)
 
     def test_the_flow_edge_note_has_an_accessible_name(self) -> None:
         # F1: every control in the flow row announces what it is; the note was
@@ -2531,6 +2739,128 @@ class IndependentReviewRegressionTest(unittest.TestCase):
             ),
             "settings-open",
         )
+
+
+_OCCLUSION_JS = """(sels) => sels.map((sel) => {
+  const el = document.querySelector(sel);
+  if (!el) return {sel, present: false};
+  const r = el.getBoundingClientRect();
+  const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return {sel, present: true,
+          inViewport: r.top >= 0 && r.left >= 0
+            && r.bottom <= innerHeight + 1 && r.right <= innerWidth + 1,
+          occludedBy: top && !el.contains(top) && top !== el
+            ? (top.id || top.className || top.tagName) : null};
+})"""
+
+# A focus indicator is any computed change on focus: an outline, a box
+# shadow, or a border/background shift. Asserting a literal outline would
+# fail the elements this shell styles with a shadow instead.
+_FOCUS_INDICATOR_JS = """() => {
+  const sel = 'button, input, select, textarea, a[href], [role=button],'
+    + ' [tabindex]:not([tabindex="-1"])';
+  const snap = (el) => { const cs = getComputedStyle(el);
+    return [cs.outlineStyle, cs.outlineWidth, cs.outlineColor, cs.boxShadow,
+            cs.borderColor, cs.backgroundColor, cs.textDecorationLine].join('|'); };
+  const out = [];
+  for (const el of document.querySelectorAll(sel)) {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) continue;
+    const before = snap(el);
+    const previous = document.activeElement;
+    el.focus();
+    const after = snap(el);
+    const focusable = document.activeElement === el;
+    if (previous && previous.focus) previous.focus();
+    out.push({id: el.id || el.tagName.toLowerCase(), focusable,
+              indicatorChanged: before !== after});
+  }
+  return out;
+}"""
+
+
+class DesktopViewportAndZoomJourneyTest(unittest.TestCase):
+    """R15: both desktop viewports and 200% zoom keep the main flow usable.
+
+    The acceptance asks for 1366x768 and 1920x1080 with no key control
+    occluded, and for the main flow to stay completable at 200% zoom. The
+    review measured this by hand; these are the same criteria, committed so
+    a regression fails the matrix instead of a screenshot.
+    """
+
+    VIEWS = (
+        ("1920x1080", 1920, 1080, 1),
+        ("1366x768", 1366, 768, 1),
+        ("zoom200", 683, 384, 2),
+    )
+
+    def setUp(self) -> None:
+        self.h = WorkbenchHarness(consume_bootstrap=False)
+        self.addCleanup(self.h.stop)
+        self.page = _BROWSER.new_page(viewport={"width": 1920, "height": 1080})
+        self.addCleanup(self.page.close)
+        self.directory = self.h.make_directory("viewport-target")
+        (self.directory / "brand.md").write_text("# Brand\n", encoding="utf-8")
+        registered = self.h.register(self.directory, name="Viewport")
+        assert registered.status == 200, registered.text
+        self.project_id = registered.json["result"]["projectId"]
+        granted = self.h.grant(self.project_id, ["read", "write"], expected_counter=0)
+        assert granted.status == 200, granted.text
+        self.page.goto(self.h.runtime.bootstrap_url)
+        expect(self.page.locator("#session-state")).to_contain_text("会话有效")
+        self.cdp = self.page.context.new_cdp_session(self.page)
+
+    def _view(self, width: int, height: int, scale: int) -> None:
+        self.cdp.send(
+            "Emulation.setDeviceMetricsOverride",
+            {"width": width, "height": height, "deviceScaleFactor": scale,
+             "mobile": False},
+        )
+        self.page.wait_for_timeout(200)
+
+    def test_neither_desktop_viewport_overflows(self) -> None:
+        for label, width, height, scale in self.VIEWS:
+            self._view(width, height, scale)
+            overflow = self.page.evaluate(
+                "() => document.documentElement.scrollWidth"
+                " > document.documentElement.clientWidth + 1"
+            )
+            self.assertFalse(overflow, f"{label} overflows horizontally")
+
+    def test_key_controls_stay_reachable_at_every_view(self) -> None:
+        # The register button lives in the candidate panel, which is hidden
+        # until a probe succeeds; reveal it so the check covers the flow the
+        # maintainer actually walks.
+        second = self.h.make_directory("viewport-target-second")
+        self.page.fill("#project-path", str(second))
+        self.page.click("#probe-button")
+        expect(self.page.locator("#candidate")).to_be_visible()
+        controls = ["#project-path", "#probe-button", "#register-button"]
+        for label, width, height, scale in self.VIEWS:
+            self._view(width, height, scale)
+            for selector in controls:
+                # At 200% zoom the viewport is only 384 CSS px tall, so
+                # reachable means "scrolls into view and is not occluded
+                # there", not "visible without scrolling".
+                self.page.locator(selector).scroll_into_view_if_needed()
+                row = self.page.evaluate(_OCCLUSION_JS, [selector])[0]
+                self.assertTrue(row["present"], f"{label}: {selector} missing")
+                self.assertTrue(
+                    row["inViewport"], f"{label}: {selector} off-screen after scroll"
+                )
+                self.assertIsNone(
+                    row["occludedBy"], f"{label}: {selector} is occluded"
+                )
+
+    def test_every_focusable_control_shows_a_focus_indicator(self) -> None:
+        self._view(1366, 768, 1)
+        stops = self.page.evaluate(_FOCUS_INDICATOR_JS)
+        self.assertTrue(stops, "the shell exposed no focusable control")
+        missing = [
+            row["id"] for row in stops
+            if row["focusable"] and not row["indicatorChanged"]
+        ]
+        self.assertEqual(missing, [], "focusable controls without a focus indicator")
 
 
 if __name__ == "__main__":  # pragma: no cover - manual run

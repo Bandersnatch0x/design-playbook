@@ -120,6 +120,29 @@ class LifecycleTestCase(unittest.TestCase):
 
 
 class ArchiveTrashRestoreTest(LifecycleTestCase):
+    def test_restore_refuses_a_stale_counter(self) -> None:
+        """R04: restore is a mutable write, so it carries the expected counter."""
+        asset = self.import_asset("brand.md")
+        self.publish(asset["assetId"])
+        stale = self.asset_counter(asset["assetId"])
+        self.lifecycle.trash(
+            self.project_id,
+            asset["assetId"],
+            operation=self.operation({"action": "trash"}, expected=stale),
+        )
+        # The trash advanced the counter; restoring on the old value applies
+        # on top of a state the caller never saw.
+        with self.assertRaises(WorkbenchError) as caught:
+            self.lifecycle.restore(
+                self.project_id,
+                asset["assetId"],
+                operation=self.operation({"action": "restore"}, expected=stale),
+            )
+        self.assertEqual(caught.exception.code, CONFLICT)
+        self.assertEqual(
+            self.store.asset(asset["assetId"])["lifecycle"], "trashed"
+        )
+
     def test_archive_and_unarchive_keep_content_and_references(self) -> None:
         asset = self.import_asset("brand.md")
         self.publish(asset["assetId"])
@@ -232,7 +255,10 @@ class ReferenceReportTest(LifecycleTestCase):
             dependencies=[
                 {"assetId": token["assetId"], "revisionId": token_rev["revision_id"]}
             ],
-            operation=self.operation({"action": "publish-deps"}),
+            operation=self.operation(
+                {"action": "publish-deps"},
+                expected=self.asset_counter(component["assetId"]),
+            ),
         )
         # An instance and a derived asset.
         self.reuse.create_instance(

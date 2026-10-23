@@ -12,7 +12,8 @@ It covers exactly one A15 item: "clean install". It deliberately does NOT
 cover, and never claims: Windows ACL / junction / file-occupation semantics,
 performance p95, keyboard-only completion, or the two real-Agent journeys.
 Those stay ``not-run``/``blocked`` in the acceptance ledger until they are
-actually measured on the required host.
+actually measured on the required host; the two Agent journeys were run
+separately on 2026-10-22/23 and are not evidence this tool produces.
 
 Usage::
 
@@ -143,7 +144,7 @@ def summarise(
             "Windows ACL / junction / file-occupation semantics",
             "performance p95 at R15 scale",
             "keyboard-only completion and viewport checks",
-            "the two real-Agent journeys (A11/A12)",
+            "the two real-Agent journeys (A11/A12; run separately on 2026-10-22/23)",
         ],
     }
 

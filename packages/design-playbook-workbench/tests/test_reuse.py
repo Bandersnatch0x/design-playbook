@@ -268,6 +268,35 @@ class RevisionImmutabilityTest(ReuseTestCase):
 
 
 class DependencyClosureTest(ReuseTestCase):
+    def test_publishing_with_dependencies_refuses_a_stale_counter(self) -> None:
+        """R04: this publish is a mutable write and carries the counter too."""
+        tokens = self.import_and_publish("source", self.source_id, "tokens/brand.json")
+        revision = self.store.latest_revision(tokens["assetId"])
+        asset = self.import_and_publish("source", self.source_id, "components/button.md")
+        stale = self.asset_counter(asset["assetId"])
+        self.reuse.publish_with_dependencies(
+            self.source_id,
+            asset["assetId"],
+            dependencies=[
+                {"assetId": tokens["assetId"], "revisionId": revision["revision_id"]}
+            ],
+            operation=self.operation({"publish-deps": 1}, expected=stale),
+        )
+        before = len(self.store.asset_revisions(asset["assetId"]))
+        with self.assertRaises(WorkbenchError) as caught:
+            self.reuse.publish_with_dependencies(
+                self.source_id,
+                asset["assetId"],
+                dependencies=[
+                    {"assetId": tokens["assetId"], "revisionId": revision["revision_id"]}
+                ],
+                operation=self.operation({"publish-deps": 2}, expected=stale),
+            )
+        self.assertEqual(caught.exception.code, CONFLICT)
+        self.assertEqual(
+            len(self.store.asset_revisions(asset["assetId"])), before
+        )
+
     def test_dependencies_must_resolve_inside_the_project(self) -> None:
         tokens = self.import_and_publish("source", self.source_id, "tokens/brand.json")
         with self.assertRaises(WorkbenchError) as caught:

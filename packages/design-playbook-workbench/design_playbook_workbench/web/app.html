@@ -21,7 +21,9 @@
   <button type="button" id="settings-open" class="secondary">设置与备份</button>
 </header>
 
-<main id="main">
+<!-- tabindex="-1" is what lets the skip link move focus here; without it the
+     link changes the hash and leaves focus at the top of the page. -->
+<main id="main" tabindex="-1">
   <section class="panel" id="session-error" hidden aria-labelledby="session-error-heading">
     <h2 id="session-error-heading">会话不可用</h2>
     <p id="session-error-message"></p>
@@ -164,6 +166,7 @@
           <button type="button" id="asset-preview-enable" class="secondary" hidden>启用动态预览</button>
         </div>
         <p id="asset-preview-note" class="hint" role="status"></p>
+        <p id="asset-preview-external" class="hint" role="status" hidden></p>
         <iframe id="asset-preview-frame" class="asset-preview-frame" hidden
                 title="资产隔离预览" sandbox=""></iframe>
         <div class="design-system-entry" id="asset-canvas-controls">
@@ -724,6 +727,11 @@
       归档与回收站只改变发现状态，不破坏引用；永久删除需二次确认、引用检查与索引完整，
       删除只清工作台记录，从不改动本地源仓库文件。
     </p>
+    <div class="preview-controls">
+      <button type="button" id="life-overview-load" class="secondary">归档总览</button>
+    </div>
+    <p id="life-overview-note" class="hint" role="status"></p>
+    <ul id="life-overview-list" class="plain-list"></ul>
     <ul id="life-list" class="plain-list"></ul>
     <div id="life-detail" hidden>
       <h4 id="life-detail-name"></h4>

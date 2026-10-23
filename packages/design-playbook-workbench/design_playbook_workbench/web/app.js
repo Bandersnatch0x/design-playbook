@@ -105,6 +105,7 @@ const elements = {
   assetWarnings: document.getElementById("asset-warnings"),
   assetPreviewFrame: document.getElementById("asset-preview-frame"),
   assetPreviewNote: document.getElementById("asset-preview-note"),
+  assetPreviewExternal: document.getElementById("asset-preview-external"),
   assetPreviewStatic: document.getElementById("asset-preview-static"),
   assetPreviewDynamic: document.getElementById("asset-preview-dynamic"),
   assetPreviewEnable: document.getElementById("asset-preview-enable"),
@@ -323,6 +324,9 @@ const elements = {
   lifeProjectArchive: document.getElementById("life-project-archive"),
   lifeProjectUnarchive: document.getElementById("life-project-unarchive"),
   lifeProjectNote: document.getElementById("life-project-note"),
+  lifeOverviewLoad: document.getElementById("life-overview-load"),
+  lifeOverviewNote: document.getElementById("life-overview-note"),
+  lifeOverviewList: document.getElementById("life-overview-list"),
   lifeList: document.getElementById("life-list"),
   lifeDetail: document.getElementById("life-detail"),
   lifeDetailName: document.getElementById("life-detail-name"),
@@ -1455,6 +1459,18 @@ async function selectAsset(assetId) {
   }
 }
 
+function applyAssetCounter(asset, counter) {
+  // Every asset-payload response carries the row's post-write counter, so a
+  // write can adopt it without a second request and without a window where
+  // the next write would send the value from before this one.
+  if (typeof counter !== "number" || !asset) return false;
+  asset.counter = counter;
+  if (state.selectedAsset && state.selectedAsset.assetId === asset.assetId) {
+    state.selectedAsset.counter = counter;
+  }
+  return true;
+}
+
 async function refreshAssetCounter(asset) {
   const project = state.assetsProject;
   if (!project || !asset) return;
@@ -1462,10 +1478,7 @@ async function refreshAssetCounter(asset) {
     const payload = await api(
       `/api/v1/projects/${project.projectId}/assets/${asset.assetId}`
     );
-    asset.counter = payload.asset.counter;
-    if (state.selectedAsset && state.selectedAsset.assetId === asset.assetId) {
-      state.selectedAsset.counter = payload.asset.counter;
-    }
+    applyAssetCounter(asset, payload.asset.counter);
   } catch (error) {
     // A failed refresh only means the next write may be refused as stale,
     // which the server reports honestly; it is not a silent success.
@@ -1511,6 +1524,28 @@ function renderAssetDetail(asset) {
   elements.assetPreviewFrame.removeAttribute("src");
   elements.assetPreviewNote.textContent =
     "预览在独立回环来源运行：不带会话凭证、不能访问管理 API 或外网。";
+  elements.assetPreviewExternal.hidden = true;
+  elements.assetPreviewExternal.textContent = "";
+}
+
+// R03: the preview policy blocks off-machine resources, so an entry that asks
+// for one renders with that resource missing. Naming each missing URL is the
+// difference between "renders differently" and "a file vanished", and the
+// policy is never relaxed to make them load.
+function renderPreviewExternal(descriptor) {
+  const external = Array.isArray(descriptor.externalResources)
+    ? descriptor.externalResources
+    : [];
+  if (external.length === 0) {
+    elements.assetPreviewExternal.hidden = true;
+    elements.assetPreviewExternal.textContent = "";
+    return;
+  }
+  elements.assetPreviewExternal.hidden = false;
+  elements.assetPreviewExternal.textContent =
+    `该预览请求 ${external.length} 个外部资源，预览策略一律拒绝加载，` +
+    `缺失不会自动放宽策略：` +
+    external.join("；");
 }
 
 async function showAssetPreview(mode) {
@@ -1523,6 +1558,7 @@ async function showAssetPreview(mode) {
     );
     elements.assetPreviewEnable.hidden =
       descriptor.dynamicAvailable === false || descriptor.dynamicUrl !== null;
+    renderPreviewExternal(descriptor);
     const url = mode === "dynamic" ? descriptor.dynamicUrl : descriptor.staticUrl;
     if (!url) {
       elements.assetPreviewNote.textContent =
@@ -1547,6 +1583,7 @@ async function showAssetPreview(mode) {
   } catch (error) {
     elements.assetsError.hidden = false;
     elements.assetsError.textContent = describeFailure(error, "打开预览");
+    elements.assetPreviewExternal.hidden = true;
   }
 }
 
@@ -1742,7 +1779,7 @@ async function saveDocument() {
       "草稿已保存并通过校验；发布新版本后才会成为固定修订。";
     // The write advanced the asset's counter; the publish button below must
     // send the value it is actually based on (R04).
-    asset.counter = payload.result.counter;
+    applyAssetCounter(asset, payload.result.counter);
     announce("文档草稿已保存。");
     await loadAssets();
   } catch (error) {
@@ -1773,6 +1810,9 @@ async function publishDocument() {
     );
     elements.documentError.hidden = true;
     renderDocumentValidation(payload.result.validation, kind);
+    // A publish advances the counter too, so the next save or publish must
+    // adopt it here or the service refuses it as stale (R04).
+    applyAssetCounter(asset, payload.result.counter);
     elements.documentStatus.textContent =
       `已发布第 ${payload.result.revisionNumber} 次修订。`;
     announce(`已发布第 ${payload.result.revisionNumber} 次修订。`);
@@ -2116,10 +2156,10 @@ async function saveTokenDraft() {
     );
     renderTokenValidation(payload.result.validation);
     elements.tokensError.hidden = true;
-    // The write advanced the asset's counter. Refresh it before announcing
-    // the save: the status text is what a caller waits on, and a publish
-    // issued the moment it appears must already carry the new counter (R04).
-    await refreshAssetCounter(state.tokensAsset);
+    // The write advanced the asset's counter. Adopt it before announcing the
+    // save: the status text is what a caller waits on, and a publish issued
+    // the moment it appears must already carry the new counter (R04).
+    applyAssetCounter(state.tokensAsset, payload.result.counter);
     elements.tokensStatus.textContent =
       "草稿已保存并通过校验；发布新版本后才会成为固定修订。";
     announce("tokens 草稿已保存。");
@@ -2150,9 +2190,9 @@ async function publishTokens() {
     const result = payload.result;
     elements.tokensError.hidden = true;
     renderTokenValidation(result.validation);
-    // Refresh before the status line, for the same reason the save path does:
+    // Adopt before the status line, for the same reason the save path does:
     // the next write must carry the counter this publish produced (R04).
-    await refreshAssetCounter(asset);
+    applyAssetCounter(asset, payload.result.counter);
     elements.tokensStatus.textContent =
       `已发布第 ${result.revisionNumber} 次修订；引用与项目基线都不会自动升级。`;
     announce(`已发布第 ${result.revisionNumber} 次 tokens 修订。`);
@@ -4650,6 +4690,8 @@ async function openLifecycle(project) {
     `项目：${project.name} · 目录：${project.canonicalPath}`;
   elements.lifeError.hidden = true;
   elements.lifeDetail.hidden = true;
+  elements.lifeOverviewNote.textContent = "";
+  elements.lifeOverviewList.textContent = "";
   elements.lifePanel.hidden = false;
   focusIntoPanel(elements.lifeHeading);
   await loadLifecycle();
@@ -4709,6 +4751,49 @@ function renderLifeList() {
     button.addEventListener("click", () => selectLifeAsset(asset));
     item.appendChild(button);
     elements.lifeList.appendChild(item);
+  }
+}
+
+// R13: one view across the four things a maintainer weighs when deciding
+// what to keep -- the project, its pages, its schemes, and its runs. Each
+// stays owned by its own service; this only names them together.
+async function loadArchiveOverview() {
+  const project = state.lifeProject;
+  if (!project) return;
+  try {
+    const payload = await api(lifePath("/archive-overview"));
+    renderArchiveOverview(payload);
+    elements.lifeOverviewNote.textContent =
+      `项目：${payload.project.name}${payload.project.archived ? "（已归档）" : ""} · ` +
+      `页面 ${payload.pages.length} · 方案 ${payload.schemes.length} · ` +
+      `提案 ${payload.proposals.length} · 运行 ${payload.runs.length}`;
+    announce("已载入归档总览。");
+  } catch (error) {
+    showLifeError(error, "载入归档总览");
+  }
+}
+
+function renderArchiveOverview(payload) {
+  elements.lifeOverviewList.textContent = "";
+  const groups = [
+    ["页面", payload.pages, (row) => row.name],
+    ["方案", payload.schemes, (row) => row.name],
+    ["提案", payload.proposals, (row) => row.summary],
+    ["运行", payload.runs, (row) => row.runId],
+  ];
+  for (const [label, rows, nameOf] of groups) {
+    for (const row of rows || []) {
+      const state = row.state || row.lifecycle || "";
+      const item = document.createElement("li");
+      item.textContent =
+        `[${label}] ${nameOf(row) || "（未命名）"}${state ? ` · ${state}` : ""}`;
+      elements.lifeOverviewList.appendChild(item);
+    }
+  }
+  if (elements.lifeOverviewList.childElementCount === 0) {
+    const item = document.createElement("li");
+    item.textContent = "该项目还没有页面、方案、提案或运行记录。";
+    elements.lifeOverviewList.appendChild(item);
   }
 }
 
@@ -4892,11 +4977,19 @@ elements.lifeDeleteConfirmButton.addEventListener(
   confirmHardDeleteLifeAsset
 );
 elements.lifePanel.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !elements.lifeDeleteConfirm.hidden) {
+  if (event.key !== "Escape") return;
+  // The delete confirmation is the first thing Escape must dismiss; closing
+  // the whole panel while a destructive step is pending would lose that step.
+  if (!elements.lifeDeleteConfirm.hidden) {
     event.preventDefault();
     cancelHardDeleteLifeAsset();
+    return;
   }
+  if (event.defaultPrevented || document.querySelector("#dpb-dialog")) return;
+  event.preventDefault();
+  elements.lifeClose.click();
 });
+elements.lifeOverviewLoad.addEventListener("click", () => loadArchiveOverview());
 elements.lifeProjectArchive.addEventListener("click", () => projectArchive(true));
 elements.lifeProjectUnarchive.addEventListener("click", () => projectArchive(false));
 elements.lifeClose.addEventListener("click", () => {
@@ -5095,5 +5188,28 @@ elements.refreshButton.addEventListener("click", () => {
   announce("已重新探测项目连接状态。");
 });
 elements.sessionError.hidden = true;
+
+// R15: every panel closes from the keyboard. The canvas and lifecycle panels
+// handle Escape themselves (they have unsaved edits and a two-step delete to
+// consider). The rest route Escape to their own close button, so each panel
+// keeps its one close path instead of growing a second copy of the logic.
+for (const [panel, close] of [
+  [elements.proposalsPanel, elements.proposalsClose],
+  [elements.assetsPanel, elements.assetsClose],
+  [elements.tokensPanel, elements.tokensClose],
+  [elements.documentPanel, elements.documentClose],
+  [elements.workPanel, elements.workClose],
+  [elements.ownerPanel, elements.ownerClose],
+  [elements.settingsPanel, elements.settingsClose],
+]) {
+  if (!panel || !close) continue;
+  panel.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    // An open dialog or row menu has already taken this Escape.
+    if (document.querySelector("#dpb-dialog")) return;
+    event.preventDefault();
+    close.click();
+  });
+}
 
 startSession();

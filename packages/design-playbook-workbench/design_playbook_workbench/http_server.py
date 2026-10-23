@@ -434,9 +434,8 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
         }
         # R14: the startup check reports missing referenced content here. It
         # is a fact for the maintainer, not a reason to refuse to serve.
-        integrity = getattr(self.server, "blob_integrity", None)
-        if integrity is not None:
-            payload["blobIntegrity"] = integrity
+        if self.server.blob_integrity is not None:
+            payload["blobIntegrity"] = self.server.blob_integrity
         self._send_json(200, payload, close=True)
 
     def _serve_backup(self, backup: "BackupService", principal: Principal) -> None:
