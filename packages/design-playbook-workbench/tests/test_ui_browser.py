@@ -797,7 +797,7 @@ class CanvasJourneyTest(unittest.TestCase):
 
     # -- helpers ---------------------------------------------------------
 
-    def reload_canvases(self) -> None:
+    def reload_canvases(self, timeout: float = 60.0) -> None:
         """Click reload and refuse to go on if the panel reported a failure.
 
         Without this a failed list read looks like an empty `<select>` and the
@@ -810,15 +810,23 @@ class CanvasJourneyTest(unittest.TestCase):
         expect(self.page.locator("#canvas-scope")).not_to_be_empty()
         self.page.click("#canvas-reload")
         error = self.page.locator("#canvas-error")
-        deadline = time.time() + 25.0
+        # The 200-node and 201-instance journeys reload a large document; on a
+        # loaded CI host the list read alone can take well past 25 s.
+        deadline = time.time() + timeout
         while time.time() < deadline:
             if error.is_visible():
                 raise AssertionError(f"canvas reload failed: {error.inner_text()}")
             if self.page.locator("#canvas-select option").count() > 0:
                 return
             self.page.wait_for_timeout(120)
+        state = self.page.evaluate(
+            "() => { const s = document.querySelector('#canvas-save-state');"
+            " return { save: s ? s.textContent : null,"
+            "  options: document.querySelectorAll('#canvas-select option').length,"
+            "  panelHidden: document.querySelector('#canvas-panel').hidden }; }")
         raise AssertionError(
-            "canvas reload produced neither a list nor an error in 25 s"
+            f"canvas reload produced neither a list nor an error in {timeout} s;"
+            f" state={state}"
         )
 
     def create_canvas(self, name: str = "首页方案") -> None:
