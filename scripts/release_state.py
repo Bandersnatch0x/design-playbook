@@ -13,6 +13,10 @@ class ReleaseStateError(ValueError):
     """Raised when an irreversible release transition is not allowed."""
 
 
+CHECKLIST = "docs/agents/release-checklist.md"
+MATRIX = f"the recovery matrix in {CHECKLIST} ('Recovery decision table')"
+
+
 def parse_bool(value: str) -> bool:
     normalized = value.strip().lower()
     if normalized == "true":
@@ -29,7 +33,9 @@ def release_mode(event_name: str, recovery: bool) -> str:
     if event_name == "workflow_dispatch" and recovery:
         return "recovery"
     raise ReleaseStateError(
-        "workflow_dispatch is recovery-only; tag pushes cannot request recovery"
+        "workflow_dispatch is recovery-only; tag pushes cannot request recovery. "
+        "A version npm has never seen has exactly one entry point: pushing the "
+        f"tag. See {MATRIX}."
     )
 
 
@@ -52,18 +58,26 @@ def release_action(
     mode = release_mode(event_name, recovery)
     if mode == "publish":
         if npm_exists:
-            raise ReleaseStateError("unexpected registry collision: npm version already exists")
+            raise ReleaseStateError(
+                "unexpected registry collision: npm version already exists; this "
+                f"version was already published. See {MATRIX}."
+            )
         if github_release_exists:
             raise ReleaseStateError(
-                "GitHub Release already exists before npm publication"
+                "GitHub Release already exists before npm publication. See "
+                f"{MATRIX}."
             )
         return "publish"
 
     if not npm_exists:
-        raise ReleaseStateError("recovery requested but npm version is absent")
+        raise ReleaseStateError(
+            "recovery requested but npm version is absent: dispatch cannot start "
+            f"a first publish, which needs a tag push. See {MATRIX}."
+        )
     if github_release_exists:
         raise ReleaseStateError(
-            "recovery requires a missing GitHub Release; it already exists"
+            "recovery requires a missing GitHub Release; it already exists, so the "
+            f"transaction is complete. See {MATRIX}."
         )
     return "recover"
 
@@ -86,11 +100,17 @@ def package_release_action(
     mode = release_mode(event_name, recovery)
     if mode == "publish":
         if npm_exists:
-            raise ReleaseStateError("unexpected registry collision: npm version already exists")
+            raise ReleaseStateError(
+                "unexpected registry collision: npm version already exists; the "
+                f"main package already shipped. See {MATRIX}."
+            )
         return "publish"
 
     if not npm_exists:
-        raise ReleaseStateError("recovery requested but npm version is absent")
+        raise ReleaseStateError(
+            "recovery requested but npm version is absent: publish the main "
+            f"package first, or push the tag. See {MATRIX}."
+        )
     return "verify"
 
 

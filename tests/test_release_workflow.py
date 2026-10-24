@@ -18,6 +18,7 @@ from release_state import (  # noqa: E402
     ReleaseStateError,
     package_release_action,
     release_action,
+    release_mode,
     require_verified_provenance,
 )
 
@@ -364,6 +365,87 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
             ),
             "the workbench tests must run in the release suite",
         )
+
+
+class RecoveryErrorRoutesToChecklistTests(unittest.TestCase):
+    """Every release_state refusal must route to the checklist, and the target
+    must exist. A refusal that names a section the checklist lacks is the same
+    dead end as no guidance: the operator reads the error and still guesses."""
+
+    CHECKLIST = ROOT / "docs" / "agents" / "release-checklist.md"
+
+    def _refusal_messages(self) -> list[str]:
+        from release_state import CHECKLIST as CHECKLIST_REL
+        from release_state import MATRIX
+
+        # One representative refusal per branch of the state machine. Each must
+        # (a) name the checklist and (b) point at the matrix anchor.
+        cases: list[str] = []
+        for args in (
+            dict(event_name="workflow_dispatch", recovery=False),
+            dict(event_name="push", recovery=True),
+        ):
+            try:
+                release_mode(**args)  # type: ignore[name-defined]
+            except ReleaseStateError as exc:
+                cases.append(str(exc))
+        for kwargs in (
+            dict(event_name="workflow_dispatch", recovery=True,
+                 npm_exists=False, github_release_exists=False),
+            dict(event_name="workflow_dispatch", recovery=True,
+                 npm_exists=True, github_release_exists=True),
+            dict(event_name="push", recovery=False,
+                 npm_exists=True, github_release_exists=False),
+            dict(event_name="push", recovery=False,
+                 npm_exists=False, github_release_exists=True),
+        ):
+            try:
+                release_action(**kwargs)
+            except ReleaseStateError as exc:
+                cases.append(str(exc))
+        for kwargs in (
+            dict(event_name="workflow_dispatch", recovery=True, npm_exists=False),
+            dict(event_name="push", recovery=False, npm_exists=True),
+        ):
+            try:
+                package_release_action(**kwargs)
+            except ReleaseStateError as exc:
+                cases.append(str(exc))
+        self.assertGreaterEqual(len(cases), 6, "the state machine branches are not all covered")
+        self.assertTrue(MATRIX and CHECKLIST_REL)
+        return cases
+
+    def test_every_refusal_names_the_checklist(self) -> None:
+        text = self.CHECKLIST.read_text(encoding="utf-8")
+        anchor = "Recovery decision table"
+        self.assertIn(
+            f"## {anchor}", text,
+            "the checklist must carry the anchor release_state.py points at",
+        )
+        for message in self._refusal_messages():
+            self.assertIn(
+                "release-checklist.md", message,
+                f"refusal does not route to the checklist: {message}",
+            )
+            self.assertIn(
+                anchor, message,
+                f"refusal does not name the matrix anchor: {message}",
+            )
+
+    def test_matrix_covers_the_publish_and_two_recovery_commands(self) -> None:
+        # The table is only useful if it names the commands the state machine
+        # permits. These three strings are what an operator must be able to copy.
+        text = self.CHECKLIST.read_text(encoding="utf-8")
+        table = text[text.index("### Recovery decision table"):]
+        self.assertIn("git push --atomic origin main vX.Y.Z", table)
+        self.assertIn(
+            "gh workflow run release.yml --ref vX.Y.Z -f tag=vX.Y.Z -f recovery=true",
+            table)
+        self.assertIn(
+            "gh workflow run release-dsh-bundle.yml --ref vX.Y.Z "
+            "-f tag=vX.Y.Z -f recovery=true",
+            table)
+        self.assertIn("git push origin :refs/tags/vX.Y.Z", table)
 
 
 if __name__ == "__main__":

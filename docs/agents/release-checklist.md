@@ -68,10 +68,27 @@ and `.github/workflows/release-dsh-bundle.yml`; private research is not a prereq
 - [ ] Monitor both tag-triggered workflows. `release.yml` publishes and verifies `design-playbook`; `release-dsh-bundle.yml` waits for that exact registry version, then publishes and verifies `dsh-design-playbook`. Both inspect their own `npm pack --dry-run` artifact first.
 - [ ] The main workflow waits for the exact DSH registry artifact and verifies its provenance before it creates the single GitHub Release from `docs/releases/vX.Y.Z.md`. The DSH workflow never creates a second Release.
 - [ ] Verify provenance and `latest=vX.Y.Z` for both npm packages; the pi.dev gallery indexes `design-playbook` for the `pi-package` keyword.
-- [ ] DSH package-only recovery (`dsh-design-playbook@X.Y.Z` already exists): `gh workflow run release-dsh-bundle.yml --ref vX.Y.Z -f tag=vX.Y.Z -f recovery=true`. It verifies registry + provenance and never republishes or owns the GitHub Release.
-- [ ] DSH not published (main package already on npm, `dsh-design-playbook@X.Y.Z` absent — the DSH workflow failed before its npm publish): fresh tag runs fail closed on both sides (main workflow hits the registry collision; dispatch recovery rejects the absent npm version). Re-run the failed `release-dsh-bundle.yml` push run from the GitHub Actions UI — a re-run preserves the original push/publish semantics.
-- [ ] Main publish run failed **before** npm publish (`design-playbook@X.Y.Z` absent on the registry): dispatch is recovery-only (`release_state.py`), and a UI re-run replays the workflow file from the original tag commit, so the only path is to fix the workflow on main, then move the tag to the fix commit and push it again (`git push origin :refs/tags/vX.Y.Z`, re-tag, push). Nothing else may have been published yet; otherwise the registry-collision rules below apply. v0.21.0 precedent: the publish run failed at release gates because `release.yml` never installed the pinned Ruff that `validate.py` requires.
-- [ ] Shared Release recovery (both npm artifacts exist, GitHub Release missing): `gh workflow run release.yml --ref vX.Y.Z -f tag=vX.Y.Z -f recovery=true`. Fresh tag runs fail on any existing version instead of silently skipping it.
+### Recovery decision table
+
+Read the observable facts first; do not choose a command from an error message.
+`scripts/release_state.py` enforces every row, and its refusal text points back
+here. Probe with `npm view design-playbook version`,
+`npm view dsh-design-playbook version`, `gh release view vX.Y.Z`.
+
+| `design-playbook@X` | `dsh@X` | GitHub Release | Action |
+| --- | --- | --- | --- |
+| absent | absent | absent | **First publish.** Push the tag: `git push --atomic origin main vX.Y.Z`. Dispatch cannot start it (recovery-only). |
+| absent | absent | absent, but the tag push already ran and failed **before** npm | Fix on `main`, then move the tag and push: `git push origin :refs/tags/vX.Y.Z`, re-tag, push. A UI re-run replays the failed commit's workflow file, so it cannot pick up the fix. |
+| present | absent | any | main shipped, dsh did not: re-run the failed `release-dsh-bundle.yml` **push** run from the Actions UI (a re-run keeps push semantics and publishes dsh). Do not dispatch it with `recovery=true`: `package-state` rejects recovery when the dsh version is absent. |
+| present | present | absent | Shared Release missing: `gh workflow run release.yml --ref vX.Y.Z -f tag=vX.Y.Z -f recovery=true`. Completes the transaction without republishing. |
+| present | present | present, but the dsh run needs re-verifying | `gh workflow run release-dsh-bundle.yml --ref vX.Y.Z -f tag=vX.Y.Z -f recovery=true`. `package-state` returns `verify`: checks registry + provenance, never republishes the immutable version, owns no GitHub Release. |
+| present | present | present | Complete. Verify provenance and `latest=vX.Y.Z`; run nothing. |
+
+A version number cannot be reused once it is on the registry. If a tag must move
+after the version published, that is a new version, not a retag.
+
+- [ ] Recovery path chosen from the table above, not from an error message; the
+  probe outputs are recorded with the decision.
 - [ ] Smoke: `python scripts/install_smoke.py` passes against public main + npm; retain or move its `result.json` / `result.md` under the release evidence directory.
 - [ ] Record the tag, release URL, verified package versions, and smoke results in the release delivery summary. Distinguish source HEAD from the published artifacts; a personal phase log is not a release requirement.
 
