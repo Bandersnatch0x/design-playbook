@@ -1439,7 +1439,17 @@ class CanvasJourneyTest(unittest.TestCase):
         # The drag still lands where the pointer went, in screen pixels.
         moved = self.page.locator(f'.canvas-node[data-node-id="{node_id}"]').bounding_box()
         assert moved is not None
-        self.assertAlmostEqual(moved["x"] - box["x"], 30, delta=3)
+        delta = moved["x"] - box["x"]
+        if abs(delta - 30) > 3:
+            # A zero delta means the gesture never reached the node: either the
+            # grab point missed it, or pointerdown re-rendered the nodes and the
+            # capture bound to a replaced element. Report which, so the next
+            # red is diagnosable instead of another round of guessing.
+            self.fail(
+                "drag did not land: "
+                + json.dumps(self._drag_diagnostics(node_id, box, x, y, moved),
+                             ensure_ascii=False)
+            )
 
     def mark(self, selector: str) -> int:
         """Tag every element the selector matches, so a rebuild is detectable."""
@@ -1460,6 +1470,39 @@ class CanvasJourneyTest(unittest.TestCase):
     def assert_survived(self, nodes: int, options: int) -> None:
         self.assertEqual(self.marked(".canvas-node"), nodes)
         self.assertEqual(self.marked("#flow-from option"), options)
+
+    def _drag_diagnostics(self, node_id, before, x, y, after) -> dict:
+        """What the page looked like when a drag failed to move the node.
+
+        Read-only. The point is to distinguish the two ways a move gesture can
+        be lost: the grab point was not over the node, or the node element was
+        replaced after the press so the pointer capture went with it.
+        """
+        probe = self.page.evaluate(
+            """([nodeId, px, py]) => {
+              const hit = document.elementFromPoint(px, py);
+              const node = document.querySelector(
+                '.canvas-node[data-node-id="' + nodeId + '"]');
+              const viewport = document.querySelector('#canvas-viewport');
+              return {
+                hitTag: hit ? hit.tagName : null,
+                hitClass: hit ? String(hit.className) : null,
+                hitInsideNode: hit ? !!hit.closest('.canvas-node') : false,
+                nodePresent: !!node,
+                nodeMarked: node ? node.__reused === true : null,
+                viewportScroll: viewport
+                  ? [viewport.scrollLeft, viewport.scrollTop] : null,
+              };
+            }""",
+            [node_id, x, y],
+        )
+        return {
+            "nodeId": node_id,
+            "grab": [round(x, 1), round(y, 1)],
+            "before": {k: round(v, 1) for k, v in before.items()},
+            "after": {k: round(v, 1) for k, v in after.items()},
+            **probe,
+        }
 
 
 class OrchestrationJourneyTest(unittest.TestCase):
