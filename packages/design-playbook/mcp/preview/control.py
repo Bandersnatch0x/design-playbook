@@ -18,6 +18,10 @@ from design_playbook.mcp.preview.i18n import (
     SKIP_LABELS,
     t,
 )
+from design_playbook.mcp.preview.visual_batch import (
+    SCHEMA_VERSION,
+    STATUS_PENDING,
+)
 
 HERE = Path(__file__).resolve().parent
 
@@ -206,7 +210,11 @@ def _build_control(
         quote=True,
     )
     visual_edits_hidden = html_lib.escape(
-        json.dumps({"schemaVersion": 1, "status": "pending", "edits": []}),
+        json.dumps({
+            "schemaVersion": SCHEMA_VERSION,
+            "status": STATUS_PENDING,
+            "edits": [],
+        }),
         quote=True,
     )
     criteria_count = len(criteria_items)

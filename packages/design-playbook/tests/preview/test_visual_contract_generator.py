@@ -46,10 +46,10 @@ class TestVisualContractDriftGate(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 fresh = _ARTIFACT.read_bytes()
             finally:
-                backup_bytes = backup.read_bytes()
-            # Restore before asserting so a failing run leaves the tree clean.
-            _ARTIFACT.write_bytes(backup_bytes)
-        self.assertEqual(fresh, backup_bytes,
+                # Restore before any assertion propagates so a failing run
+                # leaves the tree clean.
+                _ARTIFACT.write_bytes(committed)
+        self.assertEqual(fresh, committed,
                          "regenerated artifact drifted from the committed file; "
                          "run scripts/generate_visual_contract.py after changing "
                          "visual_batch.py")
@@ -69,15 +69,17 @@ class TestVisualContractDriftGate(unittest.TestCase):
             + " cssKinds: window.DPBUI.visualContract.CSS_KINDS,"
             + " viewports: window.DPBUI.visualContract.VIEWPORTS,"
             + " sources: window.DPBUI.visualContract.EDIT_SOURCES,"
-            + " shell: window.DPBUI.visualContract.SHELL_SOURCE[0],"
+            + " shell: window.DPBUI.visualContract.SHELL_SOURCE,"
+            + " anyViewport: window.DPBUI.visualContract.ANY_VIEWPORT,"
             + " content: window.DPBUI.visualContract.CONTENT_PROPERTIES,"
             + " maxEdits: window.DPBUI.visualContract.MAX_EDITS}));"
         )
-        script = Path(tempfile.mkdtemp()) / "contract_check.js"
-        script.write_text(payload, encoding="utf-8")
-        result = subprocess.run(
-            ["node", str(script)], capture_output=True, text=True,
-        )
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "contract_check.js"
+            script.write_text(payload, encoding="utf-8")
+            result = subprocess.run(
+                ["node", str(script)], capture_output=True, text=True,
+            )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
             result.stdout.strip(),
@@ -87,6 +89,7 @@ class TestVisualContractDriftGate(unittest.TestCase):
             '"viewports":["desktop","tablet","mobile","any"],'
             '"sources":["shell","frame","agent","unknown"],'
             '"shell":"shell",'
+            '"anyViewport":"any",'
             '"content":["text","placeholder","aria-label"],'
             '"maxEdits":200}',
         )
@@ -111,9 +114,12 @@ class TestVisualContractDriftGate(unittest.TestCase):
 
         shared_core = control._load_shared_core()
         contract = control._load_visual_contract()
-        self.assertLess(
-            shared_core.find("DPBUI.visualContract"),
-            len(shared_core),
+        # The core must not reference the contract: it ships ahead of it, so
+        # such a reference would read an empty namespace (and the contract
+        # block only ever attaches DPBUI.visualContract, never reads it).
+        self.assertEqual(
+            shared_core.find("DPBUI.visualContract"), -1,
+            "the shared core must not reference the visual contract",
         )
         self.assertIn("DPBUI.visualContract", contract)
         # The server pages assemble shared core, then contract, then every
@@ -122,6 +128,7 @@ class TestVisualContractDriftGate(unittest.TestCase):
         core_at = page.find("DPBUI.theme")
         contract_at = page.find("DPBUI.visualContract = {")
         self.assertGreater(contract_at, core_at, "contract must ship after the shared core")
+        self.assertGreater(contract_at, -1, "contract block missing from the page")
         for reader in ("DPBUI.visualContract.VIEWPORTS", "DPBUI.visualContract.SCHEMA_VERSION"):
             self.assertIn(reader, page, f"{reader} missing from the assembled page")
 

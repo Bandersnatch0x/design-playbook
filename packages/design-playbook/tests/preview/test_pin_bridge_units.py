@@ -83,9 +83,7 @@ def test_the_bridge_pure_helpers_keep_their_values(tmp_path) -> None:
     if node is None:  # pragma: no cover - the repository requires node
         pytest.skip("node is not installed")
     source = BRIDGE.read_text(encoding="utf-8")
-    core = (PKG_ROOT.parent / "design-playbook" / "mcp" / "_shared" / "dpbui-core.js")
-    if not core.is_file():  # pragma: no cover - layout guard
-        core = PKG_ROOT / "mcp" / "_shared" / "dpbui-core.js"
+    core = PKG_ROOT / "mcp" / "_shared" / "dpbui-core.js"
     # The delegation needs DPBUI.pure in scope, and dpbui-core.js ends by
     # invoking itself with `window`; node has no window, so stub it first.
     preamble = "var window = globalThis;\n" + core.read_text(encoding="utf-8")

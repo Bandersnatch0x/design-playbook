@@ -304,7 +304,7 @@
     if (!batch.edits || !batch.edits.length) return false;
     var net = {};
     batch.edits.forEach(function (e) {
-      if (e.source !== contract.SHELL_SOURCE[0]) return;
+      if (e.source !== contract.SHELL_SOURCE) return;
       var key = [e.locator, e.property].join("\u0000");
       var original = Object.prototype.hasOwnProperty.call(net, key) ? net[key][0] : e.oldValue;
       net[key] = [original, e.newValue, e.kind];

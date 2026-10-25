@@ -180,11 +180,10 @@
       // the effects below keep the source state in their dependency arrays.
       var flat = ledger.flatten(entries);
       function t(key) {
-        // The locale switch lives in the shared store; setLang is idempotent
-        // for an unchanged lang, so a re-render with the same locale is a
-        // no-op on the table and a language change from the L toggle rebuilds
-        // it before this read.
-        DPBUI.i18n.setLang((locale || "en").indexOf("zh") === 0 ? "zh" : "en");
+        // Read-only through the shared store: the L toggle owns every
+        // setLang call (single write point), and the observer that tracks
+        // root.lang re-renders this component after each swap, so the table
+        // is already in the render's locale when t() runs.
         return DPBUI.i18n.tt(key);
       }
       function snapshot(selection) {
@@ -449,7 +448,7 @@
             applyOutcome(receipt);
             var edits = changes.filter(function (c) { return c.oldValue !== c.newValue; }).map(function (c) {
               return { kind: LAYOUT.indexOf(c.property) >= 0 ? "layout" : "style",
-                viewport: operation ? operation.viewport : (window.DPB_ACTIVE_VIEWPORT || DPBUI.visualContract.VIEWPORTS[3]),
+                viewport: operation ? operation.viewport : (window.DPB_ACTIVE_VIEWPORT || DPBUI.visualContract.ANY_VIEWPORT),
                 locator: parsed.selector, property: c.property, oldValue: c.oldValue, newValue: c.newValue,
                 source: source,
                 _seq: opSeq,

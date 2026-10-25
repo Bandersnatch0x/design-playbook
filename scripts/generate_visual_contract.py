@@ -46,6 +46,10 @@ def _js_int(name: str, value: int) -> str:
     return f"    {name}: {value},\n"
 
 
+def _js_str(name: str, value: str) -> str:
+    return f'    {name}: "{value}",\n'
+
+
 def _js_str_tuple(name: str, values: tuple[str, ...]) -> str:
     items = ", ".join(f'"{v}"' for v in values)
     return f"    {name}: [{items}],\n"
@@ -54,15 +58,16 @@ def _js_str_tuple(name: str, values: tuple[str, ...]) -> str:
 def main() -> int:
     lines = [_HEADER]
     lines.append(_js_int("SCHEMA_VERSION", visual_batch.SCHEMA_VERSION))
-    lines.append("    STATUS_PENDING: \"pending\",\n")
-    lines.append("    STATUS_STALE: \"stale\",\n")
+    lines.append(_js_str("STATUS_PENDING", visual_batch.STATUS_PENDING))
+    lines.append(_js_str("STATUS_STALE", visual_batch.STATUS_STALE))
     lines.append(_js_str_tuple("CHANGE_KINDS", visual_batch.CHANGE_KINDS))
-    lines.append(_js_str_tuple("CSS_KINDS", ("style", "layout", "responsive")))
+    lines.append(_js_str_tuple("CSS_KINDS", visual_batch.CSS_KINDS))
     lines.append(_js_str_tuple("VIEWPORTS", visual_batch.VIEWPORTS))
     lines.append(_js_str_tuple("EDIT_SOURCES", visual_batch.EDIT_SOURCES))
-    lines.append(_js_str_tuple("SHELL_SOURCE", ("shell",)))
-    lines.append(_js_str_tuple("DEFAULT_SOURCE", ("shell",)))
+    lines.append(_js_str("SHELL_SOURCE", visual_batch.SHELL_SOURCE))
+    lines.append(_js_str("DEFAULT_SOURCE", visual_batch.SHELL_SOURCE))
     lines.append(_js_str_tuple("CONTENT_PROPERTIES", visual_batch.CONTENT_PROPERTIES))
+    lines.append(_js_str("ANY_VIEWPORT", visual_batch.VIEWPORTS[-1]))
     lines.append(_js_int("MAX_EDITS", visual_batch.MAX_EDITS))
     lines.append(_js_int("MAX_SELECTOR", visual_batch.MAX_SELECTOR))
     lines.append(_js_int("MAX_VALUE", visual_batch.MAX_VALUE))
