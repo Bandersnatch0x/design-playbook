@@ -2,7 +2,7 @@
 
 <img src="packages/design-playbook/showcase/screenshots/hero.png" alt="design-playbook — evidence-backed UI delivery for coding agents" width="100%" />
 
-# 🎴 design-playbook
+# design-playbook
 
 ### *Evidence-backed UI delivery for coding agents.*
 
@@ -28,17 +28,20 @@ Two surfaces carry this:
 
 ### Current stage
 
-As of 2026-09-24, this project is in **maintainer self-use and maintenance**.
+As of 2026-09-26, this project is in **maintainer self-use and maintenance with
+bounded exceptions**.
 Catalog submissions and participant recruitment are paused. Existing install
 paths remain available; internal dogfood, historical examples, and automated
 replays are not evidence of external adoption or repeat use. New capability
 specs are proposals, not implementation or release commitments. Resumption
 requires an explicit maintainer decision, not a date or passing internal tests.
 
-The 2026-09-25 bounded self-use exception permits the source checkout's
-[read-only frontend scope report](packages/design-playbook/commands/run-status.md).
-It does not reopen recruitment, catalog submission, or release, and no measured
-time-saving is claimed. The boundary is recorded in [ADR-0045](docs/adr/0045-external-evidence-spend-gate.md).
+The [read-only frontend scope report](packages/design-playbook/commands/run-status.md)
+(2026-09-25) and the [Preview visual-editing capability](docs/adr/0047-preview-visual-editing-capability.md)
+(2026-10-09, local validation only) are dated exceptions recorded in
+[ADR-0045](docs/adr/0045-external-evidence-spend-gate.md); they do not reopen
+recruitment, catalog submission, or release, and no measured time-saving is
+claimed.
 
 ## ⚡ One command, three artifacts
 
@@ -128,7 +131,7 @@ The images below are illustrated summaries of that historical case, not raw exec
 | **3 · ui-evaluator** — point-back + recirculate closure | **Historical result** — six case checks, not the current gate matrix |
 | ![Point-back findings](packages/design-playbook/showcase/screenshots/03-point-back.png) | ![Historical case checklist](packages/design-playbook/showcase/screenshots/04-gates.png) |
 
-**Preview review workbench** — inspect a design, anchor feedback, then confirm or revise. The [packaged human-confirmation record](./packages/design-playbook/showcase/README.md#case-b) belongs to a separate onboarding-form task; it is not confirmation of the queue case or of production acceptance:
+**Preview review workbench** — inspect a design, anchor feedback, then confirm or revise. The control shell also carries a bounded [visual-editing capability](docs/adr/0047-preview-visual-editing-capability.md) (resize, drag move, text and colour edits through the inspector; local validation only, no source writer). The [packaged human-confirmation record](./packages/design-playbook/showcase/README.md#case-b) belongs to a separate onboarding-form task; it is not confirmation of the queue case or of production acceptance:
 
 ![Preview confirm workbench — annotate, then confirm or revise](packages/design-playbook/showcase/screenshots/05-preview-confirm.png)
 
@@ -244,6 +247,8 @@ Not another style/palette pack — this plugin owns the **delivery pipeline, evi
 ## 📄 License
 
 MIT (authored content). See [`LICENSE`](./packages/design-playbook/LICENSE) + [`NOTICE`](./packages/design-playbook/NOTICE). No rights claimed over any third-party playbook corpus.
+
+The repo also carries [design-playbook-workbench](./packages/design-playbook-workbench/README.md), a separate single-maintainer, loopback-only local design-asset workbench authorized under [ADR-0045](docs/adr/0045-external-evidence-spend-gate.md); it is not part of the installable plugin and ships nowhere yet.
 
 Repo layout, maintainer scripts, and the engineering shell live behind the front door: [package README](./packages/design-playbook/README.md) · [docs/agents](./docs/agents) · [Contributing](./.github/CONTRIBUTING.md).
 

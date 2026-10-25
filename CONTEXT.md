@@ -34,8 +34,8 @@ distribution boundary; it does not claim that the workbench exists, passes
 acceptance, or has been released. No exception reopens catalog submission,
 recruitment, adapter breadth, or unrelated capability work.
 
-Current repository release baseline: `v0.25.1`, per
-[release record](docs/releases/v0.25.1.md). Later source fixes are not thereby
+Current repository release baseline: `v0.25.5`, per
+[release record](docs/releases/v0.25.5.md). Later source fixes are not thereby
 claimed to be in that release; registry `latest` is not re-verified here.
 
 Shared document and delivery requirements are defined by the

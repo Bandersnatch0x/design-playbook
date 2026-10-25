@@ -2,7 +2,7 @@
 
 <img src="packages/design-playbook/showcase/screenshots/hero.png" alt="design-playbook — 给 coding agent 的 Design I/O" width="100%" />
 
-# 🎴 design-playbook
+# design-playbook
 
 ### *为 coding agent 提供带证据的 UI 交付闭环。*
 
@@ -28,13 +28,15 @@
 
 ### 当前阶段
 
-截至 2026-09-24，项目处于**维护者自用与维护阶段**，catalog 提交和参与者招募均已暂停。
+截至 2026-09-26，项目处于**维护者自用与维护阶段（含有界例外）**，catalog 提交和参与者招募均已暂停。
 现有安装路径继续保留；内部 dogfood、历史案例和自动回放不构成外部采用或自愿复用证据。
 新增能力 spec 只是提案，不代表实施或发布承诺。恢复活动须经维护者明确决定，
 不因日期到达或内部测试通过而自动恢复。
 
-2026-09-25 的有界自用例外允许源码工作区提供[前端改动只读摘要](docs/subsystems/run-console.zh.md)。
-这不恢复招募、catalog 提交或发布，也不宣称已测得提效；边界见 [ADR-0045](docs/adr/0045-external-evidence-spend-gate.md)。
+[前端改动只读摘要](docs/subsystems/run-console.zh.md)（2026-09-25）与
+[Preview 视觉编辑能力](docs/adr/0047-preview-visual-editing-capability.md)（2026-10-09，仅本地验证）
+是登记在 [ADR-0045](docs/adr/0045-external-evidence-spend-gate.md) 的有日期例外；
+这不恢复招募、catalog 提交或发布，也不宣称已测得提效。
 
 ## ⚡ 一条命令，三份产物
 
@@ -121,7 +123,7 @@ codex plugin add design-playbook@design-playbook
 | **3 · ui-evaluator**——point-back + 回流闭环 | **历史结果**——六项案例检查，不是当前门禁矩阵 |
 | ![Point-back 发现](packages/design-playbook/showcase/screenshots/03-point-back.png) | ![历史案例检查摘要](packages/design-playbook/showcase/screenshots/04-gates.png) |
 
-**预览评审工作台**——检查设计、定位反馈，再确认或要求修改。[已收录的人工确认记录](./packages/design-playbook/showcase/README.md#case-b) 来自独立的入驻表单任务，不是队列案例的确认，也不代表产品实现已通过验收：
+**预览评审工作台**——检查设计、定位反馈，再确认或要求修改。控制壳还带一项有界的[视觉编辑能力](docs/adr/0047-preview-visual-editing-capability.md)（缩放、拖拽移动、经检查器改文字与颜色；仅本地验证，无源码写入器）。[已收录的人工确认记录](./packages/design-playbook/showcase/README.md#case-b) 来自独立的入驻表单任务，不是队列案例的确认，也不代表产品实现已通过验收：
 
 ![Preview 确认工作台——批注后确认或打回](packages/design-playbook/showcase/screenshots/05-preview-confirm.png)
 
@@ -236,6 +238,8 @@ Claude Code 为原生平台。Tier 2/3 为生成适配器，已诚实说明降�
 ## 📄 许可
 
 MIT（原创内容）。见 [`LICENSE`](./packages/design-playbook/LICENSE) + [`NOTICE`](./packages/design-playbook/NOTICE)。不主张任何第三方 playbook 内容的权利。
+
+仓库同时承载 [design-playbook-workbench](./packages/design-playbook-workbench/README.md)——ADR-0045 授权的独立单维护者、仅回环本地设计资产工作台；它不属于可安装插件，也尚未在任何渠道分发。
 
 仓库结构、维护脚本与工程壳在门面之后：[package README](./packages/design-playbook/README.md) · [docs/agents](./docs/agents) · [贡献指南](./.github/CONTRIBUTING.zh-CN.md)。
 
