@@ -820,10 +820,17 @@ class CanvasJourneyTest(unittest.TestCase):
                 return
             self.page.wait_for_timeout(120)
         state = self.page.evaluate(
-            "() => { const s = document.querySelector('#canvas-save-state');"
-            " return { save: s ? s.textContent : null,"
+            "() => ({save: document.querySelector('#canvas-save-state')?.textContent ?? null,"
             "  options: document.querySelectorAll('#canvas-select option').length,"
-            "  panelHidden: document.querySelector('#canvas-panel').hidden }; }")
+            "  panelHidden: document.querySelector('#canvas-panel')?.hidden ?? null,"
+            "  error: document.querySelector('#canvas-error')?.textContent ?? null,"
+            "  scope: document.querySelector('#canvas-scope')?.textContent ?? null,"
+            "  nodes: document.querySelectorAll('.canvas-node').length,"
+            "  buttonDisabled: document.querySelector('#canvas-reload')?.disabled ?? null,"
+            "  zoomLabel: document.querySelector('#canvas-zoom-label')?.textContent ?? null,"
+            "  projectReady: !!window.state?.canvasProject,"
+            "  canvases: window.state?.canvases?.length ?? null,"
+            "  canvasLoaded: !!window.state?.canvas });")
         raise AssertionError(
             f"canvas reload produced neither a list nor an error in {timeout} s;"
             f" state={state}"
