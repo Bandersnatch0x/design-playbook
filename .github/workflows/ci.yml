@@ -331,12 +331,13 @@ jobs:
         # 8 such failures, all pass on a faster host). One retry of just the
         # failed cases; a case that fails twice still fails the leg, and the
         # retry summary names every flake so a persistent red stays visible.
+        # pipefail keeps a pytest usage error from hiding behind tee.
         run: |
+          set -o pipefail
           python3 -m pip install pytest-rerunfailures
-          python3 -m pytest packages/design-playbook/tests/preview -m browser -v --reruns 1 --reruns-delay 2 --only-rerun-errors 2>&1 | tee /tmp/macos-matrix.log
-          grep -E "^FAILED" /tmp/macos-matrix.log > /tmp/macos-flakes.txt || true
-          echo "flake summary (failed on first attempt, retried):"
-          cat /tmp/macos-flakes.txt || true
+          python3 -m pytest packages/design-playbook/tests/preview -m browser -v --reruns 1 --reruns-delay 2 2>&1 | tee /tmp/macos-matrix.log
+          echo "flake summary (failed on first attempt, retried once):"
+          grep -E "FAILED" /tmp/macos-matrix.log | grep -v "RERUN" || true
 
   powershell-quoting:
     # The ubuntu matrix runs every t002 test except the PowerShell
