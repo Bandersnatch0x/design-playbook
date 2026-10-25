@@ -3,6 +3,7 @@ from pathlib import Path
 
 from .conftest import expand_inspector_section
 import re
+import sys
 
 import pytest
 
@@ -362,10 +363,11 @@ def test_n1_native_text_undo_does_not_replay_visual_history(
     page.keyboard.press(f"{modifier}+z")
     expect(page.locator("#dpb-visual-count")).to_have_text("1")
     assert page.evaluate("window.undoPrevented") is False
-    # Chromium on Windows uses Control for native undo; Meta still must pass through.
-    if modifier == "Control":
+    # Only the platform's native undo modifier reverses the typing: Control on
+    # Windows/Linux, Meta on macOS. The other one must pass through untouched.
+    if modifier == ("Meta" if sys.platform == "darwin" else "Control"):
         assert len(field.input_value()) < len("Audit note")
-        page.keyboard.press("Control+Shift+z")
+        page.keyboard.press(f"{modifier}+Shift+z")
     expect(field).to_have_value("Audit note")
     expect(page.locator("#dpb-visual-count")).to_have_text("1")
 
