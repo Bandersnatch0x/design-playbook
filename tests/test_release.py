@@ -189,13 +189,13 @@ class ReleaseGateTests(unittest.TestCase):
         # The fixture tree holds a real .git; on a loaded runner a git
         # maintenance writer can still hold an object file while rmtree walks
         # the objects directory (Errno 39). The tree is disposable, so one
-        # short retry after the writer exits is cleanup robustness, not a
-        # weaker assertion.
+        # short retry and then a best-effort rmtree is cleanup robustness,
+        # not a weaker assertion.
         try:
             self.temp.cleanup()
         except OSError:
             time.sleep(0.5)
-            self.temp.cleanup(ignore_errors=True)
+            shutil.rmtree(self.temp.name, ignore_errors=True)
 
     def release(self, *args: str) -> subprocess.CompletedProcess[str]:
         return _run(sys.executable, str(self.root / "scripts" / "release.py"), *args, cwd=self.root)
