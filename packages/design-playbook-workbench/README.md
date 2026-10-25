@@ -20,14 +20,14 @@ and quality bar.
 
 ## Install and start
 
+No PyPI distribution exists yet; install from a checkout of this repository:
+
 ```text
-python -m pip install design-playbook-workbench
+python -m pip install ./packages/design-playbook-workbench
 design-playbook-workbench --data-dir %LOCALAPPDATA%\design-playbook-workbench
 ```
 
-On POSIX the same command works with a `$HOME/.local/share` style path. From a
-checkout, `python -m pip install .` inside this package installs the same
-distribution.
+On POSIX the same command works with a `$HOME/.local/share` style path.
 
 Flags:
 
