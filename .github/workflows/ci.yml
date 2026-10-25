@@ -326,11 +326,13 @@ jobs:
       - name: Preview browser matrix (zh-CN locale pinned)
         env:
           LANG: zh_CN.UTF-8
-        # --reruns 1: the macOS runner's slower event loop races the fixed
-        # debounce windows in a handful of typing tests (first run 2026-10-25:
-        # 8 such failures, all pass on a faster host). One retry of just the
-        # failed cases; a case that fails twice still fails the leg, and the
-        # retry summary names every flake so a persistent red stays visible.
+        # --reruns 1: the macOS runner is slower than the ubuntu leg, and one
+        # retry of just the failed cases absorbs a genuine timing wobble. A case
+        # that fails twice still fails the leg, and the retry summary names
+        # every first-attempt failure so a persistent red stays visible.
+        # The 2026-10-25 red was NOT timing: the typing tests used Control+A,
+        # which macOS Chromium reads as move-to-line-start, so they now use
+        # ControlOrMeta and the platform-native undo modifier.
         # pipefail keeps a pytest usage error from hiding behind tee.
         run: |
           set -o pipefail
