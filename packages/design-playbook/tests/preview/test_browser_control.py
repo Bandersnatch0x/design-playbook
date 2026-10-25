@@ -1374,26 +1374,18 @@ class PinAnnotationBridgeTests(unittest.TestCase):
         )
 
     def test_bridge_contains_cssPath_logic(self) -> None:
-        # The bridge duplicates cssPath (from control.py) so the iframe can
-        # compute a selector for the clicked element on its own side of the
-        # trust boundary. Assert the key branches are present.
+        # The bridge computes cssPath for the clicked element on its own side
+        # of the trust boundary. The math itself is the shared pure helper in
+        # dpbui-core.js, which the frame document inlines ahead of the bridge;
+        # here we pin the delegation and the surface-owned stop ids, while the
+        # shared core's branches are pinned by test_pin_bridge_units.py and
+        # the core's own unit tests.
         js = _bridge_inner_js()
         self.assertIn("function cssPath", js, "cssPath function missing from bridge")
-        self.assertIn("CSS.escape", js, "cssPath must escape id/class via CSS.escape")
-        # id fast path
-        self.assertRegex(
-            js, r'el\.id\b.*#"', "cssPath must short-circuit on element id"
-        )
-        # nth-of-type branch (disambiguate siblings)
-        self.assertIn(
-            ":nth-of-type(",
-            js,
-            "cssPath must include :nth-of-type for sibling disambig",
-        )
-        # tag fallback
-        self.assertIn(
-            "tagName.toLowerCase()", js, "cssPath must fall back to lowercased tagName"
-        )
+        self.assertIn("DPBUI.pure.cssPath", js,
+                      "cssPath must delegate to the shared pure helper")
+        self.assertIn("dpb-preview-bar", js,
+                      "the bridge's stop ids must stay this surface's own")
         # the click listener that fires cssPath + postMessage
         self.assertIn('"click"', js, "bridge must register a click listener")
         self.assertIn(

@@ -39,9 +39,13 @@
       frame.contentWindow.postMessage({ dpbVisualEdit: message }, "*");
     }
     function bridgeLabels() {
-      var labels = {}, lang = root.lang.indexOf("zh") === 0 ? "zh" : "en";
+      // The visual_* subset of the shared locale store: the editor resolves
+      // through DPBUI.i18n's table instead of re-deriving the active locale's
+      // strings from a private DUAL read. The subset filter stays: the editor
+      // needs only the visual_* keys.
+      var labels = {};
       Object.keys(window.DPB_I18N_DUAL).forEach(function (key) {
-        if (key.indexOf("visual_") === 0) labels[key] = window.DPB_I18N_DUAL[key][lang];
+        if (key.indexOf("visual_") === 0) labels[key] = DPBUI.i18n.tt(key);
       });
       return labels;
     }
@@ -176,10 +180,12 @@
       // the effects below keep the source state in their dependency arrays.
       var flat = ledger.flatten(entries);
       function t(key) {
-        var table = window.DPB_I18N_DUAL;
-        var isZh = (locale || "en").indexOf("zh") === 0;
-        if (table && table[key]) return table[key][isZh ? "zh" : "en"] || key;
-        return key;
+        // The locale switch lives in the shared store; setLang is idempotent
+        // for an unchanged lang, so a re-render with the same locale is a
+        // no-op on the table and a language change from the L toggle rebuilds
+        // it before this read.
+        DPBUI.i18n.setLang((locale || "en").indexOf("zh") === 0 ? "zh" : "en");
+        return DPBUI.i18n.tt(key);
       }
       function snapshot(selection) {
         var values = {};

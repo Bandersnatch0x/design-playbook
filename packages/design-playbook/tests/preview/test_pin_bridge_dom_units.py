@@ -263,7 +263,20 @@ def test_the_bridges_dom_bound_helpers_keep_their_contracts(tmp_path) -> None:
     if node is None:  # pragma: no cover - the repository requires node
         pytest.skip("node is not installed")
     source = BRIDGE.read_text(encoding="utf-8")
-    extracted = "\n".join(_extract(name, source) for name in DOM_HELPERS)
+    # `cssPath` and the badge builder delegate to DPBUI.pure, so the shared
+    # core ships first in the extracted payload. It ends with `(window)` and
+    # the fake window below is declared inside CHECKS, so a pre-stub keeps the
+    # core's IIFE call resolvable.
+    core = (PKG_ROOT / "mcp" / "_shared" / "dpbui-core.js")
+    preamble = (
+        "var window = globalThis;\n"
+        "var document = { documentElement: {}, getElementById: function () { return null; } };\n"
+        + core.read_text(encoding="utf-8")
+        # Bridge-scope constants the extracted bodies read (declared next to
+        # cssPath in the shipped file, outside the extracted function text).
+        + "\nvar CAPTURE_STOP_IDS = ['dpb-preview-bar', 'dpb-float-root'];\n"
+    )
+    extracted = preamble + "\n" + "\n".join(_extract(name, source) for name in DOM_HELPERS)
     for name in DOM_HELPERS:
         assert "function " + name + "(" in extracted
     # node -e mangles multi-line payloads on some installs; run from a file.

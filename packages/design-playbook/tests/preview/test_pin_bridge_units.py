@@ -18,7 +18,10 @@ PKG_ROOT = Path(__file__).resolve().parents[2]
 BRIDGE = PKG_ROOT / "mcp" / "preview" / "pin_bridge.js"
 
 # Pure helpers: no DOM, no module state. `checkGuides` and the toolbar helpers
-# are deliberately absent because they read or write bridge state.
+# are deliberately absent because they read or write bridge state. `drawPathD`
+# and `cssPath` are thin delegations to DPBUI.pure (dpbui-core.js), whose own
+# math lives under tests for that file; this suite pins that the delegation
+# keeps the bridge's call signature.
 PURE_HELPERS = ("hsvToRgb", "rgbToHex", "translated", "drawPathD")
 
 # Extraction counts braces, which is enough for these four: none of them holds a
@@ -80,7 +83,13 @@ def test_the_bridge_pure_helpers_keep_their_values(tmp_path) -> None:
     if node is None:  # pragma: no cover - the repository requires node
         pytest.skip("node is not installed")
     source = BRIDGE.read_text(encoding="utf-8")
-    extracted = "\n".join(_extract(name, source) for name in PURE_HELPERS)
+    core = (PKG_ROOT.parent / "design-playbook" / "mcp" / "_shared" / "dpbui-core.js")
+    if not core.is_file():  # pragma: no cover - layout guard
+        core = PKG_ROOT / "mcp" / "_shared" / "dpbui-core.js"
+    # The delegation needs DPBUI.pure in scope, and dpbui-core.js ends by
+    # invoking itself with `window`; node has no window, so stub it first.
+    preamble = "var window = globalThis;\n" + core.read_text(encoding="utf-8")
+    extracted = preamble + "\n" + "\n".join(_extract(name, source) for name in PURE_HELPERS)
     for name in PURE_HELPERS:
         assert "function " + name + "(" in extracted
     checks = CHECKS.replace("CHECKS_RUN", str(CHECKS.count("eq(") - 1))
