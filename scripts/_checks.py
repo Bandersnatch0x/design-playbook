@@ -24,7 +24,7 @@ RUFF_VERSION = "0.15.12"
 # both workflows read this constant. A bump requires re-running the
 # preview browser matrix and updating the version table in
 # tests/preview/test_visual_edit_acceptance.py.
-PLAYWRIGHT_VERSION = "1.60.0"
+PLAYWRIGHT_VERSION = "1.63.0"
 
 # Version line → exact shipped command set (ADR-0015 stable main).
 # main is the public install surface, so unreleased capability must never
