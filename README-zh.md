@@ -19,24 +19,26 @@
 
 ## ✅ 对照声明的判据和证据评审 UI
 
-面向使用 coding agent 修改既有 Web UI 的前端或产品工程师，design-playbook 把需求、验收判据、证据与修复责任人串起来。必需证据缺失时，判据保持 `blocked`；显式跳过评审器时，产出 `audited: false` 骨架，而非已审计的 Pass。发现指回所属声明，阻塞性发现回流修复。评审器不替代具名人工角色的语义批准，也不保证独立判断。
+> **Agent 不能给自己的 UI 打分。** design-playbook 让它们逐判据拿出证明：必需证据缺失时判据保持 `blocked`；跳过评审器仍会产出 `audited: false` 骨架——绝不是已审计的 Pass。
 
-承载它的是两个面：
+面向使用 coding agent 修改既有 Web UI 的前端或产品工程师，design-playbook 把需求、验收判据、证据与修复责任人串起来。发现指回所属声明，阻塞性发现回流修复，评审器永远不替代具名人工角色的语义批准。
 
-1. **带证据的验收**——`ui-evaluator` + point-back 台账：发现必须引用绑定判据的证据，闭环轨迹是 run 的一部分，不是聊天摘要。
-2. **存量产品的 UI 改动**——`design-baseline` 在改动既有产品之前先发现、校验或生成项目 `DESIGN.md`，让改动与已上线的部分保持一致。
+| 面 | 由谁承载 |
+| :--- | :--- |
+| **带证据的验收** | `ui-evaluator` + point-back 台账：发现必须引用绑定判据的证据，闭环轨迹是 run 产物，不是聊天摘要 |
+| **存量产品的 UI 改动** | `design-baseline` 在改动既有产品之前先发现、校验或生成项目 `DESIGN.md` |
+
+| | |
+| :---: | :---: |
+| ![Point-back 发现](packages/design-playbook/showcase/screenshots/03-point-back.png) | ![六层 spec](packages/design-playbook/showcase/screenshots/01-spec.png) |
+| **每条发现都指回它的声明** | **spec 写在任何 UI 之前** |
 
 ### 当前阶段
 
-截至 2026-09-26，项目处于**维护者自用与维护阶段（含有界例外）**，catalog 提交和参与者招募均已暂停。
-现有安装路径继续保留；内部 dogfood、历史案例和自动回放不构成外部采用或自愿复用证据。
-新增能力 spec 只是提案，不代表实施或发布承诺。恢复活动须经维护者明确决定，
-不因日期到达或内部测试通过而自动恢复。
-
-[前端改动只读摘要](docs/subsystems/run-console.zh.md)（2026-09-25）与
-[Preview 视觉编辑能力](docs/adr/0047-preview-visual-editing-capability.md)（2026-10-09，仅本地验证）
-是登记在 [ADR-0045](docs/adr/0045-external-evidence-spend-gate.md) 的有日期例外；
-这不恢复招募、catalog 提交或发布，也不宣称已测得提效。
+> [!NOTE]
+> 截至 2026-09-26，项目处于**维护者自用与维护阶段（含有界例外）**，catalog 提交和参与者招募均已暂停。现有安装路径继续保留；内部 dogfood、历史案例和自动回放不构成外部采用或自愿复用证据。新增能力 spec 只是提案，不代表实施或发布承诺。恢复活动须经维护者明确决定，不因日期到达或内部测试通过而自动恢复。
+>
+> 登记在 [ADR-0045](docs/adr/0045-external-evidence-spend-gate.md) 的有日期例外：[前端改动只读摘要](docs/subsystems/run-console.zh.md)（2026-09-25）与 [Preview 视觉编辑能力](docs/adr/0047-preview-visual-editing-capability.md)（2026-10-09，仅本地验证）。这不恢复招募、catalog 提交或发布，也不宣称已测得提效。
 
 ## ⚡ 一条命令，三份产物
 
@@ -48,9 +50,11 @@
 
 一次 Design I/O run 使用随包内置的 MCP 配置，在宿主支持且运行前提满足时，将三类核心产物记录在 `.scratch/<run>/`：
 
-1. **`spec.md`**——六层的"什么是好"声明（意图 → 验收），写在任何 UI 之前
-2. **决策报告**——骨架 + 组件语义，写在任何代码之前
-3. **Point-back 台账**——每条验收发现都写明它违反的是哪条声明，外加闭环轨迹
+| 产物 | 拥有什么 |
+| :--- | :--- |
+| **1 · `spec.md`** | 六层的"什么是好"声明（意图 → 验收），写在任何 UI 之前 |
+| **2 · 决策报告** | 骨架 + 组件语义，写在任何代码之前 |
+| **3 · Point-back 台账** | 每条验收发现都写明它违反的是哪条声明，外加闭环轨迹 |
 
 ## 🎬 试一把
 
@@ -76,12 +80,17 @@ codex plugin add design-playbook@design-playbook
 
 用 Cursor、Windsurf、Gemini CLI 等 30 个受支持的 agent？见 [🌐 跨平台安装](#-跨平台安装)。诚实降级：30 个里有 22 个走的是生成的 `AGENTS.md` 地板（编排契约 + MCP 安装指南，命令退化为提示文档）——每一档实际拿到什么，分层表写得明明白白。
 
+<details>
+<summary>Codex 安装细节、MCP fallback 与运行前提</summary>
+
 Codex 安装细节、marketplace 不可用时的 `[mcp_servers.*]` 直配 fallback、preview 前置条件：见 [`packages/design-playbook/codex/AGENTS.md`](./packages/design-playbook/codex/AGENTS.md)。
 
 **运行前提**：受支持的宿主已注册相应 MCP 工具，内置运行时需要 Python 3，Preview 需要本地浏览器。
 运行取证还需要 Playwright 与 Chromium，以及可访问的应用、相应测试数据和登录态。见
 [取证安装说明](./packages/design-playbook-evidence/README.md#install--mcp-config)。
 可选适配器不可用时会披露限制，但跳过取证不等于必需证据已通过。
+
+</details>
 
 <details>
 <summary>本地开发 / 自测</summary>
@@ -107,10 +116,12 @@ codex plugin add design-playbook@design-playbook
 
 验收记录必须保留证据边界：
 
-- **Point-back**——每个验收发现都点名拥有它的 spec、领域规则或工艺声明。不存在无主的"看起来不错"。
-- **回流（recirculate）**——blocking 发现回流到 owning 阶段直到闭环；闭环轨迹本身就是 run 产物的一部分。
-- **不能静默跳过**——跳过审计仍会产出 point-back 骨架，但标记 `audited: false`，strict 校验不把它当已审计结果放行。
-- **缺失不等于不适用**：必需证据缺失为 `blocked`；`not-applicable` 必须有未触发的适用条件与理由，不能因为取证工具不可用就判不适用。
+| 规则 | 含义 |
+| :--- | :--- |
+| **Point-back** | 每个验收发现都点名拥有它的 spec、领域规则或工艺声明。不存在无主的"看起来不错" |
+| **回流（recirculate）** | blocking 发现回流到 owning 阶段直到闭环；闭环轨迹本身就是 run 产物的一部分 |
+| **不能静默跳过** | 跳过审计仍会产出 point-back 骨架，但标记 `audited: false`——strict 校验不把它当已审计结果放行 |
+| **缺失不等于不适用** | 必需证据缺失为 `blocked`；`not-applicable` 必须有未触发的适用条件与理由，不能因为取证工具不可用就判不适用 |
 
 [历史案例与用户旅程](./packages/design-playbook/showcase/README.md#user-journey)：三次独立任务，外加一个[完整的当前实跑](./packages/design-playbook/showcase/case-reader/index.html)（案例阅读器）——规格、真实预览确认、Fill、工艺审计、运行取证、评审、静态交付全程打包，并附[跨 run 回顾报告](./packages/design-playbook/showcase/run-review-2026-09-08.md)。SwarSight 队列案例保留了规格、设计决策与评审修复记录，早于当前计划交接和运行取证要求。
 
@@ -125,7 +136,7 @@ codex plugin add design-playbook@design-playbook
 
 **预览评审工作台**——检查设计、定位反馈，再确认或要求修改。控制壳还带一项有界的[视觉编辑能力](docs/adr/0047-preview-visual-editing-capability.md)（缩放、拖拽移动、经检查器改文字与颜色；仅本地验证，无源码写入器）。[已收录的人工确认记录](./packages/design-playbook/showcase/README.md#case-b) 来自独立的入驻表单任务，不是队列案例的确认，也不代表产品实现已通过验收：
 
-![Preview 确认工作台——批注后确认或打回](packages/design-playbook/showcase/screenshots/05-preview-confirm.png)
+<a href="packages/design-playbook/showcase/screenshots/05-preview-confirm.png"><img src="packages/design-playbook/showcase/screenshots/05-preview-confirm.png" alt="Preview 确认工作台——批注后确认或打回" width="640" /></a>
 
 查看[三类案例及各自的证据边界](./packages/design-playbook/showcase/README.md)，或打开[完整的当前实跑](./packages/design-playbook/showcase/case-reader/index.html)——其中包含接续暂停点与生成的静态交付包。重试界面来自另一任务，使用本地模拟数据，不执行插件。
 

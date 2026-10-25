@@ -19,29 +19,26 @@
 
 ## ✅ Review UI against declared criteria and evidence
 
-For a frontend or product engineer changing an existing Web UI with a coding agent, design-playbook connects the request, acceptance criteria, evidence, and repair owner. Required evidence that is missing leaves the criterion `blocked`. Explicitly skipping the evaluator produces an `audited: false` skeleton, not an audited Pass. Findings point back to their owning declarations and blocking findings recirculate for repair. Evaluator review does not replace the named human's semantic approval or guarantee independent judgment.
+> **Agents cannot grade their own UI.** design-playbook makes them prove it, criterion by criterion: required evidence missing leaves the criterion `blocked`, and skipping the evaluator still produces an `audited: false` skeleton — never an audited Pass.
 
-Two surfaces carry this:
+For a frontend or product engineer changing an existing Web UI with a coding agent, design-playbook connects the request, acceptance criteria, evidence, and repair owner. Findings point back to their owning declarations, blocking findings recirculate for repair, and evaluator review never replaces the named human's semantic approval.
 
-1. **Acceptance with proof** — `ui-evaluator` + the point-back ledger: findings must cite criterion-bound evidence, and the closure trail is part of the run, not a chat summary.
-2. **Existing-product UI work** — `design-baseline` discovers, validates, or drafts the project's `DESIGN.md` *before* changing a live product, so the change stays consistent with what already shipped.
+| Surface | What carries it |
+| :--- | :--- |
+| **Acceptance with proof** | `ui-evaluator` + the point-back ledger: findings cite criterion-bound evidence; the closure trail is a run artifact, not a chat summary |
+| **Existing-product UI work** | `design-baseline` discovers, validates, or drafts the project's `DESIGN.md` *before* changing a live product |
+
+| | |
+| :---: | :---: |
+| ![Point-back findings](packages/design-playbook/showcase/screenshots/03-point-back.png) | ![Six-layer spec](packages/design-playbook/showcase/screenshots/01-spec.png) |
+| **Every finding points back to its declaration** | **The spec exists before any UI** |
 
 ### Current stage
 
-As of 2026-09-26, this project is in **maintainer self-use and maintenance with
-bounded exceptions**.
-Catalog submissions and participant recruitment are paused. Existing install
-paths remain available; internal dogfood, historical examples, and automated
-replays are not evidence of external adoption or repeat use. New capability
-specs are proposals, not implementation or release commitments. Resumption
-requires an explicit maintainer decision, not a date or passing internal tests.
-
-The [read-only frontend scope report](packages/design-playbook/commands/run-status.md)
-(2026-09-25) and the [Preview visual-editing capability](docs/adr/0047-preview-visual-editing-capability.md)
-(2026-10-09, local validation only) are dated exceptions recorded in
-[ADR-0045](docs/adr/0045-external-evidence-spend-gate.md); they do not reopen
-recruitment, catalog submission, or release, and no measured time-saving is
-claimed.
+> [!NOTE]
+> As of 2026-09-26, this project is in **maintainer self-use and maintenance with bounded exceptions**. Catalog submissions and participant recruitment are paused. Existing install paths remain available; internal dogfood, historical examples, and automated replays are not evidence of external adoption or repeat use. New capability specs are proposals, not implementation or release commitments. Resumption requires an explicit maintainer decision, not a date or passing internal tests.
+>
+> Dated exceptions recorded in [ADR-0045](docs/adr/0045-external-evidence-spend-gate.md): the [read-only frontend scope report](packages/design-playbook/commands/run-status.md) (2026-09-25) and the [Preview visual-editing capability](docs/adr/0047-preview-visual-editing-capability.md) (2026-10-09, local validation only). They do not reopen recruitment, catalog submission, or release, and no measured time-saving is claimed.
 
 ## ⚡ One command, three artifacts
 
@@ -53,9 +50,11 @@ The mechanism behind that proof is one pass:
 
 A Design I/O run uses bundled MCP configuration, subject to host support and runtime prerequisites, and records three core artifacts under `.scratch/<run>/`:
 
-1. **`spec.md`** — the six-layer declaration of what good is (intent → acceptance), written *before* any UI
-2. **Decision report** — shell + component semantics, written *before* any code
-3. **Point-back ledger** — every acceptance finding states which declaration it violates, plus the closure trail
+| Artifact | What it owns |
+| :--- | :--- |
+| **1 · `spec.md`** | The six-layer declaration of what good is (intent → acceptance), written *before* any UI |
+| **2 · Decision report** | Shell + component semantics, written *before* any code |
+| **3 · Point-back ledger** | Every acceptance finding states which declaration it violates, plus the closure trail |
 
 ## 🎬 Try it
 
@@ -81,7 +80,10 @@ Then, namespaced (bare `/design-io` is a `--plugin-dir` dev alias only):
 
 On Cursor, Windsurf, Gemini CLI, Zed, or any of 30 supported agents: see [🌐 Install on other agents](#-install-on-other-agents). Honest degradation: 22 of the 30 are the generated `AGENTS.md` floor (orchestrator contract + MCP install guide, commands as prompt docs) — the tier table says exactly what each tier gets.
 
-Codex install notes, the `[mcp_servers.*]` fallback when a marketplace is unavailable, and preview prerequisites: [`packages/design-playbook/codex/AGENTS.md`](./packages/design-playbook/codex/AGENTS.md).
+<details>
+<summary>Codex install notes, MCP fallback, and runtime prerequisites</summary>
+
+Codex install details, the `[mcp_servers.*]` fallback when a marketplace is unavailable, and preview prerequisites: [`packages/design-playbook/codex/AGENTS.md`](./packages/design-playbook/codex/AGENTS.md).
 
 **Runtime prerequisites:** a supported host with the relevant MCP tools
 registered, Python 3 for the bundled runtimes, and a local browser for Preview.
@@ -90,6 +92,8 @@ application with the required test data and login state. See the
 [capture setup](./packages/design-playbook-evidence/README.md#install--mcp-config).
 An unavailable optional adapter is disclosed; required proof still cannot be
 treated as passed merely because capture was skipped.
+
+</details>
 
 <details>
 <summary>Local dev / self-test</summary>
@@ -115,10 +119,12 @@ sibling bundle, root catalog, README badges, and generated Codex snapshot follow
 
 Acceptance records keep their evidence limits visible:
 
-- **Point-back** — every acceptance finding names the spec, domain, or craft declaration that owns it. No free-floating "looks good".
-- **Recirculate** — blocking findings flow back to the owning stage until they close; the closure trail is part of the run artifacts.
-- **No silent skip** — skip the audit and the result still carries the point-back skeleton, but marked `audited: false`, which strict validation refuses as a final result.
-- **Missing is not inapplicable** - missing required proof is `blocked`; `not-applicable` needs an unmet applicability condition and a reason, not an unavailable capture tool.
+| Rule | Meaning |
+| :--- | :--- |
+| **Point-back** | Every acceptance finding names the spec, domain, or craft declaration that owns it. No free-floating "looks good" |
+| **Recirculate** | Blocking findings flow back to the owning stage until they close; the closure trail is part of the run artifacts |
+| **No silent skip** | Skipping the audit still carries the point-back skeleton, marked `audited: false` — strict validation refuses it as a final result |
+| **Missing is not inapplicable** | Missing required proof is `blocked`; `not-applicable` needs an unmet applicability condition and a reason, not an unavailable capture tool |
 
 [Historical cases and journey coverage](./packages/design-playbook/showcase/README.md#user-journey): three independent requests, plus one [complete current live run](./packages/design-playbook/showcase/case-reader/index.html) (case reader) that packages the whole chain — spec, real preview confirmations, Fill, craft audit, captured evidence, review, static handoff — with a [cross-run review report](./packages/design-playbook/showcase/run-review-2026-09-08.md). The SwarSight queue case retains its specification, design decisions, and review / repair record; it predates the current plan and capture requirements.
 
@@ -133,7 +139,7 @@ The images below are illustrated summaries of that historical case, not raw exec
 
 **Preview review workbench** — inspect a design, anchor feedback, then confirm or revise. The control shell also carries a bounded [visual-editing capability](docs/adr/0047-preview-visual-editing-capability.md) (resize, drag move, text and colour edits through the inspector; local validation only, no source writer). The [packaged human-confirmation record](./packages/design-playbook/showcase/README.md#case-b) belongs to a separate onboarding-form task; it is not confirmation of the queue case or of production acceptance:
 
-![Preview confirm workbench — annotate, then confirm or revise](packages/design-playbook/showcase/screenshots/05-preview-confirm.png)
+<a href="packages/design-playbook/showcase/screenshots/05-preview-confirm.png"><img src="packages/design-playbook/showcase/screenshots/05-preview-confirm.png" alt="Preview confirm workbench — annotate, then confirm or revise" width="640" /></a>
 
 Browse [the three cases and their boundaries](./packages/design-playbook/showcase/README.md), or the [complete current run](./packages/design-playbook/showcase/case-reader/index.html) for an end-to-end record that includes a resume pause point and a generated static handoff. The retry interface is another task with local mock data, not a plugin execution.
 
