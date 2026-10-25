@@ -293,6 +293,54 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  preview-browser-macos:
+    # ADR-0045 amendment (2026-10-25): one macOS leg over the existing
+    # browser-matrix selections. Same pytest choices the ubuntu leg runs;
+    # the locale chain is pinned so the narrow-viewport assertions resolve
+    # through ui_locale.py the same way they do in CI today. Chromium is
+    # installed by the documented ticket-06 path; if the macOS runner image
+    # needs system deps, the pw_install fallback below marks the gate red
+    # instead of silently skipping.
+    name: Preview browser matrix (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pytest
+        run: python3 -m pip install pytest
+      - name: Install Playwright + chromium (ticket 06 default path)
+        id: pw_install
+        continue-on-error: true
+        run: |
+          PLAYWRIGHT_VERSION=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); from _checks import PLAYWRIGHT_VERSION; print(PLAYWRIGHT_VERSION)")
+          python3 -m pip install "playwright==${PLAYWRIGHT_VERSION}"
+          python3 -m playwright install --with-deps chromium
+      - name: Playwright missing — skip-with-reason, mark gate red
+        if: steps.pw_install.outcome != 'success'
+        run: |
+          echo "::error::Playwright/chromium install failed on macOS; browser matrix skipped-with-reason."
+          exit 1
+      - name: Preview browser matrix (zh-CN locale pinned)
+        env:
+          LANG: zh_CN.UTF-8
+        # --reruns 1: the macOS runner is slower than the ubuntu leg, and one
+        # retry of just the failed cases absorbs a genuine timing wobble. A case
+        # that fails twice still fails the leg, and the retry summary names
+        # every first-attempt failure so a persistent red stays visible.
+        # The 2026-10-25 red was NOT timing: the typing tests used Control+A,
+        # which macOS Chromium reads as move-to-line-start, so they now use
+        # ControlOrMeta and the platform-native undo modifier.
+        # pipefail keeps a pytest usage error from hiding behind tee.
+        run: |
+          set -o pipefail
+          python3 -m pip install pytest-rerunfailures
+          python3 -m pytest packages/design-playbook/tests/preview -m browser -v --reruns 1 --reruns-delay 2 2>&1 | tee /tmp/macos-matrix.log
+          echo "flake summary (failed on first attempt, retried once):"
+          grep -E "FAILED" /tmp/macos-matrix.log | grep -v "RERUN" || true
+
   powershell-quoting:
     # The ubuntu matrix runs every t002 test except the PowerShell
     # round-trip class (skipIf os.name != "nt"): quoting regressions

@@ -434,6 +434,34 @@ specification prerequisites (Stage S): the listed registry entries, the
 own dated amendment there. This pointer changes no boundary above, and the
 ADR-0045 spend gate otherwise remains in force.
 
+## Amendment (2026-10-25): bounded self-use exception for a macOS CI leg
+
+The maintainer explicitly authorized, on 2026-10-25, a bounded exception that
+adds one macOS leg to the existing browser-matrix job in
+`.github/workflows/ci.yml`. This is test-infrastructure hardening of an
+already-authorized surface, not a new capability. The authorized boundary is:
+
+- one additional matrix entry in the CI browser job only, running the same
+  pytest selections the Windows and ubuntu legs already run;
+- the Chromium install path already documented in the workflow
+  (ticket-06 default, with the documented fallback when macOS needs system
+  dependencies);
+- the locale chain pinned to `zh_CN.UTF-8` on the new leg, matching the
+  existing `ui_locale.py` LANG resolution chain that the narrow-viewport
+  assertions depend on.
+
+The exclusions are: no release, tag, publish, catalog submission or
+recruitment; no change to the release workflows' publish semantics; no new
+runner image claims beyond macOS; no claim of cross-platform support for the
+plugin's product surface; no new capability declaration of any kind. A red
+macOS leg is treated like any CI failure: diagnose first, never widen an
+assertion to pass.
+
+Authorization is NOT a completion claim. This is one CI leg on one hosted
+runner, not evidence that the plugin is validated on macOS, and it does not
+satisfy the external trial gate. The ADR-0045 spend gate otherwise remains in
+force.
+
 ## Release authorization
 
 The gate above requires a separate maintainer decision for each release. The

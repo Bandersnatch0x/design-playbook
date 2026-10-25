@@ -576,7 +576,7 @@ class VisualEditorRegressionTests(unittest.TestCase):
         self.select("#a")
         field = self.page.locator('[data-property="background-color"] input')
         field.click()
-        self.page.keyboard.press("Control+a")
+        self.page.keyboard.press("ControlOrMeta+a")
         self.page.keyboard.type("r")
         self.page.wait_for_timeout(450)
         self.page.keyboard.type("ed")
@@ -602,7 +602,7 @@ class VisualEditorRegressionTests(unittest.TestCase):
         expand_inspector_section(self.page, "width")
         field = self.page.locator('[data-property="width"] input')
         field.click()
-        self.page.keyboard.press("Control+a")
+        self.page.keyboard.press("ControlOrMeta+a")
         self.page.keyboard.type("7")
         self.page.wait_for_timeout(450)
         self.page.keyboard.type("00")
@@ -646,7 +646,7 @@ class VisualEditorRegressionTests(unittest.TestCase):
         expand_inspector_section(self.page, "width")
         field = self.page.locator('[data-property="width"] input')
         field.click()
-        self.page.keyboard.press("Control+a")
+        self.page.keyboard.press("ControlOrMeta+a")
         self.page.keyboard.type("7")
         field.press("Enter")
         self.page.wait_for_timeout(250)
@@ -669,7 +669,7 @@ class VisualEditorRegressionTests(unittest.TestCase):
         self.select("#a")
         field = self.page.locator('[data-property="background-color"] input')
         field.click()
-        self.page.keyboard.press("Control+a")
+        self.page.keyboard.press("ControlOrMeta+a")
         self.page.keyboard.type("red")
         self.page.wait_for_timeout(450)
         before = self.edits()
@@ -780,11 +780,13 @@ class VisualEditorRegressionTests(unittest.TestCase):
         self.assertTrue(self.page.locator(".dpb-react-diagnostic").inner_text())
 
     def test_native_webmcp_registration_uses_the_same_batch(self) -> None:
-        """Chromium 148 only exposes registerTool, not getTools/executeTool.
+        """The native WebMCP surface moved between Chromium generations.
 
-        The observer calls the real native method before recording success.
-        Calling the captured execute callback tests our pipeline, NOT invocation
-        by a real browser agent or a browser-provided executeTool API.
+        Chromium 148 exposes registerTool on ``navigator.modelContext`` only;
+        Chromium 153 adds getTools/executeTool and moves the surface to
+        ``document.modelContext`` (T-117 option B). The init script probes
+        whichever surface the running browser provides, so the expectation
+        branches on the browser generation the pin ships.
         """
         self.browser.close()
         self.browser = self.pw.chromium.launch(headless=True, args=["--enable-features=WebMCP"])
@@ -792,11 +794,12 @@ class VisualEditorRegressionTests(unittest.TestCase):
         self.page = self.browser.new_page(viewport={"width": 1440, "height": 1000})
         self.page.add_init_script("""(() => {
           if (window !== top) return;
-          const context = navigator.modelContext;
+          const context = navigator.modelContext || document.modelContext;
           window.nativeSurface = {
             secure: isSecureContext,
+            surfaceLocation: navigator.modelContext ? 'navigator' : (document.modelContext ? 'document' : 'absent'),
             documentContext: typeof document.modelContext,
-            navigatorContext: typeof context,
+            navigatorContext: typeof navigator.modelContext,
             detected: typeof context?.registerTool === 'function',
             methods: context ? Object.getOwnPropertyNames(Object.getPrototypeOf(context)) : [],
             getTools: typeof context?.getTools,
@@ -817,15 +820,31 @@ class VisualEditorRegressionTests(unittest.TestCase):
         self.open_editor(loopback=True)
         surface = self.page.evaluate("window.nativeSurface")
         print("Chromium", self.browser.version, "native WebMCP surface:", json.dumps(surface, sort_keys=True))
-        self.assertEqual(surface, {
-            "secure": True, "documentContext": "undefined", "navigatorContext": "object",
-            "detected": True, "methods": ["registerTool", "constructor"], "native": True,
-            "getTools": "undefined", "executeTool": "undefined", "provideContext": "undefined",
-        }, msg=(
-            "This assertion records the native surface of the pinned browser.\n"
-            "A red here after a version bump means the surface moved, not that the product broke.\n"
-            "The product already reads both surfaces in control.react.js; update this expectation and the ticket's version table."
-        ))
+        major = int(self.browser.version.split(".")[0])
+        if major < 150:
+            self.assertEqual(surface, {
+                "secure": True, "surfaceLocation": "navigator",
+                "documentContext": "undefined", "navigatorContext": "object",
+                "detected": True, "methods": ["registerTool", "constructor"], "native": True,
+                "getTools": "undefined", "executeTool": "undefined", "provideContext": "undefined",
+            }, msg=(
+                "Chromium <150 native surface changed; the product already reads both surfaces.\n"
+                "A red here after a version bump means the surface moved, not that the product broke.\n"
+                "Update this expectation table and the ticket's version table."
+            ))
+        else:
+            self.assertEqual(surface, {
+                "secure": True, "surfaceLocation": "document",
+                "documentContext": "object", "navigatorContext": "undefined",
+                "detected": True, "methods": ["ontoolchange", "executeTool", "getTools", "registerTool", "constructor"], "native": True,
+                # Method order is the prototype's own enumeration on 153
+                # (measured 2026-10-25, Chromium 153.0.8010.12); keep it exact.
+                "getTools": "function", "executeTool": "function", "provideContext": "undefined",
+            }, msg=(
+                "Chromium >=150 native surface changed; the product already reads both surfaces.\n"
+                "A red here after a version bump means the surface moved, not that the product broke.\n"
+                "Update this expectation table and the ticket's version table."
+            ))
         expected = [
             {"name": "preview_get_selection", "inputSchema": {"type": "object", "properties": {}},
              "annotations": {"readOnlyHint": True, "consequentialHint": False}},
