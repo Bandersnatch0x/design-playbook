@@ -663,7 +663,8 @@
         // instead of dropping it, so the two questions are answered separately.
         window.dpbVisualEditorState = function () {
           var state = protocol.status();
-          return { ready: !!state.ready, stale: !!state.stale };
+          return { ready: !!state.ready, stale: !!state.stale,
+                   pendingRequest: protocol.hasRequest() };
         };
         window.dpbDrainVisualEdits = function () {
           if (drainRef.current) return drainRef.current();
