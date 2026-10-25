@@ -828,7 +828,8 @@ class CanvasJourneyTest(unittest.TestCase):
             "  nodes: document.querySelectorAll('.canvas-node').length,"
             "  buttonDisabled: document.querySelector('#canvas-reload')?.disabled ?? null,"
             "  zoomLabel: document.querySelector('#canvas-zoom-label')?.textContent ?? null,"
-            "  boardOptions: document.querySelectorAll('#canvas-board option').length });")
+            "  boardOptions: document.querySelectorAll('#canvas-board option').length,"
+            "  buttonBusy: document.querySelector('#canvas-reload')?.getAttribute('aria-busy') });")
         raise AssertionError(
             f"canvas reload produced neither a list nor an error in {timeout} s;"
             f" state={state}"
