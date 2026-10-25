@@ -339,7 +339,10 @@
   }
 
   // ---- viewport modes (v9: desktop / tablet / mobile) ----
+  // The viewport family is the wire contract's; the pixel widths are shell
+  // presentation and stay here.
   var VP_WIDTHS = { desktop: 1024, tablet: 768, mobile: 375 };
+  var VIEWPORT_MODES = DPBUI.visualContract.VIEWPORTS.filter(function (v) { return v !== "any"; });
   function setViewport(vp, quiet) {
     viewport = vp;
     // T-107: visual edits are captured per viewport so a responsive change can
@@ -353,7 +356,7 @@
     });
     sizeDrawLayer();
   }
-  ["desktop", "tablet", "mobile"].forEach(function (vp) {
+  VIEWPORT_MODES.forEach(function (vp) {
     var b = document.getElementById("dpb-vp-" + vp);
     if (b) b.addEventListener("click", function () { setViewport(vp); });
   });

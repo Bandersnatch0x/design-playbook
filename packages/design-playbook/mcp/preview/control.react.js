@@ -443,7 +443,7 @@
             applyOutcome(receipt);
             var edits = changes.filter(function (c) { return c.oldValue !== c.newValue; }).map(function (c) {
               return { kind: LAYOUT.indexOf(c.property) >= 0 ? "layout" : "style",
-                viewport: operation ? operation.viewport : (window.DPB_ACTIVE_VIEWPORT || "any"),
+                viewport: operation ? operation.viewport : (window.DPB_ACTIVE_VIEWPORT || DPBUI.visualContract.VIEWPORTS[3]),
                 locator: parsed.selector, property: c.property, oldValue: c.oldValue, newValue: c.newValue,
                 source: source,
                 _seq: opSeq,
@@ -481,7 +481,7 @@
             property: e.property, oldValue: e.oldValue, newValue: e.newValue,
             source: e.source };
         });
-        var batch = { schemaVersion: 1, status: isStale ? "stale" : "pending",
+        var batch = { schemaVersion: DPBUI.visualContract.SCHEMA_VERSION, status: isStale ? DPBUI.visualContract.STATUS_STALE : DPBUI.visualContract.STATUS_PENDING,
           sourceHash: binding.sourceHash, routeUrl: binding.routeUrl, edits: cleanEdits };
         window.DPB_VISUAL_EDIT_BATCH = batch;
         var hidden = document.getElementById("dpb-visual-edits-json");

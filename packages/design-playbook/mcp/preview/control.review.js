@@ -299,18 +299,19 @@
     // only in case renders identically and is not a review; text stays exact.
     // Readiness stays owned here; the editor only publishes state.
     var batch = window.DPB_VISUAL_EDIT_BATCH;
-    if (!batch || batch.status !== "pending") return false;
+    var contract = DPBUI.visualContract;
+    if (!batch || batch.status !== contract.STATUS_PENDING) return false;
     if (!batch.edits || !batch.edits.length) return false;
     var net = {};
     batch.edits.forEach(function (e) {
-      if (e.source !== "shell") return;
+      if (e.source !== contract.SHELL_SOURCE[0]) return;
       var key = [e.locator, e.property].join("\u0000");
       var original = Object.prototype.hasOwnProperty.call(net, key) ? net[key][0] : e.oldValue;
       net[key] = [original, e.newValue, e.kind];
     });
     return Object.keys(net).some(function (k) {
       var pair = net[k];
-      var cssKind = pair[2] === "style" || pair[2] === "layout" || pair[2] === "responsive";
+      var cssKind = contract.CSS_KINDS.indexOf(pair[2]) >= 0;
       var original = String(pair[0] == null ? "" : pair[0]);
       var final = String(pair[1] == null ? "" : pair[1]);
       if (!cssKind) return original !== final;
