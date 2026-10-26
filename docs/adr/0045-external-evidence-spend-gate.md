@@ -470,10 +470,10 @@ block and refuses the tag when it is missing, malformed, or names another tag.
 
 ```release-authorization
 {
-  "tag": "v0.25.5",
+  "tag": "v0.25.6",
   "decision": "approved",
   "authority": "maintainer",
-  "reason": "Lands the preview control shell consolidation and the personal asset workbench, which ships as its own package rather than in the plugin artifact. The maintainer reviewed the workbench's A01-A15 ledger and accepted that two items stay not-run: human keyboard acceptance (two subjective checks) and a second physical clean machine. Both are recorded as not-run in the delivery ticket, not as passes."
+  "reason": "Maintenance release. It finishes the Stage P consolidation inside the preview editor (one shared pure layer for the capture math and the theme/locale reads; the visual-edit wire contract generated from the server module behind a drift gate) and upgrades the browser test bench (playwright pinned at 1.63.0, WebMCP surface assertions branch by browser generation, a macOS CI leg over the same preview matrix). No command, skill, or MCP surface changes, and the wire format is unchanged. Knowingly not done: console/workbench sharing (S3/S4) needs a Stage R/W amendment; the second-framework host and multi-party collaboration stay out of scope by prior decision."
 }
 ```
 
