@@ -24,6 +24,12 @@
    That is also what makes the whole lifecycle executable in node. */
 (function () {
   "use strict";
+  // The wire contract's provenance constants. The generated block ships ahead
+  // of this module, so the fallbacks here only cover a script-order bug failing
+  // loudly enough to be seen rather than silently re-literalizing the contract.
+  var VC = (window.DPBUI || {}).visualContract || {};
+  var SHELL_SOURCE = VC.SHELL_SOURCE || "shell";
+  var FRAME_SOURCE = (VC.EDIT_SOURCES || ["shell", "frame"])[1];
   var MERGE_WINDOW_MS = 500;
   function mergeEdit(prev, next, now, windowMs) {
     if (!prev || !next || prev.locator !== next.locator || prev.property !== next.property) return false;
@@ -185,7 +191,7 @@
     setPublished(store, false);
     emitStatus(store, { busy: true });
     var operation = { oldValue: request.oldValue, id: id, action: request.action || "edit",
-      entry: entry, origin: request.origin || "shell",
+      entry: entry, origin: request.origin || SHELL_SOURCE,
       value: request.value, draft: request.draft, property: request.property,
       viewport: request.viewport, locator: request.locator };
     store.unacked[id] = operation;
@@ -247,7 +253,9 @@
     // parent rebuilds the record from its own dispatch. A gesture the parent did not
     // dispatch has no such record, so its reported values are kept with "frame"
     // provenance, and a WebMCP tool call is the agent editing, not the reviewer.
-    var source = operation ? (operation.origin || "shell") : "frame";
+    // The default provenance is the wire contract's reviewer source; a
+    // prototype-reported change without a parent dispatch keeps "frame".
+    var source = operation ? (operation.origin || SHELL_SOURCE) : FRAME_SOURCE;
     var reported = source === "frame" ? (event.changes || [event]) : (
       operation.entry ? operation.entry.map(function (item) {
         var target = operation.action === "undo" ? item.oldValue : item.newValue;

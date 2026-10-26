@@ -91,5 +91,8 @@ def build_visual_edit_bridge_script() -> str:
 
     Only the sandbox parent can issue preview commands. This never writes host
     source; include the bridge before starting a review so served bytes stay stable.
+    The payload carries the shared core ahead of the bridge, because the
+    bridge's pure helpers read DPBUI.pure and a host page has no other copy.
     """
-    return BRIDGE_SCRIPT
+    core = (HERE.parent / "_shared" / "dpbui-core.js").read_text(encoding="utf-8")
+    return "<script>" + core + "</script>" + BRIDGE_SCRIPT

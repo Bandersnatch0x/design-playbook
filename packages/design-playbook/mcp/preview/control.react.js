@@ -39,9 +39,13 @@
       frame.contentWindow.postMessage({ dpbVisualEdit: message }, "*");
     }
     function bridgeLabels() {
-      var labels = {}, lang = root.lang.indexOf("zh") === 0 ? "zh" : "en";
+      // The visual_* subset of the shared locale store: the editor resolves
+      // through DPBUI.i18n's table instead of re-deriving the active locale's
+      // strings from a private DUAL read. The subset filter stays: the editor
+      // needs only the visual_* keys.
+      var labels = {};
       Object.keys(window.DPB_I18N_DUAL).forEach(function (key) {
-        if (key.indexOf("visual_") === 0) labels[key] = window.DPB_I18N_DUAL[key][lang];
+        if (key.indexOf("visual_") === 0) labels[key] = DPBUI.i18n.tt(key);
       });
       return labels;
     }
@@ -176,10 +180,11 @@
       // the effects below keep the source state in their dependency arrays.
       var flat = ledger.flatten(entries);
       function t(key) {
-        var table = window.DPB_I18N_DUAL;
-        var isZh = (locale || "en").indexOf("zh") === 0;
-        if (table && table[key]) return table[key][isZh ? "zh" : "en"] || key;
-        return key;
+        // Read-only through the shared store: the L toggle owns every
+        // setLang call (single write point), and the observer that tracks
+        // root.lang re-renders this component after each swap, so the table
+        // is already in the render's locale when t() runs.
+        return DPBUI.i18n.tt(key);
       }
       function snapshot(selection) {
         var values = {};
@@ -443,7 +448,7 @@
             applyOutcome(receipt);
             var edits = changes.filter(function (c) { return c.oldValue !== c.newValue; }).map(function (c) {
               return { kind: LAYOUT.indexOf(c.property) >= 0 ? "layout" : "style",
-                viewport: operation ? operation.viewport : (window.DPB_ACTIVE_VIEWPORT || "any"),
+                viewport: operation ? operation.viewport : (window.DPB_ACTIVE_VIEWPORT || DPBUI.visualContract.ANY_VIEWPORT),
                 locator: parsed.selector, property: c.property, oldValue: c.oldValue, newValue: c.newValue,
                 source: source,
                 _seq: opSeq,
@@ -481,7 +486,7 @@
             property: e.property, oldValue: e.oldValue, newValue: e.newValue,
             source: e.source };
         });
-        var batch = { schemaVersion: 1, status: isStale ? "stale" : "pending",
+        var batch = { schemaVersion: DPBUI.visualContract.SCHEMA_VERSION, status: isStale ? DPBUI.visualContract.STATUS_STALE : DPBUI.visualContract.STATUS_PENDING,
           sourceHash: binding.sourceHash, routeUrl: binding.routeUrl, edits: cleanEdits };
         window.DPB_VISUAL_EDIT_BATCH = batch;
         var hidden = document.getElementById("dpb-visual-edits-json");
@@ -658,7 +663,8 @@
         // instead of dropping it, so the two questions are answered separately.
         window.dpbVisualEditorState = function () {
           var state = protocol.status();
-          return { ready: !!state.ready, stale: !!state.stale };
+          return { ready: !!state.ready, stale: !!state.stale,
+                   pendingRequest: protocol.hasRequest() };
         };
         window.dpbDrainVisualEdits = function () {
           if (drainRef.current) return drainRef.current();

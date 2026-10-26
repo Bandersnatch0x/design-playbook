@@ -152,40 +152,11 @@
   // clicks and hover pass through to the prototype untouched.
   var pinOn = false;
 
+  // The selector math is the shared pure helper; only the stop-node ids are
+  // this surface's own (the bridge lives inside the sandboxed prototype).
+  var CAPTURE_STOP_IDS = ["dpb-preview-bar", "dpb-float-root"];
   function cssPath(el) {
-    if (!el || el.nodeType !== 1) return "";
-    if (el.id) return "#" + CSS.escape(el.id);
-    var parts = [];
-    var cur = el;
-    var depth = 0;
-    while (cur && cur.nodeType === 1 && cur !== document.documentElement && depth < 8) {
-      if (cur.id === "dpb-preview-bar" || cur.id === "dpb-float-root") break;
-      var part = cur.tagName.toLowerCase();
-      if (cur.classList && cur.classList.length) {
-        var cls = Array.prototype.slice.call(cur.classList, 0, 2)
-          .filter(function (c) { return c && c.indexOf("dpb-") !== 0; })
-          .map(function (c) { return "." + CSS.escape(c); })
-          .join("");
-        part += cls;
-      }
-      var parent = cur.parentElement;
-      if (parent) {
-        var kids = parent.children;
-        var n = 0, idx = 0, i;
-        for (i = 0; i < kids.length; i++) {
-          if (kids[i].tagName === cur.tagName) {
-            n++;
-            if (kids[i] === cur) idx = n;
-          }
-        }
-        if (n > 1) part += ":nth-of-type(" + idx + ")";
-      }
-      parts.unshift(part);
-      if (cur.tagName === "BODY") break;
-      cur = parent;
-      depth++;
-    }
-    return parts.join(" > ");
+    return DPBUI.pure.cssPath(el, CAPTURE_STOP_IDS);
   }
   var hoverEl = null;
   var visualSelectedEl = null;
@@ -520,9 +491,12 @@
     var hue = 0, saturation = 0, brightness = 0, alpha = 1, property = "color";
     var colorDraft = null, colorTarget = null, opener = null;
     function pageTheme() {
-      var set = document.documentElement.getAttribute("data-theme");
-      if (set === "light" || set === "dark") return set;
-      return window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      // The iframe has no preference store, so the resolution chain is the
+      // pure two-step (explicit attribute, then system) with no storage leg.
+      return DPBUI.pure.resolveThemeFrom(
+        document.documentElement.getAttribute("data-theme"),
+        !!(window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches)
+      );
     }
     function clamp(value, max) { return Math.max(0, Math.min(max, value)); }
     function readColor(value) {
@@ -1181,12 +1155,7 @@
   }
 
   function drawPathD(points) {
-    if (!points || !points.length) return "";
-    var d = "";
-    for (var i = 0; i < points.length; i++) {
-      d += (i ? "L" : "M") + Number(points[i][0]).toFixed(1) + " " + Number(points[i][1]).toFixed(1);
-    }
-    return d + (points.length > 2 ? " Z" : "");
+    return DPBUI.pure.drawPathD(points);
   }
 
   function cancelLiveStroke() {
@@ -1264,23 +1233,12 @@
     (list || []).forEach(function (item) {
       if (item.tag !== "draw" || !item.points || !item.points.length) return;
       var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.setAttribute("d", drawPathD(item.points));
+      path.setAttribute("d", DPBUI.pure.drawPathD(item.points));
       path.setAttribute("class", "dpb-draw-path");
       path.setAttribute("data-draw-n", String(item.n));
       drawSvg.appendChild(path);
       var p0 = item.points[0];
-      var g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      g.setAttribute("class", "dpb-draw-badge");
-      g.setAttribute("transform", "translate(" + Number(p0[0]).toFixed(1) + "," + Math.max(9, Number(p0[1]) - 12).toFixed(1) + ")");
-      var c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      c.setAttribute("r", "9");
-      c.setAttribute("class", "dpb-draw-badge-c");
-      var t = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      t.setAttribute("text-anchor", "middle");
-      t.setAttribute("dy", "3.2");
-      t.textContent = String(item.n);
-      g.appendChild(c); g.appendChild(t);
-      drawSvg.appendChild(g);
+      DPBUI.pure.buildDrawBadge(drawSvg, "dpb-draw-badge", p0[0], p0[1], item.n);
     });
   }
 

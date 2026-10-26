@@ -338,6 +338,12 @@ def pending_visual_edit(editor_page):
     expect(field).to_be_enabled()
     field.fill("rgb(9, 9, 9)")
     expect(page.locator("#dpb-visual-count")).to_have_text("1")
+    # The count renders before the receipt round trip is fully settled, and the
+    # history shortcuts ignore a keypress while a request is in flight. Wait for
+    # the editor to be idle so the first press is the one under test.
+    page.wait_for_function(
+        "() => { const s = window.dpbVisualEditorState();"
+        " return s.ready && !s.stale && !s.pendingRequest; }")
     return page
 
 

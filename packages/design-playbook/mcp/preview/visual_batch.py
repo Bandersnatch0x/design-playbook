@@ -15,11 +15,22 @@ SCHEMA_VERSION = 1
 MAX_EDITS = 200
 MAX_SELECTOR = 512
 MAX_VALUE = 2000
+# Batch lifecycle. A batch is pending until the transaction flow confirms it;
+# anything else (stale) fails the currency gate below.
+STATUS_PENDING = "pending"
+STATUS_STALE = "stale"
 _PROPERTY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9-]{0,63}$")
 # Change families one batch can carry. `style`/`layout`/`responsive` carry a CSS
 # property; `content` carries text; `structure` is a declarative intent that
 # still needs an explicit source locator before any write.
 CHANGE_KINDS = ("style", "layout", "content", "responsive", "structure")
+# The CSS-carrying subset: comparisons for these trim and casefold because a
+# value that renders identically is not a review.
+CSS_KINDS = ("style", "layout", "responsive")
+# The reviewer source: only the parent control shell is the reviewer, so it is
+# both the provenance default and the only source whose edits stand in for
+# review notes.
+SHELL_SOURCE = "shell"
 CONTENT_PROPERTIES = ("text", "placeholder", "aria-label")
 VIEWPORTS = ("desktop", "tablet", "mobile", "any")
 # Who composed an edit. Only the parent control shell is the reviewer; a
@@ -97,7 +108,7 @@ def normalize_visual_batch(
         raise VisualBatchError("unsupported visual edit batch schema")
     if not isinstance(source_hash, str) or not source_hash.strip():
         raise VisualBatchError("source_hash is required")
-    if raw.get("status", "pending") != "pending":
+    if raw.get("status", STATUS_PENDING) != STATUS_PENDING:
         raise VisualBatchError("visual edit batch is stale or no longer pending")
     if "sourceHash" in raw and raw["sourceHash"] != source_hash:
         raise VisualBatchError("visual edit batch is stale")
@@ -147,7 +158,7 @@ def normalize_visual_batch(
 
     batch: dict[str, Any] = {
         "schemaVersion": SCHEMA_VERSION,
-        "status": "pending",
+        "status": STATUS_PENDING,
         "sourceHash": source_hash,
         "routeUrl": _value(route_url, "routeUrl"),
         "edits": normalized,
@@ -174,7 +185,7 @@ def has_effective_visual_edits(batch: dict[str, Any]) -> bool:
         # Only the parent control shell composes a human edit. A prototype
         # gesture or an agent tool call carries its own provenance and cannot
         # stand in for review notes.
-        if edit.get("source") != "shell":
+        if edit.get("source") != SHELL_SOURCE:
             continue
         key = (edit["locator"], edit["property"])
         original = values[key][0] if key in values else edit["oldValue"]
@@ -191,7 +202,7 @@ def _comparable(value: str, kind: str) -> str:
     A CSS value that differs only in case renders identically, so it is not a
     review; text content is case-sensitive and compares exactly.
     """
-    if kind in ("style", "layout", "responsive"):
+    if kind in CSS_KINDS:
         return str(value).strip().casefold()
     return str(value)
 

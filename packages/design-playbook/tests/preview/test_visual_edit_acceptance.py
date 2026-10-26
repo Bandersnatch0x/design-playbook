@@ -402,7 +402,10 @@ class VisualEditNegativeTests(unittest.TestCase):
 
         control_js = (preview / "control.react.js").read_text(encoding="utf-8")
         self.assertEqual(control_js.count("dpb-visual-edits-json"), 1)
-        self.assertIn("schemaVersion: 1", control_js)
+        # The schema version is the generated contract's constant, not a
+        # private literal: a second spelling here would be a second authority.
+        self.assertIn("DPBUI.visualContract.SCHEMA_VERSION", control_js)
+        self.assertNotIn("schemaVersion: 1", control_js)
         self.assertNotIn("localStorage", control_js)
 
 

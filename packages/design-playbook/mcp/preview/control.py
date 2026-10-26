@@ -18,6 +18,10 @@ from design_playbook.mcp.preview.i18n import (
     SKIP_LABELS,
     t,
 )
+from design_playbook.mcp.preview.visual_batch import (
+    SCHEMA_VERSION,
+    STATUS_PENDING,
+)
 
 HERE = Path(__file__).resolve().parent
 
@@ -155,6 +159,17 @@ def _load_shared_core() -> str:
 
 
 @lru_cache(maxsize=1)
+def _load_visual_contract() -> str:
+    """Load the generated wire-constant namespace inlined ahead of its readers."""
+    try:
+        return (HERE / "visual_contract.js").read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise RuntimeError(
+            f"Failed to load the generated visual contract from {HERE}"
+        ) from exc
+
+
+@lru_cache(maxsize=1)
 def _load_edit_ledger() -> str:
     """Load the edit-ledger module inlined ahead of the React editor."""
     try:
@@ -195,7 +210,11 @@ def _build_control(
         quote=True,
     )
     visual_edits_hidden = html_lib.escape(
-        json.dumps({"schemaVersion": 1, "status": "pending", "edits": []}),
+        json.dumps({
+            "schemaVersion": SCHEMA_VERSION,
+            "status": STATUS_PENDING,
+            "edits": [],
+        }),
         quote=True,
     )
     criteria_count = len(criteria_items)
@@ -287,6 +306,7 @@ def _build_control(
     html_tpl, css_tpl, js_tpl, _review_tpl = _load_resources()
     react_js, react_dom_js, react_editor_js = _load_react_resources()
     shared_core = _load_shared_core()
+    visual_contract = _load_visual_contract()
     edit_ledger = _load_edit_ledger()
     js_formatted = js_tpl
     localized_copy = {f"t_{key}": html_lib.escape(t(key), quote=True) for key in _STRINGS[ZH]}
@@ -325,8 +345,10 @@ def _build_control(
         f"<script>window.DPB_SKIP_LABELS = {skip_labels_json};</script>\n"
         f"<script>window.DPB_DRAFT_KEY = {json.dumps(draft_key)};</script>\n"
         # The canonical stores ride in their own block, byte-for-byte, so the
-        # shell below reads through them instead of copying them.
+        # shell below reads through them instead of copying them. The generated
+        # wire constants ride ahead of every reader for the same reason.
         f"<script>\n{shared_core}</script>\n"
+        f"<script>\n{visual_contract}</script>\n"
         f"<script>\n{js_formatted}\n</script>\n"
         # The ledger module must be defined before the editor starts its
         # component: the component reads `window.DPBEdit` while it is defined.

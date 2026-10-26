@@ -40,6 +40,7 @@ from design_playbook.mcp.preview.owned_browser import (  # noqa: F401
     _screen_size,
 )
 from design_playbook.mcp.preview.pin_bridge import BRIDGE_SCRIPT
+from design_playbook.mcp.preview.control import _load_shared_core
 from design_playbook.mcp.preview.visual_batch import VisualBatchError, normalize_visual_batch
 from design_playbook.mcp.preview.live_route import observe_visual_source, validate_live_route_url
 from design_playbook.mcp.util import log as _log
@@ -408,8 +409,13 @@ def _build_parent_page(
     # attribute-escaping context (safe); it is NOT the inline-<script> context
     # where </script> would need splitting.
     live_route_url = validate_live_route_url(live_route_url) if live_route_url else ""
+    # The bridge reads DPBUI.pure, and the iframe is a unique opaque origin
+    # that cannot see the parent page's copy, so the shared core ships into
+    # the frame document ahead of the bridge — same bytes, second inline.
     frame_source = ('src="' + html.escape(live_route_url, quote=True) if live_route_url else
-                    'srcdoc="' + html.escape(prototype_html + BRIDGE_SCRIPT, quote=True))
+                    'srcdoc="' + html.escape(
+                        prototype_html + "<script>" + _load_shared_core() + "</script>"
+                        + BRIDGE_SCRIPT, quote=True))
     visual_binding = visual_binding or {
         "sourceHash": prototype_html_digest(prototype_html.encode("utf-8")),
         "routeUrl": live_route_url,

@@ -339,7 +339,10 @@
   }
 
   // ---- viewport modes (v9: desktop / tablet / mobile) ----
+  // The viewport family is the wire contract's; the pixel widths are shell
+  // presentation and stay here.
   var VP_WIDTHS = { desktop: 1024, tablet: 768, mobile: 375 };
+  var VIEWPORT_MODES = DPBUI.visualContract.VIEWPORTS.filter(function (v) { return v !== "any"; });
   function setViewport(vp, quiet) {
     viewport = vp;
     // T-107: visual edits are captured per viewport so a responsive change can
@@ -353,7 +356,7 @@
     });
     sizeDrawLayer();
   }
-  ["desktop", "tablet", "mobile"].forEach(function (vp) {
+  VIEWPORT_MODES.forEach(function (vp) {
     var b = document.getElementById("dpb-vp-" + vp);
     if (b) b.addEventListener("click", function () { setViewport(vp); });
   });
@@ -539,41 +542,11 @@
   // ---- same-doc element pin capture (v9 keeps the classic pick flow) ----
   // Inside the sandboxed iframe the bridge owns capture; on same-doc pages
   // the parent captures directly: pin active + click on a prototype element
-  // -> cssPath anchor + outline highlight.
+  // -> cssPath anchor + outline highlight. The selector math is the shared
+  // pure helper; only the stop-node ids are this surface's own.
+  var CAPTURE_STOP_IDS = ["dpb-root", "dpb-float-root", "dpb-toasts"];
   function cssPath(el) {
-    if (!el || el.nodeType !== 1) return "";
-    if (el.id) return "#" + CSS.escape(el.id);
-    var parts = [];
-    var cur = el;
-    var depth = 0;
-    while (cur && cur.nodeType === 1 && cur !== document.documentElement && depth < 8) {
-      if (cur.id === "dpb-root" || cur.id === "dpb-float-root" || cur.id === "dpb-toasts") break;
-      var part = cur.tagName.toLowerCase();
-      if (cur.classList && cur.classList.length) {
-        var cls = Array.prototype.slice.call(cur.classList, 0, 2)
-          .filter(function (c) { return c && c.indexOf("dpb-") !== 0; })
-          .map(function (c) { return "." + CSS.escape(c); })
-          .join("");
-        part += cls;
-      }
-      var parent = cur.parentElement;
-      if (parent) {
-        var kids = parent.children;
-        var n = 0, idx = 0, i;
-        for (i = 0; i < kids.length; i++) {
-          if (kids[i].tagName === cur.tagName) {
-            n++;
-            if (kids[i] === cur) idx = n;
-          }
-        }
-        if (n > 1) part += ":nth-of-type(" + idx + ")";
-      }
-      parts.unshift(part);
-      if (cur.tagName === "BODY") break;
-      cur = parent;
-      depth++;
-    }
-    return parts.join(" > ");
+    return DPBUI.pure.cssPath(el, CAPTURE_STOP_IDS);
   }
   var hoverEl = null;
   function clearHover() {
@@ -805,12 +778,7 @@
     drawLayer.setAttribute("viewBox", "0 0 " + w + " " + h);
   }
   function drawPathD(points) {
-    if (!points || !points.length) return "";
-    var d = "";
-    for (var i = 0; i < points.length; i++) {
-      d += (i ? "L" : "M") + Number(points[i][0]).toFixed(1) + " " + Number(points[i][1]).toFixed(1);
-    }
-    return d + (points.length > 2 ? " Z" : "");
+    return DPBUI.pure.drawPathD(points);
   }
   function renderDrawStrokes() {
     var items = anchors.filter(function (a) { return (a.tag === "draw" && a.points) || (a.tag === "box" && a.rect); });
@@ -848,22 +816,11 @@
       }
       if (a.tag !== "draw" || !a.points) return;
       var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.setAttribute("d", drawPathD(a.points));
+      path.setAttribute("d", DPBUI.pure.drawPathD(a.points));
       path.setAttribute("class", "dpb-draw-path");
       drawLayer.appendChild(path);
       var p0 = a.points[0];
-      var g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      g.setAttribute("class", "dpb-draw-badge");
-      g.setAttribute("transform", "translate(" + Number(p0[0]).toFixed(1) + "," + Math.max(9, Number(p0[1]) - 12).toFixed(1) + ")");
-      var c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      c.setAttribute("r", "9");
-      c.setAttribute("class", "dpb-draw-badge-c");
-      var t = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      t.setAttribute("text-anchor", "middle");
-      t.setAttribute("dy", "3.2");
-      t.textContent = String(idx + 1);
-      g.appendChild(c); g.appendChild(t);
-      drawLayer.appendChild(g);
+      DPBUI.pure.buildDrawBadge(drawLayer, "dpb-draw-badge", p0[0], p0[1], idx + 1);
     });
   }
   function renderFreePins() {

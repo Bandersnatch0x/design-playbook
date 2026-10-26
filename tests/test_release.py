@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -185,7 +186,16 @@ class ReleaseGateTests(unittest.TestCase):
         self.assertEqual(committed.returncode, 0, committed.stderr)
 
     def tearDown(self) -> None:
-        self.temp.cleanup()
+        # The fixture tree holds a real .git; on a loaded runner a git
+        # maintenance writer can still hold an object file while rmtree walks
+        # the objects directory (Errno 39). The tree is disposable, so one
+        # short retry and then a best-effort rmtree is cleanup robustness,
+        # not a weaker assertion.
+        try:
+            self.temp.cleanup()
+        except OSError:
+            time.sleep(0.5)
+            shutil.rmtree(self.temp.name, ignore_errors=True)
 
     def release(self, *args: str) -> subprocess.CompletedProcess[str]:
         return _run(sys.executable, str(self.root / "scripts" / "release.py"), *args, cwd=self.root)
