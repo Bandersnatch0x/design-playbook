@@ -188,7 +188,9 @@ def test_the_edit_ledger_module_is_syntactically_valid() -> None:
 
 
 def test_the_edit_ledger_keeps_its_answers(tmp_path) -> None:
-    script = "globalThis.window = {};\n" + _ledger_source() + _HARNESS
+    script = ('globalThis.window = { DPBUI: { visualContract: '
+              '{ SHELL_SOURCE: "shell", FRAME_SOURCE: "frame" } } };\n'
+              + _ledger_source() + _HARNESS)
     result = _run_node(tmp_path, script, "control_edit_ledger_units.js")
     assert result.returncode == 0, result.stderr
     failures = json.loads(result.stdout)

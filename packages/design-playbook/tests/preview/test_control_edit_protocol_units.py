@@ -564,7 +564,9 @@ def _run_node(tmp_path: Path, script_text: str, name: str) -> subprocess.Complet
 
 
 def test_the_protocol_keeps_its_answers(tmp_path) -> None:
-    script = ("globalThis.window = {};\n" + EDITS.read_text(encoding="utf-8") + _HARNESS)
+    script = ("globalThis.window = { DPBUI: { visualContract: "
+              "{ SHELL_SOURCE: 'shell', FRAME_SOURCE: 'frame' } } };\n"
+              + EDITS.read_text(encoding="utf-8") + _HARNESS)
     result = _run_node(tmp_path, script, "control_edit_protocol_units.js")
     assert result.returncode == 0, result.stderr
     failures = json.loads(result.stdout)

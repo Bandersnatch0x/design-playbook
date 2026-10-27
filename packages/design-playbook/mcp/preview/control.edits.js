@@ -25,11 +25,10 @@
 (function () {
   "use strict";
   // The wire contract's provenance constants. The generated block ships ahead
-  // of this module, so the fallbacks here only cover a script-order bug failing
-  // loudly enough to be seen rather than silently re-literalizing the contract.
-  var VC = (window.DPBUI || {}).visualContract || {};
-  var SHELL_SOURCE = VC.SHELL_SOURCE || "shell";
-  var FRAME_SOURCE = (VC.EDIT_SOURCES || ["shell", "frame"])[1];
+  // of this module, so these reads are direct.
+  var VC = window.DPBUI.visualContract;
+  var SHELL_SOURCE = VC.SHELL_SOURCE;
+  var FRAME_SOURCE = VC.FRAME_SOURCE;
   var MERGE_WINDOW_MS = 500;
   function mergeEdit(prev, next, now, windowMs) {
     if (!prev || !next || prev.locator !== next.locator || prev.property !== next.property) return false;

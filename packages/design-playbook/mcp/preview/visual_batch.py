@@ -31,13 +31,14 @@ CSS_KINDS = ("style", "layout", "responsive")
 # both the provenance default and the only source whose edits stand in for
 # review notes.
 SHELL_SOURCE = "shell"
+FRAME_SOURCE = "frame"
 CONTENT_PROPERTIES = ("text", "placeholder", "aria-label")
 VIEWPORTS = ("desktop", "tablet", "mobile", "any")
 # Who composed an edit. Only the parent control shell is the reviewer; a
 # prototype gesture and a WebMCP tool call are recorded for provenance but are
 # not evidence that a human reviewed anything. An edit with no declared source
 # is not attributable, so it cannot be evidence either.
-EDIT_SOURCES = ("shell", "frame", "agent", "unknown")
+EDIT_SOURCES = (SHELL_SOURCE, FRAME_SOURCE, "agent", "unknown")
 # A locator addresses an element inside the reviewed artifact. Anything that
 # looks like a filesystem path, URL scheme, or traversal target is rejected so a
 # hostile page cannot smuggle a host path into a coding-agent handoff.

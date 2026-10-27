@@ -14,6 +14,7 @@ that reads it.
 """
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -55,7 +56,10 @@ def _js_str_tuple(name: str, values: tuple[str, ...]) -> str:
     return f"    {name}: [{items}],\n"
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Generate the visual-edit wire contract.")
+    parser.add_argument("--out", type=Path, default=OUT_PATH)
+    out = parser.parse_args(argv).out
     lines = [_HEADER]
     lines.append(_js_int("SCHEMA_VERSION", visual_batch.SCHEMA_VERSION))
     lines.append(_js_str("STATUS_PENDING", visual_batch.STATUS_PENDING))
@@ -65,15 +69,15 @@ def main() -> int:
     lines.append(_js_str_tuple("VIEWPORTS", visual_batch.VIEWPORTS))
     lines.append(_js_str_tuple("EDIT_SOURCES", visual_batch.EDIT_SOURCES))
     lines.append(_js_str("SHELL_SOURCE", visual_batch.SHELL_SOURCE))
-    lines.append(_js_str("DEFAULT_SOURCE", visual_batch.SHELL_SOURCE))
+    lines.append(_js_str("FRAME_SOURCE", visual_batch.FRAME_SOURCE))
     lines.append(_js_str_tuple("CONTENT_PROPERTIES", visual_batch.CONTENT_PROPERTIES))
     lines.append(_js_str("ANY_VIEWPORT", visual_batch.VIEWPORTS[-1]))
     lines.append(_js_int("MAX_EDITS", visual_batch.MAX_EDITS))
     lines.append(_js_int("MAX_SELECTOR", visual_batch.MAX_SELECTOR))
     lines.append(_js_int("MAX_VALUE", visual_batch.MAX_VALUE))
     lines.append(_FOOTER)
-    OUT_PATH.write_text("".join(lines), encoding="utf-8", newline="\n")
-    print(f"wrote {OUT_PATH}")
+    out.write_text("".join(lines), encoding="utf-8", newline="\n")
+    print(f"wrote {out}")
     return 0
 
 
