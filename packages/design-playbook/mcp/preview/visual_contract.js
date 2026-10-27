@@ -13,7 +13,7 @@
     VIEWPORTS: ["desktop", "tablet", "mobile", "any"],
     EDIT_SOURCES: ["shell", "frame", "agent", "unknown"],
     SHELL_SOURCE: "shell",
-    DEFAULT_SOURCE: "shell",
+    FRAME_SOURCE: "frame",
     CONTENT_PROPERTIES: ["text", "placeholder", "aria-label"],
     ANY_VIEWPORT: "any",
     MAX_EDITS: 200,

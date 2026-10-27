@@ -36,19 +36,13 @@ class TestVisualContractDriftGate(unittest.TestCase):
     def test_regeneration_is_byte_identical_to_the_committed_artifact(self) -> None:
         committed = _ARTIFACT.read_bytes()
         with tempfile.TemporaryDirectory() as tmp:
-            backup = Path(tmp) / "committed.js"
-            backup.write_bytes(committed)
-            try:
-                result = subprocess.run(
-                    [sys.executable, str(_GENERATOR)],
-                    capture_output=True, text=True, cwd=str(_ROOT),
-                )
-                self.assertEqual(result.returncode, 0, result.stderr)
-                fresh = _ARTIFACT.read_bytes()
-            finally:
-                # Restore before any assertion propagates so a failing run
-                # leaves the tree clean.
-                _ARTIFACT.write_bytes(committed)
+            fresh_path = Path(tmp) / "visual_contract.js"
+            result = subprocess.run(
+                [sys.executable, str(_GENERATOR), "--out", str(fresh_path)],
+                capture_output=True, text=True, cwd=str(_ROOT),
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            fresh = fresh_path.read_bytes()
         self.assertEqual(fresh, committed,
                          "regenerated artifact drifted from the committed file; "
                          "run scripts/generate_visual_contract.py after changing "
@@ -70,6 +64,7 @@ class TestVisualContractDriftGate(unittest.TestCase):
             + " viewports: window.DPBUI.visualContract.VIEWPORTS,"
             + " sources: window.DPBUI.visualContract.EDIT_SOURCES,"
             + " shell: window.DPBUI.visualContract.SHELL_SOURCE,"
+            + " frame: window.DPBUI.visualContract.FRAME_SOURCE,"
             + " anyViewport: window.DPBUI.visualContract.ANY_VIEWPORT,"
             + " content: window.DPBUI.visualContract.CONTENT_PROPERTIES,"
             + " maxEdits: window.DPBUI.visualContract.MAX_EDITS}));"
@@ -89,6 +84,7 @@ class TestVisualContractDriftGate(unittest.TestCase):
             '"viewports":["desktop","tablet","mobile","any"],'
             '"sources":["shell","frame","agent","unknown"],'
             '"shell":"shell",'
+            '"frame":"frame",'
             '"anyViewport":"any",'
             '"content":["text","placeholder","aria-label"],'
             '"maxEdits":200}',
@@ -101,7 +97,7 @@ class TestVisualContractDriftGate(unittest.TestCase):
             ("control.js", ['"desktop", "tablet", "mobile"]']),
             ("control.review.js", ['batch.status !== "pending"', 'e.source !== "shell"']),
             ("control.react.js", ['schemaVersion: 1']),
-            ("control.edits.js", []),
+            ("control.edits.js", ['(window.DPBUI || {})']),
         ]
         for name, forbidden in cases:
             text = (_PKG / "mcp" / "preview" / name).read_text(encoding="utf-8")

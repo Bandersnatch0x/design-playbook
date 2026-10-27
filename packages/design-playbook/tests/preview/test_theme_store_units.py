@@ -44,6 +44,7 @@ CASES = [
 _HARNESS = """
 var DPBUI = {};
 __STORE__
+__PURE__
 var els = {};
 function mkEl() {
   return {
@@ -63,6 +64,13 @@ globalThis.localStorage = {
 var cases = __CASES__;
 var out = {};
 out.resolved = cases.map(function (c) { return DPBUI.theme.resolveTheme(c[0], c[1], c[2]); });
+out.pureResolve = [
+  DPBUI.pure.resolveThemeFrom("dark", false),
+  DPBUI.pure.resolveThemeFrom("light", true),
+  DPBUI.pure.resolveThemeFrom(null, true),
+  DPBUI.pure.resolveThemeFrom(null, false),
+  DPBUI.pure.resolveThemeFrom("bogus", false)
+];
 out.storageKey = DPBUI.theme.STORAGE_KEY;
 DPBUI.theme.applyTheme("dark", true);
 out.afterDark = {
@@ -88,7 +96,16 @@ console.log(JSON.stringify(out));
 
 def _store_text() -> str:
     source = CORE.read_text(encoding="utf-8")
-    start = source.index("DPBUI.theme = (function () {")
+    return _extract_iife(source, "DPBUI.theme")
+
+
+def _pure_text() -> str:
+    source = CORE.read_text(encoding="utf-8")
+    return _extract_iife(source, "DPBUI.pure")
+
+
+def _extract_iife(source: str, anchor: str) -> str:
+    start = source.index(anchor + " = (function () {")
     depth = 0
     for i in range(source.index("{", start), len(source)):
         if source[i] == "{":
@@ -97,7 +114,7 @@ def _store_text() -> str:
             depth -= 1
             if depth == 0:
                 return source[start:i + 1] + ")();"
-    raise AssertionError("unterminated DPBUI.theme store")
+    raise AssertionError(f"unterminated {anchor} store")
 
 
 def test_the_theme_store_keeps_its_answers(tmp_path) -> None:
@@ -105,6 +122,8 @@ def test_the_theme_store_keeps_its_answers(tmp_path) -> None:
     if node is None:  # pragma: no cover - the repository requires node
         pytest.skip("node is not installed")
     harness = _HARNESS.replace("__STORE__", _store_text()).replace(
+        "__PURE__", _pure_text()
+    ).replace(
         "__CASES__", json.dumps([case[:3] for case in CASES])
     )
     # node -e mangles multi-line payloads on some installs; run from a file.
@@ -123,6 +142,7 @@ def test_the_theme_store_keeps_its_answers(tmp_path) -> None:
         if g != w
     )
     assert got["storageKey"] == "dpb.preview.theme"
+    assert got["pureResolve"] == ["dark", "light", "dark", "light", "light"]
     assert got["afterDark"] == {
         "root": "dark",
         "float": "dark",
