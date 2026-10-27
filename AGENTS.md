@@ -55,7 +55,7 @@ Single-context: `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
 3. 演示站已移除；勿再引入 `src/` 阅读站作为交付。  
 4. 打磨产品时先读 `CONTEXT.md` 当前指针和相关 ADR，再读本任务 plan/ticket；旧 phase 只作历史线索，缺失不阻断新任务。
 5. skill 文案变更遵循 writing-great-skills（完成标准、少重复、pointers）。  
-6. **生成快照勿手改**：`packages/design-playbook/{.codex-plugin/,codex/AGENTS.md}` 由生成器产出——版本号变更后运行 `python packages/design-playbook/scripts/generate_adapter.py codex`，否则 validate/doctor 漂移门失败（ADR-0042）。  
+6. **生成快照勿手改**：`packages/design-playbook/{.codex-plugin/,codex/AGENTS.md}` 由生成器产出——版本号变更后运行 `python packages/design-playbook/scripts/generate_adapter.py codex`，否则 validate/doctor 漂移门失败（ADR-0042）。`packages/design-playbook/mcp/preview/visual_contract.js` 由 `python scripts/generate_visual_contract.py` 从 `visual_batch.py` 生成；`packages/design-playbook-workbench/design_playbook_workbench/web/` 下的 `dpbui-core.js` 与 `tokens.css` 由 `python scripts/sync_ui_shared.py` 从 `mcp/_shared/` 复制并写 lock。两处都有测试门禁，手改即红。  
 7. **外部名词边界**：产品内容（skills、references、rules.md、术语表、`CONTEXT.md`、本文件，以及 `mcp/` 下的注释和界面文案）不出现外部产品、规范、书名或第三方 skill 名。吸收外部思路一律用自研措辞，注册表条目标 `provenance: benchmark-input-only`。拒绝词表、代码里允许的平台标识（字体名、安装路径）和文件级豁免（README 生态署名表、codex 路由行）只登记在 `scripts/external_terms.json`，由 validate.py 的外部名词门禁执行（ADR-0002）。  
 8. **文档与个人产物分离**：长期共享说明进 `docs/`；个人规划进本地 `.agents/`，个人命令与配置留根目录 `.claude/`，临时产物进 `.scratch/`，三者不提交 Git（`.agents/plugins/marketplace.json` 存量分发文件除外）。产品示例、测试夹具和运行时契约不按同名文件误迁；根级不新增杂项目录。
 
