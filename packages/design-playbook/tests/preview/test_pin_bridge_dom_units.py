@@ -237,6 +237,22 @@ var root2 = ensureFloatRoot();
 eq(root2 === root1, true, "second call reuses the root");
 eq(created.length, 1, "second call appends nothing");
 
+// buildDrawBadge: the badge the shell and the bridge both draw. One shared
+// builder, so a drift in the clamp or the class name shows up here.
+document.createElementNS = function (ns, tag) {
+  var node = makeElement(String(tag).toUpperCase());
+  node.attrs = {};
+  node.setAttribute = function (k, v) { this.attrs[k] = String(v); };
+  return node;
+};
+var badgeSvg = makeElement("SVG");
+var badge = DPBUI.pure.buildDrawBadge(badgeSvg, "dpb-draw-badge", 10, 4, 3);
+eq(badge.attrs["class"], "dpb-draw-badge", "badge class");
+eq(badge.attrs.transform, "translate(10.0,9.0)", "badge y clamps above the point");
+eq(badge.children[0].attrs.r, "9", "badge circle radius");
+eq(badge.children[1].textContent, "3", "badge label");
+eq(badgeSvg.children[badgeSvg.children.length - 1] === badge, true, "badge appended to the svg");
+
 if (failures.length) {
   console.error(failures.length + " failure(s):\n" + failures.join("\n"));
   process.exit(1);
