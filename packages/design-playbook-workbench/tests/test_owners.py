@@ -19,6 +19,7 @@ from design_playbook_workbench.assets import AssetService
 from design_playbook_workbench.blobs import BlobStore, digest_bytes
 from design_playbook_workbench.components import ComponentService
 from design_playbook_workbench.errors import (
+    CONFLICT,
     INVALID_INPUT,
     INVALID_TARGET,
     MISSING_DEPENDENCY,
@@ -308,6 +309,50 @@ class ProjectionReadTest(OwnerProjectionTestCase):
 
 
 class ConfirmationTest(OwnerProjectionTestCase):
+    def test_a_confirmation_operation_id_is_bound_to_its_project(self) -> None:
+        """An operation id answers only inside the project that recorded it.
+
+        A create has no entity id before it runs, so the project is the only
+        target the replay can bind. Without that binding, reusing an id in a
+        second project would hand back the first project's confirmation.
+        """
+        self.publish_projection("run-1", projection("run-1"))
+        operation = self.operation({"action": "confirmations"})
+        body = {
+            "run_id": "run-1",
+            "object_type": "criterion",
+            "object_id": "c-1",
+            "source_hash": "sha256:" + "1" * 64,
+            "role": "owner-verified",
+        }
+        first = self.owners.confirm(self.project_id, operation=operation, **body)
+        self.assertFalse(first["replayed"])
+
+        other_dir = self.base / "other-project"
+        other_dir.mkdir()
+        candidate = self.service.probe_folder(other_dir)
+        other_project = self.service.register_project(
+            path=candidate.canonical_path,
+            candidate_id=candidate.candidate_id,
+            name="Other",
+            operation=self.operation({"action": "register-project"}),
+        )["result"]
+        counter = int(self.store.project(other_project["projectId"])["counter"])
+        self.service.set_grants(
+            other_project["projectId"],
+            scopes=["read", "write"],
+            operation=Operation(
+                operation_id="op_grant_other",
+                payload={"scopes": ["read", "write"]},
+                expected_counter=counter,
+            ),
+        )
+        with self.assertRaises(WorkbenchError) as caught:
+            self.owners.confirm(
+                other_project["projectId"], operation=operation, **body
+            )
+        self.assertEqual(caught.exception.code, CONFLICT)
+
     def test_confirming_requires_the_hash_the_owner_currently_states(self) -> None:
         self.publish_projection("run-1", projection("run-1"))
         for kwargs, code in (

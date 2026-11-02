@@ -111,6 +111,7 @@ class MutationGate:
         load_row: Callable[[], dict | None],
         apply: Callable[[], tuple[dict, int]],
         authorize: Callable[[], None] | None = None,
+        require_counter: bool = True,
     ) -> dict:
         """One write against a row that already exists.
 
@@ -122,6 +123,14 @@ class MutationGate:
         ``authorize`` runs only for a fresh request, after the replay check:
         a retry of a write that already succeeded must get its recorded result
         even if the project has since been disconnected or its grant revoked.
+
+        ``require_counter`` exists for the rows that have no optimistic-
+        concurrency contract yet -- work requests, proposals, schemes and
+        owner backflow. They are recorded with a counter but never compare
+        one, and this round is not allowed to add that enforcement (T-127).
+        Passing ``False`` keeps the gap exactly where it is; it does not close
+        it. Every such call site names that ticket, so the gap stays greppable
+        instead of being invisible.
         """
         replayed = self.replay(
             operation, kind=kind, entity_id=entity_id, project_id=project_id
@@ -138,10 +147,13 @@ class MutationGate:
             row = load_row()
             if row is None:
                 raise WorkbenchError(INVALID_TARGET)
-            if operation.expected_counter is None:
-                raise WorkbenchError(INVALID_INPUT, operation_id=operation.operation_id)
-            if operation.expected_counter != int(row["counter"]):
-                raise WorkbenchError(CONFLICT, operation_id=operation.operation_id)
+            if require_counter:
+                if operation.expected_counter is None:
+                    raise WorkbenchError(
+                        INVALID_INPUT, operation_id=operation.operation_id
+                    )
+                if operation.expected_counter != int(row["counter"]):
+                    raise WorkbenchError(CONFLICT, operation_id=operation.operation_id)
             result, new_counter = apply()
             self.record(
                 operation, kind=kind, entity_id=entity_id, result=result,
@@ -181,6 +193,7 @@ class MutationGate:
         apply: Callable[[], dict],
         authorize: Callable[[], None] | None = None,
         counter: int | None = None,
+        project_id: str | None = None,
     ) -> dict:
         """One write that creates its row; there is no counter to be stale against.
 
@@ -190,8 +203,15 @@ class MutationGate:
         ``existing``. ``counter`` is what the ledger reports as the resulting
         counter; a create has no prior row to advance, so callers that report
         ``0`` pass it and callers that report nothing leave it ``None``.
+
+        ``project_id`` is the target a caller already knows before the row
+        exists, and it binds the replay the same way ``existing`` binds it: an
+        operation id reused against another project is a conflict, never that
+        project's success. It has to agree with what ``project_of`` records;
+        a caller whose ledger row deliberately names no project leaves both
+        out.
         """
-        replayed = self.replay(operation, kind=kind)
+        replayed = self.replay(operation, kind=kind, project_id=project_id)
         if replayed is not None:
             return replayed
         if authorize is not None:
