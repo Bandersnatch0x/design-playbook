@@ -114,9 +114,9 @@ class WorkbenchService:
 
     # -- transition surface (T-126 segment 2) --------------------------
     #
-    # The gate itself lives in mutation.py. These three forwards exist only
-    # because the ten domain modules still reach through these private names;
-    # each of those call sites is what segment 2 moves. Do not add new callers.
+    # The gate itself lives in mutation.py. This forward exists only because
+    # the domain modules still reach through this private name; each of those
+    # call sites is what segment 2 moves. Do not add new callers.
 
     def _replay(
         self, operation: Operation, *, kind: str, entity_id: str | None = None,
@@ -124,38 +124,6 @@ class WorkbenchService:
     ) -> dict | None:
         return self.mutations.replay(
             operation, kind=kind, entity_id=entity_id, project_id=project_id
-        )
-
-    def _mutate_existing(
-        self,
-        *,
-        kind: str,
-        entity_id: str,
-        project_id: str | None,
-        operation: Operation,
-        current_counter: Callable[[], int],
-        apply: Callable[[], tuple[dict, int]],
-    ) -> dict:
-        return self.mutations.existing(
-            operation,
-            kind=kind,
-            entity_id=entity_id,
-            project_id=project_id,
-            load_row=lambda: {"counter": current_counter()},
-            apply=apply,
-        )
-
-    def _mutate_new(
-        self,
-        *,
-        kind: str,
-        operation: Operation,
-        project_id_fn: Callable[[dict], str],
-        apply: Callable[[], dict],
-    ) -> dict:
-        return self.mutations.create(
-            operation, kind=kind, entity_of=project_id_fn,
-            project_of=project_id_fn, apply=apply,
         )
 
     # -- project targets ------------------------------------------------
@@ -258,7 +226,7 @@ class WorkbenchService:
         )
         now = self._now()
 
-        def apply() -> dict:
+        def apply() -> tuple[dict, int | None]:
             # The duplicate check belongs inside the transaction: a retry of
             # an already-applied registration must replay its recorded
             # result, not re-evaluate the world it already changed.
@@ -275,7 +243,7 @@ class WorkbenchService:
                 directory_identity=candidate.directory_identity,
                 now=now,
             )
-            return self.project_target(project_id)
+            return self.project_target(project_id), None
 
         return self.mutations.create(
             operation,
@@ -432,13 +400,13 @@ class WorkbenchService:
         Only an unregistered project can be deleted, so one action never
         silently performs the other. The source folder is never touched.
         """
-        def apply() -> dict:
+        def apply() -> tuple[dict, int | None]:
             if self.store.project_exists(project_id):
                 raise WorkbenchError(CONFLICT, detail="unregister the project first")
             if self.store.removed_project(project_id) is None:
                 raise WorkbenchError(INVALID_TARGET)
             self.store.delete_project_data(project_id)
-            return {"projectId": project_id, "deleted": True}
+            return {"projectId": project_id, "deleted": True}, None
 
         return self.mutations.create(
             operation,

@@ -199,9 +199,8 @@ class MutationGate:
         kind: str,
         entity_of: Callable[[dict], str],
         project_of: Callable[[dict], str | None],
-        apply: Callable[[], dict],
+        apply: Callable[[], tuple[dict, int | None]],
         authorize: Callable[[], None] | None = None,
-        counter: int | None = None,
         project_id: str | None = None,
     ) -> dict:
         """One write that creates its row; there is no counter to be stale against.
@@ -209,9 +208,9 @@ class MutationGate:
         ``entity_of`` and ``project_of`` name the new row after ``apply`` has
         produced it, so the ledger records the id the write actually made.
         ``authorize`` runs after the replay check, for the same reason as
-        ``existing``. ``counter`` is what the ledger reports as the resulting
-        counter; a create has no prior row to advance, so callers that report
-        ``0`` pass it and callers that report nothing leave it ``None``.
+        ``existing``. ``apply`` returns ``(result, resulting_counter)`` the
+        same way it does there: a create usually reports ``0`` or ``None``,
+        but a create that makes a row with a counter reports that one.
 
         ``project_id`` is the target a caller already knows before the row
         exists, and it binds the replay the same way ``existing`` binds it: an
@@ -228,7 +227,7 @@ class MutationGate:
         with self.store.transaction():
             if self.store.mutation(operation.operation_id) is not None:
                 raise WorkbenchError(CONFLICT, operation_id=operation.operation_id)
-            result = apply()
+            result, counter = apply()
             self.record(
                 operation, kind=kind, entity_id=entity_of(result),
                 result=result, counter=counter, project_id=project_of(result),

@@ -359,7 +359,7 @@ class OwnerProjectionService:
         The hash must match what the owner projection currently states, so a
         confirmation never survives a change to the object it was given for.
         """
-        def apply() -> dict:
+        def apply() -> tuple[dict, int | None]:
             # Every check lives here, under the replay: the projection is a
             # file the owner rewrites, so a retry that re-read it could report
             # a stale fact for a confirmation that already succeeded.
@@ -425,7 +425,7 @@ class OwnerProjectionService:
                 "createdAt": now,
                 "verdictSource": "owner",
                 "noteOverride": False,
-            }
+            }, 0
 
         return self.service.mutations.create(
             operation,
@@ -434,7 +434,6 @@ class OwnerProjectionService:
             project_of=lambda result: project_id,
             apply=apply,
             authorize=lambda: self.service.require_project(project_id, scope="write"),
-            counter=0,
             project_id=project_id,
         )
 

@@ -179,37 +179,34 @@ class ReuseService:
         ``kind`` labels the ledger row; a delegating caller that gates the
         request itself passes its own kind so its retry finds the row.
         """
-        replayed = self.service._replay(
-            operation, kind=kind, entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        row = self.store.asset(asset_id)
-        if row is None or row["project_id"] != project_id:
-            raise WorkbenchError(INVALID_TARGET)
-        parsed = self._parse_dependencies(project_id, dependencies)
-        # Completeness, resolvability, and cycles are checked before anything
-        # is written -- including the edge this publish is about to add.
-        for dependency in parsed:
-            self.dependency_closure(project_id, dependency["revisionId"])
-        if self._would_cycle(
-            project_id=project_id, asset_id=asset_id, dependencies=parsed
-        ):
-            raise WorkbenchError(MISSING_DEPENDENCY, detail="dependency cycle")
-        # The counter is checked after the document's own rules, so a broken
-        # dependency reports its real reason instead of a stale-counter one.
-        self.assets._check_counter(row, operation)
-        draft = self.store.draft(asset_id)
-        manifest = _loads(draft["attributes_json"]).get("manifest", [])
-        for entry in manifest:
-            if not self.blobs.verify(entry["contentHash"]):
-                raise WorkbenchError(CORRUPT_CONTENT)
-        now = self._now()
+        held: dict = {}
+
+        def validate(row: dict) -> None:
+            parsed = self._parse_dependencies(project_id, dependencies)
+            # Completeness, resolvability, and cycles are checked before
+            # anything is written -- including the edge this publish is about
+            # to add. The counter is compared after them, so a broken
+            # dependency reports its real reason instead of a stale one.
+            for dependency in parsed:
+                self.dependency_closure(project_id, dependency["revisionId"])
+            if self._would_cycle(
+                project_id=project_id, asset_id=asset_id, dependencies=parsed
+            ):
+                raise WorkbenchError(MISSING_DEPENDENCY, detail="dependency cycle")
+            held["dependencies"] = parsed
 
         def apply() -> tuple[dict, int]:
-            revision_number = int(self.store.draft(asset_id)["revision_counter"]) + 1
-            revision_id = str(uuid.uuid4())
+            parsed = held["dependencies"]
+            row = self.store.asset(asset_id)
+            draft = self.store.draft(asset_id)
             attributes = _loads(draft["attributes_json"])
+            manifest = attributes.get("manifest", [])
+            for entry in manifest:
+                if not self.blobs.verify(entry["contentHash"]):
+                    raise WorkbenchError(CORRUPT_CONTENT)
+            now = self._now()
+            revision_number = int(draft["revision_counter"]) + 1
+            revision_id = str(uuid.uuid4())
             self.store.insert_revision(
                 revision_id=revision_id,
                 asset_id=asset_id,
@@ -234,17 +231,22 @@ class ReuseService:
             payload["revisionId"] = revision_id
             return payload, int(refreshed["counter"])
 
-        with self.store.transaction():
-            result, counter = apply()
-            self.service.mutations.record(
-                operation=operation,
-                kind=kind,
-                entity_id=asset_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind=kind,
+            entity_id=asset_id,
+            project_id=project_id,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self._owned_asset(project_id, asset_id),
+            validate=validate,
+            apply=apply,
+        )
+
+    def _owned_asset(self, project_id: str, asset_id: str) -> dict:
+        row = self.store.asset(asset_id)
+        if row is None or row["project_id"] != project_id:
+            raise WorkbenchError(INVALID_TARGET)
+        return row
 
     def _parse_dependencies(self, project_id: str, raw: object) -> list[dict]:
         if raw in (None, []):
@@ -290,22 +292,16 @@ class ReuseService:
         overrides: object = None,
         operation: Operation,
     ) -> dict:
-        replayed = self.service._replay(operation, kind="instance-create", project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        asset = self.store.asset(asset_id)
-        if asset is None:
-            raise WorkbenchError(INVALID_TARGET)
-        # An instance may reference a revision owned by another project
-        # only after that closure was imported; otherwise the revision must
-        # belong to the project itself.
-        revision = self._resolve_revision(project_id, asset_id, revision_id)
-        overrides_map = self._parse_overrides(overrides, revision)
-        instance_id = str(uuid.uuid4())
-        now = self._now()
-
-        def apply() -> tuple[dict, int]:
+        def apply() -> tuple[dict, int | None]:
+            asset = self.store.asset(asset_id)
+            if asset is None:
+                raise WorkbenchError(INVALID_TARGET)
+            # An instance may reference a revision owned by another project
+            # only after that closure was imported; otherwise the revision
+            # must belong to the project itself.
+            revision = self._resolve_revision(project_id, asset_id, revision_id)
+            overrides_map = self._parse_overrides(overrides, revision)
+            instance_id = str(uuid.uuid4())
             self.store.insert_instance(
                 instance_id=instance_id,
                 project_id=project_id,
@@ -313,21 +309,19 @@ class ReuseService:
                 revision_id=revision["revision_id"],
                 overrides=overrides_map,
                 declared_public_params=self._public_params(revision),
-                now=now,
+                now=self._now(),
             )
             return self._instance_payload(instance_id), 0
 
-        with self.store.transaction():
-            result, counter = apply()
-            self.service.mutations.record(
-                operation=operation,
-                kind="instance-create",
-                entity_id=instance_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.create(
+            operation,
+            kind="instance-create",
+            entity_of=lambda result: str(result["instanceId"]),
+            project_of=lambda result: project_id,
+            apply=apply,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            project_id=project_id,
+        )
 
     def _public_params(self, revision: dict) -> list:
         origin = _loads(revision["origin_json"])
@@ -419,33 +413,28 @@ class ReuseService:
     ) -> dict:
         if mode not in MODES:
             raise WorkbenchError(INVALID_INPUT)
-        replayed = self.service._replay(operation, kind=f"asset-{mode}", project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        source = self.store.asset(asset_id)
-        if source is None or source["project_id"] != project_id:
-            raise WorkbenchError(INVALID_TARGET)
-        revision = self.store.latest_revision(asset_id)
-        if revision is None:
-            raise WorkbenchError(MISSING_DEPENDENCY)
-        draft = self.store.draft(asset_id)
-        attributes = _loads(draft["attributes_json"])
-        # The draft carries the same capability list as the revision; a
-        # verified tag dropped from the revision must not survive here and
-        # reappear on the next publish.
-        attributes["capabilities"] = [
-            capability
-            for capability in attributes.get("capabilities", [])
-            if capability not in _VERIFIED_CAPABILITIES
-        ]
-        new_name = (
-            f"{source['name']} copy" if name in (None, "") else str(name)
-        )[:120]
-        now = self._now()
-        new_asset_id = str(uuid.uuid4())
-
         def apply() -> tuple[dict, int]:
+            source = self.store.asset(asset_id)
+            if source is None or source["project_id"] != project_id:
+                raise WorkbenchError(INVALID_TARGET)
+            revision = self.store.latest_revision(asset_id)
+            if revision is None:
+                raise WorkbenchError(MISSING_DEPENDENCY)
+            draft = self.store.draft(asset_id)
+            attributes = _loads(draft["attributes_json"])
+            # The draft carries the same capability list as the revision; a
+            # verified tag dropped from the revision must not survive here and
+            # reappear on the next publish.
+            attributes["capabilities"] = [
+                capability
+                for capability in attributes.get("capabilities", [])
+                if capability not in _VERIFIED_CAPABILITIES
+            ]
+            new_name = (
+                f"{source['name']} copy" if name in (None, "") else str(name)
+            )[:120]
+            now = self._now()
+            new_asset_id = str(uuid.uuid4())
             if mode == "reference":
                 # A reference reuses the same asset identity: only the
                 # instance is new, so no lineage edge is created.
@@ -522,17 +511,19 @@ class ReuseService:
                 int(self.store.asset(new_asset_id)["counter"]),
             )
 
-        with self.store.transaction():
-            result, counter = apply()
-            self.service.mutations.record(
-                operation=operation,
-                kind=f"asset-{mode}",
-                entity_id=new_asset_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.create(
+            operation,
+            kind=f"asset-{mode}",
+            # A reference makes an instance and the other modes make an
+            # asset; the row names the one this request actually created.
+            entity_of=lambda result: str(
+                result.get("instanceId") or result["assetId"]
+            ),
+            project_of=lambda result: project_id,
+            apply=apply,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            project_id=project_id,
+        )
 
     def _create_instance_row(
         self,
@@ -978,46 +969,40 @@ class ReuseService:
         to_revision_id: object = None,
         operation: Operation,
     ) -> dict:
-        replayed = self.service._replay(
-            operation, kind="instance-upgrade", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        self.assets._check_counter(self.store.asset(asset_id), operation)
-        if not isinstance(instance_ids, list) or not instance_ids:
-            raise WorkbenchError(INVALID_INPUT)
-        plan = self.upgrade_plan(project_id, asset_id, to_revision_id=to_revision_id)
-        target = self.store.revision(plan["target"]["revisionId"])
-        assert target is not None
-        selected = set(instance_ids)
-        known = {
-            instance_id
-            for candidate in plan["candidates"]
-            for instance_id in candidate["instanceIds"]
-        }
-        unknown = selected - known
-        if unknown:
-            raise WorkbenchError(INVALID_TARGET)
-        affected = [
-            candidate
-            for candidate in plan["candidates"]
-            if selected & set(candidate["instanceIds"])
-        ]
-        # The whole selected set is applied atomically: any conflict blocks
-        # every change, and unselected instances are never touched.
-        blocking = [
-            conflict
-            for candidate in affected
-            for conflict in candidate["conflicts"]
-        ]
-        if blocking:
-            raise WorkbenchError(CONFLICT)
-        now = self._now()
-        from_revisions = {
-            candidate["fromRevisionId"] for candidate in affected
-        }
-
         def apply() -> tuple[dict, int]:
+            if not isinstance(instance_ids, list) or not instance_ids:
+                raise WorkbenchError(INVALID_INPUT)
+            plan = self.upgrade_plan(
+                project_id, asset_id, to_revision_id=to_revision_id
+            )
+            target = self.store.revision(plan["target"]["revisionId"])
+            assert target is not None
+            selected = set(instance_ids)
+            known = {
+                instance_id
+                for candidate in plan["candidates"]
+                for instance_id in candidate["instanceIds"]
+            }
+            if selected - known:
+                raise WorkbenchError(INVALID_TARGET)
+            affected = [
+                candidate
+                for candidate in plan["candidates"]
+                if selected & set(candidate["instanceIds"])
+            ]
+            # The whole selected set is applied atomically: any conflict
+            # blocks every change, and unselected instances are never touched.
+            blocking = [
+                conflict
+                for candidate in affected
+                for conflict in candidate["conflicts"]
+            ]
+            if blocking:
+                raise WorkbenchError(CONFLICT)
+            now = self._now()
+            from_revisions = {
+                candidate["fromRevisionId"] for candidate in affected
+            }
             for instance_id in sorted(selected):
                 instance = self.store.instance(instance_id)
                 if instance is None:  # pragma: no cover - invariant
@@ -1055,17 +1040,15 @@ class ReuseService:
                 int(self.store.asset(asset_id)["counter"]),
             )
 
-        with self.store.transaction():
-            result, counter = apply()
-            self.service.mutations.record(
-                operation=operation,
-                kind="instance-upgrade",
-                entity_id=asset_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="instance-upgrade",
+            entity_id=asset_id,
+            project_id=project_id,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self.store.asset(asset_id),
+            apply=apply,
+        )
 
     def rollback_instances(
         self,
@@ -1077,26 +1060,19 @@ class ReuseService:
         operation: Operation,
     ) -> dict:
         """Restore selected instances to an older revision as a new record."""
-        replayed = self.service._replay(
-            operation, kind="instance-rollback", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        self.assets._check_counter(self.store.asset(asset_id), operation)
-        if not isinstance(instance_ids, list) or not instance_ids:
-            raise WorkbenchError(INVALID_INPUT)
-        revision = self.store.revision(str(to_revision_id))
-        if revision is None or revision["asset_id"] != asset_id:
-            # Unknown target, or content that no longer verifies, must be
-            # reported as damage instead of silently becoming "latest".
-            raise WorkbenchError(CORRUPT_CONTENT)
-        for entry in _loads(revision["manifest_json"]):
-            if not self.blobs.verify(entry["contentHash"]):
-                raise WorkbenchError(CORRUPT_CONTENT)
-        now = self._now()
-        selected = [str(item) for item in instance_ids]
-
         def apply() -> tuple[dict, int]:
+            if not isinstance(instance_ids, list) or not instance_ids:
+                raise WorkbenchError(INVALID_INPUT)
+            revision = self.store.revision(str(to_revision_id))
+            if revision is None or revision["asset_id"] != asset_id:
+                # Unknown target, or content that no longer verifies, must be
+                # reported as damage instead of silently becoming "latest".
+                raise WorkbenchError(CORRUPT_CONTENT)
+            for entry in _loads(revision["manifest_json"]):
+                if not self.blobs.verify(entry["contentHash"]):
+                    raise WorkbenchError(CORRUPT_CONTENT)
+            now = self._now()
+            selected = [str(item) for item in instance_ids]
             for instance_id in sorted(selected):
                 instance = self.store.instance(instance_id)
                 if instance is None or instance["project_id"] != project_id:
@@ -1130,17 +1106,15 @@ class ReuseService:
                 int(self.store.asset(asset_id)["counter"]),
             )
 
-        with self.store.transaction():
-            result, counter = apply()
-            self.service.mutations.record(
-                operation=operation,
-                kind="instance-rollback",
-                entity_id=asset_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="instance-rollback",
+            entity_id=asset_id,
+            project_id=project_id,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self.store.asset(asset_id),
+            apply=apply,
+        )
 
     def asset_history(self, project_id: str, asset_id: str) -> dict:
         self.service.require_project(project_id, scope="read")
