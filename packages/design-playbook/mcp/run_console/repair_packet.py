@@ -295,23 +295,23 @@ def _next_command(primary: object) -> dict[str, Any]:
 def _next_action_field(
     primary: object, field: str, missing_message: str
 ) -> dict[str, Any]:
-    """Project one optional owner fact from the primary action."""
+    """Project one optional owner fact from the primary action.
+
+    A present-but-empty value (``""`` or ``[]``) is a projected fact, not a
+    gap: the schema allows both, and the Console renders them as known-empty.
+    Only an absent or null field is an evidence gap. This mirrors
+    ``packetNextActionField`` in ``app.js``, which is what the operator reads;
+    tests/run_console/test_repair_packet_mirror.py holds the two together.
+    """
     projected = _from_assertion(primary)
     result = projected["value"] if isinstance(projected["value"], dict) else None
     if result is None:
         return projected
     value = result.get(field)
-    if isinstance(value, (list, str)) and value:
+    if value is not None:
         return _fact(
             availability=projected["availability"],
             value=value,
-            reason=projected["reason"],
-            source_id=projected["sourceId"],
-        )
-    if isinstance(value, list):
-        return _fact(
-            availability=projected["availability"],
-            value=[],
             reason=projected["reason"],
             source_id=projected["sourceId"],
         )
