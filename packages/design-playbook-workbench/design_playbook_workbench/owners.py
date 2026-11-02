@@ -571,6 +571,10 @@ class OwnerProjectionService:
             project_id,
             asset_id,
             operation=operation,
+            # The replay gate above searches the ledger for this kind, so the
+            # row this delegates must carry it. Recording under the delegate's
+            # default would make every retry a conflict.
+            kind="owner-verified-publish",
             verified_by={
                 "confirmationId": confirmation["confirmation_id"],
                 "role": confirmation["role"],
@@ -583,13 +587,6 @@ class OwnerProjectionService:
                 "environment": environment,
             },
         )
-        outcome["result"]["verifiedBy"] = {
-            "confirmationId": confirmation["confirmation_id"],
-            "role": confirmation["role"],
-            "runId": run_id,
-            "objectId": object_id,
-            "environment": environment,
-        }
         return outcome
 
     # -- backflow --------------------------------------------------------

@@ -492,12 +492,14 @@ class AssetService:
 
         with self.store.transaction():
             result = apply()
-            self._record(
+            self.service.mutations.record(
                 operation=operation,
                 kind="asset-import",
                 entity_id=asset_id,
                 project_id=project_id,
                 result=result,
+                # An import creates its rows; there is no prior counter.
+                counter=None,
             )
         return {"result": result, "replayed": False, "counter": None}
 
@@ -758,12 +760,13 @@ class AssetService:
 
         with self.store.transaction():
             result, counter = apply()
-            self._record(
+            self.service.mutations.record(
                 operation=operation,
                 kind="asset-preview-enable",
                 entity_id=asset_id,
                 project_id=project_id,
                 result=result,
+                counter=counter,
             )
         return {"result": result, "replayed": False, "counter": counter}
 
@@ -870,12 +873,13 @@ class AssetService:
 
         with self.store.transaction():
             result, counter = apply()
-            self._record(
+            self.service.mutations.record(
                 operation=operation,
                 kind="asset-refresh-draft",
                 entity_id=asset_id,
                 project_id=project_id,
                 result=result,
+                counter=counter,
             )
         return {"result": result, "replayed": False, "counter": counter}
 
@@ -889,6 +893,7 @@ class AssetService:
         operation: Operation,
         verified_by: dict | None = None,
         dependencies: list[dict] | None = None,
+        kind: str = "asset-publish",
     ) -> dict:
         """Publish a revision.
 
@@ -900,9 +905,14 @@ class AssetService:
         page that instantiates components, for instance). They are the same
         shape ``publish_with_dependencies`` accepts and are recorded in both
         the revision and the dependency table.
+
+        ``kind`` labels the ledger row. A caller that opens its own replay
+        gate before delegating here must pass its own kind: a retry searches
+        the ledger by that kind, so recording under a different one turns
+        every retry into a conflict.
         """
         replayed = self.service._replay(
-            operation, kind="asset-publish", entity_id=asset_id, project_id=project_id)
+            operation, kind=kind, entity_id=asset_id, project_id=project_id)
         if replayed is not None:
             return replayed
         self.service.require_project(project_id, scope="write")
@@ -975,47 +985,34 @@ class AssetService:
                     revision_id=revision_id, dependencies=declared, now=now
                 )
             asset = self.store.asset(asset_id)
-            return (
-                self._asset_payload(asset, self.store.draft(asset_id), self.store.latest_revision(asset_id)),
-                int(asset["counter"]),
+            payload = self._asset_payload(
+                asset, self.store.draft(asset_id), self.store.latest_revision(asset_id)
             )
+            if verified_by is not None:
+                # The recorded result is the response: a retry gets this dict
+                # back verbatim, so the verification record has to be part of
+                # it rather than added to the caller's copy afterwards.
+                payload["verifiedBy"] = {
+                    key: verified_by[key]
+                    for key in ("confirmationId", "role", "runId", "objectId", "environment")
+                }
+            return payload, int(asset["counter"])
 
         with self.store.transaction():
             result, counter = apply()
-            self._record(
+            self.service.mutations.record(
                 operation=operation,
-                kind="asset-publish",
+                kind=kind,
                 entity_id=asset_id,
                 project_id=project_id,
                 result=result,
+                counter=counter,
             )
         return {"result": result, "replayed": False, "counter": counter}
 
     # -- mutation plumbing ----------------------------------------------
-
-    def _record(
-        self,
-        *,
-        operation: Operation,
-        kind: str,
-        entity_id: str,
-        project_id: str | None,
-        result: dict,
-    ) -> None:
-        import json as _json_module
-
-        self.store.record_mutation(
-            operation_id=operation.operation_id,
-            entity_kind=kind,
-            entity_id=entity_id,
-            payload_digest=operation.digest,
-            resulting_counter=None,
-            result_json=_json_module.dumps(
-                result, separators=(",", ":"), sort_keys=True, ensure_ascii=False
-            ),
-            project_id=project_id,
-            now=self._now(),
-        )
+    # The ledger row is written by ``self.service.mutations``; this module no
+    # longer carries its own copy of the six-step gate.
 
 
 def _loads(text: object) -> object:

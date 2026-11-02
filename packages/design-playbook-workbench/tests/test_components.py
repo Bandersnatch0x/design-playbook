@@ -276,6 +276,29 @@ class ComponentLifecycleTest(ComponentsTestCase):
         locators = json.loads(revision["source_locators_json"])
         self.assertEqual(locators, [])
 
+    def test_a_publish_retry_replays_the_same_answer_and_says_so(self) -> None:
+        """One request, one identity: the retry finds its own ledger row.
+
+        The row is written by the dependency-recording delegate. The caller
+        must keep its operation ID and name its kind, or the retry searches
+        for a row that was never written under that name.
+        """
+        component = self.create_component(DEFINITION)
+        operation = self.operation(
+            {"action": "component-publish"}, expected=self.asset_counter(component["assetId"])
+        )
+        first = self.components.publish(
+            self.project_id, component["assetId"], operation=operation
+        )
+        self.assertFalse(first["replayed"])
+        again = self.components.publish(
+            self.project_id, component["assetId"], operation=operation
+        )
+        self.assertTrue(again["replayed"])
+        self.assertEqual(again["result"], first["result"])
+        self.assertEqual(again["counter"], first["counter"])
+        self.assertEqual(len(self.store.asset_revisions(component["assetId"])), 1)
+
     def test_publish_refuses_unresolved_dependencies_and_unverified_capabilities(
         self,
     ) -> None:

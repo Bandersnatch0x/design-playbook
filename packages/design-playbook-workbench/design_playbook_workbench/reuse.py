@@ -87,28 +87,6 @@ class ReuseService:
 
     # -- mutation plumbing ----------------------------------------------
 
-    def _record(
-        self,
-        *,
-        operation: Operation,
-        kind: str,
-        entity_id: str,
-        project_id: str | None,
-        result: dict,
-    ) -> None:
-        self.store.record_mutation(
-            operation_id=operation.operation_id,
-            entity_kind=kind,
-            entity_id=entity_id,
-            payload_digest=operation.digest,
-            resulting_counter=None,
-            result_json=json.dumps(
-                result, separators=(",", ":"), sort_keys=True, ensure_ascii=False
-            ),
-            project_id=project_id,
-            now=self._now(),
-        )
-
     # -- dependency closure ---------------------------------------------
 
     def _closure(
@@ -194,10 +172,15 @@ class ReuseService:
         *,
         dependencies: object,
         operation: Operation,
+        kind: str = "asset-publish-deps",
     ) -> dict:
-        """Publish a revision whose declared dependencies must all resolve."""
+        """Publish a revision whose declared dependencies must all resolve.
+
+        ``kind`` labels the ledger row; a delegating caller that gates the
+        request itself passes its own kind so its retry finds the row.
+        """
         replayed = self.service._replay(
-            operation, kind="asset-publish-deps", entity_id=asset_id, project_id=project_id)
+            operation, kind=kind, entity_id=asset_id, project_id=project_id)
         if replayed is not None:
             return replayed
         self.service.require_project(project_id, scope="write")
@@ -253,12 +236,13 @@ class ReuseService:
 
         with self.store.transaction():
             result, counter = apply()
-            self._record(
+            self.service.mutations.record(
                 operation=operation,
-                kind="asset-publish-deps",
+                kind=kind,
                 entity_id=asset_id,
                 project_id=project_id,
                 result=result,
+                counter=counter,
             )
         return {"result": result, "replayed": False, "counter": counter}
 
@@ -335,12 +319,13 @@ class ReuseService:
 
         with self.store.transaction():
             result, counter = apply()
-            self._record(
+            self.service.mutations.record(
                 operation=operation,
                 kind="instance-create",
                 entity_id=instance_id,
                 project_id=project_id,
                 result=result,
+                counter=counter,
             )
         return {"result": result, "replayed": False, "counter": counter}
 
@@ -539,12 +524,13 @@ class ReuseService:
 
         with self.store.transaction():
             result, counter = apply()
-            self._record(
+            self.service.mutations.record(
                 operation=operation,
                 kind=f"asset-{mode}",
                 entity_id=new_asset_id,
                 project_id=project_id,
                 result=result,
+                counter=counter,
             )
         return {"result": result, "replayed": False, "counter": counter}
 
@@ -867,12 +853,13 @@ class ReuseService:
 
         with self.store.transaction():
             result, counter = apply()
-            self._record(
+            self.service.mutations.record(
                 operation=operation,
                 kind="closure-import",
                 entity_id=closure_id,
                 project_id=target_id,
                 result=result,
+                counter=counter,
             )
         return {"result": result, "replayed": False, "counter": counter}
 
@@ -1070,12 +1057,13 @@ class ReuseService:
 
         with self.store.transaction():
             result, counter = apply()
-            self._record(
+            self.service.mutations.record(
                 operation=operation,
                 kind="instance-upgrade",
                 entity_id=asset_id,
                 project_id=project_id,
                 result=result,
+                counter=counter,
             )
         return {"result": result, "replayed": False, "counter": counter}
 
@@ -1144,12 +1132,13 @@ class ReuseService:
 
         with self.store.transaction():
             result, counter = apply()
-            self._record(
+            self.service.mutations.record(
                 operation=operation,
                 kind="instance-rollback",
                 entity_id=asset_id,
                 project_id=project_id,
                 result=result,
+                counter=counter,
             )
         return {"result": result, "replayed": False, "counter": counter}
 

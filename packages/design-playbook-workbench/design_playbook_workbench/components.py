@@ -827,12 +827,13 @@ class ComponentService:
 
         with self.store.transaction():
             result, counter = apply()
-            self.assets._record(
+            self.service.mutations.record(
                 operation=operation,
                 kind=mutation_kind,
                 entity_id=asset_id,
                 project_id=project_id,
                 result=result,
+                counter=counter,
             )
         return {"result": result, "replayed": False, "counter": counter}
 
@@ -893,12 +894,13 @@ class ComponentService:
 
         with self.store.transaction():
             result, counter = apply()
-            self.assets._record(
+            self.service.mutations.record(
                 operation=operation,
                 kind=mutation_kind,
                 entity_id=asset_id,
                 project_id=project_id,
                 result=result,
+                counter=counter,
             )
         return {"result": result, "replayed": False, "counter": counter}
 
@@ -969,10 +971,14 @@ class ComponentService:
         return outcome
 
     def publish(self, project_id: str, asset_id: str, *, operation: Operation) -> dict:
-        """Publish a component only when its definition and deps are complete."""
-        replayed = self.service._replay(operation, kind="component-publish", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
+        """Publish a component only when its definition and deps are complete.
+
+        No replay gate of its own: the ledger row is written by
+        ``reuse.publish_with_dependencies``, and this method adds validation
+        output to the result afterwards. Answering a replay here would return
+        the recorded result without that output, so the delegate answers and
+        the response is assembled the same way on both paths.
+        """
         self.service.require_project(project_id, scope="write")
         self._require_asset(project_id, asset_id, kind=KIND_COMPONENT)
         data, _ = self._document_bytes(asset_id)
@@ -988,22 +994,25 @@ class ComponentService:
         ):
             raise WorkbenchError(MISSING_DEPENDENCY, detail="dependency cycle")
         # The dependency-recording publication path is owned by the reuse
-        # module; the derived operation ID keeps the two mutations distinct
-        # while this call still answers replays itself.
+        # module, and it writes the ledger row. The request keeps its own
+        # operation ID and names its own kind: a derived ID would give one
+        # request two identities, and a retry of the client's ID would search
+        # the ledger for a row that was recorded under a name it never sent.
         outcome = self.reuse.publish_with_dependencies(
             project_id,
             asset_id,
             dependencies=dependencies,
-            operation=Operation(
-                operation_id=f"{operation.operation_id}:dependencies",
-                payload={"action": "publish-with-deps", "assetId": asset_id},
-                expected_counter=operation.expected_counter,
-            ),
+            operation=operation,
+            kind="component-publish",
         )
         result = outcome["result"]
         result["definition"] = definition
         result["validation"] = verdict
-        return {"result": result, "replayed": False, "counter": outcome["counter"]}
+        return {
+            "result": result,
+            "replayed": outcome["replayed"],
+            "counter": outcome["counter"],
+        }
 
     def instance_preview(
         self, project_id: str, asset_id: str, *, params: object = None

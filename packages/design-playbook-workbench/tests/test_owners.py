@@ -470,6 +470,66 @@ class VerifiedPublishTest(OwnerProjectionTestCase):
             published["verifiedBy"]["environment"], "design-playbook run-console"
         )
 
+    def test_a_retry_gets_the_recorded_result_after_the_projection_moves(self) -> None:
+        """The operation id is a promise, not a fresh attempt.
+
+        The first call publishes and records one ledger row. A retry must get
+        that row back even if the owner re-ran in between and the criterion it
+        was bound to no longer names the published content -- otherwise the
+        retry reports a stale fact for a publish that already happened.
+        """
+        asset_id = self.make_asset(["reference", "static-preview", "runnable-verified"])
+        content_hash = json.loads(self.store.draft(asset_id)["attributes_json"])[
+            "manifest"
+        ][0]["contentHash"]
+        self.publish_projection(
+            "run-1",
+            projection(
+                "run-1",
+                criteria=[
+                    {"criterionId": "c-1", "verdict": "pass",
+                     "sourceHash": content_hash}
+                ],
+            ),
+        )
+        self.owners.confirm(
+            self.project_id,
+            run_id="run-1",
+            object_type="criterion",
+            object_id="c-1",
+            source_hash=content_hash,
+            role="owner-verified",
+            operation=self.operation({"action": "confirmations"}),
+        )
+        operation = self.operation(
+            {"action": "publish-verified"}, expected=self.asset_counter(asset_id)
+        )
+        first = self.owners.publish_verified(
+            self.project_id, asset_id, run_id="run-1", object_id="c-1",
+            operation=operation,
+        )
+        self.assertFalse(first["replayed"])
+        self.assertEqual(len(self.store.asset_revisions(asset_id)), 1)
+
+        # The owner re-ran and its criterion now names different content.
+        self.publish_projection(
+            "run-1",
+            projection(
+                "run-1",
+                criteria=[
+                    {"criterionId": "c-1", "verdict": "fail",
+                     "sourceHash": "sha256:" + "9" * 64}
+                ],
+            ),
+        )
+        again = self.owners.publish_verified(
+            self.project_id, asset_id, run_id="run-1", object_id="c-1",
+            operation=operation,
+        )
+        self.assertTrue(again["replayed"])
+        self.assertEqual(again["result"], first["result"])
+        self.assertEqual(len(self.store.asset_revisions(asset_id)), 1)
+
     def test_a_re_run_that_moves_the_owner_fact_makes_the_confirmation_stale(self) -> None:
         asset_id = self.make_asset(["reference", "static-preview", "runnable-verified"])
         content_hash = json.loads(self.store.draft(asset_id)["attributes_json"])[
