@@ -833,35 +833,29 @@ class ComponentService:
         operation: Operation,
         mutation_kind: str,
     ) -> dict:
-        replayed = self.service._replay(operation, kind=mutation_kind, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        record = self.blobs.put(text.encode("utf-8"))
-        asset_id = str(uuid.uuid4())
-        carrier, document = _DOCUMENT_LABELS[kind]
-        now = self._now()
-        attributes = {
-            "manifest": [
-                {
-                    "path": document_path(kind, name),
-                    "contentHash": record.content_hash,
-                    "size": record.size,
-                    "mediaType": "application/json",
-                    "carrier": carrier,
-                    "encoding": "utf-8",
-                }
-            ],
-            "carrier": carrier,
-            "document": document,
-            "capabilities": list(capabilities),
-            "sourceLocators": list(locators),
-            "roots": [],
-            "warnings": [],
-            "displayName": name,
-        }
-
         def apply() -> tuple[dict, int]:
+            record = self.blobs.put(text.encode("utf-8"))
+            asset_id = str(uuid.uuid4())
+            carrier, document = _DOCUMENT_LABELS[kind]
+            attributes = {
+                "manifest": [
+                    {
+                        "path": document_path(kind, name),
+                        "contentHash": record.content_hash,
+                        "size": record.size,
+                        "mediaType": "application/json",
+                        "carrier": carrier,
+                        "encoding": "utf-8",
+                    }
+                ],
+                "carrier": carrier,
+                "document": document,
+                "capabilities": list(capabilities),
+                "sourceLocators": list(locators),
+                "roots": [],
+                "warnings": [],
+                "displayName": name,
+            }
             self.store.create_asset(
                 asset_id=asset_id,
                 project_id=project_id,
@@ -869,24 +863,22 @@ class ComponentService:
                 name=name,
                 tags=[],
                 attributes=attributes,
-                now=now,
+                now=self._now(),
             )
             payload = self.assets._asset_payload(
                 self.store.asset(asset_id), self.store.draft(asset_id), None
             )
             return payload, 0
 
-        with self.store.transaction():
-            result, counter = apply()
-            self.service.mutations.record(
-                operation=operation,
-                kind=mutation_kind,
-                entity_id=asset_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.create(
+            operation,
+            kind=mutation_kind,
+            entity_of=lambda result: str(result["assetId"]),
+            project_of=lambda result: project_id,
+            apply=apply,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            project_id=project_id,
+        )
 
     # -- components -----------------------------------------------------
 
