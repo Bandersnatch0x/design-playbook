@@ -52,28 +52,6 @@ class LifecycleService:
 
     # -- shared plumbing ------------------------------------------------
 
-    def _record(
-        self,
-        operation: Operation,
-        *,
-        kind: str,
-        entity_id: str,
-        project_id: str,
-        result: dict,
-        counter: int,
-        now: str,
-    ) -> None:
-        self.store.record_mutation(
-            operation_id=operation.operation_id,
-            entity_kind=kind,
-            entity_id=entity_id,
-            payload_digest=operation.digest,
-            resulting_counter=counter,
-            result_json=json.dumps(result, ensure_ascii=False, sort_keys=True),
-            project_id=project_id,
-            now=now,
-        )
-
     def _asset(self, project_id: str, asset_id: str) -> dict:
         row = self.store.asset(asset_id)
         if row is None or row["project_id"] != project_id:
@@ -245,19 +223,13 @@ class LifecycleService:
         allowed_from: tuple[str, ...],
         operation: Operation,
     ) -> dict:
-        replayed = self.service._replay(operation, kind=kind, entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        row = self._asset(project_id, asset_id)
-        self.assets._check_counter(row, operation)
-        if row["lifecycle"] not in allowed_from:
-            raise WorkbenchError(
-                CONFLICT, detail=f"asset is {row['lifecycle']}, not {allowed_from}"
-            )
-        now = self._now()
-
         def apply() -> tuple[dict, int]:
+            row = self._asset(project_id, asset_id)
+            if row["lifecycle"] not in allowed_from:
+                raise WorkbenchError(
+                    CONFLICT, detail=f"asset is {row['lifecycle']}, not {allowed_from}"
+                )
+            now = self._now()
             counter = self.store.set_asset_lifecycle(
                 asset_id=asset_id, lifecycle=to_state, now=now
             )
@@ -268,18 +240,15 @@ class LifecycleService:
             }
             return result, counter
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._record(
-                operation,
-                kind=kind,
-                entity_id=asset_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind=kind,
+            entity_id=asset_id,
+            project_id=project_id,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self._asset(project_id, asset_id),
+            apply=apply,
+        )
 
     def archive(self, project_id: str, asset_id: str, *, operation: Operation) -> dict:
         return self._transition(
@@ -305,43 +274,40 @@ class LifecycleService:
         self, project_id: str, asset_id: str, *, name: object = None, operation: Operation
     ) -> dict:
         """Restore a trashed asset, keeping its ID; a name clash must be resolved."""
-        replayed = self.service._replay(operation, kind="asset-restore", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        row = self._asset(project_id, asset_id)
-        self.assets._check_counter(row, operation)
-        if row["lifecycle"] != "trashed":
-            raise WorkbenchError(CONFLICT, detail="asset is not in the recycle bin")
-        target = (
-            "published" if self.store.latest_revision(asset_id) is not None else "draft"
-        )
-        rename_to = row["name"]
-        clash = any(
-            other["asset_id"] != asset_id
-            and other["name"] == row["name"]
-            and other["kind"] == row["kind"]
-            and other["lifecycle"] != "trashed"
-            for other in self.store.project_assets(project_id)
-        )
-        if clash:
-            # Restoring must not silently overwrite or shadow another asset.
-            if not isinstance(name, str) or not name.strip():
-                raise WorkbenchError(
-                    CONFLICT, detail="name conflicts with an active asset; provide a new name"
-                )
-            rename_to = name.strip()[:120]
-            if any(
+        def apply() -> tuple[dict, int]:
+            row = self._asset(project_id, asset_id)
+            if row["lifecycle"] != "trashed":
+                raise WorkbenchError(CONFLICT, detail="asset is not in the recycle bin")
+            target = (
+                "published"
+                if self.store.latest_revision(asset_id) is not None
+                else "draft"
+            )
+            rename_to = row["name"]
+            clash = any(
                 other["asset_id"] != asset_id
-                and other["name"] == rename_to
+                and other["name"] == row["name"]
                 and other["kind"] == row["kind"]
                 and other["lifecycle"] != "trashed"
                 for other in self.store.project_assets(project_id)
-            ):
-                raise WorkbenchError(CONFLICT, detail="the new name also conflicts")
-        now = self._now()
-
-        def apply() -> tuple[dict, int]:
+            )
+            if clash:
+                # Restoring must not silently overwrite or shadow another asset.
+                if not isinstance(name, str) or not name.strip():
+                    raise WorkbenchError(
+                        CONFLICT,
+                        detail="name conflicts with an active asset; provide a new name",
+                    )
+                rename_to = name.strip()[:120]
+                if any(
+                    other["asset_id"] != asset_id
+                    and other["name"] == rename_to
+                    and other["kind"] == row["kind"]
+                    and other["lifecycle"] != "trashed"
+                    for other in self.store.project_assets(project_id)
+                ):
+                    raise WorkbenchError(CONFLICT, detail="the new name also conflicts")
+            now = self._now()
             if rename_to != row["name"]:
                 self.store.rename_asset(asset_id=asset_id, name=rename_to, now=now)
             counter = self.store.set_asset_lifecycle(
@@ -354,18 +320,15 @@ class LifecycleService:
                 "renamed": rename_to != row["name"],
             }, counter
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._record(
-                operation,
-                kind="asset-restore",
-                entity_id=asset_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="asset-restore",
+            entity_id=asset_id,
+            project_id=project_id,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self._asset(project_id, asset_id),
+            apply=apply,
+        )
 
     # -- permanent deletion ---------------------------------------------
 
@@ -373,55 +336,50 @@ class LifecycleService:
         self, project_id: str, asset_id: str, *, confirm: object, operation: Operation
     ) -> dict:
         """Permanently delete an asset only when the scan proves it is safe."""
-        replayed = self.service._replay(operation, kind="asset-hard-delete", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        row = self._asset(project_id, asset_id)
-        self.assets._check_counter(row, operation)
-        if confirm is not True:
-            # A permanent delete is a second, explicit confirmation.
-            raise WorkbenchError(INVALID_INPUT, detail="confirm must be true")
-        report = self.reference_report(project_id, asset_id)
-        if not report["indexComplete"]:
-            raise WorkbenchError(
-                CONFLICT, detail="reference index is incomplete; deletion is refused"
-            )
-        if not report["deletable"]:
-            raise WorkbenchError(
-                CONFLICT,
-                detail=json.dumps(
-                    {
-                        "instances": len(report["instances"]),
-                        "dependents": len(report["dependents"]),
-                        "lineageChildren": len(report["lineageChildren"]),
-                        "canvasReferences": len(report["canvasReferences"]),
-                    },
-                    ensure_ascii=False,
-                ),
-            )
-        now = self._now()
-        record = {
-            "assetId": asset_id,
-            "name": row["name"],
-            "kind": row["kind"],
-            "deletedAt": now,
-            "crossProjectCopies": report["crossProjectCopies"],
-            "boundaries": report["boundaries"],
-        }
-
-        with self.store.transaction():
+        def apply() -> tuple[dict, int]:
+            row = self._asset(project_id, asset_id)
+            if confirm is not True:
+                # A permanent delete is a second, explicit confirmation.
+                raise WorkbenchError(INVALID_INPUT, detail="confirm must be true")
+            report = self.reference_report(project_id, asset_id)
+            if not report["indexComplete"]:
+                raise WorkbenchError(
+                    CONFLICT, detail="reference index is incomplete; deletion is refused"
+                )
+            if not report["deletable"]:
+                raise WorkbenchError(
+                    CONFLICT,
+                    detail=json.dumps(
+                        {
+                            "instances": len(report["instances"]),
+                            "dependents": len(report["dependents"]),
+                            "lineageChildren": len(report["lineageChildren"]),
+                            "canvasReferences": len(report["canvasReferences"]),
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+            now = self._now()
+            record = {
+                "assetId": asset_id,
+                "name": row["name"],
+                "kind": row["kind"],
+                "deletedAt": now,
+                "crossProjectCopies": report["crossProjectCopies"],
+                "boundaries": report["boundaries"],
+            }
             self.store.delete_asset(asset_id)
-            self._record(
-                operation,
-                kind="asset-hard-delete",
-                entity_id=asset_id,
-                project_id=project_id,
-                result=record,
-                counter=0,
-                now=now,
-            )
-        return {"result": record, "replayed": False, "counter": 0}
+            return record, 0
+
+        return self.service.mutations.existing(
+            operation,
+            kind="asset-hard-delete",
+            entity_id=asset_id,
+            project_id=project_id,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self._asset(project_id, asset_id),
+            apply=apply,
+        )
 
     # -- project lifecycle ----------------------------------------------
 
@@ -429,30 +387,25 @@ class LifecycleService:
         self, project_id: str, *, archived: bool, operation: Operation
     ) -> dict:
         kind = "project-archive" if archived else "project-unarchive"
-        replayed = self.service._replay(operation, kind=kind, entity_id=project_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="read")
-        now = self._now()
 
         def apply() -> tuple[dict, int]:
             counter = self.store.set_archived(
-                project_id=project_id, archived=archived, now=now
+                project_id=project_id, archived=archived, now=self._now()
             )
             return {"projectId": project_id, "archived": archived}, counter
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._record(
-                operation,
-                kind=kind,
-                entity_id=project_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind=kind,
+            entity_id=project_id,
+            project_id=project_id,
+            # Archiving has always been a read-grant action.
+            authorize=lambda: self.service.require_project(project_id, scope="read"),
+            load_row=lambda: self.store.project(project_id),
+            apply=apply,
+            # A project archive has never compared a counter; preserving that.
+            require_counter=False,
+        )
 
     def archive_overview(
         self,
