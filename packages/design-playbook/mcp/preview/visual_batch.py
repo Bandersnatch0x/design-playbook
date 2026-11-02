@@ -24,7 +24,7 @@ _PROPERTY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9-]{0,63}$")
 # property; `content` carries text; `structure` is a declarative intent that
 # still needs an explicit source locator before any write.
 CHANGE_KINDS = ("style", "layout", "content", "responsive", "structure")
-# The CSS-carrying subset: comparisons for these trim and casefold because a
+# The CSS-carrying subset: comparisons for these trim and lowercase because a
 # value that renders identically is not a review.
 CSS_KINDS = ("style", "layout", "responsive")
 # The reviewer source: only the parent control shell is the reviewer, so it is
@@ -202,9 +202,14 @@ def _comparable(value: str, kind: str) -> str:
 
     A CSS value that differs only in case renders identically, so it is not a
     review; text content is case-sensitive and compares exactly.
+
+    ``lower()`` rather than ``casefold()``: the client mirror decides readiness
+    with ``toLowerCase()``, and the client is what a reviewer sees, so the
+    server matches it instead of the two disagreeing on values such as "ß".
+    tests/preview/test_net_effect_mirror.py holds the two together by execution.
     """
     if kind in CSS_KINDS:
-        return str(value).strip().casefold()
+        return str(value).strip().lower()
     return str(value)
 
 
