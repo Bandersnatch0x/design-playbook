@@ -481,11 +481,10 @@ unchanged unless a sentence below says otherwise.
   `test_transaction_module_surface.py` assertion that pins their existence. The
   `atomic_write` primitive those modules carried, which `locking.py` also uses,
   moves into `locking.py` so the import direction stays one-way.
-- **Preview wire vocabulary and net-effect mirror.**
-  `scripts/generate_visual_contract.py` generates the message names and key
-  names in `mcp/preview/visual_contract.js` from
-  `mcp/preview/visual_batch.py`, and the generated file stops emitting the
-  constants no consumer reads. Separately, the client-side net-effect decision
+- **Preview contract vocabulary and net-effect mirror.**
+  `scripts/generate_visual_contract.py` keeps `mcp/preview/visual_batch.py` as
+  the single owner of the values the client reads, and stops emitting the six
+  server-only constants no client reads. Separately, the client-side net-effect decision
   in `mcp/preview/control.review.js` gains a node-harness comparison against the
   server-side decision in `visual_batch.py`. Where the two disagree on case
   folding, the client's behaviour governs and the server changes to match,
