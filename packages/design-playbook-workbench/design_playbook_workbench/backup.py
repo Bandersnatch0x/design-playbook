@@ -77,27 +77,15 @@ class BackupService:
         self.blobs = blobs
         self._now = now_fn if now_fn is not None else utc_now
 
-    # -- shared plumbing ------------------------------------------------
-
-    def _record(self, operation: Operation, *, kind: str, result: dict, now: str) -> None:
-        self.store.record_mutation(
-            operation_id=operation.operation_id,
-            entity_kind=kind,
-            entity_id=result.get("backupId") or result.get("restoredDataDir") or kind,
-            payload_digest=operation.digest,
-            resulting_counter=0,
-            result_json=json.dumps(result, ensure_ascii=False, sort_keys=True),
-            project_id=None,
-            now=now,
-        )
-
     # -- create ---------------------------------------------------------
 
     def create(
         self, *, destination: object = None, overwrite: object = False, operation: Operation
     ) -> dict:
         """Seal a consistency snapshot + blob manifest into one archive."""
-        replayed = self.service._replay(operation, kind="backup-create")
+        # The archive is written before the ledger row, so the replay has to
+        # come first: a retry must not seal a second archive.
+        replayed = self.service.mutations.replay(operation, kind="backup-create")
         if replayed is not None:
             return replayed
         backup_id = str(uuid.uuid4())
@@ -157,8 +145,11 @@ class BackupService:
             "containsCredentials": False,
             "containsSourceRepo": False,
         }
-        with self.store.transaction():
-            self._record(operation, kind="backup-create", result=result, now=now)
+        self.service.mutations.record(
+            operation, kind="backup-create",
+            entity_id=result.get("backupId") or "backup-create",
+            result=result, counter=0,
+        )
         return {"result": result, "replayed": False, "counter": 0}
 
     def _storage_paths(self) -> list[Path]:
@@ -347,7 +338,7 @@ class BackupService:
 
     def restore(self, *, archive_path: object, target: object, operation: Operation) -> dict:
         """Restore a verified archive into a new data directory."""
-        replayed = self.service._replay(operation, kind="backup-restore")
+        replayed = self.service.mutations.replay(operation, kind="backup-restore")
         if replayed is not None:
             return replayed
         verification = self.verify(archive_path)
@@ -365,7 +356,6 @@ class BackupService:
         if target_dir.exists() and any(target_dir.iterdir()):
             raise WorkbenchError(CONFLICT, detail="target directory must be empty")
         restored = WorkbenchDataDirectory(target_dir).ensure()
-        now = self._now()
         with zipfile.ZipFile(path, "r") as archive:
             self._reject_unsafe_entries(archive)
             manifest = self._read_manifest(archive)
@@ -390,8 +380,11 @@ class BackupService:
                 "恢复后需重新授权，且不会自动执行 Agent 或未完成的写回。"
             ),
         }
-        with self.store.transaction():
-            self._record(operation, kind="backup-restore", result=result, now=now)
+        self.service.mutations.record(
+            operation, kind="backup-restore",
+            entity_id=result.get("restoredDataDir") or "backup-restore",
+            result=result, counter=0,
+        )
         return {"result": result, "replayed": False, "counter": 0}
 
     def _write_restored_blob(

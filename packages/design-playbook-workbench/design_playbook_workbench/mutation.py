@@ -17,7 +17,7 @@ import json
 from dataclasses import dataclass
 from typing import Callable
 
-from .errors import CONFLICT, INVALID_INPUT, WorkbenchError
+from .errors import CONFLICT, INVALID_INPUT, INVALID_TARGET, WorkbenchError
 from .store import Store
 
 
@@ -108,43 +108,68 @@ class MutationGate:
         kind: str,
         entity_id: str,
         project_id: str | None,
-        load_row: Callable[[], dict],
+        load_row: Callable[[], dict | None],
         apply: Callable[[], tuple[dict, int]],
+        authorize: Callable[[], None] | None = None,
     ) -> dict:
         """One write against a row that already exists.
 
         ``load_row`` is called inside the transaction and its ``counter`` is
         what the caller's ``expected_counter`` is checked against; a caller
-        never reads the counter itself. ``apply`` returns
-        ``(result, resulting_counter)``.
+        never reads the counter itself. A missing row is a bad target, not a
+        server fault. ``apply`` returns ``(result, resulting_counter)``.
+
+        ``authorize`` runs only for a fresh request, after the replay check:
+        a retry of a write that already succeeded must get its recorded result
+        even if the project has since been disconnected or its grant revoked.
         """
         replayed = self.replay(
             operation, kind=kind, entity_id=entity_id, project_id=project_id
         )
         if replayed is not None:
             return replayed
+        if authorize is not None:
+            authorize()
         with self.store.transaction():
             # Re-check inside the transaction: two concurrent requests with
             # the same counter can otherwise both pass the pre-check.
             if self.store.mutation(operation.operation_id) is not None:
                 raise WorkbenchError(CONFLICT, operation_id=operation.operation_id)
             row = load_row()
+            if row is None:
+                raise WorkbenchError(INVALID_TARGET)
             if operation.expected_counter is None:
                 raise WorkbenchError(INVALID_INPUT, operation_id=operation.operation_id)
             if operation.expected_counter != int(row["counter"]):
                 raise WorkbenchError(CONFLICT, operation_id=operation.operation_id)
             result, new_counter = apply()
+            self.record(
+                operation, kind=kind, entity_id=entity_id, result=result,
+                counter=new_counter, project_id=project_id,
+            )
+        return {"result": result, "counter": new_counter, "replayed": False}
+
+    def record(
+        self, operation: Operation, *, kind: str, entity_id: str, result: dict,
+        counter: int | None, project_id: str | None = None,
+    ) -> None:
+        """Write the ledger row for one applied mutation.
+
+        Exposed for the two writes that cannot run their work inside the
+        transaction - sealing a backup and restoring one write whole archives -
+        but still need the ledger write to be one implementation.
+        """
+        with self.store.transaction():
             self.store.record_mutation(
                 operation_id=operation.operation_id,
                 entity_kind=kind,
                 entity_id=entity_id,
                 payload_digest=operation.digest,
-                resulting_counter=new_counter,
+                resulting_counter=counter,
                 result_json=json.dumps(result, separators=(",", ":"), sort_keys=True),
                 project_id=project_id,
                 now=self._now(),
             )
-        return {"result": result, "counter": new_counter, "replayed": False}
 
     def create(
         self,
@@ -154,27 +179,29 @@ class MutationGate:
         entity_of: Callable[[dict], str],
         project_of: Callable[[dict], str | None],
         apply: Callable[[], dict],
+        authorize: Callable[[], None] | None = None,
+        counter: int | None = None,
     ) -> dict:
         """One write that creates its row; there is no counter to be stale against.
 
         ``entity_of`` and ``project_of`` name the new row after ``apply`` has
         produced it, so the ledger records the id the write actually made.
+        ``authorize`` runs after the replay check, for the same reason as
+        ``existing``. ``counter`` is what the ledger reports as the resulting
+        counter; a create has no prior row to advance, so callers that report
+        ``0`` pass it and callers that report nothing leave it ``None``.
         """
         replayed = self.replay(operation, kind=kind)
         if replayed is not None:
             return replayed
+        if authorize is not None:
+            authorize()
         with self.store.transaction():
             if self.store.mutation(operation.operation_id) is not None:
                 raise WorkbenchError(CONFLICT, operation_id=operation.operation_id)
             result = apply()
-            self.store.record_mutation(
-                operation_id=operation.operation_id,
-                entity_kind=kind,
-                entity_id=entity_of(result),
-                payload_digest=operation.digest,
-                resulting_counter=None,
-                result_json=json.dumps(result, separators=(",", ":"), sort_keys=True),
-                project_id=project_of(result),
-                now=self._now(),
+            self.record(
+                operation, kind=kind, entity_id=entity_of(result),
+                result=result, counter=counter, project_id=project_of(result),
             )
-        return {"result": result, "counter": None, "replayed": False}
+        return {"result": result, "counter": counter, "replayed": False}

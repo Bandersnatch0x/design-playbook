@@ -552,34 +552,35 @@ class DesignSystemService:
         self, project_id: str, asset_id: str, *, document: object, operation: Operation
     ) -> dict:
         """Replace the draft token document after validation."""
-        replayed = self.service._replay(operation, kind="design-system-update", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        self.assets._check_counter(self._tokens_asset(project_id, asset_id), operation)
-        parsed = parse_document(document)
-        verdict = validate_document(parsed)
-        if not verdict["valid"]:
-            raise WorkbenchError(INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False))
-        data = json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
-        record = self.blobs.put(data)
-        draft = self.store.draft(asset_id)
-        attributes = json.loads(draft["attributes_json"])
-        manifest = [
-            {
-                "path": attributes.get("manifest", [{}])[0].get("path", "tokens.json"),
-                "contentHash": record.content_hash,
-                "size": record.size,
-                "mediaType": "application/json",
-                "carrier": "tokens",
-                "encoding": "utf-8",
-            }
-        ]
-        attributes["manifest"] = manifest
-        attributes["capabilities"] = ["reference"]
-        now = self._now()
 
         def apply() -> tuple[dict, int]:
+            parsed = parse_document(document)
+            verdict = validate_document(parsed)
+            if not verdict["valid"]:
+                raise WorkbenchError(
+                    INVALID_INPUT,
+                    detail=json.dumps(verdict["errors"], ensure_ascii=False),
+                )
+            data = json.dumps(
+                document, ensure_ascii=False, indent=2, sort_keys=True
+            ).encode("utf-8")
+            record = self.blobs.put(data)
+            draft = self.store.draft(asset_id)
+            attributes = json.loads(draft["attributes_json"])
+            attributes["manifest"] = [
+                {
+                    "path": attributes.get("manifest", [{}])[0].get(
+                        "path", "tokens.json"
+                    ),
+                    "contentHash": record.content_hash,
+                    "size": record.size,
+                    "mediaType": "application/json",
+                    "carrier": "tokens",
+                    "encoding": "utf-8",
+                }
+            ]
+            attributes["capabilities"] = ["reference"]
+            now = self._now()
             self.store.update_draft(
                 asset_id=asset_id,
                 tags=json.loads(draft["tags_json"]),
@@ -593,16 +594,15 @@ class DesignSystemService:
             payload["validation"] = verdict
             return payload, counter
 
-        with self.store.transaction():
-            result, counter = apply()
-            self.assets._record(
-                operation=operation,
-                kind="design-system-update",
-                entity_id=asset_id,
-                project_id=project_id,
-                result=result,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="design-system-update",
+            entity_id=asset_id,
+            project_id=project_id,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self._tokens_asset(project_id, asset_id),
+            apply=apply,
+        )
 
     def publish(self, project_id: str, asset_id: str, *, operation: Operation) -> dict:
         """Publish only after the same validator accepts the document."""
