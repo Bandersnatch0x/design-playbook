@@ -187,7 +187,15 @@ class MutationGate:
                 entity_id=entity_id,
                 payload_digest=operation.digest,
                 resulting_counter=counter,
-                result_json=json.dumps(result, separators=(",", ":"), sort_keys=True),
+                result_json=json.dumps(
+                    result,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                    # The rows this replaces stored Chinese text as text, not
+                    # as escapes; a reader diffing the ledger should not see
+                    # the encoding change under a refactor.
+                    ensure_ascii=False,
+                ),
                 project_id=project_id,
                 now=self._now(),
             )
