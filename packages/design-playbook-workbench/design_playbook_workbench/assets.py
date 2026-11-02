@@ -362,11 +362,104 @@ class AssetService:
     def import_selection(
         self, project_id: str, *, selections: object, operation: Operation
     ) -> dict:
-        replayed = self.service._replay(operation, kind="asset-import", project_id=project_id)
-        if replayed is not None:
-            return replayed
-        root = self._root_of(project_id)
-        parsed = self._parse_selections(selections)
+        def apply() -> tuple[dict, int | None]:
+            # Reading the selection is part of the write: the files are the
+            # input, and a retry that re-read them would hash a project that
+            # moved since the first attempt.
+            root = self._root_of(project_id)
+            parsed = self._parse_selections(selections)
+            records, warnings, total_bytes = self._import_records(root, parsed)
+            # Blobs first: content must exist before anything references it.
+            for record in records:
+                self.blobs.put(record.data, expected_hash=record.content_hash)
+            kind, capabilities = _carrier_kind(records)
+            manifest = [
+                {
+                    "path": record.relative_path,
+                    "contentHash": record.content_hash,
+                    "size": record.size,
+                    "mediaType": record.media_type,
+                    "carrier": record.carrier,
+                    "encoding": record.encoding,
+                }
+                for record in sorted(records, key=lambda item: item.relative_path)
+            ]
+            name = self._suggested_name(parsed, records)
+            source_locators = [
+                {
+                    "kind": "project-file",
+                    "projectId": project_id,
+                    "path": record.relative_path,
+                    "sourceHash": record.content_hash,
+                    "run": None,
+                    "objectType": "file",
+                    "objectId": record.relative_path,
+                }
+                for record in sorted(records, key=lambda item: item.relative_path)
+            ]
+            asset_id = str(uuid.uuid4())
+            import_id = str(uuid.uuid4())
+            now = self._now()
+            attributes = {
+                "manifest": manifest,
+                "carrier": kind,
+                "capabilities": capabilities,
+                "roots": [selection.relative_path for selection in parsed],
+                "warnings": sorted(set(warnings)),
+                "dynamicPreviewEnabled": False,
+            }
+            self.store.create_asset(
+                asset_id=asset_id,
+                project_id=project_id,
+                kind=kind,
+                name=name,
+                tags=[],
+                attributes=attributes,
+                now=now,
+            )
+            self.store.create_import(
+                import_id=import_id,
+                project_id=project_id,
+                roots=attributes["roots"],
+                status="committed",
+                file_count=len(manifest),
+                total_bytes=total_bytes,
+                warnings=sorted(set(warnings)),
+                now=now,
+            )
+            for record in sorted(records, key=lambda item: item.relative_path):
+                self.store.add_import_file(
+                    import_id=import_id,
+                    relative_path=record.relative_path,
+                    content_hash=record.content_hash,
+                    size=record.size,
+                    media_type=record.media_type,
+                    carrier=record.carrier,
+                )
+            return {
+                "importId": import_id,
+                "asset": self._asset_payload(
+                    self.store.asset(asset_id), self.store.draft(asset_id), None
+                ),
+                "fileCount": len(manifest),
+                "totalBytes": total_bytes,
+                "warnings": sorted(set(warnings)),
+                "sourceLocators": source_locators,
+                "capabilities": capabilities,
+            }, None
+
+        return self.service.mutations.create(
+            operation,
+            kind="asset-import",
+            entity_of=lambda result: str(result["asset"]["assetId"]),
+            project_of=lambda result: project_id,
+            apply=apply,
+            project_id=project_id,
+        )
+
+    def _import_records(
+        self, root: Path, parsed: list[ImportSelection]
+    ) -> tuple[list[FileRecord], list[str], int]:
         records: list[FileRecord] = []
         warnings: list[str] = []
         seen_paths: set[str] = set()
@@ -407,101 +500,7 @@ class AssetService:
                 )
         if not records:
             raise WorkbenchError(INVALID_TARGET)
-
-        # Blobs first: content must exist before anything references it.
-        for record in records:
-            self.blobs.put(record.data, expected_hash=record.content_hash)
-
-        kind, capabilities = _carrier_kind(records)
-        manifest = [
-            {
-                "path": record.relative_path,
-                "contentHash": record.content_hash,
-                "size": record.size,
-                "mediaType": record.media_type,
-                "carrier": record.carrier,
-                "encoding": record.encoding,
-            }
-            for record in sorted(records, key=lambda item: item.relative_path)
-        ]
-        name = self._suggested_name(parsed, records)
-        source_locators = [
-            {
-                "kind": "project-file",
-                "projectId": project_id,
-                "path": record.relative_path,
-                "sourceHash": record.content_hash,
-                "run": None,
-                "objectType": "file",
-                "objectId": record.relative_path,
-            }
-            for record in sorted(records, key=lambda item: item.relative_path)
-        ]
-        asset_id = str(uuid.uuid4())
-        import_id = str(uuid.uuid4())
-        now = self._now()
-        attributes = {
-            "manifest": manifest,
-            "carrier": kind,
-            "capabilities": capabilities,
-            "roots": [selection.relative_path for selection in parsed],
-            "warnings": sorted(set(warnings)),
-            "dynamicPreviewEnabled": False,
-        }
-
-        def apply() -> dict:
-            self.store.create_asset(
-                asset_id=asset_id,
-                project_id=project_id,
-                kind=kind,
-                name=name,
-                tags=[],
-                attributes=attributes,
-                now=now,
-            )
-            self.store.create_import(
-                import_id=import_id,
-                project_id=project_id,
-                roots=attributes["roots"],
-                status="committed",
-                file_count=len(manifest),
-                total_bytes=total_bytes,
-                warnings=sorted(set(warnings)),
-                now=now,
-            )
-            for record in sorted(records, key=lambda item: item.relative_path):
-                self.store.add_import_file(
-                    import_id=import_id,
-                    relative_path=record.relative_path,
-                    content_hash=record.content_hash,
-                    size=record.size,
-                    media_type=record.media_type,
-                    carrier=record.carrier,
-                )
-            return {
-                "importId": import_id,
-                "asset": self._asset_payload(
-                    self.store.asset(asset_id), self.store.draft(asset_id), None
-                ),
-                "fileCount": len(manifest),
-                "totalBytes": total_bytes,
-                "warnings": sorted(set(warnings)),
-                "sourceLocators": source_locators,
-                "capabilities": capabilities,
-            }
-
-        with self.store.transaction():
-            result = apply()
-            self.service.mutations.record(
-                operation=operation,
-                kind="asset-import",
-                entity_id=asset_id,
-                project_id=project_id,
-                result=result,
-                # An import creates its rows; there is no prior counter.
-                counter=None,
-            )
-        return {"result": result, "replayed": False, "counter": None}
+        return records, warnings, total_bytes
 
     def _parse_selections(self, raw: object) -> list[ImportSelection]:
         if not isinstance(raw, list) or not raw:
@@ -727,23 +726,13 @@ class AssetService:
     def enable_dynamic_preview(
         self, project_id: str, asset_id: str, *, operation: Operation
     ) -> dict:
-        replayed = self.service._replay(
-            operation, kind="asset-preview-enable", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        row = self.store.asset(asset_id)
-        if row is None or row["project_id"] != project_id:
-            raise WorkbenchError(INVALID_TARGET)
-        self._check_counter(row, operation)
-        draft = self.store.draft(asset_id)
-        attributes = _loads(draft["attributes_json"])
-        if CAPABILITY_STATIC_PREVIEW not in attributes.get("capabilities", []):
-            raise WorkbenchError(MISSING_DEPENDENCY)
-        attributes["dynamicPreviewEnabled"] = True
-        now = self._now()
-
         def apply() -> tuple[dict, int]:
+            draft = self.store.draft(asset_id)
+            attributes = _loads(draft["attributes_json"])
+            if CAPABILITY_STATIC_PREVIEW not in attributes.get("capabilities", []):
+                raise WorkbenchError(MISSING_DEPENDENCY)
+            attributes["dynamicPreviewEnabled"] = True
+            now = self._now()
             self.store.update_draft(
                 asset_id=asset_id,
                 tags=_loads(draft["tags_json"]),
@@ -758,17 +747,15 @@ class AssetService:
                 counter,
             )
 
-        with self.store.transaction():
-            result, counter = apply()
-            self.service.mutations.record(
-                operation=operation,
-                kind="asset-preview-enable",
-                entity_id=asset_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="asset-preview-enable",
+            entity_id=asset_id,
+            project_id=project_id,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self._owned_asset(project_id, asset_id),
+            apply=apply,
+        )
 
     def refresh_draft(
         self, project_id: str, asset_id: str, *, operation: Operation
@@ -780,17 +767,58 @@ class AssetService:
         what an asset contains. Bringing changed source files in is therefore
         its own explicit step, with the same limits and exclusions as import.
         """
-        replayed = self.service._replay(
-            operation, kind="asset-refresh-draft", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        root = self._root_of(project_id)
-        row = self.store.asset(asset_id)
-        if row is None or row["project_id"] != project_id:
-            raise WorkbenchError(INVALID_TARGET)
-        self._check_counter(row, operation)
-        draft = self.store.draft(asset_id)
-        attributes = _loads(draft["attributes_json"])
+        def apply() -> tuple[dict, int]:
+            root = self._root_of(project_id)
+            draft = self.store.draft(asset_id)
+            attributes = _loads(draft["attributes_json"])
+            records, warnings, total_bytes = self._refresh_records(root, attributes)
+            for record in records:
+                self.blobs.put(record.data, expected_hash=record.content_hash)
+            kind, capabilities = _carrier_kind(records)
+            manifest = [
+                {
+                    "path": record.relative_path,
+                    "contentHash": record.content_hash,
+                    "size": record.size,
+                    "mediaType": record.media_type,
+                    "carrier": record.carrier,
+                    "encoding": record.encoding,
+                }
+                for record in sorted(records, key=lambda item: item.relative_path)
+            ]
+            refreshed = dict(attributes)
+            refreshed["manifest"] = manifest
+            refreshed["carrier"] = kind
+            refreshed["capabilities"] = capabilities
+            refreshed["warnings"] = sorted(set(warnings))
+            now = self._now()
+            self.store.update_draft(
+                asset_id=asset_id,
+                tags=_loads(draft["tags_json"]),
+                attributes=refreshed,
+                now=now,
+            )
+            counter = self.store.bump_asset_counter(asset_id=asset_id, now=now)
+            return (
+                self._asset_payload(
+                    self.store.asset(asset_id), self.store.draft(asset_id), None
+                ),
+                counter,
+            )
+
+        return self.service.mutations.existing(
+            operation,
+            kind="asset-refresh-draft",
+            entity_id=asset_id,
+            project_id=project_id,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self._owned_asset(project_id, asset_id),
+            apply=apply,
+        )
+
+    def _refresh_records(
+        self, root: Path, attributes: dict
+    ) -> tuple[list[FileRecord], list[str], int]:
         roots = attributes.get("roots") or []
         if not roots:
             raise WorkbenchError(MISSING_DEPENDENCY)
@@ -835,53 +863,7 @@ class AssetService:
                 )
         if not records:
             raise WorkbenchError(MISSING_DEPENDENCY)
-        for record in records:
-            self.blobs.put(record.data, expected_hash=record.content_hash)
-        kind, capabilities = _carrier_kind(records)
-        manifest = [
-            {
-                "path": record.relative_path,
-                "contentHash": record.content_hash,
-                "size": record.size,
-                "mediaType": record.media_type,
-                "carrier": record.carrier,
-                "encoding": record.encoding,
-            }
-            for record in sorted(records, key=lambda item: item.relative_path)
-        ]
-        refreshed = dict(attributes)
-        refreshed["manifest"] = manifest
-        refreshed["carrier"] = kind
-        refreshed["capabilities"] = capabilities
-        refreshed["warnings"] = sorted(set(warnings))
-        now = self._now()
-
-        def apply() -> tuple[dict, int]:
-            self.store.update_draft(
-                asset_id=asset_id,
-                tags=_loads(draft["tags_json"]),
-                attributes=refreshed,
-                now=now,
-            )
-            counter = self.store.bump_asset_counter(asset_id=asset_id, now=now)
-            return (
-                self._asset_payload(
-                    self.store.asset(asset_id), self.store.draft(asset_id), None
-                ),
-                counter,
-            )
-
-        with self.store.transaction():
-            result, counter = apply()
-            self.service.mutations.record(
-                operation=operation,
-                kind="asset-refresh-draft",
-                entity_id=asset_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return records, warnings, total_bytes
 
     # -- publish --------------------------------------------------------
 
@@ -911,61 +893,55 @@ class AssetService:
         the ledger by that kind, so recording under a different one turns
         every retry into a conflict.
         """
-        replayed = self.service._replay(
-            operation, kind=kind, entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        row = self.store.asset(asset_id)
-        if row is None or row["project_id"] != project_id:
-            raise WorkbenchError(INVALID_TARGET)
-        self._check_counter(row, operation)
-        draft = self.store.draft(asset_id)
-        attributes = _loads(draft["attributes_json"])
-        manifest = attributes.get("manifest") or []
-        if not manifest:
-            raise WorkbenchError(MISSING_DEPENDENCY)
-        for entry in manifest:
-            # Publishing validates content completeness: every declared blob
-            # must still be present and readable.
-            if not self.blobs.verify(entry["contentHash"]):
-                raise WorkbenchError(CORRUPT_CONTENT)
-        capabilities = list(attributes.get("capabilities", []))
-        verified: list[dict] = []
-        if CAPABILITY_RUNNABLE_VERIFIED in capabilities or (
-            CAPABILITY_NATIVE_EDITABLE in capabilities
-        ):
-            # A revision cannot claim a verified capability without a
-            # verification record bound to revision, environment, and hash.
-            if verified_by is None:
-                raise WorkbenchError(MISSING_DEPENDENCY)
-            if (
-                not isinstance(verified_by, dict)
-                or verified_by.get("sourceHash") != manifest[0]["contentHash"]
-                or not verified_by.get("confirmationId")
-                or not verified_by.get("role")
-                # R03: a verification record names the environment it ran in.
-                # A hash alone cannot tell a later reader where the check
-                # happened, and re-running it elsewhere is a different fact.
-                or not verified_by.get("environment")
-            ):
-                raise WorkbenchError(MISSING_DEPENDENCY)
-            verified = [dict(verified_by)]
-        revision_number = int(draft["revision_counter"]) + 1
-        revision_id = str(uuid.uuid4())
-        now = self._now()
-        locators = _draft_locators(draft, project_id)
-        declared = list(dependencies or [])
-        for dependency in declared:
-            # A declared edge must resolve inside this project: a dangling
-            # one is a missing dependency, not a pointer to trust later.
-            dependency_revision = self.store.revision(dependency.get("revisionId"))
-            if dependency_revision is None or dependency_revision["asset_id"] != dependency.get(
-                "assetId"
-            ):
-                raise WorkbenchError(MISSING_DEPENDENCY)
-
         def apply() -> tuple[dict, int]:
+            row = self.store.asset(asset_id)
+            draft = self.store.draft(asset_id)
+            attributes = _loads(draft["attributes_json"])
+            manifest = attributes.get("manifest") or []
+            if not manifest:
+                raise WorkbenchError(MISSING_DEPENDENCY)
+            for entry in manifest:
+                # Publishing validates content completeness: every declared
+                # blob must still be present and readable.
+                if not self.blobs.verify(entry["contentHash"]):
+                    raise WorkbenchError(CORRUPT_CONTENT)
+            capabilities = list(attributes.get("capabilities", []))
+            verified: list[dict] = []
+            if CAPABILITY_RUNNABLE_VERIFIED in capabilities or (
+                CAPABILITY_NATIVE_EDITABLE in capabilities
+            ):
+                # A revision cannot claim a verified capability without a
+                # verification record bound to revision, environment, and hash.
+                if verified_by is None:
+                    raise WorkbenchError(MISSING_DEPENDENCY)
+                if (
+                    not isinstance(verified_by, dict)
+                    or verified_by.get("sourceHash") != manifest[0]["contentHash"]
+                    or not verified_by.get("confirmationId")
+                    or not verified_by.get("role")
+                    # R03: a verification record names the environment it ran
+                    # in. A hash alone cannot tell a later reader where the
+                    # check happened, and re-running it elsewhere is a
+                    # different fact.
+                    or not verified_by.get("environment")
+                ):
+                    raise WorkbenchError(MISSING_DEPENDENCY)
+                verified = [dict(verified_by)]
+            revision_number = int(draft["revision_counter"]) + 1
+            revision_id = str(uuid.uuid4())
+            now = self._now()
+            locators = _draft_locators(draft, project_id)
+            declared = list(dependencies or [])
+            for dependency in declared:
+                # A declared edge must resolve inside this project: a dangling
+                # one is a missing dependency, not a pointer to trust later.
+                dependency_revision = self.store.revision(
+                    dependency.get("revisionId")
+                )
+                if dependency_revision is None or dependency_revision[
+                    "asset_id"
+                ] != dependency.get("assetId"):
+                    raise WorkbenchError(MISSING_DEPENDENCY)
             self.store.insert_revision(
                 revision_id=revision_id,
                 asset_id=asset_id,
@@ -998,21 +974,25 @@ class AssetService:
                 }
             return payload, int(asset["counter"])
 
-        with self.store.transaction():
-            result, counter = apply()
-            self.service.mutations.record(
-                operation=operation,
-                kind=kind,
-                entity_id=asset_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind=kind,
+            entity_id=asset_id,
+            project_id=project_id,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self._owned_asset(project_id, asset_id),
+            apply=apply,
+        )
 
     # -- mutation plumbing ----------------------------------------------
     # The ledger row is written by ``self.service.mutations``; this module no
     # longer carries its own copy of the six-step gate.
+
+    def _owned_asset(self, project_id: str, asset_id: str) -> dict:
+        row = self.store.asset(asset_id)
+        if row is None or row["project_id"] != project_id:
+            raise WorkbenchError(INVALID_TARGET)
+        return row
 
 
 def _loads(text: object) -> object:
