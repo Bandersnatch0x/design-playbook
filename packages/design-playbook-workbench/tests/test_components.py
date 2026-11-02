@@ -298,6 +298,8 @@ class ComponentLifecycleTest(ComponentsTestCase):
         self.assertEqual(again["result"], first["result"])
         self.assertEqual(again["counter"], first["counter"])
         self.assertEqual(len(self.store.asset_revisions(component["assetId"])), 1)
+        recorded = self.store.mutation(operation.operation_id)
+        self.assertEqual(recorded["entity_kind"], "component-publish")
 
     def test_publish_refuses_unresolved_dependencies_and_unverified_capabilities(
         self,
@@ -560,6 +562,28 @@ class PageLayoutTest(ComponentsTestCase):
         self.assertEqual(
             [edge["depends_on_asset_id"] for edge in edges], [component["assetId"]]
         )
+
+    def test_a_page_publish_retry_replays_under_the_id_the_client_sent(self) -> None:
+        page = self.create_page(
+            {"name": "P", "nodes": [{"id": "root", "type": "stack", "children": [], "props": {}}]}
+        )
+        operation = self.operation(
+            {"action": "page-publish"}, expected=self.asset_counter(page["assetId"])
+        )
+        first = self.components.publish_page(
+            self.project_id, page["assetId"], operation=operation
+        )
+        self.assertFalse(first["replayed"])
+        again = self.components.publish_page(
+            self.project_id, page["assetId"], operation=operation
+        )
+        self.assertTrue(again["replayed"])
+        self.assertEqual(again["result"], first["result"])
+        self.assertEqual(len(self.store.asset_revisions(page["assetId"])), 1)
+        # One request, one ledger row, under the ID the client sent.
+        recorded = self.store.mutation(operation.operation_id)
+        self.assertEqual(recorded["entity_kind"], "page-publish")
+        self.assertEqual(recorded["entity_id"], page["assetId"])
 
     def test_pages_publish_their_own_document(self) -> None:
         page = self.create_page(PAGE)

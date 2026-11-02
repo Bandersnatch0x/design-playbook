@@ -780,18 +780,16 @@ class ComponentService:
             )
         return resolved
 
-    def _write_document(
+    def _document_body(
         self,
         *,
-        project_id: str,
         asset_id: str,
         kind: str,
         text: str,
         capabilities: list[str],
         locators: list[dict],
-        operation: Operation,
-        mutation_kind: str,
-    ) -> dict:
+    ) -> tuple[dict, int]:
+        """Write one document asset's draft; the caller owns the transaction."""
         record = self.blobs.put(text.encode("utf-8"))
         draft = self.store.draft(asset_id)
         attributes = json.loads(draft["attributes_json"])
@@ -811,31 +809,17 @@ class ComponentService:
         attributes["capabilities"] = list(capabilities)
         attributes["sourceLocators"] = list(locators)
         now = self._now()
-
-        def apply() -> tuple[dict, int]:
-            self.store.update_draft(
-                asset_id=asset_id,
-                tags=json.loads(draft["tags_json"]),
-                attributes=attributes,
-                now=now,
-            )
-            counter = self.store.bump_asset_counter(asset_id=asset_id, now=now)
-            payload = self.assets._asset_payload(
-                self.store.asset(asset_id), self.store.draft(asset_id), None
-            )
-            return payload, counter
-
-        with self.store.transaction():
-            result, counter = apply()
-            self.service.mutations.record(
-                operation=operation,
-                kind=mutation_kind,
-                entity_id=asset_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        self.store.update_draft(
+            asset_id=asset_id,
+            tags=json.loads(draft["tags_json"]),
+            attributes=attributes,
+            now=now,
+        )
+        counter = self.store.bump_asset_counter(asset_id=asset_id, now=now)
+        payload = self.assets._asset_payload(
+            self.store.asset(asset_id), self.store.draft(asset_id), None
+        )
+        return payload, counter
 
     def _create_document_asset(
         self,
@@ -941,34 +925,44 @@ class ComponentService:
         definition: object,
         operation: Operation,
     ) -> dict:
-        replayed = self.service._replay(operation, kind="component-update", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        row = self._require_asset(project_id, asset_id, kind=KIND_COMPONENT)
         parsed = parse_definition(definition)
-        verdict = validate_definition(parsed)
-        if not verdict["valid"]:
-            raise WorkbenchError(
-                INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False)
+        held: dict = {}
+
+        def validate(row: dict) -> None:
+            # The counter is compared after this, so a malformed definition
+            # reports its own error instead of a counter one.
+            verdict = validate_definition(parsed)
+            if not verdict["valid"]:
+                raise WorkbenchError(
+                    INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False)
+                )
+            held["verdict"] = verdict
+
+        def apply() -> tuple[dict, int]:
+            draft = self.store.draft(asset_id)
+            attributes = json.loads(draft["attributes_json"])
+            result, counter = self._document_body(
+                asset_id=asset_id,
+                kind=KIND_COMPONENT,
+                text=json.dumps(parsed, ensure_ascii=False, indent=2, sort_keys=True),
+                capabilities=attributes.get("capabilities") or ["reference"],
+                locators=attributes.get("sourceLocators") or [],
             )
-        # The counter is checked after the document is known to be valid, so a
-        # malformed definition reports its own error instead of a counter one.
-        self.assets._check_counter(row, operation)
-        draft = self.store.draft(asset_id)
-        attributes = json.loads(draft["attributes_json"])
-        outcome = self._write_document(
+            result["validation"] = held["verdict"]
+            return result, counter
+
+        return self.service.mutations.existing(
+            operation,
+            kind="component-update",
+            entity_id=asset_id,
             project_id=project_id,
-            asset_id=asset_id,
-            kind=KIND_COMPONENT,
-            text=json.dumps(parsed, ensure_ascii=False, indent=2, sort_keys=True),
-            capabilities=attributes.get("capabilities") or ["reference"],
-            locators=attributes.get("sourceLocators") or [],
-            operation=operation,
-            mutation_kind="component-update",
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self._require_asset(
+                project_id, asset_id, kind=KIND_COMPONENT
+            ),
+            validate=validate,
+            apply=apply,
         )
-        outcome["result"]["validation"] = verdict
-        return outcome
 
     def publish(self, project_id: str, asset_id: str, *, operation: Operation) -> dict:
         """Publish a component only when its definition and deps are complete.
@@ -1139,40 +1133,55 @@ class ComponentService:
         layout: object,
         operation: Operation,
     ) -> dict:
-        replayed = self.service._replay(operation, kind="page-update", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        self._require_asset(project_id, asset_id, kind=KIND_PAGE)
         parsed = parse_layout(layout)
-        verdict = validate_layout(
-            parsed, components=self._component_index(project_id)
-        )
-        if not verdict["valid"]:
-            raise WorkbenchError(
-                INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False)
+        held: dict = {}
+
+        def validate(row: dict) -> None:
+            verdict = validate_layout(
+                parsed, components=self._component_index(project_id)
             )
-        draft = self.store.draft(asset_id)
-        attributes = json.loads(draft["attributes_json"])
-        outcome = self._write_document(
+            if not verdict["valid"]:
+                raise WorkbenchError(
+                    INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False)
+                )
+            held["verdict"] = verdict
+
+        def apply() -> tuple[dict, int]:
+            draft = self.store.draft(asset_id)
+            attributes = json.loads(draft["attributes_json"])
+            result, counter = self._document_body(
+                asset_id=asset_id,
+                kind=KIND_PAGE,
+                text=json.dumps(parsed, ensure_ascii=False, indent=2, sort_keys=True),
+                capabilities=attributes.get("capabilities") or ["reference"],
+                locators=attributes.get("sourceLocators") or [],
+            )
+            result["validation"] = held["verdict"]
+            return result, counter
+
+        return self.service.mutations.existing(
+            operation,
+            kind="page-update",
+            entity_id=asset_id,
             project_id=project_id,
-            asset_id=asset_id,
-            kind=KIND_PAGE,
-            text=json.dumps(parsed, ensure_ascii=False, indent=2, sort_keys=True),
-            capabilities=attributes.get("capabilities") or ["reference"],
-            locators=attributes.get("sourceLocators") or [],
-            operation=operation,
-            mutation_kind="page-update",
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self._require_asset(project_id, asset_id, kind=KIND_PAGE),
+            validate=validate,
+            apply=apply,
+            # A page update has never asked its caller for a counter; T-127
+            # owns that gap and this round may not close it.
+            require_counter=False,
         )
-        outcome["result"]["validation"] = verdict
-        return outcome
 
     def publish_page(self, project_id: str, asset_id: str, *, operation: Operation) -> dict:
-        replayed = self.service._replay(operation, kind="page-publish", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
+        """Publish a page, recording the components it instantiates.
+
+        Like a component publish, the ledger row is the delegate's and this
+        method adds validation output afterwards, so the delegate answers the
+        replay and the response is assembled the same way on both paths.
+        """
         self.service.require_project(project_id, scope="write")
-        row = self._require_asset(project_id, asset_id, kind=KIND_PAGE)
+        self._require_asset(project_id, asset_id, kind=KIND_PAGE)
         data, _ = self._document_bytes(asset_id)
         layout = parse_layout(data)
         verdict = validate_layout(
@@ -1182,7 +1191,6 @@ class ComponentService:
             raise WorkbenchError(
                 INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False)
             )
-        self.assets._check_counter(row, operation)
         # R07: a page that instantiates components depends on them. Recording
         # those edges is what lets the affected list name pages, and what
         # makes a reuse plan show a page's real closure.
@@ -1190,11 +1198,8 @@ class ComponentService:
         outcome = self.assets.publish_revision(
             project_id,
             asset_id,
-            operation=Operation(
-                operation_id=f"{operation.operation_id}:revision",
-                payload={"action": "publish", "assetId": asset_id},
-                expected_counter=operation.expected_counter,
-            ),
+            operation=operation,
+            kind="page-publish",
             dependencies=dependencies,
         )
         outcome["result"]["validation"] = verdict
@@ -1252,9 +1257,9 @@ class ComponentService:
         publishes it separately. The source page is never written, and no
         reuse, verification, or approval is claimed.
         """
-        replayed = self.service._replay(operation, kind="component-distill", project_id=project_id)
-        if replayed is not None:
-            return replayed
+        # The row is written by the create helper below and this method adds
+        # the candidate locator and owner note to the result afterwards, so the
+        # helper answers the replay and both paths decorate the same way.
         self.service.require_project(project_id, scope="write")
         page = self.store.asset(page_asset_id)
         if page is None or page["project_id"] != project_id:

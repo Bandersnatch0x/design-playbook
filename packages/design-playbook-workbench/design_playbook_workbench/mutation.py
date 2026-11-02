@@ -112,6 +112,7 @@ class MutationGate:
         apply: Callable[[], tuple[dict, int]],
         authorize: Callable[[], None] | None = None,
         require_counter: bool = True,
+        validate: Callable[[dict], None] | None = None,
     ) -> dict:
         """One write against a row that already exists.
 
@@ -123,6 +124,12 @@ class MutationGate:
         ``authorize`` runs only for a fresh request, after the replay check:
         a retry of a write that already succeeded must get its recorded result
         even if the project has since been disconnected or its grant revoked.
+
+        ``validate`` runs after the row loads and before the counter is
+        compared, so a document whose own rules are broken reports that
+        reason instead of a stale-counter one. Two call sites state that
+        ordering as a rule; putting it in the gate's sequence is what keeps
+        them from having to re-derive it.
 
         ``require_counter`` exists for the rows that have no optimistic-
         concurrency contract yet -- work requests, proposals, schemes and
@@ -147,6 +154,8 @@ class MutationGate:
             row = load_row()
             if row is None:
                 raise WorkbenchError(INVALID_TARGET)
+            if validate is not None:
+                validate(row)
             if require_counter:
                 if operation.expected_counter is None:
                     raise WorkbenchError(
