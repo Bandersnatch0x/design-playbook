@@ -20,7 +20,6 @@ from typing import Callable
 
 from .blobs import BlobStore, digest_bytes
 from .errors import (
-    CONFLICT,
     CORRUPT_CONTENT,
     INVALID_INPUT,
     INVALID_TARGET,
@@ -245,24 +244,6 @@ def _carrier_kind(records: list[FileRecord]) -> tuple[str, list[str]]:
 
 class AssetService:
     """The one owner of asset import, discovery, and revision publication."""
-
-    def _check_counter(self, row: dict | None, operation: Operation) -> int:
-        """R04: an explicit expected counter is required, never last-write-wins.
-
-        Only writes that change an existing asset row take this check; a
-        create has no prior counter to be stale against. A caller that passes
-        a missing row is a bad target, not a server fault: reading through it
-        would raise TypeError and surface as a 500.
-        """
-        if row is None:
-            raise WorkbenchError(INVALID_TARGET)
-        if operation.expected_counter is None:
-            raise WorkbenchError(
-                INVALID_INPUT, detail="asset writes require an expected counter"
-            )
-        if int(operation.expected_counter) != int(row["counter"]):
-            raise WorkbenchError(CONFLICT, operation_id=operation.operation_id)
-        return int(row["counter"])
 
     def __init__(
         self,

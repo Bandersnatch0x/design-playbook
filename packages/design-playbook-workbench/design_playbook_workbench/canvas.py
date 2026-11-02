@@ -29,7 +29,6 @@ from .components import (
     validate_layout,
 )
 from .errors import (
-    CONFLICT,
     INVALID_INPUT,
     INVALID_TARGET,
     LIMIT_EXCEEDED,
@@ -1299,16 +1298,6 @@ class CanvasService:
             )
         return verdict
 
-    def _check_counter(self, row: dict, operation: Operation) -> int:
-        """R04: an explicit expected counter is required, never last-write-wins."""
-        if operation.expected_counter is None:
-            raise WorkbenchError(
-                INVALID_INPUT, detail="canvas writes require an expected counter"
-            )
-        if int(operation.expected_counter) != int(row["counter"]):
-            raise WorkbenchError(CONFLICT, operation_id=operation.operation_id)
-        return int(row["counter"])
-
     def _history_summary(self, canvas_id: str) -> dict:
         rows = self.store.canvas_transactions(canvas_id)
         return {
@@ -1390,91 +1379,74 @@ class CanvasService:
     def create(
         self, project_id: str, *, name: str, document: object, operation: Operation
     ) -> dict:
-        replayed = self.service._replay(operation, kind="canvas-create", project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        parsed = parse_canvas(document)
-        # The name may arrive either as the request field or inside the
-        # document; reject only when neither supplies one.
-        document_name = parsed.get("name")
-        resolved = (name.strip() if isinstance(name, str) else "") or (
-            document_name.strip() if isinstance(document_name, str) else ""
-        )
-        if not resolved:
-            raise WorkbenchError(
-                INVALID_INPUT, detail="a canvas name is required"
-            )
-        parsed["name"] = resolved
-        self._require_valid(project_id, parsed)
-        canvas_id = str(uuid.uuid4())
-        now = self._now()
-
         def apply() -> tuple[dict, int]:
+            parsed = parse_canvas(document)
+            # The name may arrive either as the request field or inside the
+            # document; reject only when neither supplies one.
+            document_name = parsed.get("name")
+            resolved = (name.strip() if isinstance(name, str) else "") or (
+                document_name.strip() if isinstance(document_name, str) else ""
+            )
+            if not resolved:
+                raise WorkbenchError(
+                    INVALID_INPUT, detail="a canvas name is required"
+                )
+            parsed["name"] = resolved
+            self._require_valid(project_id, parsed)
+            canvas_id = str(uuid.uuid4())
             self.store.create_canvas(
                 canvas_id=canvas_id,
                 project_id=project_id,
                 name=resolved[:120],
                 document=parsed,
-                now=now,
+                now=self._now(),
             )
             return self._payload(project_id, self._row(project_id, canvas_id)), 0
 
-        with self.store.transaction():
-            result, counter = apply()
-            self.store.record_mutation(
-                operation_id=operation.operation_id,
-                entity_kind="canvas-create",
-                entity_id=canvas_id,
-                payload_digest=operation.digest,
-                resulting_counter=counter,
-                result_json=json.dumps(result, ensure_ascii=False, sort_keys=True),
-                project_id=project_id,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.create(
+            operation,
+            kind="canvas-create",
+            entity_of=lambda result: str(result["canvas"]["canvasId"]),
+            project_of=lambda result: project_id,
+            apply=apply,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            project_id=project_id,
+        )
 
     def run_commands(
         self, project_id: str, canvas_id: str, *, commands: object, operation: Operation
     ) -> dict:
         """Apply 1..20 commands atomically: one transaction per command."""
-        replayed = self.service._replay(
-            operation, kind="canvas-commands", entity_id=canvas_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        if not isinstance(commands, list) or not commands:
-            raise WorkbenchError(INVALID_INPUT)
-        if len(commands) > MAX_COMMANDS_PER_BATCH:
-            raise WorkbenchError(
-                LIMIT_EXCEEDED,
-                detail=f"单次最多 {MAX_COMMANDS_PER_BATCH} 条画布命令。",
-            )
-        row = self._row(project_id, canvas_id)
-        self._check_counter(row, operation)
-        components, instances = self._indexes(project_id)
-        document = self._document(row)
-        transactions: list[dict] = []
-        for command in commands:
-            document, before, after, label, targets = apply_command(
-                document, command, components=components, instances=instances
-            )
-            transactions.append(
-                {
-                    "transactionId": str(uuid.uuid4()),
-                    "kind": command.get("kind"),
-                    "label": label,
-                    "targetIds": targets,
-                    "before": before,
-                    "after": after,
-                    "at": self._now(),
-                }
-            )
-        self._require_valid(project_id, document)
-        now = self._now()
-        recorded: list[dict] = []
-
         def apply() -> tuple[dict, int]:
+            if not isinstance(commands, list) or not commands:
+                raise WorkbenchError(INVALID_INPUT)
+            if len(commands) > MAX_COMMANDS_PER_BATCH:
+                raise WorkbenchError(
+                    LIMIT_EXCEEDED,
+                    detail=f"单次最多 {MAX_COMMANDS_PER_BATCH} 条画布命令。",
+                )
+            row = self._row(project_id, canvas_id)
+            components, instances = self._indexes(project_id)
+            document = self._document(row)
+            transactions: list[dict] = []
+            for command in commands:
+                document, before, after, label, targets = apply_command(
+                    document, command, components=components, instances=instances
+                )
+                transactions.append(
+                    {
+                        "transactionId": str(uuid.uuid4()),
+                        "kind": command.get("kind"),
+                        "label": label,
+                        "targetIds": targets,
+                        "before": before,
+                        "after": after,
+                        "at": self._now(),
+                    }
+                )
+            self._require_valid(project_id, document)
+            now = self._now()
+            recorded: list[dict] = []
             # A new edit clears the redo branch (R09), then each command is
             # one history row, trimmed to the persisted undo limit.
             self.store.clear_canvas_redo(canvas_id)
@@ -1496,19 +1468,15 @@ class CanvasService:
             payload["transactions"] = recorded
             return payload, counter
 
-        with self.store.transaction():
-            result, counter = apply()
-            self.store.record_mutation(
-                operation_id=operation.operation_id,
-                entity_kind="canvas-commands",
-                entity_id=canvas_id,
-                payload_digest=operation.digest,
-                resulting_counter=counter,
-                result_json=json.dumps(result, ensure_ascii=False, sort_keys=True),
-                project_id=project_id,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="canvas-commands",
+            entity_id=canvas_id,
+            project_id=project_id,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self._row(project_id, canvas_id),
+            apply=apply,
+        )
 
     def undo(self, project_id: str, canvas_id: str, *, operation: Operation) -> dict:
         return self._step(project_id, canvas_id, operation=operation, reverse=False)
@@ -1520,29 +1488,24 @@ class CanvasService:
         self, project_id: str, canvas_id: str, *, operation: Operation, reverse: bool
     ) -> dict:
         kind = "canvas-redo" if reverse else "canvas-undo"
-        replayed = self.service._replay(operation, kind=kind, entity_id=canvas_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        row = self._row(project_id, canvas_id)
-        self._check_counter(row, operation)
-        rows = self.store.canvas_transactions(canvas_id)
-        candidates = [item for item in rows if bool(item["undone"]) == reverse]
-        if not candidates:
-            raise WorkbenchError(
-                MISSING_DEPENDENCY,
-                detail="没有可撤销的编辑" if not reverse else "没有可重做的编辑",
-            )
-        # Undo walks backwards from the newest edit; redo walks forwards
-        # from the oldest undone one.
-        picked = candidates[-1] if not reverse else candidates[0]
-        transaction = json.loads(picked["transaction_json"])
-        patch = transaction["before"] if not reverse else transaction["after"]
-        document = apply_patch(self._document(row), patch)
-        self._require_valid(project_id, document)
-        now = self._now()
 
         def apply() -> tuple[dict, int]:
+            row = self._row(project_id, canvas_id)
+            rows = self.store.canvas_transactions(canvas_id)
+            candidates = [item for item in rows if bool(item["undone"]) == reverse]
+            if not candidates:
+                raise WorkbenchError(
+                    MISSING_DEPENDENCY,
+                    detail="没有可撤销的编辑" if not reverse else "没有可重做的编辑",
+                )
+            # Undo walks backwards from the newest edit; redo walks forwards
+            # from the oldest undone one.
+            picked = candidates[-1] if not reverse else candidates[0]
+            transaction = json.loads(picked["transaction_json"])
+            patch = transaction["before"] if not reverse else transaction["after"]
+            document = apply_patch(self._document(row), patch)
+            self._require_valid(project_id, document)
+            now = self._now()
             counter = self.store.save_canvas(
                 canvas_id=canvas_id, document=document, now=now
             )
@@ -1559,58 +1522,41 @@ class CanvasService:
             }
             return payload, counter
 
-        with self.store.transaction():
-            result, counter = apply()
-            self.store.record_mutation(
-                operation_id=operation.operation_id,
-                entity_kind=kind,
-                entity_id=canvas_id,
-                payload_digest=operation.digest,
-                resulting_counter=counter,
-                result_json=json.dumps(result, ensure_ascii=False, sort_keys=True),
-                project_id=project_id,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind=kind,
+            entity_id=canvas_id,
+            project_id=project_id,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self._row(project_id, canvas_id),
+            apply=apply,
+        )
 
     def rename(
         self, project_id: str, canvas_id: str, *, name: object, operation: Operation
     ) -> dict:
-        replayed = self.service._replay(
-            operation, kind="canvas-rename", entity_id=canvas_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        row = self._row(project_id, canvas_id)
-        self._check_counter(row, operation)
-        if not isinstance(name, str) or not name.strip():
-            raise WorkbenchError(INVALID_INPUT)
-        document = self._document(row)
-        document["name"] = name.strip()[:120]
-        now = self._now()
-
         def apply() -> tuple[dict, int]:
+            if not isinstance(name, str) or not name.strip():
+                raise WorkbenchError(INVALID_INPUT)
+            document = self._document(self._row(project_id, canvas_id))
+            document["name"] = name.strip()[:120]
             counter = self.store.save_canvas(
                 canvas_id=canvas_id,
                 document=document,
                 name=document["name"],
-                now=now,
+                now=self._now(),
             )
             return self._payload(project_id, self._row(project_id, canvas_id)), counter
 
-        with self.store.transaction():
-            result, counter = apply()
-            self.store.record_mutation(
-                operation_id=operation.operation_id,
-                entity_kind="canvas-rename",
-                entity_id=canvas_id,
-                payload_digest=operation.digest,
-                resulting_counter=counter,
-                result_json=json.dumps(result, ensure_ascii=False, sort_keys=True),
-                project_id=project_id,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="canvas-rename",
+            entity_id=canvas_id,
+            project_id=project_id,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self._row(project_id, canvas_id),
+            apply=apply,
+        )
 
     def fork(
         self,
@@ -1627,46 +1573,38 @@ class CanvasService:
         maintainer's window keeps its own edits and stores them under a new
         canvas, leaving the other writer's state untouched.
         """
-        replayed = self.service._replay(operation, kind="canvas-fork", project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        source = self._row(project_id, canvas_id)
-        branched = (
-            parse_canvas(document)
-            if document is not None
-            else self._document(source)
-        )
-        default_name = f"{source['name']} 分支"
-        branched["name"] = (
-            str(name).strip()[:120] if isinstance(name, str) and name.strip() else default_name[:120]
-        )
-        self._require_valid(project_id, branched)
-        canvas_id_new = str(uuid.uuid4())
-        now = self._now()
-
         def apply() -> tuple[dict, int]:
+            source = self._row(project_id, canvas_id)
+            branched = (
+                parse_canvas(document)
+                if document is not None
+                else self._document(source)
+            )
+            default_name = f"{source['name']} 分支"
+            branched["name"] = (
+                str(name).strip()[:120]
+                if isinstance(name, str) and name.strip()
+                else default_name[:120]
+            )
+            self._require_valid(project_id, branched)
+            canvas_id_new = str(uuid.uuid4())
             self.store.create_canvas(
                 canvas_id=canvas_id_new,
                 project_id=project_id,
                 name=branched["name"],
                 document=branched,
-                now=now,
+                now=self._now(),
             )
             payload = self._payload(project_id, self._row(project_id, canvas_id_new))
             payload["forkedFrom"] = canvas_id
             return payload, 0
 
-        with self.store.transaction():
-            result, counter = apply()
-            self.store.record_mutation(
-                operation_id=operation.operation_id,
-                entity_kind="canvas-fork",
-                entity_id=canvas_id_new,
-                payload_digest=operation.digest,
-                resulting_counter=counter,
-                result_json=json.dumps(result, ensure_ascii=False, sort_keys=True),
-                project_id=project_id,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.create(
+            operation,
+            kind="canvas-fork",
+            entity_of=lambda result: str(result["canvas"]["canvasId"]),
+            project_of=lambda result: project_id,
+            apply=apply,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            project_id=project_id,
+        )
