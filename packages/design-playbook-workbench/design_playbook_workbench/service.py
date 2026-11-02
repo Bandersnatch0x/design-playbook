@@ -11,10 +11,7 @@ a second write.
 """
 from __future__ import annotations
 
-import hashlib
-import json
 import re
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable
 
@@ -26,6 +23,14 @@ from .errors import (
     RECOVERY_REQUIRED,
     UNAUTHORIZED,
     WorkbenchError,
+)
+# The mutation envelope and its gate are re-exported: every domain module still
+# imports them from here, and T-126 segment 2 is where those call sites move.
+from .mutation import (  # noqa: F401
+    MutationGate,
+    Operation,
+    payload_digest,
+    validate_operation,
 )
 from .paths import (
     FolderCandidate,
@@ -45,51 +50,6 @@ def utc_now() -> str:
         datetime.now(timezone.utc)
         .replace(microsecond=0)
         .strftime("%Y-%m-%dT%H:%M:%SZ")
-    )
-
-
-@dataclass(frozen=True)
-class Operation:
-    """MutationEnvelope: unique ID, expected counter, confirmed payload."""
-
-    operation_id: str
-    payload: dict
-    expected_counter: int | None = None
-
-    @property
-    def digest(self) -> str:
-        return payload_digest(self.payload)
-
-
-def payload_digest(payload: dict) -> str:
-    """Stable digest of the confirmed payload (reason strings are stable)."""
-    encoded = json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode("utf-8")
-    return "sha256:" + hashlib.sha256(encoded).hexdigest()
-
-
-def validate_operation(raw: object) -> Operation:
-    """Parse one mutation envelope from a request body."""
-    if not isinstance(raw, dict):
-        raise WorkbenchError(INVALID_INPUT)
-    operation_id = raw.get("operationId")
-    if not isinstance(operation_id, str) or not _looks_like_token(operation_id):
-        raise WorkbenchError(INVALID_INPUT)
-    expected = raw.get("expectedCounter", None)
-    if expected is not None and (
-        isinstance(expected, bool) or not isinstance(expected, int) or expected < 0
-    ):
-        raise WorkbenchError(INVALID_INPUT)
-    payload = raw.get("payload", {})
-    if not isinstance(payload, dict):
-        raise WorkbenchError(INVALID_INPUT)
-    return Operation(operation_id=operation_id, payload=payload, expected_counter=expected)
-
-
-def _looks_like_token(value: str) -> bool:
-    return 8 <= len(value) <= 128 and all(
-        character.isalnum() or character in "-_." for character in value
     )
 
 
@@ -117,6 +77,7 @@ class WorkbenchService:
         self.store = store
         self.data_dir = data_dir
         self._now = now_fn if now_fn is not None else utc_now
+        self.mutations = MutationGate(store, self._now)
 
     # -- probing -------------------------------------------------------
 
@@ -151,33 +112,19 @@ class WorkbenchService:
 
     # -- mutation discipline -------------------------------------------
 
+    # -- transition surface (T-126 segment 2) --------------------------
+    #
+    # The gate itself lives in mutation.py. These three forwards exist only
+    # because the ten domain modules still reach through these private names;
+    # each of those call sites is what segment 2 moves. Do not add new callers.
+
     def _replay(
         self, operation: Operation, *, kind: str, entity_id: str | None = None,
         project_id: str | None = None,
     ) -> dict | None:
-        """The one mutation-replay gate shared by every service.
-
-        A recorded mutation only replays when the operation id, the payload
-        digest, the entity kind and -- for an operation that targets an
-        existing entity -- the entity id all match. Reusing an operation id
-        against a different target, kind, or payload is a conflict, never a
-        replay of some other entity's success.
-        """
-        recorded = self.store.mutation(operation.operation_id)
-        if recorded is None:
-            return None
-        if (
-            recorded["payload_digest"] != operation.digest
-            or recorded["entity_kind"] != kind
-            or (entity_id is not None and recorded["entity_id"] != entity_id)
-            or (project_id is not None and recorded["project_id"] != project_id)
-        ):
-            raise WorkbenchError(CONFLICT, operation_id=operation.operation_id)
-        return {
-            "result": json.loads(recorded["result_json"]),
-            "counter": recorded["resulting_counter"],
-            "replayed": True,
-        }
+        return self.mutations.replay(
+            operation, kind=kind, entity_id=entity_id, project_id=project_id
+        )
 
     def _mutate_existing(
         self,
@@ -189,32 +136,14 @@ class WorkbenchService:
         current_counter: Callable[[], int],
         apply: Callable[[], tuple[dict, int]],
     ) -> dict:
-        replayed = self._replay(operation, kind=kind, entity_id=entity_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        with self.store.transaction():
-            # Re-check inside the transaction: two concurrent requests with
-            # the same counter can otherwise both pass the pre-check.
-            again = self.store.mutation(operation.operation_id)
-            if again is not None:
-                raise WorkbenchError(CONFLICT, operation_id=operation.operation_id)
-            counter = current_counter()
-            if operation.expected_counter is None:
-                raise WorkbenchError(INVALID_INPUT, operation_id=operation.operation_id)
-            if operation.expected_counter != counter:
-                raise WorkbenchError(CONFLICT, operation_id=operation.operation_id)
-            result, new_counter = apply()
-            self.store.record_mutation(
-                operation_id=operation.operation_id,
-                entity_kind=kind,
-                entity_id=entity_id,
-                payload_digest=operation.digest,
-                resulting_counter=new_counter,
-                result_json=json.dumps(result, separators=(",", ":"), sort_keys=True),
-                project_id=project_id,
-                now=self._now(),
-            )
-        return {"result": result, "counter": new_counter, "replayed": False}
+        return self.mutations.existing(
+            operation,
+            kind=kind,
+            entity_id=entity_id,
+            project_id=project_id,
+            load_row=lambda: {"counter": current_counter()},
+            apply=apply,
+        )
 
     def _mutate_new(
         self,
@@ -224,25 +153,10 @@ class WorkbenchService:
         project_id_fn: Callable[[dict], str],
         apply: Callable[[], dict],
     ) -> dict:
-        replayed = self._replay(operation, kind=kind)
-        if replayed is not None:
-            return replayed
-        with self.store.transaction():
-            again = self.store.mutation(operation.operation_id)
-            if again is not None:
-                raise WorkbenchError(CONFLICT, operation_id=operation.operation_id)
-            result = apply()
-            self.store.record_mutation(
-                operation_id=operation.operation_id,
-                entity_kind=kind,
-                entity_id=project_id_fn(result),
-                payload_digest=operation.digest,
-                resulting_counter=None,
-                result_json=json.dumps(result, separators=(",", ":"), sort_keys=True),
-                project_id=project_id_fn(result),
-                now=self._now(),
-            )
-        return {"result": result, "counter": None, "replayed": False}
+        return self.mutations.create(
+            operation, kind=kind, entity_of=project_id_fn,
+            project_of=project_id_fn, apply=apply,
+        )
 
     # -- project targets ------------------------------------------------
 
@@ -363,10 +277,11 @@ class WorkbenchService:
             )
             return self.project_target(project_id)
 
-        return self._mutate_new(
+        return self.mutations.create(
+            operation,
             kind="project",
-            operation=operation,
-            project_id_fn=lambda result: result["projectId"],
+            entity_of=lambda result: result["projectId"],
+            project_of=lambda result: result["projectId"],
             apply=apply,
         )
 
@@ -383,12 +298,12 @@ class WorkbenchService:
             )
             return self.project_target(project_id), counter
 
-        return self._mutate_existing(
+        return self.mutations.existing(
+            operation,
             kind="project",
             entity_id=project_id,
             project_id=project_id,
-            operation=operation,
-            current_counter=lambda: int(self.store.project(project_id)["counter"]),
+            load_row=lambda: self.store.project(project_id),
             apply=apply,
         )
 
@@ -416,12 +331,12 @@ class WorkbenchService:
                 self.store.project(project_id)["counter"]
             )
 
-        return self._mutate_existing(
+        return self.mutations.existing(
+            operation,
             kind="project-grants",
             entity_id=project_id,
             project_id=project_id,
-            operation=operation,
-            current_counter=lambda: int(self.store.project(project_id)["counter"]),
+            load_row=lambda: self.store.project(project_id),
             apply=apply,
         )
 
@@ -450,12 +365,12 @@ class WorkbenchService:
                 self.store.project(project_id)["counter"]
             )
 
-        return self._mutate_existing(
+        return self.mutations.existing(
+            operation,
             kind="project-rebind",
             entity_id=project_id,
             project_id=project_id,
-            operation=operation,
-            current_counter=lambda: int(self.store.project(project_id)["counter"]),
+            load_row=lambda: self.store.project(project_id),
             apply=apply,
         )
 
@@ -466,12 +381,14 @@ class WorkbenchService:
             self.store.set_setting(CURRENT_PROJECT_SETTING, project_id)
             return self.projects_overview(), 0
 
-        return self._mutate_existing(
+        return self.mutations.existing(
+            operation,
             kind="setting",
             entity_id=CURRENT_PROJECT_SETTING,
             project_id=project_id,
-            operation=operation,
-            current_counter=lambda: 0,
+            # The setting has no counter of its own: its write is conditional on
+            # the project still existing, which require_project already checked.
+            load_row=lambda: {"counter": 0},
             apply=apply,
         )
 
@@ -483,7 +400,9 @@ class WorkbenchService:
         authorization (grants) go away, so the data is still there for a
         separate, explicit deletion.
         """
-        replayed = self._replay(operation, kind="project-removal", project_id=project_id)
+        replayed = self.mutations.replay(
+            operation, kind="project-removal", project_id=project_id
+        )
         if replayed is not None:
             # The entity is already unregistered; the retry still gets its
             # original result instead of a misleading invalid-target.
@@ -498,15 +417,14 @@ class WorkbenchService:
                 self.store.clear_setting(CURRENT_PROJECT_SETTING)
             return {"removed": project_id}, counter_before + 1
 
-        outcome = self._mutate_existing(
+        return self.mutations.existing(
+            operation,
             kind="project-removal",
             entity_id=project_id,
             project_id=project_id,
-            operation=operation,
-            current_counter=lambda: int(self.store.project(project_id)["counter"]),
+            load_row=lambda: self.store.project(project_id),
             apply=apply,
         )
-        return outcome
 
     def delete_project_data(self, project_id: str, *, operation: Operation) -> dict:
         """Delete this project's workbench data, explicitly and irrevocably.
@@ -514,29 +432,21 @@ class WorkbenchService:
         Only an unregistered project can be deleted, so one action never
         silently performs the other. The source folder is never touched.
         """
-        replayed = self._replay(
-            operation, kind="project-data-deletion", project_id=project_id
+        def apply() -> dict:
+            if self.store.project_exists(project_id):
+                raise WorkbenchError(CONFLICT, detail="unregister the project first")
+            if self.store.removed_project(project_id) is None:
+                raise WorkbenchError(INVALID_TARGET)
+            self.store.delete_project_data(project_id)
+            return {"projectId": project_id, "deleted": True}
+
+        return self.mutations.create(
+            operation,
+            kind="project-data-deletion",
+            entity_of=lambda result: result["projectId"],
+            project_of=lambda result: None,
+            apply=apply,
         )
-        if replayed is not None:
-            return replayed
-        if self.store.project_exists(project_id):
-            raise WorkbenchError(CONFLICT, detail="unregister the project first")
-        row = self.store.removed_project(project_id)
-        if row is None:
-            raise WorkbenchError(INVALID_TARGET)
-        self.store.delete_project_data(project_id)
-        result = {"projectId": project_id, "deleted": True}
-        self.store.record_mutation(
-            operation_id=operation.operation_id,
-            entity_kind="project-data-deletion",
-            entity_id=project_id,
-            payload_digest=operation.digest,
-            resulting_counter=None,
-            result_json=json.dumps(result, separators=(",", ":"), sort_keys=True),
-            project_id=None,
-            now=self._now(),
-        )
-        return {"result": result, "counter": None, "replayed": False}
 
     # -- capability issuance -------------------------------------------
 
