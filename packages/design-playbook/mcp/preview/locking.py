@@ -10,6 +10,7 @@ from __future__ import annotations
 import errno
 import json
 import os
+import tempfile
 import threading
 import time
 import uuid
@@ -22,7 +23,6 @@ if os.name == "nt":
 else:
     import fcntl
 
-from design_playbook.mcp.preview.entry_io import atomic_write
 from design_playbook.mcp.preview.transaction_errors import (
     DirectoryLockError,
     PreviewTransactionError,
@@ -36,6 +36,44 @@ DIRECTORY_LOCK_STALE_SECONDS = 30.0
 DIRECTORY_LOCK_HEARTBEAT_SECONDS = 10.0
 DIRECTORY_LOCK_POLL_SECONDS = 0.01
 PROJECTION_LOCK_NAME = ".preview-projection.lock"
+
+# ponytail: fixed 4x25ms retry covers AV/indexer WinError-5 windows on
+# Windows; backoff only if field reports ever exceed ~100ms.
+_REPLACE_RETRY_ATTEMPTS = 4
+_REPLACE_RETRY_SECONDS = 0.025
+
+
+def atomic_write(path: Path, content: str) -> None:
+    """Flush a same-directory temporary file before atomically replacing path."""
+    if path.is_symlink():
+        raise ValueError(f"refusing write through symlinked file: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
+            fh.write(content)
+            fh.flush()
+            os.fsync(fh.fileno())
+        for attempt in range(_REPLACE_RETRY_ATTEMPTS):
+            try:
+                os.replace(temp_name, path)
+                break
+            except PermissionError:
+                # Windows: a freshly written target (e.g. log.md replaced by a
+                # prior writer milliseconds ago) can be briefly held open by
+                # AV/indexer scanning, making os.replace fail with WinError 5.
+                # The conflict is transient; retry the same temp file instead
+                # of surfacing a spurious commit failure.
+                if os.name != "nt" or attempt == _REPLACE_RETRY_ATTEMPTS - 1:
+                    raise
+                time.sleep(_REPLACE_RETRY_SECONDS)
+    except BaseException:
+        try:
+            os.unlink(temp_name)
+        except FileNotFoundError:
+            pass
+        raise
+
 
 def _lock_metadata(path: Path) -> dict[str, Any]:
     try:

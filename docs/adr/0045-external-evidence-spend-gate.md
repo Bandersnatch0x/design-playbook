@@ -478,7 +478,9 @@ unchanged unless a sentence below says otherwise.
 - **Preview transaction surface.** `mcp/preview/transaction.py` absorbs
   `entry_io.py` and `preview_request.py` back into the module that owns the
   transaction. Both pass-through modules are deleted, together with the
-  `test_transaction_module_surface.py` assertion that pins their existence.
+  `test_transaction_module_surface.py` assertion that pins their existence. The
+  `atomic_write` primitive those modules carried, which `locking.py` also uses,
+  moves into `locking.py` so the import direction stays one-way.
 - **Preview wire vocabulary and net-effect mirror.**
   `scripts/generate_visual_contract.py` generates the message names and key
   names in `mcp/preview/visual_contract.js` from
