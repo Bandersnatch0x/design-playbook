@@ -200,7 +200,7 @@ class UIResourcesTest(unittest.TestCase):
     def test_bytes_are_immutable_after_construction(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
-            for name in ("app.html", "app.css", "app.js"):
+            for name in ("app.html", "app.css", "snapshot_contract.js", "app.js"):
                 (base / name).write_text("original-" + name, encoding="utf-8")
             resources = UIResources(directory=base)
             (base / "app.css").write_text("tampered", encoding="utf-8")
@@ -269,6 +269,7 @@ class StaticRouteTest(unittest.TestCase):
         cases = {
             "/app.html": "text/html; charset=utf-8",
             "/app.css": "text/css; charset=utf-8",
+            "/snapshot_contract.js": "text/javascript; charset=utf-8",
             "/app.js": "text/javascript; charset=utf-8",
         }
         for path, content_type in cases.items():
@@ -279,7 +280,7 @@ class StaticRouteTest(unittest.TestCase):
                 self.assertEqual(body, (_DIR / path.lstrip("/")).read_bytes())
 
     def test_ui_responses_carry_the_full_header_policy(self) -> None:
-        for path in ("/", "/app.css", "/app.js"):
+        for path in ("/", "/app.css", "/snapshot_contract.js", "/app.js"):
             with self.subTest(path=path):
                 _, fields, _ = self._get(path)
                 self.assertEqual(fields["x-content-type-options"], "nosniff")
@@ -430,7 +431,7 @@ class StaticRouteTest(unittest.TestCase):
     def test_served_ui_bytes_are_frozen_at_server_start(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
-            for name in ("app.html", "app.css", "app.js"):
+            for name in ("app.html", "app.css", "snapshot_contract.js", "app.js"):
                 (base / name).write_text("frozen-" + name, encoding="utf-8")
             server = RunConsoleHTTPServer(
                 self.session, bind_host="127.0.0.1", port=0, ui_directory=base

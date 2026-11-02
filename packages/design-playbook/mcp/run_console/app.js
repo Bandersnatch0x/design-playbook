@@ -920,13 +920,13 @@
       showView("error", true);
       return;
     }
-    if (body.schemaVersion !== 1) {
+    if (body.schemaVersion !== DPBUI.snapshotContract.SCHEMA_VERSION) {
       lastError = { type: "unsupported", version: body.schemaVersion };
       setDetail("unsupported-detail", t("err_unsupported_detail", { version: body.schemaVersion }));
       showView("unsupported", true);
       return;
     }
-    var required = ["identity", "intent", "execution", "evaluation", "nextActions", "limitations", "sources"];
+    var required = DPBUI.snapshotContract.REQUIRED_SECTIONS;
     for (var i = 0; i < required.length; i += 1) {
       if (!body[required[i]] || typeof body[required[i]] !== "object") {
         lastError = { type: "error", subType: "missing_section", section: required[i] };
