@@ -46,7 +46,6 @@ from design_playbook.mcp.run_console.repair_packet import (  # noqa: E402
     NOT_PRODUCED,
     PACKET_KEYS,
     derive_repair_packet,
-    format_packet_copy_text,
 )
 from design_playbook.mcp.run_console.ui import UIResources  # noqa: E402
 from tests.run_console import test_contract as contract_fixtures  # noqa: E402
@@ -84,6 +83,23 @@ _JS_MSG_TO_PY = (
 _COPY_LINE_SHAPE = re.compile(
     r"^([^(]+) \((known|unknown|stale|inconsistent)\): (.*)$"
 )
+
+
+def _expected_copy_value(value: object) -> str:
+    """The copy renderer's value form, restated as a test expectation."""
+    if isinstance(value, dict):
+        parts = []
+        for key, item in value.items():
+            if item is None or item == []:
+                parts.append(f"{key}=(none)")
+            elif isinstance(item, list):
+                parts.append(f"{key}={','.join(str(entry) for entry in item)}")
+            else:
+                parts.append(f"{key}={item}")
+        return "; ".join(parts) if parts else "(none)"
+    if isinstance(value, list):
+        return ", ".join(str(entry) for entry in value)
+    return str(value)
 
 _PLAYWRIGHT = None
 _BROWSER = None
@@ -252,8 +268,6 @@ class RepairPacketProjectionTest(unittest.TestCase):
         self.assertEqual(packet["resumeStage"]["reason"]["code"], NOT_PRODUCED)
         self.assertEqual(packet["resumeStage"]["reason"]["message"], MSG_NO_RESUME_STAGE)
         self.assertEqual(packet["nextOwner"]["value"]["actor"], "run-operator")
-        self.assertNotIn(_COMMAND, packet["copyText"])
-        self.assertIn("unavailable", packet["copyText"])
 
     def test_blocked_finding_projects_owner_repair_and_does_not_invent_command(self) -> None:
         packet = derive_repair_packet(_blocking_snapshot())
@@ -287,7 +301,6 @@ class RepairPacketProjectionTest(unittest.TestCase):
         packet = derive_repair_packet(_blocking_snapshot(command=_COMMAND))
         self.assertEqual(packet["nextCommand"]["availability"], "known")
         self.assertEqual(packet["nextCommand"]["value"], _COMMAND)
-        self.assertIn(_COMMAND, packet["copyText"])
 
     def test_resume_stage_is_owner_explicit_and_not_inferred_from_progress(self) -> None:
         """Spec rule 19: latest observed stage is not a resume target."""
@@ -323,7 +336,6 @@ class RepairPacketProjectionTest(unittest.TestCase):
         packet = derive_repair_packet(document)
         self.assertEqual(packet["intent"]["availability"], "stale")
         self.assertEqual(packet["intent"]["value"], "Deliver a safe checkout.")
-        self.assertIn("stale context", packet["copyText"])
         self.assertEqual(packet["verdict"]["value"], "Pass")
 
     def test_inconsistent_verdict_does_not_surface_pass(self) -> None:
@@ -351,7 +363,6 @@ class RepairPacketProjectionTest(unittest.TestCase):
         packet = derive_repair_packet(document)
         self.assertEqual(packet["verdict"]["availability"], "inconsistent")
         self.assertIsNone(packet["verdict"]["value"])
-        self.assertNotIn("Verdict (inconsistent): Pass", packet["copyText"])
 
     def test_unknown_finding_disposition_is_not_treated_as_non_blocking(self) -> None:
         document = _valid()
@@ -385,12 +396,6 @@ class RepairPacketProjectionTest(unittest.TestCase):
     def test_invalid_snapshot_fails_closed(self) -> None:
         with self.assertRaises(SnapshotContractError):
             derive_repair_packet({"schemaVersion": 1})
-
-    def test_copy_text_is_plain_and_mentions_copy_only(self) -> None:
-        text = format_packet_copy_text(derive_repair_packet(_valid()))
-        self.assertTrue(text.startswith("Repair Packet"))
-        self.assertIn("copy only", text)
-        self.assertIn("nothing is executed", text)
 
     def test_projection_module_has_no_exec_or_network_primitive(self) -> None:
         source = (_DIR / "repair_packet.py").read_text(encoding="utf-8")
@@ -684,16 +689,17 @@ class RepairPacketBrowserTest(browser_harness.BrowserTestCase):
 
 
 class RepairPacketCrossImplementationTest(browser_harness.BrowserTestCase):
-    """JS and Python must derive and render the same packet.
+    """The browser's copy summary must stay faithful to the derived packet.
 
-    app.js re-implements the projection and copy renderer from
-    repair_packet.py, including the seven shared gap messages. A silent
-    drift would flip the localized UI back to English reasons with no
-    failing gate, so every assertion here is a fail-direction lock: the
-    same snapshot is rendered through the real browser and its copied
-    summary is compared against the Python projection. Interface labels
-    may differ per locale, so the comparison splits each copy line into
-    label, availability, and reason parts instead of raw equality.
+    app.js re-implements the packet projection from repair_packet.py,
+    including the seven shared gap messages; the copy text itself is the
+    console's own. A silent drift would flip the localized UI back to
+    English reasons with no failing gate, so every assertion here is a
+    fail-direction lock: the same snapshot is rendered through the real
+    browser and its copied summary is checked line by line against the
+    Python projection's facts. Interface labels may differ per locale, so
+    each line splits into label, availability, and reason parts instead of
+    raw equality.
     """
 
     def _open_via_route(self, snapshot: dict[str, object]) -> None:
@@ -724,34 +730,43 @@ class RepairPacketCrossImplementationTest(browser_harness.BrowserTestCase):
         return text.replace("\r\n", "\n").replace("\r", "\n")
 
     def _assert_copy_summary_matches(self, packet, summary: str) -> None:
-        py_lines = packet["copyText"].split("\n")
+        # The console owns the copy text; assert it stays faithful to the
+        # derived packet facts rather than to a second renderer's bytes.
         js_lines = summary.split("\n")
-        self.assertEqual(len(js_lines), len(py_lines))
-        self.assertEqual(js_lines[0], py_lines[0])
+        self.assertEqual(len(js_lines), len(PACKET_KEYS) + 1)
+        self.assertTrue(js_lines[0].startswith("Repair Packet"))
         for index, key in enumerate(PACKET_KEYS, start=1):
-            py_match = _COPY_LINE_SHAPE.match(py_lines[index])
-            js_match = _COPY_LINE_SHAPE.match(js_lines[index])
-            self.assertIsNotNone(py_match, py_lines[index])
-            self.assertIsNotNone(js_match, js_lines[index])
-            self.assertEqual(js_match.group(1), py_match.group(1), f"{key} label")
-            self.assertEqual(
-                js_match.group(2), py_match.group(2), f"{key} availability"
-            )
-            reason = packet[key]["reason"]
-            if not (
-                isinstance(reason, dict) and (reason.get("code") or reason.get("message"))
-            ):
-                # Known facts carry no reason, so the whole line must agree.
-                self.assertEqual(js_lines[index], py_lines[index], f"{key} line")
+            fact = packet[key]
+            line = js_lines[index]
+            match = _COPY_LINE_SHAPE.match(line)
+            self.assertIsNotNone(match, line)
+            self.assertEqual(match.group(2), fact["availability"], f"{key} availability")
+            reason = fact.get("reason")
+            if isinstance(reason, dict) and (reason.get("code") or reason.get("message")):
+                code = reason.get("code") or ""
+                message = reason.get("message") or ""
+                separator = ": " if code and message else ""
+                self.assertTrue(
+                    match.group(3).endswith(f" ({code}{separator}{message})"),
+                    f"{key}: copy reason drifted from the projection: {line!r}",
+                )
                 continue
-            code = reason.get("code") or ""
-            message = reason.get("message") or ""
-            separator = ": " if code and message else ""
-            expected_tail = f" ({code}{separator}{message})"
+            value = fact.get("value")
+            availability = fact["availability"]
+            if availability not in {"known", "stale", "inconsistent"} or value in (
+                None, "", [], {}
+            ):
+                expected = "(none)" if availability == "known" else "unavailable"
+            else:
+                expected = _expected_copy_value(value)
+            stale = (
+                " [stale context — not current]"
+                if availability in {"stale", "inconsistent"}
+                else ""
+            )
             self.assertTrue(
-                js_match.group(3).endswith(expected_tail),
-                f"{key}: JS reason drifted from the Python projection: "
-                f"{js_lines[index]!r} does not end with {expected_tail!r}",
+                match.group(3).startswith(expected + stale),
+                f"{key}: copy value drifted from the projection: {line!r}",
             )
 
     def _zh_reason(self, key: str) -> str:

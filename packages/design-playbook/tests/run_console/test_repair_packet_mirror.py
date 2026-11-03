@@ -14,7 +14,10 @@ projection over the same snapshots, comparing the derived objects field by
 field.
 
 The block is DOM-free by construction: it ends before ``packetValueText``, which
-is where the copy renderer starts reaching for the locale table.
+is where the copy renderer starts reaching for the locale table. The copy text
+itself has one owner now (the console's renderer); only the derived packet is
+held in lockstep, because both sides read it: the console renders it from the
+snapshot, and ``scripts/frontend_review.py`` reads the Python projection.
 """
 from __future__ import annotations
 
@@ -183,17 +186,9 @@ def _run_client(snapshots: list[dict], tmp_path: Path) -> list[dict]:
     return json.loads(result.stdout)
 
 
-def _without_copy_text(packet: dict) -> dict:
-    # The copy renderer is the one part that reads the locale table, and the
-    # browser lockstep already compares it line by line; this test compares the
-    # derived facts.
-    return {key: value for key, value in packet.items() if key != "copyText"}
-
-
 def test_the_client_repair_packet_matches_the_python_projection(tmp_path) -> None:
     client = _run_client([snapshot for _, snapshot in CASES], tmp_path)
-    server = [_without_copy_text(derive_repair_packet(snapshot))
-              for _, snapshot in CASES]
+    server = [derive_repair_packet(snapshot) for _, snapshot in CASES]
     mismatches = [
         f"{label}: client={got!r} server={want!r}"
         for (label, _), got, want in zip(CASES, client, server)
