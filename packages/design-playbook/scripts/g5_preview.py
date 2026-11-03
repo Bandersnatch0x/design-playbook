@@ -26,29 +26,9 @@ from design_playbook.mcp.preview.integrity import (  # noqa: E402
     inspect_preview,
     prototype_name,
 )
-
-
-def _resolve_report_ref(
-        ref: str, preview_dir: Path,
-        decision_report: Path | None) -> Path | None:
-    raw = Path(ref)
-    candidates: list[Path] = []
-    if raw.is_absolute():
-        candidates.append(raw)
-    else:
-        # run root = parent of preview/
-        candidates.append(preview_dir.parent / raw)
-        candidates.append(preview_dir / raw)
-        if decision_report is not None:
-            candidates.append(decision_report.parent / raw)
-        candidates.append(Path.cwd() / raw)
-    for candidate in candidates:
-        try:
-            if candidate.is_file():
-                return candidate.resolve()
-        except OSError:
-            continue
-    return None
+# The resolution rule is shared with the preview transaction: the same run
+# must resolve the same ref the same way in the gate and in the shell.
+from design_playbook.mcp.preview.report_ref import resolve_report_path  # noqa: E402
 
 
 def _g5_no_valid_reason(current: tuple[ConfirmRecord, ...]) -> list[Finding]:
@@ -267,7 +247,9 @@ def check_preview(
         ref = data.get("report_ref")
         if not isinstance(ref, str) or not ref.strip():
             continue
-        resolved = _resolve_report_ref(ref.strip(), preview_dir, decision_report)
+        resolved = resolve_report_path(
+            ref.strip(), preview_dir=preview_dir, decision_report=decision_report
+        )
         if resolved is None:
             continue
         if wanted is None or resolved == wanted:

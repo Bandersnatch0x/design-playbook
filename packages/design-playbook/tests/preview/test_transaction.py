@@ -859,6 +859,66 @@ Edges.
         self.assertEqual(entry["outcome"]["criteria_review"], expected)
         self.assertEqual(confirm["criteria_review"], expected)
 
+    def test_a_relative_report_ref_resolves_against_the_preview_run(self) -> None:
+        """The shell and G5 resolve a ref by the same rule, not by cwd.
+
+        The transaction used to resolve relative refs from the process cwd
+        only, so the same run showed no criteria here while G5 matched it.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prototype = root / "round-1.html"
+            prototype.write_text("<html><body>reviewed</body></html>", encoding="utf-8")
+            (root / "report.md").write_text("# Decision report\n", encoding="utf-8")
+            (root / "spec.md").write_text(
+                """# Spec
+
+## L1 Goal
+- Outcome summary: Review a queue monitor UI.
+## L2 Structure
+Page.
+## L3 Flow
+Flow.
+## L4 Details
+Details.
+## L5 Edges
+Edges.
+## L6 Acceptance
+1. Queue cards: Given jobs exist, When the monitor renders, Then active and queued counts are visible.
+""",
+                encoding="utf-8",
+            )
+
+            seen: list[list[str]] = []
+
+            def collect(
+                prototype: Path,
+                summary: str,
+                options: list[str],
+                round_n: int,
+                *,
+                criteria: list[dict[str, str]],
+            ) -> dict:
+                seen.append([item["id"] for item in criteria])
+                return {
+                    "choice": "确认通过",
+                    "feedback": "checked",
+                    "anchors": [],
+                    "aborted": False,
+                }
+
+            run_preview_transaction(
+                path_arg=str(prototype),
+                html=None,
+                summary="summary",
+                round_n=1,
+                report_ref="report.md",
+                options=["确认通过", "需要修改"],
+                collect=collect,
+            )
+
+        self.assertEqual(seen, [["L6.1"]])
+
     def _run(
         self, prototype: Path, *, summary: str = "summary",
         report_ref: str = "report.md", options: list[str] | None = None,

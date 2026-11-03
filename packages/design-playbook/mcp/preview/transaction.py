@@ -35,10 +35,7 @@ from design_playbook.mcp.preview.integrity import (
     prototype_name,
 )
 from design_playbook.mcp.util import now_iso as _now_iso
-from design_playbook.scripts.g1_spec import (
-    SpecificationProjectionError,
-    project_specification,
-)
+from design_playbook.mcp.preview.report_ref import criteria_from_report_ref
 # Re-exports: the error vocabulary and the lock machinery. The importers below
 # and the tests that patch these targets keep going through this module, so the
 # names are bound here rather than reached through their modules.
@@ -269,23 +266,6 @@ def _preview_dir_for(path: Path | None) -> Path:
     scratch = Path.cwd() / ".scratch" / "preview-adapter" / "preview"
     scratch.mkdir(parents=True, exist_ok=True)
     return scratch
-
-
-def _criteria_from_report_ref(report_ref: str) -> list[dict[str, str]]:
-    try:
-        report_path = Path(report_ref).expanduser().resolve()
-        if not report_path.is_file():
-            return []
-        spec_path = report_path.parent / "spec.md"
-        if not spec_path.is_file():
-            return []
-        projection = project_specification(spec_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, SpecificationProjectionError):
-        return []
-    return [
-        {"id": item.criterion_id, "title": item.title or "", "then": item.then}
-        for item in projection.criteria
-    ]
 
 
 def _criteria_review_from_submission(
@@ -549,7 +529,7 @@ def run_preview_transaction(
     summary = summary.strip()
     report_ref = report_ref.strip()
     preview_dir = _preview_dir_for(Path(path_arg) if path_arg else None)
-    criteria = _criteria_from_report_ref(report_ref)
+    criteria = criteria_from_report_ref(report_ref, preview_dir=preview_dir)
     _prototype, prototype_hash = _resolve_prototype(
         path_arg, html, round_n, preview_dir,
     )
