@@ -57,6 +57,12 @@ class ValidateGateTests(unittest.TestCase):
         # ROOT/.claude-plugin/marketplace.json and the Codex/agents catalog
         # at ROOT/.agents/plugins/marketplace.json (ADR-0009 dual-publish).
         shutil.copytree(ROOT / ".claude-plugin", self.root / ".claude-plugin")
+        # The generated-artifact register names the gate that keeps each
+        # artifact honest, and the fixture must carry those gate files or the
+        # register check would fail on a legitimate partial tree.
+        (self.root / "tests").mkdir()
+        for gate in ("test_adapter_drift.py", "test_ui_shared_parity.py"):
+            shutil.copy2(ROOT / "tests" / gate, self.root / "tests" / gate)
         # Private plans and tickets are not validator inputs.
         (self.root / ".agents" / "plugins").mkdir(parents=True)
         shutil.copy2(
@@ -73,9 +79,15 @@ class ValidateGateTests(unittest.TestCase):
         workbench_css = (
             "packages/design-playbook-workbench/design_playbook_workbench/web/app.css"
         )
-        (self.root / workbench_css).parent.mkdir(parents=True)
+        (self.root / workbench_css).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / workbench_css, self.root / workbench_css)
         shutil.copy2(ROOT / WORKBENCH_TOKENS, self.root / WORKBENCH_TOKENS)
+        # The register also names the workbench's shared-copy lock artifact.
+        workbench_lock = (
+            "packages/design-playbook-workbench/design_playbook_workbench/web/"
+            "dpbui.lock.json"
+        )
+        shutil.copy2(ROOT / workbench_lock, self.root / workbench_lock)
 
     def tearDown(self) -> None:
         self.temp.cleanup()
