@@ -97,7 +97,18 @@ def _from_assertion(assertion: object) -> dict[str, Any]:
     source_id = assertion.get("id")
     source_id = source_id if isinstance(source_id, str) else None
     reason = assertion.get("reason")
-    reason_obj = reason if isinstance(reason, dict) else None
+    # The packet reason is the closed {code, message} pair the shell renders;
+    # assertion reasons also carry hashes and refs, which stay in the snapshot
+    # where their owners put them.
+    reason_obj = None
+    if isinstance(reason, dict):
+        code = reason.get("code")
+        message = reason.get("message")
+        if isinstance(code, str) or isinstance(message, str):
+            reason_obj = _reason(
+                code if isinstance(code, str) else "",
+                message if isinstance(message, str) else "",
+            )
     result = assertion.get("result")
     if availability in _READABLE_AVAILABILITY:
         return _fact(
@@ -336,13 +347,13 @@ def _next_action_field(
     )
 
 
-def derive_repair_packet(snapshot: Mapping[str, Any]) -> dict[str, Any]:
-    """Return a JSON-serializable derived packet from a validated snapshot.
+def packet_from_document(document: Mapping[str, Any]) -> dict[str, Any]:
+    """Derive the packet from a snapshot whose other sections already validate.
 
-    The input is validated through the existing consumer contract and is
-    never mutated. The result has no independent lifecycle.
+    The snapshot builder calls this before the final contract check, so it
+    must not validate the document it is completing (the packet itself is a
+    required section). ``derive_repair_packet`` is the validated entry point.
     """
-    document = validate_snapshot(snapshot)
     evaluation = document["evaluation"]
     kind, subject, blocking_count = _select_blocking_finding(evaluation.get("findings"))
     finding_fields = _finding_fields(kind, subject)
@@ -352,7 +363,7 @@ def derive_repair_packet(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             "blockingCount": blocking_count,
         }
     primary = document["nextActions"]["primary"]
-    packet = {
+    return {
         "intent": _from_assertion(document["intent"]["summary"]),
         "verdict": _from_assertion(evaluation["verdict"]),
         **finding_fields,
@@ -368,4 +379,14 @@ def derive_repair_packet(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             primary, "recaptureRequirement", MSG_NO_RECAPTURE
         ),
     }
-    return packet
+
+
+def derive_repair_packet(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the packet from a validated snapshot without mutating it.
+
+    The packet is now a snapshot section, so the validated document already
+    carries it; this stays the reader for projections over older documents
+    and for callers that only want the packet.
+    """
+    document = validate_snapshot(snapshot)
+    return packet_from_document(document)

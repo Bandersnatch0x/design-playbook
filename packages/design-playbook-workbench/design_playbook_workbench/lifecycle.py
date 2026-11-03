@@ -403,8 +403,9 @@ class LifecycleService:
             authorize=lambda: self.service.require_project(project_id, scope="read"),
             load_row=lambda: self.store.project(project_id),
             apply=apply,
-            # A project archive has never compared a counter; preserving that.
-            require_counter=False,  # T-127: no counter contract.
+            # The archive action takes no client counter; T-127 covers the
+            # work rows only, so this stays as it has always behaved.
+            require_counter=False,
         )
 
     def archive_overview(

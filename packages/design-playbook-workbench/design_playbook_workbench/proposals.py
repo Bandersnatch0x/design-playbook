@@ -993,7 +993,9 @@ class ProposalService:
             project_id=project_id,
             load_row=lambda: self._require_proposal(project_id, proposal_id),
             apply=apply,
-            require_counter=False,  # T-127: no counter contract.
+            # Proposals carry no counter column: the payload digest is
+            # their concurrency unit (CONTEXT.md, T-127).
+            require_counter=False,
             validate=check,
         )
 

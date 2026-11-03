@@ -48,6 +48,9 @@ _COMPONENT_DIR = _PKG_ROOT / "mcp" / "run_console"
 
 from tests.run_console import test_http_server as harness  # noqa: E402
 from design_playbook.mcp.run_console.http_server import serve_run_console  # noqa: E402
+from design_playbook.mcp.run_console.repair_packet import (  # noqa: E402
+    packet_from_document,
+)
 from design_playbook.mcp.run_console.session import RunConsoleSession  # noqa: E402
 from design_playbook.mcp.run_console.snapshot_builder import SnapshotBuildError  # noqa: E402
 
@@ -94,6 +97,12 @@ def serve_on_navigable_port(session):
             return server
         server.stop()
     raise OSError("could not bind an ephemeral port outside the Chromium restricted list")
+
+
+def _with_packet(snapshot: dict) -> dict:
+    """Refresh the derived section after a fixture mutates snapshot facts."""
+    snapshot["repairPacket"] = packet_from_document(snapshot)
+    return snapshot
 
 
 class NavigablePortTest(unittest.TestCase):
@@ -386,7 +395,7 @@ class StateMachineTest(BrowserTestCase):
 
         def fulfill(route):
             route.fulfill(status=200, content_type="application/json",
-                          body=json.dumps(snapshot))
+                          body=json.dumps(_with_packet(snapshot)))
 
         self.page.route("**/api/v1/snapshot", fulfill)
         self.page.goto(self.console.url(f"#token={self.console.token}"))
@@ -460,7 +469,7 @@ class StateMachineTest(BrowserTestCase):
 
         def fulfill(route):
             route.fulfill(status=200, content_type="application/json",
-                          body=json.dumps(snapshot))
+                          body=json.dumps(_with_packet(snapshot)))
 
         self.page.route("**/api/v1/snapshot", fulfill)
         self.page.goto(self.console.url(f"#token={self.console.token}"))
@@ -486,7 +495,7 @@ class StateMachineTest(BrowserTestCase):
 
         def fulfill(route):
             route.fulfill(status=200, content_type="application/json",
-                          body=json.dumps(snapshot))
+                          body=json.dumps(_with_packet(snapshot)))
 
         self.page.route("**/api/v1/snapshot", fulfill)
         self.page.goto(self.console.url(f"#token={self.console.token}"))
@@ -868,7 +877,7 @@ class SecurityTest(BrowserTestCase):
 
         def fulfill(route):
             route.fulfill(status=200, content_type="application/json",
-                          body=json.dumps(snapshot))
+                          body=json.dumps(_with_packet(snapshot)))
 
         self.page.route("**/api/v1/snapshot", fulfill)
         self.page.goto(self.console.url(f"#token={self.console.token}"))

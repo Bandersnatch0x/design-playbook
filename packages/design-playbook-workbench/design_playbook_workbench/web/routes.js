@@ -63,6 +63,9 @@
     requests: function (project) {
       return "/api/v1/projects/" + encodeURIComponent(project) + "/requests";
     },
+    requestDetail: function (project, request) {
+      return "/api/v1/projects/" + encodeURIComponent(project) + "/requests/" + encodeURIComponent(request) + "";
+    },
     requestAction: function (project, request, verb) {
       return "/api/v1/projects/" + encodeURIComponent(project) + "/actions/requests/" + encodeURIComponent(request) + "/" + encodeURIComponent(verb) + "";
     },

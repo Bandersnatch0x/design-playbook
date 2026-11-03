@@ -6,6 +6,6 @@
   var DPBUI = (global.DPBUI = global.DPBUI || {});
   DPBUI.snapshotContract = {
     SCHEMA_VERSION: 1,
-    REQUIRED_SECTIONS: ["identity", "intent", "execution", "evaluation", "nextActions", "limitations", "sources"],
+    REQUIRED_SECTIONS: ["identity", "intent", "execution", "evaluation", "nextActions", "repairPacket", "limitations", "sources"],
   };
 })(window);

@@ -4363,6 +4363,18 @@ async function workVerb(verb, body) {
   const request = selectedWorkRequest();
   if (!project || !request) return;
   try {
+    // Every work write compares a counter (T-127). An agent may have written
+    // since the list was rendered, so read the current row before acting
+    // instead of sending a counter that is already stale.
+    let current = request;
+    try {
+      const detail = await api(
+        ROUTES.requestDetail(project.projectId, request.requestId)
+      );
+      if (detail && detail.request) current = detail.request;
+    } catch (error) {
+      // Fall back to the rendered counter; the server still refuses a stale one.
+    }
     const payload = await api(
       ROUTES.requestAction(
         project.projectId, request.requestId, verb
@@ -4373,7 +4385,7 @@ async function workVerb(verb, body) {
           operation: mutation(newOperationId(), {
             action: verb,
             requestId: request.requestId,
-          }),
+          }, current.counter),
           ...(body || {}),
         },
       }

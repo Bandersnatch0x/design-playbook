@@ -33,6 +33,7 @@ from design_playbook.mcp.run_console.contract import (
     SNAPSHOT_VERSION,
     validate_snapshot,
 )
+from design_playbook.mcp.run_console.repair_packet import packet_from_document
 from design_playbook.mcp.run_console.source_registry import (
     RegisteredSource,
     SourceRegistry,
@@ -352,6 +353,9 @@ class _Builder:
             for relpath in self._artifact_sources
         }
         document = self._assemble(capture, verify, projection)
+        # The packet is a derived section of the contract, filled here from
+        # the sections just assembled; the final check validates all of it.
+        document["repairPacket"] = packet_from_document(document)
         validate_snapshot(document)
         return document
 

@@ -130,6 +130,17 @@ class WorkApiTestCase(unittest.TestCase):
             "operationId": operation_id or f"op_api_work_{self._operations:04d}",
             "payload": {"action": verb, **(payload or {})},
         }
+        if request_id:
+            # Every work write compares a counter (T-127); read the current
+            # one, the same envelope the agent sends after claiming.
+            detail = http_request(
+                self.h.runtime,
+                f"/api/v1/projects/{project_id or self.project_id}/requests/"
+                f"{request_id}",
+                token=self.h.token,
+            )
+            if detail.status == 200:
+                operation["expectedCounter"] = int(detail.json["request"]["counter"])
         path = (
             f"/api/v1/projects/{project_id or self.project_id}/actions/requests/"
             f"{request_id}/{verb}"

@@ -153,6 +153,10 @@ class WorkRequestTestCase(unittest.TestCase):
         self.store.close()
         self._tmp.cleanup()
 
+    def request_counter(self, request_id: str) -> int:
+        """The request row's counter: every work write now carries it (T-127)."""
+        return int(self.store.work_request(request_id)["counter"])
+
     def operation(self, payload: dict, *, expected: int | None = None) -> Operation:
         self._operations += 1
         return Operation(
@@ -204,7 +208,10 @@ class WorkRequestTestCase(unittest.TestCase):
             self.project_id,
             request["requestId"],
             digest=request["contextDigest"],
-            operation=self.operation({"action": "consent"}),
+            operation=self.operation(
+                {"action": "consent"},
+                expected=self.request_counter(request["requestId"]),
+            ),
         )["result"]
 
     def agent_principal(self, request_id: str):
@@ -221,7 +228,7 @@ class WorkRequestTestCase(unittest.TestCase):
         claimed = self.work.claim(
             request["requestId"],
             principal=principal,
-            operation=self.operation({"action": "claim"}),
+            operation=self.operation({"action": "claim"}, expected=self.request_counter(request["requestId"])),
         )["result"]
         return claimed["lease"], principal
 
@@ -292,7 +299,10 @@ class ConsentTest(WorkRequestTestCase):
             self.work.consent(
                 self.project_id, stale["requestId"],
                 digest="sha256:" + "0" * 64,
-                operation=self.operation({"action": "consent"}),
+                operation=self.operation(
+                    {"action": "consent"},
+                    expected=self.request_counter(stale["requestId"]),
+                ),
             )
         self.assertEqual(caught.exception.code, CONFLICT)
 
@@ -369,7 +379,7 @@ class LeaseTest(WorkRequestTestCase):
             sequence=lease["sequence"],
             progress={"phase": "editing", "files": 1},
             principal=principal,
-            operation=self.operation({"action": "heartbeat"}),
+            operation=self.operation({"action": "heartbeat"}, expected=self.request_counter(request["requestId"])),
         )["result"]
         self.assertEqual(beaten["attempt"]["progress"]["phase"], "editing")
         self.assertNotEqual(beaten["lease"]["expiresAt"], lease["expiresAt"])
@@ -389,7 +399,7 @@ class LeaseTest(WorkRequestTestCase):
                 with self.assertRaises(WorkbenchError) as caught:
                     self.work.heartbeat(
                         request["requestId"], principal=principal,
-                        operation=self.operation({"action": "heartbeat"}), **body,
+                        operation=self.operation({"action": "heartbeat"}, expected=self.request_counter(request["requestId"])), **body,
                     )
                 self.assertEqual(caught.exception.code, code)
         with self.assertRaises(WorkbenchError) as caught:
@@ -399,7 +409,7 @@ class LeaseTest(WorkRequestTestCase):
                 lease_id=lease["leaseId"],
                 sequence=lease["sequence"],
                 principal=None,
-                operation=self.operation({"action": "heartbeat"}),
+                operation=self.operation({"action": "heartbeat"}, expected=self.request_counter(request["requestId"])),
             )
         self.assertEqual(caught.exception.code, UNAUTHORIZED)
 
@@ -412,7 +422,7 @@ class LeaseTest(WorkRequestTestCase):
                 lease_id=lease["leaseId"],
                 sequence=lease["sequence"],
                 principal=principal,
-                operation=self.operation({"action": "heartbeat"}),
+                operation=self.operation({"action": "heartbeat"}, expected=self.request_counter(request["requestId"])),
             )
         self.assertEqual(caught.exception.code, STALE_EVIDENCE)
         stored = self.work.detail(self.project_id, request["requestId"])["request"]
@@ -428,7 +438,7 @@ class LeaseTest(WorkRequestTestCase):
                 sequence=lease["sequence"],
                 result=self.result_body(),
                 principal=principal,
-                operation=self.operation({"action": "result"}),
+                operation=self.operation({"action": "result"}, expected=self.request_counter(request["requestId"])),
             )
         self.assertEqual(caught.exception.code, CONFLICT)
 
@@ -455,7 +465,7 @@ class LeaseTest(WorkRequestTestCase):
                 lease_id=lease["leaseId"],
                 sequence=lease["sequence"],
                 principal=principal,
-                operation=self.operation({"action": "heartbeat"}),
+                operation=self.operation({"action": "heartbeat"}, expected=self.request_counter(request["requestId"])),
             )
         self.assertIn(caught.exception.code, (STALE_EVIDENCE, UNAUTHORIZED))
         stored = self.work.detail(self.project_id, request["requestId"])["request"]
@@ -470,7 +480,7 @@ class LeaseTest(WorkRequestTestCase):
             self.work.claim(
                 request["requestId"],
                 principal=None,
-                operation=self.operation({"action": "claim"}),
+                operation=self.operation({"action": "claim"}, expected=self.request_counter(request["requestId"])),
             )
         self.assertEqual(caught.exception.code, UNAUTHORIZED)
 
@@ -481,7 +491,7 @@ class LeaseTest(WorkRequestTestCase):
             self.work.claim(
                 request["requestId"],
                 principal=wrong_request,
-                operation=self.operation({"action": "claim"}),
+                operation=self.operation({"action": "claim"}, expected=self.request_counter(request["requestId"])),
             )
         self.assertEqual(caught.exception.code, UNAUTHORIZED)
 
@@ -494,14 +504,14 @@ class LeaseTest(WorkRequestTestCase):
         lease = self.work.claim(
             request["requestId"],
             principal=principal,
-            operation=self.operation({"action": "claim"}),
+            operation=self.operation({"action": "claim"}, expected=self.request_counter(request["requestId"])),
         )["result"]["lease"]
         # A second claim on a running request is a conflict.
         with self.assertRaises(WorkbenchError) as caught:
             self.work.claim(
                 request["requestId"],
                 principal=principal,
-                operation=self.operation({"action": "claim"}),
+                operation=self.operation({"action": "claim"}, expected=self.request_counter(request["requestId"])),
             )
         self.assertEqual(caught.exception.code, CONFLICT)
         with self.assertRaises(WorkbenchError) as caught:
@@ -509,7 +519,7 @@ class LeaseTest(WorkRequestTestCase):
                 request["requestId"],
                 principal=principal,
                 lease_seconds=LEASE_SECONDS * 4,
-                operation=self.operation({"action": "claim"}),
+                operation=self.operation({"action": "claim"}, expected=self.request_counter(request["requestId"])),
             )
         self.assertEqual(caught.exception.code, CONFLICT)
         self.assertTrue(lease["attemptId"])
@@ -523,7 +533,7 @@ class CancelAndRetryTest(WorkRequestTestCase):
 
         asked = self.work.cancel(
             self.project_id, request["requestId"],
-            operation=self.operation({"action": "cancel"}),
+            operation=self.operation({"action": "cancel"}, expected=self.request_counter(request["requestId"])),
         )["result"]
         self.assertEqual(asked["state"], "cancel-requested")
         # R11: the attempt is not called cancelled until the host confirms
@@ -539,7 +549,7 @@ class CancelAndRetryTest(WorkRequestTestCase):
                 sequence=lease["sequence"],
                 result=self.result_body(),
                 principal=principal,
-                operation=self.operation({"action": "result"}),
+                operation=self.operation({"action": "result"}, expected=self.request_counter(request["requestId"])),
             )
         self.assertEqual(caught.exception.code, CONFLICT)
         with self.assertRaises(WorkbenchError) as caught:
@@ -549,13 +559,13 @@ class CancelAndRetryTest(WorkRequestTestCase):
                 lease_id=lease["leaseId"],
                 sequence=lease["sequence"],
                 principal=principal,
-                operation=self.operation({"action": "heartbeat"}),
+                operation=self.operation({"action": "heartbeat"}, expected=self.request_counter(request["requestId"])),
             )
         self.assertEqual(caught.exception.code, CONFLICT)
 
         confirmed = self.work.confirm_cancelled(
             self.project_id, request["requestId"],
-            operation=self.operation({"action": "confirm-cancelled"}),
+            operation=self.operation({"action": "confirm-cancelled"}, expected=self.request_counter(request["requestId"])),
         )["result"]
         self.assertEqual(confirmed["state"], "cancelled")
         self.assertEqual(confirmed["attempt"]["state"], "cancelled")
@@ -575,7 +585,7 @@ class CancelAndRetryTest(WorkRequestTestCase):
         with self.assertRaises(WorkbenchError) as caught:
             self.work.retry(
                 self.project_id, request["requestId"],
-                operation=self.operation({"action": "retry"}),
+                operation=self.operation({"action": "retry"}, expected=self.request_counter(request["requestId"])),
             )
         self.assertEqual(caught.exception.code, CONFLICT)
 
@@ -590,13 +600,13 @@ class CancelAndRetryTest(WorkRequestTestCase):
             sequence=lease["sequence"],
             reason="依赖安装被拒绝",
             principal=first,
-            operation=self.operation({"action": "fail"}),
+            operation=self.operation({"action": "fail"}, expected=self.request_counter(request["requestId"])),
         )["result"]
         self.assertEqual(failed["state"], "failed")
 
         retried = self.work.retry(
             self.project_id, request["requestId"],
-            operation=self.operation({"action": "retry"}),
+            operation=self.operation({"action": "retry"}, expected=self.request_counter(request["requestId"])),
         )["result"]
         self.assertEqual(retried["state"], "waiting-for-agent")
         self.assertNotEqual(retried["capabilityId"], request["capabilityId"])
@@ -608,7 +618,7 @@ class CancelAndRetryTest(WorkRequestTestCase):
                     if call == "claim":
                         self.work.claim(
                             request["requestId"], principal=first,
-                            operation=self.operation({"action": "claim"}),
+                            operation=self.operation({"action": "claim"}, expected=self.request_counter(request["requestId"])),
                         )
                     else:
                         self.work.heartbeat(
@@ -617,14 +627,14 @@ class CancelAndRetryTest(WorkRequestTestCase):
                             lease_id=lease["leaseId"],
                             sequence=lease["sequence"],
                             principal=first,
-                            operation=self.operation({"action": "heartbeat"}),
+                            operation=self.operation({"action": "heartbeat"}, expected=self.request_counter(request["requestId"])),
                         )
                 self.assertEqual(caught.exception.code, UNAUTHORIZED)
 
         second = self.agent_principal(request["requestId"])
         claimed = self.work.claim(
             request["requestId"], principal=second,
-            operation=self.operation({"action": "claim"}),
+            operation=self.operation({"action": "claim"}, expected=self.request_counter(request["requestId"])),
         )["result"]
         self.assertEqual(claimed["lease"]["sequence"], 2)
         attempts = self.work.detail(self.project_id, request["requestId"])["request"][
@@ -643,9 +653,12 @@ class CancelAndRetryTest(WorkRequestTestCase):
             sequence=lease["sequence"],
             result=self.result_body(),
             principal=principal,
-            operation=self.operation({"action": "result"}),
+            operation=self.operation({"action": "result"}, expected=self.request_counter(request["requestId"])),
         )["result"]
-        reject_operation = self.operation({"action": "reject"})
+        reject_operation = self.operation(
+            {"action": "reject"},
+            expected=self.request_counter(request["requestId"]),
+        )
         rejected = self.work.reject(
             self.project_id, request["requestId"], operation=reject_operation
         )["result"]
@@ -662,6 +675,56 @@ class CancelAndRetryTest(WorkRequestTestCase):
         self.assertEqual(again["result"], rejected)
 
 
+class CounterContractTest(WorkRequestTestCase):
+    """T-127: work writes compare a counter; a stale or absent one fails closed."""
+
+    def _proposal_ready(self) -> tuple[dict, int]:
+        selection = self.confirmed_context()
+        request = self.create_request(selection)
+        lease, principal = self.claimed(request)
+        before = self.request_counter(request["requestId"])
+        self.work.submit_result(
+            request["requestId"],
+            attempt_id=lease["attemptId"],
+            lease_id=lease["leaseId"],
+            sequence=lease["sequence"],
+            result=self.result_body(),
+            principal=principal,
+            operation=self.operation({"action": "result"}, expected=before),
+        )
+        self.assertEqual(
+            self.store.work_request(request["requestId"])["state"], "proposal-ready"
+        )
+        return request, before
+
+    def test_a_work_write_without_a_counter_is_refused(self) -> None:
+        request, _ = self._proposal_ready()
+        with self.assertRaises(WorkbenchError) as caught:
+            self.work.reject(
+                self.project_id,
+                request["requestId"],
+                operation=self.operation({"action": "reject"}),
+            )
+        self.assertEqual(caught.exception.code, INVALID_INPUT)
+        self.assertEqual(
+            self.store.work_request(request["requestId"])["state"], "proposal-ready"
+        )
+
+    def test_a_second_writer_with_a_stale_counter_conflicts(self) -> None:
+        request, stale = self._proposal_ready()
+        # submit_result moved the row on; the counter read before it is stale.
+        with self.assertRaises(WorkbenchError) as caught:
+            self.work.reject(
+                self.project_id,
+                request["requestId"],
+                operation=self.operation({"action": "reject"}, expected=stale),
+            )
+        self.assertEqual(caught.exception.code, CONFLICT)
+        self.assertEqual(
+            self.store.work_request(request["requestId"])["state"], "proposal-ready"
+        )
+
+
 class ResultTest(WorkRequestTestCase):
     def test_a_result_becomes_an_ordinary_proposal_and_applied_is_not_verified(
         self,
@@ -676,7 +739,7 @@ class ResultTest(WorkRequestTestCase):
             sequence=lease["sequence"],
             result=self.result_body(),
             principal=principal,
-            operation=self.operation({"action": "result"}),
+            operation=self.operation({"action": "result"}, expected=self.request_counter(request["requestId"])),
         )["result"]
         self.assertEqual(submitted["state"], "proposal-ready")
         self.assertFalse(submitted["verified"])
@@ -727,7 +790,7 @@ class ResultTest(WorkRequestTestCase):
                         sequence=lease["sequence"],
                         result=body,
                         principal=principal,
-                        operation=self.operation({"action": "result"}),
+                        operation=self.operation({"action": "result"}, expected=self.request_counter(request["requestId"])),
                     )
                 self.assertEqual(caught.exception.code, code)
 
@@ -739,7 +802,7 @@ class ResultTest(WorkRequestTestCase):
                 sequence=lease["sequence"],
                 result=self.result_body(),
                 principal=principal,
-                operation=self.operation({"action": "result"}),
+                operation=self.operation({"action": "result"}, expected=self.request_counter(request["requestId"])),
             )
         self.assertEqual(caught.exception.code, INVALID_TARGET)
 

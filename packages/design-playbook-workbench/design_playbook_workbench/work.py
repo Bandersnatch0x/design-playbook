@@ -468,7 +468,6 @@ class WorkRequestService:
             load_row=lambda: self._request_row(project_id, request_id),
             apply=apply,
             authorize=lambda: self.service.require_project(project_id, scope="write"),
-            require_counter=False,  # T-127: no counter contract.
             validate=check,
         )
 
@@ -505,7 +504,6 @@ class WorkRequestService:
             load_row=lambda: self._request_row(project_id, request_id),
             apply=apply,
             authorize=lambda: self.service.require_project(project_id, scope="write"),
-            require_counter=False,  # T-127: no counter contract.
             validate=check,
         )
 
@@ -541,7 +539,6 @@ class WorkRequestService:
             load_row=lambda: self._request_row(project_id, request_id),
             apply=apply,
             authorize=lambda: self.service.require_project(project_id, scope="write"),
-            require_counter=False,  # T-127: no counter contract.
             validate=check,
         )
 
@@ -596,7 +593,6 @@ class WorkRequestService:
             load_row=lambda: self._request_row(project_id, request_id),
             apply=apply,
             authorize=lambda: self.service.require_project(project_id, scope="write"),
-            require_counter=False,  # T-127: no counter contract.
             validate=check,
         )
 
@@ -626,7 +622,6 @@ class WorkRequestService:
             load_row=lambda: self._request_row(project_id, request_id),
             apply=apply,
             authorize=lambda: self.service.require_project(project_id, scope="write"),
-            require_counter=False,  # T-127: no counter contract.
             validate=check,
         )
 
@@ -778,7 +773,6 @@ class WorkRequestService:
             project_id=row["project_id"],
             load_row=lambda: self._request_row(row["project_id"], request_id),
             apply=apply,
-            require_counter=False,  # T-127: no counter contract.
             validate=check,
         )
 
@@ -836,7 +830,6 @@ class WorkRequestService:
             project_id=row["project_id"],
             load_row=lambda: self._request_row(row["project_id"], request_id),
             apply=apply,
-            require_counter=False,  # T-127: no counter contract.
         )
 
     def submit_result(
@@ -947,7 +940,6 @@ class WorkRequestService:
             project_id=row["project_id"],
             load_row=lambda: self._request_row(row["project_id"], request_id),
             apply=apply,
-            require_counter=False,  # T-127: no counter contract.
         )
 
     def fail_attempt(
@@ -992,5 +984,4 @@ class WorkRequestService:
             project_id=row["project_id"],
             load_row=lambda: self._request_row(row["project_id"], request_id),
             apply=apply,
-            require_counter=False,  # T-127: no counter contract.
         )

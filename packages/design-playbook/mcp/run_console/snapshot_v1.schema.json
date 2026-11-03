@@ -10,6 +10,7 @@
     "execution",
     "evaluation",
     "nextActions",
+    "repairPacket",
     "limitations",
     "sources"
   ],
@@ -79,6 +80,36 @@
         }
       }
     },
+    "repairPacket": {
+      "type": "object",
+      "required": [
+        "intent",
+        "verdict",
+        "finding",
+        "blockerSource",
+        "declarationOwner",
+        "repairIntent",
+        "nextOwner",
+        "invalidatedEvidence",
+        "resumeStage",
+        "nextCommand",
+        "recaptureRequirement"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "intent": { "$ref": "#/$defs/packetFact" },
+        "verdict": { "$ref": "#/$defs/packetFact" },
+        "finding": { "$ref": "#/$defs/packetFact" },
+        "blockerSource": { "$ref": "#/$defs/packetFact" },
+        "declarationOwner": { "$ref": "#/$defs/packetFact" },
+        "repairIntent": { "$ref": "#/$defs/packetFact" },
+        "nextOwner": { "$ref": "#/$defs/packetFact" },
+        "invalidatedEvidence": { "$ref": "#/$defs/packetFact" },
+        "resumeStage": { "$ref": "#/$defs/packetFact" },
+        "nextCommand": { "$ref": "#/$defs/packetFact" },
+        "recaptureRequirement": { "$ref": "#/$defs/packetFact" }
+      }
+    },
     "limitations": {
       "type": "object",
       "required": ["items"],
@@ -126,6 +157,37 @@
     "timestamp": {
       "type": "string",
       "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?Z$"
+    },
+    "packetFact": {
+      "type": "object",
+      "required": ["availability", "value", "reason", "sourceId"],
+      "additionalProperties": false,
+      "properties": {
+        "availability": {
+          "enum": ["known", "unknown", "stale", "inconsistent"]
+        },
+        "value": {},
+        "reason": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["code", "message"],
+              "additionalProperties": false,
+              "properties": {
+                "code": { "type": "string" },
+                "message": { "type": "string" }
+              }
+            }
+          ]
+        },
+        "sourceId": {
+          "anyOf": [
+            { "type": "string" },
+            { "type": "null" }
+          ]
+        }
+      }
     },
     "nullableTimestamp": {
       "anyOf": [

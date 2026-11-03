@@ -44,6 +44,7 @@ BUILDERS: tuple[tuple[str, str], ...] = (
         API + "/projects/{project}/actions/canvases/{canvas}/{verb}",
     ),
     ("requests", API + "/projects/{project}/requests"),
+    ("requestDetail", API + "/projects/{project}/requests/{request}"),
     (
         "requestAction",
         API + "/projects/{project}/actions/requests/{request}/{verb}",

@@ -36,6 +36,7 @@ from design_playbook.mcp.run_console.contract import (  # noqa: E402
     validate_snapshot,
 )
 from design_playbook.mcp.run_console.repair_packet import (  # noqa: E402
+    packet_from_document,
     MSG_ABSENT_ASSERTION,
     MSG_DISPOSITION_UNKNOWN,
     MSG_NO_BLOCKING,
@@ -79,6 +80,12 @@ _JS_MSG_TO_PY = (
     ("PACKET_MSG_NO_RESUME_STAGE", MSG_NO_RESUME_STAGE),
     ("PACKET_MSG_NO_COMMAND", MSG_NO_COMMAND),
 )
+
+def _with_packet(snapshot: dict) -> dict:
+    """Refresh the derived section after a fixture mutates snapshot facts."""
+    snapshot["repairPacket"] = packet_from_document(snapshot)
+    return snapshot
+
 
 _COPY_LINE_SHAPE = re.compile(
     r"^([^(]+) \((known|unknown|stale|inconsistent)\): (.*)$"
@@ -411,7 +418,7 @@ class RepairPacketRenderContractTest(unittest.TestCase):
 
     def test_shell_exposes_repair_packet_jump_and_section_id(self) -> None:
         self.assertIn('href="#section-repair-packet"', _HTML)
-        self.assertIn("deriveRepairPacket", _JS)
+        self.assertIn("snapshot.repairPacket", _JS)
         self.assertIn("section-repair-packet", _JS)
         self.assertIn("data-repair-packet", _JS)
         self.assertIn("packet-copy-summary", _JS)
@@ -425,15 +432,16 @@ class RepairPacketRenderContractTest(unittest.TestCase):
         self.assertNotIn("executeRepair", _JS)
 
     def test_resume_stage_comes_from_owner_next_action_not_progress(self) -> None:
-        # Owner-produced resumeStage rides nextActions.primary; the JS
-        # helper keeps the gap message when the owner did not produce it.
-        # Never invent a packetResumeStage parser over progress.
-        self.assertIn("packetNextActionField(", _JS)
+        # The packet's resumeStage is derived server-side from
+        # nextActions.primary; the client only renders the section and
+        # localizes its gap message. Never invent a parser over progress.
+        self.assertIn("snapshot.repairPacket", _JS)
         self.assertIn('"resumeStage"', _JS)
         self.assertIn("PACKET_MSG_NO_RESUME_STAGE", _JS)
         self.assertIn("packet_not_produced_resume_stage", _JS)
         self.assertNotIn("packetResumeStage", _JS)
-        self.assertNotIn("execution.progress", _JS.split("function deriveRepairPacket")[1].split("function ")[0])
+        source = (_DIR / "repair_packet.py").read_text(encoding="utf-8")
+        self.assertNotIn("execution.progress", source)
 
     def test_ui_route_table_is_unchanged(self) -> None:
         resources = UIResources()
@@ -587,7 +595,7 @@ class RepairPacketBrowserTest(browser_harness.BrowserTestCase):
             route.fulfill(
                 status=200,
                 content_type="application/json",
-                body=json.dumps(snapshot),
+                body=json.dumps(_with_packet(snapshot)),
             )
 
         self.page.route("**/api/v1/snapshot", fulfill)
@@ -609,7 +617,7 @@ class RepairPacketBrowserTest(browser_harness.BrowserTestCase):
             route.fulfill(
                 status=200,
                 content_type="application/json",
-                body=json.dumps(snapshot),
+                body=json.dumps(_with_packet(snapshot)),
             )
 
         self.page.route("**/api/v1/snapshot", fulfill)
@@ -669,7 +677,7 @@ class RepairPacketBrowserTest(browser_harness.BrowserTestCase):
             route.fulfill(
                 status=200,
                 content_type="application/json",
-                body=json.dumps(snapshot),
+                body=json.dumps(_with_packet(snapshot)),
             )
 
         self.page.route("**/api/v1/snapshot", fulfill)
@@ -707,7 +715,7 @@ class RepairPacketCrossImplementationTest(browser_harness.BrowserTestCase):
             route.fulfill(
                 status=200,
                 content_type="application/json",
-                body=json.dumps(snapshot),
+                body=json.dumps(_with_packet(snapshot)),
             )
 
         # A repeated goto to the identical URL is a same-document no-op, so

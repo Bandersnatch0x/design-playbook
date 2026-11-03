@@ -513,6 +513,21 @@ to the `writesSource: false` boundary; no change to the workbench distribution
 boundary or to its loopback threat model; and no work outside the files named
 above and the tests that pin them.
 
+**Amendment (2026-11-04, T-127 — work-request counter enforcement).**
+Maintainer-authorized with the architecture follow-up batch. `work_requests`
+writes now compare the request counter through the one mutation gate:
+`consent`, `cancel`, `retry`, `reject`, `claim`, `heartbeat`, `submit_result`
+and `fail_attempt` require the caller's `expectedCounter` and refuse a stale
+or absent one. The workbench client reads the current row before acting, so
+an agent write between render and click is a conflict rather than a lost
+update. Proposals have no counter column; the payload digest is their
+concurrency unit, recorded in `CONTEXT.md`. Project archives and context
+selections keep `require_counter=False`: the former takes no client counter,
+the latter carries the canvas counter, and both stay outside this amendment.
+This lifts the "no counter enforcement" exclusion for work-request rows only;
+every other exclusion above stays in force. No release, tag, or publish is
+authorized by this amendment.
+
 The plugin gains no source writer; `writesSource` stays false and the G5
 boundary is unchanged. Authorization to implement is NOT a completion claim:
 delivery requires every change to pass the full repository gates — the three
