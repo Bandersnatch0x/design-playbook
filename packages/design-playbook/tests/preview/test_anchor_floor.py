@@ -89,7 +89,7 @@ def test_served_round_refuses_an_unusable_anchor_without_spending_the_token() ->
     adapter = _PrintOnlyAdapter()
     outcome: dict = {}
 
-    def collect(prototype_path, summary, options, round_n, *, criteria):
+    def collect(prototype_path, summary, options, round_n, *, criteria, **kwargs: object):
         return review_session.collect_review(
             prototype_path, summary, options, round_n,
             browser_adapter=adapter, criteria=criteria,

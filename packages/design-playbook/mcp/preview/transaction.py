@@ -35,7 +35,7 @@ from design_playbook.mcp.preview.integrity import (
     prototype_name,
 )
 from design_playbook.mcp.util import now_iso as _now_iso
-from design_playbook.mcp.preview.report_ref import criteria_from_report_ref
+from design_playbook.mcp.preview.report_ref import resolve_criteria
 # Re-exports: the error vocabulary and the lock machinery. The importers below
 # and the tests that patch these targets keep going through this module, so the
 # names are bound here rather than reached through their modules.
@@ -529,7 +529,7 @@ def run_preview_transaction(
     summary = summary.strip()
     report_ref = report_ref.strip()
     preview_dir = _preview_dir_for(Path(path_arg) if path_arg else None)
-    criteria = criteria_from_report_ref(report_ref, preview_dir=preview_dir)
+    resolution = resolve_criteria(report_ref, preview_dir=preview_dir)
     _prototype, prototype_hash = _resolve_prototype(
         path_arg, html, round_n, preview_dir,
     )
@@ -549,7 +549,8 @@ def run_preview_transaction(
             return _run_locked(
                 path_arg=path_arg, html=html, summary=summary, round_n=round_n,
                 report_ref=report_ref, options=options, collect=collect,
-                criteria=criteria,
+                criteria=resolution.criteria,
+                criteria_reason=resolution.reason,
                 preview_dir=preview_dir, prototype_hash=prototype_hash,
                 binding=binding, decision_id=decision_id, live_route_url=live_route_url,
             )
@@ -598,7 +599,7 @@ def _run_locked(
     report_ref: str, options: list[str], collect: BrowserCollector,
     criteria: list[dict[str, str]],
     preview_dir: Path, prototype_hash: str, binding: dict[str, Any],
-    decision_id: str, live_route_url: str = "",
+    decision_id: str, criteria_reason: str = "", live_route_url: str = "",
 ) -> dict[str, Any]:
     entry_path = preview_dir / decision_name(round_n)
     # Re-resolve inside the lock to detect TOCTOU: if the path-mode file
@@ -643,6 +644,8 @@ def _run_locked(
 
     prototype = _ensure_prototype(path_arg, html, round_n, preview_dir)
     collect_options: dict[str, Any] = {"criteria": criteria}
+    if criteria_reason:
+        collect_options["criteria_reason"] = criteria_reason
     if live_route_url:
         collect_options["live_route_url"] = live_route_url
     submission = collect(prototype, summary, options, round_n, **collect_options)

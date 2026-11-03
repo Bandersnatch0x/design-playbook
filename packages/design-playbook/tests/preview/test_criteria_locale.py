@@ -22,6 +22,18 @@ if str(_PKG_ROOT) not in sys.path:
 
 from design_playbook.mcp.preview import control, review_session  # noqa: E402
 
+def test_an_empty_criteria_set_says_which_source_is_missing() -> None:
+    # The message key is the contract; the text follows the active locale.
+    for reason, key in (
+        ("report-unresolved", "criteria_unavailable_report"),
+        ("spec-missing", "criteria_unavailable_spec"),
+        ("spec-invalid", "criteria_unavailable_invalid"),
+    ):
+        html = control._render_criteria_cards([], reason)
+        assert f'data-i18n="{key}"' in html, html
+        assert 'data-i18n="criteria_empty"' not in html, html
+
+
 BILINGUAL = [
     {
         "id": "AC-1",
@@ -78,7 +90,7 @@ def test_criteria_follow_the_one_existing_language_switcher() -> None:
     adapter = _PrintOnlyAdapter()
     box: dict = {}
 
-    def collect(path, summary, options, round_n, *, criteria=None):
+    def collect(path, summary, options, round_n, *, criteria=None, **kwargs: object):
         return review_session.collect_review(
             path, summary, options, round_n, browser_adapter=adapter, criteria=BILINGUAL
         )

@@ -512,6 +512,7 @@ def collect_review(
     browser_adapter: BrowserInteraction | None = None,
     *,
     criteria: list[dict[str, str]] | None = None,
+    criteria_reason: str = "",
     live_route_url: str = "",
 ) -> dict[str, Any]:
     """Serve prototype + control form; block until user submits or aborts.
@@ -549,7 +550,13 @@ def collect_review(
             submission["visual_source_hash"] = visual_source_hash
         return submission
 
-    control = _build_control(round_n, summary.strip(), options, criteria=criteria)
+    control = _build_control(
+        round_n,
+        summary.strip(),
+        options,
+        criteria=criteria,
+        criteria_reason=criteria_reason,
+    )
     # G5 trust boundary: one-time token + first-decision-wins session. The
     # token renders as a hidden field in the PARENT control form (trusted);
     # the sandboxed prototype iframe cannot read it, so a forged

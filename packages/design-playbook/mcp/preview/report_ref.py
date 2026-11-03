@@ -8,12 +8,28 @@ order and the ``spec.md`` derivation both callers share.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from design_playbook.scripts.g1_spec import (
     SpecificationProjectionError,
     project_specification,
 )
+
+# Why an empty criteria list is empty. The preview shell says which one;
+# an empty set with no reason is what made the shell and G5 disagree.
+CRITERIA_OK = ""
+CRITERIA_REPORT_UNRESOLVED = "report-unresolved"
+CRITERIA_SPEC_MISSING = "spec-missing"
+CRITERIA_SPEC_INVALID = "spec-invalid"
+
+
+@dataclass(frozen=True)
+class CriteriaResolution:
+    """The criteria a run can supply, and why when it cannot."""
+
+    criteria: list[dict[str, str]]
+    reason: str = CRITERIA_OK
 
 
 def resolve_report_path(
@@ -50,23 +66,34 @@ def spec_path_for(report_path: Path) -> Path:
     return report_path.parent / "spec.md"
 
 
-def criteria_from_report_ref(
+def resolve_criteria(
     ref: str, *, preview_dir: Path, decision_report: Path | None = None
-) -> list[dict[str, str]]:
-    """The L6 criteria the operator reviews, or ``[]`` when the run cannot say."""
+) -> CriteriaResolution:
+    """The L6 criteria the operator reviews, with the reason when empty."""
     report_path = resolve_report_path(
         ref, preview_dir=preview_dir, decision_report=decision_report
     )
     if report_path is None:
-        return []
+        return CriteriaResolution([], CRITERIA_REPORT_UNRESOLVED)
+    spec_path = spec_path_for(report_path)
+    if not spec_path.is_file():
+        return CriteriaResolution([], CRITERIA_SPEC_MISSING)
     try:
-        spec_path = spec_path_for(report_path)
-        if not spec_path.is_file():
-            return []
         projection = project_specification(spec_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, SpecificationProjectionError):
-        return []
-    return [
-        {"id": item.criterion_id, "title": item.title or "", "then": item.then}
-        for item in projection.criteria
-    ]
+        return CriteriaResolution([], CRITERIA_SPEC_INVALID)
+    return CriteriaResolution(
+        [
+            {"id": item.criterion_id, "title": item.title or "", "then": item.then}
+            for item in projection.criteria
+        ]
+    )
+
+
+def criteria_from_report_ref(
+    ref: str, *, preview_dir: Path, decision_report: Path | None = None
+) -> list[dict[str, str]]:
+    """The L6 criteria the operator reviews (empty when the run cannot say)."""
+    return resolve_criteria(
+        ref, preview_dir=preview_dir, decision_report=decision_report
+    ).criteria
