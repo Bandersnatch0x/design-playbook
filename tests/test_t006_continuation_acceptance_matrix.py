@@ -353,7 +353,10 @@ class MatrixCompletedJourneyTest(unittest.TestCase):
             self.assertEqual(packet["nextCommand"]["availability"], "unknown")
             self.assertIsNone(packet["nextCommand"]["value"])
             self.assertEqual(packet["nextCommand"]["reason"]["code"], "not-produced")
-            self.assertIn("copy only", packet["copyText"])
+            # The projection carries facts only; the copy renderer lives in
+            # the console. Exporting this packet is never a productive
+            # command copy because nextCommand is an honest gap.
+            self.assertNotIn("copyText", packet)
 
             # Leg 4: explicit static handoff completes the journey through
             # the real default canonical gate seam (no gate stub). The Pass
@@ -473,7 +476,9 @@ class MatrixBlockedJourneyTest(unittest.TestCase):
                 packet["nextCommand"]["availability"], "known"
             )
             self.assertEqual(packet["nextCommand"]["value"], snapshot_command)
-            self.assertIn(snapshot_command, packet["copyText"])
+            # Copy text is the console's; the projection's fact is the exact
+            # owner command, never a rewrite of it.
+            self.assertNotIn("copyText", packet)
             self.assertTrue(
                 copy_command_is_eligible("known", snapshot_command)
             )
