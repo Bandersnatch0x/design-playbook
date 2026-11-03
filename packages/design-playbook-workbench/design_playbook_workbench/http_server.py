@@ -16,6 +16,7 @@ import json
 import socket
 import socketserver
 import threading
+from dataclasses import dataclass
 from urllib.parse import parse_qsl, urlsplit
 
 from .assets import AssetService
@@ -41,6 +42,7 @@ from .resolver import resolve
 from .reuse import ReuseService
 from .security import (
     DEFAULT_BIND_HOST,
+    READ_METHODS,
     capability_header_value,
     canonical_authority,
     canonical_origin,
@@ -84,6 +86,56 @@ _BROWSER_ONLY_ACTIONS = frozenset(
 #: Agent capability may submit a proposal, never approve one.
 _MAINTAINER_ONLY_PROPOSAL_ACTIONS = frozenset(
     {"apply", "recover", "revert", "reject"}
+)
+
+
+@dataclass(frozen=True)
+class _FixedRoute:
+    """One exact path and the methods it accepts.
+
+    ``allow`` is the header this path has always sent when the method is
+    refused. ``browser`` runs the maintainer-session check before the method
+    check, which is the order these routes have always had.
+    """
+
+    path: str
+    methods: frozenset[str]
+    allow: str
+    handler: str
+    browser: bool = False
+
+
+_FIXED_ROUTES = (
+    _FixedRoute(STATUS_ROUTE, READ_METHODS, READ_METHODS_HEADER, "status"),
+    _FixedRoute(RESOLVE_ROUTE, READ_METHODS, READ_METHODS_HEADER, "resolve"),
+    _FixedRoute(
+        PROJECTS_ROUTE,
+        READ_METHODS,
+        COLLECTION_METHODS_HEADER,
+        "project-list",
+        browser=True,
+    ),
+    _FixedRoute(
+        PROJECTS_ROUTE,
+        frozenset({"POST"}),
+        COLLECTION_METHODS_HEADER,
+        "register",
+        browser=True,
+    ),
+    _FixedRoute(
+        PROJECTS_ROUTE + "/probe",
+        frozenset({"POST"}),
+        WRITE_METHODS_HEADER,
+        "probe",
+        browser=True,
+    ),
+    _FixedRoute(
+        BACKUP_ROUTE,
+        READ_METHODS | {"POST"},
+        WRITE_METHODS_HEADER,
+        "backup",
+        browser=True,
+    ),
 )
 
 
@@ -274,33 +326,30 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
 
         path = split.path
         self._authorize_request_route(principal, path, split.query)
-        if path == STATUS_ROUTE:
-            self._require_method(read_only)
-            self._serve_status(session)
-            return
-        if path == RESOLVE_ROUTE:
-            self._require_method(read_only)
-            self._serve_resolve(service, principal, split.query)
-            return
-        if path == PROJECTS_ROUTE:
-            self._require_browser(principal)
-            if read_only:
-                if split.query:
-                    raise _Rejection(INVALID_INPUT)
-                self._serve_project_list(service)
-                return
-            if self.command != "POST":
-                self._method_not_allowed(COLLECTION_METHODS_HEADER)
-            self._serve_register(service)
-            return
-        if path == PROJECTS_ROUTE + "/probe":
-            self._require_browser(principal)
-            if self.command != "POST":
-                self._method_not_allowed(WRITE_METHODS_HEADER)
-            self._serve_probe(service)
-            return
-        if path == BACKUP_ROUTE:
-            self._serve_backup(backup, principal)
+        matched = [route for route in _FIXED_ROUTES if route.path == path]
+        if matched:
+            # Authentication class first: a capability may not learn whether
+            # its method would have been accepted.
+            if matched[0].browser:
+                self._require_browser(principal)
+            route = next(
+                (item for item in matched if self.command in item.methods), None
+            )
+            if route is None:
+                self._method_not_allowed(matched[0].allow)
+            handlers = {
+                "status": lambda: self._serve_status(session),
+                "resolve": lambda: self._serve_resolve(
+                    service, principal, split.query
+                ),
+                "project-list": lambda: self._serve_project_list(
+                    service, split.query
+                ),
+                "register": lambda: self._serve_register(service),
+                "probe": lambda: self._serve_probe(service),
+                "backup": lambda: self._serve_backup(backup),
+            }
+            handlers[route.handler]()
             return
         if path.startswith(PROJECTS_PREFIX):
             self._serve_project_route(
@@ -438,9 +487,8 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             payload["blobIntegrity"] = self.server.blob_integrity
         self._send_json(200, payload, close=True)
 
-    def _serve_backup(self, backup: "BackupService", principal: Principal) -> None:
+    def _serve_backup(self, backup: "BackupService") -> None:
         """Backup, verify, and restore are maintainer-only settings actions."""
-        self._require_browser(principal)
         if is_read_method(self.command):
             # GET verifies an existing archive named by ?path=.
             params = dict(parse_qsl(urlsplit(self.path).query, keep_blank_values=True))
@@ -507,7 +555,9 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
                 raise _Rejection(UNAUTHORIZED)
         self._send_json(200, {"schemaVersion": SCHEMA_VERSION, **payload})
 
-    def _serve_project_list(self, service: WorkbenchService) -> None:
+    def _serve_project_list(self, service: WorkbenchService, query: str) -> None:
+        if query:
+            raise _Rejection(INVALID_INPUT)
         self._drain_body()
         self._send_json(
             200, {"schemaVersion": SCHEMA_VERSION, **service.projects_overview()}
