@@ -13,9 +13,6 @@ from __future__ import annotations
 
 import http.server
 import json
-import socket
-import socketserver
-import threading
 from dataclasses import dataclass
 from typing import Callable
 from urllib.parse import parse_qsl, urlsplit
@@ -25,6 +22,7 @@ from .canvas import CanvasService
 from .orchestration import OrchestrationService
 from .backup import BackupService
 from .lifecycle import LifecycleService
+from .listener import LoopbackHTTPServer, finish_gracefully
 from .owners import OwnerProjectionService
 from .work import WorkRequestService
 from .components import ComponentService
@@ -45,9 +43,6 @@ from .security import (
     DEFAULT_BIND_HOST,
     READ_METHODS,
     capability_header_value,
-    canonical_authority,
-    canonical_origin,
-    ensure_loopback_bind_host,
     extract_bearer_token,
     host_header_is_valid,
     is_read_method,
@@ -248,16 +243,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
     def finish(self) -> None:
         """Graceful teardown: flush, half-close, drain, close."""
         super().finish()
-        try:
-            self.connection.shutdown(socket.SHUT_WR)
-        except OSError:
-            pass
-        try:
-            self.connection.settimeout(0.2)
-            while self.connection.recv(65536):
-                pass
-        except OSError:
-            pass
+        finish_gracefully(self.connection)
 
     # -- dispatch -------------------------------------------------------
 
@@ -1935,11 +1921,10 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(body)
 
 
-class WorkbenchHTTPServer(http.server.ThreadingHTTPServer):
+class WorkbenchHTTPServer(LoopbackHTTPServer):
     """One IP-literal loopback listener serving one workbench session."""
 
-    daemon_threads = True
-    allow_reuse_address = False
+    serve_thread_name = "workbench-server"
 
     def __init__(
         self,
@@ -1948,9 +1933,6 @@ class WorkbenchHTTPServer(http.server.ThreadingHTTPServer):
         port: int = 0,
         ui_directory=None,
     ) -> None:
-        host = ensure_loopback_bind_host(bind_host)
-        if host == "::1":
-            self.address_family = socket.AF_INET6
         self.session: WorkbenchSession | None = None
         self.service: WorkbenchService | None = None
         self.proposals: ProposalService | None = None
@@ -1967,28 +1949,8 @@ class WorkbenchHTTPServer(http.server.ThreadingHTTPServer):
         self.preview_origin = ""
         self.blob_integrity: dict | None = None
         self.task_lookup = None
-        super().__init__((host, port), WorkbenchRequestHandler)
-        self.bind_host = host
+        super().__init__(WorkbenchRequestHandler, bind_host=bind_host, port=port)
         self.ui = UIResources(ui_directory)
-        bound_host, bound_port = self.socket.getsockname()[:2]
-        if bound_host != host:
-            self.server_close()
-            raise OSError("socket did not bind to the requested loopback literal")
-        self.authority = canonical_authority(host, bound_port)
-        self.origin = canonical_origin(host, bound_port)
-        self._serve_thread: threading.Thread | None = None
-        self._stopped = False
-
-    def server_bind(self) -> None:
-        # Bind without socket.getfqdn: no reverse DNS and no hostname.
-        socketserver.TCPServer.server_bind(self)
-        host, port = self.socket.getsockname()[:2]
-        self.server_name = host
-        self.server_port = port
-
-    @property
-    def port(self) -> int:
-        return self.socket.getsockname()[1]
 
     def attach(
         self,
@@ -2029,37 +1991,6 @@ class WorkbenchHTTPServer(http.server.ThreadingHTTPServer):
         self.ui.set_preview_origin(preview_origin)
         return self
 
-    def start_serving(self, poll_interval: float = 0.05) -> "WorkbenchHTTPServer":
-        if self._serve_thread is not None and self._serve_thread.is_alive():
-            return self
-        self._serve_thread = threading.Thread(
-            target=self.serve_forever,
-            kwargs={"poll_interval": poll_interval},
-            daemon=True,
-            name="workbench-server",
-        )
-        self._serve_thread.start()
-        return self
-
-    def stop(self) -> None:
-        """Stop serving, close the listener, and invalidate the session."""
-        if self._stopped:
-            return
-        self._stopped = True
-        thread = self._serve_thread
-        if (
-            thread is not None
-            and thread is not threading.current_thread()
-            and thread.is_alive()
-        ):
-            try:
-                self.shutdown()
-            except Exception:
-                pass
-        try:
-            self.server_close()
-        except Exception:
-            pass
-        finally:
-            if self.session is not None:
-                self.session.close()
+    def _close_owned(self) -> None:
+        if self.session is not None:
+            self.session.close()

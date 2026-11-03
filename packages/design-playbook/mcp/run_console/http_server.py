@@ -18,10 +18,10 @@ import http.server
 import json
 import secrets
 import socket
-import socketserver
 import threading
 from urllib.parse import parse_qsl, urlsplit
 
+from ..listener import bind_without_dns, finish_gracefully
 from .client_routes import (
     EXPORT_PREVIEW_ROUTE,
     EXPORT_WRITE_ROUTE,
@@ -163,16 +163,7 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
         a reset.
         """
         super().finish()
-        try:
-            self.connection.shutdown(socket.SHUT_WR)
-        except OSError:
-            pass
-        try:
-            self.connection.settimeout(0.2)
-            while self.connection.recv(65536):
-                pass
-        except OSError:
-            pass
+        finish_gracefully(self.connection)
 
 
     def do_GET(self) -> None:  # noqa: N802
@@ -691,11 +682,7 @@ class RunConsoleHTTPServer(http.server.ThreadingHTTPServer):
         self._stopped = False
 
     def server_bind(self) -> None:
-        # Bind without socket.getfqdn: no reverse DNS and no hostname.
-        socketserver.TCPServer.server_bind(self)
-        host, port = self.socket.getsockname()[:2]
-        self.server_name = host
-        self.server_port = port
+        bind_without_dns(self)
 
     @property
     def port(self) -> int:

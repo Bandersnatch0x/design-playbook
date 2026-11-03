@@ -43,6 +43,7 @@ from design_playbook.mcp.preview.pin_bridge import BRIDGE_SCRIPT
 from design_playbook.mcp.preview.control import _load_shared_core
 from design_playbook.mcp.preview.visual_batch import VisualBatchError, normalize_visual_batch
 from design_playbook.mcp.preview.live_route import observe_visual_source, validate_live_route_url
+from design_playbook.mcp.listener import bind_without_dns, finish_gracefully
 from design_playbook.mcp.util import log as _log
 
 __all__ = [
@@ -480,7 +481,7 @@ class _PreviewHTTPServer(HTTPServer):
             # stops another local process that sets SO_REUSEADDR from binding
             # the port this preview is listening on (Windows-only option).
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-        super().server_bind()
+        bind_without_dns(self)
 
 
 def _bind_preview_server(handler: type) -> HTTPServer:
@@ -563,6 +564,10 @@ def collect_review(
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt: str, *args: Any) -> None:  # noqa: A003
             _log("http: " + (fmt % args))
+
+        def finish(self) -> None:
+            super().finish()
+            finish_gracefully(self.connection)
 
         def do_GET(self) -> None:  # noqa: N802
             # Stage 6 only (ADR-0034): the review page. Delivery routes

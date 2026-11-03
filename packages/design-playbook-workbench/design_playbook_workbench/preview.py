@@ -13,20 +13,12 @@ from __future__ import annotations
 
 import http.server
 import json
-import socket
-import socketserver
-import threading
 from urllib.parse import parse_qsl, urlsplit
 
 from .blobs import BlobStore
 from .errors import WorkbenchError
-from .security import (
-    DEFAULT_BIND_HOST,
-    canonical_authority,
-    canonical_origin,
-    ensure_loopback_bind_host,
-    security_headers,
-)
+from .listener import LoopbackHTTPServer, finish_gracefully
+from .security import DEFAULT_BIND_HOST, security_headers
 
 PREVIEW_PATH_PREFIX = "/p/"
 MODES = ("static", "dynamic")
@@ -99,16 +91,7 @@ class PreviewRequestHandler(http.server.BaseHTTPRequestHandler):
 
     def finish(self) -> None:
         super().finish()
-        try:
-            self.connection.shutdown(socket.SHUT_WR)
-        except OSError:
-            pass
-        try:
-            self.connection.settimeout(0.2)
-            while self.connection.recv(65536):
-                pass
-        except OSError:
-            pass
+        finish_gracefully(self.connection)
 
     def do_GET(self) -> None:  # noqa: N802
         self._serve()
@@ -200,11 +183,10 @@ class PreviewRequestHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(body)
 
 
-class PreviewServer(http.server.ThreadingHTTPServer):
+class PreviewServer(LoopbackHTTPServer):
     """One IP-literal loopback listener with no session and no API."""
 
-    daemon_threads = True
-    allow_reuse_address = False
+    serve_thread_name = "workbench-preview"
 
     def __init__(
         self,
@@ -214,60 +196,11 @@ class PreviewServer(http.server.ThreadingHTTPServer):
         port: int = 0,
         frame_ancestors: tuple[str, ...] = (),
     ) -> None:
-        host = ensure_loopback_bind_host(bind_host)
-        if host == "::1":
-            self.address_family = socket.AF_INET6
-        super().__init__((host, port), PreviewRequestHandler)
         self.blobs = blobs
         # Only the management origin may frame a preview; with no declared
         # ancestor the document may not be framed at all.
         self.frame_ancestors = tuple(frame_ancestors)
-        self.bind_host = host
-        bound_host, bound_port = self.socket.getsockname()[:2]
-        if bound_host != host:
-            self.server_close()
-            raise OSError("preview socket did not bind to the requested loopback literal")
-        self.authority = canonical_authority(host, bound_port)
-        self.origin = canonical_origin(host, bound_port)
-        self._thread: threading.Thread | None = None
-
-    def server_bind(self) -> None:
-        socketserver.TCPServer.server_bind(self)
-        host, port = self.socket.getsockname()[:2]
-        self.server_name = host
-        self.server_port = port
-
-    @property
-    def port(self) -> int:
-        return self.socket.getsockname()[1]
-
-    def start_serving(self, poll_interval: float = 0.05) -> "PreviewServer":
-        if self._thread is not None and self._thread.is_alive():
-            return self
-        self._thread = threading.Thread(
-            target=self.serve_forever,
-            kwargs={"poll_interval": poll_interval},
-            daemon=True,
-            name="workbench-preview",
-        )
-        self._thread.start()
-        return self
-
-    def stop(self) -> None:
-        thread = self._thread
-        if (
-            thread is not None
-            and thread is not threading.current_thread()
-            and thread.is_alive()
-        ):
-            try:
-                self.shutdown()
-            except Exception:
-                pass
-        try:
-            self.server_close()
-        except Exception:
-            pass
+        super().__init__(PreviewRequestHandler, bind_host=bind_host, port=port)
 
 
 def preview_media_type(entry_media_type: object) -> str:
