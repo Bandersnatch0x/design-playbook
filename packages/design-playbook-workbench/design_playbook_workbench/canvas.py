@@ -24,7 +24,6 @@ from .blobs import BlobStore
 from .components import (
     MAX_NODES,
     ComponentService,
-    check_params,
     parse_layout,
     validate_layout,
 )
@@ -416,19 +415,16 @@ def default_layout(node_type: str, index: int = 0) -> dict:
 def apply_command(
     document: dict,
     command: object,
-    *,
-    components: dict[str, dict] | None = None,
-    instances: dict[str, dict] | None = None,
 ) -> tuple[dict, dict, dict, str, list[str]]:
     """Apply one command for real; return the new document and its patch.
 
     Returns ``(document, before_patch, after_patch, label, target_ids)``.
-    The patches are what makes undo and redo exact: only the affected
-    boards and nodes are recorded, so a 200-instance canvas does not store
-    a full copy of itself for every edit.
+    The patches are what makes undo and redo exact: the touched boards and
+    nodes are derived from the command's effect, so a new command cannot
+    forget to declare them. Legality is not decided here: the one document
+    validator (``validate_canvas``) owns that, and the service runs it
+    before anything is stored.
     """
-    components = components or {}
-    instances = instances or {}
     if not isinstance(command, dict):
         raise WorkbenchError(INVALID_INPUT)
     kind = command.get("kind")
@@ -446,17 +442,13 @@ def apply_command(
     working = json.loads(json.dumps(document))
     # Which boards and nodes the patches must cover: the diff is derived from
     # before/after states, so no snapshot can be taken too late.
-    touched_boards: set[str] = set()
-    touched_nodes: dict[str, set[str]] = {}
     targets: list[str] = []
     if kind == "board-add":
         board = _board_add(working, command)
         targets = [board["id"]]
-        touched_boards.add(board["id"])
         label = f"新建画板 {board['name']}"
     elif kind in ("board-rename", "board-resize"):
         board = _board(working, command.get("boardId"))
-        touched_boards.add(board["id"])
         if kind == "board-rename":
             name = command.get("name")
             if not isinstance(name, str) or not name.strip():
@@ -472,24 +464,13 @@ def apply_command(
         board = _board(working, command.get("boardId"))
         if len(working["boards"]) <= 1:
             raise WorkbenchError(INVALID_INPUT, detail="the last board cannot be deleted")
-        touched_boards.add(board["id"])
         working["boards"] = [item for item in working["boards"] if item["id"] != board["id"]]
         targets = [board["id"]]
         label = f"删除画板 {board['name']}"
     elif kind == "node-add":
         board = _board(working, command.get("boardId"))
-        parent_id = command.get("parentId") or None
-        parent_snapshot = (
-            json.loads(json.dumps(_node(board, parent_id))) if parent_id else None
-        )
         node = _node_add(board, command)
-        if node["type"] == "instance":
-            _check_instance_params(node, components)
         targets = [node["id"]]
-        touched_nodes.setdefault(board["id"], set()).add(node["id"])
-        if parent_snapshot is not None:
-            # The parent's child list is part of the transaction too.
-            touched_nodes.setdefault(board["id"], set()).add(parent_id)
         label = f"添加 {node['type']} 节点"
     elif kind == "node-props":
         board = _board(working, command.get("boardId"))
@@ -498,9 +479,6 @@ def apply_command(
         if not isinstance(props, dict):
             raise WorkbenchError(INVALID_INPUT)
         node["props"] = {**node["props"], **props}
-        if node["type"] == "instance":
-            _check_instance_params(node, components)
-        touched_nodes.setdefault(board["id"], set()).add(node["id"])
         targets = [node["id"]]
         label = f"修改 {node['type']} 属性"
     elif kind == "instance-params":
@@ -512,8 +490,6 @@ def apply_command(
         if not isinstance(params, dict):
             raise WorkbenchError(INVALID_INPUT)
         node["props"] = {**node["props"], "params": params}
-        _check_instance_params(node, components)
-        touched_nodes.setdefault(board["id"], set()).add(node["id"])
         targets = [node["id"]]
         label = "修改实例参数"
     elif kind == "node-move":
@@ -526,7 +502,6 @@ def apply_command(
             geometry = node["layout"]
             geometry["x"] = round(_number(geometry.get("x"), "x") + dx, 3)
             geometry["y"] = round(_number(geometry.get("y"), "y") + dy, 3)
-            touched_nodes.setdefault(board["id"], set()).add(node_id)
         targets = list(node_ids)
         label = f"移动 {len(node_ids)} 个节点"
     elif kind == "node-resize":
@@ -539,7 +514,6 @@ def apply_command(
             node["layout"][key] = (
                 _positive_number(value, key) if key in ("width", "height") else _number(value, key)
             )
-        touched_nodes.setdefault(board["id"], set()).add(node["id"])
         targets = [node["id"]]
         label = "缩放节点"
     elif kind == "node-reorder":
@@ -549,9 +523,6 @@ def apply_command(
             raise WorkbenchError(INVALID_INPUT)
         node = _node(board, command.get("nodeId"))
         _reorder(board, node, action)
-        touched_nodes.setdefault(board["id"], set()).update(
-            other["id"] for other in board["nodes"]
-        )
         targets = [node["id"]]
         label = "调整图层顺序"
     elif kind == "node-duplicate":
@@ -571,9 +542,6 @@ def apply_command(
             clone["children"] = []
             board["nodes"].append(clone)
             created.append(clone)
-        touched_nodes.setdefault(board["id"], set()).update(
-            clone["id"] for clone in created
-        )
         targets = [node["id"] for node in created]
         label = f"复制 {len(created)} 个节点"
     elif kind == "node-delete":
@@ -586,12 +554,10 @@ def apply_command(
         }
         for node_id in node_ids:
             _node(board, node_id)
-            touched_nodes.setdefault(board["id"], set()).add(node_id)
         board["nodes"] = [node for node in board["nodes"] if node["id"] not in set(node_ids)]
         for node in board["nodes"]:
             if not set(node["children"]) & set(node_ids):
                 continue
-            touched_nodes.setdefault(board["id"], set()).add(node["id"])
             node["children"] = [
                 child for child in node["children"] if child not in set(node_ids)
             ]
@@ -610,10 +576,6 @@ def apply_command(
         ):
             raise WorkbenchError(INVALID_INPUT, detail="duplicate node id")
         group = _group(board, node_ids, command.get("name"), group_id=group_id)
-        touched_nodes.setdefault(board["id"], set()).update(
-            node["id"] for node in board["nodes"]
-        )
-        touched_nodes[board["id"]].add(group["id"])
         targets = [group["id"], *node_ids]
         label = f"成组 {len(node_ids)} 个节点"
     elif kind == "node-align":
@@ -626,12 +588,10 @@ def apply_command(
             raise WorkbenchError(INVALID_INPUT)
         nodes = [_node(board, node_id) for node_id in node_ids]
         _align(nodes, mode)
-        touched_nodes.setdefault(board["id"], set()).update(node_ids)
         targets = list(node_ids)
         label = f"对齐 {len(node_ids)} 个节点"
     elif kind == "board-scheme":
         board = _board(working, command.get("boardId"))
-        touched_boards.add(board["id"])
         scheme = command.get("scheme")
         board["scheme"] = (
             None if scheme in (None, {}) else _parse_scheme(scheme)
@@ -664,18 +624,15 @@ def apply_command(
             snapshot_id=command.get("snapshotId"),
         )
         working["boards"].append(derived)
-        touched_boards.add(new_board_id)
         targets = [new_board_id]
         label = f"派生方案 {derived['name']}"
     elif kind == "flow-edge-add":
         board = _board(working, command.get("boardId"))
-        touched_boards.add(board["id"])
         edge = _flow_edge_add(board, command.get("edge"))
         targets = [edge["id"]]
         label = f"新增流程边 {edge['id']}"
     elif kind in ("flow-edge-update", "flow-edge-delete"):
         board = _board(working, command.get("boardId"))
-        touched_boards.add(board["id"])
         edge_id = command.get("edgeId")
         edge = next(
             (item for item in board["flowEdges"] if item["id"] == edge_id), None
@@ -716,7 +673,7 @@ def apply_command(
             raise WorkbenchError(
                 LIMIT_EXCEEDED, detail=f"单画板最多 {MAX_NODES} 个节点。"
             )
-    before, after = _diff_patches(original, working, touched_boards, touched_nodes)
+    before, after = _diff_patches(original, working)
     return working, before, after, label, targets
 
 
@@ -752,13 +709,43 @@ def _find_node(board: dict | None, node_id: str) -> dict | None:
     )
 
 
-def _diff_patches(
-    original: dict,
-    working: dict,
-    board_ids: set[str],
-    node_ids: dict[str, set[str]],
-) -> tuple[dict, dict]:
-    """The smallest reversible patch pair for the touched ids."""
+def _touched(
+    original: dict, working: dict
+) -> tuple[set[str], dict[str, set[str]]]:
+    """The boards and nodes whose stored bytes differ.
+
+    Derived from the command's effect rather than declared per branch: a new
+    command cannot forget to record something it changed, and a command that
+    records too much cannot make the patch wider than the change.
+    """
+    board_ids: set[str] = set()
+    node_ids: dict[str, set[str]] = {}
+    source_boards = {board["id"]: board for board in original.get("boards") or []}
+    target_boards = {board["id"]: board for board in working.get("boards") or []}
+    for board_id in set(source_boards) | set(target_boards):
+        source = source_boards.get(board_id)
+        target = target_boards.get(board_id)
+        if source is None or target is None:
+            # A created or deleted board carries its nodes with it.
+            board_ids.add(board_id)
+            continue
+        if _board_patch_fields(source, target) or _board_patch_fields(target, source):
+            board_ids.add(board_id)
+        source_nodes = {node["id"]: node for node in source.get("nodes") or []}
+        target_nodes = {node["id"]: node for node in target.get("nodes") or []}
+        changed = {
+            node_id
+            for node_id in set(source_nodes) | set(target_nodes)
+            if source_nodes.get(node_id) != target_nodes.get(node_id)
+        }
+        if changed:
+            node_ids[board_id] = changed
+    return board_ids, node_ids
+
+
+def _diff_patches(original: dict, working: dict) -> tuple[dict, dict]:
+    """The smallest reversible patch pair, derived from the effect."""
+    board_ids, node_ids = _touched(original, working)
     before = _empty_patch()
     after = _empty_patch()
     for board_id in sorted(board_ids):
@@ -950,23 +937,6 @@ def _flow_edge_add(board: dict, raw: object) -> dict:
             raise WorkbenchError(INVALID_INPUT, detail=f"flow edge {key} is required")
     board["flowEdges"].append(edge)
     return edge
-
-
-def _check_instance_params(node: dict, components: dict[str, dict]) -> None:
-    asset_id = node["props"].get("assetId")
-    if not isinstance(asset_id, str) or not asset_id:
-        # A fixed-revision instance carries its revisions in the instance
-        # row, so there is nothing to check against a component schema.
-        return
-    entry = components.get(asset_id)
-    if entry is None:
-        raise WorkbenchError(MISSING_DEPENDENCY, detail="instance component is unresolved")
-    params = node["props"].get("params") or {}
-    problems = check_params(entry["definition"], params)
-    if problems:
-        raise WorkbenchError(
-            INVALID_INPUT, detail=json.dumps(problems, ensure_ascii=False)
-        )
 
 
 def _group(
@@ -1426,12 +1396,11 @@ class CanvasService:
                     detail=f"单次最多 {MAX_COMMANDS_PER_BATCH} 条画布命令。",
                 )
             row = self._row(project_id, canvas_id)
-            components, instances = self._indexes(project_id)
             document = self._document(row)
             transactions: list[dict] = []
             for command in commands:
                 document, before, after, label, targets = apply_command(
-                    document, command, components=components, instances=instances
+                    document, command
                 )
                 transactions.append(
                     {
