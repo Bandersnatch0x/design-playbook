@@ -120,6 +120,7 @@ class E2EFullFlowTests(unittest.TestCase):
             round_n: int,
             *,
             criteria: list[dict[str, str]],
+            criteria_reason: str = "",
         ) -> dict:
             return review_session.collect_review(
                 prototype,
@@ -128,6 +129,7 @@ class E2EFullFlowTests(unittest.TestCase):
                 round_n,
                 _PlaywrightReviewAdapter(),
                 criteria=criteria,
+                criteria_reason=criteria_reason,
             )
         with tempfile.TemporaryDirectory() as tmp:
             preview_dir = Path(tmp)
@@ -432,6 +434,7 @@ class FrontendInteractionTests(unittest.TestCase):
             round_n: int,
             *,
             criteria: list[dict[str, str]],
+            criteria_reason: str = "",
         ) -> dict:
             return review_session.collect_review(
                 prototype,
@@ -440,6 +443,7 @@ class FrontendInteractionTests(unittest.TestCase):
                 round_n,
                 _DrawAdapter(),
                 criteria=criteria,
+                criteria_reason=criteria_reason,
             )
 
         with tempfile.TemporaryDirectory() as tmp:

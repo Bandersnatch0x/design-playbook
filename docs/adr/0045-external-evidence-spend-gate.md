@@ -462,6 +462,81 @@ runner, not evidence that the plugin is validated on macOS, and it does not
 satisfy the external trial gate. The ADR-0045 spend gate otherwise remains in
 force.
 
+## Amendment (2026-11-02): bounded architecture-deepening round over shipped surfaces
+
+The maintainer explicitly authorized, on 2026-11-02, a bounded
+architecture-deepening round. It restructures modules that already ship; it
+adds no capability, no gate, no registry entry and no adapter row. It is an
+exception to the spend gate, not evidence that `G-RO-TRIAL-PASS` has passed and
+not a reopening of the general capability lane.
+
+The authorized boundary is four changes, each delivered on its own feature
+branch behind its own pull request, and each an equivalent restructuring: the
+observable behaviour, the error strings, the ordering and the stored shapes are
+unchanged unless a sentence below says otherwise.
+
+- **Preview transaction surface.** `mcp/preview/transaction.py` absorbs
+  `entry_io.py` and `preview_request.py` back into the module that owns the
+  transaction. Both pass-through modules are deleted, together with the
+  `test_transaction_module_surface.py` assertion that pins their existence. The
+  `atomic_write` primitive those modules carried, which `locking.py` also uses,
+  moves into `locking.py` so the import direction stays one-way.
+- **Preview contract vocabulary and net-effect mirror.**
+  `scripts/generate_visual_contract.py` keeps `mcp/preview/visual_batch.py` as
+  the single owner of the values the client reads, and stops emitting the six
+  server-only constants no client reads. Separately, the client-side net-effect decision
+  in `mcp/preview/control.review.js` gains a node-harness comparison against the
+  server-side decision in `visual_batch.py`. Where the two disagree on case
+  folding, the client's behaviour governs and the server changes to match,
+  because the client's decision is what a reviewer sees.
+- **Run-snapshot shape owner and repair-packet lockstep.**
+  `mcp/run_console/snapshot_v1.schema.json` becomes the single owner of the
+  seven-part snapshot shape, and the client's list of those parts is generated
+  from it. The repair-packet lockstep gains an object comparison through the
+  existing node harness, and the `_next_action_field` divergence between
+  `mcp/run_console/repair_packet.py` and `mcp/run_console/app.js` is closed.
+- **Workbench mutation gate and response envelope.** The six workbench mutation
+  steps move behind one module in
+  `packages/design-playbook-workbench/design_playbook_workbench/`, whose
+  interface takes the operation, the kind, a row loader and an apply callback;
+  replay, authorization, load verification, counter comparison, transaction and
+  record stay behind that seam. The workbench server's route table and its
+  response envelope each get a single owner. No counter enforcement is added,
+  and the client-side route derivation is explicitly out of scope.
+
+The exclusions are: no new skill, command, gate, collector, registry entry,
+adapter row, MCP server or runtime; no Stage R or Stage W runtime migration
+(ADR-0048); no counter enforcement, which stays a separate undelivered ticket;
+no release, tag, publish, catalog submission or recruitment; no change to the
+Content-Security-Policy surfaces, to the ADR-0008 feedback-floor semantics, or
+to the `writesSource: false` boundary; no change to the workbench distribution
+boundary or to its loopback threat model; and no work outside the files named
+above and the tests that pin them.
+
+**Amendment (2026-11-04, T-127 — work-request counter enforcement).**
+Maintainer-authorized with the architecture follow-up batch. `work_requests`
+writes now compare the request counter through the one mutation gate:
+`consent`, `cancel`, `retry`, `reject`, `claim`, `heartbeat`, `submit_result`
+and `fail_attempt` require the caller's `expectedCounter` and refuse a stale
+or absent one. The workbench client reads the current row before acting, so
+an agent write between render and click is a conflict rather than a lost
+update. Proposals have no counter column; the payload digest is their
+concurrency unit, recorded in `CONTEXT.md`. Project archives and context
+selections keep `require_counter=False`: the former takes no client counter,
+the latter carries the canvas counter, and both stay outside this amendment.
+This lifts the "no counter enforcement" exclusion for work-request rows only;
+every other exclusion above stays in force. No release, tag, or publish is
+authorized by this amendment.
+
+The plugin gains no source writer; `writesSource` stays false and the G5
+boundary is unchanged. Authorization to implement is NOT a completion claim:
+delivery requires every change to pass the full repository gates — the three
+quick scripts, the full non-browser suite, the browser matrix, the drift and
+parity checks, and a baseline run on `main` to compare against — and requires
+the existing assertions to remain unweakened. This bounded exception does not
+satisfy the external trial gate, and the ADR-0045 spend gate otherwise remains
+in force.
+
 ## Release authorization
 
 The gate above requires a separate maintainer decision for each release. The

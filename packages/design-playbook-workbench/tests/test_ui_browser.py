@@ -1804,6 +1804,11 @@ class WorkRequestJourneyTest(unittest.TestCase):
                 self.h.runtime.data_dir.session_dir / f"claim-{request_id}.json"
             ).read_text(encoding="utf-8")
         )
+        detail = http_request(
+            self.h.runtime,
+            f"/api/v1/projects/{self.project_id}/requests/{request_id}",
+            token=self.h.token,
+        )
         return http_request(
             self.h.runtime,
             f"/api/v1/projects/{self.project_id}/actions/requests/{request_id}/{verb}",
@@ -1812,6 +1817,8 @@ class WorkRequestJourneyTest(unittest.TestCase):
                 "operation": {
                     "operationId": f"op_ui_agent_{verb}_{request_id[:8]}",
                     "payload": {"action": verb},
+                    # T-127: every work write compares the request's counter.
+                    "expectedCounter": int(detail.json["request"]["counter"]),
                 },
                 **payload,
             },

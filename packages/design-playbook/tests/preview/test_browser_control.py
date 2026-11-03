@@ -43,8 +43,10 @@ if str(_TESTS_ROOT) not in sys.path:
     sys.path.insert(0, str(_TESTS_ROOT))
 from design_playbook.mcp.preview import review_session  # noqa: E402
 from design_playbook.mcp.preview import control as preview_control  # noqa: E402
-from design_playbook.mcp.preview import transaction  # noqa: E402
 from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
+from design_playbook.mcp.preview.report_ref import (  # noqa: E402
+    criteria_from_report_ref,
+)
 try:
     from playwright.sync_api import sync_playwright  # noqa: E402
 except ImportError:  # pragma: no cover - only the browser tests need it
@@ -340,7 +342,7 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             report = _write_spec_fixture(root)
-            criteria = transaction._criteria_from_report_ref(str(report))
+            criteria = criteria_from_report_ref(str(report), preview_dir=root)
             file_url = _write_control_page(root, criteria)
 
             with sync_playwright() as pw:
@@ -414,7 +416,7 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
             root = Path(tmp)
             report = root / "report.md"
             report.write_text("# Decision report\n", encoding="utf-8")
-            criteria = transaction._criteria_from_report_ref(str(report))
+            criteria = criteria_from_report_ref(str(report), preview_dir=root)
             file_url = _write_control_page(root, criteria)
 
             with sync_playwright() as pw:
@@ -505,7 +507,7 @@ class SpecMatrixWorkbenchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             report = _write_spec_fixture(root)
-            criteria = transaction._criteria_from_report_ref(str(report))
+            criteria = criteria_from_report_ref(str(report), preview_dir=root)
             file_url = _write_control_page(root, criteria)
 
             with sync_playwright() as pw:

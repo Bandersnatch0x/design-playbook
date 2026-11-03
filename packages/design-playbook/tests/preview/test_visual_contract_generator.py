@@ -59,15 +59,18 @@ class TestVisualContractDriftGate(unittest.TestCase):
             + "v: window.DPBUI.visualContract.SCHEMA_VERSION,"
             + " pending: window.DPBUI.visualContract.STATUS_PENDING,"
             + " stale: window.DPBUI.visualContract.STATUS_STALE,"
-            + " kinds: window.DPBUI.visualContract.CHANGE_KINDS,"
             + " cssKinds: window.DPBUI.visualContract.CSS_KINDS,"
             + " viewports: window.DPBUI.visualContract.VIEWPORTS,"
-            + " sources: window.DPBUI.visualContract.EDIT_SOURCES,"
             + " shell: window.DPBUI.visualContract.SHELL_SOURCE,"
             + " frame: window.DPBUI.visualContract.FRAME_SOURCE,"
             + " anyViewport: window.DPBUI.visualContract.ANY_VIEWPORT,"
-            + " content: window.DPBUI.visualContract.CONTENT_PROPERTIES,"
-            + " maxEdits: window.DPBUI.visualContract.MAX_EDITS}));"
+            + " serverOnly: ["
+            + " window.DPBUI.visualContract.CHANGE_KINDS === undefined,"
+            + " window.DPBUI.visualContract.EDIT_SOURCES === undefined,"
+            + " window.DPBUI.visualContract.CONTENT_PROPERTIES === undefined,"
+            + " window.DPBUI.visualContract.MAX_EDITS === undefined,"
+            + " window.DPBUI.visualContract.MAX_SELECTOR === undefined,"
+            + " window.DPBUI.visualContract.MAX_VALUE === undefined]}));"
         )
         with tempfile.TemporaryDirectory() as tmp:
             script = Path(tmp) / "contract_check.js"
@@ -79,15 +82,12 @@ class TestVisualContractDriftGate(unittest.TestCase):
         self.assertEqual(
             result.stdout.strip(),
             '{"v":1,"pending":"pending","stale":"stale",'
-            '"kinds":["style","layout","content","responsive","structure"],'
             '"cssKinds":["style","layout","responsive"],'
             '"viewports":["desktop","tablet","mobile","any"],'
-            '"sources":["shell","frame","agent","unknown"],'
             '"shell":"shell",'
             '"frame":"frame",'
             '"anyViewport":"any",'
-            '"content":["text","placeholder","aria-label"],'
-            '"maxEdits":200}',
+            '"serverOnly":[true,true,true,true,true,true]}',
         )
 
     def test_consumers_read_the_contract_and_do_not_reliteralize_it(self) -> None:

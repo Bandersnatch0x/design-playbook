@@ -16,7 +16,6 @@ Everything else is a typed refusal:
 """
 from __future__ import annotations
 
-import json
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -34,6 +33,7 @@ from .errors import (
     WorkbenchError,
 )
 from .orchestration import OrchestrationService
+from . import rows as rowshape
 from .proposals import ProposalService
 from .service import Operation, WorkbenchService, payload_digest, utc_now
 from .session import WorkbenchSession
@@ -154,26 +154,17 @@ class WorkRequestService:
         parsed = _parse_iso(self._now())
         return parsed if parsed is not None else _wall_clock()
 
-    def _record(
-        self,
-        operation: Operation,
-        *,
-        kind: str,
-        entity_id: str,
-        project_id: str,
-        result: dict,
-        counter: int,
-        now: str,
-    ) -> None:
-        self.store.record_mutation(
-            operation_id=operation.operation_id,
-            entity_kind=kind,
-            entity_id=entity_id,
-            payload_digest=operation.digest,
-            resulting_counter=counter,
-            result_json=json.dumps(result, ensure_ascii=False, sort_keys=True),
-            project_id=project_id,
-            now=now,
+    def _replay_agent(
+        self, operation: Operation, *, kind: str, request_id: str, row: dict
+    ) -> dict | None:
+        """Answer a retry before the lease check can refuse it.
+
+        The gate replays again; this early answer is what keeps an expired
+        lease -- and the interruption it records -- from pre-empting a write
+        that already succeeded.
+        """
+        return self.service._replay(
+            operation, kind=kind, entity_id=request_id, project_id=row["project_id"]
         )
 
     def claim_record_path(self, request_id: str) -> Path:
@@ -199,8 +190,8 @@ class WorkRequestService:
             "state": row["state"],
             "leaseId": row["lease_id"],
             "leaseExpiresAt": row["lease_expires_at"],
-            "progress": json.loads(row["progress_json"]),
-            "result": json.loads(row["result_json"]) if row["result_json"] else None,
+            "progress": rowshape.load(row["progress_json"], {}),
+            "result": rowshape.load(row["result_json"], None),
             "resultDigest": row["result_digest"],
             "proposalId": row["proposal_id"],
             "capabilityId": row["capability_id"],
@@ -227,9 +218,9 @@ class WorkRequestService:
             "title": row["title"],
             "goal": row["goal"],
             "targetStack": row["target_stack"],
-            "plan": json.loads(row["plan_json"]),
-            "allowedActions": json.loads(row["allowed_actions_json"]),
-            "resultSchema": json.loads(row["result_schema_json"]),
+            "plan": rowshape.load(row["plan_json"], {}),
+            "allowedActions": rowshape.load(row["allowed_actions_json"], []),
+            "resultSchema": rowshape.load(row["result_schema_json"], {}),
             "contextSelectionId": row["context_selection_id"],
             "contextDigest": row["context_digest"],
             "bindingGeneration": int(row["binding_generation"]),
@@ -294,44 +285,45 @@ class WorkRequestService:
         expires_in_seconds: object = None,
         operation: Operation,
     ) -> dict:
-        replayed = self.service._replay(operation, kind="work-request-create", project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        if not isinstance(title, str) or not title.strip():
-            raise WorkbenchError(INVALID_INPUT, detail="title is required")
-        if not isinstance(goal, str) or not goal.strip():
-            raise WorkbenchError(INVALID_INPUT, detail="goal is required")
-        if target_stack not in TARGET_STACKS:
-            raise WorkbenchError(
-                INVALID_INPUT, detail="target stack must be static-html or react-ts"
-            )
-        if not isinstance(context_selection_id, str) or not context_selection_id:
-            raise WorkbenchError(INVALID_INPUT, detail="a context selection is required")
-        selection = self.store.context_selection(context_selection_id)
-        if selection is None or selection["project_id"] != project_id:
-            raise WorkbenchError(INVALID_TARGET)
-        if selection["state"] != "confirmed":
-            # R11: the send scope is confirmed before an Agent ever sees it.
-            raise WorkbenchError(
-                MISSING_DEPENDENCY, detail="context selection is not confirmed"
-            )
-        if len(self.store.project_work_requests(project_id)) >= MAX_OPEN_REQUESTS:
-            raise WorkbenchError(
-                LIMIT_EXCEEDED, detail=f"最多 {MAX_OPEN_REQUESTS} 个任务请求。"
-            )
-        plan_value = self._parse_plan(plan)
-        actions = self._parse_actions(allowed_actions)
-        schema = self._parse_result_schema(result_schema)
-        ttl = 24 * 3600 if expires_in_seconds in (None, "") else int(expires_in_seconds)
-        if ttl <= 0:
-            raise WorkbenchError(INVALID_INPUT, detail="expiry must be positive")
-        project = self.service.require_project(project_id, scope="read")
-        request_id = str(uuid.uuid4())
-        now = self._now()
-        expires_at = _iso(self._moment() + timedelta(seconds=ttl))
-
         def apply() -> tuple[dict, int]:
+            if not isinstance(title, str) or not title.strip():
+                raise WorkbenchError(INVALID_INPUT, detail="title is required")
+            if not isinstance(goal, str) or not goal.strip():
+                raise WorkbenchError(INVALID_INPUT, detail="goal is required")
+            if target_stack not in TARGET_STACKS:
+                raise WorkbenchError(
+                    INVALID_INPUT, detail="target stack must be static-html or react-ts"
+                )
+            if not isinstance(context_selection_id, str) or not context_selection_id:
+                raise WorkbenchError(
+                    INVALID_INPUT, detail="a context selection is required"
+                )
+            selection = self.store.context_selection(context_selection_id)
+            if selection is None or selection["project_id"] != project_id:
+                raise WorkbenchError(INVALID_TARGET)
+            if selection["state"] != "confirmed":
+                # R11: the send scope is confirmed before an Agent ever sees it.
+                raise WorkbenchError(
+                    MISSING_DEPENDENCY, detail="context selection is not confirmed"
+                )
+            if len(self.store.project_work_requests(project_id)) >= MAX_OPEN_REQUESTS:
+                raise WorkbenchError(
+                    LIMIT_EXCEEDED, detail=f"最多 {MAX_OPEN_REQUESTS} 个任务请求。"
+                )
+            plan_value = self._parse_plan(plan)
+            actions = self._parse_actions(allowed_actions)
+            schema = self._parse_result_schema(result_schema)
+            ttl = (
+                24 * 3600
+                if expires_in_seconds in (None, "")
+                else int(expires_in_seconds)
+            )
+            if ttl <= 0:
+                raise WorkbenchError(INVALID_INPUT, detail="expiry must be positive")
+            project = self.service.require_project(project_id, scope="read")
+            request_id = str(uuid.uuid4())
+            now = self._now()
+            expires_at = _iso(self._moment() + timedelta(seconds=ttl))
             self.store.insert_work_request(
                 request_id=request_id,
                 project_id=project_id,
@@ -350,18 +342,15 @@ class WorkRequestService:
             )
             return self._request_payload(self.store.work_request(request_id)), 0
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._record(
-                operation,
-                kind="work-request-create",
-                entity_id=request_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.create(
+            operation,
+            kind="work-request-create",
+            entity_of=lambda result: result["requestId"],
+            project_of=lambda result: result["projectId"],
+            apply=apply,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            project_id=project_id,
+        )
 
     def _parse_plan(self, raw: object) -> dict:
         plan = raw if isinstance(raw, dict) else {}
@@ -414,40 +403,39 @@ class WorkRequestService:
         operation: Operation,
     ) -> dict:
         """Confirm the send scope and mint the request-bound credential."""
-        replayed = self.service._replay(
-            operation, kind="work-request-consent", entity_id=request_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        row = self._request_row(project_id, request_id)
-        if row["state"] != "awaiting-consent":
-            raise WorkbenchError(CONFLICT, detail=f"request is {row['state']}")
-        if self._expired(row):
-            raise WorkbenchError(STALE_EVIDENCE, detail="request already expired")
-        if not isinstance(digest, str) or digest != row["context_digest"]:
-            raise WorkbenchError(CONFLICT, detail="context digest does not match")
-        selection = self.store.context_selection(row["context_selection_id"])
-        if (
-            selection is None
-            or selection["state"] != "confirmed"
-            or selection["digest"] != row["context_digest"]
-        ):
-            raise WorkbenchError(
-                CONFLICT, detail="context selection changed; confirm it again"
-            )
-        token, capability_id = self.session.issue_request_capability(
-            project_id=project_id,
-            scopes=["read", "write"],
-            request_id=request_id,
-            ttl_seconds=ttl_seconds,
-        )
-        project = self.service.require_project(project_id, scope="read")
-        command = (
-            '/design-playbook:run-handoff project="{}" request="{}"'
-        ).format(project["canonicalPath"], request_id)
-        now = self._now()
+        held: dict = {}
+
+        def check(row: dict) -> None:
+            if row["state"] != "awaiting-consent":
+                raise WorkbenchError(CONFLICT, detail=f"request is {row['state']}")
+            if self._expired(row):
+                raise WorkbenchError(STALE_EVIDENCE, detail="request already expired")
+            if not isinstance(digest, str) or digest != row["context_digest"]:
+                raise WorkbenchError(CONFLICT, detail="context digest does not match")
+            selection = self.store.context_selection(row["context_selection_id"])
+            if (
+                selection is None
+                or selection["state"] != "confirmed"
+                or selection["digest"] != row["context_digest"]
+            ):
+                raise WorkbenchError(
+                    CONFLICT, detail="context selection changed; confirm it again"
+                )
+            held["row"] = row
 
         def apply() -> tuple[dict, int]:
+            row = held["row"]
+            token, capability_id = self.session.issue_request_capability(
+                project_id=project_id,
+                scopes=["read", "write"],
+                request_id=request_id,
+                ttl_seconds=ttl_seconds,
+            )
+            project = self.service.require_project(project_id, scope="read")
+            command = (
+                '/design-playbook:run-handoff project="{}" request="{}"'
+            ).format(project["canonicalPath"], request_id)
+            now = self._now()
             # The claim credential lives in the private data directory, so
             # the slash entry point reads it from the OS-protected record
             # instead of from a command line or a web payload.
@@ -472,34 +460,28 @@ class WorkRequestService:
             )
             return self._request_payload(self.store.work_request(request_id)), counter
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._record(
-                operation,
-                kind="work-request-consent",
-                entity_id=request_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="work-request-consent",
+            entity_id=request_id,
+            project_id=project_id,
+            load_row=lambda: self._request_row(project_id, request_id),
+            apply=apply,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            validate=check,
+        )
 
     def cancel(
         self, project_id: str, request_id: str, *, operation: Operation
     ) -> dict:
         """Ask for a stop: new write-backs are refused from here on."""
-        replayed = self.service._replay(
-            operation, kind="work-request-cancel", entity_id=request_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        row = self._request_row(project_id, request_id)
-        if row["state"] in ("cancelled", "rejected", "applied"):
-            raise WorkbenchError(CONFLICT, detail=f"request is {row['state']}")
-        now = self._now()
+
+        def check(row: dict) -> None:
+            if row["state"] in ("cancelled", "rejected", "applied"):
+                raise WorkbenchError(CONFLICT, detail=f"request is {row['state']}")
 
         def apply() -> tuple[dict, int]:
+            now = self._now()
             counter = self.store.set_work_request_state(
                 request_id=request_id, state="cancel-requested", now=now
             )
@@ -514,34 +496,28 @@ class WorkRequestService:
                 )
             return self._request_payload(self.store.work_request(request_id)), counter
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._record(
-                operation,
-                kind="work-request-cancel",
-                entity_id=request_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="work-request-cancel",
+            entity_id=request_id,
+            project_id=project_id,
+            load_row=lambda: self._request_row(project_id, request_id),
+            apply=apply,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            validate=check,
+        )
 
     def confirm_cancelled(
         self, project_id: str, request_id: str, *, operation: Operation
     ) -> dict:
         """Only a host confirmation turns a stop request into ``cancelled``."""
-        replayed = self.service._replay(
-            operation, kind="work-request-cancel-confirm", entity_id=request_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        row = self._request_row(project_id, request_id)
-        if row["state"] != "cancel-requested":
-            raise WorkbenchError(CONFLICT, detail=f"request is {row['state']}")
-        now = self._now()
+
+        def check(row: dict) -> None:
+            if row["state"] != "cancel-requested":
+                raise WorkbenchError(CONFLICT, detail=f"request is {row['state']}")
 
         def apply() -> tuple[dict, int]:
+            now = self._now()
             counter = self.store.set_work_request_state(
                 request_id=request_id, state="cancelled", now=now
             )
@@ -555,41 +531,38 @@ class WorkRequestService:
             remove_private_file(self.claim_record_path(request_id))
             return self._request_payload(self.store.work_request(request_id)), counter
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._record(
-                operation,
-                kind="work-request-cancel-confirm",
-                entity_id=request_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="work-request-cancel-confirm",
+            entity_id=request_id,
+            project_id=project_id,
+            load_row=lambda: self._request_row(project_id, request_id),
+            apply=apply,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            validate=check,
+        )
 
     def retry(self, project_id: str, request_id: str, *, operation: Operation) -> dict:
         """A retry is a new attempt with a new capability; the old one dies."""
-        replayed = self.service._replay(
-            operation, kind="work-request-retry", entity_id=request_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        row = self._request_row(project_id, request_id)
-        # R11: a retry follows a failure. ``running`` is not a failure -- an
-        # agent may still be holding that lease -- so it is not a retry
-        # source. An interrupted or failed request is, and so is one whose
-        # agent never accepted it.
-        if row["state"] not in ("failed", "interrupted", "waiting-for-agent"):
-            raise WorkbenchError(CONFLICT, detail=f"request is {row['state']}")
-        token, capability_id = self.session.issue_request_capability(
-            project_id=project_id,
-            scopes=["read", "write"],
-            request_id=request_id,
-        )
-        now = self._now()
+        held: dict = {}
+
+        def check(row: dict) -> None:
+            # R11: a retry follows a failure. ``running`` is not a failure -- an
+            # agent may still be holding that lease -- so it is not a retry
+            # source. An interrupted or failed request is, and so is one whose
+            # agent never accepted it.
+            if row["state"] not in ("failed", "interrupted", "waiting-for-agent"):
+                raise WorkbenchError(CONFLICT, detail=f"request is {row['state']}")
+            held["row"] = row
 
         def apply() -> tuple[dict, int]:
+            row = held["row"]
+            token, capability_id = self.session.issue_request_capability(
+                project_id=project_id,
+                scopes=["read", "write"],
+                request_id=request_id,
+            )
+            now = self._now()
             write_private_json(
                 self.claim_record_path(request_id),
                 {
@@ -612,31 +585,24 @@ class WorkRequestService:
             )
             return self._request_payload(self.store.work_request(request_id)), counter
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._record(
-                operation,
-                kind="work-request-retry",
-                entity_id=request_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="work-request-retry",
+            entity_id=request_id,
+            project_id=project_id,
+            load_row=lambda: self._request_row(project_id, request_id),
+            apply=apply,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            validate=check,
+        )
 
     def reject(self, project_id: str, request_id: str, *, operation: Operation) -> dict:
-        replayed = self.service._replay(
-            operation, kind="work-request-reject", entity_id=request_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        row = self._request_row(project_id, request_id)
-        if row["state"] != "proposal-ready":
-            raise WorkbenchError(CONFLICT, detail=f"request is {row['state']}")
-        now = self._now()
+        def check(row: dict) -> None:
+            if row["state"] != "proposal-ready":
+                raise WorkbenchError(CONFLICT, detail=f"request is {row['state']}")
 
         def apply() -> tuple[dict, int]:
+            now = self._now()
             counter = self.store.set_work_request_state(
                 request_id=request_id, state="rejected", now=now
             )
@@ -648,18 +614,16 @@ class WorkRequestService:
             remove_private_file(self.claim_record_path(request_id))
             return self._request_payload(self.store.work_request(request_id)), counter
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._record(
-                operation,
-                kind="work-request-reject",
-                entity_id=request_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="work-request-reject",
+            entity_id=request_id,
+            project_id=project_id,
+            load_row=lambda: self._request_row(project_id, request_id),
+            apply=apply,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            validate=check,
+        )
 
     # -- agent writes (request-bound capability) -------------------------
 
@@ -684,7 +648,7 @@ class WorkRequestService:
         if self._expired(row):
             raise WorkbenchError(STALE_EVIDENCE, detail="request expired")
         if scope == "read":
-            if "read-context" not in json.loads(row["allowed_actions_json"]):
+            if "read-context" not in rowshape.load(row["allowed_actions_json"], []):
                 raise WorkbenchError(UNAUTHORIZED)
             attempt = self.store.latest_work_attempt(request_id)
             if attempt is not None and attempt["state"] == "running":
@@ -747,32 +711,37 @@ class WorkRequestService:
         operation: Operation,
     ) -> dict:
         row = self._require_agent(request_id, principal)
-        replayed = self.service._replay(
-            operation, kind="work-claim", entity_id=request_id, project_id=row["project_id"])
-        if replayed is not None:
-            return replayed
-        if row["state"] != "waiting-for-agent":
-            raise WorkbenchError(CONFLICT, detail=f"request is {row['state']}")
-        if self._expired(row):
-            raise WorkbenchError(STALE_EVIDENCE, detail="request already expired")
-        lease = LEASE_SECONDS if lease_seconds in (None, "") else int(lease_seconds)
-        if lease <= 0 or lease > LEASE_SECONDS:
-            raise WorkbenchError(
-                INVALID_INPUT, detail=f"lease must be 1..{LEASE_SECONDS} seconds"
-            )
-        attempt_seq = len(self.store.request_work_attempts(request_id)) + 1
-        attempt_id = str(uuid.uuid4())
-        lease_id = str(uuid.uuid4())
-        now = self._now()
-        deadline = _iso(self._moment() + timedelta(seconds=lease))
+        # Unlike the lease-checked writes below, nothing runs between this
+        # check and the gate's replay, so the gate's replay is enough.
+        held: dict = {}
+
+        def check(current: dict) -> None:
+            if current["state"] != "waiting-for-agent":
+                raise WorkbenchError(
+                    CONFLICT, detail=f"request is {current['state']}"
+                )
+            if self._expired(current):
+                raise WorkbenchError(STALE_EVIDENCE, detail="request already expired")
+            held["row"] = current
 
         def apply() -> tuple[dict, int]:
+            current = held["row"]
+            lease = LEASE_SECONDS if lease_seconds in (None, "") else int(lease_seconds)
+            if lease <= 0 or lease > LEASE_SECONDS:
+                raise WorkbenchError(
+                    INVALID_INPUT, detail=f"lease must be 1..{LEASE_SECONDS} seconds"
+                )
+            attempt_seq = len(self.store.request_work_attempts(request_id)) + 1
+            attempt_id = str(uuid.uuid4())
+            lease_id = str(uuid.uuid4())
+            now = self._now()
+            deadline = _iso(self._moment() + timedelta(seconds=lease))
             self.store.insert_work_attempt(
                 attempt_id=attempt_id,
                 request_id=request_id,
                 sequence=attempt_seq,
                 state="running",
-                capability_id=row["capability_id"],
+                capability_id=current["capability_id"],
                 now=now,
             )
             self.store.update_work_attempt(
@@ -797,18 +766,15 @@ class WorkRequestService:
             }
             return payload, counter
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._record(
-                operation,
-                kind="work-claim",
-                entity_id=request_id,
-                project_id=row["project_id"],
-                result=result,
-                counter=counter,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="work-claim",
+            entity_id=request_id,
+            project_id=row["project_id"],
+            load_row=lambda: self._request_row(row["project_id"], request_id),
+            apply=apply,
+            validate=check,
+        )
 
     def heartbeat(
         self,
@@ -822,20 +788,20 @@ class WorkRequestService:
         operation: Operation,
     ) -> dict:
         row = self._require_agent(request_id, principal)
-        replayed = self.service._replay(
-            operation, kind="work-heartbeat", entity_id=request_id, project_id=row["project_id"])
+        replayed = self._replay_agent(
+            operation, kind="work-heartbeat", request_id=request_id, row=row
+        )
         if replayed is not None:
             return replayed
         attempt = self._require_live_lease(
             row, attempt_id=attempt_id, lease_id=lease_id, sequence=sequence
         )
-        if progress is not None and not isinstance(progress, dict):
-            raise WorkbenchError(INVALID_INPUT, detail="progress must be an object")
-        lease = LEASE_SECONDS
-        now = self._now()
-        deadline = _iso(self._moment() + timedelta(seconds=lease))
-
         def apply() -> tuple[dict, int]:
+            if progress is not None and not isinstance(progress, dict):
+                raise WorkbenchError(INVALID_INPUT, detail="progress must be an object")
+            lease = LEASE_SECONDS
+            now = self._now()
+            deadline = _iso(self._moment() + timedelta(seconds=lease))
             self.store.update_work_attempt(
                 attempt_id=attempt["attempt_id"],
                 state="running",
@@ -853,20 +819,18 @@ class WorkRequestService:
                 "expiresAt": deadline,
                 "heartbeatSeconds": HEARTBEAT_SECONDS,
             }
-            return payload, int(row["counter"])
+            # The payload was read inside this transaction; the counter from
+            # the pre-transaction row could already be one behind.
+            return payload, int(payload["counter"])
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._record(
-                operation,
-                kind="work-heartbeat",
-                entity_id=request_id,
-                project_id=row["project_id"],
-                result=result,
-                counter=counter,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="work-heartbeat",
+            entity_id=request_id,
+            project_id=row["project_id"],
+            load_row=lambda: self._request_row(row["project_id"], request_id),
+            apply=apply,
+        )
 
     def submit_result(
         self,
@@ -880,8 +844,9 @@ class WorkRequestService:
         operation: Operation,
     ) -> dict:
         row = self._require_agent(request_id, principal)
-        replayed = self.service._replay(
-            operation, kind="work-result", entity_id=request_id, project_id=row["project_id"])
+        replayed = self._replay_agent(
+            operation, kind="work-result", request_id=request_id, row=row
+        )
         if replayed is not None:
             return replayed
         attempt = self._require_live_lease(
@@ -889,7 +854,7 @@ class WorkRequestService:
         )
         if not isinstance(result, dict) or set(result) - RESULT_FIELDS:
             raise WorkbenchError(INVALID_INPUT, detail="unknown result field")
-        schema = json.loads(row["result_schema_json"])
+        schema = rowshape.load(row["result_schema_json"], {})
         missing = [key for key in schema.get("required", []) if key not in result]
         if missing:
             raise WorkbenchError(
@@ -909,7 +874,7 @@ class WorkRequestService:
         dependencies = result.get("dependencies", [])
         if not isinstance(dependencies, list):
             raise WorkbenchError(INVALID_INPUT, detail="dependencies must be a list")
-        allowed = json.loads(row["allowed_actions_json"])
+        allowed = rowshape.load(row["allowed_actions_json"], [])
         if changes and "propose-source" not in allowed:
             raise WorkbenchError(UNAUTHORIZED, detail="source proposal was not granted")
         if dependencies and "add-dependency" not in allowed:
@@ -968,18 +933,14 @@ class WorkRequestService:
             payload["verified"] = False
             return payload, counter
 
-        with self.store.transaction():
-            result_payload, counter = apply()
-            self._record(
-                operation,
-                kind="work-result",
-                entity_id=request_id,
-                project_id=row["project_id"],
-                result=result_payload,
-                counter=counter,
-                now=now,
-            )
-        return {"result": result_payload, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="work-result",
+            entity_id=request_id,
+            project_id=row["project_id"],
+            load_row=lambda: self._request_row(row["project_id"], request_id),
+            apply=apply,
+        )
 
     def fail_attempt(
         self,
@@ -994,17 +955,17 @@ class WorkRequestService:
     ) -> dict:
         """The Agent reports its own failure: the request stays retryable."""
         row = self._require_agent(request_id, principal)
-        replayed = self.service._replay(
-            operation, kind="work-fail", entity_id=request_id, project_id=row["project_id"])
+        replayed = self._replay_agent(
+            operation, kind="work-fail", request_id=request_id, row=row
+        )
         if replayed is not None:
             return replayed
         attempt = self._require_live_lease(
             row, attempt_id=attempt_id, lease_id=lease_id, sequence=sequence
         )
-        now = self._now()
-        note = reason if isinstance(reason, str) else ""
-
         def apply() -> tuple[dict, int]:
+            now = self._now()
+            note = reason if isinstance(reason, str) else ""
             self.store.update_work_attempt(
                 attempt_id=attempt["attempt_id"],
                 state="failed",
@@ -1016,15 +977,11 @@ class WorkRequestService:
             )
             return self._request_payload(self.store.work_request(request_id)), counter
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._record(
-                operation,
-                kind="work-fail",
-                entity_id=request_id,
-                project_id=row["project_id"],
-                result=result,
-                counter=counter,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="work-fail",
+            entity_id=request_id,
+            project_id=row["project_id"],
+            load_row=lambda: self._request_row(row["project_id"], request_id),
+            apply=apply,
+        )

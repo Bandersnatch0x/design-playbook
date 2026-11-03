@@ -1265,14 +1265,19 @@ class DisabledActionSurfaceTest(harness._ServerTestCase):
 
     def test_the_server_module_declares_exactly_the_two_export_routes(self) -> None:
         # The two S35 route spellings are the only export-shaped route
-        # literals the server may declare: any new spelling — even in a
-        # comment — must force this gate test to be re-derived
-        # consciously, mirroring the boundary scans in test_actions.py.
-        source = (_COMPONENT_DIR / "http_server.py").read_text(
-            encoding="utf-8"
+        # literals the console may declare: any new spelling — even in a
+        # comment — must force this gate test to be re-derived consciously,
+        # mirroring the boundary scans in test_actions.py. client_routes.py
+        # owns them; the HTTP adapter names none of its own.
+        owner = (_COMPONENT_DIR / "client_routes.py").read_text(encoding="utf-8")
+        adapter = (_COMPONENT_DIR / "http_server.py").read_text(encoding="utf-8")
+        self.assertEqual(
+            set(re.findall(r'"(/api/v1/[^"]*export[^"]*)"', owner)),
+            set(_SPEC_EXPORT_ROUTES),
         )
-        route_literals = set(re.findall(r'"(/api/v1/[^"]*export[^"]*)"', source))
-        self.assertEqual(route_literals, set(_SPEC_EXPORT_ROUTES))
+        self.assertEqual(
+            set(re.findall(r'"(/api/v1/[^"]*export[^"]*)"', adapter)), set()
+        )
 
     def test_export_posts_dispatch_the_accepted_routes(self) -> None:
         # The two specified routes are live: the preview answers its
@@ -1640,8 +1645,9 @@ class DisabledSnapshotLimitationTest(_BuiltSnapshotTestCase):
             "requestExportWrite",
             "participantReviewed: true",
             "export-review-checkbox",
-            "diagnostic-export/preview",
-            "diagnostic-export/write",
+            # Routes come from the generated contract, not literals.
+            "ROUTES.EXPORT_PREVIEW.path",
+            "ROUTES.EXPORT_WRITE.path",
             # The stale disabled-state tokens are gone.
         ):
             with self.subTest(token=token):

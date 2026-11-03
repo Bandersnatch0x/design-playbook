@@ -103,7 +103,7 @@ class ReuseTestCase(unittest.TestCase):
             selections=[relative],
             operation=self.operation({"selections": [relative]}),
         )["result"]["asset"]
-        self.assets.publish_revision(
+        self.assets.publish(
             project_id,
             asset["assetId"],
             operation=self.operation(
@@ -111,9 +111,10 @@ class ReuseTestCase(unittest.TestCase):
             ),
         )
         if dependencies is not None:
-            self.reuse.publish_with_dependencies(
+            self.assets.publish(
                 project_id,
                 asset["assetId"],
+                kind="asset-publish-deps",
                 dependencies=dependencies,
                 operation=self.operation(
                     {"publish-deps": 1},
@@ -145,7 +146,7 @@ class RevisionImmutabilityTest(ReuseTestCase):
                 {"refresh": 1}, expected=self.asset_counter(asset_id)
             ),
         )
-        self.assets.publish_revision(
+        self.assets.publish(
             self.source_id,
             asset_id,
             operation=self.operation(
@@ -170,7 +171,7 @@ class RevisionImmutabilityTest(ReuseTestCase):
         asset_id = asset["assetId"]
         first = self.store.latest_revision(asset_id)
         self.write("source", "spec.md", "# silently changed on disk\n")
-        self.assets.publish_revision(
+        self.assets.publish(
             self.source_id,
             asset_id,
             operation=self.operation(
@@ -215,7 +216,7 @@ class RevisionImmutabilityTest(ReuseTestCase):
         manifest = json.loads(revision["manifest_json"])
         self.blobs.path_for(manifest[0]["contentHash"]).write_bytes(b"tampered")
         with self.assertRaises(WorkbenchError) as caught:
-            self.assets.publish_revision(
+            self.assets.publish(
                 self.source_id,
                 asset_id,
                 operation=self.operation(
@@ -233,10 +234,10 @@ class RevisionImmutabilityTest(ReuseTestCase):
             expected=stale,
             operation_id="op_publish_same_1",
         )
-        first = self.assets.publish_revision(
+        first = self.assets.publish(
             self.source_id, asset_id, operation=operation
         )
-        replay = self.assets.publish_revision(
+        replay = self.assets.publish(
             self.source_id, asset_id, operation=operation
         )
         self.assertFalse(first["replayed"])
@@ -245,7 +246,7 @@ class RevisionImmutabilityTest(ReuseTestCase):
         # The same counter that was current before the first publish is now
         # stale: a new operation must be refused, never applied on top.
         with self.assertRaises(WorkbenchError) as caught:
-            self.assets.publish_revision(
+            self.assets.publish(
                 self.source_id,
                 asset_id,
                 operation=self.operation({"publish": "stale"}, expected=stale),
@@ -255,7 +256,7 @@ class RevisionImmutabilityTest(ReuseTestCase):
         # A reused operation ID with a different payload is a conflict, not
         # a second success.
         with self.assertRaises(WorkbenchError) as caught:
-            self.assets.publish_revision(
+            self.assets.publish(
                 self.source_id,
                 asset_id,
                 operation=self.operation(
@@ -274,9 +275,10 @@ class DependencyClosureTest(ReuseTestCase):
         revision = self.store.latest_revision(tokens["assetId"])
         asset = self.import_and_publish("source", self.source_id, "components/button.md")
         stale = self.asset_counter(asset["assetId"])
-        self.reuse.publish_with_dependencies(
+        self.assets.publish(
             self.source_id,
             asset["assetId"],
+            kind="asset-publish-deps",
             dependencies=[
                 {"assetId": tokens["assetId"], "revisionId": revision["revision_id"]}
             ],
@@ -284,9 +286,10 @@ class DependencyClosureTest(ReuseTestCase):
         )
         before = len(self.store.asset_revisions(asset["assetId"]))
         with self.assertRaises(WorkbenchError) as caught:
-            self.reuse.publish_with_dependencies(
+            self.assets.publish(
                 self.source_id,
                 asset["assetId"],
+                kind="asset-publish-deps",
                 dependencies=[
                     {"assetId": tokens["assetId"], "revisionId": revision["revision_id"]}
                 ],
@@ -330,9 +333,10 @@ class DependencyClosureTest(ReuseTestCase):
         )
         # Closing the loop must be refused, and nothing new is published.
         with self.assertRaises(WorkbenchError) as caught:
-            self.reuse.publish_with_dependencies(
+            self.assets.publish(
                 self.source_id,
                 second["assetId"],
+                kind="asset-publish-deps",
                 dependencies=[
                     {
                         "assetId": first["assetId"],
@@ -627,7 +631,7 @@ class UpgradeTest(ReuseTestCase):
                 {"refresh": text[:8]}, expected=self.asset_counter(self.asset_id)
             ),
         )
-        self.assets.publish_revision(
+        self.assets.publish(
             self.source_id,
             self.asset_id,
             operation=self.operation(
@@ -904,13 +908,14 @@ class ClosureLimitTest(ReuseTestCase):
             {"assetId": asset["assetId"], "revisionId": revision["revision_id"]}
             for _ in range(1)
         ]
-        from design_playbook_workbench import reuse as module
+        from design_playbook_workbench import publication as module
 
         with mock.patch.object(module, "MAX_CLOSURE_REVISIONS", 0):
             with self.assertRaises(WorkbenchError) as caught:
-                self.reuse.publish_with_dependencies(
+                self.assets.publish(
                     self.source_id,
                     asset["assetId"],
+                    kind="asset-publish-deps",
                     dependencies=oversized,
                     operation=self.operation({"publish-deps": "limit"}),
                 )

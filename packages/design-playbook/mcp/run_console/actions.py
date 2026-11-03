@@ -22,6 +22,13 @@ from __future__ import annotations
 
 import json
 
+from .client_routes import (
+    ACTION_EXPORT_PREVIEW,
+    ACTION_EXPORT_WRITE,
+    ACTION_REFRESH,
+    REFRESH_ROUTE,  # noqa: F401 - re-exported for the HTTP layer and tests
+    SCHEMA_VERSION,
+)
 from .request_security import ACTION_PAYLOAD_INVALID
 from .session import (
     SESSION_CLOSED,
@@ -42,15 +49,12 @@ MALFORMED_JSON = "MALFORMED_JSON"
 MALFORMED_JSON_MESSAGE = "The request body is not well-formed JSON."
 
 JSON_CONTENT_TYPE = "application/json"
-ACTION_REFRESH = "refresh"
-REFRESH_ROUTE = "/api/v1/actions/refresh"
 REFRESH_ALLOWED_METHODS = "POST"
-REFRESH_SCHEMA_VERSION = 1
-
+# Route, action name, and payload version are client-visible facts;
+# client_routes.py owns them and generates the browser copy.
+REFRESH_SCHEMA_VERSION = SCHEMA_VERSION
 # Diagnostic export (ADR-0044): one capability, two typed requests.
-ACTION_EXPORT_PREVIEW = "diagnostic-export-preview"
-ACTION_EXPORT_WRITE = "diagnostic-export-write"
-EXPORT_SCHEMA_VERSION = 1
+EXPORT_SCHEMA_VERSION = SCHEMA_VERSION
 
 # Closed names only. Route and method live with the HTTP layer that
 # actually dispatches them (ADR-0038 §5 allowlist as contract object,

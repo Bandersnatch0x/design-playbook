@@ -8,7 +8,7 @@ request, so no later filesystem change can alter what the operator's
 browser receives. Route lookup is a fixed exact-path whitelist — there
 is no filesystem access at request time, so traversal, encoded paths,
 case games, and listing attempts have no surface: any path that is not
-one of the five keys is simply not a UI route. ``/tokens.css`` is the
+one of the seven keys is simply not a UI route. ``/tokens.css`` is the
 shared token file in ``mcp/_shared``, read from the package, not from the
 UI directory.
 
@@ -21,12 +21,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import NamedTuple
 
-#: URL path -> file name. Exactly these five paths are UI routes.
+#: URL path -> file name. Exactly these seven paths are UI routes.
 ROUTE_TO_FILE: dict[str, str] = {
     "/": "app.html",
     "/app.html": "app.html",
     "/tokens.css": "tokens.css",
     "/app.css": "app.css",
+    "/snapshot_contract.js": "snapshot_contract.js",
+    "/client_routes.js": "client_routes.js",
     "/app.js": "app.js",
 }
 
@@ -37,6 +39,8 @@ CONTENT_TYPES: dict[str, str] = {
     "app.html": "text/html; charset=utf-8",
     "tokens.css": "text/css; charset=utf-8",
     "app.css": "text/css; charset=utf-8",
+    "snapshot_contract.js": "text/javascript; charset=utf-8",
+    "client_routes.js": "text/javascript; charset=utf-8",
     "app.js": "text/javascript; charset=utf-8",
 }
 
@@ -50,6 +54,8 @@ CONTENT_SECURITY_POLICY: dict[str, str] = {
     ),
     "tokens.css": "default-src 'none'; frame-ancestors 'none'",
     "app.css": "default-src 'none'; frame-ancestors 'none'",
+    "snapshot_contract.js": "default-src 'none'; frame-ancestors 'none'",
+    "client_routes.js": "default-src 'none'; frame-ancestors 'none'",
     "app.js": "default-src 'none'; frame-ancestors 'none'",
 }
 
@@ -82,7 +88,7 @@ class UIResources:
     def lookup(self, path: object) -> StaticResource | None:
         """The frozen resource for an exact UI path, else ``None``.
 
-        Only exact string matches against the five fixed routes resolve;
+        Only exact string matches against the six fixed routes resolve;
         every other input (unknown path, trailing slash, encoded bytes,
         non-string) is ``None`` and therefore not a UI route.
         """

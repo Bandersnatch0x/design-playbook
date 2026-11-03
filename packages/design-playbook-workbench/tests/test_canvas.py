@@ -155,7 +155,6 @@ class CanvasDomainTest(unittest.TestCase):
                 over,
                 {"kind": "node-add", "boardId": "b1",
                  "node": node("extra", "instance", props={"assetId": "a"})},
-                components={"a": {"definition": {"props": []}, "published": True}},
             )
         self.assertEqual(caught.exception.code, LIMIT_EXCEEDED)
         self.assertIn(str(MAX_INSTANCES), str(caught.exception))
@@ -229,6 +228,26 @@ class CommandTest(unittest.TestCase):
                 self.assertIn(
                     caught.exception.code, (INVALID_INPUT, INVALID_TARGET)
                 )
+
+    def test_a_patch_contains_only_what_the_command_changed(self) -> None:
+        updated, before, after, _, _ = apply_command(
+            self.document,
+            {"kind": "node-move", "boardId": "b1", "nodeIds": ["n2"],
+             "dx": 5, "dy": 0},
+        )
+        self.assertEqual([entry["nodeId"] for entry in before["nodes"]], ["n2"])
+        self.assertEqual(before["boards"], [])
+        self.assertEqual(apply_patch(updated, before), self.document)
+
+    def test_a_parent_is_patched_when_its_child_is_deleted(self) -> None:
+        """The patch is derived from the effect, not declared by the branch."""
+        updated, before, after, _, _ = apply_command(
+            self.document,
+            {"kind": "node-delete", "boardId": "b1", "nodeIds": ["n3"]},
+        )
+        patched = {entry["nodeId"] for entry in before["nodes"]}
+        self.assertEqual(patched, {"n1", "n3"})
+        self.assertEqual(apply_patch(updated, before), self.document)
 
     def test_the_last_board_cannot_be_deleted(self) -> None:
         with self.assertRaises(WorkbenchError) as caught:
@@ -577,6 +596,37 @@ class CanvasServiceTest(unittest.TestCase):
         self.assertEqual(caught.exception.code, INVALID_INPUT)
         self.assertIn("unresolved-instance", str(caught.exception))
 
+        # An asset-bound instance takes the same rules from the same
+        # validator: resolution and publication are the document validator's
+        # facts, not the command's.
+        unpublished = self.components.create_component(
+            self.project_id,
+            name="未发布",
+            definition={"name": "未发布", "props": []},
+            operation=self.operation({"action": "components"}),
+        )["result"]
+        with self.assertRaises(WorkbenchError) as caught:
+            self.apply_batch(
+                canvas_id,
+                [{"kind": "node-add", "boardId": "b1",
+                  "node": {"id": "draft-inst", "type": "instance",
+                           "props": {"assetId": unpublished["assetId"], "params": {}},
+                           "layout": {"x": 0, "y": 0, "width": 10, "height": 10, "z": 6}}}],
+            )
+        self.assertEqual(caught.exception.code, INVALID_INPUT)
+        self.assertIn("unpublished-instance", str(caught.exception))
+
+        with self.assertRaises(WorkbenchError) as caught:
+            self.apply_batch(
+                canvas_id,
+                [{"kind": "node-add", "boardId": "b1",
+                  "node": {"id": "ghost-inst", "type": "instance",
+                           "props": {"assetId": "00000000-0000-4000-8000-000000000000"},
+                           "layout": {"x": 0, "y": 0, "width": 10, "height": 10, "z": 7}}}],
+            )
+        self.assertEqual(caught.exception.code, INVALID_INPUT)
+        self.assertIn("unresolved-instance", str(caught.exception))
+
         # Instance parameters are checked against the component's public
         # schema by the same code the component editor uses.
         with self.assertRaises(WorkbenchError) as caught:
@@ -589,7 +639,9 @@ class CanvasServiceTest(unittest.TestCase):
                            "layout": {"x": 0, "y": 0, "width": 10, "height": 10, "z": 2}}}],
             )
         self.assertEqual(caught.exception.code, INVALID_INPUT)
-        self.assertIn("invalid-param-value", str(caught.exception))
+        # One validator reports one kind; the old command-time check spelled
+        # the individual parameter problem instead.
+        self.assertIn("invalid-instance-params", str(caught.exception))
 
     def test_undo_never_touches_published_assets(self) -> None:
         self.project_dir.joinpath("brand.md").write_bytes(b"# Brand\n")
@@ -598,7 +650,7 @@ class CanvasServiceTest(unittest.TestCase):
             selections=["brand.md"],
             operation=self.operation({"action": "imports"}),
         )["result"]["asset"]
-        published = self.assets.publish_revision(
+        published = self.assets.publish(
             self.project_id,
             asset["assetId"],
             operation=self.operation(

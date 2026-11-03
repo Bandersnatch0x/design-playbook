@@ -310,7 +310,7 @@ class PreviewLedgerGateTests(unittest.TestCase):
             run_preview_transaction,
         )
 
-        def collect(*args: object, criteria: list[dict[str, str]]) -> dict:
+        def collect(*args: object, criteria: list[dict[str, str]], **kwargs: object) -> dict:
             return {
                 "choice": "确认通过", "feedback": "清晰",
                 "anchors": [], "aborted": False,

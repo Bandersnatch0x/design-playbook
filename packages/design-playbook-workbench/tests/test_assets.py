@@ -101,7 +101,7 @@ class AssetTestCase(unittest.TestCase):
 
     def publish(self, asset_id: str) -> dict:
         self.grant(["read", "write"])
-        return self.assets.publish_revision(
+        return self.assets.publish(
             self.project_id,
             asset_id,
             operation=self.operation(
@@ -424,19 +424,19 @@ class PublishTest(AssetTestCase):
         self.grant(["read", "write"])
         # No counter at all is a malformed request, not a last-write-wins.
         with self.assertRaises(WorkbenchError) as missing:
-            self.assets.publish_revision(
+            self.assets.publish(
                 self.project_id, asset_id, operation=self.operation({"publish": "none"})
             )
         self.assertEqual(missing.exception.code, INVALID_INPUT)
         # The counter read before the first publish is stale for the second.
         stale = self.asset_counter(asset_id)
-        self.assets.publish_revision(
+        self.assets.publish(
             self.project_id,
             asset_id,
             operation=self.operation({"publish": 1}, expected=stale),
         )
         with self.assertRaises(WorkbenchError) as stale_refused:
-            self.assets.publish_revision(
+            self.assets.publish(
                 self.project_id,
                 asset_id,
                 operation=self.operation({"publish": 2}, expected=stale),
@@ -448,7 +448,7 @@ class PublishTest(AssetTestCase):
         self.write("notes.md", "# notes\n")
         asset = self.import_assets(["notes.md"])["asset"]
         with self.assertRaises(WorkbenchError) as caught:
-            self.assets.publish_revision(
+            self.assets.publish(
                 self.project_id, asset["assetId"], operation=self.operation({"publish": 1})
             )
         self.assertEqual(caught.exception.code, UNAUTHORIZED)
@@ -456,7 +456,7 @@ class PublishTest(AssetTestCase):
         blob = asset["manifest"][0]["contentHash"]
         self.blobs.path_for(blob).unlink()
         with self.assertRaises(WorkbenchError) as caught:
-            self.assets.publish_revision(
+            self.assets.publish(
                 self.project_id,
                 asset["assetId"],
                 operation=self.operation(
@@ -479,7 +479,7 @@ class PublishTest(AssetTestCase):
         )
         self.grant(["read", "write"])
         with self.assertRaises(WorkbenchError) as caught:
-            self.assets.publish_revision(
+            self.assets.publish(
                 self.project_id,
                 asset["assetId"],
                 operation=self.operation(
@@ -632,19 +632,19 @@ class MutationReplayBindingTest(AssetTestCase):
             expected=self.asset_counter(asset_id),
         )
 
-        first = self.assets.publish_revision(self.project_id, asset_id, operation=operation)
+        first = self.assets.publish(self.project_id, asset_id, operation=operation)
         self.assertFalse(first["replayed"])
         self.assertIsNone(self.store.asset("nonexistent-asset"))
 
         # Same operation id, different (nonexistent) target: a conflict.
         with self.assertRaises(WorkbenchError) as caught:
-            self.assets.publish_revision(
+            self.assets.publish(
                 self.project_id, "nonexistent-asset", operation=operation
             )
         self.assertEqual(caught.exception.code, CONFLICT)
 
         # The exact same operation on the same target is idempotent.
-        again = self.assets.publish_revision(self.project_id, asset_id, operation=operation)
+        again = self.assets.publish(self.project_id, asset_id, operation=operation)
         self.assertTrue(again["replayed"])
         self.assertEqual(again["result"], first["result"])
 

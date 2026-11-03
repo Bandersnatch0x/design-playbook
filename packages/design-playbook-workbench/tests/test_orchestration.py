@@ -171,7 +171,7 @@ class OrchestrationTestCase(unittest.TestCase):
             selections=[name],
             operation=self.operation({"action": "imports"}),
         )["result"]["asset"]
-        self.assets.publish_revision(
+        self.assets.publish(
             self.project_id,
             asset["assetId"],
             operation=self.operation(
@@ -392,6 +392,26 @@ class SnapshotAndComparisonTest(OrchestrationTestCase):
         listing = self.orchestration.list_snapshots(self.project_id, canvas_id)
         self.assertEqual(len(listing["snapshots"]), 1)
 
+    def test_a_snapshot_retry_replays_the_same_snapshot(self) -> None:
+        created = self.create_canvas()
+        canvas_id = created["canvas"]["canvasId"]
+        operation = self.operation({"action": "snapshots"})
+        first = self.orchestration.create_snapshot(
+            self.project_id, canvas_id, note="评审基线", operation=operation
+        )
+        again = self.orchestration.create_snapshot(
+            self.project_id, canvas_id, note="评审基线", operation=operation
+        )
+        self.assertTrue(again["replayed"])
+        self.assertEqual(again["result"], first["result"])
+        self.assertEqual(
+            len(self.orchestration.list_snapshots(self.project_id, canvas_id)["snapshots"]),
+            1,
+        )
+        recorded = self.store.mutation(operation.operation_id)
+        self.assertEqual(recorded["entity_kind"], "scheme-snapshot")
+        self.assertEqual(recorded["entity_id"], first["result"]["snapshotId"])
+
     def test_comparison_shows_differences_and_crowns_no_winner(self) -> None:
         created = self.create_canvas()
         canvas_id = created["canvas"]["canvasId"]
@@ -610,6 +630,60 @@ class ContextSelectionTest(OrchestrationTestCase):
         ]
         self.assertEqual(read["totals"]["nodeCount"], 2)
         self.assertEqual(read["canvasCounter"], self.canvas_counter(canvas_id))
+
+    def test_a_retry_answers_before_the_selection_moves_again(self) -> None:
+        created = self.create_canvas()
+        canvas_id = created["canvas"]["canvasId"]
+        selection = self.build(canvas_id, node_ids=["n2"])
+        operation = self.operation({"action": "confirm"})
+        first = self.orchestration.confirm_context(
+            self.project_id, canvas_id, selection["selectionId"],
+            digest=selection["digest"], operation=operation,
+        )
+        # The selection changes again: a fresh confirmation of the old digest
+        # is refused, but the retry gets what was recorded for it.
+        self.build(
+            canvas_id, node_ids=["n2", "n3"], selection_id=selection["selectionId"]
+        )
+        again = self.orchestration.confirm_context(
+            self.project_id, canvas_id, selection["selectionId"],
+            digest=selection["digest"], operation=operation,
+        )
+        self.assertTrue(again["replayed"])
+        self.assertEqual(again["result"], first["result"])
+        self.assertEqual(again["result"]["state"], "confirmed")
+
+    def test_a_selection_retry_is_bound_to_the_id_the_client_sent(self) -> None:
+        created = self.create_canvas()
+        canvas_id = created["canvas"]["canvasId"]
+        operation = self.operation({"action": "contexts"})
+        first = self.orchestration.build_context(
+            self.project_id,
+            canvas_id,
+            selection_id="sel-one",
+            node_ids=["n2"],
+            operation=operation,
+        )
+        again = self.orchestration.build_context(
+            self.project_id,
+            canvas_id,
+            selection_id="sel-one",
+            node_ids=["n2"],
+            operation=operation,
+        )
+        self.assertTrue(again["replayed"])
+        self.assertEqual(again["result"], first["result"])
+        # Same operation, same content, a different target: a conflict, never
+        # the first selection's success.
+        with self.assertRaises(WorkbenchError) as caught:
+            self.orchestration.build_context(
+                self.project_id,
+                canvas_id,
+                selection_id="sel-two",
+                node_ids=["n2"],
+                operation=operation,
+            )
+        self.assertEqual(caught.exception.code, CONFLICT)
 
     def test_reads_are_scoped_to_their_own_project_and_canvas(self) -> None:
         created = self.create_canvas()

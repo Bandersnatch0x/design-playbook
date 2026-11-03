@@ -276,6 +276,31 @@ class ComponentLifecycleTest(ComponentsTestCase):
         locators = json.loads(revision["source_locators_json"])
         self.assertEqual(locators, [])
 
+    def test_a_publish_retry_replays_the_same_answer_and_says_so(self) -> None:
+        """One request, one identity: the retry finds its own ledger row.
+
+        The row is written by the dependency-recording delegate. The caller
+        must keep its operation ID and name its kind, or the retry searches
+        for a row that was never written under that name.
+        """
+        component = self.create_component(DEFINITION)
+        operation = self.operation(
+            {"action": "component-publish"}, expected=self.asset_counter(component["assetId"])
+        )
+        first = self.components.publish(
+            self.project_id, component["assetId"], operation=operation
+        )
+        self.assertFalse(first["replayed"])
+        again = self.components.publish(
+            self.project_id, component["assetId"], operation=operation
+        )
+        self.assertTrue(again["replayed"])
+        self.assertEqual(again["result"], first["result"])
+        self.assertEqual(again["counter"], first["counter"])
+        self.assertEqual(len(self.store.asset_revisions(component["assetId"])), 1)
+        recorded = self.store.mutation(operation.operation_id)
+        self.assertEqual(recorded["entity_kind"], "component-publish")
+
     def test_publish_refuses_unresolved_dependencies_and_unverified_capabilities(
         self,
     ) -> None:
@@ -318,6 +343,64 @@ class ComponentLifecycleTest(ComponentsTestCase):
         self.assertEqual(caught.exception.code, MISSING_DEPENDENCY)
         self.assertEqual(self.store.asset_revisions(component["assetId"]), [])
 
+    def test_a_component_cannot_claim_a_verified_capability_without_a_record(
+        self,
+    ) -> None:
+        """The verified-capability rule is publication's, on every path.
+
+        A component with a valid definition and a ``runnable-verified``
+        capability has no owner confirmation behind it, so the freeze is
+        refused exactly as it is for a plain asset publish.
+        """
+        component = self.create_component(DEFINITION)
+        draft = self.store.draft(component["assetId"])
+        attributes = json.loads(draft["attributes_json"])
+        attributes["capabilities"] = ["reference", "runnable-verified"]
+        self.store.update_draft(
+            asset_id=component["assetId"],
+            tags=[],
+            attributes=attributes,
+            now="2026-09-26T12:00:00Z",
+        )
+        with self.assertRaises(WorkbenchError) as caught:
+            self.components.publish(
+                self.project_id,
+                component["assetId"],
+                operation=self.operation(
+                    {"action": "component-publish"},
+                    expected=self.asset_counter(component["assetId"]),
+                ),
+            )
+        self.assertEqual(caught.exception.code, MISSING_DEPENDENCY)
+        self.assertEqual(self.store.asset_revisions(component["assetId"]), [])
+
+    def test_a_publish_retry_is_answered_before_the_content_is_read_again(
+        self,
+    ) -> None:
+        """A retry of a successful publish is a replay, not a fresh request.
+
+        The document read and its validation run inside the gate now, so a
+        retry still gets the recorded result when the content it published is
+        no longer readable.
+        """
+        component = self.create_component(DEFINITION)
+        operation = self.operation(
+            {"action": "component-publish"},
+            expected=self.asset_counter(component["assetId"]),
+        )
+        first = self.components.publish(
+            self.project_id, component["assetId"], operation=operation
+        )
+        revision = self.store.latest_revision(component["assetId"])
+        content_hash = json.loads(revision["manifest_json"])[0]["contentHash"]
+        self.blobs.path_for(content_hash).unlink()
+        again = self.components.publish(
+            self.project_id, component["assetId"], operation=operation
+        )
+        self.assertTrue(again["replayed"])
+        self.assertEqual(again["result"], first["result"])
+        self.assertEqual(len(self.store.asset_revisions(component["assetId"])), 1)
+
     def test_a_component_cannot_depend_on_itself(self) -> None:
         component = self.create_component(DEFINITION)
         self.components.update_definition(
@@ -355,7 +438,7 @@ class ComponentLifecycleTest(ComponentsTestCase):
             selections=["tokens/brand.json"],
             operation=self.operation({"action": "imports"}),
         )["result"]["asset"]
-        self.assets.publish_revision(
+        self.assets.publish(
             self.project_id,
             imported["assetId"],
             operation=self.operation(
@@ -524,7 +607,7 @@ class PageLayoutTest(ComponentsTestCase):
             ],
         }
         created = self.create_page(page)
-        self.components.publish_page(
+        published = self.components.publish_page(
             self.project_id,
             created["assetId"],
             operation=self.operation(
@@ -533,10 +616,48 @@ class PageLayoutTest(ComponentsTestCase):
             ),
         )
         revision = self.store.latest_revision(created["assetId"])
+        # The recorded response names the revision it made and the edges it
+        # recorded, so a replay returns the same facts rather than re-deriving
+        # them from whatever the layout says later.
+        self.assertEqual(published["result"]["revisionId"], revision["revision_id"])
+        self.assertEqual(
+            published["result"]["dependencies"],
+            [
+                {
+                    "assetId": component["assetId"],
+                    "revisionId": self.store.latest_revision(component["assetId"])[
+                        "revision_id"
+                    ],
+                    "revisionNumber": 1,
+                }
+            ],
+        )
         edges = self.store.dependencies(revision["revision_id"])
         self.assertEqual(
             [edge["depends_on_asset_id"] for edge in edges], [component["assetId"]]
         )
+
+    def test_a_page_publish_retry_replays_under_the_id_the_client_sent(self) -> None:
+        page = self.create_page(
+            {"name": "P", "nodes": [{"id": "root", "type": "stack", "children": [], "props": {}}]}
+        )
+        operation = self.operation(
+            {"action": "page-publish"}, expected=self.asset_counter(page["assetId"])
+        )
+        first = self.components.publish_page(
+            self.project_id, page["assetId"], operation=operation
+        )
+        self.assertFalse(first["replayed"])
+        again = self.components.publish_page(
+            self.project_id, page["assetId"], operation=operation
+        )
+        self.assertTrue(again["replayed"])
+        self.assertEqual(again["result"], first["result"])
+        self.assertEqual(len(self.store.asset_revisions(page["assetId"])), 1)
+        # One request, one ledger row, under the ID the client sent.
+        recorded = self.store.mutation(operation.operation_id)
+        self.assertEqual(recorded["entity_kind"], "page-publish")
+        self.assertEqual(recorded["entity_id"], page["assetId"])
 
     def test_pages_publish_their_own_document(self) -> None:
         page = self.create_page(PAGE)

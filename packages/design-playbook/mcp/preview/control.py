@@ -69,11 +69,22 @@ def _normalise_criteria(criteria: list[dict[str, Any]] | None) -> list[dict[str,
     return items
 
 
-def _render_criteria_cards(criteria: list[dict[str, str]]) -> str:
+#: Why the criteria list is empty, as the message key the shell shows.
+_CRITERIA_REASON_KEYS = {
+    "report-unresolved": "criteria_unavailable_report",
+    "spec-missing": "criteria_unavailable_spec",
+    "spec-invalid": "criteria_unavailable_invalid",
+}
+
+
+def _render_criteria_cards(
+    criteria: list[dict[str, str]], reason: str = ""
+) -> str:
     if not criteria:
+        key = _CRITERIA_REASON_KEYS.get(reason, "criteria_empty")
         return (
-            '<p class="dpb-spec-empty i18n" data-i18n="criteria_empty">'
-            f'{html_lib.escape(t("criteria_empty"))}</p>'
+            f'<p class="dpb-spec-empty i18n" data-i18n="{key}">'
+            f'{html_lib.escape(t(key))}</p>'
         )
 
     cards: list[str] = []
@@ -190,6 +201,7 @@ def _build_control(
     summary: str,
     options: list[str],
     criteria: list[dict[str, Any]] | None = None,
+    criteria_reason: str = "",
 ) -> str:
     """Build the injected confirm control-bar HTML (ADR-0008 floor-aware).
 
@@ -316,7 +328,7 @@ def _build_control(
         round_n=round_n,
         **localized_copy,
         summary_safe=summary_safe,
-        criteria_html=_render_criteria_cards(criteria_items),
+        criteria_html=_render_criteria_cards(criteria_items, criteria_reason),
         criteria_hidden=criteria_hidden,
         visual_edits_hidden=visual_edits_hidden,
         criteria_count_label=criteria_count_label,

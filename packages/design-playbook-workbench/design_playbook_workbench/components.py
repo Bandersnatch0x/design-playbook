@@ -25,7 +25,7 @@ import re
 import uuid
 from typing import Callable
 
-from .assets import AssetService
+from .assets import AssetService, document_text
 from .blobs import BlobStore
 from .errors import (
     INVALID_INPUT,
@@ -35,6 +35,8 @@ from .errors import (
     UNSUPPORTED,
     WorkbenchError,
 )
+from . import rows as rowshape
+from .publication import PublicationPlan
 from .reuse import ReuseService
 from .service import Operation, WorkbenchService, utc_now
 from .store import Store
@@ -77,9 +79,9 @@ MAX_STATES = 40
 _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]{0,63}$")
 _DIMENSION = re.compile(r"^-?\d+(?:\.\d+)?(?:px|rem|em|%|vw|vh|ch|pt)?$")
 
-_DOCUMENT_LABELS = {
-    KIND_COMPONENT: ("component", "component-definition"),
-    KIND_PAGE: ("layout-tree", "page-layout"),
+_DOCUMENT_CARRIERS = {
+    KIND_COMPONENT: "component",
+    KIND_PAGE: "layout-tree",
 }
 
 
@@ -691,19 +693,12 @@ class ComponentService:
     # -- shared plumbing ------------------------------------------------
 
     def _require_asset(self, project_id: str, asset_id: str, *, kind: str) -> dict:
-        row = self.store.asset(asset_id)
-        if row is None or row["project_id"] != project_id:
-            raise WorkbenchError(INVALID_TARGET)
-        if row["kind"] != kind:
-            raise WorkbenchError(
-                UNSUPPORTED, detail=f"asset is not a {kind}"
-            )
-        return row
+        return rowshape.owned_asset(self.store, project_id, asset_id, kind=kind)
 
     def _document_bytes(self, asset_id: str, revision: dict | None = None) -> tuple[bytes, dict]:
         source = revision or self.store.latest_revision(asset_id)
         if source is not None:
-            manifest = json.loads(source["manifest_json"])
+            manifest = rowshape.manifest(source)
             if manifest:
                 return self.blobs.read(manifest[0]["contentHash"]), {
                     "kind": "revision",
@@ -711,7 +706,7 @@ class ComponentService:
                     "revisionNumber": source["revision_number"],
                 }
         draft = self.store.draft(asset_id)
-        manifest = json.loads(draft["attributes_json"]).get("manifest", [])
+        manifest = rowshape.attributes(draft).get("manifest", [])
         if not manifest:
             raise WorkbenchError(MISSING_DEPENDENCY)
         return self.blobs.read(manifest[0]["contentHash"]), {"kind": "draft"}
@@ -780,61 +775,28 @@ class ComponentService:
             )
         return resolved
 
-    def _write_document(
+    def _document_body(
         self,
         *,
-        project_id: str,
         asset_id: str,
         kind: str,
-        text: str,
+        document: object,
         capabilities: list[str],
         locators: list[dict],
-        operation: Operation,
-        mutation_kind: str,
-    ) -> dict:
-        record = self.blobs.put(text.encode("utf-8"))
+    ) -> tuple[dict, int]:
+        """Write one document asset's draft; the caller owns the transaction."""
         draft = self.store.draft(asset_id)
-        attributes = json.loads(draft["attributes_json"])
-        carrier, document = _DOCUMENT_LABELS[kind]
-        attributes["manifest"] = [
-            {
-                "path": document_path(kind, attributes.get("displayName") or draft["name"]),
-                "contentHash": record.content_hash,
-                "size": record.size,
-                "mediaType": "application/json",
-                "carrier": carrier,
-                "encoding": "utf-8",
-            }
-        ]
-        attributes["carrier"] = carrier
-        attributes["document"] = document
-        attributes["capabilities"] = list(capabilities)
-        attributes["sourceLocators"] = list(locators)
-        now = self._now()
-
-        def apply() -> tuple[dict, int]:
-            self.store.update_draft(
-                asset_id=asset_id,
-                tags=json.loads(draft["tags_json"]),
-                attributes=attributes,
-                now=now,
-            )
-            counter = self.store.bump_asset_counter(asset_id=asset_id, now=now)
-            payload = self.assets._asset_payload(
-                self.store.asset(asset_id), self.store.draft(asset_id), None
-            )
-            return payload, counter
-
-        with self.store.transaction():
-            result, counter = apply()
-            self.assets._record(
-                operation=operation,
-                kind=mutation_kind,
-                entity_id=asset_id,
-                project_id=project_id,
-                result=result,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        attributes = rowshape.attributes(draft)
+        return self.assets.write_document_draft(
+            asset_id,
+            document=document,
+            path=document_path(
+                kind, attributes.get("displayName") or draft["name"]
+            ),
+            carrier=_DOCUMENT_CARRIERS[kind],
+            capabilities=capabilities,
+            source_locators=locators,
+        )
 
     def _create_document_asset(
         self,
@@ -848,35 +810,28 @@ class ComponentService:
         operation: Operation,
         mutation_kind: str,
     ) -> dict:
-        replayed = self.service._replay(operation, kind=mutation_kind, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        record = self.blobs.put(text.encode("utf-8"))
-        asset_id = str(uuid.uuid4())
-        carrier, document = _DOCUMENT_LABELS[kind]
-        now = self._now()
-        attributes = {
-            "manifest": [
-                {
-                    "path": document_path(kind, name),
-                    "contentHash": record.content_hash,
-                    "size": record.size,
-                    "mediaType": "application/json",
-                    "carrier": carrier,
-                    "encoding": "utf-8",
-                }
-            ],
-            "carrier": carrier,
-            "document": document,
-            "capabilities": list(capabilities),
-            "sourceLocators": list(locators),
-            "roots": [],
-            "warnings": [],
-            "displayName": name,
-        }
-
         def apply() -> tuple[dict, int]:
+            record = self.blobs.put(text.encode("utf-8"))
+            asset_id = str(uuid.uuid4())
+            carrier = _DOCUMENT_CARRIERS[kind]
+            attributes = {
+                "manifest": [
+                    {
+                        "path": document_path(kind, name),
+                        "contentHash": record.content_hash,
+                        "size": record.size,
+                        "mediaType": "application/json",
+                        "carrier": carrier,
+                        "encoding": "utf-8",
+                    }
+                ],
+                "carrier": carrier,
+                "capabilities": list(capabilities),
+                "sourceLocators": list(locators),
+                "roots": [],
+                "warnings": [],
+                "displayName": name,
+            }
             self.store.create_asset(
                 asset_id=asset_id,
                 project_id=project_id,
@@ -884,23 +839,22 @@ class ComponentService:
                 name=name,
                 tags=[],
                 attributes=attributes,
-                now=now,
+                now=self._now(),
             )
-            payload = self.assets._asset_payload(
+            payload = self.assets.asset_payload(
                 self.store.asset(asset_id), self.store.draft(asset_id), None
             )
             return payload, 0
 
-        with self.store.transaction():
-            result, counter = apply()
-            self.assets._record(
-                operation=operation,
-                kind=mutation_kind,
-                entity_id=asset_id,
-                project_id=project_id,
-                result=result,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.create(
+            operation,
+            kind=mutation_kind,
+            entity_of=lambda result: str(result["assetId"]),
+            project_of=lambda result: project_id,
+            apply=apply,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            project_id=project_id,
+        )
 
     # -- components -----------------------------------------------------
 
@@ -924,7 +878,7 @@ class ComponentService:
             project_id=project_id,
             kind=KIND_COMPONENT,
             name=name.strip()[:120],
-            text=json.dumps(parsed, ensure_ascii=False, indent=2, sort_keys=True),
+            text=document_text(parsed),
             capabilities=["reference"],
             locators=[],
             operation=operation,
@@ -939,71 +893,76 @@ class ComponentService:
         definition: object,
         operation: Operation,
     ) -> dict:
-        replayed = self.service._replay(operation, kind="component-update", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        row = self._require_asset(project_id, asset_id, kind=KIND_COMPONENT)
         parsed = parse_definition(definition)
-        verdict = validate_definition(parsed)
-        if not verdict["valid"]:
-            raise WorkbenchError(
-                INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False)
+        held: dict = {}
+
+        def validate(row: dict) -> None:
+            # The counter is compared after this, so a malformed definition
+            # reports its own error instead of a counter one.
+            verdict = validate_definition(parsed)
+            if not verdict["valid"]:
+                raise WorkbenchError(
+                    INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False)
+                )
+            held["verdict"] = verdict
+
+        def apply() -> tuple[dict, int]:
+            draft = self.store.draft(asset_id)
+            attributes = rowshape.attributes(draft)
+            result, counter = self._document_body(
+                asset_id=asset_id,
+                kind=KIND_COMPONENT,
+                document=parsed,
+                capabilities=attributes.get("capabilities") or ["reference"],
+                locators=attributes.get("sourceLocators") or [],
             )
-        # The counter is checked after the document is known to be valid, so a
-        # malformed definition reports its own error instead of a counter one.
-        self.assets._check_counter(row, operation)
-        draft = self.store.draft(asset_id)
-        attributes = json.loads(draft["attributes_json"])
-        outcome = self._write_document(
+            result["validation"] = held["verdict"]
+            return result, counter
+
+        return self.service.mutations.existing(
+            operation,
+            kind="component-update",
+            entity_id=asset_id,
             project_id=project_id,
-            asset_id=asset_id,
-            kind=KIND_COMPONENT,
-            text=json.dumps(parsed, ensure_ascii=False, indent=2, sort_keys=True),
-            capabilities=attributes.get("capabilities") or ["reference"],
-            locators=attributes.get("sourceLocators") or [],
-            operation=operation,
-            mutation_kind="component-update",
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self._require_asset(
+                project_id, asset_id, kind=KIND_COMPONENT
+            ),
+            validate=validate,
+            apply=apply,
         )
-        outcome["result"]["validation"] = verdict
-        return outcome
 
     def publish(self, project_id: str, asset_id: str, *, operation: Operation) -> dict:
-        """Publish a component only when its definition and deps are complete."""
-        replayed = self.service._replay(operation, kind="component-publish", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        self._require_asset(project_id, asset_id, kind=KIND_COMPONENT)
-        data, _ = self._document_bytes(asset_id)
-        definition = parse_definition(data)
-        dependencies = self._resolve_dependencies(project_id, asset_id, definition)
-        verdict = validate_definition(definition, dependencies=dependencies)
-        if not verdict["valid"]:
-            raise WorkbenchError(
-                INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False)
+        """Publish a component only when its definition and deps are complete.
+
+        The freeze, its closure check, and the ledger row belong to the one
+        publication owner; this method only states what must hold first. That
+        check runs inside the gate, after a replay is answered, so a definition
+        edited after a successful publish cannot turn its retry into an error.
+        """
+        def prepare() -> PublicationPlan:
+            self._require_asset(project_id, asset_id, kind=KIND_COMPONENT)
+            data, _ = self._document_bytes(asset_id)
+            definition = parse_definition(data)
+            dependencies = self._resolve_dependencies(project_id, asset_id, definition)
+            verdict = validate_definition(definition, dependencies=dependencies)
+            if not verdict["valid"]:
+                raise WorkbenchError(
+                    INVALID_INPUT,
+                    detail=json.dumps(verdict["errors"], ensure_ascii=False),
+                )
+            return PublicationPlan(
+                dependencies=dependencies,
+                response={"definition": definition, "validation": verdict},
             )
-        if self.reuse.would_cycle(
-            project_id=project_id, asset_id=asset_id, dependencies=dependencies
-        ):
-            raise WorkbenchError(MISSING_DEPENDENCY, detail="dependency cycle")
-        # The dependency-recording publication path is owned by the reuse
-        # module; the derived operation ID keeps the two mutations distinct
-        # while this call still answers replays itself.
-        outcome = self.reuse.publish_with_dependencies(
+
+        return self.assets.publish(
             project_id,
             asset_id,
-            dependencies=dependencies,
-            operation=Operation(
-                operation_id=f"{operation.operation_id}:dependencies",
-                payload={"action": "publish-with-deps", "assetId": asset_id},
-                expected_counter=operation.expected_counter,
-            ),
+            operation=operation,
+            kind="component-publish",
+            prepare=prepare,
         )
-        result = outcome["result"]
-        result["definition"] = definition
-        result["validation"] = verdict
-        return {"result": result, "replayed": False, "counter": outcome["counter"]}
 
     def instance_preview(
         self, project_id: str, asset_id: str, *, params: object = None
@@ -1026,7 +985,7 @@ class ComponentService:
             definition, supplied, title=f"{definition['name']} 实例"
         ).encode("utf-8")
         record = self.blobs.put(html)
-        attributes = json.loads(self.store.draft(asset_id)["attributes_json"])
+        attributes = rowshape.attributes(self.store.draft(asset_id))
         return {
             "assetId": asset_id,
             "params": resolved,
@@ -1115,7 +1074,7 @@ class ComponentService:
             project_id=project_id,
             kind=KIND_PAGE,
             name=name.strip()[:120],
-            text=json.dumps(parsed, ensure_ascii=False, indent=2, sort_keys=True),
+            text=document_text(parsed),
             capabilities=["reference"],
             locators=[],
             operation=operation,
@@ -1130,66 +1089,75 @@ class ComponentService:
         layout: object,
         operation: Operation,
     ) -> dict:
-        replayed = self.service._replay(operation, kind="page-update", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        self._require_asset(project_id, asset_id, kind=KIND_PAGE)
         parsed = parse_layout(layout)
-        verdict = validate_layout(
-            parsed, components=self._component_index(project_id)
-        )
-        if not verdict["valid"]:
-            raise WorkbenchError(
-                INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False)
+        held: dict = {}
+
+        def validate(row: dict) -> None:
+            verdict = validate_layout(
+                parsed, components=self._component_index(project_id)
             )
-        draft = self.store.draft(asset_id)
-        attributes = json.loads(draft["attributes_json"])
-        outcome = self._write_document(
+            if not verdict["valid"]:
+                raise WorkbenchError(
+                    INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False)
+                )
+            held["verdict"] = verdict
+
+        def apply() -> tuple[dict, int]:
+            draft = self.store.draft(asset_id)
+            attributes = rowshape.attributes(draft)
+            result, counter = self._document_body(
+                asset_id=asset_id,
+                kind=KIND_PAGE,
+                document=parsed,
+                capabilities=attributes.get("capabilities") or ["reference"],
+                locators=attributes.get("sourceLocators") or [],
+            )
+            result["validation"] = held["verdict"]
+            return result, counter
+
+        return self.service.mutations.existing(
+            operation,
+            kind="page-update",
+            entity_id=asset_id,
             project_id=project_id,
-            asset_id=asset_id,
-            kind=KIND_PAGE,
-            text=json.dumps(parsed, ensure_ascii=False, indent=2, sort_keys=True),
-            capabilities=attributes.get("capabilities") or ["reference"],
-            locators=attributes.get("sourceLocators") or [],
-            operation=operation,
-            mutation_kind="page-update",
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self._require_asset(project_id, asset_id, kind=KIND_PAGE),
+            validate=validate,
+            apply=apply,
+            # A page update has never asked its caller for a counter; T-127
+            # owns that gap and this round may not close it.
+            require_counter=False,
         )
-        outcome["result"]["validation"] = verdict
-        return outcome
 
     def publish_page(self, project_id: str, asset_id: str, *, operation: Operation) -> dict:
-        replayed = self.service._replay(operation, kind="page-publish", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        row = self._require_asset(project_id, asset_id, kind=KIND_PAGE)
-        data, _ = self._document_bytes(asset_id)
-        layout = parse_layout(data)
-        verdict = validate_layout(
-            layout, components=self._component_index(project_id)
-        )
-        if not verdict["valid"]:
-            raise WorkbenchError(
-                INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False)
+        """Publish a page, recording the components it instantiates."""
+        def prepare() -> PublicationPlan:
+            self._require_asset(project_id, asset_id, kind=KIND_PAGE)
+            data, _ = self._document_bytes(asset_id)
+            layout = parse_layout(data)
+            verdict = validate_layout(
+                layout, components=self._component_index(project_id)
             )
-        self.assets._check_counter(row, operation)
-        # R07: a page that instantiates components depends on them. Recording
-        # those edges is what lets the affected list name pages, and what
-        # makes a reuse plan show a page's real closure.
-        dependencies = self._page_dependencies(layout)
-        outcome = self.assets.publish_revision(
+            if not verdict["valid"]:
+                raise WorkbenchError(
+                    INVALID_INPUT,
+                    detail=json.dumps(verdict["errors"], ensure_ascii=False),
+                )
+            # R07: a page that instantiates components depends on them.
+            # Recording those edges is what lets the affected list name
+            # pages, and what makes a reuse plan show a page's real closure.
+            return PublicationPlan(
+                dependencies=self._page_dependencies(layout),
+                response={"validation": verdict},
+            )
+
+        return self.assets.publish(
             project_id,
             asset_id,
-            operation=Operation(
-                operation_id=f"{operation.operation_id}:revision",
-                payload={"action": "publish", "assetId": asset_id},
-                expected_counter=operation.expected_counter,
-            ),
-            dependencies=dependencies,
+            operation=operation,
+            kind="page-publish",
+            prepare=prepare,
         )
-        outcome["result"]["validation"] = verdict
-        return outcome
 
     def _page_dependencies(self, layout: dict) -> list[dict]:
         """The published component revisions one page's nodes instantiate."""
@@ -1243,9 +1211,9 @@ class ComponentService:
         publishes it separately. The source page is never written, and no
         reuse, verification, or approval is claimed.
         """
-        replayed = self.service._replay(operation, kind="component-distill", project_id=project_id)
-        if replayed is not None:
-            return replayed
+        # The row is written by the create helper below and this method adds
+        # the candidate locator and owner note to the result afterwards, so the
+        # helper answers the replay and both paths decorate the same way.
         self.service.require_project(project_id, scope="write")
         page = self.store.asset(page_asset_id)
         if page is None or page["project_id"] != project_id:
@@ -1326,7 +1294,7 @@ class ComponentService:
             project_id=project_id,
             kind=KIND_COMPONENT,
             name=candidate_name,
-            text=json.dumps(definition, ensure_ascii=False, indent=2, sort_keys=True),
+            text=document_text(definition),
             capabilities=["reference"],
             locators=locators,
             operation=operation,

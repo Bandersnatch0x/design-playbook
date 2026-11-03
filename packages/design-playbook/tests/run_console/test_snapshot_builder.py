@@ -188,6 +188,7 @@ class PassBuildTest(_BuilderTestCase):
                 "execution",
                 "evaluation",
                 "nextActions",
+                "repairPacket",
                 "limitations",
                 "sources",
             },

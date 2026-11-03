@@ -36,6 +36,7 @@ from .errors import (
     RECOVERY_REQUIRED,
     WorkbenchError,
 )
+from . import rows as rowshape
 from .paths import assert_contained
 from .service import Operation, WorkbenchService
 from .store import Store, WorkbenchDataDirectory
@@ -252,26 +253,6 @@ class ProposalService:
         # until the maintainer resolves it explicitly.
         raise WorkbenchError(RECOVERY_REQUIRED)
 
-    def _record(
-        self,
-        *,
-        operation: Operation,
-        kind: str,
-        entity_id: str,
-        project_id: str | None,
-        result: dict,
-    ) -> None:
-        self.store.record_mutation(
-            operation_id=operation.operation_id,
-            entity_kind=kind,
-            entity_id=entity_id,
-            payload_digest=operation.digest,
-            resulting_counter=None,
-            result_json=_canonical_json(result),
-            project_id=project_id,
-            now=self._now_iso(),
-        )
-
     # -- proposal creation ---------------------------------------------
 
     def _parse_changes(self, raw: object) -> list[ChangeSpec]:
@@ -335,99 +316,110 @@ class ProposalService:
         dependency_changes: object = None,
         source_request: object = None,
     ) -> dict:
-        replayed = self.service._replay(operation, kind="proposal-create", project_id=project_id)
-        if replayed is not None:
-            return replayed
-        target = self.service.require_project(project_id, scope="write")
-        self._block_incomplete(project_id)
-        specs = self._parse_changes(changes)
-        if summary is not None and not isinstance(summary, str):
-            raise WorkbenchError(INVALID_INPUT)
-        if dependency_changes is None:
-            dependency_changes = []
-        if not isinstance(dependency_changes, list):
-            raise WorkbenchError(INVALID_INPUT, detail="dependencyChanges must be a list")
-        if source_request is not None:
-            if not isinstance(source_request, str):
-                raise WorkbenchError(INVALID_INPUT, detail="sourceRequest must be a request id")
-            request = self.store.work_request(source_request)
-            if request is None or request["project_id"] != project_id:
-                raise WorkbenchError(INVALID_TARGET, detail="sourceRequest belongs to another project")
-        root = Path(target["canonicalPath"])
-
-        entries: list[dict] = []
-        for spec in specs:
-            relative, resolved = self._resolve(root, spec.path)
-            current = _current_hash(resolved)
-            if spec.operation == "create":
-                if current is not None:
-                    # A new file must be new: an existing file is a change
-                    # of the maintainer's content, not a creation.
-                    raise WorkbenchError(
-                        CONFLICT, detail=f"{relative} already exists"
-                    )
-                result_hash = sha256_bytes(spec.content or b"")
-            else:
-                if current is None:
-                    raise WorkbenchError(
-                        CONFLICT, detail=f"{relative} does not exist"
-                    )
-                if current != spec.base_hash:
-                    raise WorkbenchError(
-                        CONFLICT,
-                        detail=f"{relative} changed since the proposal was created",
-                    )
-                result_hash = (
-                    None if spec.operation == "delete" else sha256_bytes(spec.content or b"")
+        def apply() -> tuple[dict, None]:
+            target = self.service.require_project(project_id, scope="write")
+            self._block_incomplete(project_id)
+            specs = self._parse_changes(changes)
+            if summary is not None and not isinstance(summary, str):
+                raise WorkbenchError(INVALID_INPUT)
+            dependency_list = dependency_changes
+            if dependency_list is None:
+                dependency_list = []
+            if not isinstance(dependency_list, list):
+                raise WorkbenchError(
+                    INVALID_INPUT, detail="dependencyChanges must be a list"
                 )
-            entries.append(
-                {
-                    "path": relative,
-                    "operation": spec.operation,
-                    "baseHash": spec.base_hash if spec.operation != "create" else None,
-                    "resultHash": result_hash,
-                    "diff": _unified_diff(
-                        relative,
-                        None if spec.operation == "create" else _read_bytes(resolved),
-                        None if spec.operation == "delete" else spec.content,
-                    ),
-                }
-            )
+            if source_request is not None:
+                if not isinstance(source_request, str):
+                    raise WorkbenchError(
+                        INVALID_INPUT, detail="sourceRequest must be a request id"
+                    )
+                request = self.store.work_request(source_request)
+                if request is None or request["project_id"] != project_id:
+                    raise WorkbenchError(
+                        INVALID_TARGET,
+                        detail="sourceRequest belongs to another project",
+                    )
+            root = Path(target["canonicalPath"])
 
-        proposal_id = str(uuid.uuid4())
-        staging = self._staging_dir(proposal_id)
-        for index, spec in enumerate(specs):
-            if spec.operation in ("create", "update"):
-                (staging / f"{index:03d}.content").write_bytes(spec.content or b"")
-            else:
-                (staging / f"{index:03d}.content").write_bytes(b"")
-            if spec.operation in ("update", "delete"):
-                _, resolved = self._resolve(root, spec.path)
-                (staging / f"{index:03d}.backup").write_bytes(_read_bytes(resolved))
+            entries: list[dict] = []
+            for spec in specs:
+                relative, resolved = self._resolve(root, spec.path)
+                current = _current_hash(resolved)
+                if spec.operation == "create":
+                    if current is not None:
+                        # A new file must be new: an existing file is a change
+                        # of the maintainer's content, not a creation.
+                        raise WorkbenchError(
+                            CONFLICT, detail=f"{relative} already exists"
+                        )
+                    result_hash = sha256_bytes(spec.content or b"")
+                else:
+                    if current is None:
+                        raise WorkbenchError(
+                            CONFLICT, detail=f"{relative} does not exist"
+                        )
+                    if current != spec.base_hash:
+                        raise WorkbenchError(
+                            CONFLICT,
+                            detail=f"{relative} changed since the proposal was created",
+                        )
+                    result_hash = (
+                        None
+                        if spec.operation == "delete"
+                        else sha256_bytes(spec.content or b"")
+                    )
+                entries.append(
+                    {
+                        "path": relative,
+                        "operation": spec.operation,
+                        "baseHash": (
+                            spec.base_hash if spec.operation != "create" else None
+                        ),
+                        "resultHash": result_hash,
+                        "diff": _unified_diff(
+                            relative,
+                            None if spec.operation == "create" else _read_bytes(resolved),
+                            None if spec.operation == "delete" else spec.content,
+                        ),
+                    }
+                )
 
-        now = self._now()
-        expires_at = _iso(now + timedelta(seconds=PROPOSAL_TTL_SECONDS))
-        payload = {
-            "proposalId": proposal_id,
-            "projectId": project_id,
-            "state": STATE_AWAITING,
-            "summary": summary or "",
-            "target": {
+            proposal_id = str(uuid.uuid4())
+            staging = self._staging_dir(proposal_id)
+            for index, spec in enumerate(specs):
+                if spec.operation in ("create", "update"):
+                    (staging / f"{index:03d}.content").write_bytes(spec.content or b"")
+                else:
+                    (staging / f"{index:03d}.content").write_bytes(b"")
+                if spec.operation in ("update", "delete"):
+                    _, resolved = self._resolve(root, spec.path)
+                    (staging / f"{index:03d}.backup").write_bytes(
+                        _read_bytes(resolved)
+                    )
+
+            now = self._now()
+            expires_at = _iso(now + timedelta(seconds=PROPOSAL_TTL_SECONDS))
+            payload = {
+                "proposalId": proposal_id,
                 "projectId": project_id,
-                "bindingGeneration": target["bindingGeneration"],
-                "directoryIdentity": target["directoryIdentity"],
-                "canonicalPath": target["canonicalPath"],
-            },
-            "changes": entries,
-            "dependencyChanges": dependency_changes,
-            "sourceRequest": source_request,
-            "createdAt": _iso(now),
-            "expiresAt": expires_at,
-            "stagingReference": f"staging/{proposal_id}",
-        }
-        digest = self._proposal_digest(payload)
-        payload["digest"] = digest
-        with self.store.transaction():
+                "state": STATE_AWAITING,
+                "summary": summary or "",
+                "target": {
+                    "projectId": project_id,
+                    "bindingGeneration": target["bindingGeneration"],
+                    "directoryIdentity": target["directoryIdentity"],
+                    "canonicalPath": target["canonicalPath"],
+                },
+                "changes": entries,
+                "dependencyChanges": dependency_list,
+                "sourceRequest": source_request,
+                "createdAt": _iso(now),
+                "expiresAt": expires_at,
+                "stagingReference": f"staging/{proposal_id}",
+            }
+            digest = self._proposal_digest(payload)
+            payload["digest"] = digest
             self.store.create_proposal(
                 proposal_id=proposal_id,
                 project_id=project_id,
@@ -438,20 +430,22 @@ class ProposalService:
                 expires_at=expires_at,
                 now=_iso(now),
             )
-            self._record(
-                operation=operation,
-                kind="proposal-create",
-                entity_id=proposal_id,
-                project_id=project_id,
-                result=payload,
-            )
-        return {"result": payload, "replayed": False, "counter": None}
+            return payload, None
+
+        return self.service.mutations.create(
+            operation,
+            kind="proposal-create",
+            entity_of=lambda result: result["proposalId"],
+            project_of=lambda result: result["projectId"],
+            apply=apply,
+            project_id=project_id,
+        )
 
     # -- reads ---------------------------------------------------------
 
     def detail(self, project_id: str, proposal_id: str) -> dict:
         row = self._require_proposal(project_id, proposal_id)
-        payload = json.loads(row["payload_json"])
+        payload = rowshape.load(row["payload_json"], {})
         payload["state"] = self._effective_state(row)
         journal = self.store.journal(proposal_id)
         payload["journalState"] = journal["state"] if journal is not None else None
@@ -502,7 +496,7 @@ class ProposalService:
         self.service.require_project(project_id, scope="read")
         items = []
         for row in self.store.project_proposals(project_id):
-            payload = json.loads(row["payload_json"])
+            payload = rowshape.load(row["payload_json"], {})
             payload["state"] = self._effective_state(row)
             items.append(
                 {
@@ -554,7 +548,7 @@ class ProposalService:
         row = self.store.proposal(proposal_id)
         if row is None or row["project_id"] != project_id:
             raise WorkbenchError(INVALID_TARGET)
-        payload = json.loads(row["payload_json"])
+        payload = rowshape.load(row["payload_json"], {})
         if self._proposal_digest(payload) != row["digest"]:
             raise WorkbenchError(CORRUPT_CONTENT, detail="proposal metadata no longer matches its digest")
         return row
@@ -692,7 +686,7 @@ class ProposalService:
             # and the approval no longer names this proposal.
             raise WorkbenchError(CONFLICT)
         self._block_incomplete(project_id)
-        payload = json.loads(row["payload_json"])
+        payload = rowshape.load(row["payload_json"], {})
         root = Path(target["canonicalPath"])
         with self._project_lock(project_id):
             if self.store.journal(proposal_id) is not None:
@@ -731,12 +725,13 @@ class ProposalService:
                     receipt_json=_canonical_json(receipt),
                     applied_at=self._now_iso(),
                 )
-                self._record(
-                    operation=operation,
+                self.service.mutations.record(
+                    operation,
                     kind="proposal-apply",
                     entity_id=proposal_id,
-                    project_id=project_id,
                     result=receipt,
+                    counter=None,
+                    project_id=project_id,
                 )
         return {"result": receipt, "replayed": False, "counter": None}
 
@@ -810,7 +805,7 @@ class ProposalService:
         journal = self.store.journal(proposal_id)
         if journal is None or journal["state"] not in (JOURNAL_WRITING, JOURNAL_RECOVERY):
             raise WorkbenchError(CONFLICT)
-        plan = json.loads(journal["plan_json"])
+        plan = rowshape.load(journal["plan_json"], {})
         root = Path(target["canonicalPath"])
         with self._project_lock(project_id):
             applied, pending, external = self._classify(row, target, plan)
@@ -867,12 +862,13 @@ class ProposalService:
                         now=self._now_iso(),
                         receipt_json=_canonical_json(receipt),
                     )
-                    self._record(
-                        operation=operation,
+                    self.service.mutations.record(
+                        operation,
                         kind="proposal-recover",
                         entity_id=proposal_id,
-                        project_id=project_id,
                         result=receipt,
+                        counter=None,
+                        project_id=project_id,
                     )
                 return {"result": receipt, "replayed": False, "counter": None}
 
@@ -907,12 +903,13 @@ class ProposalService:
                     receipt_json=_canonical_json(receipt),
                     applied_at=self._now_iso(),
                 )
-                self._record(
-                    operation=operation,
+                self.service.mutations.record(
+                    operation,
                     kind="proposal-recover",
                     entity_id=proposal_id,
-                    project_id=project_id,
                     result=receipt,
+                    counter=None,
+                    project_id=project_id,
                 )
             return {"result": receipt, "replayed": False, "counter": None}
 
@@ -931,7 +928,7 @@ class ProposalService:
         row = self._require_proposal(project_id, proposal_id)
         if row["state"] != STATE_APPLIED:
             raise WorkbenchError(CONFLICT)
-        payload = json.loads(row["payload_json"])
+        payload = rowshape.load(row["payload_json"], {})
         root = Path(target["canonicalPath"])
         staging = Path(row["staging_dir"])
         changes: list[dict] = []
@@ -978,28 +975,29 @@ class ProposalService:
         return outcome
 
     def reject(self, project_id: str, proposal_id: str, *, operation: Operation) -> dict:
-        replayed = self.service._replay(
-            operation, kind="proposal-reject", entity_id=proposal_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self._require_proposal(project_id, proposal_id)
-        row = self.store.proposal(proposal_id)
-        assert row is not None
-        if row["state"] != STATE_AWAITING:
-            raise WorkbenchError(CONFLICT)
-        result = {"proposalId": proposal_id, "state": STATE_REJECTED}
-        with self.store.transaction():
+        def check(row: dict) -> None:
+            if row["state"] != STATE_AWAITING:
+                raise WorkbenchError(CONFLICT)
+
+        def apply() -> tuple[dict, None]:
+            result = {"proposalId": proposal_id, "state": STATE_REJECTED}
             self.store.set_proposal_state(
                 proposal_id=proposal_id, state=STATE_REJECTED, now=self._now_iso()
             )
-            self._record(
-                operation=operation,
-                kind="proposal-reject",
-                entity_id=proposal_id,
-                project_id=project_id,
-                result=result,
-            )
-        return {"result": result, "replayed": False, "counter": None}
+            return result, None
+
+        return self.service.mutations.existing(
+            operation,
+            kind="proposal-reject",
+            entity_id=proposal_id,
+            project_id=project_id,
+            load_row=lambda: self._require_proposal(project_id, proposal_id),
+            apply=apply,
+            # Proposals carry no counter column: the payload digest is
+            # their concurrency unit (CONTEXT.md, T-127).
+            require_counter=False,
+            validate=check,
+        )
 
 
 def _read_bytes(path: Path) -> bytes:

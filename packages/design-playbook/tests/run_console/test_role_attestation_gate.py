@@ -886,7 +886,13 @@ class DisabledSnapshotLimitationTest(_BuiltSnapshotTestCase):
         self.assertEqual(attest_keys, [])
         for path in role_paths:
             with self.subTest(path=path):
-                self.assertTrue(path.startswith("nextActions."), path)
+                # The repair packet is a derived view of the same next action,
+                # so its owner role is the one role-bearing structure, not a
+                # second gate.
+                self.assertTrue(
+                    path.startswith(("nextActions.", "repairPacket.nextOwner.value.")),
+                    path,
+                )
 
     def test_the_ui_renders_the_disabled_attest_control_with_the_limitation(self) -> None:
         # The limitation is visible in the rendered Console: the attest

@@ -5,6 +5,17 @@ is not a schema, is not persisted, and is not a second finding, verdict,
 or repair authority. Missing owner, command, resume-stage, recapture, or
 invalidated-evidence facts stay explicit evidence gaps; prose is never
 parsed to fill them. The projection writes nothing and executes nothing.
+
+Ownership: the operator's console derives the same packet in the browser
+(``app.js``) because it renders from the snapshot alone -- it has no round
+trip to this module. ``scripts/frontend_review.py`` is this module's reader.
+``tests/run_console/test_repair_packet_mirror.py`` runs the shipped client
+block against this projection over the same snapshots, so the two owners
+are held equal by execution. Routing the packet through the snapshot
+contract instead would make this module the only owner, but that changes
+Run Snapshot v1 and needs its own decision; until then the execution mirror
+*is* the contract. The plain-text copy renderer used to be duplicated here
+with no reader (the console owns copy text); it is gone.
 """
 from __future__ import annotations
 
@@ -86,7 +97,18 @@ def _from_assertion(assertion: object) -> dict[str, Any]:
     source_id = assertion.get("id")
     source_id = source_id if isinstance(source_id, str) else None
     reason = assertion.get("reason")
-    reason_obj = reason if isinstance(reason, dict) else None
+    # The packet reason is the closed {code, message} pair the shell renders;
+    # assertion reasons also carry hashes and refs, which stay in the snapshot
+    # where their owners put them.
+    reason_obj = None
+    if isinstance(reason, dict):
+        code = reason.get("code")
+        message = reason.get("message")
+        if isinstance(code, str) or isinstance(message, str):
+            reason_obj = _reason(
+                code if isinstance(code, str) else "",
+                message if isinstance(message, str) else "",
+            )
     result = assertion.get("result")
     if availability in _READABLE_AVAILABILITY:
         return _fact(
@@ -295,23 +317,23 @@ def _next_command(primary: object) -> dict[str, Any]:
 def _next_action_field(
     primary: object, field: str, missing_message: str
 ) -> dict[str, Any]:
-    """Project one optional owner fact from the primary action."""
+    """Project one optional owner fact from the primary action.
+
+    A present-but-empty value (``""`` or ``[]``) is a projected fact, not a
+    gap: the schema allows both, and the Console renders them as known-empty.
+    Only an absent or null field is an evidence gap. This mirrors
+    ``packetNextActionField`` in ``app.js``, which is what the operator reads;
+    tests/run_console/test_repair_packet_mirror.py holds the two together.
+    """
     projected = _from_assertion(primary)
     result = projected["value"] if isinstance(projected["value"], dict) else None
     if result is None:
         return projected
     value = result.get(field)
-    if isinstance(value, (list, str)) and value:
+    if value is not None:
         return _fact(
             availability=projected["availability"],
             value=value,
-            reason=projected["reason"],
-            source_id=projected["sourceId"],
-        )
-    if isinstance(value, list):
-        return _fact(
-            availability=projected["availability"],
-            value=[],
             reason=projected["reason"],
             source_id=projected["sourceId"],
         )
@@ -325,70 +347,13 @@ def _next_action_field(
     )
 
 
-def _copy_line(label: str, fact: Mapping[str, Any]) -> str:
-    availability = str(fact.get("availability") or "unknown")
-    reason = fact.get("reason")
-    reason_text = ""
-    if isinstance(reason, dict):
-        code = reason.get("code")
-        message = reason.get("message")
-        if code or message:
-            reason_text = f" ({code or ''}{': ' if code and message else ''}{message or ''})"
-    value = fact.get("value")
-    if availability not in _READABLE_AVAILABILITY or value in (None, "", [], {}):
-        if availability == "known" and value in (None, "", [], {}):
-            return f"{label} (known): (none)"
-        return f"{label} ({availability}): unavailable{reason_text}"
-    if isinstance(value, dict):
-        parts = []
-        for key, item in value.items():
-            if item is None or item == []:
-                parts.append(f"{key}=(none)")
-            elif isinstance(item, list):
-                parts.append(f"{key}={','.join(str(entry) for entry in item)}")
-            else:
-                parts.append(f"{key}={item}")
-        rendered = "; ".join(parts) if parts else "(none)"
-    elif isinstance(value, list):
-        rendered = ", ".join(str(entry) for entry in value)
-    else:
-        rendered = str(value)
-    stale = ""
-    if availability in {"stale", "inconsistent"}:
-        stale = " [stale context — not current]"
-    return f"{label} ({availability}): {rendered}{stale}{reason_text}"
+def packet_from_document(document: Mapping[str, Any]) -> dict[str, Any]:
+    """Derive the packet from a snapshot whose other sections already validate.
 
-
-def format_packet_copy_text(packet: Mapping[str, Any]) -> str:
-    """Plain-text copy of the derived packet. Never a command to execute."""
-    lines = ["Repair Packet (derived view; copy only; nothing is executed)"]
-    labels = {
-        "intent": "Intent",
-        "verdict": "Verdict",
-        "finding": "Finding",
-        "blockerSource": "Blocker source",
-        "declarationOwner": "Declaration owner",
-        "repairIntent": "Repair intent",
-        "nextOwner": "Next owner",
-        "invalidatedEvidence": "Invalidated evidence",
-        "resumeStage": "Resume stage",
-        "nextCommand": "Next Agent command",
-        "recaptureRequirement": "Recapture requirement",
-    }
-    for key in PACKET_KEYS:
-        fact = packet.get(key)
-        if isinstance(fact, dict):
-            lines.append(_copy_line(labels[key], fact))
-    return "\n".join(lines)
-
-
-def derive_repair_packet(snapshot: Mapping[str, Any]) -> dict[str, Any]:
-    """Return a JSON-serializable derived packet from a validated snapshot.
-
-    The input is validated through the existing consumer contract and is
-    never mutated. The result has no independent lifecycle.
+    The snapshot builder calls this before the final contract check, so it
+    must not validate the document it is completing (the packet itself is a
+    required section). ``derive_repair_packet`` is the validated entry point.
     """
-    document = validate_snapshot(snapshot)
     evaluation = document["evaluation"]
     kind, subject, blocking_count = _select_blocking_finding(evaluation.get("findings"))
     finding_fields = _finding_fields(kind, subject)
@@ -398,7 +363,7 @@ def derive_repair_packet(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             "blockingCount": blocking_count,
         }
     primary = document["nextActions"]["primary"]
-    packet = {
+    return {
         "intent": _from_assertion(document["intent"]["summary"]),
         "verdict": _from_assertion(evaluation["verdict"]),
         **finding_fields,
@@ -414,5 +379,14 @@ def derive_repair_packet(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             primary, "recaptureRequirement", MSG_NO_RECAPTURE
         ),
     }
-    packet["copyText"] = format_packet_copy_text(packet)
-    return packet
+
+
+def derive_repair_packet(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the packet from a validated snapshot without mutating it.
+
+    The packet is now a snapshot section, so the validated document already
+    carries it; this stays the reader for projections over older documents
+    and for callers that only want the packet.
+    """
+    document = validate_snapshot(snapshot)
+    return packet_from_document(document)

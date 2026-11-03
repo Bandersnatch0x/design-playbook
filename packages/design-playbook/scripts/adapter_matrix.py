@@ -1,8 +1,10 @@
 """Adapter capability matrix — one row per agent (ADR-0042).
 
-Dispatch keys off the agent id, its tier, and the ``native`` flag
-(``_SPECIALIZED_RENDERERS`` + the shared AGENTS.md floor fallback in
-generate_adapter.py), so adding an agent = adding a matrix row. The
+Dispatch keys off the row: its ``native`` flag says the host consumes the
+package directly, its ``renderer`` names a dedicated renderer (Tier 1/2),
+and a Tier-3 row renders through the shared AGENTS.md floor. The row cannot
+be built with a tier its renderer cannot honor, so a Tier-2 declaration
+cannot silently produce Tier-3 output. The
 per-surface capability flags this file once carried (rules / commands /
 mcp_project / hooks / skills / rules_target) had no production consumer —
 no renderer or gate ever read them — and were retired 2026-09-20 (T-040;
@@ -27,29 +29,42 @@ class AgentRow:
     # True when the host platform consumes the package directly (no generated
     # adapter output).  The generator skips native rows entirely.
     native: bool = False
+    #: The dedicated renderer this row uses; ``None`` means the shared
+    #: AGENTS.md floor.  Renderer availability is a matrix fact, so a Tier-2
+    #: declaration cannot silently render Tier-3 output: the row cannot be
+    #: built without naming its renderer.
+    renderer: str | None = None
 
     def __post_init__(self) -> None:
         if self.tier not in (1, 2, 3):
             raise ValueError(f"{self.agent}: tier must be 1, 2, or 3, got {self.tier!r}")
         if not self.agent:
             raise ValueError("agent must be non-empty")
+        if self.tier in (1, 2) and not self.native and not self.renderer:
+            raise ValueError(
+                f"{self.agent}: tier {self.tier} requires a dedicated renderer"
+            )
+        if self.tier == 3 and self.renderer:
+            raise ValueError(
+                f"{self.agent}: tier 3 renders through the shared AGENTS.md floor"
+            )
 
 
 # Tier 1 — full fidelity (skills + commands + MCP + hooks where supported).
 # These agents have dedicated, committed snapshots verified by validate.py.
 _TIER1: tuple[AgentRow, ...] = (
     AgentRow(agent="claude-code", tier=1, native=True),
-    AgentRow(agent="codex", tier=1),
+    AgentRow(agent="codex", tier=1, renderer="codex"),
 )
 
 # Tier 2 — skills + MCP (commands degrade to documented prompt equivalents).
 _TIER2: tuple[AgentRow, ...] = (
-    AgentRow(agent="cursor", tier=2),
-    AgentRow(agent="gemini-cli", tier=2),
-    AgentRow(agent="opencode", tier=2),
-    AgentRow(agent="windsurf", tier=2),
-    AgentRow(agent="github-copilot", tier=2),
-    AgentRow(agent="zed", tier=2),
+    AgentRow(agent="cursor", tier=2, renderer="cursor"),
+    AgentRow(agent="gemini-cli", tier=2, renderer="gemini-cli"),
+    AgentRow(agent="opencode", tier=2, renderer="opencode"),
+    AgentRow(agent="windsurf", tier=2, renderer="windsurf"),
+    AgentRow(agent="github-copilot", tier=2, renderer="github-copilot"),
+    AgentRow(agent="zed", tier=2, renderer="zed"),
 )
 
 # Tier 3 — rules floor (generated AGENTS.md + inline MCP guide).

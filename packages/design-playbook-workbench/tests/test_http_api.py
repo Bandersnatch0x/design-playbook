@@ -274,6 +274,83 @@ class TransportPolicyTest(unittest.TestCase):
                 self.assertEqual(response.status, 405)
                 self.assertEqual(response.headers.get("Allow"), "GET, HEAD, POST")
 
+    def test_every_fixed_route_sends_its_own_allow_header(self) -> None:
+        # Each row carries the Allow header its path has always sent; a row
+        # that drifts here is a visible compatibility break.
+        for path, method, allow in (
+            ("/api/v1/status", "PUT", "GET, HEAD"),
+            ("/api/v1/resolve", "PUT", "GET, HEAD"),
+            ("/api/v1/projects", "PUT", "GET, HEAD, POST"),
+            ("/api/v1/projects/probe", "GET", "POST"),
+            ("/api/v1/backup", "DELETE", "POST"),
+        ):
+            with self.subTest(path=path, method=method):
+                response = http_request(
+                    self.h.runtime,
+                    path,
+                    method=method,
+                    body={} if method != "GET" else None,
+                    token=self.h.token,
+                    origin=(
+                        None if method == "GET" else self.h.runtime.origin
+                    ),
+                )
+                self.assertEqual(response.status, 405)
+                self.assertEqual(response.headers.get("Allow"), allow)
+
+    def test_every_project_route_still_reaches_a_handler(self) -> None:
+        from design_playbook_workbench.http_server import (
+            _ANY,
+            _ANY_OR_EMPTY,
+            _PROJECT_ROUTES,
+        )
+
+        sentinel = "00000000-0000-4000-8000-000000000000"
+        verbs = {
+            "proposals": "apply",
+            "assets": "publish",
+            "canvases": "commands",
+            "requests": "consent",
+        }
+        for parts, _handler in _PROJECT_ROUTES:
+            segments: list[str] = []
+            for index, part in enumerate(parts):
+                if part is _ANY_OR_EMPTY:
+                    segments.append("rename")
+                elif isinstance(part, frozenset):
+                    segments.append(sorted(part)[0])
+                elif part is _ANY:
+                    if (
+                        index == 4
+                        and len(parts) == 5
+                        and parts[1] == "actions"
+                        and parts[2] in verbs
+                    ):
+                        segments.append(verbs[parts[2]])
+                    else:
+                        segments.append(sentinel)
+                else:
+                    segments.append(part)
+            path = "/api/v1/projects/" + "/".join(segments)
+            response = http_request(self.h.runtime, path, token=self.h.token)
+            self.assertNotEqual(
+                response.error_code,
+                "route-not-found",
+                f"{path} fell through the route table",
+            )
+
+    def test_empty_segments_are_not_a_route(self) -> None:
+        sentinel = "00000000-0000-4000-8000-000000000000"
+        for path in (
+            "/api/v1/projects/",
+            f"/api/v1/projects/{sentinel}/canvases/",
+            f"/api/v1/projects/{sentinel}/runs/",
+        ):
+            with self.subTest(path=path):
+                response = http_request(self.h.runtime, path, token=self.h.token)
+                self.assertEqual(response.status, 404)
+                self.assertEqual(response.error_code, "route-not-found")
+
     def test_oversized_bodies_are_refused_before_parsing(self) -> None:
         oversized = b'{"path":"' + b"a" * (300 * 1024) + b'"}'
         response = http_request(
@@ -652,6 +729,22 @@ class CapabilityTest(unittest.TestCase):
             capability=capability,
         )
         self.assertEqual(rename.status, 401)
+
+    def test_capability_never_learns_whether_a_method_is_allowed(self) -> None:
+        # The browser check runs before the method check on these paths: a
+        # capability gets the same refusal for any method.
+        capability = self._capability(self.alpha["projectId"], ["read", "write"])
+        for path in ("/api/v1/projects", "/api/v1/projects/probe", "/api/v1/backup"):
+            with self.subTest(path=path):
+                response = http_request(
+                    self.h.runtime,
+                    path,
+                    method="PUT",
+                    body={},
+                    capability=capability,
+                )
+                self.assertEqual(response.status, 401)
+                self.assertEqual(response.error_code, "unauthorized")
 
     def test_capability_never_reaches_maintainer_mutations(self) -> None:
         # An Agent/slash capability holding full project write scope must

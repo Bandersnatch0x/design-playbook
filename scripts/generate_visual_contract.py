@@ -61,20 +61,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=OUT_PATH)
     out = parser.parse_args(argv).out
     lines = [_HEADER]
+    # Only values a client reads are emitted. CHANGE_KINDS, EDIT_SOURCES,
+    # CONTENT_PROPERTIES, MAX_EDITS, MAX_SELECTOR and MAX_VALUE are server-side
+    # validation limits with no client reader; shipping them invited a second
+    # copy that nothing kept honest.
     lines.append(_js_int("SCHEMA_VERSION", visual_batch.SCHEMA_VERSION))
     lines.append(_js_str("STATUS_PENDING", visual_batch.STATUS_PENDING))
     lines.append(_js_str("STATUS_STALE", visual_batch.STATUS_STALE))
-    lines.append(_js_str_tuple("CHANGE_KINDS", visual_batch.CHANGE_KINDS))
     lines.append(_js_str_tuple("CSS_KINDS", visual_batch.CSS_KINDS))
     lines.append(_js_str_tuple("VIEWPORTS", visual_batch.VIEWPORTS))
-    lines.append(_js_str_tuple("EDIT_SOURCES", visual_batch.EDIT_SOURCES))
     lines.append(_js_str("SHELL_SOURCE", visual_batch.SHELL_SOURCE))
     lines.append(_js_str("FRAME_SOURCE", visual_batch.FRAME_SOURCE))
-    lines.append(_js_str_tuple("CONTENT_PROPERTIES", visual_batch.CONTENT_PROPERTIES))
     lines.append(_js_str("ANY_VIEWPORT", visual_batch.VIEWPORTS[-1]))
-    lines.append(_js_int("MAX_EDITS", visual_batch.MAX_EDITS))
-    lines.append(_js_int("MAX_SELECTOR", visual_batch.MAX_SELECTOR))
-    lines.append(_js_int("MAX_VALUE", visual_batch.MAX_VALUE))
     lines.append(_FOOTER)
     out.write_text("".join(lines), encoding="utf-8", newline="\n")
     print(f"wrote {out}")

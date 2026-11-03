@@ -22,6 +22,7 @@ from pathlib import Path
 # than run as `python scripts/validate.py` (mirrors doctor.py's guard).
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _checks
+import generated_artifacts
 
 # The registry parser lives with the shipped package scripts so the
 # product-level G8 and the run-level G8 (g8_run_registry.py) share one
@@ -31,6 +32,7 @@ PKG = ROOT / "packages" / "design-playbook"
 sys.path.insert(0, str(PKG / "scripts"))
 import adapter_drift  # noqa: E402
 import adapter_matrix  # noqa: E402
+import frontmatter  # noqa: E402
 import rules_registry  # noqa: E402
 import self_audit  # noqa: E402
 
@@ -328,6 +330,29 @@ def validate_codex_manifest(pj: dict):
     return claude_version
 
 
+def validate_generated_artifacts() -> None:
+    print("== Generated artifact register ==")
+    # scripts/generated_artifacts.py is the one owner of "what is generated,
+    # from what, by what, and which test keeps it honest". Checking the row
+    # here means a new artifact cannot land without a gate, and release.py's
+    # validate step runs this file.
+    for entry in generated_artifacts.ARTIFACTS:
+        if entry.generator is not None:
+            check(
+                (ROOT / entry.generator).is_file(),
+                f"{entry.name}: generator present ({entry.generator})",
+            )
+        for artifact in entry.artifacts:
+            check(
+                (ROOT / artifact).is_file(),
+                f"{entry.name}: artifact present ({artifact})",
+            )
+        check(
+            (ROOT / entry.gate).is_file(),
+            f"{entry.name}: drift gate present ({entry.gate})",
+        )
+
+
 def validate_adapter_drift() -> None:
     print("== Adapter generator drift gate (ADR-0042) ==")
     _gen_script = PKG / "scripts" / "generate_adapter.py"
@@ -455,20 +480,16 @@ def validate_skill_frontmatter() -> None:
         sm = skill_dir / "SKILL.md"
         check(sm.is_file(), f"{skill_dir.name}/SKILL.md exists")
         if sm.is_file():
-            txt = sm.read_text(encoding="utf-8")
-            fm = txt.split("---", 2)
-            head = fm[1] if len(fm) >= 3 else ""
-            check(bool(re.search(r"^name:\s*\S", head, re.M)), f"{skill_dir.name} has name frontmatter")
-            check(bool(re.search(r"^description:\s*\S", head, re.M)), f"{skill_dir.name} has description frontmatter")
+            meta, _ = frontmatter.parse_frontmatter(sm.read_text(encoding="utf-8"))
+            check(bool(meta.get("name")), f"{skill_dir.name} has name frontmatter")
+            check(bool(meta.get("description")), f"{skill_dir.name} has description frontmatter")
 
 
 def validate_command_frontmatter() -> None:
     print("== Command frontmatter ==")
     for cmd in sorted((PKG / "commands").glob("*.md")):
-        txt = cmd.read_text(encoding="utf-8")
-        fm = txt.split("---", 2)
-        head = fm[1] if len(fm) >= 3 else ""
-        check(bool(re.search(r"^description:\s*\S", head, re.M)), f"{cmd.name} has description frontmatter")
+        meta, _ = frontmatter.parse_frontmatter(cmd.read_text(encoding="utf-8"))
+        check(bool(meta.get("description")), f"{cmd.name} has description frontmatter")
 
 
 def validate_release_identity(pj: dict) -> None:
@@ -636,18 +657,18 @@ def validate_capability_claims() -> None:
 def validate_cordis_commands(npmj: dict) -> None:
     print("== design-playbook commands (P2 Cordis plugin registration) ==")
     # lib/index.js must register every shipped slash command from commands/*.md.
-    # A drift between COMMAND_NAMES and the shipped .md files would surface
-    # only at DSH runtime — fail-fast here.
+    # The inventory is derived from the directory at runtime; a literal list
+    # here would be the second owner this gate exists to stop.
     lib_index = PKG / "lib" / "index.js"
     check(lib_index.is_file(), "lib/index.js present (Cordis plugin entry)")
     if lib_index.is_file():
         lib_src = lib_index.read_text(encoding="utf-8")
         check("'skills'" in lib_src and "'commands'" in lib_src,
               "lib/index.js injects skills + commands")
-        for cmd_file in sorted((PKG / "commands").glob("*.md")):
-            cmd_name = cmd_file.stem
-            check(f"'{cmd_name}'" in lib_src,
-                  f"lib/index.js registers /{cmd_name}")
+        check("readdirSync(COMMANDS_DIR" in lib_src,
+              "lib/index.js derives the command inventory from commands/")
+        check("COMMAND_NAMES = [" not in lib_src,
+              "lib/index.js carries no hand-written command list")
         # The handler must use agent.followup (not inject/steer) — slash commands
         # are explicit user actions that open a turn.
         check("agent.followup" in lib_src or "invocation.agent.followup" in lib_src,
@@ -1579,6 +1600,7 @@ CHECKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("validate_bundled_mcp", (), ()),
     ("validate_marketplace_catalog", ("mj",), ()),
     ("validate_codex_manifest", ("pj",), ("claude_version",)),
+    ("validate_generated_artifacts", (), ()),
     ("validate_adapter_drift", (), ()),
     ("validate_publish_manifest", ("claude_version",), ("npmj",)),
     ("validate_skill_frontmatter", (), ()),

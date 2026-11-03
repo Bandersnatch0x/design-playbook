@@ -25,8 +25,11 @@ LOCK_NAME = "dpbui.lock.json"
 
 #: Files the workbench ships as flat byte copies of their canonical file.
 #: A name here is the file's name in both directories; add a row when the
-#: workbench starts carrying another shared file, then rerun this script.
-COPIES = ("tokens.css", "dpbui-core.js")
+#: workbench starts loading another shared file, then rerun this script.
+#: ``dpbui-core.js`` was copied here with no reader in the workbench shell
+#: (app.js never references DPBUI); it was removed 2026-11-03 rather than
+#: locked in place. Re-add it only together with the code that loads it.
+COPIES = ("tokens.css",)
 
 
 def main() -> int:

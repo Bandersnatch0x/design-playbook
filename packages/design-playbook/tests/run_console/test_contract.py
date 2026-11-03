@@ -20,6 +20,9 @@ from design_playbook.mcp.run_console.contract import (  # noqa: E402
     SnapshotContractError,
     validate_snapshot,
 )
+from design_playbook.mcp.run_console.repair_packet import (  # noqa: E402
+    packet_from_document,
+)
 
 _HASH_1 = "sha256:" + "1" * 64
 _HASH_2 = "sha256:" + "2" * 64
@@ -90,7 +93,7 @@ def _assertion(
 
 
 def _valid_snapshot() -> dict[str, object]:
-    return {
+    document: dict[str, object] = {
         "schemaVersion": 1,
         "identity": {
             "snapshot": {
@@ -239,6 +242,8 @@ def _valid_snapshot() -> dict[str, object]:
             ],
         },
     }
+    document["repairPacket"] = packet_from_document(document)
+    return document
 
 
 def _assert_contract_invalid(test: unittest.TestCase, document: object) -> None:
@@ -648,6 +653,7 @@ class SnapshotContractInvariantTests(unittest.TestCase):
                 "execution",
                 "evaluation",
                 "nextActions",
+                "repairPacket",
                 "limitations",
                 "sources",
             },

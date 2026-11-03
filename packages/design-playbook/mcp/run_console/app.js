@@ -8,12 +8,18 @@
 "use strict";
 
 (function () {
-  var SNAPSHOT_PATH = "/api/v1/snapshot";
+  /* Routes and action names are generated from client_routes.py: the
+     Python server and this client read the same facts. */
+  var ROUTES = DPBUI.runConsoleRoutes;
+  var SNAPSHOT_PATH = ROUTES.SNAPSHOT;
   /* The single typed action from the closed allowlist (RCV1-009): a full
      snapshot rebuild. The body is the exact closed payload — no fields,
      no variations, no generic command channel. */
-  var REFRESH_ACTION_PATH = "/api/v1/actions/refresh";
-  var REFRESH_ACTION_BODY = JSON.stringify({ schemaVersion: 1, action: "refresh" });
+  var REFRESH_ACTION_PATH = ROUTES.REFRESH.path;
+  var REFRESH_ACTION_BODY = JSON.stringify({
+    schemaVersion: ROUTES.REFRESH.schemaVersion,
+    action: ROUTES.REFRESH.action,
+  });
   var VIEW_IDS = [
     "loading", "ready", "no-token", "closed", "unsupported",
     "build-error", "error", "network",
@@ -920,13 +926,13 @@
       showView("error", true);
       return;
     }
-    if (body.schemaVersion !== 1) {
+    if (body.schemaVersion !== DPBUI.snapshotContract.SCHEMA_VERSION) {
       lastError = { type: "unsupported", version: body.schemaVersion };
       setDetail("unsupported-detail", t("err_unsupported_detail", { version: body.schemaVersion }));
       showView("unsupported", true);
       return;
     }
-    var required = ["identity", "intent", "execution", "evaluation", "nextActions", "limitations", "sources"];
+    var required = DPBUI.snapshotContract.REQUIRED_SECTIONS;
     for (var i = 0; i < required.length; i += 1) {
       if (!body[required[i]] || typeof body[required[i]] !== "object") {
         lastError = { type: "error", subType: "missing_section", section: required[i] };
@@ -1530,11 +1536,14 @@
 
   /* Diagnostic export (ADR-0044): preview, participant review, write.  */
 
-  var EXPORT_PREVIEW_PATH = "/api/v1/actions/diagnostic-export/preview";
-  var EXPORT_WRITE_PATH = "/api/v1/actions/diagnostic-export/write";
+  var EXPORT_PREVIEW_PATH = ROUTES.EXPORT_PREVIEW.path;
+  var EXPORT_WRITE_PATH = ROUTES.EXPORT_WRITE.path;
 
   function requestExportPreview(participantRef) {
-    var body = { schemaVersion: 1, action: "diagnostic-export-preview" };
+    var body = {
+      schemaVersion: ROUTES.EXPORT_PREVIEW.schemaVersion,
+      action: ROUTES.EXPORT_PREVIEW.action,
+    };
     if (participantRef) body.participantRef = participantRef;
     return timedFetch(EXPORT_PREVIEW_PATH, {
       method: "POST",
@@ -1549,8 +1558,8 @@
 
   function requestExportWrite(expectedSourceSetHash, previewHash, participantRef) {
     var body = {
-      schemaVersion: 1,
-      action: "diagnostic-export-write",
+      schemaVersion: ROUTES.EXPORT_WRITE.schemaVersion,
+      action: ROUTES.EXPORT_WRITE.action,
       expectedSourceSetHash: expectedSourceSetHash,
       previewHash: previewHash,
       participantReviewed: true,
@@ -1861,7 +1870,7 @@
       class: "excerpt-state",
       text: t("excerpt_loading"),
     }));
-    var path = "/api/v1/sources/" + encodeURIComponent(record.locator) +
+    var path = ROUTES.SOURCES_PREFIX + encodeURIComponent(record.locator) +
       "?expectedHash=" + encodeURIComponent(record.verifiedHash);
     requestJson(path).then(function (result) {
       area.textContent = "";
@@ -1942,7 +1951,6 @@
 
   /* Derived Repair Packet — display/copy only, no new authority.       */
 
-  var PACKET_NOT_PRODUCED = "not-produced";
   var PACKET_MSG_ABSENT = "This assertion is absent from the snapshot.";
   var PACKET_MSG_NO_BLOCKING = "No blocking finding is projected in this snapshot.";
   var PACKET_MSG_DISPOSITION_UNKNOWN =
@@ -1956,238 +1964,6 @@
     "the latest observed stage is not a resume target.";
   var PACKET_MSG_NO_COMMAND =
     "This action carries no copyable agent command in the snapshot.";
-
-  function packetReason(code, message) {
-    return { code: code, message: message };
-  }
-
-  function packetFact(availability, value, reason, sourceId) {
-    return {
-      availability: availability,
-      value: value,
-      reason: reason || null,
-      sourceId: sourceId || null,
-    };
-  }
-
-  function packetGap(message, sourceId) {
-    return packetFact("unknown", null, packetReason(PACKET_NOT_PRODUCED, message), sourceId);
-  }
-
-  function packetFromAssertion(assertion) {
-    if (!assertion || typeof assertion !== "object") {
-      return packetGap(PACKET_MSG_ABSENT);
-    }
-    var availability = assertion.availability;
-    if (availability !== "known" && availability !== "unknown" &&
-        availability !== "stale" && availability !== "inconsistent") {
-      availability = "unknown";
-    }
-    var sourceId = typeof assertion.id === "string" ? assertion.id : null;
-    var reason = assertion.reason && typeof assertion.reason === "object" ? assertion.reason : null;
-    if (availability === "known" || availability === "stale" || availability === "inconsistent") {
-      return packetFact(
-        availability,
-        assertion.result,
-        availability === "known" ? null : reason,
-        sourceId
-      );
-    }
-    return packetFact("unknown", null, reason, sourceId);
-  }
-
-  function packetDisposition(assertion) {
-    var result = assertion && assertion.result;
-    if (!result || typeof result !== "object") return null;
-    var disposition = result.disposition;
-    if (disposition === "blocking" || disposition === "advisory" || disposition === "info") {
-      return disposition;
-    }
-    return null;
-  }
-
-  function selectBlockingFinding(findings) {
-    var items = Array.isArray(findings) ? findings : [];
-    var subject = null;
-    var unreadable = null;
-    var blockingCount = 0;
-    items.forEach(function (item) {
-      if (!item || typeof item !== "object") return;
-      var disposition = packetDisposition(item);
-      if (disposition === "blocking") {
-        blockingCount += 1;
-        if (subject === null) subject = item;
-      } else if (disposition === null && unreadable === null) {
-        unreadable = item;
-      }
-    });
-    if (subject) return { kind: "present", assertion: subject, blockingCount: blockingCount };
-    if (unreadable) {
-      return { kind: "disposition-unknown", assertion: unreadable, blockingCount: 0 };
-    }
-    return { kind: "absent", assertion: null, blockingCount: 0 };
-  }
-
-  function packetOwnerValue(result) {
-    var owner = result && result.owner;
-    if (!owner || typeof owner !== "object") {
-      return { kind: null, domainId: null, sourceRef: null };
-    }
-    return {
-      kind: typeof owner.kind === "string" ? owner.kind : null,
-      domainId: owner.domainId === undefined ? null : owner.domainId,
-      sourceRef: owner.sourceRef === undefined ? null : owner.sourceRef,
-    };
-  }
-
-  function packetFindingFields(selection) {
-    var kind = selection.kind;
-    var assertion = selection.assertion;
-    if (kind === "absent") {
-      var absent = packetGap(PACKET_MSG_NO_BLOCKING);
-      return {
-        finding: absent,
-        blockerSource: absent,
-        declarationOwner: absent,
-        repairIntent: absent,
-      };
-    }
-    if (kind === "disposition-unknown") {
-      var base = packetFromAssertion(assertion);
-      var unknown = packetFact(
-        base.availability,
-        null,
-        base.reason || packetReason(PACKET_NOT_PRODUCED, PACKET_MSG_DISPOSITION_UNKNOWN),
-        base.sourceId
-      );
-      return {
-        finding: unknown,
-        blockerSource: unknown,
-        declarationOwner: unknown,
-        repairIntent: unknown,
-      };
-    }
-    var projected = packetFromAssertion(assertion);
-    var result = projected.value && typeof projected.value === "object" ? projected.value : null;
-    if (!result) {
-      var empty = packetFact(projected.availability, null, projected.reason, projected.sourceId);
-      return {
-        finding: empty,
-        blockerSource: empty,
-        declarationOwner: empty,
-        repairIntent: empty,
-      };
-    }
-    var owner = packetOwnerValue(result);
-    return {
-      finding: packetFact(projected.availability, {
-        findingId: result.findingId,
-        criterionIds: Array.isArray(result.criterionIds) ? result.criterionIds.slice() : [],
-        issue: result.issue,
-        severity: result.severity,
-        disposition: result.disposition,
-      }, projected.reason, projected.sourceId),
-      blockerSource: packetFact(projected.availability, {
-        issue: result.issue,
-        findingId: result.findingId,
-        sourceRef: owner.sourceRef,
-        domainId: owner.domainId,
-        blockingCount: selection.blockingCount,
-      }, projected.reason, projected.sourceId),
-      declarationOwner: packetFact(
-        projected.availability, owner, projected.reason, projected.sourceId
-      ),
-      repairIntent: packetFact(
-        projected.availability,
-        typeof result.repair === "string" ? result.repair : null,
-        projected.reason,
-        projected.sourceId
-      ),
-    };
-  }
-
-  function packetNextOwner(primary) {
-    var projected = packetFromAssertion(primary);
-    var result = projected.value && typeof projected.value === "object" ? projected.value : null;
-    if (!result) return projected;
-    var owner = result.owner && typeof result.owner === "object" ? result.owner : {};
-    return packetFact(projected.availability, {
-      actor: owner.actor === undefined ? null : owner.actor,
-      role: owner.role === undefined ? null : owner.role,
-      kind: result.kind === undefined ? null : result.kind,
-      actionId: result.actionId === undefined ? null : result.actionId,
-      label: result.label === undefined ? null : result.label,
-    }, projected.reason, projected.sourceId);
-  }
-
-  function packetNextCommand(primary) {
-    var projected = packetFromAssertion(primary);
-    var result = projected.value && typeof projected.value === "object" ? projected.value : null;
-    if (!result) return projected;
-    var command = result.copyableAgentCommand;
-    if (typeof command === "string" && command.length) {
-      return packetFact(projected.availability, command, projected.reason, projected.sourceId);
-    }
-    if (projected.availability === "known") {
-      return packetGap(PACKET_MSG_NO_COMMAND, projected.sourceId);
-    }
-    return packetFact(
-      projected.availability,
-      null,
-      projected.reason || packetReason(PACKET_NOT_PRODUCED, PACKET_MSG_NO_COMMAND),
-      projected.sourceId
-    );
-  }
-
-  function packetNextActionField(primary, field, missingMessage) {
-    var projected = packetFromAssertion(primary);
-    var result = projected.value && typeof projected.value === "object" ? projected.value : null;
-    if (!result) return projected;
-    if (result[field] !== undefined && result[field] !== null) {
-      return packetFact(
-        projected.availability,
-        result[field],
-        projected.reason,
-        projected.sourceId
-      );
-    }
-    if (projected.availability === "known") {
-      return packetGap(missingMessage, projected.sourceId);
-    }
-    return packetFact(
-      projected.availability,
-      null,
-      projected.reason || packetReason(PACKET_NOT_PRODUCED, missingMessage),
-      projected.sourceId
-    );
-  }
-
-  function deriveRepairPacket(snapshot) {
-    var evaluation = snapshot.evaluation || {};
-    var selection = selectBlockingFinding(evaluation.findings);
-    var findingFields = packetFindingFields(selection);
-    var primary = snapshot.nextActions && snapshot.nextActions.primary;
-    var intent = snapshot.intent && snapshot.intent.summary;
-    return {
-      intent: packetFromAssertion(intent),
-      verdict: packetFromAssertion(evaluation.verdict),
-      finding: findingFields.finding,
-      blockerSource: findingFields.blockerSource,
-      declarationOwner: findingFields.declarationOwner,
-      repairIntent: findingFields.repairIntent,
-      nextOwner: packetNextOwner(primary),
-      invalidatedEvidence: packetNextActionField(
-        primary, "invalidatedEvidence", PACKET_MSG_NO_INVALIDATED
-      ),
-      resumeStage: packetNextActionField(
-        primary, "resumeStage", PACKET_MSG_NO_RESUME_STAGE
-      ),
-      nextCommand: packetNextCommand(primary),
-      recaptureRequirement: packetNextActionField(
-        primary, "recaptureRequirement", PACKET_MSG_NO_RECAPTURE
-      ),
-    };
-  }
 
   function packetValueText(value) {
     if (value === null || value === undefined || value === "") return t("packet_none");
@@ -2313,7 +2089,8 @@
   }
 
   function renderRepairPacket(details, snapshot) {
-    var packet = deriveRepairPacket(snapshot);
+    // The packet is a validated snapshot section; the client owns no derivation.
+    var packet = snapshot.repairPacket;
     var children = [
       el("p", { class: "section-hint", id: "repair-packet-hint", text: t("repair_packet_hint") }),
       el("p", { class: "repair-packet-notice", text: t("repair_packet_notice") }),

@@ -1,14 +1,16 @@
 """Durable Preview decision authority and artifact transaction.
 
-Browser collectors return authenticated submission data. This module owns the
-orchestration for one Preview decision: request binding, choice authority,
-commit, recovery, projections and result construction. The lock machinery lives
-in locking.py and the entry/ledger record IO in entry_io.py; both are imported
-into this namespace and re-exported from here, so every current importer of
-`transaction` keeps working unchanged.
+Browser collectors return authenticated submission data. This module owns one
+Preview decision end to end: request preparation (criteria, prototype
+resolution, the ADR-0008 floor self-check), binding, choice authority, commit,
+recovery, projections, result construction, and the record IO those write.
+The lock machinery lives in locking.py and the error vocabulary in
+transaction_errors.py; both are imported into this namespace and re-exported
+from here, so every current importer of `transaction` keeps working unchanged.
 """
 from __future__ import annotations
 
+import json
 import uuid
 from pathlib import Path
 from typing import Any, Protocol
@@ -20,47 +22,32 @@ from design_playbook.mcp.preview.live_route import observe_visual_source, valida
 from design_playbook.mcp.preview.visual_handoff import build_agent_handoff
 from design_playbook.mcp.preview.visual_batch import (
     has_effective_visual_edits,
+    normalize_visual_batch,
 )
 from design_playbook.mcp.preview.integrity import (
+    _MISSING,
     binding_equivalent,
     compute_binding_digest,
     confirm_name,
     decision_name,
     evaluate_feedback_floor,
+    prototype_html_digest,
+    prototype_name,
 )
 from design_playbook.mcp.util import now_iso as _now_iso
-from design_playbook.mcp.preview.preview_request import (
-    _criteria_from_report_ref,
-    _criteria_review_from_submission,
-    _ensure_prototype,
-    _preview_dir_for,
-    _resolve_prototype,
-    self_check_floor as self_check_floor,
-)
-# Re-exports: the error vocabulary, the record IO and the lock machinery. The
-# importers below and the tests that patch these targets keep going through this
-# module, so the names are bound here rather than reached through their modules.
+from design_playbook.mcp.preview.report_ref import resolve_criteria
+# Re-exports: the error vocabulary and the lock machinery. The importers below
+# and the tests that patch these targets keep going through this module, so the
+# names are bound here rather than reached through their modules.
 from design_playbook.mcp.preview.transaction_errors import (  # noqa: F401
     ConfirmRecordError,
     DirectoryLockError,
     PreviewTransactionError,
     TransactionConflict,
 )
-from design_playbook.mcp.preview.entry_io import (  # noqa: F401
+from design_playbook.mcp.preview.locking import (  # noqa: F401
     _REPLACE_RETRY_ATTEMPTS,
     _REPLACE_RETRY_SECONDS,
-    _confirm_record,
-    _ledger_record,
-    _round_from_path,
-    ENTRY_SCHEMA_VERSION,
-    atomic_write,
-    json_text,
-    load_confirm_for_entry,
-    load_entry,
-    render_log,
-    valid_entries,
-)
-from design_playbook.mcp.preview.locking import (  # noqa: F401
     DIRECTORY_LOCK_HEARTBEAT_SECONDS,
     DIRECTORY_LOCK_POLL_SECONDS,
     DIRECTORY_LOCK_STALE_SECONDS,
@@ -76,8 +63,373 @@ from design_playbook.mcp.preview.locking import (  # noqa: F401
     _round_lock,
     _try_acquire_directory_lease,
     _try_lock_guard,
+    atomic_write,
     directory_lock,
 )
+
+
+ENTRY_SCHEMA_VERSION = 1
+
+
+def json_text(value: dict[str, Any]) -> str:
+    return json.dumps(value, ensure_ascii=False, indent=2) + "\n"
+
+def load_entry(path: Path) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    try:
+        entry = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise TransactionConflict(
+            f"round decision metadata is unreadable; use next round: {path}",
+            retryable=False, round_n=_round_from_path(path), decision_id="",
+            artifact=str(path),
+        ) from exc
+    required = {
+        "schema_version", "decision_id", "timestamp", "binding", "outcome"
+    }
+    round_n = _round_from_path(path)
+    binding = entry.get("binding") if isinstance(entry, dict) else None
+    outcome = entry.get("outcome") if isinstance(entry, dict) else None
+    prototype_mode = entry.get("prototype_mode") if isinstance(entry, dict) else None
+    prototype_path = entry.get("prototype_path") if isinstance(entry, dict) else None
+    binding_valid = False
+    if isinstance(binding, dict):
+        try:
+            # Rebuild against the same era the record was written in: a
+            # missing route_url (pre-live-route record) stays absent from the
+            # canonical bytes and from the strict equality check, while an
+            # explicit value — including "" — is required to match exactly.
+            expected = compute_binding_digest(
+                round_n=round_n,
+                prototype_html_hash=binding["prototype_html_hash"],
+                report_ref=binding["report_ref"], summary=binding["summary"],
+                options=binding["options"],
+                route_url=binding.get("route_url", _MISSING),
+            )
+            binding_valid = binding == expected
+        except (KeyError, TypeError):
+            binding_valid = False
+    if (
+        not isinstance(entry, dict)
+        or entry.get("schema_version") != ENTRY_SCHEMA_VERSION
+        or not required.issubset(entry)
+        or not isinstance(entry.get("decision_id"), str)
+        or not entry["decision_id"]
+        or not isinstance(entry.get("timestamp"), str)
+        or not binding_valid
+        or not isinstance(outcome, dict)
+        or not isinstance(outcome.get("selected_options"), list)
+        or not isinstance(outcome.get("anchors"), list)
+        or not isinstance(outcome.get("feedback"), str)
+        or not isinstance(outcome.get("confirmed"), bool)
+        or not isinstance(outcome.get("user_confirmed"), bool)
+        or not isinstance(outcome.get("floor_pass"), bool)
+        or not isinstance(outcome.get("aborted"), bool)
+        or prototype_mode not in (None, "html", "path")
+        or prototype_mode == "path" and (
+            not isinstance(prototype_path, str) or not prototype_path.strip()
+        )
+    ):
+        raise TransactionConflict(
+            f"round decision metadata is invalid; use next round: {path}",
+            retryable=False, round_n=round_n, decision_id="",
+            artifact=str(path),
+        )
+    return entry
+
+def _round_from_path(path: Path) -> int:
+    try:
+        return int(path.stem.rsplit("-", 1)[1])
+    except (IndexError, ValueError):
+        return 0
+
+def _confirm_record(entry: dict[str, Any]) -> dict[str, Any]:
+    binding = entry["binding"]
+    outcome = entry["outcome"]
+    record: dict[str, Any] = {
+        "round": binding["round"],
+        "report_ref": binding["report_ref"],
+        "confirmed": outcome["confirmed"],
+        "floor_pass": outcome["floor_pass"],
+        "selected_options": outcome["selected_options"],
+        "feedback": outcome["feedback"],
+        "timestamp": entry["timestamp"],
+        "prototype_path": f"preview/{prototype_name(binding['round'])}",
+        "prototype_html_hash": binding["prototype_html_hash"],
+        "decision_id": entry["decision_id"],
+    }
+    if outcome.get("floor_failure"):
+        record["floor_failure"] = outcome["floor_failure"]
+    if outcome.get("criteria_review"):
+        record["criteria_review"] = list(outcome["criteria_review"])
+    if outcome.get("visual_edits"):
+        record["visual_edits"] = dict(outcome["visual_edits"])
+    if outcome.get("visual_edits_error"):
+        record["visual_edits_error"] = str(outcome["visual_edits_error"])
+    if outcome.get("visual_handoff"):
+        record["visual_handoff"] = dict(outcome["visual_handoff"])
+    return record
+
+def load_confirm_for_entry(
+    preview_dir: Path, entry: dict[str, Any], *, allow_legacy: bool = True,
+) -> dict[str, Any] | None:
+    binding = entry["binding"]
+    outcome = entry["outcome"]
+    round_n = int(binding["round"])
+    path = preview_dir / confirm_name(round_n)
+    if not path.is_file():
+        return None
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ConfirmRecordError(f"confirm record unreadable: {path}") from exc
+    if not isinstance(record, dict):
+        raise ConfirmRecordError(f"confirm record invalid: {path}")
+    expected = _confirm_record(entry)
+    if "decision_id" not in record:
+        if not allow_legacy:
+            raise ConfirmRecordError(f"legacy confirm record is invalid: {path}")
+        del expected["decision_id"]
+    elif not isinstance(record.get("decision_id"), str):
+        raise ConfirmRecordError(f"confirm record invalid: {path}")
+    elif record["decision_id"] != entry["decision_id"]:
+        raise ConfirmRecordError(f"confirm decision mismatch: {path}")
+    if not outcome.get("user_confirmed"):
+        raise ConfirmRecordError(f"confirm record is unexpected: {path}")
+    if record != expected:
+        raise ConfirmRecordError(f"confirm record invalid: {path}")
+    return record
+
+def render_log(entries: list[dict[str, Any]]) -> str:
+    blocks = ["# preview log\n"]
+    for entry in sorted(
+        entries, key=lambda item: (str(item["timestamp"]), str(item["decision_id"]))
+    ):
+        binding = entry["binding"]
+        outcome = entry["outcome"]
+        anchors = list(outcome.get("anchors") or [])
+        lines = [
+            "",
+            f"## round {binding['round']}",
+            f"- report_ref: {binding['report_ref']}",
+            f"- timestamp: {entry['timestamp']}",
+            f"- decision_id: {entry['decision_id']}",
+            f"- feedback: {outcome.get('feedback') or ''}",
+            f"- selected: {', '.join(outcome.get('selected_options') or [])}",
+            f"- aborted: {str(bool(outcome.get('aborted'))).lower()}",
+            f"- anchors: {len(anchors)}",
+            f"- floor_pass: {str(bool(outcome.get('floor_pass'))).lower()}",
+        ]
+        if outcome.get("timeout"):
+            lines.append("- timeout: true")
+        if outcome.get("floor_failure"):
+            lines.append(f"- floor_failure: {outcome['floor_failure']}")
+        if outcome.get("rejected"):
+            lines.append("- rejected: true")
+            if outcome.get("rejection"):
+                lines.append(f"- rejection: {outcome['rejection']}")
+        for index, anchor in enumerate(anchors, 1):
+            lines.append(
+                f"  - [{index}] {anchor.get('selector') or ''} | "
+                f"{anchor.get('label') or ''} | {anchor.get('comment') or ''}"
+            )
+        blocks.append("\n".join(lines) + "\n")
+    return "".join(blocks)
+
+def valid_entries(preview_dir: Path) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for path in preview_dir.glob("decision-round-*.json"):
+        entry = load_entry(path)
+        if entry is not None:
+            entries.append(entry)
+    return entries
+
+def _ledger_record(entry: dict[str, Any]) -> dict[str, Any]:
+    """T-086: the run-external registration for one committed round."""
+    binding = entry["binding"]
+    outcome = entry["outcome"]
+    return {
+        "round": int(binding["round"]),
+        "decision_id": entry["decision_id"],
+        "timestamp": entry["timestamp"],
+        "confirmed": outcome["confirmed"],
+        "floor_pass": outcome["floor_pass"],
+        "aborted": outcome["aborted"],
+        "binding_digest": binding["digest"],
+    }
+
+
+def _preview_dir_for(path: Path | None) -> Path:
+    if path is not None:
+        return path.parent
+    scratch = Path.cwd() / ".scratch" / "preview-adapter" / "preview"
+    scratch.mkdir(parents=True, exist_ok=True)
+    return scratch
+
+
+def _criteria_review_from_submission(
+    submission: dict[str, Any], criteria: list[dict[str, str]]
+) -> list[dict[str, Any]]:
+    if not criteria:
+        return []
+    raw = submission.get("criteria_review")
+    posted: dict[str, bool] = {}
+    if isinstance(raw, list):
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            criterion_id = str(item.get("id") or "").strip()
+            if criterion_id:
+                posted[criterion_id] = item.get("checked") is True
+    return [
+        {"id": item["id"], "title": item["title"], "checked": posted.get(item["id"], False)}
+        for item in criteria
+    ]
+
+
+def _resolve_prototype(
+    path_arg: str | None, html: str | None, round_n: int,
+    preview_dir: Path,
+) -> tuple[Path, str]:
+    """Resolve prototype source to a path and compute its digest.
+
+    Single source for prototype resolution: path mode reads the file, html
+    mode computes from inline bytes. Returns (prototype_path, digest) so
+    callers can build the binding without re-reading. Does NOT write the
+    html file — that is _ensure_prototype's job.
+    """
+    if path_arg:
+        prototype = Path(path_arg)
+        if not prototype.is_file():
+            raise ValueError(f"prototype path does not exist: {path_arg}")
+        return prototype, prototype_html_digest(prototype.read_bytes())
+    if not html:
+        raise ValueError("path or html is required")
+    return (
+        preview_dir / prototype_name(round_n),
+        prototype_html_digest(html.encode("utf-8")),
+    )
+
+
+def _ensure_prototype(path_arg: str | None, html: str | None, round_n: int,
+                      preview_dir: Path) -> Path:
+    """Resolve and materialize the prototype file on disk."""
+    prototype, _ = _resolve_prototype(path_arg, html, round_n, preview_dir)
+    if not path_arg:
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        prototype.write_text(html, encoding="utf-8")
+    return prototype
+
+
+def _self_check(condition: bool, message: str) -> None:
+    """Self-check assertion that still fires under `python -O`.
+
+    A bare `assert` is compiled out under -O, so a self-check built from one
+    reports success on a broken floor without ever running the comparison.
+    """
+    if not condition:
+        raise AssertionError(message)
+
+
+def self_check_floor() -> None:
+    """ADR-0008 floor branch logic self-check (ponytail: one runnable check)."""
+    cases = [
+        ("empty + no anchors", "", [], False),
+        ("whitespace-only feedback", "   \n  ", [], False),
+        ("short feedback passes (structural floor)", "ok", [], True),
+        ("short CJK feedback passes ('太挤了' is substantive)", "太挤了", [], True),
+        ("'安师大' passes floor; semantic junk is G6's job (ADR-0008)", "安师大", [], True),
+        ("longer feedback passes", "fix it", [], True),
+        ("anchor with comment", "", [{"selector": "h2", "comment": "x"}], True),
+        ("anchor no comment (0015 garbage)", "",
+         [{"selector": "h2", "comment": ""}], False),
+        ("anchor empty selector", "",
+         [{"selector": "", "comment": "x"}], False),
+        ("non-dict anchor", "", ["not-a-dict"], False),
+        ("feedback + incomplete anchor still fails", "ok",
+         [{"selector": "h2", "comment": ""}], False),
+        ("two anchors one incomplete fails", "",
+         [{"selector": "h2", "comment": "x"}, {"selector": "p", "comment": ""}], False),
+        ("two anchors both complete passes", "",
+         [{"selector": "h2", "comment": "x"}, {"selector": "p", "comment": "y"}], True),
+        ("short feedback + good anchor passes", "hi",
+         [{"selector": "h2", "comment": "x"}], True),
+    ]
+    for label, fb, anc, want in cases:
+        got = evaluate_feedback_floor(fb, anc).passed
+        _self_check(got == want, f"{label}: want {want}, got {got}")
+    # The 2026-10-08 amendment added a third trigger, a validated visual batch
+    # whose net effect changes a value. Every case above calls the floor with
+    # has_visual_edits defaulted to False, so the branch the amendment added was
+    # not covered by this check at all.
+    #
+    # Only one case below is sensitive to the flag. The floor returns before it
+    # consults the flag whenever an anchor is incomplete or absent, so a case that
+    # pairs the flag with an incomplete anchor asserts the anchor rule again and
+    # covers nothing new; those live in the list above instead.
+    edit_cases = [
+        ("validated edits alone pass", "", [], True),
+    ]
+    for label, fb, anc, want in edit_cases:
+        got = evaluate_feedback_floor(fb, anc, has_visual_edits=True).passed
+        _self_check(got == want, f"{label} (with edits): want {want}, got {got}")
+    # The flag itself is decided elsewhere, so the substance of the amendment is
+    # only checked if that decision is checked. It is passed as a literal above.
+    for label, edits, want in [
+        ("a real change counts",
+         [{"locator": "#a", "property": "color", "oldValue": "", "newValue": "red"}], True),
+        ("a no-op does not count",
+         [{"locator": "#a", "property": "color", "oldValue": "red", "newValue": "red"}], False),
+        ("a chain undone to its baseline does not count", [
+            {"locator": "#a", "property": "color", "oldValue": "", "newValue": "red"},
+            {"locator": "#a", "property": "color", "oldValue": "red", "newValue": ""},
+        ], False),
+        ("a change and its reversal under two viewport labels do not count", [
+            {"kind": "style", "viewport": "desktop", "locator": "#a",
+             "property": "color", "oldValue": "", "newValue": "red"},
+            {"kind": "style", "viewport": "mobile", "locator": "#a",
+             "property": "color", "oldValue": "red", "newValue": ""},
+        ], False),
+        ("one surviving change beside an undone chain counts", [
+            {"locator": "#a", "property": "color", "oldValue": "", "newValue": "red"},
+            {"locator": "#a", "property": "color", "oldValue": "red", "newValue": ""},
+            {"locator": "#a", "property": "padding", "oldValue": "8px", "newValue": "16px"},
+        ], True),
+        # 2026-10-09: only the parent shell's own edit is evidence. The
+        # prototype shares the bridge window, so what it reports is not proof a
+        # human reviewed anything, and neither is an agent's own tool call.
+        ("a frame gesture alone does not count",
+         [{"source": "frame", "locator": "#a", "property": "color",
+           "oldValue": "", "newValue": "red"}], False),
+        ("an agent tool edit alone does not count",
+         [{"source": "agent", "locator": "#a", "property": "color",
+           "oldValue": "", "newValue": "red"}], False),
+        ("a case-only CSS value does not count",
+         [{"kind": "style", "locator": "#a", "property": "color",
+           "oldValue": "red", "newValue": "RED"}], False),
+        ("a kind-only round trip does not count", [
+            {"kind": "style", "locator": "#a", "property": "padding",
+             "oldValue": "8px", "newValue": "16px"},
+            {"kind": "layout", "locator": "#a", "property": "padding",
+             "oldValue": "16px", "newValue": "8px"},
+        ], False),
+    ]:
+        # These cases are about the net effect; the provenance cases declare
+        # their own source, so the rest default to the reviewer's own shell.
+        edits = [{"source": "shell", **edit} for edit in edits]
+        batch = normalize_visual_batch({"edits": edits}, source_hash="self-check")
+        got = has_effective_visual_edits(batch)
+        _self_check(got == want, f"{label}: want {want}, got {got}")
+    # An edit with no declared provenance is not attributable, and the shell
+    # always declares one, so it cannot be evidence either. Asserted outside the
+    # loop because that loop defaults a missing source to the shell.
+    unattributed = normalize_visual_batch(
+        {"edits": [{"kind": "style", "locator": "#a", "property": "color",
+                    "oldValue": "", "newValue": "red"}]}, source_hash="self-check")
+    _self_check(not has_effective_visual_edits(unattributed),
+                "an edit with no declared source must not count")
+    print("FLOOR SELF-CHECK PASSED")
 
 
 class BrowserCollector(Protocol):
@@ -177,7 +529,7 @@ def run_preview_transaction(
     summary = summary.strip()
     report_ref = report_ref.strip()
     preview_dir = _preview_dir_for(Path(path_arg) if path_arg else None)
-    criteria = _criteria_from_report_ref(report_ref)
+    resolution = resolve_criteria(report_ref, preview_dir=preview_dir)
     _prototype, prototype_hash = _resolve_prototype(
         path_arg, html, round_n, preview_dir,
     )
@@ -197,7 +549,8 @@ def run_preview_transaction(
             return _run_locked(
                 path_arg=path_arg, html=html, summary=summary, round_n=round_n,
                 report_ref=report_ref, options=options, collect=collect,
-                criteria=criteria,
+                criteria=resolution.criteria,
+                criteria_reason=resolution.reason,
                 preview_dir=preview_dir, prototype_hash=prototype_hash,
                 binding=binding, decision_id=decision_id, live_route_url=live_route_url,
             )
@@ -246,7 +599,7 @@ def _run_locked(
     report_ref: str, options: list[str], collect: BrowserCollector,
     criteria: list[dict[str, str]],
     preview_dir: Path, prototype_hash: str, binding: dict[str, Any],
-    decision_id: str, live_route_url: str = "",
+    decision_id: str, criteria_reason: str = "", live_route_url: str = "",
 ) -> dict[str, Any]:
     entry_path = preview_dir / decision_name(round_n)
     # Re-resolve inside the lock to detect TOCTOU: if the path-mode file
@@ -291,6 +644,8 @@ def _run_locked(
 
     prototype = _ensure_prototype(path_arg, html, round_n, preview_dir)
     collect_options: dict[str, Any] = {"criteria": criteria}
+    if criteria_reason:
+        collect_options["criteria_reason"] = criteria_reason
     if live_route_url:
         collect_options["live_route_url"] = live_route_url
     submission = collect(prototype, summary, options, round_n, **collect_options)

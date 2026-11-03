@@ -12,7 +12,6 @@ an erasure of history.
 """
 from __future__ import annotations
 
-import json
 import uuid
 from typing import Callable
 
@@ -23,37 +22,19 @@ from .errors import (
     CORRUPT_CONTENT,
     INVALID_INPUT,
     INVALID_TARGET,
-    LIMIT_EXCEEDED,
     MISSING_DEPENDENCY,
     WorkbenchError,
 )
+from . import rows as rowshape
+from .publication import VERIFIED_CAPABILITIES
 from .service import Operation, WorkbenchService, utc_now
 from .store import Store
 
-MAX_CLOSURE_REVISIONS = 200
 RELATIONS = ("derived-from", "copied-from")
 MODES = ("reference", "derive", "copy")
 
-#: Capabilities that mean "someone verified this content". A copy or an
-#: imported revision carries the content, never the verification: the tags
-#: are dropped so the new asset cannot claim a check nobody ran on it.
-_VERIFIED_CAPABILITIES = frozenset(
-    {"runnable-verified", "native-editable"}
-)
 
-
-def _loads(text: object) -> object:
-    if isinstance(text, (list, dict)):
-        return text
-    if not isinstance(text, str) or not text:
-        return []
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:  # pragma: no cover - stored by us
-        return []
-
-
-def _importable_capabilities(raw: object) -> list[str]:
+def _importable_capabilities(capabilities: list) -> list[str]:
     """The source capabilities a copy or import may keep.
 
     A verified capability means a record bound to this exact revision was
@@ -62,8 +43,8 @@ def _importable_capabilities(raw: object) -> list[str]:
     """
     return [
         capability
-        for capability in _loads(raw)
-        if capability not in _VERIFIED_CAPABILITIES
+        for capability in capabilities
+        if capability not in VERIFIED_CAPABILITIES
     ]
 
 
@@ -87,213 +68,18 @@ class ReuseService:
 
     # -- mutation plumbing ----------------------------------------------
 
-    def _record(
-        self,
-        *,
-        operation: Operation,
-        kind: str,
-        entity_id: str,
-        project_id: str | None,
-        result: dict,
-    ) -> None:
-        self.store.record_mutation(
-            operation_id=operation.operation_id,
-            entity_kind=kind,
-            entity_id=entity_id,
-            payload_digest=operation.digest,
-            resulting_counter=None,
-            result_json=json.dumps(
-                result, separators=(",", ":"), sort_keys=True, ensure_ascii=False
-            ),
-            project_id=project_id,
-            now=self._now(),
-        )
-
     # -- dependency closure ---------------------------------------------
 
-    def _closure(
-        self, *, project_id: str, revision_id: str, seen: set[str] | None = None
-    ) -> list[dict]:
-        """Resolve one revision's dependency closure, refusing cycles."""
-        seen = seen if seen is not None else set()
-        if revision_id in seen:
-            raise WorkbenchError(MISSING_DEPENDENCY, detail="dependency cycle")
-        seen.add(revision_id)
-        revision = self.store.revision(revision_id)
-        if revision is None:
-            raise WorkbenchError(MISSING_DEPENDENCY)
-        entries: list[dict] = []
-        for dependency in self.store.dependencies(revision_id):
-            child_id = dependency["depends_on_revision_id"]
-            child = self.store.revision(child_id)
-            if child is None:
-                raise WorkbenchError(MISSING_DEPENDENCY)
-            asset = self.store.asset(child["asset_id"])
-            if asset is None or asset["project_id"] != project_id:
-                # A dependency must be resolvable inside the consuming
-                # project: a dangling cross-project pointer is refused.
-                raise WorkbenchError(MISSING_DEPENDENCY)
-            entries.extend(
-                self._closure(project_id=project_id, revision_id=child_id, seen=seen)
-            )
-            entries.append(
-                {
-                    "assetId": child["asset_id"],
-                    "revisionId": child_id,
-                    "revisionNumber": child["revision_number"],
-                }
-            )
-        if len(seen) > MAX_CLOSURE_REVISIONS:
-            raise WorkbenchError(LIMIT_EXCEEDED)
-        return entries
-
-    def dependency_closure(
-        self, project_id: str, revision_id: str
-    ) -> list[dict]:
-        return self._closure(project_id=project_id, revision_id=revision_id)
+    def dependency_closure(self, project_id: str, revision_id: str) -> list[dict]:
+        return self.assets.publication.closure(project_id, revision_id)
 
     def would_cycle(
         self, *, project_id: str, asset_id: str, dependencies: list[dict]
     ) -> bool:
         """Public form of the prospective-edge check, for other owners."""
-        return self._would_cycle(
+        return self.assets.publication.would_cycle(
             project_id=project_id, asset_id=asset_id, dependencies=dependencies
         )
-
-    def _would_cycle(
-        self, *, project_id: str, asset_id: str, dependencies: list[dict]
-    ) -> bool:
-        """True when the prospective edges close a loop back to this asset.
-
-        The stored graph alone cannot answer this: the edge being added does
-        not exist yet, so it is walked explicitly.
-        """
-        pending = {dependency["revisionId"] for dependency in dependencies}
-        seen: set[str] = set()
-        stack = list(pending)
-        while stack:
-            current = stack.pop()
-            if current in seen:
-                continue
-            seen.add(current)
-            revision = self.store.revision(current)
-            if revision is None:
-                continue
-            if revision["asset_id"] == asset_id:
-                return True
-            for dependency in self.store.dependencies(current):
-                stack.append(dependency["depends_on_revision_id"])
-        return False
-
-    # -- publish with a validated closure --------------------------------
-
-    def publish_with_dependencies(
-        self,
-        project_id: str,
-        asset_id: str,
-        *,
-        dependencies: object,
-        operation: Operation,
-    ) -> dict:
-        """Publish a revision whose declared dependencies must all resolve."""
-        replayed = self.service._replay(
-            operation, kind="asset-publish-deps", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        row = self.store.asset(asset_id)
-        if row is None or row["project_id"] != project_id:
-            raise WorkbenchError(INVALID_TARGET)
-        parsed = self._parse_dependencies(project_id, dependencies)
-        # Completeness, resolvability, and cycles are checked before anything
-        # is written -- including the edge this publish is about to add.
-        for dependency in parsed:
-            self.dependency_closure(project_id, dependency["revisionId"])
-        if self._would_cycle(
-            project_id=project_id, asset_id=asset_id, dependencies=parsed
-        ):
-            raise WorkbenchError(MISSING_DEPENDENCY, detail="dependency cycle")
-        # The counter is checked after the document's own rules, so a broken
-        # dependency reports its real reason instead of a stale-counter one.
-        self.assets._check_counter(row, operation)
-        draft = self.store.draft(asset_id)
-        manifest = _loads(draft["attributes_json"]).get("manifest", [])
-        for entry in manifest:
-            if not self.blobs.verify(entry["contentHash"]):
-                raise WorkbenchError(CORRUPT_CONTENT)
-        now = self._now()
-
-        def apply() -> tuple[dict, int]:
-            revision_number = int(self.store.draft(asset_id)["revision_counter"]) + 1
-            revision_id = str(uuid.uuid4())
-            attributes = _loads(draft["attributes_json"])
-            self.store.insert_revision(
-                revision_id=revision_id,
-                asset_id=asset_id,
-                revision_number=revision_number,
-                content_hash=manifest[0]["contentHash"] if manifest else None,
-                carrier=attributes.get("carrier", row["kind"]),
-                capabilities=attributes.get("capabilities", []),
-                dependencies=parsed,
-                source_locators=self.assets.asset_detail(project_id, asset_id)[
-                    "asset"
-                ]["sourceLocators"],
-                manifest=manifest,
-                origin={"kind": "publish", "withDependencies": True},
-                now=now,
-            )
-            self.store.insert_dependencies(
-                revision_id=revision_id, dependencies=parsed, now=now
-            )
-            refreshed = self.store.asset(asset_id)
-            payload = self.assets.asset_detail(project_id, asset_id)["asset"]
-            payload["dependencies"] = parsed
-            payload["revisionId"] = revision_id
-            return payload, int(refreshed["counter"])
-
-        with self.store.transaction():
-            result, counter = apply()
-            self._record(
-                operation=operation,
-                kind="asset-publish-deps",
-                entity_id=asset_id,
-                project_id=project_id,
-                result=result,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
-
-    def _parse_dependencies(self, project_id: str, raw: object) -> list[dict]:
-        if raw in (None, []):
-            return []
-        if not isinstance(raw, list):
-            raise WorkbenchError(INVALID_INPUT)
-        if len(raw) > MAX_CLOSURE_REVISIONS:
-            raise WorkbenchError(LIMIT_EXCEEDED)
-        parsed: list[dict] = []
-        seen: set[str] = set()
-        for item in raw:
-            if not isinstance(item, dict):
-                raise WorkbenchError(INVALID_INPUT)
-            revision_id = item.get("revisionId")
-            if not isinstance(revision_id, str) or not revision_id:
-                raise WorkbenchError(INVALID_INPUT)
-            if revision_id in seen:
-                raise WorkbenchError(INVALID_INPUT)
-            revision = self.store.revision(revision_id)
-            if revision is None:
-                raise WorkbenchError(MISSING_DEPENDENCY)
-            asset = self.store.asset(revision["asset_id"])
-            if asset is None or asset["project_id"] != project_id:
-                raise WorkbenchError(MISSING_DEPENDENCY)
-            seen.add(revision_id)
-            parsed.append(
-                {
-                    "assetId": revision["asset_id"],
-                    "revisionId": revision_id,
-                    "revisionNumber": revision["revision_number"],
-                }
-            )
-        return parsed
 
     # -- instances -------------------------------------------------------
 
@@ -306,22 +92,16 @@ class ReuseService:
         overrides: object = None,
         operation: Operation,
     ) -> dict:
-        replayed = self.service._replay(operation, kind="instance-create", project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        asset = self.store.asset(asset_id)
-        if asset is None:
-            raise WorkbenchError(INVALID_TARGET)
-        # An instance may reference a revision owned by another project
-        # only after that closure was imported; otherwise the revision must
-        # belong to the project itself.
-        revision = self._resolve_revision(project_id, asset_id, revision_id)
-        overrides_map = self._parse_overrides(overrides, revision)
-        instance_id = str(uuid.uuid4())
-        now = self._now()
-
-        def apply() -> tuple[dict, int]:
+        def apply() -> tuple[dict, int | None]:
+            asset = self.store.asset(asset_id)
+            if asset is None:
+                raise WorkbenchError(INVALID_TARGET)
+            # An instance may reference a revision owned by another project
+            # only after that closure was imported; otherwise the revision
+            # must belong to the project itself.
+            revision = self._resolve_revision(project_id, asset_id, revision_id)
+            overrides_map = self._parse_overrides(overrides, revision)
+            instance_id = str(uuid.uuid4())
             self.store.insert_instance(
                 instance_id=instance_id,
                 project_id=project_id,
@@ -329,23 +109,22 @@ class ReuseService:
                 revision_id=revision["revision_id"],
                 overrides=overrides_map,
                 declared_public_params=self._public_params(revision),
-                now=now,
+                now=self._now(),
             )
             return self._instance_payload(instance_id), 0
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._record(
-                operation=operation,
-                kind="instance-create",
-                entity_id=instance_id,
-                project_id=project_id,
-                result=result,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.create(
+            operation,
+            kind="instance-create",
+            entity_of=lambda result: str(result["instanceId"]),
+            project_of=lambda result: project_id,
+            apply=apply,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            project_id=project_id,
+        )
 
     def _public_params(self, revision: dict) -> list:
-        origin = _loads(revision["origin_json"])
+        origin = rowshape.origin(revision)
         if isinstance(origin, dict):
             params = origin.get("publicParams")
             if isinstance(params, list):
@@ -406,8 +185,8 @@ class ReuseService:
             "assetCounter": int(asset["counter"]) if asset else None,
             "revisionId": row["revision_id"],
             "revisionNumber": revision["revision_number"] if revision else None,
-            "overrides": _loads(row["overrides_json"]),
-            "declaredPublicParams": _loads(row["declared_public_params_json"]),
+            "overrides": rowshape.load(row["overrides_json"], {}),
+            "declaredPublicParams": rowshape.load(row["declared_public_params_json"], []),
             "createdAt": row["created_at"],
             "updatedAt": row["updated_at"],
         }
@@ -434,33 +213,28 @@ class ReuseService:
     ) -> dict:
         if mode not in MODES:
             raise WorkbenchError(INVALID_INPUT)
-        replayed = self.service._replay(operation, kind=f"asset-{mode}", project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        source = self.store.asset(asset_id)
-        if source is None or source["project_id"] != project_id:
-            raise WorkbenchError(INVALID_TARGET)
-        revision = self.store.latest_revision(asset_id)
-        if revision is None:
-            raise WorkbenchError(MISSING_DEPENDENCY)
-        draft = self.store.draft(asset_id)
-        attributes = _loads(draft["attributes_json"])
-        # The draft carries the same capability list as the revision; a
-        # verified tag dropped from the revision must not survive here and
-        # reappear on the next publish.
-        attributes["capabilities"] = [
-            capability
-            for capability in attributes.get("capabilities", [])
-            if capability not in _VERIFIED_CAPABILITIES
-        ]
-        new_name = (
-            f"{source['name']} copy" if name in (None, "") else str(name)
-        )[:120]
-        now = self._now()
-        new_asset_id = str(uuid.uuid4())
-
         def apply() -> tuple[dict, int]:
+            source = self.store.asset(asset_id)
+            if source is None or source["project_id"] != project_id:
+                raise WorkbenchError(INVALID_TARGET)
+            revision = self.store.latest_revision(asset_id)
+            if revision is None:
+                raise WorkbenchError(MISSING_DEPENDENCY)
+            draft = self.store.draft(asset_id)
+            attributes = rowshape.attributes(draft)
+            # The draft carries the same capability list as the revision; a
+            # verified tag dropped from the revision must not survive here and
+            # reappear on the next publish.
+            attributes["capabilities"] = [
+                capability
+                for capability in attributes.get("capabilities", [])
+                if capability not in VERIFIED_CAPABILITIES
+            ]
+            new_name = (
+                f"{source['name']} copy" if name in (None, "") else str(name)
+            )[:120]
+            now = self._now()
+            new_asset_id = str(uuid.uuid4())
             if mode == "reference":
                 # A reference reuses the same asset identity: only the
                 # instance is new, so no lineage edge is created.
@@ -478,7 +252,7 @@ class ReuseService:
                 project_id=project_id,
                 kind=source["kind"],
                 name=new_name,
-                tags=_loads(draft["tags_json"]),
+                tags=rowshape.tags(draft),
                 attributes=attributes,
                 now=now,
             )
@@ -492,8 +266,8 @@ class ReuseService:
             # carried across with an empty `verified` list.
             copied_capabilities = [
                 capability
-                for capability in _loads(revision["capabilities_json"])
-                if capability not in _VERIFIED_CAPABILITIES
+                for capability in rowshape.capabilities(revision)
+                if capability not in VERIFIED_CAPABILITIES
             ]
             self.store.insert_revision(
                 revision_id=revision_id,
@@ -502,9 +276,9 @@ class ReuseService:
                 content_hash=revision["content_hash"],
                 carrier=revision["carrier"],
                 capabilities=copied_capabilities,
-                dependencies=_loads(revision["dependencies_json"]),
-                source_locators=_loads(revision["source_locators_json"]),
-                manifest=_loads(revision["manifest_json"]),
+                dependencies=rowshape.dependencies(revision),
+                source_locators=rowshape.source_locators(revision),
+                manifest=rowshape.manifest(revision),
                 # A copy never inherits approvals: verified capabilities
                 # start empty on the new asset.
                 origin={
@@ -537,16 +311,19 @@ class ReuseService:
                 int(self.store.asset(new_asset_id)["counter"]),
             )
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._record(
-                operation=operation,
-                kind=f"asset-{mode}",
-                entity_id=new_asset_id,
-                project_id=project_id,
-                result=result,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.create(
+            operation,
+            kind=f"asset-{mode}",
+            # A reference makes an instance and the other modes make an
+            # asset; the row names the one this request actually created.
+            entity_of=lambda result: str(
+                result.get("instanceId") or result["assetId"]
+            ),
+            project_of=lambda result: project_id,
+            apply=apply,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            project_id=project_id,
+        )
 
     def _create_instance_row(
         self,
@@ -598,7 +375,7 @@ class ReuseService:
         if revision is None or revision["asset_id"] != source_asset["asset_id"]:
             raise WorkbenchError(INVALID_TARGET)
         closure = self.dependency_closure(project_id, revision["revision_id"])
-        manifest = _loads(revision["manifest_json"])
+        manifest = rowshape.manifest(revision)
         for entry in manifest:
             if not self.blobs.verify(entry["contentHash"]):
                 raise WorkbenchError(CORRUPT_CONTENT)
@@ -704,9 +481,9 @@ class ReuseService:
                 dependency_asset = self.store.asset(source_dependency["asset_id"])
                 if dependency_asset is None:  # pragma: no cover - plan validated
                     raise WorkbenchError(MISSING_DEPENDENCY)
-                dependency_manifest = _loads(source_dependency["manifest_json"])
+                dependency_manifest = rowshape.manifest(source_dependency)
                 dependency_capabilities = _importable_capabilities(
-                    source_dependency["capabilities_json"]
+                    rowshape.capabilities(source_dependency)
                 )
                 local_dependency_asset_id = str(uuid.uuid4())
                 local_dependency_revision_id = str(uuid.uuid4())
@@ -813,7 +590,7 @@ class ReuseService:
                     "manifest": plan["manifest"],
                     "carrier": revision["carrier"],
                     "capabilities": _importable_capabilities(
-                        revision["capabilities_json"]
+                        rowshape.capabilities(revision)
                     ),
                     "roots": [],
                     "warnings": [],
@@ -827,7 +604,7 @@ class ReuseService:
                 revision_number=1,
                 content_hash=revision["content_hash"],
                 carrier=revision["carrier"],
-                capabilities=_importable_capabilities(revision["capabilities_json"]),
+                capabilities=_importable_capabilities(rowshape.capabilities(revision)),
                 dependencies=imported_dependencies,
                 source_locators=locators,
                 manifest=plan["manifest"],
@@ -867,12 +644,13 @@ class ReuseService:
 
         with self.store.transaction():
             result, counter = apply()
-            self._record(
+            self.service.mutations.record(
                 operation=operation,
                 kind="closure-import",
                 entity_id=closure_id,
                 project_id=target_id,
                 result=result,
+                counter=counter,
             )
         return {"result": result, "replayed": False, "counter": counter}
 
@@ -927,7 +705,7 @@ class ReuseService:
             "target": {
                 "revisionId": target_revision["revision_id"],
                 "revisionNumber": target_revision["revision_number"],
-                "capabilities": _loads(target_revision["capabilities_json"]),
+                "capabilities": rowshape.capabilities(target_revision),
             },
             "candidates": candidates,
             "notes": (
@@ -944,8 +722,8 @@ class ReuseService:
             conflicts.append(
                 {"kind": "carrier-changed", "from": current["carrier"], "to": target["carrier"]}
             )
-        current_caps = set(_loads(current["capabilities_json"]))
-        target_caps = set(_loads(target["capabilities_json"]))
+        current_caps = set(rowshape.capabilities(current))
+        target_caps = set(rowshape.capabilities(target))
         if not current_caps <= target_caps:
             conflicts.append(
                 {
@@ -959,7 +737,7 @@ class ReuseService:
             if isinstance(param, dict)
         }
         for member in members:
-            overrides = _loads(member["overrides_json"])
+            overrides = rowshape.load(member["overrides_json"], {})
             if not isinstance(overrides, dict) or not overrides:
                 continue
             # A target that declares no such parameter cannot honour the
@@ -991,51 +769,45 @@ class ReuseService:
         to_revision_id: object = None,
         operation: Operation,
     ) -> dict:
-        replayed = self.service._replay(
-            operation, kind="instance-upgrade", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        self.assets._check_counter(self.store.asset(asset_id), operation)
-        if not isinstance(instance_ids, list) or not instance_ids:
-            raise WorkbenchError(INVALID_INPUT)
-        plan = self.upgrade_plan(project_id, asset_id, to_revision_id=to_revision_id)
-        target = self.store.revision(plan["target"]["revisionId"])
-        assert target is not None
-        selected = set(instance_ids)
-        known = {
-            instance_id
-            for candidate in plan["candidates"]
-            for instance_id in candidate["instanceIds"]
-        }
-        unknown = selected - known
-        if unknown:
-            raise WorkbenchError(INVALID_TARGET)
-        affected = [
-            candidate
-            for candidate in plan["candidates"]
-            if selected & set(candidate["instanceIds"])
-        ]
-        # The whole selected set is applied atomically: any conflict blocks
-        # every change, and unselected instances are never touched.
-        blocking = [
-            conflict
-            for candidate in affected
-            for conflict in candidate["conflicts"]
-        ]
-        if blocking:
-            raise WorkbenchError(CONFLICT)
-        now = self._now()
-        from_revisions = {
-            candidate["fromRevisionId"] for candidate in affected
-        }
-
         def apply() -> tuple[dict, int]:
+            if not isinstance(instance_ids, list) or not instance_ids:
+                raise WorkbenchError(INVALID_INPUT)
+            plan = self.upgrade_plan(
+                project_id, asset_id, to_revision_id=to_revision_id
+            )
+            target = self.store.revision(plan["target"]["revisionId"])
+            assert target is not None
+            selected = set(instance_ids)
+            known = {
+                instance_id
+                for candidate in plan["candidates"]
+                for instance_id in candidate["instanceIds"]
+            }
+            if selected - known:
+                raise WorkbenchError(INVALID_TARGET)
+            affected = [
+                candidate
+                for candidate in plan["candidates"]
+                if selected & set(candidate["instanceIds"])
+            ]
+            # The whole selected set is applied atomically: any conflict
+            # blocks every change, and unselected instances are never touched.
+            blocking = [
+                conflict
+                for candidate in affected
+                for conflict in candidate["conflicts"]
+            ]
+            if blocking:
+                raise WorkbenchError(CONFLICT)
+            now = self._now()
+            from_revisions = {
+                candidate["fromRevisionId"] for candidate in affected
+            }
             for instance_id in sorted(selected):
                 instance = self.store.instance(instance_id)
                 if instance is None:  # pragma: no cover - invariant
                     raise WorkbenchError(INVALID_TARGET)
-                overrides = _loads(instance["overrides_json"])
+                overrides = rowshape.load(instance["overrides_json"], {})
                 self.store.set_instance_revision(
                     instance_id=instance_id,
                     revision_id=target["revision_id"],
@@ -1068,16 +840,15 @@ class ReuseService:
                 int(self.store.asset(asset_id)["counter"]),
             )
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._record(
-                operation=operation,
-                kind="instance-upgrade",
-                entity_id=asset_id,
-                project_id=project_id,
-                result=result,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="instance-upgrade",
+            entity_id=asset_id,
+            project_id=project_id,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self.store.asset(asset_id),
+            apply=apply,
+        )
 
     def rollback_instances(
         self,
@@ -1089,26 +860,19 @@ class ReuseService:
         operation: Operation,
     ) -> dict:
         """Restore selected instances to an older revision as a new record."""
-        replayed = self.service._replay(
-            operation, kind="instance-rollback", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        self.assets._check_counter(self.store.asset(asset_id), operation)
-        if not isinstance(instance_ids, list) or not instance_ids:
-            raise WorkbenchError(INVALID_INPUT)
-        revision = self.store.revision(str(to_revision_id))
-        if revision is None or revision["asset_id"] != asset_id:
-            # Unknown target, or content that no longer verifies, must be
-            # reported as damage instead of silently becoming "latest".
-            raise WorkbenchError(CORRUPT_CONTENT)
-        for entry in _loads(revision["manifest_json"]):
-            if not self.blobs.verify(entry["contentHash"]):
-                raise WorkbenchError(CORRUPT_CONTENT)
-        now = self._now()
-        selected = [str(item) for item in instance_ids]
-
         def apply() -> tuple[dict, int]:
+            if not isinstance(instance_ids, list) or not instance_ids:
+                raise WorkbenchError(INVALID_INPUT)
+            revision = self.store.revision(str(to_revision_id))
+            if revision is None or revision["asset_id"] != asset_id:
+                # Unknown target, or content that no longer verifies, must be
+                # reported as damage instead of silently becoming "latest".
+                raise WorkbenchError(CORRUPT_CONTENT)
+            for entry in rowshape.manifest(revision):
+                if not self.blobs.verify(entry["contentHash"]):
+                    raise WorkbenchError(CORRUPT_CONTENT)
+            now = self._now()
+            selected = [str(item) for item in instance_ids]
             for instance_id in sorted(selected):
                 instance = self.store.instance(instance_id)
                 if instance is None or instance["project_id"] != project_id:
@@ -1118,7 +882,7 @@ class ReuseService:
                 self.store.set_instance_revision(
                     instance_id=instance_id,
                     revision_id=revision["revision_id"],
-                    overrides=_loads(instance["overrides_json"]),
+                    overrides=rowshape.load(instance["overrides_json"], {}),
                     now=now,
                 )
             record_id = str(uuid.uuid4())
@@ -1142,16 +906,15 @@ class ReuseService:
                 int(self.store.asset(asset_id)["counter"]),
             )
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._record(
-                operation=operation,
-                kind="instance-rollback",
-                entity_id=asset_id,
-                project_id=project_id,
-                result=result,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="instance-rollback",
+            entity_id=asset_id,
+            project_id=project_id,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self.store.asset(asset_id),
+            apply=apply,
+        )
 
     def asset_history(self, project_id: str, asset_id: str) -> dict:
         self.service.require_project(project_id, scope="read")
@@ -1165,7 +928,7 @@ class ReuseService:
                 {
                     "revisionId": row["revision_id"],
                     "revisionNumber": row["revision_number"],
-                    "capabilities": _loads(row["capabilities_json"]),
+                    "capabilities": rowshape.capabilities(row),
                     "dependencies": self.store.dependencies(row["revision_id"]),
                     "createdAt": row["created_at"],
                     "instanceCount": len(self.store.revision_instances(row["revision_id"])),
@@ -1177,7 +940,7 @@ class ReuseService:
                     "recordId": row["record_id"],
                     "kind": row["kind"],
                     "toRevisionId": row["to_revision_id"],
-                    "instanceIds": _loads(row["instance_ids_json"]),
+                    "instanceIds": rowshape.load(row["instance_ids_json"], []),
                     "createdAt": row["created_at"],
                 }
                 for row in self.store.asset_upgrade_records(asset_id)

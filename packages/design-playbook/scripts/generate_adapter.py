@@ -34,6 +34,9 @@ _TEMPLATES_DIR = _SCRIPTS_DIR / "adapter_templates"
 sys.path.insert(0, str(_SCRIPTS_DIR))
 import adapter_markers as markers  # noqa: E402
 from adapter_matrix import MATRIX, AgentRow, get_agent  # noqa: E402
+# One frontmatter reading rule, shared with scripts/validate.py, so a file
+# cannot pass one parser and be dropped by the other.
+from frontmatter import parse_frontmatter  # noqa: E402
 
 
 
@@ -56,18 +59,8 @@ def _get_version() -> str:
 
 
 def _parse_fm(text: str) -> tuple[dict[str, str], str]:
-    """Parse YAML-lite frontmatter (single-line values only). Returns (meta, body)."""
-    if not text.startswith("---"):
-        return {}, text
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return {}, text
-    meta: dict[str, str] = {}
-    for line in parts[1].splitlines():
-        m = re.match(r"^([\w-]+):\s*(.+)$", line)
-        if m:
-            meta[m.group(1)] = m.group(2).strip()
-    return meta, parts[2].lstrip("\n")
+    """Parse YAML-lite frontmatter through the shared rule."""
+    return parse_frontmatter(text)
 
 
 def _read_skills() -> list[dict]:
@@ -677,10 +670,10 @@ def _zed_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
 
 
 
-# Dedicated renderers for agents whose platform surface rises above the
-# AGENTS.md floor (Tier 1/2 today).  Tier membership lives in the matrix, not
-# here: a matrix row absent from this map automatically falls back to the
-# floor renderer, so adding an agent = adding a matrix row (ADR-0042).
+# Dedicated renderers by name.  Which rows use which renderer is a matrix
+# fact (``AgentRow.renderer``); a Tier-1/2 row cannot be built without one,
+# so "declared a tier" and "has the output surface" cannot drift apart
+# (ADR-0042).  This map only binds a name to its implementation.
 _SPECIALIZED_RENDERERS: dict[str, Renderer] = {
     "codex": _codex_files,
     "cursor": _cursor_files,
@@ -696,12 +689,20 @@ def _renderer_for(row: AgentRow) -> Renderer | None:
     """Resolve *row* to a renderer from matrix properties, not name lists.
 
     Native rows (the host platform consumes the package directly) resolve to
-    None — the generator emits nothing for them.  Every other row uses its
-    dedicated renderer when one exists, else the shared AGENTS.md floor.
+    None — the generator emits nothing for them.  A row that names a renderer
+    uses it; a row that names none is a Tier-3 row and uses the shared
+    AGENTS.md floor.
     """
     if row.native:
         return None
-    return _SPECIALIZED_RENDERERS.get(row.agent, _agents_md_floor_files)
+    if row.renderer is None:
+        return _agents_md_floor_files
+    renderer = _SPECIALIZED_RENDERERS.get(row.renderer)
+    if renderer is None:
+        raise ValueError(
+            f"agent {row.agent!r} names an unknown renderer: {row.renderer!r}"
+        )
+    return renderer
 
 
 def render_entries(

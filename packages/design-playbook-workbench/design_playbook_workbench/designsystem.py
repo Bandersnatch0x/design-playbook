@@ -24,8 +24,10 @@ from .errors import (
     UNSUPPORTED,
     WorkbenchError,
 )
+from . import rows as rowshape
 from .paths import assert_contained
 from .proposals import ProposalService, relative_parts
+from .publication import PublicationPlan
 from .service import Operation, WorkbenchService, utc_now
 from .store import Store
 
@@ -373,18 +375,13 @@ class DesignSystemService:
     # -- reads ----------------------------------------------------------
 
     def _tokens_asset(self, project_id: str, asset_id: str) -> dict:
-        asset = self.store.asset(asset_id)
-        if asset is None or asset["project_id"] != project_id:
-            raise WorkbenchError(INVALID_TARGET)
-        if asset["kind"] != "tokens":
-            raise WorkbenchError(UNSUPPORTED, detail="asset is not a token set")
-        return asset
+        return rowshape.owned_asset(self.store, project_id, asset_id, kind="tokens")
 
     def _document_bytes(self, asset_id: str, revision: dict | None = None) -> tuple[bytes, dict]:
         """The stored token document plus where it currently comes from."""
         source = revision or self.store.latest_revision(asset_id)
         if source is not None:
-            manifest = json.loads(source["manifest_json"])
+            manifest = rowshape.manifest(source)
             if manifest:
                 return self.blobs.read(manifest[0]["contentHash"]), {
                     "kind": "revision",
@@ -392,7 +389,7 @@ class DesignSystemService:
                     "revisionNumber": source["revision_number"],
                 }
         draft = self.store.draft(asset_id)
-        manifest = json.loads(draft["attributes_json"]).get("manifest", [])
+        manifest = rowshape.attributes(draft).get("manifest", [])
         if not manifest:
             raise WorkbenchError(MISSING_DEPENDENCY)
         return self.blobs.read(manifest[0]["contentHash"]), {"kind": "draft"}
@@ -552,72 +549,64 @@ class DesignSystemService:
         self, project_id: str, asset_id: str, *, document: object, operation: Operation
     ) -> dict:
         """Replace the draft token document after validation."""
-        replayed = self.service._replay(operation, kind="design-system-update", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        self.assets._check_counter(self._tokens_asset(project_id, asset_id), operation)
-        parsed = parse_document(document)
-        verdict = validate_document(parsed)
-        if not verdict["valid"]:
-            raise WorkbenchError(INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False))
-        data = json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
-        record = self.blobs.put(data)
-        draft = self.store.draft(asset_id)
-        attributes = json.loads(draft["attributes_json"])
-        manifest = [
-            {
-                "path": attributes.get("manifest", [{}])[0].get("path", "tokens.json"),
-                "contentHash": record.content_hash,
-                "size": record.size,
-                "mediaType": "application/json",
-                "carrier": "tokens",
-                "encoding": "utf-8",
-            }
-        ]
-        attributes["manifest"] = manifest
-        attributes["capabilities"] = ["reference"]
-        now = self._now()
+
+        held: dict = {}
+
+        def validate(row: dict) -> None:
+            # The same moment as every other document write: the document's
+            # own rules report before the counter does.
+            parsed = parse_document(document)
+            verdict = validate_document(parsed)
+            if not verdict["valid"]:
+                raise WorkbenchError(
+                    INVALID_INPUT,
+                    detail=json.dumps(verdict["errors"], ensure_ascii=False),
+                )
+            held["verdict"] = verdict
 
         def apply() -> tuple[dict, int]:
-            self.store.update_draft(
-                asset_id=asset_id,
-                tags=json.loads(draft["tags_json"]),
-                attributes=attributes,
-                now=now,
+            draft = self.store.draft(asset_id)
+            attributes = rowshape.attributes(draft)
+            manifest = attributes.get("manifest") or [{}]
+            result, counter = self.assets.write_document_draft(
+                asset_id,
+                # The parsed form separates themes and is not what the editor
+                # round-trips; the client's document is the stored shape,
+                # written through the one canonical serializer.
+                document=document,
+                path=manifest[0].get("path", "tokens.json"),
+                carrier="tokens",
+                capabilities=["reference"],
             )
-            counter = self.store.bump_asset_counter(asset_id=asset_id, now=now)
-            payload = self.assets._asset_payload(
-                self.store.asset(asset_id), self.store.draft(asset_id), None
-            )
-            payload["validation"] = verdict
-            return payload, counter
+            result["validation"] = held["verdict"]
+            return result, counter
 
-        with self.store.transaction():
-            result, counter = apply()
-            self.assets._record(
-                operation=operation,
-                kind="design-system-update",
-                entity_id=asset_id,
-                project_id=project_id,
-                result=result,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="design-system-update",
+            entity_id=asset_id,
+            project_id=project_id,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            load_row=lambda: self._tokens_asset(project_id, asset_id),
+            validate=validate,
+            apply=apply,
+        )
 
     def publish(self, project_id: str, asset_id: str, *, operation: Operation) -> dict:
         """Publish only after the same validator accepts the document."""
-        self.service.require_project(project_id, scope="write")
-        self._tokens_asset(project_id, asset_id)
-        verdict = validate_document(self._document_for(asset_id))
-        if not verdict["valid"]:
-            raise WorkbenchError(
-                INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False)
-            )
-        outcome = self.assets.publish_revision(
-            project_id, asset_id, operation=operation
+        def prepare() -> PublicationPlan:
+            self._tokens_asset(project_id, asset_id)
+            verdict = validate_document(self._document_for(asset_id))
+            if not verdict["valid"]:
+                raise WorkbenchError(
+                    INVALID_INPUT,
+                    detail=json.dumps(verdict["errors"], ensure_ascii=False),
+                )
+            return PublicationPlan(response={"validation": verdict})
+
+        return self.assets.publish(
+            project_id, asset_id, operation=operation, prepare=prepare
         )
-        outcome["result"]["validation"] = verdict
-        return outcome
 
     # -- baseline proposal ---------------------------------------------
 
@@ -702,8 +691,8 @@ class DesignSystemService:
         revision = self.store.latest_revision(asset_id)
         if revision is None:
             raise WorkbenchError(MISSING_DEPENDENCY)
-        manifest = json.loads(revision["manifest_json"])
-        locators = json.loads(revision["source_locators_json"])
+        manifest = rowshape.manifest(revision)
+        locators = rowshape.source_locators(revision)
         target_path = path
         if target_path in (None, ""):
             target_path = manifest[0]["path"] if manifest else None

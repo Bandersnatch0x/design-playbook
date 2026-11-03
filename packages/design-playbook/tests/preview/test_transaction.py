@@ -39,8 +39,7 @@ def _static_collect(choice: str, feedback: str):
         options: list[str],
         round_n: int,
         *,
-        criteria: list[dict[str, str]],
-    ) -> dict:
+        criteria: list[dict[str, str]], **kwargs: object) -> dict:
         return {
             "choice": choice,
             "feedback": feedback,
@@ -98,8 +97,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             options: list[str],
             round_n: int,
             *,
-            criteria: list[dict[str, str]],
-        ) -> dict:
+            criteria: list[dict[str, str]], **kwargs: object) -> dict:
             seen.append((prototype, summary, options, round_n))
             return {
                 "choice": "确认通过",
@@ -266,7 +264,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             prototype.write_text("reviewed", encoding="utf-8")
             calls = 0
 
-            def collect(*args: object, criteria: list[dict[str, str]]) -> dict:
+            def collect(*args: object, criteria: list[dict[str, str]], **kwargs: object) -> dict:
                 nonlocal calls
                 calls += 1
                 return {
@@ -459,7 +457,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
                 prototype.write_text("reviewed", encoding="utf-8")
                 calls = 0
 
-                def collect(*args: object, criteria: list[dict[str, str]]) -> dict:
+                def collect(*args: object, criteria: list[dict[str, str]], **kwargs: object) -> dict:
                     nonlocal calls
                     calls += 1
                     return {
@@ -498,7 +496,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             first_error: list[BaseException] = []
 
             def blocking_collect(
-                *args: object, criteria: list[dict[str, str]]
+                *args: object, criteria: list[dict[str, str]], **kwargs: object
             ) -> dict:
                 entered.set()
                 release.wait(3)
@@ -519,7 +517,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             second_calls = 0
 
             def second_collect(
-                *args: object, criteria: list[dict[str, str]]
+                *args: object, criteria: list[dict[str, str]], **kwargs: object
             ) -> dict:
                 nonlocal second_calls
                 second_calls += 1
@@ -543,7 +541,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             release = threading.Event()
             errors: list[BaseException] = []
 
-            def collect(*args: object, criteria: list[dict[str, str]]) -> dict:
+            def collect(*args: object, criteria: list[dict[str, str]], **kwargs: object) -> dict:
                 entered.set()
                 release.wait(2)
                 return {
@@ -757,7 +755,7 @@ class PreviewDecisionTransactionTests(unittest.TestCase):
             prototype.write_text("reviewed", encoding="utf-8")
 
             def fail_collect(
-                *args: object, criteria: list[dict[str, str]]
+                *args: object, criteria: list[dict[str, str]], **kwargs: object
             ) -> dict:
                 raise RuntimeError("browser closed")
 
@@ -822,8 +820,7 @@ Edges.
                 options: list[str],
                 round_n: int,
                 *,
-                criteria: list[dict[str, str]],
-            ) -> dict:
+                criteria: list[dict[str, str]], **kwargs: object) -> dict:
                 self.assertEqual(
                     [item["id"] for item in criteria], ["L6.1", "L6.2"]
                 )
@@ -859,6 +856,109 @@ Edges.
         self.assertEqual(entry["outcome"]["criteria_review"], expected)
         self.assertEqual(confirm["criteria_review"], expected)
 
+    def test_an_empty_criteria_set_names_its_reason(self) -> None:
+        """The shell says why criteria are missing, not just that they are."""
+        cases = (
+            ("missing-report.md", None, "report-unresolved"),
+            ("report.md", None, "spec-missing"),
+            ("report.md", "not a spec", "spec-invalid"),
+        )
+        for report_ref, spec_text, expected in cases:
+            with self.subTest(reason=expected):
+                with tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    prototype = root / "round-1.html"
+                    prototype.write_text(
+                        "<html><body>reviewed</body></html>", encoding="utf-8"
+                    )
+                    if report_ref == "report.md":
+                        (root / report_ref).write_text(
+                            "# Decision report\n", encoding="utf-8"
+                        )
+                    if spec_text is not None:
+                        (root / "spec.md").write_text(spec_text, encoding="utf-8")
+
+                    seen: list[str] = []
+
+                    def collect(*args, criteria, criteria_reason="", **kwargs):
+                        seen.append(criteria_reason)
+                        return {
+                            "choice": "确认通过",
+                            "feedback": "checked",
+                            "anchors": [],
+                            "aborted": False,
+                        }
+
+                    run_preview_transaction(
+                        path_arg=str(prototype),
+                        html=None,
+                        summary="summary",
+                        round_n=1,
+                        report_ref=report_ref,
+                        options=["确认通过", "需要修改"],
+                        collect=collect,
+                    )
+                self.assertEqual(seen, [expected])
+
+    def test_a_relative_report_ref_resolves_against_the_preview_run(self) -> None:
+        """The shell and G5 resolve a ref by the same rule, not by cwd.
+
+        The transaction used to resolve relative refs from the process cwd
+        only, so the same run showed no criteria here while G5 matched it.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prototype = root / "round-1.html"
+            prototype.write_text("<html><body>reviewed</body></html>", encoding="utf-8")
+            (root / "report.md").write_text("# Decision report\n", encoding="utf-8")
+            (root / "spec.md").write_text(
+                """# Spec
+
+## L1 Goal
+- Outcome summary: Review a queue monitor UI.
+## L2 Structure
+Page.
+## L3 Flow
+Flow.
+## L4 Details
+Details.
+## L5 Edges
+Edges.
+## L6 Acceptance
+1. Queue cards: Given jobs exist, When the monitor renders, Then active and queued counts are visible.
+""",
+                encoding="utf-8",
+            )
+
+            seen: list[list[str]] = []
+
+            def collect(
+                prototype: Path,
+                summary: str,
+                options: list[str],
+                round_n: int,
+                *,
+                criteria: list[dict[str, str]], **kwargs: object) -> dict:
+                seen.append([item["id"] for item in criteria])
+                return {
+                    "choice": "确认通过",
+                    "feedback": "checked",
+                    "anchors": [],
+                    "aborted": False,
+                }
+
+            run_preview_transaction(
+                path_arg=str(prototype),
+                html=None,
+                summary="summary",
+                round_n=1,
+                report_ref="report.md",
+                options=["确认通过", "需要修改"],
+                collect=collect,
+            )
+
+        self.assertEqual(seen, [["L6.1"]])
+
     def _run(
         self, prototype: Path, *, summary: str = "summary",
         report_ref: str = "report.md", options: list[str] | None = None,
@@ -881,8 +981,7 @@ Edges.
             options: list[str],
             round_n: int,
             *,
-            criteria: list[dict[str, str]],
-        ) -> dict:
+            criteria: list[dict[str, str]], **kwargs: object) -> dict:
             return submission
 
         temp = tempfile.TemporaryDirectory()
@@ -947,8 +1046,7 @@ class PreviewVisualEditHandoffTests(unittest.TestCase):
             options: list[str],
             round_n: int,
             *,
-            criteria: list[dict[str, str]],
-        ) -> dict:
+            criteria: list[dict[str, str]], **kwargs: object) -> dict:
             return submission
 
         temp = tempfile.TemporaryDirectory()
@@ -1236,8 +1334,7 @@ class LiveRouteReplayTests(unittest.TestCase):
     def _static(self, choice: str, feedback: str):
         def collect(
             prototype: Path, summary: str, options: list[str], round_n: int, *,
-            criteria: list[dict[str, str]], live_route_url: str = "",
-        ) -> dict:
+            criteria: list[dict[str, str]], live_route_url: str = "", **kwargs: object) -> dict:
             return {
                 "choice": choice,
                 "feedback": feedback,

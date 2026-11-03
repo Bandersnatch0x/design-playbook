@@ -32,8 +32,10 @@ from .errors import (
     STALE_EVIDENCE,
     WorkbenchError,
 )
+from . import rows as rowshape
 from .paths import assert_contained
 from .proposals import relative_parts
+from .publication import PublicationPlan
 from .service import Operation, WorkbenchService, payload_digest, utc_now
 from .store import Store
 
@@ -87,28 +89,6 @@ class OwnerProjectionService:
         self._now = now_fn if now_fn is not None else utc_now
 
     # -- shared plumbing ------------------------------------------------
-
-    def _record(
-        self,
-        operation: Operation,
-        *,
-        kind: str,
-        entity_id: str,
-        project_id: str,
-        result: dict,
-        counter: int,
-        now: str,
-    ) -> None:
-        self.store.record_mutation(
-            operation_id=operation.operation_id,
-            entity_kind=kind,
-            entity_id=entity_id,
-            payload_digest=operation.digest,
-            resulting_counter=counter,
-            result_json=json.dumps(result, ensure_ascii=False, sort_keys=True),
-            project_id=project_id,
-            now=now,
-        )
 
     def _root(self, project_id: str) -> Path:
         return Path(
@@ -381,48 +361,49 @@ class OwnerProjectionService:
         The hash must match what the owner projection currently states, so a
         confirmation never survives a change to the object it was given for.
         """
-        replayed = self.service._replay(operation, kind="owner-confirmation", project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        if not isinstance(run_id, str) or not run_id:
-            raise WorkbenchError(INVALID_INPUT, detail="run id is required")
-        if object_type not in OBJECT_TYPES:
-            raise WorkbenchError(INVALID_INPUT, detail="unknown object type")
-        if not isinstance(object_id, str) or not object_id:
-            raise WorkbenchError(INVALID_INPUT, detail="object id is required")
-        if not isinstance(source_hash, str) or not source_hash:
-            # An unhashed object cannot be confirmed: there is nothing to
-            # bind the decision to.
-            raise WorkbenchError(INVALID_INPUT, detail="source hash is required")
-        if role not in CONFIRMATION_ROLES:
-            raise WorkbenchError(INVALID_INPUT, detail="unknown confirmation role")
-        projection = self._projection_for(project_id, run_id)
-        rows = [
-            *self._criterion_rows(projection),
-            *self._finding_rows(projection),
-            *self._evidence_rows(projection),
-        ]
-        match = next(
-            (
-                row
-                for row in rows
-                if row["objectType"] == object_type and row["objectId"] == object_id
-            ),
-            None,
-        )
-        if match is None:
-            raise WorkbenchError(INVALID_TARGET, detail="unknown owner object")
-        current = str(match.get("sourceHash") or "")
-        if not current or current != source_hash:
-            raise WorkbenchError(
-                STALE_EVIDENCE, detail="the object changed since it was shown"
+        def apply() -> tuple[dict, int | None]:
+            # Every check lives here, under the replay: the projection is a
+            # file the owner rewrites, so a retry that re-read it could report
+            # a stale fact for a confirmation that already succeeded.
+            if not isinstance(run_id, str) or not run_id:
+                raise WorkbenchError(INVALID_INPUT, detail="run id is required")
+            if object_type not in OBJECT_TYPES:
+                raise WorkbenchError(INVALID_INPUT, detail="unknown object type")
+            if not isinstance(object_id, str) or not object_id:
+                raise WorkbenchError(INVALID_INPUT, detail="object id is required")
+            if not isinstance(source_hash, str) or not source_hash:
+                # An unhashed object cannot be confirmed: there is nothing to
+                # bind the decision to.
+                raise WorkbenchError(INVALID_INPUT, detail="source hash is required")
+            if role not in CONFIRMATION_ROLES:
+                raise WorkbenchError(INVALID_INPUT, detail="unknown confirmation role")
+            projection = self._projection_for(project_id, run_id)
+            rows = [
+                *self._criterion_rows(projection),
+                *self._finding_rows(projection),
+                *self._evidence_rows(projection),
+            ]
+            match = next(
+                (
+                    row
+                    for row in rows
+                    if row["objectType"] == object_type
+                    and row["objectId"] == object_id
+                ),
+                None,
             )
-        confirmation_id = str(uuid.uuid4())
-        now = self._now()
-        project = self.service.require_project(project_id, scope="read")
-
-        def apply() -> tuple[dict, int]:
+            if match is None:
+                raise WorkbenchError(INVALID_TARGET, detail="unknown owner object")
+            current = str(match.get("sourceHash") or "")
+            if not current or current != source_hash:
+                raise WorkbenchError(
+                    STALE_EVIDENCE, detail="the object changed since it was shown"
+                )
+            confirmation_id = str(uuid.uuid4())
+            now = self._now()
+            # Read inside the write: the confirmation names the project the
+            # write is actually against, not one read before it started.
+            project = self.service.require_project(project_id, scope="read")
             self.store.insert_owner_confirmation(
                 confirmation_id=confirmation_id,
                 project_id=project_id,
@@ -435,7 +416,7 @@ class OwnerProjectionService:
                 confirmed_by=str(project["projectId"]),
                 now=now,
             )
-            result = {
+            return {
                 "confirmationId": confirmation_id,
                 "runId": run_id,
                 "objectType": object_type,
@@ -446,21 +427,17 @@ class OwnerProjectionService:
                 "createdAt": now,
                 "verdictSource": "owner",
                 "noteOverride": False,
-            }
-            return result, 0
+            }, 0
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._record(
-                operation,
-                kind="owner-confirmation",
-                entity_id=confirmation_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.create(
+            operation,
+            kind="owner-confirmation",
+            entity_of=lambda result: str(result["confirmationId"]),
+            project_of=lambda result: project_id,
+            apply=apply,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            project_id=project_id,
+        )
 
     def _projection_for(self, project_id: str, run_id: str) -> dict:
         root = self._root(project_id)
@@ -482,115 +459,84 @@ class OwnerProjectionService:
         operation: Operation,
     ) -> dict:
         """Publish requiring an owner confirmation for the exact content."""
-        replayed = self.service._replay(
-            operation, kind="owner-verified-publish", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        if role not in CONFIRMATION_ROLES:
-            raise WorkbenchError(INVALID_INPUT, detail="unknown confirmation role")
-        projection = self._projection_for(project_id, str(run_id))
-        rows = [
-            *self._criterion_rows(projection),
-            *self._finding_rows(projection),
-            *self._evidence_rows(projection),
-        ]
-        match = next(
-            (
-                row
-                for row in rows
-                if row["objectType"] == "criterion" and row["objectId"] == object_id
-            ),
-            None,
-        )
-        if match is None:
-            raise WorkbenchError(INVALID_TARGET, detail="unknown criterion")
-        return self._publish_with_confirmation(
+        def prepare() -> PublicationPlan:
+            if role not in CONFIRMATION_ROLES:
+                raise WorkbenchError(INVALID_INPUT, detail="unknown confirmation role")
+            projection = self._projection_for(project_id, str(run_id))
+            rows = [
+                *self._criterion_rows(projection),
+                *self._finding_rows(projection),
+                *self._evidence_rows(projection),
+            ]
+            match = next(
+                (
+                    row
+                    for row in rows
+                    if row["objectType"] == "criterion"
+                    and row["objectId"] == object_id
+                ),
+                None,
+            )
+            if match is None:
+                raise WorkbenchError(INVALID_TARGET, detail="unknown criterion")
+            draft = self.store.draft(asset_id)
+            if draft is None:
+                raise WorkbenchError(INVALID_TARGET)
+            manifest = rowshape.attributes(draft).get("manifest", [])
+            if not manifest:
+                raise WorkbenchError(MISSING_DEPENDENCY)
+            content_hash = manifest[0]["contentHash"]
+            # The owner's CURRENT fact must still verify this exact content: a
+            # passing criterion whose source hash is the content being
+            # published. A changed verdict or a re-run that moved the hash
+            # makes the earlier confirmation stale, so the verified capability
+            # is refused rather than published on an out-of-date Pass.
+            if match.get("verdict") != "pass":
+                raise WorkbenchError(
+                    STALE_EVIDENCE, detail="the owner criterion is no longer passing"
+                )
+            if str(match.get("sourceHash") or "") != content_hash:
+                raise WorkbenchError(
+                    STALE_EVIDENCE,
+                    detail="the owner criterion no longer matches this content",
+                )
+            confirmation = self.store.find_owner_confirmation(
+                project_id=project_id,
+                run_id=str(run_id),
+                object_type="criterion",
+                object_id=str(object_id),
+                source_hash=content_hash,
+                roles=(str(role),),
+            )
+            if confirmation is None:
+                # No bound confirmation for this content: the verified
+                # capability cannot be published.
+                raise WorkbenchError(
+                    STALE_EVIDENCE,
+                    detail="no confirmation matches this content hash",
+                )
+            return PublicationPlan(
+                verified_by={
+                    "confirmationId": confirmation["confirmation_id"],
+                    "role": confirmation["role"],
+                    "sourceHash": content_hash,
+                    "runId": str(run_id),
+                    "objectId": str(object_id),
+                    "confirmedAt": confirmation["created_at"],
+                    # R03: the record names where the check ran, alongside the
+                    # revision and the input hash.
+                    "environment": str(projection.get("runner") or ""),
+                }
+            )
+
+        return self.assets.publish(
             project_id,
             asset_id,
-            run_id=str(run_id),
-            object_id=str(object_id),
-            role=str(role),
-            criterion=match,
-            # R03: the verification record names the environment it ran in.
-            # The projection's runner field is that environment description;
-            # an empty one cannot name where the check happened.
-            environment=str(projection.get("runner") or ""),
             operation=operation,
+            kind="owner-verified-publish",
+            prepare=prepare,
         )
 
-    def _publish_with_confirmation(
-        self,
-        project_id: str,
-        asset_id: str,
-        *,
-        run_id: str,
-        object_id: str,
-        role: str,
-        criterion: dict,
-        environment: str,
-        operation: Operation,
-    ) -> dict:
-        draft = self.store.draft(asset_id)
-        if draft is None or self.store.asset(asset_id) is None:
-            raise WorkbenchError(INVALID_TARGET)
-        manifest = json.loads(draft["attributes_json"]).get("manifest", [])
-        if not manifest:
-            raise WorkbenchError(MISSING_DEPENDENCY)
-        content_hash = manifest[0]["contentHash"]
-        # The owner's CURRENT fact must still verify this exact content: a
-        # passing criterion whose source hash is the content being published.
-        # A changed verdict or a re-run that moved the hash makes the earlier
-        # confirmation stale, so the verified capability is refused rather
-        # than published on an out-of-date Pass.
-        if criterion.get("verdict") != "pass":
-            raise WorkbenchError(
-                STALE_EVIDENCE, detail="the owner criterion is no longer passing"
-            )
-        if str(criterion.get("sourceHash") or "") != content_hash:
-            raise WorkbenchError(
-                STALE_EVIDENCE,
-                detail="the owner criterion no longer matches this content",
-            )
-        confirmation = self.store.find_owner_confirmation(
-            project_id=project_id,
-            run_id=run_id,
-            object_type="criterion",
-            object_id=object_id,
-            source_hash=content_hash,
-            roles=(role,),
-        )
-        if confirmation is None:
-            # No bound confirmation for this content: the verified
-            # capability cannot be published.
-            raise WorkbenchError(
-                STALE_EVIDENCE,
-                detail="no confirmation matches this content hash",
-            )
-        outcome = self.assets.publish_revision(
-            project_id,
-            asset_id,
-            operation=operation,
-            verified_by={
-                "confirmationId": confirmation["confirmation_id"],
-                "role": confirmation["role"],
-                "sourceHash": content_hash,
-                "runId": run_id,
-                "objectId": object_id,
-                "confirmedAt": confirmation["created_at"],
-                # R03: the record names where the check ran, alongside the
-                # revision and the input hash.
-                "environment": environment,
-            },
-        )
-        outcome["result"]["verifiedBy"] = {
-            "confirmationId": confirmation["confirmation_id"],
-            "role": confirmation["role"],
-            "runId": run_id,
-            "objectId": object_id,
-            "environment": environment,
-        }
-        return outcome
 
     # -- backflow --------------------------------------------------------
 
@@ -610,7 +556,7 @@ class OwnerProjectionService:
         maintainer completes it and publishes separately. The owner's run is
         not touched, and the candidate never claims the run's verdict.
         """
-        replayed = self.service._replay(operation, kind="owner-backflow", project_id=project_id)
+        replayed = self.service.mutations.replay(operation, kind="owner-backflow", project_id=project_id)
         if replayed is not None:
             return replayed
         self.service.require_project(project_id, scope="write")
@@ -676,7 +622,7 @@ class OwnerProjectionService:
             "role": match.get("role") or "",
         }
         draft = self.store.draft(created["assetId"])
-        attributes = json.loads(draft["attributes_json"])
+        attributes = rowshape.attributes(draft)
         attributes["sourceLocators"] = [locator]
         attributes["warnings"] = [
             "回流候选：发布前需维护者补全公开面；原 run 的判据不因本候选改变。"
@@ -696,16 +642,20 @@ class OwnerProjectionService:
             payload["runVerdictUnchanged"] = True
             return payload, counter
 
+        # The nested component create above is itself a mutation, so it has to
+        # happen before this request's transaction opens -- the replay in front
+        # of it is what stops a retry from creating a second candidate. This is
+        # the same shape as a backup: work outside the transaction, then record
+        # the one row that names it.
         with self.store.transaction():
             result, counter = apply()
-            self._record(
+            self.service.mutations.record(
                 operation,
                 kind="owner-backflow",
                 entity_id=created["assetId"],
                 project_id=project_id,
                 result=result,
                 counter=counter,
-                now=now,
             )
         return {"result": result, "replayed": False, "counter": counter}
 

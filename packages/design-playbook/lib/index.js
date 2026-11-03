@@ -8,11 +8,10 @@
  *    `skills/` directory. The plugin locates the directory via `__dirname`,
  *    so no `!!js` expression and no cwd-dependent resolution is involved.
  *
- * 2. Slash commands (ctx.commands) — `component-distill`, `design-io`,
- *    `doctor`, `run-handoff`, `run-review`, `run-status`, `ui-review`,
- *    `ux-spec` —
- *    that load the matching `commands/<name>.md` prompt, substitute
- *    `$ARGUMENTS` with the raw trailing input, and inject it as a
+ * 2. Slash commands (ctx.commands) — one per `commands/*.md` prompt file.
+ *    The inventory is the directory itself, so a prompt added, renamed, or
+ *    removed needs no second list kept in step. Each command substitutes
+ *    `$ARGUMENTS` with the raw trailing input, and injects it as a
  *    user-role follow-up turn via `agent.followup()`.
  *
  * The Cordis `!!js` evaluation scope provides no `require` (only Node globals
@@ -82,21 +81,22 @@ exports.parseSkillFile = parseSkillFile
 exports.createUserMessageFromPrompt = createUserMessageFromPrompt
 
 /**
- * Slash commands this plugin registers. Each maps to a
- * `commands/<name>.md` prompt file; the file's frontmatter `description`
- * becomes the command's discovery metadata, and the body (with `$ARGUMENTS`
- * substituted) is injected as a user follow-up turn.
+ * The slash-command inventory: every `commands/*.md` prompt file.
+ *
+ * The directory is the only list. A hand-written copy drifts silently — a
+ * missing file is skipped at runtime, and a stale name points at nothing.
+ * @returns {string[]} command names, sorted.
  */
-const COMMAND_NAMES = [
-  'component-distill',
-  'design-io',
-  'doctor',
-  'run-handoff',
-  'run-review',
-  'run-status',
-  'ui-review',
-  'ux-spec',
-]
+function listCommandNames() {
+  if (!fs.existsSync(COMMANDS_DIR)) return []
+  return fs
+    .readdirSync(COMMANDS_DIR, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
+    .map((entry) => entry.name.slice(0, -3))
+    .sort()
+}
+
+exports.listCommandNames = listCommandNames
 
 exports.apply = function (ctx) {
   if (fs.existsSync(SKILLS_DIR)) {
@@ -141,7 +141,7 @@ exports.apply = function (ctx) {
   }
 
   if (ctx.commands && fs.existsSync(COMMANDS_DIR)) {
-    for (const name of COMMAND_NAMES) {
+    for (const name of listCommandNames()) {
       const filePath = path.join(COMMANDS_DIR, `${name}.md`)
       if (!fs.existsSync(filePath)) continue
       const parsed = parseSkillFile(filePath)
