@@ -104,9 +104,22 @@ class MatrixSchemaTests(unittest.TestCase):
         self.assertEqual(tier2, spec_tier2)
 
     def test_validate_matrix_catches_duplicates(self) -> None:
-        dup_row = matrix_mod.AgentRow(agent="codex", tier=1)
+        dup_row = matrix_mod.AgentRow(agent="codex", tier=1, renderer="codex")
         errors = matrix_mod.validate_matrix(matrix_mod.MATRIX + (dup_row,))
         self.assertTrue(any("duplicate" in e for e in errors), errors)
+
+    def test_a_tier2_row_cannot_be_built_without_a_renderer(self) -> None:
+        """Declaring a tier without its output surface is the drift removed.
+
+        A row that says "Tier 2" but names no renderer used to render the
+        AGENTS.md floor silently; now it cannot be constructed.
+        """
+        with self.assertRaises(ValueError):
+            matrix_mod.AgentRow(agent="silently-tier-3", tier=2)
+
+    def test_a_tier3_row_cannot_name_a_dedicated_renderer(self) -> None:
+        with self.assertRaises(ValueError):
+            matrix_mod.AgentRow(agent="over-declared", tier=3, renderer="codex")
 
 
 def _sha256_lf(data: bytes) -> str:
@@ -851,10 +864,16 @@ class RendererDispatchTests(unittest.TestCase):
         row = matrix_mod.AgentRow(agent="brand-new-agent-not-in-generator", tier=3)
         self.assertIs(gen_mod._renderer_for(row), gen_mod._agents_md_floor_files)
 
-    def test_specialized_renderer_keys_are_matrix_agents(self) -> None:
-        matrix_agents = {row.agent for row in matrix_mod.MATRIX}
-        stale = set(gen_mod._SPECIALIZED_RENDERERS) - matrix_agents
-        self.assertEqual(stale, set(), f"specialized renderers for agents not in the matrix: {stale}")
+    def test_every_named_renderer_is_bound_and_used(self) -> None:
+        named = {row.renderer for row in matrix_mod.MATRIX if row.renderer}
+        # Every name a row uses has an implementation...
+        self.assertEqual(
+            named - set(gen_mod._SPECIALIZED_RENDERERS), set(),
+            "matrix rows name renderers the generator does not implement")
+        # ...and every implementation belongs to a row that names it.
+        self.assertEqual(
+            set(gen_mod._SPECIALIZED_RENDERERS) - named, set(),
+            "generator carries renderers no matrix row names")
 
     def test_no_duplicated_tier_membership_list_in_generator(self) -> None:
         # Regression pin: tier membership lives in adapter_matrix.py only.

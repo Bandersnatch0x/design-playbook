@@ -239,8 +239,9 @@ class ValidateGateTests(unittest.TestCase):
         # gate: adding/removing/re-tiering a row requires a revision
         # decision first.
         self._mutate_matrix(
-            'AgentRow(agent="zed", tier=2),',
-            'AgentRow(agent="zed", tier=2),\n    AgentRow(agent="generic", tier=2),',
+            'AgentRow(agent="zed", tier=2, renderer="zed"),',
+            'AgentRow(agent="zed", tier=2, renderer="zed"),\n'
+            '    AgentRow(agent="generic", tier=2, renderer="generic"),',
         )
         self._mutate_matrix(
             '    "trae",\n    "generic",\n)',
