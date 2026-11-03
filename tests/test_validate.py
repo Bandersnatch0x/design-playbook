@@ -88,6 +88,19 @@ class ValidateGateTests(unittest.TestCase):
             "dpbui.lock.json"
         )
         shutil.copy2(ROOT / workbench_lock, self.root / workbench_lock)
+        # ...and the generated client route table with its drift gate.
+        shutil.copy2(
+            ROOT / "packages/design-playbook-workbench/design_playbook_workbench/"
+            "web/routes.js",
+            self.root / "packages/design-playbook-workbench/"
+            "design_playbook_workbench/web/routes.js",
+        )
+        workbench_tests = self.root / "packages/design-playbook-workbench/tests"
+        workbench_tests.mkdir(parents=True)
+        shutil.copy2(
+            ROOT / "packages/design-playbook-workbench/tests/test_client_routes.py",
+            workbench_tests / "test_client_routes.py",
+        )
 
     def tearDown(self) -> None:
         self.temp.cleanup()
