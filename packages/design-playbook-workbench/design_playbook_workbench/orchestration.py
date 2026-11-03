@@ -79,19 +79,6 @@ class OrchestrationService:
                 return board
         raise WorkbenchError(INVALID_TARGET)
 
-    def _send_record(self, operation: Operation, *, kind: str, entity_id: str,
-                     project_id: str, result: dict, counter: int, now: str) -> None:
-        self.store.record_mutation(
-            operation_id=operation.operation_id,
-            entity_kind=kind,
-            entity_id=entity_id,
-            payload_digest=operation.digest,
-            resulting_counter=counter,
-            result_json=json.dumps(result, ensure_ascii=False, sort_keys=True),
-            project_id=project_id,
-            now=now,
-        )
-
     # -- fixed scheme snapshots -----------------------------------------
 
     def _snapshot_payload(self, row: dict) -> dict:
@@ -120,28 +107,26 @@ class OrchestrationService:
         operation: Operation,
     ) -> dict:
         """Freeze one board: the hash is bound to this canvas counter."""
-        replayed = self.service._replay(operation, kind="scheme-snapshot", project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        row = self._canvas(project_id, canvas_id)
-        document = self._document(row)
-        board = self._board(
-            document, board_id or (document["boards"][0]["id"] if document["boards"] else None)
-        )
-        if len(self.store.canvas_scheme_snapshots(canvas_id)) >= 50:
-            raise WorkbenchError(
-                LIMIT_EXCEEDED, detail="单个画布最多保留 50 份固定快照。"
-            )
-        html = snapshot_html(
-            document, board["id"], title=f"{row['name']} · {board['name']}"
-        ).encode("utf-8")
-        record = self.blobs.put(html)
-        snapshot_id = str(uuid.uuid4())
-        now = self._now()
-        text = note if isinstance(note, str) else ""
 
         def apply() -> tuple[dict, int]:
+            row = self._canvas(project_id, canvas_id)
+            document = self._document(row)
+            board = self._board(
+                document,
+                board_id
+                or (document["boards"][0]["id"] if document["boards"] else None),
+            )
+            if len(self.store.canvas_scheme_snapshots(canvas_id)) >= 50:
+                raise WorkbenchError(
+                    LIMIT_EXCEEDED, detail="单个画布最多保留 50 份固定快照。"
+                )
+            html = snapshot_html(
+                document, board["id"], title=f"{row['name']} · {board['name']}"
+            ).encode("utf-8")
+            record = self.blobs.put(html)
+            snapshot_id = str(uuid.uuid4())
+            now = self._now()
+            text = note if isinstance(note, str) else ""
             self.store.insert_scheme_snapshot(
                 snapshot_id=snapshot_id,
                 canvas_id=canvas_id,
@@ -155,22 +140,19 @@ class OrchestrationService:
                 note=text[:500],
                 now=now,
             )
-            return self._snapshot_payload(self.store.scheme_snapshot(snapshot_id)), int(
-                row["counter"]
-            )
+            return self._snapshot_payload(
+                self.store.scheme_snapshot(snapshot_id)
+            ), int(row["counter"])
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._send_record(
-                operation,
-                kind="scheme-snapshot",
-                entity_id=snapshot_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.create(
+            operation,
+            kind="scheme-snapshot",
+            entity_of=lambda result: result["snapshotId"],
+            project_of=lambda result: project_id,
+            apply=apply,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            project_id=project_id,
+        )
 
     def list_snapshots(self, project_id: str, canvas_id: str) -> dict:
         self.service.require_project(project_id, scope="read")
@@ -252,17 +234,14 @@ class OrchestrationService:
             "winner": None,
             "approval": None,
         }
-        now = self._now()
-        with self.store.transaction():
-            self._send_record(
-                operation,
-                kind="scheme-compare",
-                entity_id=f"{left}:{right}",
-                project_id=project_id,
-                result=result,
-                counter=int(self._canvas(project_id, canvas_id)["counter"]),
-                now=now,
-            )
+        self.service.mutations.record(
+            operation,
+            kind="scheme-compare",
+            entity_id=f"{left}:{right}",
+            result=result,
+            counter=int(self._canvas(project_id, canvas_id)["counter"]),
+            project_id=project_id,
+        )
         return {"result": result, "replayed": False, "counter": 0}
 
     # -- explicit Agent context -----------------------------------------
@@ -323,84 +302,91 @@ class OrchestrationService:
         operation: Operation,
     ) -> dict:
         """Build or replace a selection: only what is named is ever sent."""
-        replayed = self.service._replay(
-            operation,
-            kind="context-selection",
-            entity_id=selection_id if isinstance(selection_id, str) and selection_id else None, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        canvas_row = self._canvas(project_id, canvas_id)
-        document = self._document(canvas_row)
-        board = self._board(
-            document, board_id or (document["boards"][0]["id"] if document["boards"] else None)
-        )
-        if not isinstance(node_ids, list) or not all(
-            isinstance(item, str) and item for item in node_ids
-        ):
-            raise WorkbenchError(INVALID_INPUT)
-        if len(node_ids) > MAX_CONTEXT_NODES:
-            raise WorkbenchError(LIMIT_EXCEEDED, detail="选择的节点过多。")
-        by_id = {node["id"]: node for node in board["nodes"]}
-        unknown = [node_id for node_id in node_ids if node_id not in by_id]
-        if unknown:
-            raise WorkbenchError(INVALID_TARGET, detail=f"unknown node: {unknown[0]}")
-        revisions = self._context_revisions(project_id, board, node_ids, revision_ids)
-        files = self._context_files(project_id, file_paths)
-        if not node_ids and not revisions and not files:
-            raise WorkbenchError(
-                INVALID_INPUT, detail="上下文至少要包含一个节点、修订或文件。"
-            )
-        nodes = [
-            {
-                "nodeId": node_id,
-                "type": by_id[node_id]["type"],
-                "props": by_id[node_id]["props"],
-                "layout": by_id[node_id]["layout"],
-            }
-            for node_id in node_ids
-        ]
-        exclusions = self._exclusions(document, board, node_ids)
-        node_bytes = len(
-            json.dumps(nodes, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-            .encode("utf-8")
-        )
-        revision_bytes = sum(item["size"] for item in revisions)
-        file_bytes = sum(item["size"] for item in files)
-        totals = {
-            "nodeCount": len(nodes),
-            "revisionCount": len(revisions),
-            "fileCount": len(files),
-            "nodeBytes": node_bytes,
-            "revisionBytes": revision_bytes,
-            "fileBytes": file_bytes,
-            "bytes": node_bytes + revision_bytes + file_bytes,
-        }
-        if totals["bytes"] > MAX_CONTEXT_BYTES:
-            raise WorkbenchError(
-                LIMIT_EXCEEDED,
-                detail=f"上下文超过 {MAX_CONTEXT_BYTES} 字节上限。",
-            )
-        content = {
-            "nodes": nodes,
-            "revisions": revisions,
-            "files": files,
-            "exclusions": exclusions,
-            "totals": totals,
-            "boardId": board["id"],
-            "canvasCounter": int(canvas_row["counter"]),
-        }
-        digest = payload_digest(content)
-        payload = {**content, "digest": digest}
-        now = self._now()
-        target_id = selection_id if isinstance(selection_id, str) and selection_id else str(uuid.uuid4())
-        previous = self.store.context_selection(target_id)
-        if previous is not None and previous["project_id"] != project_id:
-            raise WorkbenchError(INVALID_TARGET)
-        if previous is not None and previous["canvas_id"] != canvas_id:
-            raise WorkbenchError(INVALID_TARGET)
 
         def apply() -> tuple[dict, int]:
+            canvas_row = self._canvas(project_id, canvas_id)
+            document = self._document(canvas_row)
+            board = self._board(
+                document,
+                board_id
+                or (document["boards"][0]["id"] if document["boards"] else None),
+            )
+            if not isinstance(node_ids, list) or not all(
+                isinstance(item, str) and item for item in node_ids
+            ):
+                raise WorkbenchError(INVALID_INPUT)
+            if len(node_ids) > MAX_CONTEXT_NODES:
+                raise WorkbenchError(LIMIT_EXCEEDED, detail="选择的节点过多。")
+            by_id = {node["id"]: node for node in board["nodes"]}
+            unknown = [node_id for node_id in node_ids if node_id not in by_id]
+            if unknown:
+                raise WorkbenchError(
+                    INVALID_TARGET, detail=f"unknown node: {unknown[0]}"
+                )
+            revisions = self._context_revisions(
+                project_id, board, node_ids, revision_ids
+            )
+            files = self._context_files(project_id, file_paths)
+            if not node_ids and not revisions and not files:
+                raise WorkbenchError(
+                    INVALID_INPUT, detail="上下文至少要包含一个节点、修订或文件。"
+                )
+            nodes = [
+                {
+                    "nodeId": node_id,
+                    "type": by_id[node_id]["type"],
+                    "props": by_id[node_id]["props"],
+                    "layout": by_id[node_id]["layout"],
+                }
+                for node_id in node_ids
+            ]
+            exclusions = self._exclusions(document, board, node_ids)
+            node_bytes = len(
+                json.dumps(
+                    nodes,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                ).encode("utf-8")
+            )
+            revision_bytes = sum(item["size"] for item in revisions)
+            file_bytes = sum(item["size"] for item in files)
+            totals = {
+                "nodeCount": len(nodes),
+                "revisionCount": len(revisions),
+                "fileCount": len(files),
+                "nodeBytes": node_bytes,
+                "revisionBytes": revision_bytes,
+                "fileBytes": file_bytes,
+                "bytes": node_bytes + revision_bytes + file_bytes,
+            }
+            if totals["bytes"] > MAX_CONTEXT_BYTES:
+                raise WorkbenchError(
+                    LIMIT_EXCEEDED,
+                    detail=f"上下文超过 {MAX_CONTEXT_BYTES} 字节上限。",
+                )
+            content = {
+                "nodes": nodes,
+                "revisions": revisions,
+                "files": files,
+                "exclusions": exclusions,
+                "totals": totals,
+                "boardId": board["id"],
+                "canvasCounter": int(canvas_row["counter"]),
+            }
+            digest = payload_digest(content)
+            payload = {**content, "digest": digest}
+            now = self._now()
+            target_id = (
+                selection_id
+                if isinstance(selection_id, str) and selection_id
+                else str(uuid.uuid4())
+            )
+            previous = self.store.context_selection(target_id)
+            if previous is not None and previous["project_id"] != project_id:
+                raise WorkbenchError(INVALID_TARGET)
+            if previous is not None and previous["canvas_id"] != canvas_id:
+                raise WorkbenchError(INVALID_TARGET)
             if previous is None:
                 self.store.insert_context_selection(
                     selection_id=target_id,
@@ -423,22 +409,24 @@ class OrchestrationService:
                     state="draft",
                     now=now,
                 )
-            return self._context_payload(self.store.context_selection(target_id)), int(
-                canvas_row["counter"]
-            )
+            return self._context_payload(
+                self.store.context_selection(target_id)
+            ), int(canvas_row["counter"])
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._send_record(
-                operation,
-                kind="context-selection",
-                entity_id=target_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.create(
+            operation,
+            kind="context-selection",
+            entity_of=lambda result: result["selectionId"],
+            project_of=lambda result: project_id,
+            apply=apply,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            project_id=project_id,
+            entity_id=(
+                selection_id
+                if isinstance(selection_id, str) and selection_id
+                else None
+            ),
+        )
 
     def _context_revisions(
         self,
@@ -593,39 +581,37 @@ class OrchestrationService:
         operation: Operation,
     ) -> dict:
         """Bind a confirmation to the current digest; a change invalidates it."""
-        replayed = self.service._replay(
-            operation, kind="context-confirm", entity_id=selection_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        self._canvas(project_id, canvas_id)
-        row = self._context_row(project_id, selection_id)
-        if row["canvas_id"] != canvas_id:
-            raise WorkbenchError(INVALID_TARGET)
-        if not isinstance(digest, str) or digest != row["digest"]:
-            raise WorkbenchError(CONFLICT, detail="上下文内容已变化，请重新确认。")
-        now = self._now()
+        held: dict = {}
+
+        def check(row: dict) -> None:
+            self._canvas(project_id, canvas_id)
+            if row["canvas_id"] != canvas_id:
+                raise WorkbenchError(INVALID_TARGET)
+            if not isinstance(digest, str) or digest != row["digest"]:
+                raise WorkbenchError(
+                    CONFLICT, detail="上下文内容已变化，请重新确认。"
+                )
+            held["row"] = row
 
         def apply() -> tuple[dict, int]:
             self.store.confirm_context_selection(
-                selection_id=selection_id, digest=digest, now=now
+                selection_id=selection_id, digest=digest, now=self._now()
             )
-            return self._context_payload(self.store.context_selection(selection_id)), int(
-                row["canvas_counter"]
-            )
+            return self._context_payload(
+                self.store.context_selection(selection_id)
+            ), int(held["row"]["canvas_counter"])
 
-        with self.store.transaction():
-            result, counter = apply()
-            self._send_record(
-                operation,
-                kind="context-confirm",
-                entity_id=selection_id,
-                project_id=project_id,
-                result=result,
-                counter=counter,
-                now=now,
-            )
-        return {"result": result, "replayed": False, "counter": counter}
+        return self.service.mutations.existing(
+            operation,
+            kind="context-confirm",
+            entity_id=selection_id,
+            project_id=project_id,
+            load_row=lambda: self._context_row(project_id, selection_id),
+            apply=apply,
+            authorize=lambda: self.service.require_project(project_id, scope="write"),
+            require_counter=False,
+            validate=check,
+        )
 
 
 __all__ = [

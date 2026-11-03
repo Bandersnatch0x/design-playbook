@@ -210,6 +210,7 @@ class MutationGate:
         apply: Callable[[], tuple[dict, int | None]],
         authorize: Callable[[], None] | None = None,
         project_id: str | None = None,
+        entity_id: str | None = None,
     ) -> dict:
         """One write that creates its row; there is no counter to be stale against.
 
@@ -226,8 +227,15 @@ class MutationGate:
         project's success. It has to agree with what ``project_of`` records;
         a caller whose ledger row deliberately names no project leaves both
         out.
+
+        ``entity_id`` is for the create whose target the caller already named
+        (a selection id supplied in the request). It binds the replay exactly
+        as ``existing`` does. Leave it out when the write mints the id: the
+        caller could not have sent it, so there is nothing to bind.
         """
-        replayed = self.replay(operation, kind=kind, project_id=project_id)
+        replayed = self.replay(
+            operation, kind=kind, entity_id=entity_id, project_id=project_id
+        )
         if replayed is not None:
             return replayed
         if authorize is not None:
