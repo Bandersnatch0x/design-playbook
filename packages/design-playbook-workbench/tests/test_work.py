@@ -308,6 +308,25 @@ class ConsentTest(WorkRequestTestCase):
         self.assertTrue(changed["staleConfirmation"])
         return request
 
+    def test_a_create_retry_replays_the_recorded_request(self) -> None:
+        selection = self.confirmed_context()
+        body = {
+            "title": "首页静态改版",
+            "goal": "把首页标题改成新文案并保持既有布局",
+            "target_stack": "static-html",
+            "context_selection_id": selection["selectionId"],
+        }
+        operation = self.operation({"action": "requests", **body})
+        first = self.work.create(self.project_id, operation=operation, **body)
+        again = self.work.create(self.project_id, operation=operation, **body)
+        self.assertTrue(again["replayed"])
+        self.assertEqual(again["result"], first["result"])
+        self.assertEqual(len(self.work.list_for_project(self.project_id)["requests"]), 1)
+        recorded = self.store.mutation(operation.operation_id)
+        self.assertEqual(recorded["entity_kind"], "work-request-create")
+        self.assertEqual(recorded["entity_id"], first["result"]["requestId"])
+        self.assertEqual(recorded["project_id"], self.project_id)
+
     def test_invalid_inputs_are_refused(self) -> None:
         selection = self.confirmed_context()
         for overrides, code in (
@@ -626,14 +645,21 @@ class CancelAndRetryTest(WorkRequestTestCase):
             principal=principal,
             operation=self.operation({"action": "result"}),
         )["result"]
+        reject_operation = self.operation({"action": "reject"})
         rejected = self.work.reject(
-            self.project_id, request["requestId"],
-            operation=self.operation({"action": "reject"}),
+            self.project_id, request["requestId"], operation=reject_operation
         )["result"]
         self.assertEqual(rejected["state"], "rejected")
         proposal = self.store.proposal(submitted["proposalId"])
         # Rejecting the request does not silently rewrite the proposal.
         self.assertEqual(proposal["state"], "awaiting-authorization")
+        # A retry answers with the recorded rejection instead of conflicting
+        # with the state that rejection produced.
+        again = self.work.reject(
+            self.project_id, request["requestId"], operation=reject_operation
+        )
+        self.assertTrue(again["replayed"])
+        self.assertEqual(again["result"], rejected)
 
 
 class ResultTest(WorkRequestTestCase):
