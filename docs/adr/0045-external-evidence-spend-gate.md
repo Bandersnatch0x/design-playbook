@@ -545,13 +545,15 @@ block and refuses the tag when it is missing, malformed, or names another tag.
 
 ```release-authorization
 {
-  "tag": "v0.25.6",
+  "tag": "v0.25.7",
   "decision": "approved",
   "authority": "maintainer",
-  "reason": "Maintenance release. It finishes the Stage P consolidation inside the preview editor (one shared pure layer for the capture math and the theme/locale reads; the visual-edit wire contract generated from the server module behind a drift gate) and upgrades the browser test bench (playwright pinned at 1.63.0, WebMCP surface assertions branch by browser generation, a macOS CI leg over the same preview matrix). No command, skill, or MCP surface changes, and the wire format is unchanged. Knowingly not done: console/workbench sharing (S3/S4) needs a Stage R/W amendment; the second-framework host and multi-party collaboration stay out of scope by prior decision."
+  "reason": "Patch release of the architecture-deepening branch (PR #131): one owner per concept across publication, canvas legality/undo patches, document writes, stored-row shapes and asset identity, the run-console/preview/adapters/gates surfaces, and the Repair Packet becoming a required Run Snapshot v1 section (ADR-0050); work-request counters are enforced under the ADR-0045 T-127 amendment. No command, skill, or MCP server changes. Knowingly not done: client route derivation for the workbench web app (ADR-0048 scope) and the .aoci baseline maintenance for the removed capture_snapshot.py.",
+  "contentSha256": "fe1db8391a897b440bea11e9291aaaf73dad9165131147641411b4a5995df44c"
 }
 ```
 
-The record is tag-only: it does not bind to a content hash, so a change after
-this decision does not silently invalidate it. A release whose content matters
-to the approver should add `contentSha256`.
+The record binds to `contentSha256`: SHA-256 over HEAD's tracked entries with
+this ADR excluded, so the approval names the exact tree it authorizes. A change
+to any tracked file other than this ADR invalidates the binding until a new
+decision is recorded.
