@@ -24,8 +24,8 @@ from .errors import (
     UNAUTHORIZED,
     WorkbenchError,
 )
-# The mutation envelope and its gate are re-exported: every domain module still
-# imports them from here, and T-126 segment 2 is where those call sites move.
+# The mutation envelope and its gate are re-exported because every domain
+# module imports them from this module; the gate itself lives in mutation.py.
 from .mutation import (  # noqa: F401
     MutationGate,
     Operation,
@@ -111,12 +111,12 @@ class WorkbenchService:
         return candidate
 
     # -- mutation discipline -------------------------------------------
-
-    # -- transition surface (T-126 segment 2) --------------------------
     #
-    # The gate itself lives in mutation.py. This forward exists only because
-    # the domain modules still reach through this private name; each of those
-    # call sites is what segment 2 moves. Do not add new callers.
+    # The gate itself lives in mutation.py. This replay forward exists for
+    # the writes whose prologue cannot wait for the gate: a journaled
+    # filesystem write whose progress must survive a failure, a backup
+    # archive, an import closure, and the lease-checked agent writes. Do not
+    # add callers that could use the gate's own replay.
 
     def _replay(
         self, operation: Operation, *, kind: str, entity_id: str | None = None,
