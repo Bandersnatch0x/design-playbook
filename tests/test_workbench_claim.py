@@ -152,12 +152,24 @@ class WorkbenchClaimTestCase(unittest.TestCase):
         return created.json["result"]
 
     def _consent(self, request: dict) -> dict:
+        # Every work write compares a counter (T-127): read the current one,
+        # the same envelope the agent sends after claiming.
+        detail = HARNESS.http_request(
+            self.h.runtime,
+            f"/api/v1/projects/{self.project_id}/requests/{request['requestId']}",
+            token=self.h.token,
+            origin=self.h.runtime.origin,
+        )
+        assert detail.status == 200, detail.text
         consented = self._post(
             f"/api/v1/projects/{self.project_id}/actions/requests/"
             f"{request['requestId']}/consent",
             {
-                "operation": {"operationId": "op_claim_consent",
-                              "payload": {"action": "consent"}},
+                "operation": {
+                    "operationId": "op_claim_consent",
+                    "payload": {"action": "consent"},
+                    "expectedCounter": int(detail.json["request"]["counter"]),
+                },
                 "digest": request["contextDigest"],
             },
         )

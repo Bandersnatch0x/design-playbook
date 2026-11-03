@@ -85,14 +85,34 @@ def request_task(
         raise ClaimError(str(error)) from None
     authority = session_record["authority"]
     project_url = f"{authority}/api/v1/projects/{record['projectId']}"
+    headers = {
+        "Content-Type": "application/json",
+        CAPABILITY_HEADER: record["token"],
+    }
     data = None
     if verb is not None:
+        # Every work write compares the request counter (T-127): read the
+        # current row with the same credential, then send its counter.
+        current = _request_json(
+            opener,
+            urllib.request.Request(
+                f"{project_url}/requests/{request_id}",
+                method="GET",
+                headers=headers,
+            ),
+            what="request read",
+        )
+        try:
+            expected = int(current["request"]["counter"])
+        except (KeyError, TypeError, ValueError):
+            raise ClaimError("the request read carried no counter") from None
         fields = payload or {}
         body = {
             **fields,
             "operation": {
                 "operationId": operation_id or f"{verb}-{uuid.uuid4()}",
                 "payload": {"action": verb, "requestId": request_id, **fields},
+                "expectedCounter": expected,
             },
         }
         data = json.dumps(body).encode("utf-8")
@@ -103,17 +123,19 @@ def request_task(
         url,
         data=data,
         method="POST" if verb else "GET",
-        headers={
-            "Content-Type": "application/json",
-            CAPABILITY_HEADER: record["token"],
-        },
+        headers=headers,
     )
+    return _request_json(opener, request, what=verb or "request read")
+
+
+def _request_json(opener, request: urllib.request.Request, *, what: str) -> dict:
+    """One request through the injected opener, with a typed refusal."""
     try:
         with opener(request, timeout=CLAIM_TIMEOUT_SECONDS) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", errors="replace")
-        raise ClaimError(f"the service refused the {verb or 'request read'}: {detail}") from None
+        raise ClaimError(f"the service refused the {what}: {detail}") from None
     except (urllib.error.URLError, OSError) as error:
         raise ClaimError(f"the workbench service is not reachable: {error}") from None
 

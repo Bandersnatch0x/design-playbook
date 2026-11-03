@@ -549,7 +549,7 @@ block and refuses the tag when it is missing, malformed, or names another tag.
   "decision": "approved",
   "authority": "maintainer",
   "reason": "Patch release of the architecture-deepening branch (PR #131): one owner per concept across publication, canvas legality/undo patches, document writes, stored-row shapes and asset identity, the run-console/preview/adapters/gates surfaces, and the Repair Packet becoming a required Run Snapshot v1 section (ADR-0050); work-request counters are enforced under the ADR-0045 T-127 amendment. No command, skill, or MCP server changes. Knowingly not done: client route derivation for the workbench web app (ADR-0048 scope) and the .aoci baseline maintenance for the removed capture_snapshot.py.",
-  "contentSha256": "fe1db8391a897b440bea11e9291aaaf73dad9165131147641411b4a5995df44c"
+  "contentSha256": "b2787f93c849ff1532b771e035126a0f3bec3193a6b0f2836f07fea0a4a2ffb7"
 }
 ```
 
