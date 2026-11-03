@@ -1,5 +1,8 @@
 // Workbench project entry. Vanilla ES module: no framework, no storage,
 // no remote request. The session token lives in this module's memory only.
+// Routes come from /routes.js, generated from client_routes.py.
+
+const ROUTES = window.DPBUI.workbenchRoutes;
 
 const state = {
   token: null,
@@ -751,7 +754,7 @@ async function deleteProjectData(project) {
   if (!confirmed) return;
   try {
     await api(
-      `/api/v1/projects/${project.projectId}/actions/delete-data`,
+      ROUTES.projectAction(project.projectId, "delete-data"),
       {
         method: "POST",
         body: {
@@ -817,7 +820,7 @@ function wireRowMenu(row) {
 
 async function loadProjects() {
   try {
-    const payload = await api("/api/v1/projects");
+    const payload = await api(ROUTES.PROJECTS);
     state.projects = payload.projects || [];
     state.removedProjects = payload.removedProjects || [];
     state.currentProjectId = payload.currentProjectId || null;
@@ -842,7 +845,7 @@ function resetCandidate() {
 async function probeFolder(path, excludeProjectId) {
   const body = { path };
   if (excludeProjectId) body.excludeProjectId = excludeProjectId;
-  return api("/api/v1/projects/probe", { method: "POST", body });
+  return api(ROUTES.PROBE, { method: "POST", body });
 }
 
 async function onProbe(event) {
@@ -873,7 +876,7 @@ async function onRegister(event) {
   if (!state.candidate) return;
   elements.registerButton.disabled = true;
   try {
-    await api("/api/v1/projects", {
+    await api(ROUTES.PROJECTS, {
       method: "POST",
       body: {
         path: state.candidate.canonicalPath,
@@ -901,7 +904,7 @@ async function onRegister(event) {
 
 async function openProject(project) {
   try {
-    await api(`/api/v1/projects/${project.projectId}/actions/open`, {
+    await api(ROUTES.projectAction(project.projectId, "open"), {
       method: "POST",
       body: {
         operation: mutation(
@@ -924,7 +927,7 @@ async function renameProject(project) {
   const name = await askText("新的项目名称", project.name);
   if (name === null) return;
   try {
-    await api(`/api/v1/projects/${project.projectId}/actions/rename`, {
+    await api(ROUTES.projectAction(project.projectId, "rename"), {
       method: "POST",
       body: {
         name,
@@ -955,7 +958,7 @@ async function editGrants(project) {
     .map((scope) => scope.trim())
     .filter(Boolean);
   try {
-    await api(`/api/v1/projects/${project.projectId}/actions/grants`, {
+    await api(ROUTES.projectAction(project.projectId, "grants"), {
       method: "POST",
       body: {
         scopes,
@@ -991,7 +994,7 @@ async function rebindProject(project) {
       announce("已取消重新绑定。");
       return;
     }
-    await api(`/api/v1/projects/${project.projectId}/actions/rebind`, {
+    await api(ROUTES.projectAction(project.projectId, "rebind"), {
       method: "POST",
       body: {
         path: probed.candidate.canonicalPath,
@@ -1024,7 +1027,7 @@ async function removeProject(project) {
   );
   if (!confirmed) return;
   try {
-    await api(`/api/v1/projects/${project.projectId}/actions/remove`, {
+    await api(ROUTES.projectAction(project.projectId, "remove"), {
       method: "POST",
       body: {
         operation: mutation(
@@ -1074,12 +1077,12 @@ async function loadProposals() {
   const project = state.proposalsProject;
   if (!project) return;
   try {
-    const listing = await api(`/api/v1/projects/${project.projectId}/proposals`);
+    const listing = await api(ROUTES.proposals(project.projectId));
     state.proposals = listing.proposals || [];
     state.details = new Map();
     for (const item of state.proposals) {
       const detail = await api(
-        `/api/v1/projects/${project.projectId}/proposals/${item.proposalId}`
+        ROUTES.proposal(project.projectId, item.proposalId)
       );
       state.details.set(item.proposalId, detail.proposal);
     }
@@ -1184,7 +1187,7 @@ async function proposalVerb(proposal, verb, extra) {
     ...(extra || {}),
   };
   return api(
-    `/api/v1/projects/${state.proposalsProject.projectId}/actions/proposals/${proposal.proposalId}/${verb}`,
+    ROUTES.proposalAction(state.proposalsProject.projectId, proposal.proposalId, verb),
     { method: "POST", body }
   );
 }
@@ -1381,7 +1384,7 @@ async function loadAssets() {
   if (!project) return;
   try {
     const listing = await api(
-      `/api/v1/projects/${project.projectId}/assets${assetQueryString()}`
+      `${ROUTES.assets(project.projectId)}${assetQueryString()}`
     );
     state.assets = listing.assets || [];
     elements.assetsError.hidden = true;
@@ -1449,7 +1452,7 @@ async function selectAsset(assetId) {
   paintAssetSelection(previousId, assetId);
   try {
     const payload = await api(
-      `/api/v1/projects/${project.projectId}/assets/${assetId}`
+      ROUTES.asset(project.projectId, assetId)
     );
     state.selectedAsset = payload.asset;
     renderAssetDetail(payload.asset);
@@ -1476,7 +1479,7 @@ async function refreshAssetCounter(asset) {
   if (!project || !asset) return;
   try {
     const payload = await api(
-      `/api/v1/projects/${project.projectId}/assets/${asset.assetId}`
+      ROUTES.asset(project.projectId, asset.assetId)
     );
     applyAssetCounter(asset, payload.asset.counter);
   } catch (error) {
@@ -1554,7 +1557,7 @@ async function showAssetPreview(mode) {
   if (!project || !asset) return;
   try {
     const descriptor = await api(
-      `/api/v1/projects/${project.projectId}/assets/${asset.assetId}/preview`
+      ROUTES.assetPreview(project.projectId, asset.assetId)
     );
     elements.assetPreviewEnable.hidden =
       descriptor.dynamicAvailable === false || descriptor.dynamicUrl !== null;
@@ -1598,7 +1601,7 @@ async function enableDynamicPreview() {
   if (!confirmed) return;
   try {
     await api(
-      `/api/v1/projects/${project.projectId}/actions/assets/${asset.assetId}/preview-enable`,
+      ROUTES.assetAction(project.projectId, asset.assetId, "preview-enable"),
       {
         method: "POST",
         body: {
@@ -1661,7 +1664,7 @@ function documentKind(asset) {
 
 function documentPath(asset, view) {
   const project = state.documentProject || state.assetsProject;
-  return `/api/v1/projects/${project.projectId}/assets/${asset.assetId}/document/${view}`;
+  return ROUTES.assetDocument(project.projectId, asset.assetId, view);
 }
 
 function showDocumentError(error, action) {
@@ -1760,7 +1763,7 @@ async function saveDocument() {
   }
   try {
     const payload = await api(
-      `/api/v1/projects/${project.projectId}/actions/assets/${asset.assetId}/${DOCUMENT_LABELS[kind].update}`,
+      ROUTES.assetAction(project.projectId, asset.assetId, DOCUMENT_LABELS[kind].update),
       {
         method: "POST",
         body: {
@@ -1796,7 +1799,7 @@ async function publishDocument() {
   const verb = DOCUMENT_LABELS[kind].publish;
   try {
     const payload = await api(
-      `/api/v1/projects/${project.projectId}/actions/assets/${asset.assetId}/${verb}`,
+      ROUTES.assetAction(project.projectId, asset.assetId, verb),
       {
         method: "POST",
         body: {
@@ -1871,7 +1874,7 @@ async function createDocument(kind) {
   const template = kind === "page" ? PAGE_TEMPLATE(name) : COMPONENT_TEMPLATE(name);
   try {
     const payload = await api(
-      `/api/v1/projects/${project.projectId}/actions/${kind === "page" ? "pages" : "components"}`,
+      ROUTES.projectAction(project.projectId, kind === "page" ? "pages" : "components"),
       {
         method: "POST",
         body: {
@@ -1926,7 +1929,7 @@ async function distillCandidate(event) {
   const name = elements.distillName.value.trim();
   try {
     const payload = await api(
-      `/api/v1/projects/${project.projectId}/actions/assets/${asset.assetId}/distill-candidate`,
+      ROUTES.assetAction(project.projectId, asset.assetId, "distill-candidate"),
       {
         method: "POST",
         body: {
@@ -1993,7 +1996,7 @@ function showTokensError(error, action) {
 function tokensPath(suffix) {
   const project = state.tokensProject;
   const asset = state.tokensAsset;
-  return `/api/v1/projects/${project.projectId}/assets/${asset.assetId}/tokens/${suffix}`;
+  return ROUTES.assetTokens(project.projectId, asset.assetId, suffix);
 }
 
 async function openDesignSystem(asset) {
@@ -2151,7 +2154,7 @@ async function saveTokenDraft() {
   }
   try {
     const payload = await api(
-      `/api/v1/projects/${project.projectId}/actions/assets/${asset.assetId}/tokens-update`,
+      ROUTES.assetAction(project.projectId, asset.assetId, "tokens-update"),
       { method: "POST", body: { operation: tokensMutation({ document: parsed }), document: parsed } }
     );
     renderTokenValidation(payload.result.validation);
@@ -2175,7 +2178,7 @@ async function publishTokens() {
   if (!project || !asset) return;
   try {
     const payload = await api(
-      `/api/v1/projects/${project.projectId}/actions/assets/${asset.assetId}/tokens-publish`,
+      ROUTES.assetAction(project.projectId, asset.assetId, "tokens-publish"),
       {
         method: "POST",
         body: {
@@ -2272,7 +2275,7 @@ async function proposeBaseline(event) {
   const path = elements.tokensBaselinePath.value.trim();
   try {
     const payload = await api(
-      `/api/v1/projects/${project.projectId}/actions/assets/${asset.assetId}/propose-baseline`,
+      ROUTES.assetAction(project.projectId, asset.assetId, "propose-baseline"),
       {
         method: "POST",
         body: {
@@ -2310,7 +2313,7 @@ async function proposeNotes(event) {
   }
   try {
     const payload = await api(
-      `/api/v1/projects/${project.projectId}/actions/notes-propose`,
+      ROUTES.projectAction(project.projectId, "notes-propose"),
       {
         method: "POST",
         body: {
@@ -2361,14 +2364,13 @@ const CANVAS_SAVE_DEADLINE_MS = 2000;
 
 function canvasPath(suffix) {
   const project = state.canvasProject;
-  return `/api/v1/projects/${project.projectId}/canvases${suffix}`;
+  return `${ROUTES.canvases(project.projectId)}${suffix}`;
 }
 
 function canvasActionPath(verb) {
   const project = state.canvasProject;
-  return (
-    `/api/v1/projects/${project.projectId}/actions/canvases/` +
-    `${state.canvas.canvasId}/${verb}`
+  return ROUTES.canvasAction(
+    project.projectId, state.canvas.canvasId, verb
   );
 }
 
@@ -3227,7 +3229,7 @@ async function loadProjectInstances() {
   const project = state.canvasProject;
   if (!project) return;
   try {
-    const payload = await api(`/api/v1/projects/${project.projectId}/instances`);
+    const payload = await api(ROUTES.instances(project.projectId));
     state.canvasInstances = new Map(
       (payload.instances || []).map((row) => [row.instanceId, row])
     );
@@ -3278,7 +3280,7 @@ async function createCanvas(event) {
   };
   try {
     const payload = await api(
-      `/api/v1/projects/${project.projectId}/actions/canvases`,
+      ROUTES.projectAction(project.projectId, "canvases"),
       {
         method: "POST",
         body: {
@@ -3475,7 +3477,7 @@ async function upgradeInstance() {
     // Upgrade stays a reuse-owner operation: the canvas only names the
     // instance whose fixed revision should move.
     const payload = await api(
-      `/api/v1/projects/${project.projectId}/actions/assets/${row.assetId}/upgrade`,
+      ROUTES.assetAction(project.projectId, row.assetId, "upgrade"),
       {
         method: "POST",
         body: {
@@ -3568,7 +3570,7 @@ async function placeAssetOnCanvas(asset, point) {
   }
   try {
     const created = await api(
-      `/api/v1/projects/${project.projectId}/actions/instances`,
+      ROUTES.projectAction(project.projectId, "instances"),
       {
         method: "POST",
         body: {
@@ -3720,7 +3722,7 @@ window.addEventListener("pointerup", async (event) => {
 
 function canvasOrchestrationPath(suffix) {
   const project = state.canvasProject;
-  return `/api/v1/projects/${project.projectId}/canvases/${state.canvas.canvasId}${suffix}`;
+  return `${ROUTES.canvas(project.projectId, state.canvas.canvasId)}${suffix}`;
 }
 
 function showOrchError(element, error, action) {
@@ -3930,8 +3932,9 @@ async function createSnapshot() {
   if (!state.canvas) return;
   try {
     const payload = await api(
-      `/api/v1/projects/${state.canvasProject.projectId}/actions/canvases/` +
-        `${state.canvas.canvasId}/snapshots`,
+      ROUTES.canvasAction(
+        state.canvasProject.projectId, state.canvas.canvasId, "snapshots"
+      ),
       {
         method: "POST",
         body: {
@@ -3961,8 +3964,9 @@ async function runComparison() {
   }
   try {
     const payload = await api(
-      `/api/v1/projects/${state.canvasProject.projectId}/actions/canvases/` +
-        `${state.canvas.canvasId}/compare`,
+      ROUTES.canvasAction(
+        state.canvasProject.projectId, state.canvas.canvasId, "compare"
+      ),
       {
         method: "POST",
         body: {
@@ -4049,8 +4053,9 @@ async function buildContext() {
     .filter(Boolean);
   try {
     const payload = await api(
-      `/api/v1/projects/${state.canvasProject.projectId}/actions/canvases/` +
-        `${state.canvas.canvasId}/contexts`,
+      ROUTES.canvasAction(
+        state.canvasProject.projectId, state.canvas.canvasId, "contexts"
+      ),
       {
         method: "POST",
         body: {
@@ -4080,8 +4085,9 @@ async function confirmContext() {
   }
   try {
     const payload = await api(
-      `/api/v1/projects/${state.canvasProject.projectId}/actions/canvases/` +
-        `${state.canvas.canvasId}/confirm`,
+      ROUTES.canvasAction(
+        state.canvasProject.projectId, state.canvas.canvasId, "confirm"
+      ),
       {
         method: "POST",
         body: {
@@ -4131,7 +4137,7 @@ function workStateLabel(state) {
 
 function workPath(suffix) {
   const project = state.workProject;
-  return `/api/v1/projects/${project.projectId}/requests${suffix}`;
+  return `${ROUTES.requests(project.projectId)}${suffix}`;
 }
 
 function showWorkError(error, action) {
@@ -4323,7 +4329,7 @@ async function createWorkRequest() {
     .filter(Boolean);
   try {
     const payload = await api(
-      `/api/v1/projects/${project.projectId}/actions/requests`,
+      ROUTES.projectAction(project.projectId, "requests"),
       {
         method: "POST",
         body: {
@@ -4358,8 +4364,9 @@ async function workVerb(verb, body) {
   if (!project || !request) return;
   try {
     const payload = await api(
-      `/api/v1/projects/${project.projectId}/actions/requests/` +
-        `${request.requestId}/${verb}`,
+      ROUTES.requestAction(
+        project.projectId, request.requestId, verb
+      ),
       {
         method: "POST",
         body: {
@@ -4436,7 +4443,7 @@ elements.workClose.addEventListener("click", () => {
 
 function ownerPath(suffix) {
   const project = state.ownerProject;
-  return `/api/v1/projects/${project.projectId}${suffix}`;
+  return `${ROUTES.project(project.projectId)}${suffix}`;
 }
 
 function showOwnerError(error, action) {
@@ -4579,7 +4586,7 @@ async function confirmOwnerObject(runId, objectType, objectId, sourceHash) {
   const note = await askText("确认说明（可选）", "");
   if (note === null) return;
   try {
-    await api(`/api/v1/projects/${project.projectId}/actions/confirmations`, {
+    await api(ROUTES.projectAction(project.projectId, "confirmations"), {
       method: "POST",
       body: {
         operation: mutation(newOperationId(), {
@@ -4611,7 +4618,7 @@ async function backflowOwnerObject(runId, objectType, objectId) {
   if (name === null) return;
   try {
     const payload = await api(
-      `/api/v1/projects/${project.projectId}/actions/backflow`,
+      ROUTES.projectAction(project.projectId, "backflow"),
       {
         method: "POST",
         body: {
@@ -4680,7 +4687,7 @@ const LIFE_STATE_LABELS = {
 
 function lifePath(suffix) {
   const project = state.lifeProject;
-  return `/api/v1/projects/${project.projectId}${suffix}`;
+  return `${ROUTES.project(project.projectId)}${suffix}`;
 }
 
 function showLifeError(error, action) {
@@ -4832,7 +4839,7 @@ async function lifeVerb(verb, body) {
   if (!project || !asset) return;
   try {
     await api(
-      `/api/v1/projects/${project.projectId}/actions/assets/${asset.assetId}/${verb}`,
+      ROUTES.assetAction(project.projectId, asset.assetId, verb),
       {
         method: "POST",
         body: {
@@ -4870,7 +4877,7 @@ async function loadLifeReferences() {
   if (!project || !asset) return;
   try {
     const report = await api(
-      `/api/v1/projects/${project.projectId}/assets/${asset.assetId}/references`
+      ROUTES.assetReferences(project.projectId, asset.assetId)
     );
     elements.lifeError.hidden = true;
     state.lifeRefReport = report;
@@ -4950,7 +4957,7 @@ async function projectArchive(archived) {
   if (!project) return;
   const verb = archived ? "project-archive" : "project-unarchive";
   try {
-    await api(`/api/v1/projects/${project.projectId}/actions/${verb}`, {
+    await api(ROUTES.projectAction(project.projectId, verb), {
       method: "POST",
       body: {
         operation: mutation(newOperationId(), { action: verb }),
@@ -5044,7 +5051,7 @@ async function loadBlobIntegrity() {
   const item = document.createElement("li");
   elements.settingsDiagnostics.appendChild(item);
   try {
-    const status = await api("/api/v1/status");
+    const status = await api(ROUTES.STATUS);
     const integrity = status.blobIntegrity;
     if (!integrity) {
       item.textContent = "内容完整性：服务未报告（本次启动未检查）。";
@@ -5063,7 +5070,7 @@ async function loadBlobIntegrity() {
 async function createBackup() {
   const destination = elements.backupDest.value.trim();
   try {
-    const payload = await api("/api/v1/backup", {
+    const payload = await api(ROUTES.BACKUP, {
       method: "POST",
       body: {
         operation: mutation(newOperationId(), { action: "create" }),
@@ -5090,7 +5097,7 @@ async function verifyBackup() {
   const path = elements.backupVerifyPath.value.trim();
   if (!path) return;
   try {
-    const report = await api(`/api/v1/backup?path=${encodeURIComponent(path)}`);
+    const report = await api(ROUTES.backupPath(path));
     elements.settingsError.hidden = true;
     elements.backupVerifyNote.textContent =
       `校验通过 · schema v${report.schemaVersion} · blob ${report.blobCount} · ` +
@@ -5110,7 +5117,7 @@ async function restoreBackup() {
     return;
   }
   try {
-    const payload = await api("/api/v1/backup", {
+    const payload = await api(ROUTES.BACKUP, {
       method: "POST",
       body: {
         operation: mutation(newOperationId(), { action: "restore" }),
@@ -5161,7 +5168,7 @@ async function startSession() {
     window.location.pathname + window.location.search
   );
   try {
-    const payload = await api("/api/v1/session", {
+    const payload = await api(ROUTES.SESSION, {
       method: "POST",
       body: { bootstrap },
     });

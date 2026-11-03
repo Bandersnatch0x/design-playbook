@@ -30,6 +30,7 @@ ROUTE_TO_FILE: dict[str, str] = {
     "/app.html": "app.html",
     "/tokens.css": "tokens.css",
     "/app.css": "app.css",
+    "/routes.js": "routes.js",
     "/app.js": "app.js",
 }
 
@@ -37,6 +38,7 @@ CONTENT_TYPES: dict[str, str] = {
     "app.html": "text/html; charset=utf-8",
     "tokens.css": "text/css; charset=utf-8",
     "app.css": "text/css; charset=utf-8",
+    "routes.js": "text/javascript; charset=utf-8",
     "app.js": "text/javascript; charset=utf-8",
 }
 
@@ -61,6 +63,7 @@ CONTENT_SECURITY_POLICY: dict[str, str] = {
     "app.html": shell_policy(),
     "tokens.css": "default-src 'none'; frame-ancestors 'none'",
     "app.css": "default-src 'none'; frame-ancestors 'none'",
+    "routes.js": "default-src 'none'; frame-ancestors 'none'",
     "app.js": "default-src 'none'; frame-ancestors 'none'",
 }
 

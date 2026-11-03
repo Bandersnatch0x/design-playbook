@@ -76,6 +76,19 @@ ARTIFACTS: tuple[GeneratedArtifact, ...] = (
         ),
     ),
     GeneratedArtifact(
+        name="workbench client routes",
+        source=(
+            "packages/design-playbook-workbench/design_playbook_workbench/"
+            "client_routes.py"
+        ),
+        generator="scripts/generate_workbench_routes.py",
+        artifacts=(
+            "packages/design-playbook-workbench/design_playbook_workbench/web/"
+            "routes.js",
+        ),
+        gate="packages/design-playbook-workbench/tests/test_client_routes.py",
+    ),
+    GeneratedArtifact(
         name="workbench shared UI copies",
         source="packages/design-playbook/mcp/_shared/",
         generator="scripts/sync_ui_shared.py",
