@@ -106,7 +106,7 @@ class LifecycleTestCase(unittest.TestCase):
         return asset
 
     def publish(self, asset_id: str, *, project_id=None) -> dict:
-        return self.assets.publish_revision(
+        return self.assets.publish(
             project_id or self.project_id,
             asset_id,
             operation=self.operation(
@@ -249,9 +249,10 @@ class ReferenceReportTest(LifecycleTestCase):
         token_rev = self.store.latest_revision(token["assetId"])
         # A component that depends on the token set.
         component = self.import_asset("components/button.md", b"# Button\n")
-        self.reuse.publish_with_dependencies(
+        self.assets.publish(
             self.project_id,
             component["assetId"],
+            kind="asset-publish-deps",
             dependencies=[
                 {"assetId": token["assetId"], "revisionId": token_rev["revision_id"]}
             ],

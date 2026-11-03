@@ -682,7 +682,7 @@ class VerifiedPublishTest(OwnerProjectionTestCase):
             ),
         )
         asset_id = self.make_asset(["reference", "source-unverified"])
-        published = self.assets.publish_revision(
+        published = self.assets.publish(
             self.project_id,
             asset_id,
             operation=self.operation(

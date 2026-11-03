@@ -7,7 +7,8 @@ one transaction. Capabilities are *declared from evidence we actually
 have* -- a Markdown file is a reference, a static package can be previewed,
 TypeScript source is unverified source -- and nothing is ever labelled
 ``runnable-verified`` or ``native-editable`` merely because of a file
-extension. Publishing freezes the draft into an immutable revision.
+extension. Publishing freezes the draft into an immutable revision; the one
+owner of that freeze is ``publication``.
 """
 from __future__ import annotations
 
@@ -30,6 +31,7 @@ from .errors import (
 )
 from .paths import assert_contained
 from .proposals import relative_parts
+from .publication import PublicationPlan, PublicationService
 from .service import Operation, WorkbenchService, utc_now
 from .store import Store
 
@@ -243,7 +245,11 @@ def _carrier_kind(records: list[FileRecord]) -> tuple[str, list[str]]:
 
 
 class AssetService:
-    """The one owner of asset import, discovery, and revision publication."""
+    """The one owner of asset import, discovery, and the asset read seams.
+
+    Freezing a draft into a revision is ``publication``'s; this module exposes
+    the row views and the target guard that entry points share.
+    """
 
     def __init__(
         self,
@@ -257,6 +263,13 @@ class AssetService:
         self.service = service
         self.blobs = blobs
         self._now = now_fn if now_fn is not None else utc_now
+        self.publication = PublicationService(
+            store=store,
+            service=service,
+            blobs=blobs,
+            assets=self,
+            now_fn=self._now,
+        )
 
     # -- enumeration ----------------------------------------------------
 
@@ -419,7 +432,7 @@ class AssetService:
                 )
             return {
                 "importId": import_id,
-                "asset": self._asset_payload(
+                "asset": self.asset_payload(
                     self.store.asset(asset_id), self.store.draft(asset_id), None
                 ),
                 "fileCount": len(manifest),
@@ -589,7 +602,7 @@ class AssetService:
             raise WorkbenchError(INVALID_TARGET)
         draft = self.store.draft(asset_id)
         revision = self.store.latest_revision(asset_id)
-        payload = self._asset_payload(row, draft, revision)
+        payload = self.asset_payload(row, draft, revision)
         payload["revisions"] = [
             {
                 "revisionId": item["revision_id"],
@@ -601,10 +614,11 @@ class AssetService:
         ]
         payload["sourceLocators"] = _loads(
             revision["source_locators_json"] if revision else "[]"
-        ) or _draft_locators(draft, project_id)
+        ) or self.draft_locators(draft, project_id)
         return {"asset": payload}
 
-    def _asset_payload(self, row: dict, draft: dict | None, revision: dict | None) -> dict:
+    def asset_payload(self, row: dict, draft: dict | None, revision: dict | None) -> dict:
+        """The flat asset view shared by reads, writes, and publication."""
         attributes = _loads(draft["attributes_json"]) if draft else {}
         return {
             "assetId": row["asset_id"],
@@ -624,6 +638,30 @@ class AssetService:
             "createdAt": row["created_at"],
             "updatedAt": row["updated_at"],
         }
+
+    def draft_locators(self, draft: dict | None, project_id: str) -> list[dict]:
+        """The typed locators of a draft's content."""
+        if draft is None:
+            return []
+        attributes = _loads(draft["attributes_json"])
+        if "sourceLocators" in attributes:
+            # A workbench-owned document (component definition, layout tree)
+            # carries typed locators instead of pretending to be a project
+            # file; an explicit empty list means "no project source".
+            recorded = attributes["sourceLocators"]
+            return recorded if isinstance(recorded, list) else []
+        return [
+            {
+                "kind": "project-file",
+                "projectId": project_id,
+                "path": entry["path"],
+                "sourceHash": entry["contentHash"],
+                "run": None,
+                "objectType": "file",
+                "objectId": entry["path"],
+            }
+            for entry in attributes.get("manifest", [])
+        ]
 
     # -- preview --------------------------------------------------------
 
@@ -722,7 +760,7 @@ class AssetService:
             )
             counter = self.store.bump_asset_counter(asset_id=asset_id, now=now)
             return (
-                self._asset_payload(
+                self.asset_payload(
                     self.store.asset(asset_id), self.store.draft(asset_id), None
                 ),
                 counter,
@@ -734,7 +772,7 @@ class AssetService:
             entity_id=asset_id,
             project_id=project_id,
             authorize=lambda: self.service.require_project(project_id, scope="write"),
-            load_row=lambda: self._owned_asset(project_id, asset_id),
+            load_row=lambda: self.owned_asset(project_id, asset_id),
             apply=apply,
         )
 
@@ -781,7 +819,7 @@ class AssetService:
             )
             counter = self.store.bump_asset_counter(asset_id=asset_id, now=now)
             return (
-                self._asset_payload(
+                self.asset_payload(
                     self.store.asset(asset_id), self.store.draft(asset_id), None
                 ),
                 counter,
@@ -793,7 +831,7 @@ class AssetService:
             entity_id=asset_id,
             project_id=project_id,
             authorize=lambda: self.service.require_project(project_id, scope="write"),
-            load_row=lambda: self._owned_asset(project_id, asset_id),
+            load_row=lambda: self.owned_asset(project_id, asset_id),
             apply=apply,
         )
 
@@ -848,128 +886,39 @@ class AssetService:
 
     # -- publish --------------------------------------------------------
 
-    def publish_revision(
+    def publish(
         self,
         project_id: str,
         asset_id: str,
         *,
         operation: Operation,
-        verified_by: dict | None = None,
-        dependencies: list[dict] | None = None,
         kind: str = "asset-publish",
+        prepare: Callable[[dict], PublicationPlan] | None = None,
+        dependencies: object = None,
     ) -> dict:
-        """Publish a revision.
+        """Publish this asset through the one publication owner.
 
-        A capability like ``runnable-verified`` still needs a verification
-        record; ``verified_by`` is the owner confirmation bound to the exact
-        content hash being published, and nothing else is accepted as proof.
-
-        ``dependencies`` carries declared edges this publish introduces (a
-        page that instantiates components, for instance). They are the same
-        shape ``publish_with_dependencies`` accepts and are recorded in both
-        the revision and the dependency table.
-
-        ``kind`` labels the ledger row. A caller that opens its own replay
-        gate before delegating here must pass its own kind: a retry searches
-        the ledger by that kind, so recording under a different one turns
-        every retry into a conflict.
+        ``prepare`` is the entry point's own pre-freeze rule (a component's
+        document validation, an owner confirmation); it runs after a replay is
+        answered, so state that moved after a successful write cannot refuse
+        its retry. ``dependencies`` is a client-declared edge list. ``kind`` is
+        the request's replay identity: a retry searches the ledger for it.
         """
-        def apply() -> tuple[dict, int]:
-            row = self.store.asset(asset_id)
-            draft = self.store.draft(asset_id)
-            attributes = _loads(draft["attributes_json"])
-            manifest = attributes.get("manifest") or []
-            if not manifest:
-                raise WorkbenchError(MISSING_DEPENDENCY)
-            for entry in manifest:
-                # Publishing validates content completeness: every declared
-                # blob must still be present and readable.
-                if not self.blobs.verify(entry["contentHash"]):
-                    raise WorkbenchError(CORRUPT_CONTENT)
-            capabilities = list(attributes.get("capabilities", []))
-            verified: list[dict] = []
-            if CAPABILITY_RUNNABLE_VERIFIED in capabilities or (
-                CAPABILITY_NATIVE_EDITABLE in capabilities
-            ):
-                # A revision cannot claim a verified capability without a
-                # verification record bound to revision, environment, and hash.
-                if verified_by is None:
-                    raise WorkbenchError(MISSING_DEPENDENCY)
-                if (
-                    not isinstance(verified_by, dict)
-                    or verified_by.get("sourceHash") != manifest[0]["contentHash"]
-                    or not verified_by.get("confirmationId")
-                    or not verified_by.get("role")
-                    # R03: a verification record names the environment it ran
-                    # in. A hash alone cannot tell a later reader where the
-                    # check happened, and re-running it elsewhere is a
-                    # different fact.
-                    or not verified_by.get("environment")
-                ):
-                    raise WorkbenchError(MISSING_DEPENDENCY)
-                verified = [dict(verified_by)]
-            revision_number = int(draft["revision_counter"]) + 1
-            revision_id = str(uuid.uuid4())
-            now = self._now()
-            locators = _draft_locators(draft, project_id)
-            declared = list(dependencies or [])
-            for dependency in declared:
-                # A declared edge must resolve inside this project: a dangling
-                # one is a missing dependency, not a pointer to trust later.
-                dependency_revision = self.store.revision(
-                    dependency.get("revisionId")
-                )
-                if dependency_revision is None or dependency_revision[
-                    "asset_id"
-                ] != dependency.get("assetId"):
-                    raise WorkbenchError(MISSING_DEPENDENCY)
-            self.store.insert_revision(
-                revision_id=revision_id,
-                asset_id=asset_id,
-                revision_number=revision_number,
-                content_hash=manifest[0]["contentHash"],
-                carrier=attributes.get("carrier", row["kind"]),
-                capabilities=capabilities,
-                dependencies=declared,
-                source_locators=locators,
-                manifest=manifest,
-                origin={"kind": "import", "importRoots": attributes.get("roots", [])},
-                verified=verified,
-                now=now,
-            )
-            if declared:
-                self.store.insert_dependencies(
-                    revision_id=revision_id, dependencies=declared, now=now
-                )
-            asset = self.store.asset(asset_id)
-            payload = self._asset_payload(
-                asset, self.store.draft(asset_id), self.store.latest_revision(asset_id)
-            )
-            if verified_by is not None:
-                # The recorded result is the response: a retry gets this dict
-                # back verbatim, so the verification record has to be part of
-                # it rather than added to the caller's copy afterwards.
-                payload["verifiedBy"] = {
-                    key: verified_by[key]
-                    for key in ("confirmationId", "role", "runId", "objectId", "environment")
-                }
-            return payload, int(asset["counter"])
-
-        return self.service.mutations.existing(
-            operation,
+        return self.publication.publish(
+            project_id,
+            asset_id,
+            operation=operation,
             kind=kind,
-            entity_id=asset_id,
-            project_id=project_id,
-            authorize=lambda: self.service.require_project(project_id, scope="write"),
-            load_row=lambda: self._owned_asset(project_id, asset_id),
-            apply=apply,
+            prepare=prepare,
+            dependencies=dependencies,
         )
 
     # -- mutation plumbing ----------------------------------------------
     # The ledger row is written by ``self.service.mutations``; this module no
     # longer carries its own copy of the six-step gate.
 
-    def _owned_asset(self, project_id: str, asset_id: str) -> dict:
+    def owned_asset(self, project_id: str, asset_id: str) -> dict:
+        """The asset row, if it belongs to this project."""
         row = self.store.asset(asset_id)
         if row is None or row["project_id"] != project_id:
             raise WorkbenchError(INVALID_TARGET)
@@ -1005,27 +954,3 @@ def _time_key(value: object) -> tuple[int, ...]:
     return tuple(parts)
 
 
-def _draft_locators(draft: dict, project_id: str) -> list[dict]:
-    if draft is None:
-        return []
-    attributes = _loads(draft["attributes_json"])
-    if "sourceLocators" in attributes:
-        # A workbench-owned document (component definition, layout tree)
-        # carries typed locators instead of pretending to be a project file;
-        # an explicit empty list means "no project source".
-        recorded = attributes["sourceLocators"]
-        return recorded if isinstance(recorded, list) else []
-    locators = []
-    for entry in attributes.get("manifest", []):
-        locators.append(
-            {
-                "kind": "project-file",
-                "projectId": project_id,
-                "path": entry["path"],
-                "sourceHash": entry["contentHash"],
-                "run": None,
-                "objectType": "file",
-                "objectId": entry["path"],
-            }
-        )
-    return locators

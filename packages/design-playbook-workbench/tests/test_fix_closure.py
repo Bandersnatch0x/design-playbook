@@ -24,9 +24,9 @@ class ReplayClosureTest(asset_tests.AssetTestCase):
             {"action": "publish", "assetId": asset},
             expected=self.asset_counter(asset),
         )
-        self.assets.publish_revision(self.project_id, asset, operation=op)
+        self.assets.publish(self.project_id, asset, operation=op)
         with self.assertRaises(WorkbenchError) as caught:
-            self.assets.publish_revision("another-project", asset, operation=op)
+            self.assets.publish("another-project", asset, operation=op)
         self.assertEqual(caught.exception.code, CONFLICT)
 
 

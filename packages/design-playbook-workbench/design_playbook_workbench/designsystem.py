@@ -26,6 +26,7 @@ from .errors import (
 )
 from .paths import assert_contained
 from .proposals import ProposalService, relative_parts
+from .publication import PublicationPlan
 from .service import Operation, WorkbenchService, utc_now
 from .store import Store
 
@@ -588,7 +589,7 @@ class DesignSystemService:
                 now=now,
             )
             counter = self.store.bump_asset_counter(asset_id=asset_id, now=now)
-            payload = self.assets._asset_payload(
+            payload = self.assets.asset_payload(
                 self.store.asset(asset_id), self.store.draft(asset_id), None
             )
             payload["validation"] = verdict
@@ -606,18 +607,19 @@ class DesignSystemService:
 
     def publish(self, project_id: str, asset_id: str, *, operation: Operation) -> dict:
         """Publish only after the same validator accepts the document."""
-        self.service.require_project(project_id, scope="write")
-        self._tokens_asset(project_id, asset_id)
-        verdict = validate_document(self._document_for(asset_id))
-        if not verdict["valid"]:
-            raise WorkbenchError(
-                INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False)
-            )
-        outcome = self.assets.publish_revision(
-            project_id, asset_id, operation=operation
+        def prepare() -> PublicationPlan:
+            self._tokens_asset(project_id, asset_id)
+            verdict = validate_document(self._document_for(asset_id))
+            if not verdict["valid"]:
+                raise WorkbenchError(
+                    INVALID_INPUT,
+                    detail=json.dumps(verdict["errors"], ensure_ascii=False),
+                )
+            return PublicationPlan(response={"validation": verdict})
+
+        return self.assets.publish(
+            project_id, asset_id, operation=operation, prepare=prepare
         )
-        outcome["result"]["validation"] = verdict
-        return outcome
 
     # -- baseline proposal ---------------------------------------------
 

@@ -35,6 +35,7 @@ from .errors import (
     UNSUPPORTED,
     WorkbenchError,
 )
+from .publication import PublicationPlan
 from .reuse import ReuseService
 from .service import Operation, WorkbenchService, utc_now
 from .store import Store
@@ -816,7 +817,7 @@ class ComponentService:
             now=now,
         )
         counter = self.store.bump_asset_counter(asset_id=asset_id, now=now)
-        payload = self.assets._asset_payload(
+        payload = self.assets.asset_payload(
             self.store.asset(asset_id), self.store.draft(asset_id), None
         )
         return payload, counter
@@ -865,7 +866,7 @@ class ComponentService:
                 attributes=attributes,
                 now=self._now(),
             )
-            payload = self.assets._asset_payload(
+            payload = self.assets.asset_payload(
                 self.store.asset(asset_id), self.store.draft(asset_id), None
             )
             return payload, 0
@@ -959,46 +960,34 @@ class ComponentService:
     def publish(self, project_id: str, asset_id: str, *, operation: Operation) -> dict:
         """Publish a component only when its definition and deps are complete.
 
-        No replay gate of its own: the ledger row is written by
-        ``reuse.publish_with_dependencies``, and this method adds validation
-        output to the result afterwards. Answering a replay here would return
-        the recorded result without that output, so the delegate answers and
-        the response is assembled the same way on both paths.
+        The freeze, its closure check, and the ledger row belong to the one
+        publication owner; this method only states what must hold first. That
+        check runs inside the gate, after a replay is answered, so a definition
+        edited after a successful publish cannot turn its retry into an error.
         """
-        self.service.require_project(project_id, scope="write")
-        self._require_asset(project_id, asset_id, kind=KIND_COMPONENT)
-        data, _ = self._document_bytes(asset_id)
-        definition = parse_definition(data)
-        dependencies = self._resolve_dependencies(project_id, asset_id, definition)
-        verdict = validate_definition(definition, dependencies=dependencies)
-        if not verdict["valid"]:
-            raise WorkbenchError(
-                INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False)
+        def prepare() -> PublicationPlan:
+            self._require_asset(project_id, asset_id, kind=KIND_COMPONENT)
+            data, _ = self._document_bytes(asset_id)
+            definition = parse_definition(data)
+            dependencies = self._resolve_dependencies(project_id, asset_id, definition)
+            verdict = validate_definition(definition, dependencies=dependencies)
+            if not verdict["valid"]:
+                raise WorkbenchError(
+                    INVALID_INPUT,
+                    detail=json.dumps(verdict["errors"], ensure_ascii=False),
+                )
+            return PublicationPlan(
+                dependencies=dependencies,
+                response={"definition": definition, "validation": verdict},
             )
-        if self.reuse.would_cycle(
-            project_id=project_id, asset_id=asset_id, dependencies=dependencies
-        ):
-            raise WorkbenchError(MISSING_DEPENDENCY, detail="dependency cycle")
-        # The dependency-recording publication path is owned by the reuse
-        # module, and it writes the ledger row. The request keeps its own
-        # operation ID and names its own kind: a derived ID would give one
-        # request two identities, and a retry of the client's ID would search
-        # the ledger for a row that was recorded under a name it never sent.
-        outcome = self.reuse.publish_with_dependencies(
+
+        return self.assets.publish(
             project_id,
             asset_id,
-            dependencies=dependencies,
             operation=operation,
             kind="component-publish",
+            prepare=prepare,
         )
-        result = outcome["result"]
-        result["definition"] = definition
-        result["validation"] = verdict
-        return {
-            "result": result,
-            "replayed": outcome["replayed"],
-            "counter": outcome["counter"],
-        }
 
     def instance_preview(
         self, project_id: str, asset_id: str, *, params: object = None
@@ -1166,36 +1155,34 @@ class ComponentService:
         )
 
     def publish_page(self, project_id: str, asset_id: str, *, operation: Operation) -> dict:
-        """Publish a page, recording the components it instantiates.
-
-        Like a component publish, the ledger row is the delegate's and this
-        method adds validation output afterwards, so the delegate answers the
-        replay and the response is assembled the same way on both paths.
-        """
-        self.service.require_project(project_id, scope="write")
-        self._require_asset(project_id, asset_id, kind=KIND_PAGE)
-        data, _ = self._document_bytes(asset_id)
-        layout = parse_layout(data)
-        verdict = validate_layout(
-            layout, components=self._component_index(project_id)
-        )
-        if not verdict["valid"]:
-            raise WorkbenchError(
-                INVALID_INPUT, detail=json.dumps(verdict["errors"], ensure_ascii=False)
+        """Publish a page, recording the components it instantiates."""
+        def prepare() -> PublicationPlan:
+            self._require_asset(project_id, asset_id, kind=KIND_PAGE)
+            data, _ = self._document_bytes(asset_id)
+            layout = parse_layout(data)
+            verdict = validate_layout(
+                layout, components=self._component_index(project_id)
             )
-        # R07: a page that instantiates components depends on them. Recording
-        # those edges is what lets the affected list name pages, and what
-        # makes a reuse plan show a page's real closure.
-        dependencies = self._page_dependencies(layout)
-        outcome = self.assets.publish_revision(
+            if not verdict["valid"]:
+                raise WorkbenchError(
+                    INVALID_INPUT,
+                    detail=json.dumps(verdict["errors"], ensure_ascii=False),
+                )
+            # R07: a page that instantiates components depends on them.
+            # Recording those edges is what lets the affected list name
+            # pages, and what makes a reuse plan show a page's real closure.
+            return PublicationPlan(
+                dependencies=self._page_dependencies(layout),
+                response={"validation": verdict},
+            )
+
+        return self.assets.publish(
             project_id,
             asset_id,
             operation=operation,
             kind="page-publish",
-            dependencies=dependencies,
+            prepare=prepare,
         )
-        outcome["result"]["validation"] = verdict
-        return outcome
 
     def _page_dependencies(self, layout: dict) -> list[dict]:
         """The published component revisions one page's nodes instantiate."""

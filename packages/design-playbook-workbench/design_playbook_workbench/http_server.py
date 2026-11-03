@@ -1495,7 +1495,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
         payload = self._read_json_body()
         operation = self._operation(payload)
         handlers = {
-            "publish": lambda: assets.publish_revision(
+            "publish": lambda: assets.publish(
                 project_id, asset_id, operation=operation
             ),
             "preview-enable": lambda: assets.enable_dynamic_preview(
@@ -1569,11 +1569,12 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             "distill-candidate": lambda: self._asset_distill_candidate(
                 components, project_id, payload, operation
             ),
-            "publish-with-deps": lambda: reuse.publish_with_dependencies(
+            "publish-with-deps": lambda: assets.publish(
                 project_id,
                 asset_id,
-                dependencies=payload.get("dependencies"),
                 operation=operation,
+                kind="asset-publish-deps",
+                dependencies=payload.get("dependencies"),
             ),
             "derive": lambda: reuse.derive_or_copy(
                 project_id,

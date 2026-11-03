@@ -598,7 +598,7 @@ class CanvasServiceTest(unittest.TestCase):
             selections=["brand.md"],
             operation=self.operation({"action": "imports"}),
         )["result"]["asset"]
-        published = self.assets.publish_revision(
+        published = self.assets.publish(
             self.project_id,
             asset["assetId"],
             operation=self.operation(

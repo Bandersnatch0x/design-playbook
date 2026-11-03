@@ -23,23 +23,15 @@ from .errors import (
     CORRUPT_CONTENT,
     INVALID_INPUT,
     INVALID_TARGET,
-    LIMIT_EXCEEDED,
     MISSING_DEPENDENCY,
     WorkbenchError,
 )
+from .publication import VERIFIED_CAPABILITIES
 from .service import Operation, WorkbenchService, utc_now
 from .store import Store
 
-MAX_CLOSURE_REVISIONS = 200
 RELATIONS = ("derived-from", "copied-from")
 MODES = ("reference", "derive", "copy")
-
-#: Capabilities that mean "someone verified this content". A copy or an
-#: imported revision carries the content, never the verification: the tags
-#: are dropped so the new asset cannot claim a check nobody ran on it.
-_VERIFIED_CAPABILITIES = frozenset(
-    {"runnable-verified", "native-editable"}
-)
 
 
 def _loads(text: object) -> object:
@@ -63,7 +55,7 @@ def _importable_capabilities(raw: object) -> list[str]:
     return [
         capability
         for capability in _loads(raw)
-        if capability not in _VERIFIED_CAPABILITIES
+        if capability not in VERIFIED_CAPABILITIES
     ]
 
 
@@ -89,197 +81,16 @@ class ReuseService:
 
     # -- dependency closure ---------------------------------------------
 
-    def _closure(
-        self, *, project_id: str, revision_id: str, seen: set[str] | None = None
-    ) -> list[dict]:
-        """Resolve one revision's dependency closure, refusing cycles."""
-        seen = seen if seen is not None else set()
-        if revision_id in seen:
-            raise WorkbenchError(MISSING_DEPENDENCY, detail="dependency cycle")
-        seen.add(revision_id)
-        revision = self.store.revision(revision_id)
-        if revision is None:
-            raise WorkbenchError(MISSING_DEPENDENCY)
-        entries: list[dict] = []
-        for dependency in self.store.dependencies(revision_id):
-            child_id = dependency["depends_on_revision_id"]
-            child = self.store.revision(child_id)
-            if child is None:
-                raise WorkbenchError(MISSING_DEPENDENCY)
-            asset = self.store.asset(child["asset_id"])
-            if asset is None or asset["project_id"] != project_id:
-                # A dependency must be resolvable inside the consuming
-                # project: a dangling cross-project pointer is refused.
-                raise WorkbenchError(MISSING_DEPENDENCY)
-            entries.extend(
-                self._closure(project_id=project_id, revision_id=child_id, seen=seen)
-            )
-            entries.append(
-                {
-                    "assetId": child["asset_id"],
-                    "revisionId": child_id,
-                    "revisionNumber": child["revision_number"],
-                }
-            )
-        if len(seen) > MAX_CLOSURE_REVISIONS:
-            raise WorkbenchError(LIMIT_EXCEEDED)
-        return entries
-
-    def dependency_closure(
-        self, project_id: str, revision_id: str
-    ) -> list[dict]:
-        return self._closure(project_id=project_id, revision_id=revision_id)
+    def dependency_closure(self, project_id: str, revision_id: str) -> list[dict]:
+        return self.assets.publication.closure(project_id, revision_id)
 
     def would_cycle(
         self, *, project_id: str, asset_id: str, dependencies: list[dict]
     ) -> bool:
         """Public form of the prospective-edge check, for other owners."""
-        return self._would_cycle(
+        return self.assets.publication.would_cycle(
             project_id=project_id, asset_id=asset_id, dependencies=dependencies
         )
-
-    def _would_cycle(
-        self, *, project_id: str, asset_id: str, dependencies: list[dict]
-    ) -> bool:
-        """True when the prospective edges close a loop back to this asset.
-
-        The stored graph alone cannot answer this: the edge being added does
-        not exist yet, so it is walked explicitly.
-        """
-        pending = {dependency["revisionId"] for dependency in dependencies}
-        seen: set[str] = set()
-        stack = list(pending)
-        while stack:
-            current = stack.pop()
-            if current in seen:
-                continue
-            seen.add(current)
-            revision = self.store.revision(current)
-            if revision is None:
-                continue
-            if revision["asset_id"] == asset_id:
-                return True
-            for dependency in self.store.dependencies(current):
-                stack.append(dependency["depends_on_revision_id"])
-        return False
-
-    # -- publish with a validated closure --------------------------------
-
-    def publish_with_dependencies(
-        self,
-        project_id: str,
-        asset_id: str,
-        *,
-        dependencies: object,
-        operation: Operation,
-        kind: str = "asset-publish-deps",
-    ) -> dict:
-        """Publish a revision whose declared dependencies must all resolve.
-
-        ``kind`` labels the ledger row; a delegating caller that gates the
-        request itself passes its own kind so its retry finds the row.
-        """
-        held: dict = {}
-
-        def validate(row: dict) -> None:
-            parsed = self._parse_dependencies(project_id, dependencies)
-            # Completeness, resolvability, and cycles are checked before
-            # anything is written -- including the edge this publish is about
-            # to add. The counter is compared after them, so a broken
-            # dependency reports its real reason instead of a stale one.
-            for dependency in parsed:
-                self.dependency_closure(project_id, dependency["revisionId"])
-            if self._would_cycle(
-                project_id=project_id, asset_id=asset_id, dependencies=parsed
-            ):
-                raise WorkbenchError(MISSING_DEPENDENCY, detail="dependency cycle")
-            held["dependencies"] = parsed
-
-        def apply() -> tuple[dict, int]:
-            parsed = held["dependencies"]
-            row = self.store.asset(asset_id)
-            draft = self.store.draft(asset_id)
-            attributes = _loads(draft["attributes_json"])
-            manifest = attributes.get("manifest", [])
-            for entry in manifest:
-                if not self.blobs.verify(entry["contentHash"]):
-                    raise WorkbenchError(CORRUPT_CONTENT)
-            now = self._now()
-            revision_number = int(draft["revision_counter"]) + 1
-            revision_id = str(uuid.uuid4())
-            self.store.insert_revision(
-                revision_id=revision_id,
-                asset_id=asset_id,
-                revision_number=revision_number,
-                content_hash=manifest[0]["contentHash"] if manifest else None,
-                carrier=attributes.get("carrier", row["kind"]),
-                capabilities=attributes.get("capabilities", []),
-                dependencies=parsed,
-                source_locators=self.assets.asset_detail(project_id, asset_id)[
-                    "asset"
-                ]["sourceLocators"],
-                manifest=manifest,
-                origin={"kind": "publish", "withDependencies": True},
-                now=now,
-            )
-            self.store.insert_dependencies(
-                revision_id=revision_id, dependencies=parsed, now=now
-            )
-            refreshed = self.store.asset(asset_id)
-            payload = self.assets.asset_detail(project_id, asset_id)["asset"]
-            payload["dependencies"] = parsed
-            payload["revisionId"] = revision_id
-            return payload, int(refreshed["counter"])
-
-        return self.service.mutations.existing(
-            operation,
-            kind=kind,
-            entity_id=asset_id,
-            project_id=project_id,
-            authorize=lambda: self.service.require_project(project_id, scope="write"),
-            load_row=lambda: self._owned_asset(project_id, asset_id),
-            validate=validate,
-            apply=apply,
-        )
-
-    def _owned_asset(self, project_id: str, asset_id: str) -> dict:
-        row = self.store.asset(asset_id)
-        if row is None or row["project_id"] != project_id:
-            raise WorkbenchError(INVALID_TARGET)
-        return row
-
-    def _parse_dependencies(self, project_id: str, raw: object) -> list[dict]:
-        if raw in (None, []):
-            return []
-        if not isinstance(raw, list):
-            raise WorkbenchError(INVALID_INPUT)
-        if len(raw) > MAX_CLOSURE_REVISIONS:
-            raise WorkbenchError(LIMIT_EXCEEDED)
-        parsed: list[dict] = []
-        seen: set[str] = set()
-        for item in raw:
-            if not isinstance(item, dict):
-                raise WorkbenchError(INVALID_INPUT)
-            revision_id = item.get("revisionId")
-            if not isinstance(revision_id, str) or not revision_id:
-                raise WorkbenchError(INVALID_INPUT)
-            if revision_id in seen:
-                raise WorkbenchError(INVALID_INPUT)
-            revision = self.store.revision(revision_id)
-            if revision is None:
-                raise WorkbenchError(MISSING_DEPENDENCY)
-            asset = self.store.asset(revision["asset_id"])
-            if asset is None or asset["project_id"] != project_id:
-                raise WorkbenchError(MISSING_DEPENDENCY)
-            seen.add(revision_id)
-            parsed.append(
-                {
-                    "assetId": revision["asset_id"],
-                    "revisionId": revision_id,
-                    "revisionNumber": revision["revision_number"],
-                }
-            )
-        return parsed
 
     # -- instances -------------------------------------------------------
 
@@ -428,7 +239,7 @@ class ReuseService:
             attributes["capabilities"] = [
                 capability
                 for capability in attributes.get("capabilities", [])
-                if capability not in _VERIFIED_CAPABILITIES
+                if capability not in VERIFIED_CAPABILITIES
             ]
             new_name = (
                 f"{source['name']} copy" if name in (None, "") else str(name)
@@ -467,7 +278,7 @@ class ReuseService:
             copied_capabilities = [
                 capability
                 for capability in _loads(revision["capabilities_json"])
-                if capability not in _VERIFIED_CAPABILITIES
+                if capability not in VERIFIED_CAPABILITIES
             ]
             self.store.insert_revision(
                 revision_id=revision_id,

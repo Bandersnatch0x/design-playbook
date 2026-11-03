@@ -166,7 +166,7 @@ class DesignSystemTestCase(unittest.TestCase):
                 operation=operation_obj,
             )
         if verb == "publish":
-            return self.assets.publish_revision(
+            return self.assets.publish(
                 self.project_id, asset_id, operation=operation_obj
             )
         raise AssertionError(f"unknown verb {verb}")
@@ -331,9 +331,10 @@ class PublishRulesTest(DesignSystemTestCase):
             definition=COMPONENT,
             operation=self.operation({"action": "component-create"}),
         )["result"]
-        self.reuse.publish_with_dependencies(
+        self.assets.publish(
             self.project_id,
             component["assetId"],
+            kind="asset-publish-deps",
             dependencies=[
                 {"assetId": self.asset_id, "revisionId": revision["revision_id"]}
             ],

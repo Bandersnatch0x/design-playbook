@@ -171,7 +171,7 @@ class OrchestrationTestCase(unittest.TestCase):
             selections=[name],
             operation=self.operation({"action": "imports"}),
         )["result"]["asset"]
-        self.assets.publish_revision(
+        self.assets.publish(
             self.project_id,
             asset["assetId"],
             operation=self.operation(

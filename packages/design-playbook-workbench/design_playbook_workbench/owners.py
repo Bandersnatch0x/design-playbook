@@ -34,6 +34,7 @@ from .errors import (
 )
 from .paths import assert_contained
 from .proposals import relative_parts
+from .publication import PublicationPlan
 from .service import Operation, WorkbenchService, payload_digest, utc_now
 from .store import Store
 
@@ -457,112 +458,84 @@ class OwnerProjectionService:
         operation: Operation,
     ) -> dict:
         """Publish requiring an owner confirmation for the exact content."""
-        replayed = self.service.mutations.replay(
-            operation, kind="owner-verified-publish", entity_id=asset_id, project_id=project_id)
-        if replayed is not None:
-            return replayed
-        self.service.require_project(project_id, scope="write")
-        if role not in CONFIRMATION_ROLES:
-            raise WorkbenchError(INVALID_INPUT, detail="unknown confirmation role")
-        projection = self._projection_for(project_id, str(run_id))
-        rows = [
-            *self._criterion_rows(projection),
-            *self._finding_rows(projection),
-            *self._evidence_rows(projection),
-        ]
-        match = next(
-            (
-                row
-                for row in rows
-                if row["objectType"] == "criterion" and row["objectId"] == object_id
-            ),
-            None,
-        )
-        if match is None:
-            raise WorkbenchError(INVALID_TARGET, detail="unknown criterion")
-        return self._publish_with_confirmation(
+        def prepare() -> PublicationPlan:
+            if role not in CONFIRMATION_ROLES:
+                raise WorkbenchError(INVALID_INPUT, detail="unknown confirmation role")
+            projection = self._projection_for(project_id, str(run_id))
+            rows = [
+                *self._criterion_rows(projection),
+                *self._finding_rows(projection),
+                *self._evidence_rows(projection),
+            ]
+            match = next(
+                (
+                    row
+                    for row in rows
+                    if row["objectType"] == "criterion"
+                    and row["objectId"] == object_id
+                ),
+                None,
+            )
+            if match is None:
+                raise WorkbenchError(INVALID_TARGET, detail="unknown criterion")
+            draft = self.store.draft(asset_id)
+            if draft is None:
+                raise WorkbenchError(INVALID_TARGET)
+            manifest = json.loads(draft["attributes_json"]).get("manifest", [])
+            if not manifest:
+                raise WorkbenchError(MISSING_DEPENDENCY)
+            content_hash = manifest[0]["contentHash"]
+            # The owner's CURRENT fact must still verify this exact content: a
+            # passing criterion whose source hash is the content being
+            # published. A changed verdict or a re-run that moved the hash
+            # makes the earlier confirmation stale, so the verified capability
+            # is refused rather than published on an out-of-date Pass.
+            if match.get("verdict") != "pass":
+                raise WorkbenchError(
+                    STALE_EVIDENCE, detail="the owner criterion is no longer passing"
+                )
+            if str(match.get("sourceHash") or "") != content_hash:
+                raise WorkbenchError(
+                    STALE_EVIDENCE,
+                    detail="the owner criterion no longer matches this content",
+                )
+            confirmation = self.store.find_owner_confirmation(
+                project_id=project_id,
+                run_id=str(run_id),
+                object_type="criterion",
+                object_id=str(object_id),
+                source_hash=content_hash,
+                roles=(str(role),),
+            )
+            if confirmation is None:
+                # No bound confirmation for this content: the verified
+                # capability cannot be published.
+                raise WorkbenchError(
+                    STALE_EVIDENCE,
+                    detail="no confirmation matches this content hash",
+                )
+            return PublicationPlan(
+                verified_by={
+                    "confirmationId": confirmation["confirmation_id"],
+                    "role": confirmation["role"],
+                    "sourceHash": content_hash,
+                    "runId": str(run_id),
+                    "objectId": str(object_id),
+                    "confirmedAt": confirmation["created_at"],
+                    # R03: the record names where the check ran, alongside the
+                    # revision and the input hash.
+                    "environment": str(projection.get("runner") or ""),
+                }
+            )
+
+        return self.assets.publish(
             project_id,
             asset_id,
-            run_id=str(run_id),
-            object_id=str(object_id),
-            role=str(role),
-            criterion=match,
-            # R03: the verification record names the environment it ran in.
-            # The projection's runner field is that environment description;
-            # an empty one cannot name where the check happened.
-            environment=str(projection.get("runner") or ""),
             operation=operation,
+            kind="owner-verified-publish",
+            prepare=prepare,
         )
 
-    def _publish_with_confirmation(
-        self,
-        project_id: str,
-        asset_id: str,
-        *,
-        run_id: str,
-        object_id: str,
-        role: str,
-        criterion: dict,
-        environment: str,
-        operation: Operation,
-    ) -> dict:
-        draft = self.store.draft(asset_id)
-        if draft is None or self.store.asset(asset_id) is None:
-            raise WorkbenchError(INVALID_TARGET)
-        manifest = json.loads(draft["attributes_json"]).get("manifest", [])
-        if not manifest:
-            raise WorkbenchError(MISSING_DEPENDENCY)
-        content_hash = manifest[0]["contentHash"]
-        # The owner's CURRENT fact must still verify this exact content: a
-        # passing criterion whose source hash is the content being published.
-        # A changed verdict or a re-run that moved the hash makes the earlier
-        # confirmation stale, so the verified capability is refused rather
-        # than published on an out-of-date Pass.
-        if criterion.get("verdict") != "pass":
-            raise WorkbenchError(
-                STALE_EVIDENCE, detail="the owner criterion is no longer passing"
-            )
-        if str(criterion.get("sourceHash") or "") != content_hash:
-            raise WorkbenchError(
-                STALE_EVIDENCE,
-                detail="the owner criterion no longer matches this content",
-            )
-        confirmation = self.store.find_owner_confirmation(
-            project_id=project_id,
-            run_id=run_id,
-            object_type="criterion",
-            object_id=object_id,
-            source_hash=content_hash,
-            roles=(role,),
-        )
-        if confirmation is None:
-            # No bound confirmation for this content: the verified
-            # capability cannot be published.
-            raise WorkbenchError(
-                STALE_EVIDENCE,
-                detail="no confirmation matches this content hash",
-            )
-        outcome = self.assets.publish_revision(
-            project_id,
-            asset_id,
-            operation=operation,
-            # The replay gate above searches the ledger for this kind, so the
-            # row this delegates must carry it. Recording under the delegate's
-            # default would make every retry a conflict.
-            kind="owner-verified-publish",
-            verified_by={
-                "confirmationId": confirmation["confirmation_id"],
-                "role": confirmation["role"],
-                "sourceHash": content_hash,
-                "runId": run_id,
-                "objectId": object_id,
-                "confirmedAt": confirmation["created_at"],
-                # R03: the record names where the check ran, alongside the
-                # revision and the input hash.
-                "environment": environment,
-            },
-        )
-        return outcome
 
     # -- backflow --------------------------------------------------------
 
