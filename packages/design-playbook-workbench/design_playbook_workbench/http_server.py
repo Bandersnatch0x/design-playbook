@@ -89,6 +89,25 @@ _MAINTAINER_ONLY_PROPOSAL_ACTIONS = frozenset(
     {"apply", "recover", "revert", "reject"}
 )
 
+#: Project actions that author or administer. An Agent capability with
+#: project write scope must not reach them; only proposal submission is
+#: Agent-permitted.
+_MAINTAINER_ONLY_ACTIONS = frozenset(
+    {
+        "instances",
+        "components",
+        "pages",
+        "canvases",
+        "requests",
+        "imports",
+        "confirmations",
+        "backflow",
+        "project-archive",
+        "project-unarchive",
+        "notes-propose",
+    }
+)
+
 
 @dataclass(frozen=True)
 class _FixedRoute:
@@ -1119,75 +1138,52 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             # maintainer's decisions; an Agent credential never holds them.
             self._require_browser(principal)
             self._authorize_project(principal, project_id, "write")
-            if verb == "consent":
-                self._send_mutation(
-                    work.consent(
-                        project_id,
-                        request_id,
-                        digest=payload.get("digest"),
-                        ttl_seconds=payload.get("ttlSeconds"),
-                        operation=operation,
-                    )
-                )
-                return
-            if verb == "cancel":
-                self._send_mutation(
-                    work.cancel(project_id, request_id, operation=operation)
-                )
-                return
-            if verb == "confirm-cancelled":
-                self._send_mutation(
-                    work.confirm_cancelled(project_id, request_id, operation=operation)
-                )
-                return
-            if verb == "retry":
-                self._send_mutation(
-                    work.retry(project_id, request_id, operation=operation)
-                )
-                return
-            self._send_mutation(
-                work.reject(project_id, request_id, operation=operation)
-            )
-            return
         # Agent traffic is authenticated by the request-bound capability.
-        if verb == "claim":
-            self._send_mutation(
-                work.claim(
-                    request_id,
-                    principal=principal,
-                    lease_seconds=payload.get("leaseSeconds"),
-                    operation=operation,
-                )
-            )
-            return
-        if verb == "heartbeat":
-            self._send_mutation(
-                work.heartbeat(
-                    request_id,
-                    attempt_id=payload.get("attemptId"),
-                    lease_id=payload.get("leaseId"),
-                    sequence=payload.get("sequence"),
-                    progress=payload.get("progress"),
-                    principal=principal,
-                    operation=operation,
-                )
-            )
-            return
-        if verb == "result":
-            self._send_mutation(
-                work.submit_result(
-                    request_id,
-                    attempt_id=payload.get("attemptId"),
-                    lease_id=payload.get("leaseId"),
-                    sequence=payload.get("sequence"),
-                    result=payload.get("result"),
-                    principal=principal,
-                    operation=operation,
-                )
-            )
-            return
-        self._send_mutation(
-            work.fail_attempt(
+        handlers = {
+            "consent": lambda: work.consent(
+                project_id,
+                request_id,
+                digest=payload.get("digest"),
+                ttl_seconds=payload.get("ttlSeconds"),
+                operation=operation,
+            ),
+            "cancel": lambda: work.cancel(
+                project_id, request_id, operation=operation
+            ),
+            "confirm-cancelled": lambda: work.confirm_cancelled(
+                project_id, request_id, operation=operation
+            ),
+            "retry": lambda: work.retry(
+                project_id, request_id, operation=operation
+            ),
+            "reject": lambda: work.reject(
+                project_id, request_id, operation=operation
+            ),
+            "claim": lambda: work.claim(
+                request_id,
+                principal=principal,
+                lease_seconds=payload.get("leaseSeconds"),
+                operation=operation,
+            ),
+            "heartbeat": lambda: work.heartbeat(
+                request_id,
+                attempt_id=payload.get("attemptId"),
+                lease_id=payload.get("leaseId"),
+                sequence=payload.get("sequence"),
+                progress=payload.get("progress"),
+                principal=principal,
+                operation=operation,
+            ),
+            "result": lambda: work.submit_result(
+                request_id,
+                attempt_id=payload.get("attemptId"),
+                lease_id=payload.get("leaseId"),
+                sequence=payload.get("sequence"),
+                result=payload.get("result"),
+                principal=principal,
+                operation=operation,
+            ),
+            "fail": lambda: work.fail_attempt(
                 request_id,
                 attempt_id=payload.get("attemptId"),
                 lease_id=payload.get("leaseId"),
@@ -1195,8 +1191,9 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
                 reason=payload.get("reason"),
                 principal=principal,
                 operation=operation,
-            )
-        )
+            ),
+        }
+        self._send_mutation(handlers[verb]())
 
     def _serve_canvas_read(
         self,
@@ -1277,91 +1274,85 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
         self._authorize_project(principal, project_id, "write")
         payload = self._read_json_body()
         operation = self._operation(payload)
-        if verb == "commands":
-            self._send_mutation(
-                canvases.run_commands(
-                    project_id,
-                    canvas_id,
-                    commands=payload.get("commands"),
-                    operation=operation,
-                )
-            )
-            return
-        if verb == "undo":
-            self._send_mutation(
-                canvases.undo(project_id, canvas_id, operation=operation)
-            )
-            return
-        if verb == "redo":
-            self._send_mutation(
-                canvases.redo(project_id, canvas_id, operation=operation)
-            )
-            return
-        if verb == "rename":
-            self._send_mutation(
-                canvases.rename(
-                    project_id, canvas_id, name=payload.get("name"), operation=operation
-                )
-            )
-            return
-        if verb == "snapshots":
-            self._send_mutation(
-                orchestration.create_snapshot(
-                    project_id,
-                    canvas_id,
-                    board_id=payload.get("boardId"),
-                    note=payload.get("note"),
-                    operation=operation,
-                )
-            )
-            return
-        if verb == "compare":
-            outcome = orchestration.compare(
+        handlers = {
+            "commands": lambda: canvases.run_commands(
                 project_id,
                 canvas_id,
-                left=payload.get("left"),
-                right=payload.get("right"),
+                commands=payload.get("commands"),
                 operation=operation,
-            )
-            outcome["result"] = self._attach_preview_urls(outcome["result"])
-            self._send_mutation(outcome)
-            return
-        if verb == "contexts":
-            self._send_mutation(
-                orchestration.build_context(
-                    project_id,
-                    canvas_id,
-                    selection_id=payload.get("selectionId"),
-                    board_id=payload.get("boardId"),
-                    node_ids=payload.get("nodeIds"),
-                    revision_ids=payload.get("revisionIds"),
-                    file_paths=payload.get("filePaths"),
-                    operation=operation,
-                )
-            )
-            return
-        if verb == "confirm":
-            selection_id = payload.get("selectionId")
-            if not isinstance(selection_id, str) or not selection_id:
-                raise _Rejection(INVALID_INPUT)
-            self._send_mutation(
-                orchestration.confirm_context(
-                    project_id,
-                    canvas_id,
-                    selection_id,
-                    digest=payload.get("digest"),
-                    operation=operation,
-                )
-            )
-            return
-        self._send_mutation(
-            canvases.fork(
+            ),
+            "undo": lambda: canvases.undo(
+                project_id, canvas_id, operation=operation
+            ),
+            "redo": lambda: canvases.redo(
+                project_id, canvas_id, operation=operation
+            ),
+            "rename": lambda: canvases.rename(
+                project_id,
+                canvas_id,
+                name=payload.get("name"),
+                operation=operation,
+            ),
+            "fork": lambda: canvases.fork(
                 project_id,
                 canvas_id,
                 name=payload.get("name"),
                 document=payload.get("document"),
                 operation=operation,
-            )
+            ),
+            "snapshots": lambda: orchestration.create_snapshot(
+                project_id,
+                canvas_id,
+                board_id=payload.get("boardId"),
+                note=payload.get("note"),
+                operation=operation,
+            ),
+            "compare": lambda: self._with_preview_urls(
+                orchestration.compare(
+                    project_id,
+                    canvas_id,
+                    left=payload.get("left"),
+                    right=payload.get("right"),
+                    operation=operation,
+                )
+            ),
+            "contexts": lambda: orchestration.build_context(
+                project_id,
+                canvas_id,
+                selection_id=payload.get("selectionId"),
+                board_id=payload.get("boardId"),
+                node_ids=payload.get("nodeIds"),
+                revision_ids=payload.get("revisionIds"),
+                file_paths=payload.get("filePaths"),
+                operation=operation,
+            ),
+            "confirm": lambda: self._canvas_confirm(
+                orchestration, project_id, canvas_id, payload, operation
+            ),
+        }
+        self._send_mutation(handlers[verb]())
+
+    def _with_preview_urls(self, outcome: dict) -> dict:
+        outcome["result"] = self._attach_preview_urls(outcome["result"])
+        return outcome
+
+    def _canvas_confirm(
+        self,
+        orchestration: OrchestrationService,
+        project_id: str,
+        canvas_id: str,
+        payload: dict,
+        operation: Operation,
+    ) -> dict:
+        selection_id = payload.get("selectionId")
+        if not isinstance(selection_id, str) or not selection_id:
+            raise _Rejection(INVALID_INPUT)
+        return orchestration.confirm_context(
+            project_id,
+            canvas_id,
+            selection_id,
+            digest=payload.get("digest"),
+            operation=operation,
         )
 
     def _serve_document_view(
@@ -1425,34 +1416,27 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             self._method_not_allowed(WRITE_METHODS_HEADER)
         payload = self._read_json_body()
         operation = self._operation(payload)
-        if verb == "apply":
-            self._send_mutation(
-                proposals.apply(
-                    project_id,
-                    proposal_id,
-                    digest=payload.get("digest"),
-                    operation=operation,
-                )
-            )
-            return
-        if verb == "recover":
-            self._send_mutation(
-                proposals.recover(
-                    project_id,
-                    proposal_id,
-                    mode=payload.get("mode"),
-                    operation=operation,
-                )
-            )
-            return
-        if verb == "revert":
-            self._send_mutation(
-                proposals.revert(project_id, proposal_id, operation=operation)
-            )
-            return
-        self._send_mutation(
-            proposals.reject(project_id, proposal_id, operation=operation)
-        )
+        handlers = {
+            "apply": lambda: proposals.apply(
+                project_id,
+                proposal_id,
+                digest=payload.get("digest"),
+                operation=operation,
+            ),
+            "recover": lambda: proposals.recover(
+                project_id,
+                proposal_id,
+                mode=payload.get("mode"),
+                operation=operation,
+            ),
+            "revert": lambda: proposals.revert(
+                project_id, proposal_id, operation=operation
+            ),
+            "reject": lambda: proposals.reject(
+                project_id, proposal_id, operation=operation
+            ),
+        }
+        self._send_mutation(handlers[verb]())
 
     def _serve_asset_verb(
         self,
@@ -1510,196 +1494,168 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
         self._authorize_project(principal, project_id, "write")
         payload = self._read_json_body()
         operation = self._operation(payload)
-        if verb == "publish":
-            self._send_mutation(
-                assets.publish_revision(project_id, asset_id, operation=operation)
-            )
-            return
-        if verb == "preview-enable":
-            self._send_mutation(
-                assets.enable_dynamic_preview(
-                    project_id, asset_id, operation=operation
-                )
-            )
-            return
-        if verb == "refresh-draft":
-            self._send_mutation(
-                assets.refresh_draft(project_id, asset_id, operation=operation)
-            )
-            return
-        if verb == "tokens-update":
-            self._send_mutation(
-                design_system.update_tokens(
-                    project_id,
-                    asset_id,
-                    document=payload.get("document"),
-                    operation=operation,
-                )
-            )
-            return
-        if verb == "tokens-publish":
-            self._send_mutation(
-                design_system.publish(project_id, asset_id, operation=operation)
-            )
-            return
-        if verb == "propose-baseline":
-            self._send_mutation(
-                design_system.propose_baseline(
-                    project_id,
-                    asset_id,
-                    path=payload.get("path"),
-                    operation=operation,
-                )
-            )
-            return
-        if verb in ("archive", "unarchive", "trash", "restore", "hard-delete"):
-            if verb == "archive":
-                self._send_mutation(
-                    lifecycle.archive(project_id, asset_id, operation=operation)
-                )
-                return
-            if verb == "unarchive":
-                self._send_mutation(
-                    lifecycle.unarchive(project_id, asset_id, operation=operation)
-                )
-                return
-            if verb == "trash":
-                self._send_mutation(
-                    lifecycle.trash(project_id, asset_id, operation=operation)
-                )
-                return
-            if verb == "restore":
-                self._send_mutation(
-                    lifecycle.restore(
-                        project_id, asset_id, name=payload.get("name"),
-                        operation=operation,
-                    )
-                )
-                return
-            self._send_mutation(
-                lifecycle.hard_delete(
-                    project_id, asset_id, confirm=payload.get("confirm"),
-                    operation=operation,
-                )
-            )
-            return
-        if verb == "publish-verified":
-            self._send_mutation(
-                owners.publish_verified(
-                    project_id,
-                    asset_id,
-                    run_id=payload.get("runId"),
-                    object_id=payload.get("objectId"),
-                    role=payload.get("role") or "owner-verified",
-                    operation=operation,
-                )
-            )
-            return
-        if verb == "component-update":
-            self._send_mutation(
-                components.update_definition(
-                    project_id,
-                    asset_id,
-                    definition=payload.get("definition"),
-                    operation=operation,
-                )
-            )
-            return
-        if verb == "component-publish":
-            self._send_mutation(
-                components.publish(project_id, asset_id, operation=operation)
-            )
-            return
-        if verb == "page-update":
-            self._send_mutation(
-                components.update_layout(
-                    project_id,
-                    asset_id,
-                    layout=payload.get("layout"),
-                    operation=operation,
-                )
-            )
-            return
-        if verb == "page-publish":
-            self._send_mutation(
-                components.publish_page(project_id, asset_id, operation=operation)
-            )
-            return
-        if verb == "distill-candidate":
-            source_page_id = payload.get("sourcePageAssetId")
-            if not isinstance(source_page_id, str) or not source_page_id:
-                raise _Rejection(INVALID_INPUT)
-            self._send_mutation(
-                components.distill_candidate(
-                    project_id,
-                    source_page_id,
-                    node_ids=payload.get("nodeIds"),
-                    name=payload.get("name"),
-                    operation=operation,
-                )
-            )
-            return
-        if verb == "publish-with-deps":
-            self._send_mutation(
-                reuse.publish_with_dependencies(
-                    project_id,
-                    asset_id,
-                    dependencies=payload.get("dependencies"),
-                    operation=operation,
-                )
-            )
-            return
-        if verb in ("derive", "copy", "reference"):
-            self._send_mutation(
-                reuse.derive_or_copy(
-                    project_id,
-                    asset_id,
-                    mode=verb,
-                    name=payload.get("name"),
-                    operation=operation,
-                )
-            )
-            return
-        if verb == "import-closure":
-            source_asset_id = payload.get("sourceAssetId") or asset_id
-            source_revision_id = payload.get("sourceRevisionId")
-            target_project_id = payload.get("targetProjectId")
-            mode = payload.get("mode")
-            if not isinstance(target_project_id, str) or not target_project_id:
-                raise _Rejection(INVALID_INPUT)
-            # The source must be readable *and* the target writable: a
-            # closure import touches two projects.
-            self._authorize_project(principal, target_project_id, "write")
-            self._send_mutation(
-                reuse.import_closure(
-                    project_id,
-                    source_asset_id=source_asset_id,
-                    source_revision_id=source_revision_id,
-                    mode=mode or "copy",
-                    target_project_id=target_project_id,
-                    operation=operation,
-                )
-            )
-            return
-        if verb == "upgrade":
-            self._send_mutation(
-                reuse.upgrade_instances(
-                    project_id,
-                    asset_id,
-                    instance_ids=payload.get("instanceIds"),
-                    to_revision_id=payload.get("toRevisionId"),
-                    operation=operation,
-                )
-            )
-            return
-        self._send_mutation(
-            reuse.rollback_instances(
+        handlers = {
+            "publish": lambda: assets.publish_revision(
+                project_id, asset_id, operation=operation
+            ),
+            "preview-enable": lambda: assets.enable_dynamic_preview(
+                project_id, asset_id, operation=operation
+            ),
+            "refresh-draft": lambda: assets.refresh_draft(
+                project_id, asset_id, operation=operation
+            ),
+            "tokens-update": lambda: design_system.update_tokens(
+                project_id,
+                asset_id,
+                document=payload.get("document"),
+                operation=operation,
+            ),
+            "tokens-publish": lambda: design_system.publish(
+                project_id, asset_id, operation=operation
+            ),
+            "propose-baseline": lambda: design_system.propose_baseline(
+                project_id,
+                asset_id,
+                path=payload.get("path"),
+                operation=operation,
+            ),
+            "archive": lambda: lifecycle.archive(
+                project_id, asset_id, operation=operation
+            ),
+            "unarchive": lambda: lifecycle.unarchive(
+                project_id, asset_id, operation=operation
+            ),
+            "trash": lambda: lifecycle.trash(
+                project_id, asset_id, operation=operation
+            ),
+            "restore": lambda: lifecycle.restore(
+                project_id,
+                asset_id,
+                name=payload.get("name"),
+                operation=operation,
+            ),
+            "hard-delete": lambda: lifecycle.hard_delete(
+                project_id,
+                asset_id,
+                confirm=payload.get("confirm"),
+                operation=operation,
+            ),
+            "publish-verified": lambda: owners.publish_verified(
+                project_id,
+                asset_id,
+                run_id=payload.get("runId"),
+                object_id=payload.get("objectId"),
+                role=payload.get("role") or "owner-verified",
+                operation=operation,
+            ),
+            "component-update": lambda: components.update_definition(
+                project_id,
+                asset_id,
+                definition=payload.get("definition"),
+                operation=operation,
+            ),
+            "component-publish": lambda: components.publish(
+                project_id, asset_id, operation=operation
+            ),
+            "page-update": lambda: components.update_layout(
+                project_id,
+                asset_id,
+                layout=payload.get("layout"),
+                operation=operation,
+            ),
+            "page-publish": lambda: components.publish_page(
+                project_id, asset_id, operation=operation
+            ),
+            "distill-candidate": lambda: self._asset_distill_candidate(
+                components, project_id, payload, operation
+            ),
+            "publish-with-deps": lambda: reuse.publish_with_dependencies(
+                project_id,
+                asset_id,
+                dependencies=payload.get("dependencies"),
+                operation=operation,
+            ),
+            "derive": lambda: reuse.derive_or_copy(
+                project_id,
+                asset_id,
+                mode="derive",
+                name=payload.get("name"),
+                operation=operation,
+            ),
+            "copy": lambda: reuse.derive_or_copy(
+                project_id,
+                asset_id,
+                mode="copy",
+                name=payload.get("name"),
+                operation=operation,
+            ),
+            "reference": lambda: reuse.derive_or_copy(
+                project_id,
+                asset_id,
+                mode="reference",
+                name=payload.get("name"),
+                operation=operation,
+            ),
+            "import-closure": lambda: self._asset_import_closure(
+                reuse, principal, project_id, asset_id, payload, operation
+            ),
+            "upgrade": lambda: reuse.upgrade_instances(
                 project_id,
                 asset_id,
                 instance_ids=payload.get("instanceIds"),
                 to_revision_id=payload.get("toRevisionId"),
                 operation=operation,
-            )
+            ),
+            "rollback": lambda: reuse.rollback_instances(
+                project_id,
+                asset_id,
+                instance_ids=payload.get("instanceIds"),
+                to_revision_id=payload.get("toRevisionId"),
+                operation=operation,
+            ),
+        }
+        self._send_mutation(handlers[verb]())
+
+    def _asset_distill_candidate(
+        self,
+        components: ComponentService,
+        project_id: str,
+        payload: dict,
+        operation: Operation,
+    ) -> dict:
+        source_page_id = payload.get("sourcePageAssetId")
+        if not isinstance(source_page_id, str) or not source_page_id:
+            raise _Rejection(INVALID_INPUT)
+        return components.distill_candidate(
+            project_id,
+            source_page_id,
+            node_ids=payload.get("nodeIds"),
+            name=payload.get("name"),
+            operation=operation,
+        )
+
+    def _asset_import_closure(
+        self,
+        reuse: ReuseService,
+        principal: Principal,
+        project_id: str,
+        asset_id: str,
+        payload: dict,
+        operation: Operation,
+    ) -> dict:
+        target_project_id = payload.get("targetProjectId")
+        if not isinstance(target_project_id, str) or not target_project_id:
+            raise _Rejection(INVALID_INPUT)
+        # The source must be readable *and* the target writable: a closure
+        # import touches two projects.
+        self._authorize_project(principal, target_project_id, "write")
+        return reuse.import_closure(
+            project_id,
+            source_asset_id=payload.get("sourceAssetId") or asset_id,
+            source_revision_id=payload.get("sourceRevisionId"),
+            mode=payload.get("mode") or "copy",
+            target_project_id=target_project_id,
+            operation=operation,
         )
 
     def _serve_action(
@@ -1731,19 +1687,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             # Only the maintainer's own session administers a project.
             self._require_browser(principal)
             self._authorize_project(principal, project_id, "write")
-        elif action in (
-            "instances",
-            "components",
-            "pages",
-            "canvases",
-            "requests",
-            "imports",
-            "confirmations",
-            "backflow",
-            "project-archive",
-            "project-unarchive",
-            "notes-propose",
-        ):
+        elif action in _MAINTAINER_ONLY_ACTIONS:
             # Authoring, import curation, work-request handoff, owner
             # confirmation/backflow and project archival are maintainer-only
             # mutations. An Agent capability with project write scope must
@@ -1754,174 +1698,126 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             self._method_not_allowed(WRITE_METHODS_HEADER)
         payload = self._read_json_body()
         operation = self._operation(payload)
-        if action == "open":
-            self._authorize_project(principal, project_id, "read")
-            self._send_mutation(service.open_project(project_id, operation=operation))
-            return
-        if action == "rename":
-            self._send_mutation(
-                service.rename_project(
-                    project_id, name=payload.get("name"), operation=operation
-                )
-            )
-            return
-        if action == "rebind":
-            self._send_mutation(
-                service.rebind_project(
-                    project_id,
-                    path=payload.get("path"),
-                    candidate_id=payload.get("candidateId"),
-                    operation=operation,
-                )
-            )
-            return
-        if action == "grants":
-            self._send_mutation(
-                service.set_grants(
-                    project_id, scopes=payload.get("scopes"), operation=operation
-                )
-            )
-            return
-        if action == "remove":
-            self._send_mutation(service.remove_project(project_id, operation=operation))
-            return
-        if action == "delete-data":
-            # R13: the explicit second act after unregistration.
-            self._send_mutation(
-                service.delete_project_data(project_id, operation=operation)
-            )
-            return
-        if action == "instances":
-            self._send_mutation(
-                reuse.create_instance(
-                    project_id,
-                    payload.get("assetId"),
-                    revision_id=payload.get("revisionId"),
-                    overrides=payload.get("overrides"),
-                    operation=operation,
-                )
-            )
-            return
-        if action == "notes-propose":
-            # R07: the design notes are a repository file, so editing them is
-            # an ordinary proposal against that file, not a direct write.
-            outcome = design_system.propose_notes(
+        handlers = {
+            "open": lambda: self._action_open(
+                service, principal, project_id, operation
+            ),
+            "rename": lambda: service.rename_project(
+                project_id, name=payload.get("name"), operation=operation
+            ),
+            "rebind": lambda: service.rebind_project(
                 project_id,
                 path=payload.get("path"),
-                text=payload.get("text"),
+                candidate_id=payload.get("candidateId"),
                 operation=operation,
-            )
-            self._send_mutation(
-                {"result": outcome, "counter": None, "replayed": False}
-            )
-            return
-        if action == "proposals":
-            # An Agent holding a write capability may submit a proposal;
-            # approval stays with the maintainer (handled above).
-            self._send_mutation(
-                proposals.create(
+            ),
+            "grants": lambda: service.set_grants(
+                project_id, scopes=payload.get("scopes"), operation=operation
+            ),
+            "remove": lambda: service.remove_project(
+                project_id, operation=operation
+            ),
+            "delete-data": lambda: service.delete_project_data(
+                project_id, operation=operation
+            ),
+            "instances": lambda: reuse.create_instance(
+                project_id,
+                payload.get("assetId"),
+                revision_id=payload.get("revisionId"),
+                overrides=payload.get("overrides"),
+                operation=operation,
+            ),
+            "components": lambda: components.create_component(
+                project_id,
+                name=payload.get("name"),
+                definition=payload.get("definition"),
+                operation=operation,
+            ),
+            "pages": lambda: components.create_page(
+                project_id,
+                name=payload.get("name"),
+                layout=payload.get("layout"),
+                operation=operation,
+            ),
+            "canvases": lambda: canvases.create(
+                project_id,
+                name=payload.get("name"),
+                document=payload.get("document"),
+                operation=operation,
+            ),
+            "requests": lambda: work.create(
+                project_id,
+                title=payload.get("title"),
+                goal=payload.get("goal"),
+                target_stack=payload.get("targetStack"),
+                plan=payload.get("plan"),
+                allowed_actions=payload.get("allowedActions"),
+                result_schema=payload.get("resultSchema"),
+                context_selection_id=payload.get("contextSelectionId"),
+                expires_in_seconds=payload.get("expiresInSeconds"),
+                operation=operation,
+            ),
+            "imports": lambda: assets.import_selection(
+                project_id,
+                selections=payload.get("selections"),
+                operation=operation,
+            ),
+            "confirmations": lambda: owners.confirm(
+                project_id,
+                run_id=payload.get("runId"),
+                object_type=payload.get("objectType"),
+                object_id=payload.get("objectId"),
+                source_hash=payload.get("sourceHash"),
+                role=payload.get("role"),
+                note=payload.get("note"),
+                operation=operation,
+            ),
+            "backflow": lambda: owners.backflow_candidate(
+                project_id,
+                run_id=payload.get("runId"),
+                object_type=payload.get("objectType") or "criterion",
+                object_id=payload.get("objectId"),
+                name=payload.get("name"),
+                operation=operation,
+            ),
+            "project-archive": lambda: lifecycle.archive_project(
+                project_id, archived=True, operation=operation
+            ),
+            "project-unarchive": lambda: lifecycle.archive_project(
+                project_id, archived=False, operation=operation
+            ),
+            "notes-propose": lambda: {
+                "result": design_system.propose_notes(
                     project_id,
-                    changes=payload.get("changes"),
-                    summary=payload.get("summary"),
-                    dependency_changes=payload.get("dependencyChanges"),
+                    path=payload.get("path"),
+                    text=payload.get("text"),
                     operation=operation,
-                )
-            )
-            return
-        if action == "components":
-            self._send_mutation(
-                components.create_component(
-                    project_id,
-                    name=payload.get("name"),
-                    definition=payload.get("definition"),
-                    operation=operation,
-                )
-            )
-            return
-        if action in ("project-archive", "project-unarchive"):
-            self._require_browser(principal)
-            self._send_mutation(
-                lifecycle.archive_project(
-                    project_id,
-                    archived=action == "project-archive",
-                    operation=operation,
-                )
-            )
-            return
-        if action == "confirmations":
-            self._require_browser(principal)
-            self._send_mutation(
-                owners.confirm(
-                    project_id,
-                    run_id=payload.get("runId"),
-                    object_type=payload.get("objectType"),
-                    object_id=payload.get("objectId"),
-                    source_hash=payload.get("sourceHash"),
-                    role=payload.get("role"),
-                    note=payload.get("note"),
-                    operation=operation,
-                )
-            )
-            return
-        if action == "backflow":
-            self._require_browser(principal)
-            self._send_mutation(
-                owners.backflow_candidate(
-                    project_id,
-                    run_id=payload.get("runId"),
-                    object_type=payload.get("objectType") or "criterion",
-                    object_id=payload.get("objectId"),
-                    name=payload.get("name"),
-                    operation=operation,
-                )
-            )
-            return
-        if action == "requests":
-            self._send_mutation(
-                work.create(
-                    project_id,
-                    title=payload.get("title"),
-                    goal=payload.get("goal"),
-                    target_stack=payload.get("targetStack"),
-                    plan=payload.get("plan"),
-                    allowed_actions=payload.get("allowedActions"),
-                    result_schema=payload.get("resultSchema"),
-                    context_selection_id=payload.get("contextSelectionId"),
-                    expires_in_seconds=payload.get("expiresInSeconds"),
-                    operation=operation,
-                )
-            )
-            return
-        if action == "canvases":
-            self._send_mutation(
-                canvases.create(
-                    project_id,
-                    name=payload.get("name"),
-                    document=payload.get("document"),
-                    operation=operation,
-                )
-            )
-            return
-        if action == "pages":
-            self._send_mutation(
-                components.create_page(
-                    project_id,
-                    name=payload.get("name"),
-                    layout=payload.get("layout"),
-                    operation=operation,
-                )
-            )
-            return
-        if action == "imports":
-            self._send_mutation(
-                assets.import_selection(
-                    project_id,
-                    selections=payload.get("selections"),
-                    operation=operation,
-                )
-            )
-            return
-        raise _Rejection(ROUTE_NOT_FOUND)
+                ),
+                "counter": None,
+                "replayed": False,
+            },
+            "proposals": lambda: proposals.create(
+                project_id,
+                changes=payload.get("changes"),
+                summary=payload.get("summary"),
+                dependency_changes=payload.get("dependencyChanges"),
+                operation=operation,
+            ),
+        }
+        handler = handlers.get(action)
+        if handler is None:
+            raise _Rejection(ROUTE_NOT_FOUND)
+        self._send_mutation(handler())
+
+    def _action_open(
+        self,
+        service: WorkbenchService,
+        principal: Principal,
+        project_id: str,
+        operation: Operation,
+    ) -> dict:
+        self._authorize_project(principal, project_id, "read")
+        return service.open_project(project_id, operation=operation)
 
     def _operation(self, payload: dict) -> Operation:
         operation = validate_operation(payload.get("operation"))
