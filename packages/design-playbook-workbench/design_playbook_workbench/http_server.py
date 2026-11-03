@@ -139,6 +139,69 @@ _FIXED_ROUTES = (
 )
 
 
+#: A quoted id anywhere in a project path: matched, never captured.
+_ANY = object()
+#: The one segment the previous router let through empty (``.../actions/``).
+_ANY_OR_EMPTY = object()
+
+_TOKEN_VIEWS = frozenset({"document", "validation", "preview", "diff", "affected"})
+_DOCUMENT_VIEWS = frozenset({"component", "page", "instance"})
+
+
+def _matches(parts: tuple[object, ...], segments: list[str]) -> bool:
+    if len(parts) != len(segments):
+        return False
+    for part, segment in zip(parts, segments):
+        if part is _ANY_OR_EMPTY:
+            continue
+        if not segment:
+            return False
+        if isinstance(part, str):
+            if segment != part:
+                return False
+        elif isinstance(part, frozenset) and segment not in part:
+            return False
+    return True
+
+
+_PROJECT_ROUTES = (
+    ((_ANY,), "_route_project_detail"),
+    ((_ANY, "proposals"), "_route_proposals_list"),
+    ((_ANY, "assets"), "_route_assets_list"),
+    ((_ANY, "instances"), "_route_instances_list"),
+    ((_ANY, "canvases"), "_route_canvases_list"),
+    ((_ANY, "requests"), "_route_requests_list"),
+    ((_ANY, "runs"), "_route_runs_list"),
+    ((_ANY, "confirmations"), "_route_confirmations_list"),
+    ((_ANY, "lifecycle"), "_route_lifecycle_list"),
+    ((_ANY, "archive-overview"), "_route_archive_overview"),
+    ((_ANY, "deletion-impact"), "_route_deletion_impact"),
+    ((_ANY, "actions", _ANY_OR_EMPTY), "_route_action"),
+    ((_ANY, "runs", _ANY), "_route_run"),
+    ((_ANY, "runs", _ANY, "freshness"), "_route_run_freshness"),
+    ((_ANY, "requests", _ANY), "_route_request_detail"),
+    ((_ANY, "proposals", _ANY), "_route_proposal_detail"),
+    ((_ANY, "assets", _ANY), "_route_asset_detail"),
+    ((_ANY, "canvases", _ANY), "_route_canvas_detail"),
+    ((_ANY, "canvases", _ANY, "snapshot"), "_route_canvas_snapshot"),
+    ((_ANY, "canvases", _ANY, "snapshots"), "_route_snapshots"),
+    ((_ANY, "canvases", _ANY, "contexts"), "_route_contexts"),
+    ((_ANY, "canvases", _ANY, "snapshots", _ANY), "_route_snapshot"),
+    ((_ANY, "canvases", _ANY, "contexts", _ANY), "_route_context"),
+    ((_ANY, "assets", _ANY, "preview"), "_route_asset_preview"),
+    ((_ANY, "assets", _ANY, "history"), "_route_asset_history"),
+    ((_ANY, "assets", _ANY, "upgrade-plan"), "_route_asset_upgrade_plan"),
+    ((_ANY, "assets", _ANY, "reuse-plan"), "_route_asset_reuse_plan"),
+    ((_ANY, "assets", _ANY, "references"), "_route_asset_references"),
+    ((_ANY, "assets", _ANY, "tokens", _TOKEN_VIEWS), "_route_token_view"),
+    ((_ANY, "assets", _ANY, "document", _DOCUMENT_VIEWS), "_route_document_view"),
+    ((_ANY, "actions", "proposals", _ANY, _ANY), "_route_proposal_verb"),
+    ((_ANY, "actions", "assets", _ANY, _ANY), "_route_asset_verb"),
+    ((_ANY, "actions", "canvases", _ANY, _ANY), "_route_canvas_verb"),
+    ((_ANY, "actions", "requests", _ANY, _ANY), "_route_request_verb"),
+)
+
+
 class _Rejection(Exception):
     """Internal control flow: nothing is sent until the handler decides."""
 
@@ -352,22 +415,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             handlers[route.handler]()
             return
         if path.startswith(PROJECTS_PREFIX):
-            self._serve_project_route(
-                service,
-                proposals,
-                assets,
-                reuse,
-                design_system,
-                components,
-                canvases,
-                orchestration,
-                work,
-                owners,
-                lifecycle,
-                principal,
-                path,
-                split.query,
-            )
+            self._serve_project_route(principal, path, split.query)
             return
         self._drain_body()
         raise _Rejection(ROUTE_NOT_FOUND)
@@ -472,20 +520,16 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
         if set(payload) - {"bootstrap"}:
             raise _Rejection(INVALID_INPUT)
         receipt = self.server.session.exchange_bootstrap(payload.get("bootstrap"))
-        self._send_json(200, {"schemaVersion": SCHEMA_VERSION, **receipt})
+        self._respond(receipt)
 
     def _serve_status(self, session: WorkbenchSession) -> None:
         self._drain_body()
-        payload = {
-            "schemaVersion": SCHEMA_VERSION,
-            "service": "design-playbook-workbench",
-            **session.receipt(),
-        }
+        payload = {"service": "design-playbook-workbench", **session.receipt()}
         # R14: the startup check reports missing referenced content here. It
         # is a fact for the maintainer, not a reason to refuse to serve.
         if self.server.blob_integrity is not None:
             payload["blobIntegrity"] = self.server.blob_integrity
-        self._send_json(200, payload, close=True)
+        self._respond(payload, close=True)
 
     def _serve_backup(self, backup: "BackupService") -> None:
         """Backup, verify, and restore are maintainer-only settings actions."""
@@ -495,10 +539,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             self._drain_body()
             if set(params) - {"path"}:
                 raise _Rejection(INVALID_INPUT)
-            self._send_json(
-                200,
-                {"schemaVersion": SCHEMA_VERSION, **backup.verify(params.get("path"))},
-            )
+            self._respond(backup.verify(params.get("path")))
             return
         if self.command != "POST":
             self._method_not_allowed(WRITE_METHODS_HEADER)
@@ -553,15 +594,13 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             # path-based resolution must not become a scope bypass.
             if payload["project"]["projectId"] != principal.project_id:
                 raise _Rejection(UNAUTHORIZED)
-        self._send_json(200, {"schemaVersion": SCHEMA_VERSION, **payload})
+        self._respond(payload)
 
     def _serve_project_list(self, service: WorkbenchService, query: str) -> None:
         if query:
             raise _Rejection(INVALID_INPUT)
         self._drain_body()
-        self._send_json(
-            200, {"schemaVersion": SCHEMA_VERSION, **service.projects_overview()}
-        )
+        self._respond(service.projects_overview())
 
     def _serve_probe(self, service: WorkbenchService) -> None:
         payload = self._read_json_body()
@@ -571,9 +610,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
         candidate = service.probe_folder(
             payload.get("path"), exclude_project_id=exclude
         )
-        self._send_json(
-            200, {"schemaVersion": SCHEMA_VERSION, "candidate": candidate.as_payload()}
-        )
+        self._respond({"candidate": candidate.as_payload()})
 
     def _serve_register(self, service: WorkbenchService) -> None:
         payload = self._read_json_body()
@@ -587,233 +624,169 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
         self._send_mutation(outcome)
 
     def _serve_project_route(
-        self,
-        service: WorkbenchService,
-        proposals: ProposalService,
-        assets: AssetService,
-        reuse: ReuseService,
-        design_system: DesignSystemService,
-        components: ComponentService,
-        canvases: CanvasService,
-        orchestration: OrchestrationService,
-        work: WorkRequestService,
-        owners: OwnerProjectionService,
-        lifecycle: LifecycleService,
-        principal: Principal,
-        path: str,
-        query: str,
+        self, principal: Principal, path: str, query: str
     ) -> None:
         segments = path[len(PROJECTS_PREFIX):].split("/")
-        if len(segments) == 1 and segments[0]:
-            self._require_method(is_read_method(self.command))
-            self._authorize_project(principal, segments[0], "read")
-            if query:
-                raise _Rejection(INVALID_INPUT)
-            self._drain_body()
-            self._send_json(
-                200,
-                {
-                    "schemaVersion": SCHEMA_VERSION,
-                    "project": service.project_target(segments[0]),
-                },
-            )
-            return
-        if (
-            len(segments) == 2
-            and segments[0]
-            and segments[1]
-            in (
-                "proposals",
-                "assets",
-                "instances",
-                "canvases",
-                "requests",
-                "runs",
-                "confirmations",
-                "lifecycle",
-                "archive-overview",
-                "deletion-impact",
-            )
-        ):
-            self._require_method(is_read_method(self.command))
-            self._authorize_project(principal, segments[0], "read")
-            self._drain_body()
-            if segments[1] == "runs":
-                if query:
-                    raise _Rejection(INVALID_INPUT)
-                self._send_json(
-                    200,
-                    {
-                        "schemaVersion": SCHEMA_VERSION,
-                        **owners.list_runs(segments[0]),
-                    },
-                )
+        for parts, handler in _PROJECT_ROUTES:
+            if _matches(parts, segments):
+                getattr(self, handler)(segments, query, principal)
                 return
-            if segments[1] == "lifecycle":
-                params = dict(parse_qsl(query, keep_blank_values=True))
-                if set(params) - {"lifecycle"}:
-                    raise _Rejection(INVALID_INPUT)
-                self._send_json(
-                    200,
-                    {
-                        "schemaVersion": SCHEMA_VERSION,
-                        **lifecycle.browse(
-                            segments[0], lifecycle=params.get("lifecycle")
-                        ),
-                    },
-                )
-                return
-            if segments[1] == "archive-overview":
-                if query:
-                    raise _Rejection(INVALID_INPUT)
-                self._send_json(
-                    200,
-                    {
-                        "schemaVersion": SCHEMA_VERSION,
-                        **lifecycle.archive_overview(
-                            segments[0],
-                            canvases=canvases,
-                            proposals=proposals,
-                            owners=owners,
-                        ),
-                    },
-                )
-                return
-            if segments[1] == "deletion-impact":
-                if query:
-                    raise _Rejection(INVALID_INPUT)
-                self._send_json(
-                    200,
-                    {
-                        "schemaVersion": SCHEMA_VERSION,
-                        **lifecycle.project_deletion_impact(segments[0]),
-                    },
-                )
-                return
-            if segments[1] == "confirmations":
-                if query:
-                    raise _Rejection(INVALID_INPUT)
-                self._send_json(
-                    200,
-                    {
-                        "schemaVersion": SCHEMA_VERSION,
-                        **owners.list_confirmations(segments[0]),
-                    },
-                )
-                return
-            if segments[1] == "requests":
-                if query:
-                    raise _Rejection(INVALID_INPUT)
-                self._send_json(
-                    200,
-                    {
-                        "schemaVersion": SCHEMA_VERSION,
-                        **work.list_for_project(segments[0]),
-                    },
-                )
-                return
-            if segments[1] == "proposals":
-                if query:
-                    raise _Rejection(INVALID_INPUT)
-                self._send_json(
-                    200,
-                    {
-                        "schemaVersion": SCHEMA_VERSION,
-                        **proposals.list_for_project(segments[0]),
-                    },
-                )
-                return
-            if segments[1] == "canvases":
-                if query:
-                    raise _Rejection(INVALID_INPUT)
-                self._send_json(
-                    200,
-                    {
-                        "schemaVersion": SCHEMA_VERSION,
-                        **canvases.list_for_project(segments[0]),
-                    },
-                )
-                return
-            if segments[1] == "instances":
-                if query:
-                    raise _Rejection(INVALID_INPUT)
-                self._send_json(
-                    200,
-                    {
-                        "schemaVersion": SCHEMA_VERSION,
-                        **reuse.list_instances(segments[0]),
-                    },
-                )
-                return
-            params = parse_qsl(query, keep_blank_values=True)
-            allowed = {"query", "kind", "capability", "lifecycle"}
-            if any(name not in allowed for name, _ in params):
-                raise _Rejection(INVALID_INPUT)
-            filters = dict(params)
-            self._send_json(
-                200,
-                {
-                    "schemaVersion": SCHEMA_VERSION,
-                    **assets.list_assets(
-                        segments[0],
-                        query=filters.get("query"),
-                        kind=filters.get("kind"),
-                        capability=filters.get("capability"),
-                        lifecycle=filters.get("lifecycle"),
-                    ),
-                },
-            )
-            return
-        if len(segments) == 3 and segments[0] and segments[1] == "actions":
-            self._serve_action(
-                service,
-                proposals,
-                assets,
-                reuse,
-                design_system,
-                components,
-                canvases,
-                work,
-                owners,
-                lifecycle,
-                principal,
+        self._drain_body()
+        raise _Rejection(ROUTE_NOT_FOUND)
+
+    def _serve_collection(self, principal, project_id, query, loader) -> None:
+        self._require_method(is_read_method(self.command))
+        self._authorize_project(principal, project_id, "read")
+        self._drain_body()
+        if query:
+            raise _Rejection(INVALID_INPUT)
+        self._respond(loader())
+
+    def _route_project_detail(self, segments, query, principal) -> None:
+        self._require_method(is_read_method(self.command))
+        self._authorize_project(principal, segments[0], "read")
+        if query:
+            raise _Rejection(INVALID_INPUT)
+        self._drain_body()
+        self._respond({"project": self.server.service.project_target(segments[0])})
+
+    def _route_proposals_list(self, segments, query, principal) -> None:
+        self._serve_collection(
+            principal,
+            segments[0],
+            query,
+            lambda: self.server.proposals.list_for_project(segments[0]),
+        )
+
+    def _route_instances_list(self, segments, query, principal) -> None:
+        self._serve_collection(
+            principal,
+            segments[0],
+            query,
+            lambda: self.server.reuse.list_instances(segments[0]),
+        )
+
+    def _route_canvases_list(self, segments, query, principal) -> None:
+        self._serve_collection(
+            principal,
+            segments[0],
+            query,
+            lambda: self.server.canvases.list_for_project(segments[0]),
+        )
+
+    def _route_requests_list(self, segments, query, principal) -> None:
+        self._serve_collection(
+            principal,
+            segments[0],
+            query,
+            lambda: self.server.work.list_for_project(segments[0]),
+        )
+
+    def _route_runs_list(self, segments, query, principal) -> None:
+        self._serve_collection(
+            principal,
+            segments[0],
+            query,
+            lambda: self.server.owners.list_runs(segments[0]),
+        )
+
+    def _route_confirmations_list(self, segments, query, principal) -> None:
+        self._serve_collection(
+            principal,
+            segments[0],
+            query,
+            lambda: self.server.owners.list_confirmations(segments[0]),
+        )
+
+    def _route_assets_list(self, segments, query, principal) -> None:
+        self._require_method(is_read_method(self.command))
+        self._authorize_project(principal, segments[0], "read")
+        self._drain_body()
+        params = parse_qsl(query, keep_blank_values=True)
+        allowed = {"query", "kind", "capability", "lifecycle"}
+        if any(name not in allowed for name, _ in params):
+            raise _Rejection(INVALID_INPUT)
+        filters = dict(params)
+        self._respond(
+            self.server.assets.list_assets(
                 segments[0],
-                segments[2],
+                query=filters.get("query"),
+                kind=filters.get("kind"),
+                capability=filters.get("capability"),
+                lifecycle=filters.get("lifecycle"),
             )
-            return
-        if (
-            len(segments) == 3
-            and segments[0]
-            and segments[1] == "runs"
-            and segments[2]
-        ):
-            self._require_method(is_read_method(self.command))
-            self._authorize_project(principal, segments[0], "read")
-            if query:
-                raise _Rejection(INVALID_INPUT)
-            self._drain_body()
-            self._send_json(
-                200,
-                {
-                    "schemaVersion": SCHEMA_VERSION,
-                    **owners.run(segments[0], segments[2]),
-                },
+        )
+
+    def _route_lifecycle_list(self, segments, query, principal) -> None:
+        self._require_method(is_read_method(self.command))
+        self._authorize_project(principal, segments[0], "read")
+        self._drain_body()
+        params = dict(parse_qsl(query, keep_blank_values=True))
+        if set(params) - {"lifecycle"}:
+            raise _Rejection(INVALID_INPUT)
+        self._respond(
+            self.server.lifecycle.browse(
+                segments[0], lifecycle=params.get("lifecycle")
             )
-            return
-        if (
-            len(segments) == 4
-            and segments[0]
-            and segments[1] == "runs"
-            and segments[2]
-            and segments[3] == "freshness"
-        ):
-            self._require_method(is_read_method(self.command))
-            self._authorize_project(principal, segments[0], "read")
-            self._drain_body()
-            params = dict(parse_qsl(query, keep_blank_values=True))
-            if set(params) - {"objectType", "objectId", "sourceHash"}:
-                raise _Rejection(INVALID_INPUT)
-            payload = owners.freshness(
+        )
+
+    def _route_archive_overview(self, segments, query, principal) -> None:
+        self._require_method(is_read_method(self.command))
+        self._authorize_project(principal, segments[0], "read")
+        self._drain_body()
+        if query:
+            raise _Rejection(INVALID_INPUT)
+        self._respond(
+            self.server.lifecycle.archive_overview(
+                segments[0],
+                canvases=self.server.canvases,
+                proposals=self.server.proposals,
+                owners=self.server.owners,
+            )
+        )
+
+    def _route_deletion_impact(self, segments, query, principal) -> None:
+        self._require_method(is_read_method(self.command))
+        self._authorize_project(principal, segments[0], "read")
+        self._drain_body()
+        if query:
+            raise _Rejection(INVALID_INPUT)
+        self._respond(self.server.lifecycle.project_deletion_impact(segments[0]))
+
+    def _route_action(self, segments, query, principal) -> None:
+        self._serve_action(
+            self.server.service,
+            self.server.proposals,
+            self.server.assets,
+            self.server.reuse,
+            self.server.design_system,
+            self.server.components,
+            self.server.canvases,
+            self.server.work,
+            self.server.owners,
+            self.server.lifecycle,
+            principal,
+            segments[0],
+            segments[2],
+        )
+
+    def _route_run(self, segments, query, principal) -> None:
+        self._require_method(is_read_method(self.command))
+        self._authorize_project(principal, segments[0], "read")
+        if query:
+            raise _Rejection(INVALID_INPUT)
+        self._drain_body()
+        self._respond(self.server.owners.run(segments[0], segments[2]))
+
+    def _route_run_freshness(self, segments, query, principal) -> None:
+        self._require_method(is_read_method(self.command))
+        self._authorize_project(principal, segments[0], "read")
+        self._drain_body()
+        params = dict(parse_qsl(query, keep_blank_values=True))
+        if set(params) - {"objectType", "objectId", "sourceHash"}:
+            raise _Rejection(INVALID_INPUT)
+        self._respond(
+            self.server.owners.freshness(
                 segments[0],
                 {
                     "runId": segments[2],
@@ -822,272 +795,240 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
                     "sourceHash": params.get("sourceHash"),
                 },
             )
-            self._send_json(200, {"schemaVersion": SCHEMA_VERSION, **payload})
-            return
-        if (
-            len(segments) == 3
-            and segments[0]
-            and segments[1] == "requests"
-            and segments[2]
-        ):
-            self._require_method(is_read_method(self.command))
-            self._authorize_project(principal, segments[0], "read")
-            if principal.request_id is not None and principal.request_id != segments[2]:
-                # A request-bound capability reads its own request only; it
-                # never sees a sibling task in the same project (R11).
-                raise _Rejection(UNAUTHORIZED)
-            if query:
-                raise _Rejection(INVALID_INPUT)
-            self._drain_body()
-            self._send_json(
-                200,
-                {
-                    "schemaVersion": SCHEMA_VERSION,
-                    **work.detail(segments[0], segments[2], principal=principal),
-                },
-            )
-            return
-        if (
-            len(segments) == 3
-            and segments[0]
-            and segments[1] == "proposals"
-            and segments[2]
-        ):
-            self._require_method(is_read_method(self.command))
-            self._authorize_project(principal, segments[0], "read")
-            if query:
-                raise _Rejection(INVALID_INPUT)
-            self._drain_body()
-            self._send_json(
-                200,
-                {
-                    "schemaVersion": SCHEMA_VERSION,
-                    **proposals.detail(segments[0], segments[2]),
-                },
-            )
-            return
-        if len(segments) == 3 and segments[0] and segments[1] == "assets" and segments[2]:
-            self._require_method(is_read_method(self.command))
-            self._authorize_project(principal, segments[0], "read")
-            if query:
-                raise _Rejection(INVALID_INPUT)
-            self._drain_body()
-            self._send_json(
-                200,
-                {
-                    "schemaVersion": SCHEMA_VERSION,
-                    **assets.asset_detail(segments[0], segments[2]),
-                },
-            )
-            return
-        if (
-            len(segments) == 3
-            and segments[0]
-            and segments[1] == "canvases"
-            and segments[2]
-        ):
-            self._serve_canvas_read(
-                canvases,
-                orchestration,
-                principal,
-                segments[0],
-                segments[2],
-                "detail",
-                None,
-                query,
-            )
-            return
-        if (
-            len(segments) == 4
-            and segments[0]
-            and segments[1] == "canvases"
-            and segments[2]
-            and segments[3] in ("snapshot", "snapshots", "contexts")
-        ):
-            self._serve_canvas_read(
-                canvases,
-                orchestration,
-                principal,
-                segments[0],
-                segments[2],
-                segments[3],
-                None,
-                query,
-            )
-            return
-        if (
-            len(segments) == 5
-            and segments[0]
-            and segments[1] == "canvases"
-            and segments[2]
-            and segments[3] in ("snapshots", "contexts")
-            and segments[4]
-        ):
-            self._serve_canvas_read(
-                canvases,
-                orchestration,
-                principal,
-                segments[0],
-                segments[2],
-                segments[3],
-                segments[4],
-                query,
-            )
-            return
-        if (
-            len(segments) == 4
-            and segments[0]
-            and segments[1] == "assets"
-            and segments[2]
-            and segments[3]
-            in ("preview", "history", "upgrade-plan", "reuse-plan", "references")
-        ):
-            self._require_method(is_read_method(self.command))
-            self._authorize_project(principal, segments[0], "read")
-            self._drain_body()
-            project_id, asset_id, view = segments[0], segments[2], segments[3]
-            if view == "preview":
-                if query:
-                    raise _Rejection(INVALID_INPUT)
-                self._send_json(
-                    200,
-                    {
-                        "schemaVersion": SCHEMA_VERSION,
-                        **assets.preview_descriptor(
-                            project_id,
-                            asset_id,
-                            preview_origin=self.server.preview_origin,
-                        ),
-                    },
-                )
-                return
-            if view == "references":
-                if query:
-                    raise _Rejection(INVALID_INPUT)
-                self._send_json(
-                    200,
-                    {
-                        "schemaVersion": SCHEMA_VERSION,
-                        **lifecycle.reference_report(project_id, asset_id),
-                    },
-                )
-                return
-            if view == "history":
-                if query:
-                    raise _Rejection(INVALID_INPUT)
-                self._send_json(
-                    200,
-                    {
-                        "schemaVersion": SCHEMA_VERSION,
-                        **reuse.asset_history(project_id, asset_id),
-                    },
-                )
-                return
-            params = dict(parse_qsl(query, keep_blank_values=True))
-            if view == "upgrade-plan":
-                if set(params) - {"toRevisionId"}:
-                    raise _Rejection(INVALID_INPUT)
-                self._send_json(
-                    200,
-                    {
-                        "schemaVersion": SCHEMA_VERSION,
-                        **reuse.upgrade_plan(
-                            project_id,
-                            asset_id,
-                            to_revision_id=params.get("toRevisionId"),
-                        ),
-                    },
-                )
-                return
-            if set(params) - {"targetProjectId", "mode", "revisionId"}:
-                raise _Rejection(INVALID_INPUT)
-            target_project_id = params.get("targetProjectId")
-            if not target_project_id:
-                raise _Rejection(INVALID_INPUT)
-            self._send_json(
-                200,
-                {
-                    "schemaVersion": SCHEMA_VERSION,
-                    **reuse.reuse_plan(
-                        project_id,
-                        source_asset_id=asset_id,
-                        source_revision_id=params.get("revisionId"),
-                        mode=params.get("mode") or "copy",
-                        target_project_id=target_project_id,
-                    ),
-                },
-            )
-            return
-        if (
-            len(segments) == 5
-            and segments[0]
-            and segments[1] == "assets"
-            and segments[2]
-            and segments[3] == "tokens"
-            and segments[4] in ("document", "validation", "preview", "diff", "affected")
-        ):
-            self._serve_token_view(
-                design_system, principal, segments[0], segments[2], segments[4], query
-            )
-            return
-        if (
-            len(segments) == 5
-            and segments[0]
-            and segments[1] == "assets"
-            and segments[2]
-            and segments[3] == "document"
-            and segments[4] in ("component", "page", "instance")
-        ):
-            self._serve_document_view(
-                components, principal, segments[0], segments[2], segments[4], query
-            )
-            return
-        if (
-            len(segments) == 5
-            and segments[0]
-            and segments[1] == "actions"
-            and segments[2] in ("proposals", "assets", "canvases", "requests")
-            and segments[3]
-            and segments[4]
-        ):
-            project_id, entity_id, verb = segments[0], segments[3], segments[4]
-            if segments[2] == "requests":
-                self._serve_request_verb(
-                    work, principal, project_id, entity_id, verb
-                )
-                return
-            if segments[2] == "canvases":
-                self._serve_canvas_verb(
-                    canvases,
-                    orchestration,
-                    principal,
-                    project_id,
-                    entity_id,
-                    verb,
-                )
-                return
-            if segments[2] == "proposals":
-                self._serve_proposal_verb(
-                    proposals, principal, project_id, entity_id, verb
-                )
-                return
-            self._serve_asset_verb(
-                service,
-                assets,
-                reuse,
-                design_system,
-                components,
-                work,
-                owners,
-                lifecycle,
-                principal,
-                project_id,
-                entity_id,
-                verb,
-            )
-            return
+        )
+
+    def _route_request_detail(self, segments, query, principal) -> None:
+        self._require_method(is_read_method(self.command))
+        self._authorize_project(principal, segments[0], "read")
+        if principal.request_id is not None and principal.request_id != segments[2]:
+            # A request-bound capability reads its own request only; it
+            # never sees a sibling task in the same project (R11).
+            raise _Rejection(UNAUTHORIZED)
+        if query:
+            raise _Rejection(INVALID_INPUT)
         self._drain_body()
-        raise _Rejection(ROUTE_NOT_FOUND)
+        self._respond(
+            self.server.work.detail(segments[0], segments[2], principal=principal)
+        )
+
+    def _route_proposal_detail(self, segments, query, principal) -> None:
+        self._require_method(is_read_method(self.command))
+        self._authorize_project(principal, segments[0], "read")
+        if query:
+            raise _Rejection(INVALID_INPUT)
+        self._drain_body()
+        self._respond(self.server.proposals.detail(segments[0], segments[2]))
+
+    def _route_asset_detail(self, segments, query, principal) -> None:
+        self._require_method(is_read_method(self.command))
+        self._authorize_project(principal, segments[0], "read")
+        if query:
+            raise _Rejection(INVALID_INPUT)
+        self._drain_body()
+        self._respond(self.server.assets.asset_detail(segments[0], segments[2]))
+
+    def _route_canvas_detail(self, segments, query, principal) -> None:
+        self._serve_canvas_read(
+            self.server.canvases,
+            self.server.orchestration,
+            principal,
+            segments[0],
+            segments[2],
+            "detail",
+            None,
+            query,
+        )
+
+    def _route_canvas_snapshot(self, segments, query, principal) -> None:
+        self._serve_canvas_read(
+            self.server.canvases,
+            self.server.orchestration,
+            principal,
+            segments[0],
+            segments[2],
+            "snapshot",
+            None,
+            query,
+        )
+
+    def _route_snapshots(self, segments, query, principal) -> None:
+        self._serve_canvas_read(
+            self.server.canvases,
+            self.server.orchestration,
+            principal,
+            segments[0],
+            segments[2],
+            "snapshots",
+            None,
+            query,
+        )
+
+    def _route_contexts(self, segments, query, principal) -> None:
+        self._serve_canvas_read(
+            self.server.canvases,
+            self.server.orchestration,
+            principal,
+            segments[0],
+            segments[2],
+            "contexts",
+            None,
+            query,
+        )
+
+    def _route_snapshot(self, segments, query, principal) -> None:
+        self._serve_canvas_read(
+            self.server.canvases,
+            self.server.orchestration,
+            principal,
+            segments[0],
+            segments[2],
+            "snapshots",
+            segments[4],
+            query,
+        )
+
+    def _route_context(self, segments, query, principal) -> None:
+        self._serve_canvas_read(
+            self.server.canvases,
+            self.server.orchestration,
+            principal,
+            segments[0],
+            segments[2],
+            "contexts",
+            segments[4],
+            query,
+        )
+
+    def _route_asset_preview(self, segments, query, principal) -> None:
+        self._require_method(is_read_method(self.command))
+        self._authorize_project(principal, segments[0], "read")
+        self._drain_body()
+        if query:
+            raise _Rejection(INVALID_INPUT)
+        self._respond(
+            self.server.assets.preview_descriptor(
+                segments[0],
+                segments[2],
+                preview_origin=self.server.preview_origin,
+            )
+        )
+
+    def _route_asset_references(self, segments, query, principal) -> None:
+        self._require_method(is_read_method(self.command))
+        self._authorize_project(principal, segments[0], "read")
+        self._drain_body()
+        if query:
+            raise _Rejection(INVALID_INPUT)
+        self._respond(
+            self.server.lifecycle.reference_report(segments[0], segments[2])
+        )
+
+    def _route_asset_history(self, segments, query, principal) -> None:
+        self._require_method(is_read_method(self.command))
+        self._authorize_project(principal, segments[0], "read")
+        self._drain_body()
+        if query:
+            raise _Rejection(INVALID_INPUT)
+        self._respond(self.server.reuse.asset_history(segments[0], segments[2]))
+
+    def _route_asset_upgrade_plan(self, segments, query, principal) -> None:
+        self._require_method(is_read_method(self.command))
+        self._authorize_project(principal, segments[0], "read")
+        self._drain_body()
+        params = dict(parse_qsl(query, keep_blank_values=True))
+        if set(params) - {"toRevisionId"}:
+            raise _Rejection(INVALID_INPUT)
+        self._respond(
+            self.server.reuse.upgrade_plan(
+                segments[0],
+                segments[2],
+                to_revision_id=params.get("toRevisionId"),
+            )
+        )
+
+    def _route_asset_reuse_plan(self, segments, query, principal) -> None:
+        self._require_method(is_read_method(self.command))
+        self._authorize_project(principal, segments[0], "read")
+        self._drain_body()
+        params = dict(parse_qsl(query, keep_blank_values=True))
+        if set(params) - {"targetProjectId", "mode", "revisionId"}:
+            raise _Rejection(INVALID_INPUT)
+        target_project_id = params.get("targetProjectId")
+        if not target_project_id:
+            raise _Rejection(INVALID_INPUT)
+        self._respond(
+            self.server.reuse.reuse_plan(
+                segments[0],
+                source_asset_id=segments[2],
+                source_revision_id=params.get("revisionId"),
+                mode=params.get("mode") or "copy",
+                target_project_id=target_project_id,
+            )
+        )
+
+    def _route_token_view(self, segments, query, principal) -> None:
+        self._serve_token_view(
+            self.server.design_system,
+            principal,
+            segments[0],
+            segments[2],
+            segments[4],
+            query,
+        )
+
+    def _route_document_view(self, segments, query, principal) -> None:
+        self._serve_document_view(
+            self.server.components,
+            principal,
+            segments[0],
+            segments[2],
+            segments[4],
+            query,
+        )
+
+    def _route_proposal_verb(self, segments, query, principal) -> None:
+        self._serve_proposal_verb(
+            self.server.proposals,
+            principal,
+            segments[0],
+            segments[3],
+            segments[4],
+        )
+
+    def _route_asset_verb(self, segments, query, principal) -> None:
+        self._serve_asset_verb(
+            self.server.service,
+            self.server.assets,
+            self.server.reuse,
+            self.server.design_system,
+            self.server.components,
+            self.server.work,
+            self.server.owners,
+            self.server.lifecycle,
+            principal,
+            segments[0],
+            segments[3],
+            segments[4],
+        )
+
+    def _route_canvas_verb(self, segments, query, principal) -> None:
+        self._serve_canvas_verb(
+            self.server.canvases,
+            self.server.orchestration,
+            principal,
+            segments[0],
+            segments[3],
+            segments[4],
+        )
+
+    def _route_request_verb(self, segments, query, principal) -> None:
+        self._serve_request_verb(
+            self.server.work,
+            principal,
+            segments[0],
+            segments[3],
+            segments[4],
+        )
 
     def _serve_token_view(
         self,
@@ -1133,7 +1074,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             if params:
                 raise _Rejection(INVALID_INPUT)
             payload = design_system.affected(project_id, asset_id)
-        self._send_json(200, {"schemaVersion": SCHEMA_VERSION, **payload})
+        self._respond(payload)
 
     def _attach_preview_urls(self, payload: dict) -> dict:
         """Give frozen snapshots a ready preview URL on the preview origin."""
@@ -1295,13 +1236,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             if params:
                 raise _Rejection(INVALID_INPUT)
             payload = canvases.detail(project_id, canvas_id)
-        self._send_json(
-            200,
-            {
-                "schemaVersion": SCHEMA_VERSION,
-                **self._attach_preview_urls(payload),
-            },
-        )
+        self._respond(self._attach_preview_urls(payload))
 
     def _serve_canvas_verb(
         self,
@@ -1461,7 +1396,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             payload["previewUrl"] = self.server.preview_origin + payload.pop(
                 "previewUrl"
             )
-        self._send_json(200, {"schemaVersion": SCHEMA_VERSION, **payload})
+        self._respond(payload)
 
     def _serve_proposal_verb(
         self,
@@ -2023,14 +1958,12 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
                 raise _Rejection(UNAUTHORIZED)
 
     def _send_mutation(self, outcome: dict) -> None:
-        self._send_json(
-            200,
+        self._respond(
             {
-                "schemaVersion": SCHEMA_VERSION,
                 "result": outcome["result"],
                 "counter": outcome["counter"],
                 "replayed": outcome["replayed"],
-            },
+            }
         )
 
     # -- static shell ----------------------------------------------------
@@ -2064,6 +1997,12 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(resource.body)
 
     # -- responses --------------------------------------------------------
+
+    def _respond(self, payload: dict, *, close: bool = False) -> None:
+        """The one success response: envelope, status, CSP, close."""
+        self._send_json(
+            200, {"schemaVersion": SCHEMA_VERSION, **payload}, close=close
+        )
 
     def _send_error(self, code: str, *, detail: str | None = None) -> None:
         error = WorkbenchError(code, detail=detail)
