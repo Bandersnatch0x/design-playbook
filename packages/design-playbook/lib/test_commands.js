@@ -12,12 +12,14 @@ const assert = require('node:assert')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { parseSkillFile, createUserMessageFromPrompt } = require('./index.js')
+const { parseSkillFile, createUserMessageFromPrompt, listCommandNames } = require('./index.js')
 
 const PLUGIN_DIR = __dirname
 const COMMANDS_DIR = path.join(PLUGIN_DIR, '..', 'commands')
 
-const COMMAND_NAMES = ['design-io', 'doctor', 'run-handoff', 'run-review', 'run-status', 'ui-review', 'ux-spec']
+// The inventory the plugin registers is the directory itself; a second list
+// here is exactly the drift this test exists to catch.
+const COMMAND_NAMES = listCommandNames()
 
 let failures = 0
 function check(cond, msg) {
@@ -26,6 +28,8 @@ function check(cond, msg) {
 }
 
 console.log('== command prompt files present ==')
+check(COMMAND_NAMES.length > 0, 'commands/ yields at least one prompt file')
+check(COMMAND_NAMES.includes('design-io'), 'the design-io prompt is registered')
 for (const name of COMMAND_NAMES) {
   const filePath = path.join(COMMANDS_DIR, `${name}.md`)
   check(fs.existsSync(filePath), `${name}.md exists`)
@@ -49,7 +53,7 @@ if (designIoParsed) {
 }
 
 console.log('== commands without $ARGUMENTS load cleanly ==')
-for (const name of ['doctor', 'run-handoff', 'run-review', 'run-status', 'ui-review', 'ux-spec']) {
+for (const name of COMMAND_NAMES.filter((name) => name !== 'design-io')) {
   const filePath = path.join(COMMANDS_DIR, `${name}.md`)
   const parsed = parseSkillFile(filePath)
   check(parsed !== null && parsed.content.length > 0, `${name} prompt is non-empty`)

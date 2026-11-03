@@ -34,6 +34,9 @@ _TEMPLATES_DIR = _SCRIPTS_DIR / "adapter_templates"
 sys.path.insert(0, str(_SCRIPTS_DIR))
 import adapter_markers as markers  # noqa: E402
 from adapter_matrix import MATRIX, AgentRow, get_agent  # noqa: E402
+# One frontmatter reading rule, shared with scripts/validate.py, so a file
+# cannot pass one parser and be dropped by the other.
+from frontmatter import parse_frontmatter  # noqa: E402
 
 
 
@@ -56,18 +59,8 @@ def _get_version() -> str:
 
 
 def _parse_fm(text: str) -> tuple[dict[str, str], str]:
-    """Parse YAML-lite frontmatter (single-line values only). Returns (meta, body)."""
-    if not text.startswith("---"):
-        return {}, text
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return {}, text
-    meta: dict[str, str] = {}
-    for line in parts[1].splitlines():
-        m = re.match(r"^([\w-]+):\s*(.+)$", line)
-        if m:
-            meta[m.group(1)] = m.group(2).strip()
-    return meta, parts[2].lstrip("\n")
+    """Parse YAML-lite frontmatter through the shared rule."""
+    return parse_frontmatter(text)
 
 
 def _read_skills() -> list[dict]:

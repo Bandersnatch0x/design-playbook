@@ -79,6 +79,11 @@ jobs:
       - name: Queue monitor dialog state tests
         run: node packages/design-playbook/showcase/test_queue_monitor_state.js
 
+      - name: Cordis command registration tests
+        # The command inventory is derived from commands/*.md; this is the
+        # only gate that exercises the runtime registration contract.
+        run: node packages/design-playbook/lib/test_commands.js
+
       - name: Syntax check (all tracked Python)
         # Keep syntax inventory dynamic so lower stacked PRs never reference
         # files introduced only by a later stack layer. validate.py owns Ruff

@@ -69,7 +69,6 @@ class ClientRoutesDriftGate(unittest.TestCase):
         self.assertIn(f"SCHEMA_VERSION: {routes.SCHEMA_VERSION},", text)
 
     def test_the_client_reads_the_contract_and_does_not_reliteralize_it(self) -> None:
-        routes = _load_routes()
         text = _APP_JS.read_text(encoding="utf-8")
         for literal in (
             '"/api/v1/snapshot"',
