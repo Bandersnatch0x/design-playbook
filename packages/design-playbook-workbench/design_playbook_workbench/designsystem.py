@@ -554,7 +554,11 @@ class DesignSystemService:
     ) -> dict:
         """Replace the draft token document after validation."""
 
-        def apply() -> tuple[dict, int]:
+        held: dict = {}
+
+        def validate(row: dict) -> None:
+            # The same moment as every other document write: the document's
+            # own rules report before the counter does.
             parsed = parse_document(document)
             verdict = validate_document(parsed)
             if not verdict["valid"]:
@@ -562,38 +566,24 @@ class DesignSystemService:
                     INVALID_INPUT,
                     detail=json.dumps(verdict["errors"], ensure_ascii=False),
                 )
-            data = json.dumps(
-                document, ensure_ascii=False, indent=2, sort_keys=True
-            ).encode("utf-8")
-            record = self.blobs.put(data)
+            held["verdict"] = verdict
+
+        def apply() -> tuple[dict, int]:
             draft = self.store.draft(asset_id)
             attributes = json.loads(draft["attributes_json"])
-            attributes["manifest"] = [
-                {
-                    "path": attributes.get("manifest", [{}])[0].get(
-                        "path", "tokens.json"
-                    ),
-                    "contentHash": record.content_hash,
-                    "size": record.size,
-                    "mediaType": "application/json",
-                    "carrier": "tokens",
-                    "encoding": "utf-8",
-                }
-            ]
-            attributes["capabilities"] = ["reference"]
-            now = self._now()
-            self.store.update_draft(
-                asset_id=asset_id,
-                tags=json.loads(draft["tags_json"]),
-                attributes=attributes,
-                now=now,
+            manifest = attributes.get("manifest") or [{}]
+            result, counter = self.assets.write_document_draft(
+                asset_id,
+                # The parsed form separates themes and is not what the editor
+                # round-trips; the client's document is the stored shape,
+                # written through the one canonical serializer.
+                document=document,
+                path=manifest[0].get("path", "tokens.json"),
+                carrier="tokens",
+                capabilities=["reference"],
             )
-            counter = self.store.bump_asset_counter(asset_id=asset_id, now=now)
-            payload = self.assets.asset_payload(
-                self.store.asset(asset_id), self.store.draft(asset_id), None
-            )
-            payload["validation"] = verdict
-            return payload, counter
+            result["validation"] = held["verdict"]
+            return result, counter
 
         return self.service.mutations.existing(
             operation,
@@ -602,6 +592,7 @@ class DesignSystemService:
             project_id=project_id,
             authorize=lambda: self.service.require_project(project_id, scope="write"),
             load_row=lambda: self._tokens_asset(project_id, asset_id),
+            validate=validate,
             apply=apply,
         )
 

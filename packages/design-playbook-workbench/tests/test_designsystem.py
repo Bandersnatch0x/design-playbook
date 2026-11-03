@@ -267,6 +267,34 @@ class PublishRulesTest(DesignSystemTestCase):
         self.assertTrue(published["result"]["validation"]["valid"])
         self.assertEqual(len(self.store.asset_revisions(self.asset_id)), 1)
 
+    def test_a_malformed_document_reports_before_a_stale_counter(self) -> None:
+        """Every document write validates at the same moment: before the
+        counter, so a broken document and a stale counter in one request
+        name the document."""
+        broken = {"color": {"brand": {"$ref": "color.missing"}}}
+        with self.assertRaises(WorkbenchError) as caught:
+            self.design_system.update_tokens(
+                self.project_id,
+                self.asset_id,
+                document=broken,
+                operation=self.operation(
+                    {"action": "tokens-update"}, expected=10_000
+                ),
+            )
+        self.assertEqual(caught.exception.code, INVALID_INPUT)
+
+        # The counter still decides when the document itself is fine.
+        with self.assertRaises(WorkbenchError) as caught:
+            self.design_system.update_tokens(
+                self.project_id,
+                self.asset_id,
+                document={"color": {"brand": "#1f4fd8"}},
+                operation=self.operation(
+                    {"action": "tokens-update"}, expected=10_000
+                ),
+            )
+        self.assertEqual(caught.exception.code, CONFLICT)
+
     def test_publishing_a_broken_draft_is_refused_even_after_the_fact(self) -> None:
         # A draft written by any other route must still fail the same
         # validator at publish time.

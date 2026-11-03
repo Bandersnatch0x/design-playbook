@@ -12,6 +12,7 @@ owner of that freeze is ``publication``.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import uuid
@@ -923,6 +924,57 @@ class AssetService:
         if row is None or row["project_id"] != project_id:
             raise WorkbenchError(INVALID_TARGET)
         return row
+
+    def write_document_draft(
+        self,
+        asset_id: str,
+        *,
+        document: object,
+        path: str,
+        carrier: str,
+        capabilities: list[str],
+        source_locators: list[dict] | None = None,
+    ) -> tuple[dict, int]:
+        """Persist one workbench-owned document as the asset's draft.
+
+        The stored text shape is decided here (canonical JSON, no ASCII
+        escaping), so every document kind round-trips the same way. The
+        caller owns the transaction and the validation.
+        """
+        record = self.blobs.put(document_text(document).encode("utf-8"))
+        draft = self.store.draft(asset_id)
+        attributes = _loads(draft["attributes_json"])
+        attributes["manifest"] = [
+            {
+                "path": path,
+                "contentHash": record.content_hash,
+                "size": record.size,
+                "mediaType": "application/json",
+                "carrier": carrier,
+                "encoding": "utf-8",
+            }
+        ]
+        attributes["carrier"] = carrier
+        attributes["capabilities"] = list(capabilities)
+        if source_locators is not None:
+            attributes["sourceLocators"] = list(source_locators)
+        now = self._now()
+        self.store.update_draft(
+            asset_id=asset_id,
+            tags=_loads(draft["tags_json"]),
+            attributes=attributes,
+            now=now,
+        )
+        counter = self.store.bump_asset_counter(asset_id=asset_id, now=now)
+        payload = self.asset_payload(
+            self.store.asset(asset_id), self.store.draft(asset_id), None
+        )
+        return payload, counter
+
+
+def document_text(document: object) -> str:
+    """The stored text shape of a workbench-owned document."""
+    return json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True)
 
 
 def _loads(text: object) -> object:

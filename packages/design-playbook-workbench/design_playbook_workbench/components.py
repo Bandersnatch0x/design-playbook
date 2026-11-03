@@ -25,7 +25,7 @@ import re
 import uuid
 from typing import Callable
 
-from .assets import AssetService
+from .assets import AssetService, document_text
 from .blobs import BlobStore
 from .errors import (
     INVALID_INPUT,
@@ -78,9 +78,9 @@ MAX_STATES = 40
 _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]{0,63}$")
 _DIMENSION = re.compile(r"^-?\d+(?:\.\d+)?(?:px|rem|em|%|vw|vh|ch|pt)?$")
 
-_DOCUMENT_LABELS = {
-    KIND_COMPONENT: ("component", "component-definition"),
-    KIND_PAGE: ("layout-tree", "page-layout"),
+_DOCUMENT_CARRIERS = {
+    KIND_COMPONENT: "component",
+    KIND_PAGE: "layout-tree",
 }
 
 
@@ -786,41 +786,23 @@ class ComponentService:
         *,
         asset_id: str,
         kind: str,
-        text: str,
+        document: object,
         capabilities: list[str],
         locators: list[dict],
     ) -> tuple[dict, int]:
         """Write one document asset's draft; the caller owns the transaction."""
-        record = self.blobs.put(text.encode("utf-8"))
         draft = self.store.draft(asset_id)
         attributes = json.loads(draft["attributes_json"])
-        carrier, document = _DOCUMENT_LABELS[kind]
-        attributes["manifest"] = [
-            {
-                "path": document_path(kind, attributes.get("displayName") or draft["name"]),
-                "contentHash": record.content_hash,
-                "size": record.size,
-                "mediaType": "application/json",
-                "carrier": carrier,
-                "encoding": "utf-8",
-            }
-        ]
-        attributes["carrier"] = carrier
-        attributes["document"] = document
-        attributes["capabilities"] = list(capabilities)
-        attributes["sourceLocators"] = list(locators)
-        now = self._now()
-        self.store.update_draft(
-            asset_id=asset_id,
-            tags=json.loads(draft["tags_json"]),
-            attributes=attributes,
-            now=now,
+        return self.assets.write_document_draft(
+            asset_id,
+            document=document,
+            path=document_path(
+                kind, attributes.get("displayName") or draft["name"]
+            ),
+            carrier=_DOCUMENT_CARRIERS[kind],
+            capabilities=capabilities,
+            source_locators=locators,
         )
-        counter = self.store.bump_asset_counter(asset_id=asset_id, now=now)
-        payload = self.assets.asset_payload(
-            self.store.asset(asset_id), self.store.draft(asset_id), None
-        )
-        return payload, counter
 
     def _create_document_asset(
         self,
@@ -837,7 +819,7 @@ class ComponentService:
         def apply() -> tuple[dict, int]:
             record = self.blobs.put(text.encode("utf-8"))
             asset_id = str(uuid.uuid4())
-            carrier, document = _DOCUMENT_LABELS[kind]
+            carrier = _DOCUMENT_CARRIERS[kind]
             attributes = {
                 "manifest": [
                     {
@@ -850,7 +832,6 @@ class ComponentService:
                     }
                 ],
                 "carrier": carrier,
-                "document": document,
                 "capabilities": list(capabilities),
                 "sourceLocators": list(locators),
                 "roots": [],
@@ -903,7 +884,7 @@ class ComponentService:
             project_id=project_id,
             kind=KIND_COMPONENT,
             name=name.strip()[:120],
-            text=json.dumps(parsed, ensure_ascii=False, indent=2, sort_keys=True),
+            text=document_text(parsed),
             capabilities=["reference"],
             locators=[],
             operation=operation,
@@ -937,7 +918,7 @@ class ComponentService:
             result, counter = self._document_body(
                 asset_id=asset_id,
                 kind=KIND_COMPONENT,
-                text=json.dumps(parsed, ensure_ascii=False, indent=2, sort_keys=True),
+                document=parsed,
                 capabilities=attributes.get("capabilities") or ["reference"],
                 locators=attributes.get("sourceLocators") or [],
             )
@@ -1099,7 +1080,7 @@ class ComponentService:
             project_id=project_id,
             kind=KIND_PAGE,
             name=name.strip()[:120],
-            text=json.dumps(parsed, ensure_ascii=False, indent=2, sort_keys=True),
+            text=document_text(parsed),
             capabilities=["reference"],
             locators=[],
             operation=operation,
@@ -1133,7 +1114,7 @@ class ComponentService:
             result, counter = self._document_body(
                 asset_id=asset_id,
                 kind=KIND_PAGE,
-                text=json.dumps(parsed, ensure_ascii=False, indent=2, sort_keys=True),
+                document=parsed,
                 capabilities=attributes.get("capabilities") or ["reference"],
                 locators=attributes.get("sourceLocators") or [],
             )
@@ -1319,7 +1300,7 @@ class ComponentService:
             project_id=project_id,
             kind=KIND_COMPONENT,
             name=candidate_name,
-            text=json.dumps(definition, ensure_ascii=False, indent=2, sort_keys=True),
+            text=document_text(definition),
             capabilities=["reference"],
             locators=locators,
             operation=operation,
