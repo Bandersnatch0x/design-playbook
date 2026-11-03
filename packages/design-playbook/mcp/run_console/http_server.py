@@ -16,13 +16,18 @@ from __future__ import annotations
 
 import http.server
 import json
-import re
 import secrets
 import socket
 import socketserver
 import threading
 from urllib.parse import parse_qsl, urlsplit
 
+from .client_routes import (
+    EXPORT_PREVIEW_ROUTE,
+    EXPORT_WRITE_ROUTE,
+    SNAPSHOT_ROUTE,
+    SOURCES_PREFIX,
+)
 from .actions import (
     CONTENT_TYPE_UNSUPPORTED,
     CONTENT_TYPE_UNSUPPORTED_MESSAGE,
@@ -87,19 +92,14 @@ from .session import (
     RunConsoleSessionError,
 )
 from .snapshot_builder import SnapshotBuildError
+from .source_registry import locator_is_well_formed
 from .ui import UIResources
 
-ROUTE_SNAPSHOT = "/api/v1/snapshot"
-DIAGNOSTIC_EXPORT_PREVIEW_ROUTE = "/api/v1/actions/diagnostic-export/preview"
-DIAGNOSTIC_EXPORT_WRITE_ROUTE = "/api/v1/actions/diagnostic-export/write"
 _DIAGNOSTIC_EXPORT_ROUTES = frozenset(
-    {DIAGNOSTIC_EXPORT_PREVIEW_ROUTE, DIAGNOSTIC_EXPORT_WRITE_ROUTE}
+    {EXPORT_PREVIEW_ROUTE, EXPORT_WRITE_ROUTE}
 )
-_SOURCES_PREFIX = "/api/v1/sources/"
 ALLOWED_METHODS = "GET, HEAD"
 MAX_REQUEST_BODY_BYTES = 65536
-
-_LOCATOR_PATTERN = re.compile(r"^src_[A-Za-z0-9_-]{16,}$")
 # Sentinel for a header present more than once: never a valid single value.
 _DUPLICATED = object()
 
@@ -302,7 +302,7 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
             self._serve_export(session, path, split.query)
             return
         self._drain_body()
-        if path == ROUTE_SNAPSHOT:
+        if path == SNAPSHOT_ROUTE:
             if not read_only:
                 self._send_error(
                     METHOD_NOT_ALLOWED, extra_headers={"Allow": ALLOWED_METHODS}
@@ -313,7 +313,7 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
                 return
             self._serve_snapshot(session)
             return
-        if path.startswith(_SOURCES_PREFIX):
+        if path.startswith(SOURCES_PREFIX):
             if not read_only:
                 self._send_error(
                     METHOD_NOT_ALLOWED, extra_headers={"Allow": ALLOWED_METHODS}
@@ -482,7 +482,7 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
         reviewed pair under ``trial-export/`` atomically, and rebuilds the
         snapshot. Every rejection before commit is zero-effect.
         """
-        is_write = path == DIAGNOSTIC_EXPORT_WRITE_ROUTE
+        is_write = path == EXPORT_WRITE_ROUTE
         if query:
             self._send_error(ACTION_PAYLOAD_INVALID)
             return
@@ -587,8 +587,8 @@ class RunConsoleRequestHandler(http.server.BaseHTTPRequestHandler):
         return b"".join(chunks)
 
     def _serve_source(self, session: RunConsoleSession, path: str, query: str) -> None:
-        locator = path[len(_SOURCES_PREFIX):]
-        if _LOCATOR_PATTERN.fullmatch(locator) is None:
+        locator = path[len(SOURCES_PREFIX):]
+        if not locator_is_well_formed(locator):
             # Unknown, malformed, traversal, or encoded: uniform rejection.
             self._send_error(SOURCE_LOCATOR_INVALID)
             return

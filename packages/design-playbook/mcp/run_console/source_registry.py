@@ -62,6 +62,16 @@ _ARTIFACT_NAME_PATTERN = re.compile(r"^L6\.[0-9]+(-[A-Za-z0-9]+)+\.[A-Za-z0-9]+$
 _ARTIFACT_SLUG_PATTERN = re.compile(r"^l6-[0-9]+(-[a-z0-9]+){2,}$")
 _EVIDENCE_ARTIFACT_REF_PREFIX = "source.evidence-artifact."
 
+
+def locator_is_well_formed(value: object) -> bool:
+    """True when a value has the locator grammar this registry mints.
+
+    The HTTP adapter asks this instead of restating the pattern, so a change
+    to the token format cannot leave the router refusing valid locators.
+    """
+    return isinstance(value, str) and _LOCATOR_PATTERN.fullmatch(value) is not None
+
+
 _RUN_FACTS_CAPTURE_TARGETS = (
     "spec.md",
     "01-spec.md",

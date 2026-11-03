@@ -8,12 +8,18 @@
 "use strict";
 
 (function () {
-  var SNAPSHOT_PATH = "/api/v1/snapshot";
+  /* Routes and action names are generated from client_routes.py: the
+     Python server and this client read the same facts. */
+  var ROUTES = DPBUI.runConsoleRoutes;
+  var SNAPSHOT_PATH = ROUTES.SNAPSHOT;
   /* The single typed action from the closed allowlist (RCV1-009): a full
      snapshot rebuild. The body is the exact closed payload — no fields,
      no variations, no generic command channel. */
-  var REFRESH_ACTION_PATH = "/api/v1/actions/refresh";
-  var REFRESH_ACTION_BODY = JSON.stringify({ schemaVersion: 1, action: "refresh" });
+  var REFRESH_ACTION_PATH = ROUTES.REFRESH.path;
+  var REFRESH_ACTION_BODY = JSON.stringify({
+    schemaVersion: ROUTES.REFRESH.schemaVersion,
+    action: ROUTES.REFRESH.action,
+  });
   var VIEW_IDS = [
     "loading", "ready", "no-token", "closed", "unsupported",
     "build-error", "error", "network",
@@ -1530,11 +1536,14 @@
 
   /* Diagnostic export (ADR-0044): preview, participant review, write.  */
 
-  var EXPORT_PREVIEW_PATH = "/api/v1/actions/diagnostic-export/preview";
-  var EXPORT_WRITE_PATH = "/api/v1/actions/diagnostic-export/write";
+  var EXPORT_PREVIEW_PATH = ROUTES.EXPORT_PREVIEW.path;
+  var EXPORT_WRITE_PATH = ROUTES.EXPORT_WRITE.path;
 
   function requestExportPreview(participantRef) {
-    var body = { schemaVersion: 1, action: "diagnostic-export-preview" };
+    var body = {
+      schemaVersion: ROUTES.EXPORT_PREVIEW.schemaVersion,
+      action: ROUTES.EXPORT_PREVIEW.action,
+    };
     if (participantRef) body.participantRef = participantRef;
     return timedFetch(EXPORT_PREVIEW_PATH, {
       method: "POST",
@@ -1549,8 +1558,8 @@
 
   function requestExportWrite(expectedSourceSetHash, previewHash, participantRef) {
     var body = {
-      schemaVersion: 1,
-      action: "diagnostic-export-write",
+      schemaVersion: ROUTES.EXPORT_WRITE.schemaVersion,
+      action: ROUTES.EXPORT_WRITE.action,
       expectedSourceSetHash: expectedSourceSetHash,
       previewHash: previewHash,
       participantReviewed: true,
@@ -1861,7 +1870,7 @@
       class: "excerpt-state",
       text: t("excerpt_loading"),
     }));
-    var path = "/api/v1/sources/" + encodeURIComponent(record.locator) +
+    var path = ROUTES.SOURCES_PREFIX + encodeURIComponent(record.locator) +
       "?expectedHash=" + encodeURIComponent(record.verifiedHash);
     requestJson(path).then(function (result) {
       area.textContent = "";
