@@ -17,6 +17,7 @@ import socket
 import socketserver
 import threading
 from dataclasses import dataclass
+from typing import Callable
 from urllib.parse import parse_qsl, urlsplit
 
 from .assets import AssetService
@@ -634,7 +635,13 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
         self._drain_body()
         raise _Rejection(ROUTE_NOT_FOUND)
 
-    def _serve_collection(self, principal, project_id, query, loader) -> None:
+    def _serve_collection(
+        self,
+        principal: Principal,
+        project_id: str,
+        query: str,
+        loader: Callable[[], dict],
+    ) -> None:
         self._require_method(is_read_method(self.command))
         self._authorize_project(principal, project_id, "read")
         self._drain_body()
@@ -642,7 +649,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             raise _Rejection(INVALID_INPUT)
         self._respond(loader())
 
-    def _route_project_detail(self, segments, query, principal) -> None:
+    def _route_project_detail(self, segments: list[str], query: str, principal: Principal) -> None:
         self._require_method(is_read_method(self.command))
         self._authorize_project(principal, segments[0], "read")
         if query:
@@ -650,7 +657,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
         self._drain_body()
         self._respond({"project": self.server.service.project_target(segments[0])})
 
-    def _route_proposals_list(self, segments, query, principal) -> None:
+    def _route_proposals_list(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_collection(
             principal,
             segments[0],
@@ -658,7 +665,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             lambda: self.server.proposals.list_for_project(segments[0]),
         )
 
-    def _route_instances_list(self, segments, query, principal) -> None:
+    def _route_instances_list(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_collection(
             principal,
             segments[0],
@@ -666,7 +673,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             lambda: self.server.reuse.list_instances(segments[0]),
         )
 
-    def _route_canvases_list(self, segments, query, principal) -> None:
+    def _route_canvases_list(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_collection(
             principal,
             segments[0],
@@ -674,7 +681,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             lambda: self.server.canvases.list_for_project(segments[0]),
         )
 
-    def _route_requests_list(self, segments, query, principal) -> None:
+    def _route_requests_list(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_collection(
             principal,
             segments[0],
@@ -682,7 +689,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             lambda: self.server.work.list_for_project(segments[0]),
         )
 
-    def _route_runs_list(self, segments, query, principal) -> None:
+    def _route_runs_list(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_collection(
             principal,
             segments[0],
@@ -690,7 +697,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             lambda: self.server.owners.list_runs(segments[0]),
         )
 
-    def _route_confirmations_list(self, segments, query, principal) -> None:
+    def _route_confirmations_list(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_collection(
             principal,
             segments[0],
@@ -698,7 +705,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             lambda: self.server.owners.list_confirmations(segments[0]),
         )
 
-    def _route_assets_list(self, segments, query, principal) -> None:
+    def _route_assets_list(self, segments: list[str], query: str, principal: Principal) -> None:
         self._require_method(is_read_method(self.command))
         self._authorize_project(principal, segments[0], "read")
         self._drain_body()
@@ -717,7 +724,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             )
         )
 
-    def _route_lifecycle_list(self, segments, query, principal) -> None:
+    def _route_lifecycle_list(self, segments: list[str], query: str, principal: Principal) -> None:
         self._require_method(is_read_method(self.command))
         self._authorize_project(principal, segments[0], "read")
         self._drain_body()
@@ -730,7 +737,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             )
         )
 
-    def _route_archive_overview(self, segments, query, principal) -> None:
+    def _route_archive_overview(self, segments: list[str], query: str, principal: Principal) -> None:
         self._require_method(is_read_method(self.command))
         self._authorize_project(principal, segments[0], "read")
         self._drain_body()
@@ -745,7 +752,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             )
         )
 
-    def _route_deletion_impact(self, segments, query, principal) -> None:
+    def _route_deletion_impact(self, segments: list[str], query: str, principal: Principal) -> None:
         self._require_method(is_read_method(self.command))
         self._authorize_project(principal, segments[0], "read")
         self._drain_body()
@@ -753,7 +760,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             raise _Rejection(INVALID_INPUT)
         self._respond(self.server.lifecycle.project_deletion_impact(segments[0]))
 
-    def _route_action(self, segments, query, principal) -> None:
+    def _route_action(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_action(
             self.server.service,
             self.server.proposals,
@@ -770,7 +777,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             segments[2],
         )
 
-    def _route_run(self, segments, query, principal) -> None:
+    def _route_run(self, segments: list[str], query: str, principal: Principal) -> None:
         self._require_method(is_read_method(self.command))
         self._authorize_project(principal, segments[0], "read")
         if query:
@@ -778,7 +785,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
         self._drain_body()
         self._respond(self.server.owners.run(segments[0], segments[2]))
 
-    def _route_run_freshness(self, segments, query, principal) -> None:
+    def _route_run_freshness(self, segments: list[str], query: str, principal: Principal) -> None:
         self._require_method(is_read_method(self.command))
         self._authorize_project(principal, segments[0], "read")
         self._drain_body()
@@ -797,7 +804,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             )
         )
 
-    def _route_request_detail(self, segments, query, principal) -> None:
+    def _route_request_detail(self, segments: list[str], query: str, principal: Principal) -> None:
         self._require_method(is_read_method(self.command))
         self._authorize_project(principal, segments[0], "read")
         if principal.request_id is not None and principal.request_id != segments[2]:
@@ -811,7 +818,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             self.server.work.detail(segments[0], segments[2], principal=principal)
         )
 
-    def _route_proposal_detail(self, segments, query, principal) -> None:
+    def _route_proposal_detail(self, segments: list[str], query: str, principal: Principal) -> None:
         self._require_method(is_read_method(self.command))
         self._authorize_project(principal, segments[0], "read")
         if query:
@@ -819,7 +826,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
         self._drain_body()
         self._respond(self.server.proposals.detail(segments[0], segments[2]))
 
-    def _route_asset_detail(self, segments, query, principal) -> None:
+    def _route_asset_detail(self, segments: list[str], query: str, principal: Principal) -> None:
         self._require_method(is_read_method(self.command))
         self._authorize_project(principal, segments[0], "read")
         if query:
@@ -827,7 +834,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
         self._drain_body()
         self._respond(self.server.assets.asset_detail(segments[0], segments[2]))
 
-    def _route_canvas_detail(self, segments, query, principal) -> None:
+    def _route_canvas_detail(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_canvas_read(
             self.server.canvases,
             self.server.orchestration,
@@ -839,7 +846,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             query,
         )
 
-    def _route_canvas_snapshot(self, segments, query, principal) -> None:
+    def _route_canvas_snapshot(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_canvas_read(
             self.server.canvases,
             self.server.orchestration,
@@ -851,7 +858,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             query,
         )
 
-    def _route_snapshots(self, segments, query, principal) -> None:
+    def _route_snapshots(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_canvas_read(
             self.server.canvases,
             self.server.orchestration,
@@ -863,7 +870,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             query,
         )
 
-    def _route_contexts(self, segments, query, principal) -> None:
+    def _route_contexts(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_canvas_read(
             self.server.canvases,
             self.server.orchestration,
@@ -875,7 +882,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             query,
         )
 
-    def _route_snapshot(self, segments, query, principal) -> None:
+    def _route_snapshot(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_canvas_read(
             self.server.canvases,
             self.server.orchestration,
@@ -887,7 +894,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             query,
         )
 
-    def _route_context(self, segments, query, principal) -> None:
+    def _route_context(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_canvas_read(
             self.server.canvases,
             self.server.orchestration,
@@ -899,7 +906,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             query,
         )
 
-    def _route_asset_preview(self, segments, query, principal) -> None:
+    def _route_asset_preview(self, segments: list[str], query: str, principal: Principal) -> None:
         self._require_method(is_read_method(self.command))
         self._authorize_project(principal, segments[0], "read")
         self._drain_body()
@@ -913,7 +920,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             )
         )
 
-    def _route_asset_references(self, segments, query, principal) -> None:
+    def _route_asset_references(self, segments: list[str], query: str, principal: Principal) -> None:
         self._require_method(is_read_method(self.command))
         self._authorize_project(principal, segments[0], "read")
         self._drain_body()
@@ -923,7 +930,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             self.server.lifecycle.reference_report(segments[0], segments[2])
         )
 
-    def _route_asset_history(self, segments, query, principal) -> None:
+    def _route_asset_history(self, segments: list[str], query: str, principal: Principal) -> None:
         self._require_method(is_read_method(self.command))
         self._authorize_project(principal, segments[0], "read")
         self._drain_body()
@@ -931,7 +938,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             raise _Rejection(INVALID_INPUT)
         self._respond(self.server.reuse.asset_history(segments[0], segments[2]))
 
-    def _route_asset_upgrade_plan(self, segments, query, principal) -> None:
+    def _route_asset_upgrade_plan(self, segments: list[str], query: str, principal: Principal) -> None:
         self._require_method(is_read_method(self.command))
         self._authorize_project(principal, segments[0], "read")
         self._drain_body()
@@ -946,7 +953,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             )
         )
 
-    def _route_asset_reuse_plan(self, segments, query, principal) -> None:
+    def _route_asset_reuse_plan(self, segments: list[str], query: str, principal: Principal) -> None:
         self._require_method(is_read_method(self.command))
         self._authorize_project(principal, segments[0], "read")
         self._drain_body()
@@ -966,7 +973,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             )
         )
 
-    def _route_token_view(self, segments, query, principal) -> None:
+    def _route_token_view(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_token_view(
             self.server.design_system,
             principal,
@@ -976,7 +983,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             query,
         )
 
-    def _route_document_view(self, segments, query, principal) -> None:
+    def _route_document_view(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_document_view(
             self.server.components,
             principal,
@@ -986,7 +993,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             query,
         )
 
-    def _route_proposal_verb(self, segments, query, principal) -> None:
+    def _route_proposal_verb(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_proposal_verb(
             self.server.proposals,
             principal,
@@ -995,7 +1002,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             segments[4],
         )
 
-    def _route_asset_verb(self, segments, query, principal) -> None:
+    def _route_asset_verb(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_asset_verb(
             self.server.service,
             self.server.assets,
@@ -1011,7 +1018,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             segments[4],
         )
 
-    def _route_canvas_verb(self, segments, query, principal) -> None:
+    def _route_canvas_verb(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_canvas_verb(
             self.server.canvases,
             self.server.orchestration,
@@ -1021,7 +1028,7 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             segments[4],
         )
 
-    def _route_request_verb(self, segments, query, principal) -> None:
+    def _route_request_verb(self, segments: list[str], query: str, principal: Principal) -> None:
         self._serve_request_verb(
             self.server.work,
             principal,
