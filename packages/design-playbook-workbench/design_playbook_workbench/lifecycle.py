@@ -404,7 +404,7 @@ class LifecycleService:
             load_row=lambda: self.store.project(project_id),
             apply=apply,
             # A project archive has never compared a counter; preserving that.
-            require_counter=False,
+            require_counter=False,  # T-127: no counter contract.
         )
 
     def archive_overview(

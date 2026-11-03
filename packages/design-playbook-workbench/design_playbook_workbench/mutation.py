@@ -176,9 +176,11 @@ class MutationGate:
     ) -> None:
         """Write the ledger row for one applied mutation.
 
-        Exposed for the two writes that cannot run their work inside the
-        transaction - sealing a backup and restoring one write whole archives -
-        but still need the ledger write to be one implementation.
+        Exposed for the writes whose work cannot run inside the gate's
+        transaction - a journaled filesystem write whose progress must
+        survive the failure it reports, a backup archive, an import closure -
+        and for a read that is recorded for audit. They still share one
+        ledger implementation, and the gate still owns it.
         """
         with self.store.transaction():
             self.store.record_mutation(
@@ -212,7 +214,10 @@ class MutationGate:
         project_id: str | None = None,
         entity_id: str | None = None,
     ) -> dict:
-        """One write that creates its row; there is no counter to be stale against.
+        """One write that creates its row, or replaces the row it names.
+
+        There is no counter to be stale against: a create either mints the id
+        or targets one the caller supplied.
 
         ``entity_of`` and ``project_of`` name the new row after ``apply`` has
         produced it, so the ledger records the id the write actually made.
@@ -230,8 +235,9 @@ class MutationGate:
 
         ``entity_id`` is for the create whose target the caller already named
         (a selection id supplied in the request). It binds the replay exactly
-        as ``existing`` does. Leave it out when the write mints the id: the
-        caller could not have sent it, so there is nothing to bind.
+        as ``existing`` does, and it must agree with what ``entity_of``
+        records. Leave it out when the write mints the id: the caller could
+        not have sent it, so there is nothing to bind.
         """
         replayed = self.replay(
             operation, kind=kind, entity_id=entity_id, project_id=project_id

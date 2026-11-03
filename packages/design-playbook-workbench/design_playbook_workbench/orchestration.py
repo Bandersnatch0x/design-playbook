@@ -609,7 +609,7 @@ class OrchestrationService:
             load_row=lambda: self._context_row(project_id, selection_id),
             apply=apply,
             authorize=lambda: self.service.require_project(project_id, scope="write"),
-            require_counter=False,
+            require_counter=False,  # T-127: no counter contract.
             validate=check,
         )
 

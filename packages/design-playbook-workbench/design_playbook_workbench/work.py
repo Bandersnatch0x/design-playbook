@@ -154,6 +154,19 @@ class WorkRequestService:
         parsed = _parse_iso(self._now())
         return parsed if parsed is not None else _wall_clock()
 
+    def _replay_agent(
+        self, operation: Operation, *, kind: str, request_id: str, row: dict
+    ) -> dict | None:
+        """Answer a retry before the lease check can refuse it.
+
+        The gate replays again; this early answer is what keeps an expired
+        lease -- and the interruption it records -- from pre-empting a write
+        that already succeeded.
+        """
+        return self.service._replay(
+            operation, kind=kind, entity_id=request_id, project_id=row["project_id"]
+        )
+
     def claim_record_path(self, request_id: str) -> Path:
         """The private claim credential for one request (never in a payload)."""
         return self.data_dir.session_dir / f"claim-{request_id}.json"
@@ -455,7 +468,7 @@ class WorkRequestService:
             load_row=lambda: self._request_row(project_id, request_id),
             apply=apply,
             authorize=lambda: self.service.require_project(project_id, scope="write"),
-            require_counter=False,
+            require_counter=False,  # T-127: no counter contract.
             validate=check,
         )
 
@@ -492,7 +505,7 @@ class WorkRequestService:
             load_row=lambda: self._request_row(project_id, request_id),
             apply=apply,
             authorize=lambda: self.service.require_project(project_id, scope="write"),
-            require_counter=False,
+            require_counter=False,  # T-127: no counter contract.
             validate=check,
         )
 
@@ -528,7 +541,7 @@ class WorkRequestService:
             load_row=lambda: self._request_row(project_id, request_id),
             apply=apply,
             authorize=lambda: self.service.require_project(project_id, scope="write"),
-            require_counter=False,
+            require_counter=False,  # T-127: no counter contract.
             validate=check,
         )
 
@@ -583,7 +596,7 @@ class WorkRequestService:
             load_row=lambda: self._request_row(project_id, request_id),
             apply=apply,
             authorize=lambda: self.service.require_project(project_id, scope="write"),
-            require_counter=False,
+            require_counter=False,  # T-127: no counter contract.
             validate=check,
         )
 
@@ -613,7 +626,7 @@ class WorkRequestService:
             load_row=lambda: self._request_row(project_id, request_id),
             apply=apply,
             authorize=lambda: self.service.require_project(project_id, scope="write"),
-            require_counter=False,
+            require_counter=False,  # T-127: no counter contract.
             validate=check,
         )
 
@@ -703,10 +716,8 @@ class WorkRequestService:
         operation: Operation,
     ) -> dict:
         row = self._require_agent(request_id, principal)
-        replayed = self.service._replay(
-            operation, kind="work-claim", entity_id=request_id, project_id=row["project_id"])
-        if replayed is not None:
-            return replayed
+        # Unlike the lease-checked writes below, nothing runs between this
+        # check and the gate's replay, so the gate's replay is enough.
         held: dict = {}
 
         def check(current: dict) -> None:
@@ -767,7 +778,7 @@ class WorkRequestService:
             project_id=row["project_id"],
             load_row=lambda: self._request_row(row["project_id"], request_id),
             apply=apply,
-            require_counter=False,
+            require_counter=False,  # T-127: no counter contract.
             validate=check,
         )
 
@@ -783,8 +794,9 @@ class WorkRequestService:
         operation: Operation,
     ) -> dict:
         row = self._require_agent(request_id, principal)
-        replayed = self.service._replay(
-            operation, kind="work-heartbeat", entity_id=request_id, project_id=row["project_id"])
+        replayed = self._replay_agent(
+            operation, kind="work-heartbeat", request_id=request_id, row=row
+        )
         if replayed is not None:
             return replayed
         attempt = self._require_live_lease(
@@ -813,7 +825,9 @@ class WorkRequestService:
                 "expiresAt": deadline,
                 "heartbeatSeconds": HEARTBEAT_SECONDS,
             }
-            return payload, int(row["counter"])
+            # The payload was read inside this transaction; the counter from
+            # the pre-transaction row could already be one behind.
+            return payload, int(payload["counter"])
 
         return self.service.mutations.existing(
             operation,
@@ -822,7 +836,7 @@ class WorkRequestService:
             project_id=row["project_id"],
             load_row=lambda: self._request_row(row["project_id"], request_id),
             apply=apply,
-            require_counter=False,
+            require_counter=False,  # T-127: no counter contract.
         )
 
     def submit_result(
@@ -837,8 +851,9 @@ class WorkRequestService:
         operation: Operation,
     ) -> dict:
         row = self._require_agent(request_id, principal)
-        replayed = self.service._replay(
-            operation, kind="work-result", entity_id=request_id, project_id=row["project_id"])
+        replayed = self._replay_agent(
+            operation, kind="work-result", request_id=request_id, row=row
+        )
         if replayed is not None:
             return replayed
         attempt = self._require_live_lease(
@@ -932,7 +947,7 @@ class WorkRequestService:
             project_id=row["project_id"],
             load_row=lambda: self._request_row(row["project_id"], request_id),
             apply=apply,
-            require_counter=False,
+            require_counter=False,  # T-127: no counter contract.
         )
 
     def fail_attempt(
@@ -948,8 +963,9 @@ class WorkRequestService:
     ) -> dict:
         """The Agent reports its own failure: the request stays retryable."""
         row = self._require_agent(request_id, principal)
-        replayed = self.service._replay(
-            operation, kind="work-fail", entity_id=request_id, project_id=row["project_id"])
+        replayed = self._replay_agent(
+            operation, kind="work-fail", request_id=request_id, row=row
+        )
         if replayed is not None:
             return replayed
         attempt = self._require_live_lease(
@@ -976,5 +992,5 @@ class WorkRequestService:
             project_id=row["project_id"],
             load_row=lambda: self._request_row(row["project_id"], request_id),
             apply=apply,
-            require_counter=False,
+            require_counter=False,  # T-127: no counter contract.
         )

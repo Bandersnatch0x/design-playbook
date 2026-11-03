@@ -992,7 +992,7 @@ class ProposalService:
             project_id=project_id,
             load_row=lambda: self._require_proposal(project_id, proposal_id),
             apply=apply,
-            require_counter=False,
+            require_counter=False,  # T-127: no counter contract.
             validate=check,
         )
 
