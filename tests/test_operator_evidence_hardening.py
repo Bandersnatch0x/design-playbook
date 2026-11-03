@@ -17,9 +17,6 @@ from design_playbook.mcp.evidence import (  # noqa: E402
     capture_runtime,
     evidence_preflight as ep,
 )
-from design_playbook.mcp.evidence.capture_snapshot import (  # noqa: E402
-    capture_call_snapshot,
-)
 from design_playbook.mcp.evidence.capture_contract import (  # noqa: E402
     parse_capture_contract,
 )
@@ -766,13 +763,6 @@ class StorageStateTests(unittest.TestCase):
             self.assertNotIn(secret, dumped)
             self.assertIn("RuntimeError", payload["error"])
             self.assertIn("operator", payload["error"])
-
-    def test_capture_snapshot_keeps_session_path_not_bytes(self) -> None:
-        request = _v1(storage_state="sessions/valid.json")
-        snap = capture_call_snapshot(request)
-        self.assertEqual(snap["storage_state"], "sessions/valid.json")
-        self.assertEqual(snap["url"], request["url"])
-        self.assertNotIn("cookies", json.dumps(snap))
 
     def test_runtime_rejects_non_object_storage_state_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

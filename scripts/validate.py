@@ -22,6 +22,7 @@ from pathlib import Path
 # than run as `python scripts/validate.py` (mirrors doctor.py's guard).
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _checks
+import generated_artifacts
 
 # The registry parser lives with the shipped package scripts so the
 # product-level G8 and the run-level G8 (g8_run_registry.py) share one
@@ -327,6 +328,29 @@ def validate_codex_manifest(pj: dict):
                 check((ROOT / agents_path).is_dir(),
                       f".agents marketplace plugins[0].source.path exists: {agents_path}")
     return claude_version
+
+
+def validate_generated_artifacts() -> None:
+    print("== Generated artifact register ==")
+    # scripts/generated_artifacts.py is the one owner of "what is generated,
+    # from what, by what, and which test keeps it honest". Checking the row
+    # here means a new artifact cannot land without a gate, and release.py's
+    # validate step runs this file.
+    for entry in generated_artifacts.ARTIFACTS:
+        if entry.generator is not None:
+            check(
+                (ROOT / entry.generator).is_file(),
+                f"{entry.name}: generator present ({entry.generator})",
+            )
+        for artifact in entry.artifacts:
+            check(
+                (ROOT / artifact).is_file(),
+                f"{entry.name}: artifact present ({artifact})",
+            )
+        check(
+            (ROOT / entry.gate).is_file(),
+            f"{entry.name}: drift gate present ({entry.gate})",
+        )
 
 
 def validate_adapter_drift() -> None:
@@ -1576,6 +1600,7 @@ CHECKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("validate_bundled_mcp", (), ()),
     ("validate_marketplace_catalog", ("mj",), ()),
     ("validate_codex_manifest", ("pj",), ("claude_version",)),
+    ("validate_generated_artifacts", (), ()),
     ("validate_adapter_drift", (), ()),
     ("validate_publish_manifest", ("claude_version",), ("npmj",)),
     ("validate_skill_frontmatter", (), ()),
