@@ -434,10 +434,18 @@ class ApplyTest(ProposalTestCase):
         proposal = self.create(
             [{"path": "new.txt", "operation": "create", "content": "one\n"}]
         )
+        operation = self.operation({"reject": 1})
         rejected = self.proposals.reject(
-            self.project_id, proposal["proposalId"], operation=self.operation({"reject": 1})
+            self.project_id, proposal["proposalId"], operation=operation
         )["result"]
         self.assertEqual(rejected["state"], STATE_REJECTED)
+        # A retry answers with the recorded rejection instead of conflicting
+        # with the state that rejection produced.
+        again = self.proposals.reject(
+            self.project_id, proposal["proposalId"], operation=operation
+        )
+        self.assertTrue(again["replayed"])
+        self.assertEqual(again["result"], rejected)
         with self.assertRaises(WorkbenchError) as caught:
             self.apply(proposal)
         self.assertEqual(caught.exception.code, CONFLICT)
