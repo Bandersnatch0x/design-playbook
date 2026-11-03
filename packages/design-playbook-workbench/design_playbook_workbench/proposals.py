@@ -36,6 +36,7 @@ from .errors import (
     RECOVERY_REQUIRED,
     WorkbenchError,
 )
+from . import rows as rowshape
 from .paths import assert_contained
 from .service import Operation, WorkbenchService
 from .store import Store, WorkbenchDataDirectory
@@ -444,7 +445,7 @@ class ProposalService:
 
     def detail(self, project_id: str, proposal_id: str) -> dict:
         row = self._require_proposal(project_id, proposal_id)
-        payload = json.loads(row["payload_json"])
+        payload = rowshape.load(row["payload_json"], {})
         payload["state"] = self._effective_state(row)
         journal = self.store.journal(proposal_id)
         payload["journalState"] = journal["state"] if journal is not None else None
@@ -495,7 +496,7 @@ class ProposalService:
         self.service.require_project(project_id, scope="read")
         items = []
         for row in self.store.project_proposals(project_id):
-            payload = json.loads(row["payload_json"])
+            payload = rowshape.load(row["payload_json"], {})
             payload["state"] = self._effective_state(row)
             items.append(
                 {
@@ -547,7 +548,7 @@ class ProposalService:
         row = self.store.proposal(proposal_id)
         if row is None or row["project_id"] != project_id:
             raise WorkbenchError(INVALID_TARGET)
-        payload = json.loads(row["payload_json"])
+        payload = rowshape.load(row["payload_json"], {})
         if self._proposal_digest(payload) != row["digest"]:
             raise WorkbenchError(CORRUPT_CONTENT, detail="proposal metadata no longer matches its digest")
         return row
@@ -685,7 +686,7 @@ class ProposalService:
             # and the approval no longer names this proposal.
             raise WorkbenchError(CONFLICT)
         self._block_incomplete(project_id)
-        payload = json.loads(row["payload_json"])
+        payload = rowshape.load(row["payload_json"], {})
         root = Path(target["canonicalPath"])
         with self._project_lock(project_id):
             if self.store.journal(proposal_id) is not None:
@@ -804,7 +805,7 @@ class ProposalService:
         journal = self.store.journal(proposal_id)
         if journal is None or journal["state"] not in (JOURNAL_WRITING, JOURNAL_RECOVERY):
             raise WorkbenchError(CONFLICT)
-        plan = json.loads(journal["plan_json"])
+        plan = rowshape.load(journal["plan_json"], {})
         root = Path(target["canonicalPath"])
         with self._project_lock(project_id):
             applied, pending, external = self._classify(row, target, plan)
@@ -927,7 +928,7 @@ class ProposalService:
         row = self._require_proposal(project_id, proposal_id)
         if row["state"] != STATE_APPLIED:
             raise WorkbenchError(CONFLICT)
-        payload = json.loads(row["payload_json"])
+        payload = rowshape.load(row["payload_json"], {})
         root = Path(target["canonicalPath"])
         staging = Path(row["staging_dir"])
         changes: list[dict] = []

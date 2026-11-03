@@ -32,6 +32,7 @@ from .errors import (
 )
 from .paths import assert_contained
 from .proposals import relative_parts
+from . import rows as rowshape
 from .publication import PublicationPlan, PublicationService
 from .service import Operation, WorkbenchService, utc_now
 from .store import Store
@@ -545,9 +546,9 @@ class AssetService:
         for row in self.store.project_assets_with_drafts(project_id):
             asset_id = row["asset_id"]
             drafted = row["draft_tags_json"] is not None
-            attributes = _loads(row["draft_attributes_json"]) if drafted else {}
+            attributes = rowshape.load(row["draft_attributes_json"], {}) if drafted else {}
             capabilities = attributes.get("capabilities", [])
-            tags = _loads(row["draft_tags_json"]) if drafted else []
+            tags = rowshape.load(row["draft_tags_json"], []) if drafted else []
             if kind and row["kind"] != kind:
                 continue
             if capability and capability not in capabilities:
@@ -608,19 +609,19 @@ class AssetService:
             {
                 "revisionId": item["revision_id"],
                 "revisionNumber": item["revision_number"],
-                "capabilities": _loads(item["capabilities_json"]),
+                "capabilities": rowshape.capabilities(item),
                 "createdAt": item["created_at"],
             }
             for item in self.store.asset_revisions(asset_id)
         ]
-        payload["sourceLocators"] = _loads(
-            revision["source_locators_json"] if revision else "[]"
+        payload["sourceLocators"] = rowshape.source_locators(
+            revision
         ) or self.draft_locators(draft, project_id)
         return {"asset": payload}
 
     def asset_payload(self, row: dict, draft: dict | None, revision: dict | None) -> dict:
         """The flat asset view shared by reads, writes, and publication."""
-        attributes = _loads(draft["attributes_json"]) if draft else {}
+        attributes = rowshape.attributes(draft)
         return {
             "assetId": row["asset_id"],
             "projectId": row["project_id"],
@@ -628,7 +629,7 @@ class AssetService:
             "kind": row["kind"],
             "lifecycle": row["lifecycle"],
             "counter": int(row["counter"]),
-            "tags": _loads(draft["tags_json"]) if draft else [],
+            "tags": rowshape.tags(draft),
             "capabilities": attributes.get("capabilities", []),
             "manifest": attributes.get("manifest", []),
             "roots": attributes.get("roots", []),
@@ -644,7 +645,7 @@ class AssetService:
         """The typed locators of a draft's content."""
         if draft is None:
             return []
-        attributes = _loads(draft["attributes_json"])
+        attributes = rowshape.attributes(draft)
         if "sourceLocators" in attributes:
             # A workbench-owned document (component definition, layout tree)
             # carries typed locators instead of pretending to be a project
@@ -748,14 +749,14 @@ class AssetService:
     ) -> dict:
         def apply() -> tuple[dict, int]:
             draft = self.store.draft(asset_id)
-            attributes = _loads(draft["attributes_json"])
+            attributes = rowshape.attributes(draft)
             if CAPABILITY_STATIC_PREVIEW not in attributes.get("capabilities", []):
                 raise WorkbenchError(MISSING_DEPENDENCY)
             attributes["dynamicPreviewEnabled"] = True
             now = self._now()
             self.store.update_draft(
                 asset_id=asset_id,
-                tags=_loads(draft["tags_json"]),
+                tags=rowshape.tags(draft),
                 attributes=attributes,
                 now=now,
             )
@@ -773,7 +774,7 @@ class AssetService:
             entity_id=asset_id,
             project_id=project_id,
             authorize=lambda: self.service.require_project(project_id, scope="write"),
-            load_row=lambda: self.owned_asset(project_id, asset_id),
+            load_row=lambda: rowshape.owned_asset(self.store, project_id, asset_id),
             apply=apply,
         )
 
@@ -790,7 +791,7 @@ class AssetService:
         def apply() -> tuple[dict, int]:
             root = self._root_of(project_id)
             draft = self.store.draft(asset_id)
-            attributes = _loads(draft["attributes_json"])
+            attributes = rowshape.attributes(draft)
             records, warnings, total_bytes = self._refresh_records(root, attributes)
             for record in records:
                 self.blobs.put(record.data, expected_hash=record.content_hash)
@@ -814,7 +815,7 @@ class AssetService:
             now = self._now()
             self.store.update_draft(
                 asset_id=asset_id,
-                tags=_loads(draft["tags_json"]),
+                tags=rowshape.tags(draft),
                 attributes=refreshed,
                 now=now,
             )
@@ -832,7 +833,7 @@ class AssetService:
             entity_id=asset_id,
             project_id=project_id,
             authorize=lambda: self.service.require_project(project_id, scope="write"),
-            load_row=lambda: self.owned_asset(project_id, asset_id),
+            load_row=lambda: rowshape.owned_asset(self.store, project_id, asset_id),
             apply=apply,
         )
 
@@ -918,13 +919,6 @@ class AssetService:
     # The ledger row is written by ``self.service.mutations``; this module no
     # longer carries its own copy of the six-step gate.
 
-    def owned_asset(self, project_id: str, asset_id: str) -> dict:
-        """The asset row, if it belongs to this project."""
-        row = self.store.asset(asset_id)
-        if row is None or row["project_id"] != project_id:
-            raise WorkbenchError(INVALID_TARGET)
-        return row
-
     def write_document_draft(
         self,
         asset_id: str,
@@ -943,7 +937,7 @@ class AssetService:
         """
         record = self.blobs.put(document_text(document).encode("utf-8"))
         draft = self.store.draft(asset_id)
-        attributes = _loads(draft["attributes_json"])
+        attributes = rowshape.attributes(draft)
         attributes["manifest"] = [
             {
                 "path": path,
@@ -961,7 +955,7 @@ class AssetService:
         now = self._now()
         self.store.update_draft(
             asset_id=asset_id,
-            tags=_loads(draft["tags_json"]),
+            tags=rowshape.tags(draft),
             attributes=attributes,
             now=now,
         )
@@ -975,19 +969,6 @@ class AssetService:
 def document_text(document: object) -> str:
     """The stored text shape of a workbench-owned document."""
     return json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True)
-
-
-def _loads(text: object) -> object:
-    import json as _json_module
-
-    if isinstance(text, (list, dict)):
-        return text
-    if not isinstance(text, str) or not text:
-        return []
-    try:
-        return _json_module.loads(text)
-    except _json_module.JSONDecodeError:  # pragma: no cover - stored by us
-        return []
 
 
 def _time_key(value: object) -> tuple[int, ...]:

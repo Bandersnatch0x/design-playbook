@@ -35,6 +35,7 @@ from .errors import (
     UNSUPPORTED,
     WorkbenchError,
 )
+from . import rows as rowshape
 from .publication import PublicationPlan
 from .reuse import ReuseService
 from .service import Operation, WorkbenchService, utc_now
@@ -692,19 +693,12 @@ class ComponentService:
     # -- shared plumbing ------------------------------------------------
 
     def _require_asset(self, project_id: str, asset_id: str, *, kind: str) -> dict:
-        row = self.store.asset(asset_id)
-        if row is None or row["project_id"] != project_id:
-            raise WorkbenchError(INVALID_TARGET)
-        if row["kind"] != kind:
-            raise WorkbenchError(
-                UNSUPPORTED, detail=f"asset is not a {kind}"
-            )
-        return row
+        return rowshape.owned_asset(self.store, project_id, asset_id, kind=kind)
 
     def _document_bytes(self, asset_id: str, revision: dict | None = None) -> tuple[bytes, dict]:
         source = revision or self.store.latest_revision(asset_id)
         if source is not None:
-            manifest = json.loads(source["manifest_json"])
+            manifest = rowshape.manifest(source)
             if manifest:
                 return self.blobs.read(manifest[0]["contentHash"]), {
                     "kind": "revision",
@@ -712,7 +706,7 @@ class ComponentService:
                     "revisionNumber": source["revision_number"],
                 }
         draft = self.store.draft(asset_id)
-        manifest = json.loads(draft["attributes_json"]).get("manifest", [])
+        manifest = rowshape.attributes(draft).get("manifest", [])
         if not manifest:
             raise WorkbenchError(MISSING_DEPENDENCY)
         return self.blobs.read(manifest[0]["contentHash"]), {"kind": "draft"}
@@ -792,7 +786,7 @@ class ComponentService:
     ) -> tuple[dict, int]:
         """Write one document asset's draft; the caller owns the transaction."""
         draft = self.store.draft(asset_id)
-        attributes = json.loads(draft["attributes_json"])
+        attributes = rowshape.attributes(draft)
         return self.assets.write_document_draft(
             asset_id,
             document=document,
@@ -914,7 +908,7 @@ class ComponentService:
 
         def apply() -> tuple[dict, int]:
             draft = self.store.draft(asset_id)
-            attributes = json.loads(draft["attributes_json"])
+            attributes = rowshape.attributes(draft)
             result, counter = self._document_body(
                 asset_id=asset_id,
                 kind=KIND_COMPONENT,
@@ -991,7 +985,7 @@ class ComponentService:
             definition, supplied, title=f"{definition['name']} 实例"
         ).encode("utf-8")
         record = self.blobs.put(html)
-        attributes = json.loads(self.store.draft(asset_id)["attributes_json"])
+        attributes = rowshape.attributes(self.store.draft(asset_id))
         return {
             "assetId": asset_id,
             "params": resolved,
@@ -1110,7 +1104,7 @@ class ComponentService:
 
         def apply() -> tuple[dict, int]:
             draft = self.store.draft(asset_id)
-            attributes = json.loads(draft["attributes_json"])
+            attributes = rowshape.attributes(draft)
             result, counter = self._document_body(
                 asset_id=asset_id,
                 kind=KIND_PAGE,

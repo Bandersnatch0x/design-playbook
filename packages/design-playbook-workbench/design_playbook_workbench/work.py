@@ -16,7 +16,6 @@ Everything else is a typed refusal:
 """
 from __future__ import annotations
 
-import json
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -34,6 +33,7 @@ from .errors import (
     WorkbenchError,
 )
 from .orchestration import OrchestrationService
+from . import rows as rowshape
 from .proposals import ProposalService
 from .service import Operation, WorkbenchService, payload_digest, utc_now
 from .session import WorkbenchSession
@@ -190,8 +190,8 @@ class WorkRequestService:
             "state": row["state"],
             "leaseId": row["lease_id"],
             "leaseExpiresAt": row["lease_expires_at"],
-            "progress": json.loads(row["progress_json"]),
-            "result": json.loads(row["result_json"]) if row["result_json"] else None,
+            "progress": rowshape.load(row["progress_json"], {}),
+            "result": rowshape.load(row["result_json"], None),
             "resultDigest": row["result_digest"],
             "proposalId": row["proposal_id"],
             "capabilityId": row["capability_id"],
@@ -218,9 +218,9 @@ class WorkRequestService:
             "title": row["title"],
             "goal": row["goal"],
             "targetStack": row["target_stack"],
-            "plan": json.loads(row["plan_json"]),
-            "allowedActions": json.loads(row["allowed_actions_json"]),
-            "resultSchema": json.loads(row["result_schema_json"]),
+            "plan": rowshape.load(row["plan_json"], {}),
+            "allowedActions": rowshape.load(row["allowed_actions_json"], []),
+            "resultSchema": rowshape.load(row["result_schema_json"], {}),
             "contextSelectionId": row["context_selection_id"],
             "contextDigest": row["context_digest"],
             "bindingGeneration": int(row["binding_generation"]),
@@ -653,7 +653,7 @@ class WorkRequestService:
         if self._expired(row):
             raise WorkbenchError(STALE_EVIDENCE, detail="request expired")
         if scope == "read":
-            if "read-context" not in json.loads(row["allowed_actions_json"]):
+            if "read-context" not in rowshape.load(row["allowed_actions_json"], []):
                 raise WorkbenchError(UNAUTHORIZED)
             attempt = self.store.latest_work_attempt(request_id)
             if attempt is not None and attempt["state"] == "running":
@@ -861,7 +861,7 @@ class WorkRequestService:
         )
         if not isinstance(result, dict) or set(result) - RESULT_FIELDS:
             raise WorkbenchError(INVALID_INPUT, detail="unknown result field")
-        schema = json.loads(row["result_schema_json"])
+        schema = rowshape.load(row["result_schema_json"], {})
         missing = [key for key in schema.get("required", []) if key not in result]
         if missing:
             raise WorkbenchError(
@@ -881,7 +881,7 @@ class WorkRequestService:
         dependencies = result.get("dependencies", [])
         if not isinstance(dependencies, list):
             raise WorkbenchError(INVALID_INPUT, detail="dependencies must be a list")
-        allowed = json.loads(row["allowed_actions_json"])
+        allowed = rowshape.load(row["allowed_actions_json"], [])
         if changes and "propose-source" not in allowed:
             raise WorkbenchError(UNAUTHORIZED, detail="source proposal was not granted")
         if dependencies and "add-dependency" not in allowed:

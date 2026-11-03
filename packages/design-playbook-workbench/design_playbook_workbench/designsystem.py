@@ -24,6 +24,7 @@ from .errors import (
     UNSUPPORTED,
     WorkbenchError,
 )
+from . import rows as rowshape
 from .paths import assert_contained
 from .proposals import ProposalService, relative_parts
 from .publication import PublicationPlan
@@ -374,18 +375,13 @@ class DesignSystemService:
     # -- reads ----------------------------------------------------------
 
     def _tokens_asset(self, project_id: str, asset_id: str) -> dict:
-        asset = self.store.asset(asset_id)
-        if asset is None or asset["project_id"] != project_id:
-            raise WorkbenchError(INVALID_TARGET)
-        if asset["kind"] != "tokens":
-            raise WorkbenchError(UNSUPPORTED, detail="asset is not a token set")
-        return asset
+        return rowshape.owned_asset(self.store, project_id, asset_id, kind="tokens")
 
     def _document_bytes(self, asset_id: str, revision: dict | None = None) -> tuple[bytes, dict]:
         """The stored token document plus where it currently comes from."""
         source = revision or self.store.latest_revision(asset_id)
         if source is not None:
-            manifest = json.loads(source["manifest_json"])
+            manifest = rowshape.manifest(source)
             if manifest:
                 return self.blobs.read(manifest[0]["contentHash"]), {
                     "kind": "revision",
@@ -393,7 +389,7 @@ class DesignSystemService:
                     "revisionNumber": source["revision_number"],
                 }
         draft = self.store.draft(asset_id)
-        manifest = json.loads(draft["attributes_json"]).get("manifest", [])
+        manifest = rowshape.attributes(draft).get("manifest", [])
         if not manifest:
             raise WorkbenchError(MISSING_DEPENDENCY)
         return self.blobs.read(manifest[0]["contentHash"]), {"kind": "draft"}
@@ -570,7 +566,7 @@ class DesignSystemService:
 
         def apply() -> tuple[dict, int]:
             draft = self.store.draft(asset_id)
-            attributes = json.loads(draft["attributes_json"])
+            attributes = rowshape.attributes(draft)
             manifest = attributes.get("manifest") or [{}]
             result, counter = self.assets.write_document_draft(
                 asset_id,
@@ -695,8 +691,8 @@ class DesignSystemService:
         revision = self.store.latest_revision(asset_id)
         if revision is None:
             raise WorkbenchError(MISSING_DEPENDENCY)
-        manifest = json.loads(revision["manifest_json"])
-        locators = json.loads(revision["source_locators_json"])
+        manifest = rowshape.manifest(revision)
+        locators = rowshape.source_locators(revision)
         target_path = path
         if target_path in (None, ""):
             target_path = manifest[0]["path"] if manifest else None

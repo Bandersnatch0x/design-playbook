@@ -12,7 +12,6 @@ an erasure of history.
 """
 from __future__ import annotations
 
-import json
 import uuid
 from typing import Callable
 
@@ -26,6 +25,7 @@ from .errors import (
     MISSING_DEPENDENCY,
     WorkbenchError,
 )
+from . import rows as rowshape
 from .publication import VERIFIED_CAPABILITIES
 from .service import Operation, WorkbenchService, utc_now
 from .store import Store
@@ -34,18 +34,7 @@ RELATIONS = ("derived-from", "copied-from")
 MODES = ("reference", "derive", "copy")
 
 
-def _loads(text: object) -> object:
-    if isinstance(text, (list, dict)):
-        return text
-    if not isinstance(text, str) or not text:
-        return []
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:  # pragma: no cover - stored by us
-        return []
-
-
-def _importable_capabilities(raw: object) -> list[str]:
+def _importable_capabilities(capabilities: list) -> list[str]:
     """The source capabilities a copy or import may keep.
 
     A verified capability means a record bound to this exact revision was
@@ -54,7 +43,7 @@ def _importable_capabilities(raw: object) -> list[str]:
     """
     return [
         capability
-        for capability in _loads(raw)
+        for capability in capabilities
         if capability not in VERIFIED_CAPABILITIES
     ]
 
@@ -135,7 +124,7 @@ class ReuseService:
         )
 
     def _public_params(self, revision: dict) -> list:
-        origin = _loads(revision["origin_json"])
+        origin = rowshape.origin(revision)
         if isinstance(origin, dict):
             params = origin.get("publicParams")
             if isinstance(params, list):
@@ -196,8 +185,8 @@ class ReuseService:
             "assetCounter": int(asset["counter"]) if asset else None,
             "revisionId": row["revision_id"],
             "revisionNumber": revision["revision_number"] if revision else None,
-            "overrides": _loads(row["overrides_json"]),
-            "declaredPublicParams": _loads(row["declared_public_params_json"]),
+            "overrides": rowshape.load(row["overrides_json"], {}),
+            "declaredPublicParams": rowshape.load(row["declared_public_params_json"], []),
             "createdAt": row["created_at"],
             "updatedAt": row["updated_at"],
         }
@@ -232,7 +221,7 @@ class ReuseService:
             if revision is None:
                 raise WorkbenchError(MISSING_DEPENDENCY)
             draft = self.store.draft(asset_id)
-            attributes = _loads(draft["attributes_json"])
+            attributes = rowshape.attributes(draft)
             # The draft carries the same capability list as the revision; a
             # verified tag dropped from the revision must not survive here and
             # reappear on the next publish.
@@ -263,7 +252,7 @@ class ReuseService:
                 project_id=project_id,
                 kind=source["kind"],
                 name=new_name,
-                tags=_loads(draft["tags_json"]),
+                tags=rowshape.tags(draft),
                 attributes=attributes,
                 now=now,
             )
@@ -277,7 +266,7 @@ class ReuseService:
             # carried across with an empty `verified` list.
             copied_capabilities = [
                 capability
-                for capability in _loads(revision["capabilities_json"])
+                for capability in rowshape.capabilities(revision)
                 if capability not in VERIFIED_CAPABILITIES
             ]
             self.store.insert_revision(
@@ -287,9 +276,9 @@ class ReuseService:
                 content_hash=revision["content_hash"],
                 carrier=revision["carrier"],
                 capabilities=copied_capabilities,
-                dependencies=_loads(revision["dependencies_json"]),
-                source_locators=_loads(revision["source_locators_json"]),
-                manifest=_loads(revision["manifest_json"]),
+                dependencies=rowshape.dependencies(revision),
+                source_locators=rowshape.source_locators(revision),
+                manifest=rowshape.manifest(revision),
                 # A copy never inherits approvals: verified capabilities
                 # start empty on the new asset.
                 origin={
@@ -386,7 +375,7 @@ class ReuseService:
         if revision is None or revision["asset_id"] != source_asset["asset_id"]:
             raise WorkbenchError(INVALID_TARGET)
         closure = self.dependency_closure(project_id, revision["revision_id"])
-        manifest = _loads(revision["manifest_json"])
+        manifest = rowshape.manifest(revision)
         for entry in manifest:
             if not self.blobs.verify(entry["contentHash"]):
                 raise WorkbenchError(CORRUPT_CONTENT)
@@ -492,9 +481,9 @@ class ReuseService:
                 dependency_asset = self.store.asset(source_dependency["asset_id"])
                 if dependency_asset is None:  # pragma: no cover - plan validated
                     raise WorkbenchError(MISSING_DEPENDENCY)
-                dependency_manifest = _loads(source_dependency["manifest_json"])
+                dependency_manifest = rowshape.manifest(source_dependency)
                 dependency_capabilities = _importable_capabilities(
-                    source_dependency["capabilities_json"]
+                    rowshape.capabilities(source_dependency)
                 )
                 local_dependency_asset_id = str(uuid.uuid4())
                 local_dependency_revision_id = str(uuid.uuid4())
@@ -601,7 +590,7 @@ class ReuseService:
                     "manifest": plan["manifest"],
                     "carrier": revision["carrier"],
                     "capabilities": _importable_capabilities(
-                        revision["capabilities_json"]
+                        rowshape.capabilities(revision)
                     ),
                     "roots": [],
                     "warnings": [],
@@ -615,7 +604,7 @@ class ReuseService:
                 revision_number=1,
                 content_hash=revision["content_hash"],
                 carrier=revision["carrier"],
-                capabilities=_importable_capabilities(revision["capabilities_json"]),
+                capabilities=_importable_capabilities(rowshape.capabilities(revision)),
                 dependencies=imported_dependencies,
                 source_locators=locators,
                 manifest=plan["manifest"],
@@ -716,7 +705,7 @@ class ReuseService:
             "target": {
                 "revisionId": target_revision["revision_id"],
                 "revisionNumber": target_revision["revision_number"],
-                "capabilities": _loads(target_revision["capabilities_json"]),
+                "capabilities": rowshape.capabilities(target_revision),
             },
             "candidates": candidates,
             "notes": (
@@ -733,8 +722,8 @@ class ReuseService:
             conflicts.append(
                 {"kind": "carrier-changed", "from": current["carrier"], "to": target["carrier"]}
             )
-        current_caps = set(_loads(current["capabilities_json"]))
-        target_caps = set(_loads(target["capabilities_json"]))
+        current_caps = set(rowshape.capabilities(current))
+        target_caps = set(rowshape.capabilities(target))
         if not current_caps <= target_caps:
             conflicts.append(
                 {
@@ -748,7 +737,7 @@ class ReuseService:
             if isinstance(param, dict)
         }
         for member in members:
-            overrides = _loads(member["overrides_json"])
+            overrides = rowshape.load(member["overrides_json"], {})
             if not isinstance(overrides, dict) or not overrides:
                 continue
             # A target that declares no such parameter cannot honour the
@@ -818,7 +807,7 @@ class ReuseService:
                 instance = self.store.instance(instance_id)
                 if instance is None:  # pragma: no cover - invariant
                     raise WorkbenchError(INVALID_TARGET)
-                overrides = _loads(instance["overrides_json"])
+                overrides = rowshape.load(instance["overrides_json"], {})
                 self.store.set_instance_revision(
                     instance_id=instance_id,
                     revision_id=target["revision_id"],
@@ -879,7 +868,7 @@ class ReuseService:
                 # Unknown target, or content that no longer verifies, must be
                 # reported as damage instead of silently becoming "latest".
                 raise WorkbenchError(CORRUPT_CONTENT)
-            for entry in _loads(revision["manifest_json"]):
+            for entry in rowshape.manifest(revision):
                 if not self.blobs.verify(entry["contentHash"]):
                     raise WorkbenchError(CORRUPT_CONTENT)
             now = self._now()
@@ -893,7 +882,7 @@ class ReuseService:
                 self.store.set_instance_revision(
                     instance_id=instance_id,
                     revision_id=revision["revision_id"],
-                    overrides=_loads(instance["overrides_json"]),
+                    overrides=rowshape.load(instance["overrides_json"], {}),
                     now=now,
                 )
             record_id = str(uuid.uuid4())
@@ -939,7 +928,7 @@ class ReuseService:
                 {
                     "revisionId": row["revision_id"],
                     "revisionNumber": row["revision_number"],
-                    "capabilities": _loads(row["capabilities_json"]),
+                    "capabilities": rowshape.capabilities(row),
                     "dependencies": self.store.dependencies(row["revision_id"]),
                     "createdAt": row["created_at"],
                     "instanceCount": len(self.store.revision_instances(row["revision_id"])),
@@ -951,7 +940,7 @@ class ReuseService:
                     "recordId": row["record_id"],
                     "kind": row["kind"],
                     "toRevisionId": row["to_revision_id"],
-                    "instanceIds": _loads(row["instance_ids_json"]),
+                    "instanceIds": rowshape.load(row["instance_ids_json"], []),
                     "createdAt": row["created_at"],
                 }
                 for row in self.store.asset_upgrade_records(asset_id)

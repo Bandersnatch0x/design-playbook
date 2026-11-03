@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable
 
 from .blobs import BlobStore
+from . import rows as rowshape
 from .errors import (
     CORRUPT_CONTENT,
     INVALID_INPUT,
@@ -192,7 +193,7 @@ class PublicationService:
             entity_id=asset_id,
             project_id=project_id,
             authorize=lambda: self.service.require_project(project_id, scope="write"),
-            load_row=lambda: self._assets.owned_asset(project_id, asset_id),
+            load_row=lambda: rowshape.owned_asset(self.store, project_id, asset_id),
             validate=validate,
             apply=apply,
         )

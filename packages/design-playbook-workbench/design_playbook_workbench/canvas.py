@@ -20,6 +20,7 @@ import json
 import uuid
 from typing import Callable
 
+from . import rows as rowshape
 from .blobs import BlobStore
 from .components import (
     MAX_NODES,
@@ -1274,7 +1275,7 @@ class CanvasService:
             "applied": [row["sequence"] for row in rows if not row["undone"]],
             "undone": [row["sequence"] for row in rows if row["undone"]],
             "labels": [
-                json.loads(row["transaction_json"])["label"] for row in rows
+                rowshape.load(row["transaction_json"], {})["label"] for row in rows
             ],
             "limit": UNDO_HISTORY_LIMIT,
             "canUndo": any(not row["undone"] for row in rows),
@@ -1309,7 +1310,7 @@ class CanvasService:
                     "counter": int(row["counter"]),
                     "updatedAt": row["updated_at"],
                     "boardCount": len(
-                        (json.loads(row["document_json"]).get("boards") or [])
+                        (rowshape.load(row["document_json"], {}).get("boards") or [])
                     ),
                 }
                 for row in self.store.project_canvases(project_id)
@@ -1470,7 +1471,7 @@ class CanvasService:
             # Undo walks backwards from the newest edit; redo walks forwards
             # from the oldest undone one.
             picked = candidates[-1] if not reverse else candidates[0]
-            transaction = json.loads(picked["transaction_json"])
+            transaction = rowshape.load(picked["transaction_json"], {})
             patch = transaction["before"] if not reverse else transaction["after"]
             document = apply_patch(self._document(row), patch)
             self._require_valid(project_id, document)

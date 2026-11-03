@@ -19,6 +19,7 @@ import uuid
 from pathlib import Path
 from typing import Callable
 
+from . import rows as rowshape
 from .assets import AssetService, is_credential_name
 from .blobs import BlobStore, digest_bytes
 from .canvas import CanvasService, instance_count, snapshot_html
@@ -247,7 +248,7 @@ class OrchestrationService:
     # -- explicit Agent context -----------------------------------------
 
     def _context_payload(self, row: dict) -> dict:
-        payload = json.loads(row["payload_json"])
+        payload = rowshape.load(row["payload_json"], {})
         return {
             **payload,
             "selectionId": row["selection_id"],
@@ -447,7 +448,7 @@ class OrchestrationService:
                 raise WorkbenchError(MISSING_DEPENDENCY, detail="revision is unresolved")
             if revision["asset_id"] != asset_id:
                 raise WorkbenchError(INVALID_INPUT)
-            manifest = json.loads(revision["manifest_json"])
+            manifest = rowshape.manifest(revision)
             size = sum(int(entry.get("size") or 0) for entry in manifest)
             if revision["content_hash"]:
                 try:

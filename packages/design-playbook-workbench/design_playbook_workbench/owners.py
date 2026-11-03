@@ -32,6 +32,7 @@ from .errors import (
     STALE_EVIDENCE,
     WorkbenchError,
 )
+from . import rows as rowshape
 from .paths import assert_contained
 from .proposals import relative_parts
 from .publication import PublicationPlan
@@ -481,7 +482,7 @@ class OwnerProjectionService:
             draft = self.store.draft(asset_id)
             if draft is None:
                 raise WorkbenchError(INVALID_TARGET)
-            manifest = json.loads(draft["attributes_json"]).get("manifest", [])
+            manifest = rowshape.attributes(draft).get("manifest", [])
             if not manifest:
                 raise WorkbenchError(MISSING_DEPENDENCY)
             content_hash = manifest[0]["contentHash"]
@@ -621,7 +622,7 @@ class OwnerProjectionService:
             "role": match.get("role") or "",
         }
         draft = self.store.draft(created["assetId"])
-        attributes = json.loads(draft["attributes_json"])
+        attributes = rowshape.attributes(draft)
         attributes["sourceLocators"] = [locator]
         attributes["warnings"] = [
             "回流候选：发布前需维护者补全公开面；原 run 的判据不因本候选改变。"
