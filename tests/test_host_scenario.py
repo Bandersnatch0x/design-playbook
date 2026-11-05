@@ -575,6 +575,8 @@ class CommandShapeTests(unittest.TestCase):
             self.assertEqual(spec_arg.name, "spec.md")
             self.assertEqual(pointback_arg.name, "point-back-stub.md")
             self.assertEqual(spec_arg.parent, work.resolve() / "target" / RUN_ROOT_REL)
+            # Exactly one explicit opt-out of the fail-closed CLI default.
+            self.assertEqual(cmd.count(runner.VALIDATOR_LEGACY_FLAG), 1)
             for flag in runner.VALIDATOR_FORBIDDEN_FLAGS:
                 self.assertNotIn(flag, cmd)
             self.assertNotIn("--decision-report", cmd)
@@ -972,9 +974,12 @@ class UiPickerCommandShapeTests(unittest.TestCase):
             self.assertEqual(cmd[2:4], ["--format", "json"])
             spec_arg = Path(cmd[4])
             pointback_arg = Path(cmd[5])
-            self.assertEqual(cmd[6], "--decision-report")
-            report_arg = Path(cmd[7])
-            self.assertEqual(len(cmd), 8)
+            # Two positionals, --format json, then --legacy (the fail-closed
+            # default's explicit opt-out), then --decision-report <abs>.
+            self.assertEqual(cmd[6], "--legacy")
+            self.assertEqual(cmd[7], "--decision-report")
+            report_arg = Path(cmd[8])
+            self.assertEqual(len(cmd), 9)
             for arg in (spec_arg, pointback_arg, report_arg):
                 self.assertTrue(arg.is_absolute())
             self.assertEqual(spec_arg.name, "spec.md")

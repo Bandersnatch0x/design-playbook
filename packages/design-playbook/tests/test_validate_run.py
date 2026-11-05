@@ -16,9 +16,18 @@ RUN_STATUS = PACKAGE / "scripts" / "run_status.py"
 FIX = HERE / "fixtures"
 PASS = FIX / "pass"
 FAIL = FIX / "fail"
+# Reports that only satisfy the pre-2026-11 non-strict mode. They are valid
+# solely under the explicit --legacy opt-out.
+LEGACY = FIX / "legacy"
 
 
 def run(spec: Path, pointback: Path, *extra: str) -> subprocess.CompletedProcess[str]:
+    """Invoke the CLI exactly as a user would: no injected strictness flag.
+
+    A bare call therefore exercises the fail-closed default. Tests that judge
+    one legacy gate on a legacy-shaped fixture name ``run_legacy`` (or pass
+    ``--legacy`` themselves) so the downgrade is part of the test's intent.
+    """
     return subprocess.run(
         [sys.executable, str(VALIDATOR), str(spec), str(pointback), *extra],
         capture_output=True,
@@ -27,13 +36,27 @@ def run(spec: Path, pointback: Path, *extra: str) -> subprocess.CompletedProcess
     )
 
 
+def run_legacy(
+    spec: Path, pointback: Path, *extra: str
+) -> subprocess.CompletedProcess[str]:
+    """Explicit --legacy opt-out: the pre-2026-11 structural reading."""
+    return run(spec, pointback, "--legacy", *extra)
+
+
 def expect_valid(
-    failures: list[str], name: str, spec: Path, pointback: Path, *extra: str
+    failures: list[str],
+    name: str,
+    spec: Path,
+    pointback: Path,
+    *extra: str,
+    legacy: bool = False,
 ) -> None:
     if not spec.is_file() or not pointback.is_file():
         failures.append(f"{name}: fixture pair is incomplete")
         return
-    result = run(spec, pointback, *extra)
+    result = run_legacy(spec, pointback, *extra) if legacy else run(
+        spec, pointback, *extra
+    )
     if result.returncode != 0:
         failures.append(
             f"{name}: expected exit 0, got {result.returncode}; "
@@ -54,11 +77,14 @@ def expect_invalid(
     pointback: Path,
     diagnostic: str,
     *extra: str,
+    legacy: bool = False,
 ) -> None:
     if not spec.is_file() or not pointback.is_file():
         failures.append(f"{name}: fixture pair is incomplete")
         return
-    result = run(spec, pointback, *extra)
+    result = run_legacy(spec, pointback, *extra) if legacy else run(
+        spec, pointback, *extra
+    )
     if result.returncode != 1:
         failures.append(
             f"{name}: expected artifact-invalid exit 1, got "
@@ -77,6 +103,23 @@ def expect_invalid(
 
 def _zero_findings_pair() -> tuple[Path, Path]:
     return PASS / "zero-findings.spec.md", PASS / "zero-findings.point-back.md"
+
+
+def _json_rule_ids(
+    result: subprocess.CompletedProcess[str],
+) -> set[str] | None:
+    """Return the JSON projection's rule-id set, or None when unparseable."""
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, list):
+        return None
+    return {
+        item.get("rule_id")
+        for item in payload
+        if isinstance(item, dict) and item.get("rule_id")
+    }
 
 
 def _g5_args(case_dir: Path) -> list[str]:
@@ -306,19 +349,21 @@ def main() -> int:
     for spec in pass_specs:
         pointback = spec.with_name(spec.name.replace("spec.md", "point-back.md"))
         name = spec.name.replace(".spec.md", "").replace("spec", "default")
-        expect_valid(failures, f"pass/{name}", spec, pointback)
+        expect_valid(failures, f"pass/{name}", spec, pointback, legacy=True)
 
     expect_valid(
         failures,
         "pass/recirculate-mentions-pass",
         PASS / "zero-findings.spec.md",
         PASS / "recirculate-mentions-pass.point-back.md",
+        legacy=True,
     )
     expect_valid(
         failures,
         "showcase/direct",
         PACKAGE / "showcase" / "01-spec.md",
         PACKAGE / "showcase" / "03-point-back.md",
+        legacy=True,
     )
     expect_valid(
         failures,
@@ -329,6 +374,7 @@ def main() -> int:
         str(PACKAGE / "showcase" / "preview"),
         "--decision-report",
         str(PACKAGE / "showcase" / "preview" / "decision-report.md"),
+        legacy=True,
     )
 
     cases = [
@@ -442,7 +488,7 @@ def main() -> int:
         ),
     ]
     for name, spec, pointback, diagnostic in cases:
-        expect_invalid(failures, name, spec, pointback, diagnostic)
+        expect_invalid(failures, name, spec, pointback, diagnostic, legacy=True)
 
     missing = run(PASS / "zero-findings.spec.md", HERE / "__missing__.md")
     if missing.returncode != 2 or "RUN ERROR" not in missing.stdout:
@@ -535,7 +581,7 @@ def main() -> int:
             _write_text(
                 run_root / "point-back.md", _verdict_probe_pointback(verdict_section)
             )
-            result = run(verdict_spec, run_root / "point-back.md")
+            result = run_legacy(verdict_spec, run_root / "point-back.md")
             if result.returncode != 1 or diagnostic not in result.stdout:
                 failures.append(
                     f"{name}: expected exit 1 with {diagnostic!r}; "
@@ -554,7 +600,7 @@ def main() -> int:
             _write_text(
                 run_root / "point-back.md", _verdict_probe_pointback(verdict_section)
             )
-            result = run(verdict_spec, run_root / "point-back.md")
+            result = run_legacy(verdict_spec, run_root / "point-back.md")
             if result.returncode != 0 or "RUN OK" not in result.stdout:
                 failures.append(
                     f"{name}: expected exit 0 RUN OK; "
@@ -636,7 +682,9 @@ def main() -> int:
     # --- G5 conditional preview gate (matrix B) ---
     spec, pb = _zero_findings_pair()
 
-    expect_valid(failures, "pass/g5-no-preview-omit-flag", spec, pb)
+    expect_valid(
+        failures, "pass/g5-no-preview-omit-flag", spec, pb, legacy=True
+    )
     expect_valid(
         failures,
         "pass/g5-no-preview-empty-dir",
@@ -644,6 +692,7 @@ def main() -> int:
         pb,
         "--preview-dir",
         str(PASS / "g5-no-preview"),
+        legacy=True,
     )
 
     for name in (
@@ -653,7 +702,9 @@ def main() -> int:
         "g5-floor-fail-then-revised",
     ):
         case = PASS / name
-        expect_valid(failures, f"pass/{name}", spec, pb, *_g5_args(case))
+        expect_valid(
+            failures, f"pass/{name}", spec, pb, *_g5_args(case), legacy=True
+        )
 
     expect_invalid(
         failures,
@@ -662,6 +713,7 @@ def main() -> int:
         pb,
         "G5 preview",
         *_g5_args(FAIL / "g5-preview-without-confirm"),
+        legacy=True,
     )
     expect_invalid(
         failures,
@@ -670,6 +722,7 @@ def main() -> int:
         pb,
         "G5 preview",
         *_g5_args(FAIL / "g5-confirm-bad-report-ref"),
+        legacy=True,
     )
     expect_invalid(
         failures,
@@ -678,6 +731,7 @@ def main() -> int:
         pb,
         "G5 preview",
         *_g5_args(FAIL / "g5-only-aborted"),
+        legacy=True,
     )
     expect_invalid(
         failures,
@@ -686,6 +740,7 @@ def main() -> int:
         pb,
         "aborted",
         *_g5_args(FAIL / "g5-confirm-aborted-true"),
+        legacy=True,
     )
     expect_invalid(
         failures,
@@ -694,6 +749,7 @@ def main() -> int:
         pb,
         "G5 preview",
         *_g5_args(FAIL / "g5-confirm-false-only"),
+        legacy=True,
     )
     expect_invalid(
         failures,
@@ -702,6 +758,7 @@ def main() -> int:
         pb,
         "failed feedback floor",
         *_g5_args(FAIL / "g5-confirm-floor-fail"),
+        legacy=True,
     )
 
     # Durable decision entries are Preview occurrence signals, never G5
@@ -743,6 +800,7 @@ def main() -> int:
             "G5 preview",
             "--preview-dir",
             str(preview),
+            legacy=True,
         )
 
         _write_text(preview / "round-1.html", prototype_body.decode("utf-8"))
@@ -761,6 +819,7 @@ def main() -> int:
             pb,
             "--preview-dir",
             str(preview),
+            legacy=True,
         )
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -773,24 +832,30 @@ def main() -> int:
             pb,
             "--preview-dir",
             str(preview),
+            legacy=True,
         )
 
     # --- G6 conditional evidence-binding gate (matrix) ---
     g6_spec, _ = _zero_findings_pair()
 
+    # Zero-evidence legacy report: valid only under the explicit --legacy
+    # opt-out. A bare CLI invocation (fail-closed default) must reject it —
+    # that default is pinned by the bare-invocation regression below.
     expect_valid(
         failures,
-        "pass/g6-no-evidence",
+        "legacy/g6-no-evidence",
         g6_spec,
-        PASS / "g6-no-evidence" / "point-back.md",
+        LEGACY / "g6-no-evidence" / "point-back.md",
+        legacy=True,
     )
     expect_valid(
         failures,
-        "pass/g6-no-evidence-omit-flag",
+        "legacy/g6-no-evidence-omit-flag",
         g6_spec,
-        PASS / "g6-no-evidence" / "point-back.md",
+        LEGACY / "g6-no-evidence" / "point-back.md",
         "--evidence-dir",
-        str(PASS / "g6-no-evidence" / "evidence"),
+        str(LEGACY / "g6-no-evidence" / "evidence"),
+        legacy=True,
     )
     for name in (
         "g6-evidence-bound",
@@ -800,7 +865,8 @@ def main() -> int:
     ):
         case = PASS / name
         expect_valid(
-            failures, f"pass/{name}", g6_spec, case / "point-back.md", *_g6_args(case)
+            failures, f"pass/{name}", g6_spec, case / "point-back.md",
+            *_g6_args(case), legacy=True,
         )
 
     expect_invalid(
@@ -810,6 +876,7 @@ def main() -> int:
         FAIL / "g6-dangling-ref" / "point-back.md",
         "G6 evidence",
         *_g6_args(FAIL / "g6-dangling-ref"),
+        legacy=True,
     )
     expect_invalid(
         failures,
@@ -818,6 +885,7 @@ def main() -> int:
         FAIL / "g6-missing-artifact" / "point-back.md",
         "G6 evidence",
         *_g6_args(FAIL / "g6-missing-artifact"),
+        legacy=True,
     )
     expect_invalid(
         failures,
@@ -826,6 +894,7 @@ def main() -> int:
         FAIL / "g6-unknown-criterion" / "point-back.md",
         "G6 evidence",
         *_g6_args(FAIL / "g6-unknown-criterion"),
+        legacy=True,
     )
     expect_invalid(
         failures,
@@ -834,6 +903,7 @@ def main() -> int:
         FAIL / "g6-pass-without-valid-binding" / "point-back.md",
         "G6 evidence",
         *_g6_args(FAIL / "g6-pass-without-valid-binding"),
+        legacy=True,
     )
 
     # --- G6 capture-contract snapshot full shape (ADR-0018) ---
@@ -923,8 +993,8 @@ def main() -> int:
             g6_pb = run_root / "point-back.md"
             _write_text(g6_pb, _g6_probe_pointback("evidence/L6.1.png"))
             args = ["--evidence-dir", str(evidence), "--run-root", str(run_root)]
-            result = run(g6_spec, g6_pb, *args)
-            json_result = run(g6_spec, g6_pb, "--format", "json", *args)
+            result = run_legacy(g6_spec, g6_pb, *args)
+            json_result = run_legacy(g6_spec, g6_pb, "--format", "json", *args)
             ok = (
                 result.returncode == 1
                 and message in result.stdout
@@ -947,7 +1017,7 @@ def main() -> int:
             evidence / "manifest.jsonl",
             "not-json\n[]\n",
         )
-        text_result = run(
+        text_result = run_legacy(
             manifest_spec,
             manifest_pb,
             "--evidence-dir",
@@ -955,7 +1025,7 @@ def main() -> int:
             "--run-root",
             str(run_root),
         )
-        json_result = run(
+        json_result = run_legacy(
             manifest_spec,
             manifest_pb,
             "--format",
@@ -1016,6 +1086,7 @@ def main() -> int:
             str(preview),
             "--decision-report",
             str(run_root / "decision-report.md"),
+            legacy=True,
         )
 
     # A durable round-2 entry also makes round 2 current. It cannot let the
@@ -1070,6 +1141,7 @@ def main() -> int:
             str(preview),
             "--decision-report",
             str(run_root / "decision-report.md"),
+            legacy=True,
         )
 
     # prototype on disk no longer hashes to the recorded prototype_html_hash
@@ -1097,6 +1169,7 @@ def main() -> int:
             str(preview),
             "--decision-report",
             str(run_root / "decision-report.md"),
+            legacy=True,
         )
 
     # A current, confirmed, hash-matching record still passes (hash happy path
@@ -1122,6 +1195,7 @@ def main() -> int:
             str(preview),
             "--decision-report",
             str(run_root / "decision-report.md"),
+            legacy=True,
         )
 
     # CRLF working-tree bytes must match an LF-normalized confirm hash
@@ -1151,6 +1225,7 @@ def main() -> int:
             str(preview),
             "--decision-report",
             str(run_root / "decision-report.md"),
+            legacy=True,
         )
 
     # --- G6 observed containment (issue 04): observed must not escape
@@ -1176,6 +1251,7 @@ def main() -> int:
             str(evidence),
             "--run-root",
             str(run_root),
+            legacy=True,
         )
 
     # --- M6: realpath defence against symlink escape. Mirror evidence/
@@ -1226,6 +1302,7 @@ def main() -> int:
                 str(evidence),
                 "--run-root",
                 str(run_root),
+                legacy=True,
             )
 
     # --- LOW-3: observed prefix check is case-insensitive. An uppercase
@@ -1261,6 +1338,7 @@ def main() -> int:
             str(evidence),
             "--run-root",
             str(run_root),
+            legacy=True,
         )
 
     # --- LOW-2: _prototype_target must keep prototype resolution inside
@@ -1307,6 +1385,7 @@ def main() -> int:
             str(preview),
             "--decision-report",
             str(run_root / "decision-report.md"),
+            legacy=True,
         )
 
     # --- ADR-0008 adapter floor self-check (bundled runtime) ---
@@ -1327,7 +1406,108 @@ def main() -> int:
     else:
         failures.append("adapter floor self-check: bundled server.py not found")
 
-    # --- Strict quality mode (opt-in require flags) ---
+    # --- Fail-closed CLI default (research note I1) ---
+    # A normal invocation with no strictness flag must behave as --strict,
+    # so a zero-evidence run fails closed; --legacy is the explicit full
+    # opt-out (a lone --require-* deliberately keeps only its own check).
+    default_spec, default_pb = _zero_findings_pair()
+    zero_evidence_pb = LEGACY / "g6-no-evidence" / "point-back.md"
+    default_zero = run(default_spec, zero_evidence_pb, "--format", "json")
+    strict_zero = run(
+        default_spec, zero_evidence_pb, "--strict", "--format", "json"
+    )
+    default_rules = _json_rule_ids(default_zero)
+    strict_rules = _json_rule_ids(strict_zero)
+    required_zero_rules = {
+        "G5.require_preview",
+        "G6.require_evidence_dir",
+        "G11.missing_coverage_block",
+    }
+    if default_zero.returncode != 1 or strict_zero.returncode != 1:
+        failures.append(
+            "default/zero-evidence: expected exit 1 from both the fail-closed "
+            f"default and --strict; bare={default_zero.returncode} "
+            f"strict={strict_zero.returncode}"
+        )
+    elif default_rules is None or strict_rules is None:
+        failures.append(
+            "default/zero-evidence: expected parseable JSON findings; "
+            f"bare={default_zero.stdout!r} strict={strict_zero.stdout!r}"
+        )
+    elif not required_zero_rules <= default_rules:
+        failures.append(
+            "default/zero-evidence: default must require preview, evidence, "
+            f"and coverage; missing {sorted(required_zero_rules - default_rules)}"
+        )
+    elif default_rules != strict_rules:
+        failures.append(
+            "default/zero-evidence: bare default error rule IDs must equal "
+            f"--strict; bare={sorted(default_rules)} "
+            f"strict={sorted(strict_rules)}"
+        )
+    else:
+        print("  ok    default zero-evidence run matches --strict rule IDs")
+
+    legacy_zero = run_legacy(default_spec, zero_evidence_pb)
+    if legacy_zero.returncode != 0 or "RUN OK" not in legacy_zero.stdout:
+        failures.append(
+            "legacy/zero-evidence: expected exit 0 RUN OK under the explicit "
+            f"--legacy opt-out, got {legacy_zero.returncode}; "
+            f"stdout={legacy_zero.stdout!r}"
+        )
+    else:
+        print("  ok    explicit --legacy accepts the zero-evidence run")
+
+    # The default is not a blanket reject: a run that satisfies all three
+    # obligations passes bare, exactly as it passed under --strict.
+    full_run = PACKAGE / "examples" / "export-upgrade" / "run"
+    full_run_project = PACKAGE / "examples" / "export-upgrade" / "project"
+    full_args = (
+        "--preview-dir", str(full_run / "preview"),
+        "--decision-report", str(full_run / "decision-report.md"),
+        "--evidence-dir", str(full_run / "evidence"),
+        "--run-root", str(full_run),
+        "--contract-project", str(full_run_project),
+        "--contract-run", str(full_run),
+        "--shaping-dir", str(full_run / "shaping"),
+    )
+    full_default = run(full_run / "spec.md", full_run / "point-back.md",
+                       *full_args)
+    full_strict = run(full_run / "spec.md", full_run / "point-back.md",
+                      "--strict", *full_args)
+    if (
+        full_default.returncode != 0
+        or "RUN OK" not in full_default.stdout
+        or full_default.returncode != full_strict.returncode
+    ):
+        failures.append(
+            "default/full-run: a fully obligated run must pass bare and "
+            f"match --strict; bare={full_default.returncode} "
+            f"strict={full_strict.returncode} stdout={full_default.stdout!r}"
+        )
+    else:
+        print("  ok    bare default passes a fully obligated run")
+
+    # --legacy cannot silently downgrade an explicit strict request.
+    for conflicting in (
+        "--strict",
+        "--require-preview",
+        "--require-evidence",
+        "--require-coverage",
+    ):
+        clash = run_legacy(default_spec, zero_evidence_pb, conflicting)
+        if clash.returncode != 2 or "--legacy cannot be combined" not in (
+            clash.stdout + clash.stderr
+        ):
+            failures.append(
+                f"legacy/{conflicting}: expected usage exit 2, got "
+                f"{clash.returncode}; stdout={clash.stdout!r} "
+                f"stderr={clash.stderr!r}"
+            )
+        else:
+            print(f"  ok    --legacy rejects a conflicting {conflicting}")
+
+    # --- Per-gate strict flags (each engages only its own check) ---
     strict_spec, strict_pb = _zero_findings_pair()
     strict_no_preview = run(strict_spec, strict_pb, "--require-preview")
     if (
@@ -1379,13 +1559,15 @@ def main() -> int:
         print("  ok    strict --require-preview passes with confirmed preview")
 
     # --- Skeleton anti-forgery (ADR-0033 D12, issue #67) ---
-    # The unaudited skeleton (audited: false) passes non-strict validation
-    # (the pass-family glob above also covers pass/skeleton) but is
-    # rejected by --strict and the --require-* flags with the AUDIT.*
-    # finding — no new gate number. One fixture pair serves both modes:
-    # the pass fixture is byte-identical to the single module's generator
-    # output (lockstep check below pins that), and the same pair feeds the
-    # strict rejections — identical bytes, different verdicts.
+    # The unaudited skeleton (audited: false) is rejected by the fail-closed
+    # default and by --strict / --require-evidence / --require-coverage with
+    # the AUDIT.* finding — no new gate number. (--require-preview alone does
+    # not inspect that marker, but this fixture has no preview either, so it
+    # still fails G5.) It passes structurally under the explicit --legacy
+    # opt-out. One fixture pair serves every mode: the pass fixture
+    # is byte-identical to the single module's generator output (lockstep
+    # check below pins that), and the same pair feeds the rejections —
+    # identical bytes, different verdicts.
     if str(PACKAGE) not in sys.path:
         sys.path.insert(0, str(PACKAGE))
     from design_playbook.scripts.audit_preferences import (  # noqa: E402
@@ -1432,6 +1614,7 @@ def main() -> int:
         "pass/skeleton-explicit",
         PASS / "skeleton.spec.md",
         PASS / "skeleton.point-back.md",
+        legacy=True,
     )
 
     # --- Structured diagnostics (vNext ticket 02) ---
@@ -1491,8 +1674,8 @@ def main() -> int:
         ),
     ]
     for gate, spec, pointback, extra, prefix in structured_cases:
-        text_result = run(spec, pointback, *extra)
-        json_result = run(spec, pointback, "--format", "json", *extra)
+        text_result = run_legacy(spec, pointback, *extra)
+        json_result = run_legacy(spec, pointback, "--format", "json", *extra)
         if text_result.returncode != 1:
             failures.append(
                 f"structured/{gate}/text: expected exit 1, got "
@@ -1599,7 +1782,7 @@ def main() -> int:
         )
         pb = run_root / "point-back.md"
         _write_text(pb, _g6_probe_pointback("evidence/L6.1.png"))
-        warn_text = run(
+        warn_text = run_legacy(
             PASS / "zero-findings.spec.md",
             pb,
             "--evidence-dir",
@@ -1607,7 +1790,7 @@ def main() -> int:
             "--run-root",
             str(run_root),
         )
-        warn_json = run(
+        warn_json = run_legacy(
             PASS / "zero-findings.spec.md",
             pb,
             "--format",
@@ -1667,6 +1850,7 @@ def main() -> int:
         str(p2_run),
         "--shaping-dir",
         str(p2_run / "shaping"),
+        legacy=True,
     )
     expect_valid(
         failures,
@@ -1699,6 +1883,7 @@ def main() -> int:
             "G9 shaping",
             "--shaping-dir",
             str(bad_shaping),
+            legacy=True,
         )
 
     # G11 negative: vNext-shaped report without a Coverage statement block.
@@ -1716,6 +1901,7 @@ def main() -> int:
             p2_run / "spec.md",
             pb,
             "G11 coverage",
+            legacy=True,
         )
 
     # --- ADR-0008 frontend floor JS intercept (playwright) ---

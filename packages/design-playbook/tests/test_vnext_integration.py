@@ -28,11 +28,14 @@ class VNextIntegrationTests(unittest.TestCase):
             self.assertTrue(path.is_file(), path)
 
     def test_validate_run_json_and_doctor(self) -> None:
+        # Legacy-shaped fixture (no preview, no bound evidence, no Coverage
+        # block). The CLI fails closed by default, so the clean-run JSON
+        # projection is requested through the explicit --legacy opt-out.
         spec = PASS / "zero-findings.spec.md"
         pb = PASS / "zero-findings.point-back.md"
         result = subprocess.run(
             [sys.executable, str(SCRIPTS / "validate_run.py"), str(spec), str(pb),
-             "--format", "json"],
+             "--legacy", "--format", "json"],
             capture_output=True, text=True, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

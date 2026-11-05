@@ -701,7 +701,9 @@ class FixtureWalkthroughTests(unittest.TestCase):
 
     def test_p2_fixture_chain_with_dd_blocks(self) -> None:
         # S2 extends the S1 P2 fixture in place: R/C entries pass G10 with
-        # discovery via --run-root (no explicit --decision-report needed)
+        # discovery via --run-root (no explicit --decision-report needed).
+        # The fixture has no preview transaction, so the fail-closed default
+        # would fail G5 for an unrelated reason; pin evidence + coverage.
         result = subprocess.run(
             [sys.executable,
              str(PKG / "scripts" / "validate_run.py"),
@@ -710,7 +712,8 @@ class FixtureWalkthroughTests(unittest.TestCase):
              "--run-root", str(P2_RUN),
              "--contract-project", str(P2_RUN.parent / "project"),
              "--contract-run", str(P2_RUN),
-             "--shaping-dir", str(P2_RUN / "shaping")],
+             "--shaping-dir", str(P2_RUN / "shaping"),
+             "--require-evidence", "--require-coverage"],
             capture_output=True, text=True, check=False,
             encoding="utf-8", errors="replace",
         )

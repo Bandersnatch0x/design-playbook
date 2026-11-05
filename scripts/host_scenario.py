@@ -93,6 +93,9 @@ VALIDATOR_FORBIDDEN_FLAGS = (
     "--require-evidence",
     "--require-coverage",
 )
+# The validator CLI fails closed by default; these packs judge one gate on a
+# mechanical stub, so they ask for the explicit legacy opt-out instead.
+VALIDATOR_LEGACY_FLAG = "--legacy"
 UX_SPEC_SLICE = "ux-spec-slice"
 UX_SPEC_RUN_ROOT = ".scratch/host-scenario-ux-spec"
 UX_SPEC_SPEC = "spec.md"
@@ -433,11 +436,14 @@ def _validator_command(
 
     ``decision_report_path`` is supplied only by packs that declare
     ``decision_report_artifact``: it appends ``--decision-report <abs>``
-    so G10 engages on DD-entry-bearing reports. Without it, no
-    --run-root / --shaping-dir / --decision-report / --evidence-dir /
-    --preview-dir / --strict / --require-* flags appear: the conditional
-    gates stay disengaged so the verdict isolates G1 (plus the mechanical
-    G2/G3 check on the generated stub).
+    so G10 engages on DD-entry-bearing reports. Every pack also passes
+    ``--legacy``: the validator CLI fails closed by default, while these
+    packs judge one gate on a mechanical stub, so they opt out explicitly
+    instead of claiming preview/evidence/coverage obligations they never
+    had. Without the other flags no --run-root / --shaping-dir /
+    --evidence-dir / --preview-dir / --strict / --require-* flag appears:
+    the conditional gates stay disengaged so the verdict isolates G1 (plus
+    the mechanical G2/G3 check on the generated stub).
     """
     cmd = [
         sys.executable,
@@ -446,6 +452,7 @@ def _validator_command(
         "json",
         str(spec_path),
         str(pointback_path),
+        VALIDATOR_LEGACY_FLAG,
     ]
     forbidden = VALIDATOR_FORBIDDEN_FLAGS
     if decision_report_path is not None:
@@ -457,6 +464,10 @@ def _validator_command(
             cmd.count("--decision-report") == 1,
             "declared decision-report packs must pass --decision-report exactly once",
         )
+    _require(
+        cmd.count(VALIDATOR_LEGACY_FLAG) == 1,
+        "the fail-closed default needs exactly one explicit --legacy opt-out",
+    )
     _require(
         not any(flag in cmd for flag in forbidden),
         "validator command must stay minimal: no optional gate paths or strict flags",

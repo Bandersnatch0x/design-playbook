@@ -260,11 +260,15 @@ def verify(run_root: Path) -> int:
     spec = run_root / "spec.md"
     pb = run_root / "point-back.md"
     if spec.is_file() and pb.is_file():
+        # Inspection tool, not a gate: it reports each conditional gate on
+        # whatever the live run produced, so it opts out of the validator's
+        # fail-closed default (--legacy) and keeps the historical reading.
         base = [
             sys.executable,
             str(SCRIPTS / "validate_run.py"),
             str(spec),
             str(pb),
+            "--legacy",
         ]
         text = _run(base)
         if text.returncode == 0 and "RUN OK" in text.stdout:
@@ -361,6 +365,7 @@ def verify(run_root: Path) -> int:
                     str(pb),
                     "--format",
                     "json",
+                    "--legacy",
                     "--contract-project",
                     str(project),
                     "--contract-run",

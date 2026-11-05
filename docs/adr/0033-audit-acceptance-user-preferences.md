@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted (2026-08-19).
+Accepted (2026-08-19). Amended 2026-11-05: the CLI validator now fails
+closed by default (see decision 13); the stage-optionality decision itself
+is unchanged.
 
 ## Context
 
@@ -21,12 +23,14 @@ The Design I/O pipeline currently treats every stage as agent-decided: fill and 
 9. **Scope.** The preference files contain exactly three booleans — `craft_guard`, `observe`, `ui_evaluator` — plus an "asked" status bit. Entry routing is not included; ADR-0032's fact-driven routing already covers it.
 10. **First-ask timing.** The first ask merges into the existing tier confirmation dialogue (the one-time user tier confirmation in SKILL.md); no new interruption is added.
 11. **Write-back.** A user declaration writes back as the new default preference unless the user explicitly says "this run only".
-12. **Forgery boundary.** The skeleton point-back must carry exactly one machine-readable `audited: false` marker and a fixed limitation sentence. `validate_run --strict` and `--require-evidence` / `--require-coverage` reject skeleton runs and any present-but-ambiguous marker (duplicate, indented, commented, or malformed); `aggregate_runs` excludes both from audit-derived statistics and `run_status` never projects their verdict. Optionality is a convenience for honest users, not a channel for audit fraud.
+12. **Forgery boundary.** The skeleton point-back must carry exactly one machine-readable `audited: false` marker and a fixed limitation sentence. `validate_run` rejects skeleton runs and any present-but-ambiguous marker (duplicate, indented, commented, or malformed) by default, and `--strict` / `--require-evidence` / `--require-coverage` reject them explicitly; `aggregate_runs` excludes both from audit-derived statistics and `run_status` never projects their verdict. Optionality is a convenience for honest users, not a channel for audit fraud.
+13. **Fail-closed CLI default (2026-11-05 amendment).** A `validate_run.py` invocation that names no strictness flag behaves as `--strict`: preview occurrence, a bound evidence row, and a Coverage statement are required. `--legacy` is the explicit opt-out for old reports and cannot be combined with `--strict` or any `--require-*` flag. An explicit single `--require-*` flag keeps its historical meaning (only that check engages), and `--strict` stays accepted. The in-process `RunInputs` defaults are unchanged, so `run_status` / `aggregate_runs` projections keep their published meaning. This does not make any stage mandatory: users may still skip optional audit stages, and the resulting unaudited skeleton is simply no longer accepted as a passing run by default. Such a report remains deliverable with its `audited: false` marker, skip reason, and limitation statement; checking its structure with `--legacy` does not turn it into an audit pass (`run_status` still projects *not audited*).
 
 ## Consequences
 
 - The four-layer preview floor (ADR-0008) remains fully mandatory; this decision touches nothing inside the preview transaction, integrity, or G5 floor path.
-- G5/G6/G8 conditional gate logic is unchanged; gates still evaluate on whatever artifacts exist.
+- G5/G6/G8 conditional gate logic is unchanged; gates still evaluate on whatever artifacts exist. The 2026-11-05 amendment changes only the CLI's default strictness, not any gate's rules.
+- A bare `validate_run.py` invocation on a legacy-shaped report now exits 1 instead of 0. Old reports are still readable through the explicit `--legacy` opt-out; fixtures that encode the old acceptance moved from `tests/fixtures/pass/` to `tests/fixtures/legacy/`.
 - Change surfaces introduced by this decision are listed as input for follow-up specs/tickets and are **not** implemented by this ADR:
   - orchestrating SKILL.md preference-reading section (ask-once, read, trim, skip-list recording, write-back);
   - skeleton `point-back.md` generation with the `audited: false` marker and fixed limitation sentence;

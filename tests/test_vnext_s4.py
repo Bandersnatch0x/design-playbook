@@ -441,6 +441,10 @@ class FixtureWalkthroughTests(unittest.TestCase):
     """Issue #39: the two fixture runs demonstrate the S4 faces end to end."""
 
     def _validate(self, run_dir: Path) -> subprocess.CompletedProcess[str]:
+        # Neither S4 fixture carries a preview transaction, so a bare
+        # invocation (fail-closed default, preview required) would fail on
+        # G5 for reasons unrelated to the tier faces under test. Pin the
+        # evidence + coverage obligations instead.
         return subprocess.run(
             [
                 sys.executable,
@@ -451,6 +455,8 @@ class FixtureWalkthroughTests(unittest.TestCase):
                 "--run-root", str(run_dir),
                 "--contract-project", str(run_dir.parent / "project"),
                 "--contract-run", str(run_dir),
+                "--require-evidence",
+                "--require-coverage",
                 *(["--shaping-dir", str(run_dir / "shaping")]
                   if (run_dir / "shaping").is_dir() else []),
             ],
