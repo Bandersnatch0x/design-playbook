@@ -298,6 +298,47 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  full-suite-union:
+    # T-143: three test roots import their helpers as `tests.*` — this
+    # repository's tests/, the plugin's and the workbench's. A process binds
+    # that name to one directory, so collecting all of them at once from the
+    # repository root raised 40 collection errors while the per-directory jobs
+    # above stayed green: the "full matrix" was disjoint subsets. `conftest.py`
+    # merges the two package-owned suites under one `tests` package, and this
+    # job is the union it makes possible — every test file imported in one
+    # process, then every non-browser test run in that same process.
+    #
+    # Browser execution stays in the chromium steps above, which are the ones
+    # that own a browser; nothing here replaces, narrows, or skips them. The
+    # Playwright package (not the browser binaries) is installed so collection
+    # can import the workbench browser module, which imports it at module scope.
+    name: Full suite — single-process union
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install pytest, Playwright package, and validator dependencies
+        run: |
+          PLAYWRIGHT_VERSION=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); from _checks import PLAYWRIGHT_VERSION; print(PLAYWRIGHT_VERSION)")
+          RUFF_VERSION=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); from _checks import RUFF_VERSION; print(RUFF_VERSION)")
+          python3 -m pip install --disable-pip-version-check \
+            pytest "playwright==${PLAYWRIGHT_VERSION}" \
+            pyyaml==6.0.2 "ruff==${RUFF_VERSION}"
+      - name: Collect every test in one process
+        # The union is the assertion: any collection error anywhere fails here,
+        # whether or not a per-directory job happens to collect that file.
+        run: python3 -m pytest --collect-only -q
+      - name: Run every non-browser test in one process
+        # Same split the required gates use: the wholly-browser workbench
+        # module never imports without a browser install in some jobs, and the
+        # mixed module keeps its pure class here.
+        run: |
+          python3 -m pytest \
+            -m "not browser" \
+            --ignore=packages/design-playbook-workbench/tests/test_ui_browser.py \
+            -k "not PreviewBrowserTest" \
+            -q
+
   preview-browser-macos:
     # ADR-0045 amendment (2026-10-25): one macOS leg over the existing
     # browser-matrix selections. Same pytest choices the ubuntu leg runs;

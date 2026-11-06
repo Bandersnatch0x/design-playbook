@@ -432,7 +432,7 @@ After craft, probe MCP `tools/list` for `execute_capture_plan`.
      One capture may append one manifest line per criterion.
      Evaluator must read `measurement_status` on the relevant face before interpreting arrays; `blocked`/`unmeasured` is not a clean zero-hit.
      Session: optional `storage_state` is a run-root-relative Playwright JSON path kept outside `evidence/` and out of `run-handoff`.
-     Record that path under `capture.storage_state` (see `mcp/evidence/capture_snapshot.py`).
+     Record that path under `capture.storage_state` (see `mcp/evidence/capture_runtime.py`).
      Never copy file bytes, cookies, or tokens into manifest, logs, or diagnostics.
      Preflight checks path shape only (trim then shape; no stat).
      Capture fail-closed on missing, unreadable, non-object, or nonstandard JSON.

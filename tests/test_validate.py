@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -75,6 +76,14 @@ class ValidateGateTests(unittest.TestCase):
         shutil.copy2(ROOT / "README-zh.md", self.root / "README-zh.md")
         shutil.copy2(ROOT / "AGENTS.md", self.root / "AGENTS.md")
         shutil.copy2(ROOT / "CONTEXT.md", self.root / "CONTEXT.md")
+        # The release-identity gate reads CONTEXT.md's declared baseline and
+        # requires the matching release record to exist.
+        self.version = json.loads(
+            (self.root / "packages" / "design-playbook" / ".claude-plugin"
+             / "plugin.json").read_text(encoding="utf-8"))["version"]
+        record = self.root / "docs" / "releases" / f"v{self.version}.md"
+        record.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / "docs" / "releases" / f"v{self.version}.md", record)
         # The own-UI self-audit (V-6) reads the workbench's shipped style sheet.
         workbench_css = (
             "packages/design-playbook-workbench/design_playbook_workbench/web/app.css"
@@ -215,6 +224,49 @@ class ValidateGateTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("pin COPY-02@2", result.stdout)
+
+    def rewrite_release_baseline(self, version: str | None) -> None:
+        """Point CONTEXT.md's baseline at ``version`` (None removes the line)."""
+        context = self.root / "CONTEXT.md"
+        text = context.read_text(encoding="utf-8")
+        replacement = ("" if version is None
+                       else f"Current repository release baseline: `v{version}`")
+        text, count = re.subn(
+            r"Current repository release baseline: `v[0-9.]+`",
+            replacement, text, count=1,
+        )
+        self.assertEqual(count, 1)
+        context.write_text(text, encoding="utf-8")
+
+    def test_release_baseline_drift_from_the_manifest_fails(self) -> None:
+        self.rewrite_release_baseline("0.0.1")
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            f"CONTEXT.md release baseline matches plugin.json version "
+            f"(context=v0.0.1, plugin=v{self.version})", result.stdout)
+
+    def test_release_baseline_without_a_release_record_fails(self) -> None:
+        # Version agrees with the manifest; the record the document links to
+        # is the thing missing, so this isolates the second half of the check.
+        (self.root / "docs" / "releases" / f"v{self.version}.md").unlink()
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            f"docs/releases/v{self.version}.md exists for the declared baseline",
+            result.stdout)
+
+    def test_release_baseline_removed_from_context_fails(self) -> None:
+        self.rewrite_release_baseline(None)
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("CONTEXT.md declares a release baseline", result.stdout)
 
     def test_codex_routing_pointer_drift_fails(self) -> None:
         self._rewrite_codex_prompt("`run_profile.py route`", "a host-local guess")
