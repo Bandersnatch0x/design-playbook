@@ -540,6 +540,48 @@ the existing assertions to remain unweakened. This bounded exception does not
 satisfy the external trial gate, and the ADR-0045 spend gate otherwise remains
 in force.
 
+## Amendment (2026-11-06): the research backlog is authorized
+
+The maintainer authorized the remaining work items in the 2026-11-05 ecosystem
+research by an explicit "authorize everything" decision. This amendment names
+that scope so later work does not have to relitigate it item by item. It
+reopens the clauses the earlier record held shut, and only for the items named
+here:
+
+- **Edit-time hook (S1).** A provider-native hook surface may be added for
+  Tier-1 hosts, so declared machine-checkable rules can fire on edit instead of
+  relying on the agent remembering to run them. Hosts without a hook event keep
+  the skill-side path.
+- **Agent Plugins generation face (S4) and adapter lifecycle state (S7).**
+  Adapter breadth reopens to the extent of adding a generated Agent Plugins
+  manifest from the existing matrix and recording per-row lifecycle
+  (`active`, `deprecated`, `rebranded`, `dead`) with successors. It does not
+  justify new adapters for products that no longer exist; rows are marked, not
+  multiplied.
+- **Distribution (I12).** Package landing points and marketplace entry points
+  may be prepared, including a `.agents/skills` default landing point and a
+  second marketplace layout. Public submission and publication stay a concrete
+  external step: the maintainer sees the exact artifact before it is pushed to
+  a public catalog.
+- **Declaration-to-render closure (S5, S8).** The baseline verifier may enter a
+  gate and emit stable finding codes, and rendered computed values may be
+  probed against declared scales.
+- **Pipeline machine artifacts (I3, I4).** The Fill stage may gain a machine
+  artifact, and decision reports and the reference contract may gain
+  gate-consumed structure.
+- **Review independence and repair evidence (I7, I8, I9, I10).** Review may run
+  isolated from the producing session, repair claims may require paired
+  before/after evidence, coverage enumeration may precede acceptance, and
+  skip-excuse tables may name the blocked-not-passed consequence.
+- **Context budget (I11).** The registry split clause may be revisited, which
+  supersedes the earlier recorded reading that the clause could never trigger.
+
+Authorization to implement is not a completion claim. Every item still lands
+through its own ticket with the full repository gates, unweakened assertions,
+and a two-axis review. The spend gate above otherwise remains in force, and no
+item here changes the preview floor, the evidence binding rule, or the
+confirmation authority.
+
 ## Release authorization
 
 The gate above requires a separate maintainer decision for each release. The
