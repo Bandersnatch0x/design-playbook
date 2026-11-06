@@ -33,13 +33,16 @@ Gates the run-level controls that the skills also declare in prose:
                            unreviewed entry with a reason (gap check).
                            S6: the effective tier P3 makes the matrix block
                            mandatory (full-profile sampling obligation)
-  G10 design decisions   - conditional: when the decision report carries DD
-                           entry blocks (appended after the verbatim top
-                           block), entries must satisfy the design-decision
-                           machine face — tier/status enums, tier recording
-                           obligations, supersedes existence + acyclicity,
-                           preview decision_id linkage, R3 dd: challenge
-                           resolution, and the stale three-exit review
+  G10 design decisions   - conditional: when the decision report exists, its
+                           top block must declare scene / density / template
+                           / regions / components (T-153); when it also
+                           carries DD entry blocks (appended after the
+                           verbatim top block), entries must satisfy the
+                           design-decision machine face — tier/status enums,
+                           tier recording obligations, supersedes existence +
+                           acyclicity, preview decision_id linkage, R3 dd:
+                           challenge resolution, and the stale three-exit
+                           review
   G6 method semantics    - conditional (S3): manifest entries carrying the
                            optional method-semantics keys must satisfy the
                            nine-value method enum, observation/interpret-
@@ -63,6 +66,10 @@ Gates the run-level controls that the skills also declare in prose:
                            face; violations emit E1-E5 escalation signals
                            and require a recorded run-profile upgrade
                            (escalate-and-rewalk, never exemption)
+  G13 reference contract - conditional: when the run carries
+                           reference/contract.md (ADR-0011), it must declare
+                           every contract-template axis; a run without
+                           reference material is never a finding (T-153)
 
 Reads plain Markdown, so it is host-neutral: it accepts artifacts produced by
 any agent (Claude Code, Codex) that follow the declared shape.
@@ -186,6 +193,13 @@ from design_playbook.scripts.shaping_log import (  # noqa: E402
 # or <run-root>/decision-report.md).
 from design_playbook.scripts.dd_entries import DD_HEADING  # noqa: E402
 from design_playbook.scripts.g10_design_decisions import check_g10  # noqa: E402
+
+# G13 reference contract (T-153 / research I4): fires only when the run
+# carries reference/contract.md; absence stays silent (ADR-0011 s5).
+from design_playbook.scripts.g13_reference_contract import (  # noqa: E402
+    check_g13,
+    contract_unreadable_finding,
+)
 from design_playbook.scripts.repair_rounds import check_rounds  # noqa: E402
 from design_playbook.scripts.repair_evidence import (  # noqa: E402
     check_repair_evidence,
@@ -466,9 +480,11 @@ def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
             except (OSError, UnicodeError, ShapingLogError):
                 shaping_events = None
 
-    # G10 (conditional): a decision report carrying DD entry blocks engages
-    # the design-decision gate (top block stays verbatim; reports without
-    # entry blocks keep passing — the extension is additive).
+    # G10 (conditional): a decision report engages the design-decision gate.
+    # A present report is checked for its top-block axes (T-153); the DD
+    # entry rules beyond that stay conditional on entry blocks existing
+    # (top block stays verbatim; reports without entry blocks keep passing —
+    # the extension is additive). No report at all is never a finding.
     dr_g10 = dr if dr is not None else (
         rr / "decision-report.md" if rr is not None else None
     )
@@ -486,7 +502,10 @@ def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
             report_text = dr.read_text(encoding="utf-8") if dr.is_file() else ""
         except (OSError, UnicodeError):
             report_text = ""
-    if report_text and DD_HEADING.search(report_text):
+    report_present = bool(report_text) or (
+        dr_g10 is not None and dr_g10.is_file()
+    )
+    if report_present:
         errs += check_g10(
             report_text,
             report_path=dr_g10,
@@ -499,6 +518,15 @@ def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
                 if profile is not None else None
             ),
         )
+
+    # G13 (conditional, T-153): a contract on disk is checked for its
+    # declared axes. The run-level discovery is <run-root>/reference/
+    # contract.md; a run with no reference material reports nothing, and an
+    # unreadable contract is a finding rather than an operational exit.
+    if facts.reference_contract_text is not None:
+        errs += check_g13(facts.reference_contract_text)
+    elif facts.reference_contract_error is not None:
+        errs.append(contract_unreadable_finding())
 
     # G8 run level (vNext S3): a craft-guard.md in the run root is checked
     # against the registry (shared parser). P2/P3 demand one audit row per

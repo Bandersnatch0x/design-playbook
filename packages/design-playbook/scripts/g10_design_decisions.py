@@ -1,14 +1,17 @@
 """G10 design-decision gate (vNext S2, design-prototype 4.1 machine face).
 
-Conditional: fires only when the decision report carries DD entry blocks
-(appended after the verbatim top block). Owns the machine-checkable face
-declared by the protocol — entry completeness, tier/status enums, tier
-recording obligations (R one-line rationale / C trade-off record / E user
-confirmation), supersedes existence + acyclicity, registry rule-reference
-cross-check, preview transaction linkage (decision_id), R3 re-entry
-resolution (dd: challenges must end invalidated with an E-tier revision;
-``dd:`` on a positive finding is a shape error, issue #44), and the
-baseline-drift stale review (three exits: keep / revise / escalate).
+Conditional: fires when the decision report exists. A present report is
+checked first for its verbatim top block (T-153: scene / density / template
+/ regions / components declared, with a value on the scalar axes); the DD
+entry rules below fire when entry blocks are appended after it. Owns the
+machine-checkable face declared by the protocol — entry completeness,
+tier/status enums, tier recording obligations (R one-line rationale / C
+trade-off record / E user confirmation), supersedes existence + acyclicity,
+registry rule-reference cross-check, preview transaction linkage
+(decision_id), R3 re-entry resolution (dd: challenges must end invalidated
+with an E-tier revision; ``dd:`` on a positive finding is a shape error,
+issue #44), and the baseline-drift stale review (three exits: keep / revise
+/ escalate). A run with no decision report at all is not a finding.
 
 Comparison-matrix quality, trade-off sufficiency, and tier-grading
 judgement calls (composition change, identity drift beyond declared
@@ -69,6 +72,83 @@ def _registry_ids(text: str) -> dict[str, int]:
 
 def _fmt(owner: str) -> str:
     return f"decision-report.md#{owner}"
+
+
+# Verbatim top block (ui-picker SKILL.md step 4): the Fill consumption face
+# the DD entries are appended after. Scalar axes carry their value on the
+# declaration line; regions/components are list-shaped and only have to be
+# declared. Tolerance matches the rest of the machine face: the canonical
+# ```text fence, or — for reports predating the fence — the top matter before
+# the first appended DD entry (same reading as component_candidates). A
+# markdown-heading declaration ("## Regions ...") counts.
+_TOP_FENCE = re.compile(r"```text[ \t]*\n(.*?)```", re.DOTALL)
+_TOP_DD_HEADING = re.compile(r"(?m)^##\s+DD-")
+_SCALAR_AXES = ("scene", "density", "template")
+_LIST_AXES = ("regions", "components")
+_AXIS_LINE = re.compile(
+    r"(?mi)^[ \t]*(?:#{1,6}[ \t]*)?(scene|density|template|regions|components)"
+    r"[ \t]*(?::|[（(])?[ \t]*(?P<value>.*)$")
+
+
+def _top_region(report_text: str) -> str:
+    """The report's top-block region (fence, or text before DD blocks).
+
+    The fence only counts while it sits ahead of the first DD entry: a fenced
+    block inside an appended entry is entry content, not the Fill face.
+    """
+    heading = _TOP_DD_HEADING.search(report_text)
+    limit = heading.start() if heading is not None else len(report_text)
+    fence = _TOP_FENCE.search(report_text)
+    if fence is not None and fence.start() < limit:
+        return fence.group(1)
+    return report_text[:limit]
+
+
+def _top_block_checks(report_text: str) -> list[Finding]:
+    """Top-block axis declaration (T-153 / research I4).
+
+    Prose-only until now: the top block is the Fill consumption face and the
+    DD entries' container, but no gate read it. Missing axes and declared-
+    with-no-value scalar axes are both findings; a report that is absent is
+    the caller's business, never this function's.
+    """
+    region = _top_region(report_text)
+    declared: dict[str, str] = {}
+    for match in _AXIS_LINE.finditer(region):
+        declared.setdefault(match.group(1).lower(), match.group("value").strip())
+    missing = [
+        axis for axis in _SCALAR_AXES + _LIST_AXES if axis not in declared
+    ]
+    empty = [
+        axis for axis in _SCALAR_AXES
+        if axis in declared and not declared[axis]
+    ]
+    errs: list[Finding] = []
+    if missing:
+        errs.append(finding(
+            "G10.top_block",
+            "G10 decisions: decision report top block is missing "
+            f"axis/axes: {', '.join(missing)}",
+            owner="decision-report.md#top-block",
+            expected="scene / density / template / regions / components "
+                     "declared above the first DD entry block",
+            actual=", ".join(missing),
+            repair="Add the top-block lines from skills/ui-picker/SKILL.md "
+                   "step 4 (scene / density / template / regions / "
+                   "components) before any appended DD entry",
+        ))
+    if empty:
+        errs.append(finding(
+            "G10.top_block",
+            "G10 decisions: decision report top block declares axis/axes "
+            f"with no value: {', '.join(empty)}",
+            owner="decision-report.md#top-block",
+            expected="a value on the scene / density / template line",
+            actual=", ".join(empty),
+            repair="Fill the declared scalar axis, or move an unverifiable "
+                   "cue to a noted line instead of leaving it blank",
+        ))
+    return errs
 
 
 def _entry_checks(entries: list[DDEntry]) -> list[Finding]:
@@ -964,11 +1044,17 @@ def check_g10(
     pointback_text: str | None = None,
     baseline_state: dict | None = None,
     run_profile_tier: str | None = None) -> list[Finding]:
-    """Return G10 findings for a decision report (empty = pass/not fired)."""
+    """Return G10 findings for a decision report (empty = pass/not fired).
+
+    A report handed in is always checked for its top-block axes (T-153); the
+    DD-entry rules below stay conditional on entry blocks existing. Presence
+    is the caller's call: no report path means no call, so an empty text here
+    is an existing-but-blank report and fails the top block.
+    """
+    errs: list[Finding] = _top_block_checks(report_text)
     entries = parse_dd_entries(report_text)
     if not entries:
-        return []
-    errs: list[Finding] = []
+        return errs
     # headings that look like DD entries but fail the id shape are silently
     # ignorable by the parser — surface them so renames cannot hide entries
     for heading_id in DD_HEADING.findall(report_text):

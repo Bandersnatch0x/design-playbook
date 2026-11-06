@@ -80,6 +80,10 @@ class RunFacts:
     decision_entries: tuple[DDEntry, ...] = ()
     shaping_events: tuple[dict[str, Any], ...] | None = None
     shaping_error: str | None = None
+    # Reference contract (ADR-0011): None means the run has none — never an
+    # operational read error, so absence cannot turn a run red.
+    reference_contract_text: str | None = None
+    reference_contract_error: str | None = None
     _artifact_states: tuple[tuple[str, str], ...] = ()
     # fill: lines inside fenced blocks are ignored by declaration parsing;
     # kept as a fact so run-status can name them instead of hiding the skip.
@@ -132,6 +136,8 @@ class _OptionalRunFacts:
     shaping_events: tuple[dict[str, Any], ...] | None = None
     shaping_error: str | None = None
     craft_guard_text: str = ""
+    reference_contract_text: str | None = None
+    reference_contract_error: str | None = None
     read_errors: tuple[ArtifactReadFact, ...] = ()
     plan_probed: bool = False
 
@@ -202,6 +208,26 @@ def _read_baseline(run_root: Path | None) -> tuple[str | None, str | None]:
         json.loads(text)
         return text, None
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        return None, str(exc)
+
+
+def _read_reference_contract(
+    run_root: Path | None,
+) -> tuple[str | None, str | None]:
+    """Read ``reference/contract.md`` (ADR-0011); absence is ``None, None``.
+
+    Mirrors ``_read_baseline``: a missing or unreadable contract is a fact
+    about the run, not an operational read error — a run without reference
+    material must stay green.
+    """
+    if run_root is None:
+        return None, None
+    path = run_root / "reference" / "contract.md"
+    if not path.is_file():
+        return None, None
+    try:
+        return path.read_text(encoding="utf-8"), None
+    except (OSError, UnicodeError) as exc:
         return None, str(exc)
 
 
@@ -344,6 +370,7 @@ def _read_optional_run_facts(
     craft_guard_text, craft_error = _read_text(
         "craft_guard", run_root / "craft-guard.md"
     )
+    reference_text, reference_error = _read_reference_contract(run_root)
     errors = tuple(error for error in (plan_error, report_error, craft_error) if error)
     return _OptionalRunFacts(
         plan_text=plan_text,
@@ -353,6 +380,8 @@ def _read_optional_run_facts(
         shaping_events=shaping_events,
         shaping_error=shaping_error,
         craft_guard_text=craft_guard_text,
+        reference_contract_text=reference_text,
+        reference_contract_error=reference_error,
         read_errors=errors,
         plan_probed=plan_file is not None,
     )
@@ -526,6 +555,8 @@ def capture_run_facts(
         decision_entries=optional.decision_entries,
         shaping_events=optional.shaping_events,
         shaping_error=optional.shaping_error,
+        reference_contract_text=optional.reference_contract_text,
+        reference_contract_error=optional.reference_contract_error,
         _artifact_states=_artifact_states(
             run_root,
             spec_path,
