@@ -20,6 +20,7 @@ if str(_PKG_ROOT) not in sys.path:
 # The MCP runtime stays at mcp/preview/; the suite lives under tests/preview/.
 _COMPONENT_DIR = _PKG_ROOT / "mcp" / "preview"
 # Browser behavior is tested through its owning adapter, not server re-exports.
+from design_playbook.mcp._schema import violations  # noqa: E402
 from design_playbook.mcp.preview import review_session  # noqa: E402
 from design_playbook.mcp.preview import transaction  # noqa: E402
 from design_playbook.mcp.preview.integrity import prototype_html_digest  # noqa: E402
@@ -140,6 +141,78 @@ class PreviewStructuredErrorTests(unittest.TestCase):
 
         self.assertEqual(str(caught.exception), "repair required")
         self.assertEqual(caught.exception.structured_content, domain_error.details)
+
+
+class PreviewToolDeclarationTests(unittest.TestCase):
+    """T-145: the declared tool contract matches what the handler returns."""
+
+    def test_input_schema_is_closed_and_annotations_are_declared(self) -> None:
+        tool = _load_server_module()._tool_schema()
+
+        self.assertIs(tool["inputSchema"]["additionalProperties"], False)
+        self.assertEqual(
+            tool["annotations"],
+            {
+                "readOnlyHint": False,
+                "destructiveHint": False,
+                "idempotentHint": False,
+                "openWorldHint": False,
+            },
+        )
+
+    def test_output_schema_declares_every_returned_key(self) -> None:
+        server_mod = _load_server_module()
+        output = server_mod._tool_schema()["outputSchema"]
+
+        self.assertEqual(output["type"], "object")
+        self.assertIs(output["additionalProperties"], False)
+        self.assertEqual(
+            set(output["required"]),
+            {
+                "confirmed",
+                "floor_pass",
+                "selected_options",
+                "feedback",
+                "anchors",
+                "round",
+                "confirm_record_path",
+                "aborted",
+                "skipped",
+                "timeout",
+                "decision_id",
+            },
+        )
+
+        decision = {
+            "choice": "确认通过",
+            "feedback": "ok",
+            "aborted": False,
+            "anchors": [
+                {
+                    "selector": ".cta",
+                    "label": "提交",
+                    "comment": "primary action",
+                    "tag": "button",
+                    "resolved": True,
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            proto = Path(tmp) / "proto.html"
+            proto.write_text("<html></html>", encoding="utf-8")
+            with mock.patch.object(
+                review_session, "collect_review", return_value=decision
+            ):
+                payload = server_mod.handle_preview_prototype(
+                    {
+                        "path": str(proto),
+                        "summary": "summary",
+                        "round": 1,
+                        "report_ref": "report-1",
+                    }
+                )
+
+        self.assertEqual(violations(payload, output), [])
 
 
 class PreviewLogRejectionTests(unittest.TestCase):

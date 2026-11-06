@@ -40,6 +40,19 @@ Codex / manual: sibling [`mcp.example.toml`](https://github.com/Bandersnatch0x/d
 
 Orchestrator bind rules (verbatim `observed_state`, per-capture append, mirror surface notes): `skills/design-playbook/SKILL.md` step 8.
 
+## Capture providers
+
+The tool declaration carries `outputSchema` (`capture_contract.capture_result_schema`)
+and behavior annotations, and the manifest line has a versioned schema
+(`evidence/manifest_v1.schema.json`, read through `evidence/manifest_schema.py`).
+
+A third-party capture tool implements `evidence/provider.py`'s `CaptureProvider` —
+`tool_name`, `describe()` returning its tool declaration, `capture(arguments)`
+returning the advertised payload — and calls `register_capture_provider(provider)`
+before the adapter starts. The bundled provider is the default, so an
+unregistered process behaves exactly as before; name-based discovery
+(`probe_capture_provider`) still works.
+
 ## Mirror pages and `data-state`
 
 When capture uses a semantic mirror (not the live Fill host), set a root marker the provider can read:

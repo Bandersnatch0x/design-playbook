@@ -25,13 +25,24 @@ domain).
 from __future__ import annotations
 
 import json
+import sys
 import unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PACKAGE = HERE.parent
+# One import seam (ADR-0022): package root on sys.path once, then absolute
+# design_playbook.* imports below. No per-runtime sys.path adapters.
+if str(PACKAGE) not in sys.path:
+    sys.path.insert(0, str(PACKAGE))
+
+from design_playbook.mcp._schema import violations  # noqa: E402
+
 CODEX_MANIFEST = PACKAGE / ".codex-plugin" / "mcp.json"
 CLAUDE_MANIFEST = PACKAGE / ".mcp.json"
+ROOT = PACKAGE.parents[1]
+ROOT_MANIFEST = ROOT / ".mcp.json"
+ROOT_SCHEMA = ROOT / ".mcp.schema.json"
 
 EVIDENCE_SERVER = "design-playbook-evidence"
 RUN_ROOT_ENV = "DESIGN_PLAYBOOK_RUN_ROOT"
@@ -155,6 +166,52 @@ class ClaudeManifestTest(_ManifestMixin, unittest.TestCase):
             "Claude manifest must forward DESIGN_PLAYBOOK_RUN_ROOT via a "
             f"${{{RUN_ROOT_ENV}:-}} env interpolation (got {value!r})",
         )
+
+
+class RootDevManifestTest(unittest.TestCase):
+    """T-145: the repo-root dev config declares its transport and schema."""
+
+    def setUp(self) -> None:
+        self.doc = json.loads(ROOT_MANIFEST.read_text(encoding="utf-8"))
+        self.schema = json.loads(ROOT_SCHEMA.read_text(encoding="utf-8"))
+
+    def test_declares_local_schema_and_validates(self) -> None:
+        assert self.doc.get("$schema") == "./.mcp.schema.json"
+        assert violations(self.doc, self.schema) == []
+
+    def test_each_server_declares_stdio_transport(self) -> None:
+        servers = self.doc["mcpServers"]
+        assert set(servers) == {
+            "design-playbook-preview",
+            "design-playbook-evidence",
+        }
+        for name, server in servers.items():
+            assert server.get("type") == "stdio", name
+
+    def test_schema_rejects_a_missing_type_and_unknown_keys(self) -> None:
+        missing_type = json.loads(json.dumps(self.doc))
+        del missing_type["mcpServers"]["design-playbook-preview"]["type"]
+        assert violations(missing_type, self.schema)
+
+        unknown = json.loads(json.dumps(self.doc))
+        unknown["mcpServers"]["design-playbook-preview"]["transport"] = "sse"
+        assert violations(unknown, self.schema)
+
+
+class ServerVersionTest(unittest.TestCase):
+    """T-145: both adapters report the plugin manifest version, not a literal."""
+
+    def test_servers_report_the_plugin_manifest_version(self) -> None:
+        from design_playbook.mcp.evidence import server as evidence_server
+        from design_playbook.mcp.preview import server as preview_server
+        from design_playbook.mcp.version import package_version
+
+        version = json.loads(
+            (PACKAGE / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+        )["version"]
+        assert version == package_version()
+        assert preview_server.SERVER_VERSION == version
+        assert evidence_server.SERVER_VERSION == version
 
 
 if __name__ == "__main__":

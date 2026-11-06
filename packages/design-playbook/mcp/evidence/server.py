@@ -13,14 +13,21 @@ if str(_PKG_ROOT) not in sys.path:
 from design_playbook.mcp._transport import serve_stdio  # noqa: E402
 from design_playbook.mcp.evidence.capture_contract import (  # noqa: E402
     capture_contract_schema_fragment,
+    capture_result_schema,
 )
 from design_playbook.mcp.evidence.capture_runtime import (  # noqa: E402
     execute_capture_plan,
 )
+from design_playbook.mcp.evidence.provider import (  # noqa: E402
+    CAPTURE_TOOL_NAME,
+    resolve_capture_provider,
+)
+from design_playbook.mcp.version import package_version  # noqa: E402
 
-TOOL_NAME = "execute_capture_plan"
+TOOL_NAME = CAPTURE_TOOL_NAME
 SERVER_NAME = "design-playbook-evidence"
-SERVER_VERSION = "0.1.0"
+# Single source: .claude-plugin/plugin.json (T-145), never a literal here.
+SERVER_VERSION = package_version()
 
 
 def _tool_schema() -> dict[str, Any]:
@@ -120,10 +127,33 @@ def _tool_schema() -> dict[str, Any]:
             ],
             "additionalProperties": False,
         },
+        "outputSchema": capture_result_schema(),
+        # Writes one artifact under the run root; refuses to replace an
+        # existing file unless the caller opts in. It navigates a real page,
+        # so it does reach the open world.
+        "annotations": {
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": True,
+        },
     }
 
 
-if __name__ == "__main__":
+class _BundledCaptureProvider:
+    """The shipped provider; the default when nothing is registered."""
+
+    tool_name = TOOL_NAME
+
+    def describe(self) -> dict[str, Any]:
+        return _tool_schema()
+
+    def capture(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        return execute_capture_plan(arguments)
+
+
+def main() -> None:
+    """Start the stdio adapter, honoring a registered capture provider."""
     for _candidate in Path(__file__).resolve().parents:
         if (_candidate / "design_playbook.py").is_file():
             sys.path.insert(0, str(_candidate))
@@ -131,10 +161,15 @@ if __name__ == "__main__":
     from design_playbook.scripts.stdio_encoding import configure_piped_utf8
 
     configure_piped_utf8()
+    provider = resolve_capture_provider(_BundledCaptureProvider())
     serve_stdio(
         SERVER_NAME,
         SERVER_VERSION,
-        _tool_schema(),
-        execute_capture_plan,
+        provider.describe(),
+        provider.capture,
         recover_from_malformed=True,
     )
+
+
+if __name__ == "__main__":
+    main()

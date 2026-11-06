@@ -1,6 +1,8 @@
 {
+  "$schema": "./.mcp.schema.json",
   "mcpServers": {
     "design-playbook-preview": {
+      "type": "stdio",
       "command": "python",
       "args": [
         "packages/design-playbook/mcp/preview/server.py"
@@ -8,6 +10,7 @@
       "timeout": 3600000
     },
     "design-playbook-evidence": {
+      "type": "stdio",
       "command": "python",
       "args": [
         "packages/design-playbook/mcp/evidence/server.py"

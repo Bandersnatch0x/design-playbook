@@ -41,9 +41,98 @@ from design_playbook.mcp.preview.transaction import (  # noqa: E402
     run_preview_transaction,
     self_check_floor,
 )
+from design_playbook.mcp.version import package_version  # noqa: E402
 
 TOOL_NAME = "preview_prototype"
+SERVER_NAME = "design-playbook-preview"
+# Single source: .claude-plugin/plugin.json (T-145), never a literal here.
+SERVER_VERSION = package_version()
 
+
+def _output_schema() -> dict[str, Any]:
+    """The decision envelope ``transaction._result`` actually returns.
+
+    Written down so a client can cache or gate the shape it already receives
+    through ``structuredContent``; it adds no field and changes no value.
+    """
+    return {
+        "type": "object",
+        "properties": {
+            "confirmed": {"type": "boolean"},
+            "floor_pass": {"type": "boolean"},
+            "selected_options": {"type": "array", "items": {"type": "string"}},
+            "feedback": {"type": "string"},
+            "anchors": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "selector": {"type": "string"},
+                        "label": {"type": "string"},
+                        "comment": {"type": "string"},
+                        "tag": {"type": "string"},
+                        "dom_tag": {"type": "string"},
+                        "resolved": {"type": "boolean"},
+                        "points": {
+                            "type": "array",
+                            "items": {
+                                "type": "array",
+                                "items": {"type": "number"},
+                            },
+                        },
+                        "rect": {
+                            "type": "object",
+                            "properties": {
+                                "x": {"type": "number"},
+                                "y": {"type": "number"},
+                                "width": {"type": "number"},
+                                "height": {"type": "number"},
+                            },
+                            "required": ["x", "y", "width", "height"],
+                        },
+                        "node_id": {"type": "string"},
+                        "features": {"type": "object"},
+                    },
+                    "required": ["selector", "label", "comment", "tag"],
+                },
+            },
+            "round": {"type": "integer"},
+            "confirm_record_path": {"type": "string"},
+            "aborted": {"type": "boolean"},
+            "skipped": {"type": "boolean"},
+            "timeout": {"type": "boolean"},
+            "decision_id": {"type": "string"},
+            "criteria_review": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "title": {"type": "string"},
+                        "checked": {"type": "boolean"},
+                    },
+                    "required": ["id", "title", "checked"],
+                },
+            },
+            "visual_edits": {"type": "object"},
+            "visual_edits_error": {"type": "string"},
+            "visual_handoff": {"type": "object"},
+        },
+        "required": [
+            "confirmed",
+            "floor_pass",
+            "selected_options",
+            "feedback",
+            "anchors",
+            "round",
+            "confirm_record_path",
+            "aborted",
+            "skipped",
+            "timeout",
+            "decision_id",
+        ],
+        "additionalProperties": False,
+    }
 
 
 def _tool_schema() -> dict[str, Any]:
@@ -95,6 +184,19 @@ def _tool_schema() -> dict[str, Any]:
                 },
             },
             "required": ["summary", "round", "report_ref"],
+            "additionalProperties": False,
+        },
+        "outputSchema": _output_schema(),
+        # Writes confirm/decision records under the run's preview dir, opens a
+        # browser window, and waits for human input: not read-only, not
+        # destructive of existing user data, not idempotent (a repeat call
+        # collects a new decision), and it reaches no external world beyond
+        # the caller-supplied loopback route.
+        "annotations": {
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": False,
         },
     }
 
@@ -176,8 +278,8 @@ if __name__ == "__main__":
         self_check_floor()
     else:
         serve_stdio(
-            "design-playbook-preview",
-            "0.1.0",
+            SERVER_NAME,
+            SERVER_VERSION,
             _tool_schema(),
             handle_preview_prototype,
             recover_from_malformed=False,
