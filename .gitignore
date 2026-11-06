@@ -19,6 +19,23 @@ dist-ssr
 /.claude/
 .workbuddy/
 .workflow/
+# AOCI is local-only (maintainer decision 2026-11-06): no index volume, no
+# baseline and no runtime asset is tracked, so a clone carries none of it and
+# nothing a user installs depends on it. The repo-root .mcp.json stays tracked
+# (preview/evidence dev config); the aoci server is registered in the host's
+# own user-level config instead, and the repository contract moved to the
+# untracked .agents/aoci-contract.md.
+/aoci.txt
+/aoci.meta.txt
+/aoci.code.txt
+/.aoci/config.json
+/.aoci/baseline.json
+.aoci/baseline.json.bak
+.aoci/drafts/
+.aoci/governance/
+.aoci/ledger.jsonl
+.aoci/transactions/
+.aoci/verify_history/
 # Tool caches and regenerated run artifacts (pytest/ruff self-ignore via
 # CACHEDIR.TAG, but the intent belongs here explicitly).
 .pytest_cache/
