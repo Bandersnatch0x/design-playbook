@@ -70,11 +70,18 @@ def request_task(
     verb: str | None = None,
     payload: dict | None = None,
     operation_id: str | None = None,
+    fields: str | None = None,
     opener=urllib.request.urlopen,
 ) -> dict:
     """Read or report one task using only its protected claim credential."""
     if verb not in (None, "claim", "heartbeat", "result", "fail"):
         raise ClaimError("unsupported agent task verb")
+    if fields not in (None, "counter"):
+        # The counter view is concurrency metadata (T-127); it is the only
+        # partial read this client may ask for.
+        raise ClaimError("unsupported request view")
+    if fields is not None and verb is not None:
+        raise ClaimError("a report carries no request view")
     root = Path(data_dir) if data_dir is not None else _workbench_data_dir()
     record = read_claim_record(root, request_id)
     if record["requestId"] != request_id:
@@ -121,6 +128,8 @@ def request_task(
         url = f"{project_url}/actions/requests/{request_id}/{verb}"
     else:
         url = f"{project_url}/requests/{request_id}"
+        if fields is not None:
+            url = f"{url}?fields={fields}"
     request = urllib.request.Request(
         url,
         data=data,

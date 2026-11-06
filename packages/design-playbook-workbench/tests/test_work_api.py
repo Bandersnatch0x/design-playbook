@@ -9,6 +9,7 @@ Agent can never approve its own proposal, and no response leaks the token.
 from __future__ import annotations
 
 import json
+import time
 import unittest
 
 from tests.harness import WorkbenchHarness, http_request
@@ -562,6 +563,87 @@ class RequestBoundCapabilityReachTest(WorkApiTestCase):
             capability=token,
         )
         self.assertEqual(claimed.status, 200, claimed.text)
+
+    def test_the_counter_view_refuses_a_sibling_and_a_replaced_capability(self) -> None:
+        request = self.create_request(title="计数权限任务")
+        self.request_action(
+            "consent",
+            request_id=request["requestId"],
+            payload={"digest": request["contextDigest"]},
+        )
+        token = self.agent_token(request)
+        read_url = (
+            f"/api/v1/projects/{self.project_id}/requests/{request['requestId']}"
+        )
+        self.assertEqual(
+            http_request(
+                self.h.runtime, f"{read_url}?fields=counter", capability=token
+            ).status,
+            200,
+        )
+        # The metadata view is not a way around the sibling boundary (R11).
+        sibling = self.create_request(title="兄弟计数")
+        peek = http_request(
+            self.h.runtime,
+            f"/api/v1/projects/{self.project_id}/requests/{sibling['requestId']}"
+            "?fields=counter",
+            capability=token,
+        )
+        self.assertEqual(peek.status, 401, peek.text)
+        self.assertEqual(peek.json["error"]["code"], "unauthorized")
+
+        # A retired capability is not a live one: fail, retry, and the token
+        # that minted the earlier attempt stops reading the counter.
+        lease = self.claim_and_report(request)["lease"]
+        failed = self.request_action(
+            "fail",
+            request_id=request["requestId"],
+            payload={
+                "attemptId": lease["attemptId"],
+                "leaseId": lease["leaseId"],
+                "sequence": lease["sequence"],
+                "reason": "依赖安装被拒绝",
+            },
+            capability=token,
+        )
+        self.assertEqual(failed.status, 200, failed.text)
+        retried = self.request_action("retry", request_id=request["requestId"])
+        self.assertEqual(retried.status, 200, retried.text)
+        replacement = self.agent_token(request)
+        self.assertNotEqual(token, replacement)
+        retired = http_request(
+            self.h.runtime, f"{read_url}?fields=counter", capability=token
+        )
+        self.assertEqual(retired.status, 401, retired.text)
+        self.assertEqual(retired.json["error"]["code"], "unauthorized")
+        # The replacement credential reads the same metadata view.
+        current = http_request(
+            self.h.runtime, f"{read_url}?fields=counter", capability=replacement
+        )
+        self.assertEqual(current.status, 200, current.text)
+        self.assertEqual(
+            current.json["request"]["requestId"], request["requestId"]
+        )
+
+    def test_the_counter_view_refuses_an_expired_request(self) -> None:
+        request = self.create_request(title="过期计数任务", expiresInSeconds=1)
+        self.request_action(
+            "consent",
+            request_id=request["requestId"],
+            payload={"digest": request["contextDigest"]},
+        )
+        token = self.agent_token(request)
+        read_url = (
+            f"/api/v1/projects/{self.project_id}/requests/{request['requestId']}"
+        )
+        # The stored deadline has whole-second precision, so the clock has to
+        # pass the second it was minted in before the row reads as expired.
+        time.sleep(2.2)
+        stale = http_request(
+            self.h.runtime, f"{read_url}?fields=counter", capability=token
+        )
+        self.assertEqual(stale.status, 409, stale.text)
+        self.assertEqual(stale.json["error"]["code"], "stale-evidence")
 
     def test_it_cannot_submit_a_proposal_directly(self) -> None:
         _, token = self._agent_ready("直写任务")
