@@ -68,3 +68,15 @@ The host model may have no vision (text-only input). Renders stay **path-bound**
 ## Completion
 
 **Done when:** hierarchy, every in-scope wait and fail path, and every animation pass their checks. If the surface has L4 interactive zones, every zone's affordance passes its checks (per `references/craft.md`). Implemented UI also records exactly one seven-column audit row for every registry craft entry whose applicability predicate evaluates to `applicable`, with no unexplained missing proof. Residual hits and blocked proof are handed to `ui-evaluator`. Audit rows do not assign source, severity, or verdict. Machine check right after writing craft-guard.md: `python scripts/g8_run_registry.py .scratch/<run>/craft-guard.md`.
+
+## Excuse table
+
+Every row is an excuse for skipping a row or a run, paired with the consequence that already applies. No row adds a penalty.
+
+| Excuse | Why it does not hold | Existing consequence |
+| --- | --- | --- |
+| "There is no rendered proof to check" | Missing rendered or source proof is `blocked`, never a silent clear | The row records `blocked`; that proof gap reaches evaluation and cannot be a craft pass |
+| "The surface has no interactive zones, so affordance checks do not apply" | `not-applicable` requires an observable reason | The blank or unexplained row is invalid |
+| "I did not recognize the registry ID, so I skipped the entry" | Unknown registry IDs fail at this stage | The detector run fails; there is no partial pass |
+| "Human eye said it is better now" | Judgment is not a row, and a row needs its two evidence columns | Without that proof the row is `blocked`, never a silent clear |
+| "Good enough to ship, polish comes later" | Proof, not polish, is the gate here | Unproved rows stay `blocked` and are handed to `ui-evaluator` |

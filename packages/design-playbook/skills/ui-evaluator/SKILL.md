@@ -7,6 +7,10 @@ description: Run evidence-backed UI acceptance. Use after generating a page, or 
 
 **Evaluator** contract: turn **declarations** into checks. Do not invent new taste standards. Every issue **points back** to a declaration.
 
+## Isolation
+
+Run as a **fork subagent**. Inputs are run artifacts only: `spec`, the decision report, the evidence ledger and manifest, and the captures they bind. Producer conversation, plan notes, and prior-turn justification are **not** inputs — a claim that cannot be re-derived from those artifacts does not exist for this review. Inherited declarations count when an artifact names them by path or value, never as a transcript. Source alone is not rendered proof; with no bound artifact the row is `blocked`, not a pass.
+
 ## Steps
 
 ### 1. Bind declarations
@@ -174,3 +178,15 @@ Fix only the owning layer (minimum owning set). Repair in order R1, R2, R3, then
 ## Guard
 
 Prefer positive fixes in `fix`. Reserve bans for non-negotiables (e.g. open dangerous action without confirm) and always pair with the required behavior.
+
+## Excuse table
+
+Every row is an excuse for skipping a step, paired with the consequence that already applies. No row adds a penalty.
+
+| Excuse | Why it does not hold | Existing consequence |
+| --- | --- | --- |
+| "Captures are unavailable / the environment is not set up" | Unavailable required proof is `blocked`, not skipped | `blocked` evidence row; Pass requires every required row `pass`, so the verdict is Recirculate |
+| "The change is small / it is only a point fix" | Scope is not evidence; a criterion with no bound artifact stays unproven | Same `blocked` row; an evidence-plan seam goes to R5 |
+| "It passes on my viewport" | A criterion is bound per viewport pair | A fail or `blocked` pair is not rescued by another viewport's pass |
+| "The producer says it works" / "we settled it in the session" | Producer narrative is not a bound artifact (see Isolation) | `blocked` row, Recirculate |
+| "The craft rows were advisory anyway" | Advisory rows carry blocked proof into evaluation | Blocked craft proof is a proof gap; Pass cannot claim complete craft |
