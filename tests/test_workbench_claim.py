@@ -340,10 +340,25 @@ class WorkbenchTaskTest(WorkbenchClaimTestCase):
             "--stage", "完成标题", "--count", "1",
         )
         self.assertEqual(beat.returncode, 0, beat.stderr)
+        # The counter view is what the client reads before a work write.
+        counter = self.cli("read", request["requestId"], "--fields", "counter")
+        self.assertEqual(counter.returncode, 0, counter.stderr)
+        view = json.loads(counter.stdout.decode("utf-8"))["request"]
+        self.assertEqual(view["requestId"], request["requestId"])
+        # Claim and heartbeat are both writes; the view carries no context.
+        self.assertGreaterEqual(view["counter"], 1)
+        self.assertEqual(set(view), {"requestId", "counter"})
         # The full context read still refuses: read-context was not granted.
         read = self.cli("read", request["requestId"])
         self.assertEqual(read.returncode, 1)
         self.assertIn(b"unauthorized", read.stderr)
+        # A report never carries a view; the option is a read-only affordance.
+        refused = self.cli(
+            "heartbeat", request["requestId"], *self.lease_args(lease),
+            "--stage", "完成标题", "--count", "1", "--fields", "counter",
+        )
+        self.assertEqual(refused.returncode, 2)
+        self.assertIn(b"--fields is a read view", refused.stderr)
 
     def test_failure_reports_the_observed_reason(self) -> None:
         request, lease = self.ready()

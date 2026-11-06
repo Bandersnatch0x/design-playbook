@@ -52,7 +52,13 @@ After claiming, read the request before working:
 python "${CLAUDE_PLUGIN_ROOT}/scripts/workbench_task.py" read --request "<request-id>"
 ```
 
-Use its context, plan, allowed actions, and result schema. Keep the claim's `attemptId`, `leaseId`, and `sequence` for every report. At the returned heartbeat interval, report the stage and completed work count you actually observed:
+Use its context, plan, allowed actions, and result schema. When the request was sent without `read-context`, the full read refuses with `unauthorized`; the concurrency counter is metadata, not the context payload, so read it on its own and treat the context as withheld:
+
+```text
+python "${CLAUDE_PLUGIN_ROOT}/scripts/workbench_task.py" read --request "<request-id>" --fields counter
+```
+
+`--fields` is a read view only; a report never carries one. Keep the claim's `attemptId`, `leaseId`, and `sequence` for every report. At the returned heartbeat interval, report the stage and completed work count you actually observed:
 
 ```text
 python "${CLAUDE_PLUGIN_ROOT}/scripts/workbench_task.py" heartbeat --request "<request-id>" --attempt-id "<attempt-id>" --lease-id "<lease-id>" --sequence <sequence> --stage "<observed-stage>" --count <observed-count>

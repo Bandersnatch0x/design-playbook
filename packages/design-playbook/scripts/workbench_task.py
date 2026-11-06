@@ -27,9 +27,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--count", type=int, help="The observed completed work count.")
     parser.add_argument("--result", help="Result JSON file, or - to read UTF-8 JSON from stdin.")
     parser.add_argument("--reason")
+    parser.add_argument(
+        "--fields",
+        choices=("counter",),
+        default=None,
+        help=(
+            "Read the concurrency counter instead of the context payload. "
+            "A capability granted only `propose-source` still reads it."
+        ),
+    )
     args = parser.parse_args(argv)
     payload: dict = {}
     if args.action != "read":
+        if args.fields is not None:
+            parser.error("--fields is a read view; a report carries no view")
         if not args.attempt_id or not args.lease_id or args.sequence is None:
             parser.error("reports require --attempt-id, --lease-id and --sequence from the claim")
         payload = {
@@ -64,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
             verb=None if args.action == "read" else args.action,
             payload=payload,
             operation_id=args.operation_id,
+            fields=args.fields,
         )
     except (ClaimError, OSError, UnicodeError, json.JSONDecodeError) as error:
         print(str(error), file=sys.stderr)
