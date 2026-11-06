@@ -77,7 +77,10 @@ def _fresh_layout() -> dict[str, tuple[set[str], set[str]]]:
     probe = Path(tempfile.gettempdir()) / f"dp-doctor-fresh-probe-{uuid4().hex}"
     layout: dict[str, tuple[set[str], set[str]]] = {}
     for row in MATRIX:
-        if row.native:
+        if row.native or not row.generates:
+            # No adapter is emitted for either, so neither owns a layout:
+            # native hosts consume the package directly, dead products are
+            # gone (adapter_matrix.STATUSES).
             continue
         try:
             _version, _out_dir, entries = render_entries(row.agent, probe)
@@ -200,7 +203,7 @@ def _lifecycle_findings(repo_root: Path, package_version: str | None) -> dict:
     rendered_by_agent: dict[str, set[str]] = {}
     render_failed: set[str] = set()
     for row in MATRIX:
-        if row.native:
+        if row.native or not row.generates:
             continue
         try:
             _version, _out_dir, entries = render_entries(row.agent, repo_root)

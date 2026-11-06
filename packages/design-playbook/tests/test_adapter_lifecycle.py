@@ -27,7 +27,9 @@ from design_playbook.scripts.doctor import (  # noqa: E402
 )
 from design_playbook.scripts.generate_adapter import render, render_entries  # noqa: E402
 
-NON_NATIVE = [row.agent for row in MATRIX if not row.native]
+# Rows the generator emits an adapter for: not native, and not dead — a dead
+# row has no repo state to check, since nothing is ever written for it.
+NON_NATIVE = [row.agent for row in MATRIX if not row.native and row.generates]
 
 
 def _init(tmp_path: Path, agent: str) -> None:
@@ -80,6 +82,12 @@ class TestRenderEntriesSeam:
     def test_native_agent_not_implemented(self) -> None:
         with pytest.raises(NotImplementedError, match="native"):
             render_entries("claude-code")
+
+    def test_dead_agent_not_implemented(self) -> None:
+        # A dead matrix row is not a lifecycle target: nothing is emitted, so
+        # there is no layout to check drift against.
+        with pytest.raises(NotImplementedError, match="dead"):
+            render_entries("roo-code")
 
 
 class TestDetectorSemantics:

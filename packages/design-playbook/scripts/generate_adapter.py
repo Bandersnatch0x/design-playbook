@@ -9,6 +9,11 @@ Usage:
 Tier-1 agents (codex) regenerate committed snapshots inside the package.
 Tier-2/3 agents write into --out (defaults to cwd of the caller).
 
+``--list`` also shows the package-wide bundles available besides the matrix
+rows.  A bundle is one layout many hosts read, addressed by its own name
+rather than by a matrix row (``agent-plugins`` = ``plugin.json`` +
+``mcp.json``); a dead matrix row emits nothing at all.
+
 Dry-run prints a JSON manifest to stdout:
   {"agent": "...", "version": "...", "files": [{"path": "...", "sha256": "..."}]}
 Tier-1 paths are relative to PKG; Tier-2/3 paths are relative to --out / cwd.
@@ -274,10 +279,13 @@ def _sha256(content: str) -> str:
 
 
 
+_REPO_URL = "https://github.com/Bandersnatch0x/design-playbook"
+_AUTHOR_URL = "https://github.com/Bandersnatch0x"
+
 _CODEX_PLUGIN_EXTRA = {
-    "author_url": "https://github.com/Bandersnatch0x",
-    "homepage": "https://github.com/Bandersnatch0x/design-playbook",
-    "repository": "https://github.com/Bandersnatch0x/design-playbook",
+    "author_url": _AUTHOR_URL,
+    "homepage": _REPO_URL,
+    "repository": _REPO_URL,
     "skills": "./skills/",
     "mcpServers": "./.codex-plugin/mcp.json",
     "interface": {
@@ -670,6 +678,96 @@ def _zed_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
 
 
 
+# --- Package-wide bundles (T-149 / S4) -------------------------------------
+# One portable plugin layout — ``plugin.json`` + ``mcp.json`` at the plugin
+# root, with ``skills/`` referenced in place — that any host reading that
+# layout can install from a single directory.  This is an *additional* face:
+# the Claude layout (``.claude-plugin/``) and the per-host renderers above are
+# untouched.  A bundle is not a matrix row (it serves many hosts at once), so
+# it is addressed by its own name and its declared surface list is derived
+# from the matrix.
+
+_AGENT_PLUGINS_EXTRA = {
+    "skills": "./skills/",
+    "mcpServers": "./mcp.json",
+}
+
+
+def _agent_surface_entries() -> list[dict]:
+    """The surface list the bundle declares — derived from the matrix.
+
+    Every row the generator would emit an adapter for, with its tier and
+    lifecycle status.  Native rows (the host consumes the package directly)
+    and dead rows (no host left to run it) are absent, so the bundle cannot
+    advertise a surface the generator itself refuses to serve.
+    """
+    return [
+        {"id": row.agent, "tier": row.tier, "status": row.status}
+        for row in MATRIX
+        if _renderer_for(row) is not None
+    ]
+
+
+def _render_agent_plugins_json(version: str) -> str:
+    src = _read_claude_plugin()
+    data = {
+        "name": src["name"],
+        "version": version,
+        "description": src["description"],
+        "author": {"name": src["author"]["name"], "url": _AUTHOR_URL},
+        "homepage": _REPO_URL,
+        "repository": _REPO_URL,
+        "license": src["license"],
+        "keywords": src["keywords"],
+        "skills": _AGENT_PLUGINS_EXTRA["skills"],
+        "mcpServers": _AGENT_PLUGINS_EXTRA["mcpServers"],
+        "agents": _agent_surface_entries(),
+    }
+    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+
+def _render_agent_plugins_mcp_json() -> str:
+    data = {
+        "mcpServers": {
+            "design-playbook-preview": {
+                "type": "stdio",
+                "command": "python",
+                "args": ["./mcp/preview/server.py"],
+                "cwd": ".",
+                "timeout": 3600000,
+            },
+            "design-playbook-evidence": {
+                "type": "stdio",
+                "command": "python",
+                "args": ["./mcp/evidence/server.py"],
+                "cwd": ".",
+                "env_vars": ["DESIGN_PLAYBOOK_RUN_ROOT"],
+                "timeout": 3600000,
+            },
+        }
+    }
+    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+
+def _agent_plugins_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
+    """Portable plugin layout: ``plugin.json`` + ``mcp.json``.
+
+    ``skills/`` is referenced in place, not copied — the package's skills
+    directory is the SSOT (ADR-0004) and a rendered copy would be a second
+    inventory to keep in sync.  ``out_dir`` is unused: the layout is the same
+    wherever it lands.
+    """
+    return [
+        ("plugin.json", _render_agent_plugins_json(version)),
+        ("mcp.json", _render_agent_plugins_mcp_json()),
+    ]
+
+
+_BUNDLE_RENDERERS: dict[str, Renderer] = {
+    "agent-plugins": _agent_plugins_files,
+}
+
+
 # Dedicated renderers by name.  Which rows use which renderer is a matrix
 # fact (``AgentRow.renderer``); a Tier-1/2 row cannot be built without one,
 # so "declared a tier" and "has the output surface" cannot drift apart
@@ -688,12 +786,13 @@ _SPECIALIZED_RENDERERS: dict[str, Renderer] = {
 def _renderer_for(row: AgentRow) -> Renderer | None:
     """Resolve *row* to a renderer from matrix properties, not name lists.
 
-    Native rows (the host platform consumes the package directly) resolve to
-    None — the generator emits nothing for them.  A row that names a renderer
-    uses it; a row that names none is a Tier-3 row and uses the shared
-    AGENTS.md floor.
+    Native rows (the host platform consumes the package directly) and dead
+    rows (the product is gone) both resolve to None — the generator emits
+    nothing for either, for two different reasons.  A row that names a
+    renderer uses it; a row that names none is a Tier-3 row and uses the
+    shared AGENTS.md floor.
     """
-    if row.native:
+    if row.native or not row.generates:
         return None
     if row.renderer is None:
         return _agents_md_floor_files
@@ -703,6 +802,23 @@ def _renderer_for(row: AgentRow) -> Renderer | None:
             f"agent {row.agent!r} names an unknown renderer: {row.renderer!r}"
         )
     return renderer
+
+
+def _bundle_entries(
+    name: str, out_dir: Path | None
+) -> tuple[str, Path, list[tuple[str, str]]]:
+    """Same seam for a package-wide bundle, addressed by its own name.
+
+    Bundles default to cwd (they are laid down in the consuming project, like
+    Tier-2/3 output) and have no matrix row, so they cannot be reached through
+    the row path.
+    """
+    renderer = _BUNDLE_RENDERERS.get(name)
+    if renderer is None:
+        raise ValueError(f"unknown agent: {name!r}")
+    target = out_dir if out_dir is not None else Path.cwd()
+    version = _get_version()
+    return version, target, renderer(version, target)
 
 
 def render_entries(
@@ -716,7 +832,14 @@ def render_entries(
     """
     row = get_agent(agent)
     if row is None:
-        raise ValueError(f"unknown agent: {agent!r}")
+        return _bundle_entries(agent, out_dir)
+
+    if not row.generates:
+        hint = f"; successor: {row.successor}" if row.successor else ""
+        raise NotImplementedError(
+            f"{agent!r} is {row.status}: the product no longer exists, so the "
+            f"generator emits no adapter{hint}"
+        )
 
     renderer = _renderer_for(row)
     if renderer is None:
@@ -763,7 +886,12 @@ def render(agent: str, out_dir: Path | None = None, *, dry_run: bool = False) ->
 def _list_agents() -> None:
     for row in MATRIX:
         renderer_note = "(renderer ready)" if _renderer_for(row) is not None else ""
-        print(f"  {row.agent:<20} tier={row.tier}  {renderer_note}".rstrip())
+        status_note = "" if row.status == "active" else f"[{row.status}]"
+        print(
+            f"  {row.agent:<20} tier={row.tier}  {status_note} {renderer_note}".rstrip()
+        )
+    for name in _BUNDLE_RENDERERS:
+        print(f"  {name:<20} bundle       (renderer ready)")
 
 
 def main(argv: list[str] | None = None) -> int:
