@@ -20,8 +20,10 @@ intentionally not judged here.
 """
 from __future__ import annotations
 
+import importlib
 import re
 from dataclasses import dataclass, field
+from typing import Any, Callable
 
 try:  # package import seam (design_playbook.* context)
     from design_playbook.scripts import rules_governance
@@ -832,3 +834,124 @@ def validate_craft_rows(
                         repair=f"Fill the {name} cell",
                     ))
     return errors
+
+
+# --- machine-detector bindings (T-144) -----------------------------------
+#
+# A ``check-type: machine-detector`` rule names the callable that judges it.
+# ``callable_path`` is ``<module>:<attribute>`` under the ``scripts/`` import
+# root; the callable takes one payload and returns findings. A rule with no
+# callable is *not* covered — ``reason`` states why, so enumeration never
+# reports silent coverage (the ecosystem failure I6 names).
+
+
+@dataclass(frozen=True)
+class DetectorBinding:
+    """One registry rule bound to its detector callable (or a reason it is not)."""
+
+    rule_id: str
+    callable_path: str = ""
+    reason: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.callable_path and not self.reason:
+            raise ValueError(
+                f"{self.rule_id}: an unbound detector requires a reason"
+            )
+
+    @property
+    def implemented(self) -> bool:
+        return bool(self.callable_path)
+
+
+DETECTOR_BINDINGS: dict[str, DetectorBinding] = {
+    binding.rule_id: binding
+    for binding in (
+        DetectorBinding("A11Y-03", "detectors.contrast:detect"),
+        DetectorBinding("A11Y-04", "detectors.hit_target:detect"),
+        DetectorBinding("A11Y-05", "detectors.text_size:detect"),
+        DetectorBinding(
+            "CRAFT-11",
+            reason=(
+                "declared type/spacing/radius scales have no machine-readable "
+                "artifact in a run, and near-duplicate hierarchy plus "
+                "nested-radius conformance need layout-tree adjacency; a "
+                "size-count-only check would under-cover the rule"
+            ),
+        ),
+    )
+}
+
+
+def machine_detector_statuses(
+        entries: list[RuleEntry],
+) -> list[dict[str, Any]]:
+    """Enumerate every ``machine-detector`` rule with its implementation status.
+
+    Returns ``[{"ruleId", "implemented", "reason"}]`` in registry order. An
+    entry with no binding is reported as unimplemented with an explicit
+    reason — never as covered.
+    """
+    statuses: list[dict[str, Any]] = []
+    for entry in entries:
+        if entry.fields.get("check-type") != "machine-detector":
+            continue
+        binding = DETECTOR_BINDINGS.get(entry.id)
+        statuses.append({
+            "ruleId": entry.id,
+            "implemented": bool(binding and binding.implemented),
+            "reason": (
+                binding.reason if binding is not None
+                else "no detector bound (rule declares machine-detector)"
+            ),
+        })
+    return statuses
+
+
+def validate_detector_bindings(
+        entries: list[RuleEntry],
+) -> list[RegistryError]:
+    """Check that the binding table points at real machine-detector rules."""
+    by_id = {entry.id: entry for entry in entries}
+    errors: list[RegistryError] = []
+    for rule_id, binding in DETECTOR_BINDINGS.items():
+        entry = by_id.get(rule_id)
+        if entry is None:
+            errors.append(RegistryError(
+                f"detector binding: unknown registry id {rule_id}",
+                rule=rule_id,
+                expected="a registered entry id",
+                actual=rule_id,
+                repair="Bind a detector to an entry from references/rules.md",
+            ))
+        elif entry.fields.get("check-type") != "machine-detector":
+            errors.append(RegistryError(
+                f"detector binding: {rule_id} is not a machine-detector rule",
+                rule=rule_id,
+                expected="check-type: machine-detector",
+                actual=entry.fields.get("check-type", "missing"),
+                repair="Remove the binding or change the rule's check-type",
+            ))
+    return errors
+
+
+def load_detector(rule_id: str) -> Callable[[object], list[dict[str, Any]]]:
+    """Resolve the detector callable bound to ``rule_id`` (fail closed)."""
+    binding = DETECTOR_BINDINGS.get(rule_id)
+    if binding is None or not binding.implemented:
+        reason = binding.reason if binding is not None else "no binding"
+        raise NotImplementedError(f"{rule_id}: no detector implementation: {reason}")
+    module_name, _, attribute = binding.callable_path.partition(":")
+    # Resolve under this module's own name, never "whichever is importable".
+    # A bare ``rules_registry`` and a packaged one would otherwise load the
+    # detector twice, and the two copies' exception classes do not match.
+    prefix = f"{__name__.rsplit('.', 1)[0]}." if "." in __name__ else ""
+    leaf = module_name.partition(".")[2]
+    return getattr(
+        importlib.import_module(f"{prefix}detectors.{leaf}"), attribute
+    )
+
+
+def run_detector(rule_id: str, payload: object) -> list[dict[str, Any]]:
+    """Run the bound detector over ``payload`` and return its findings."""
+    return load_detector(rule_id)(payload)
