@@ -89,6 +89,12 @@ Every compare or explore entry answers the **Anti-default check** with brief-spe
 
 Baseline-internal small choices never trigger full exploration. E-tier confirmation rides the preview transaction when the adapter is present (`options` = candidate labels, `report_ref` = this report; link the entry to the transaction `decision_id`). When absent, record `kind: user` + `report-batch` in the entry's confirmation block. R3 challenges revise by a new entry that `supersedes` the retired one, history is never rewritten. `scripts/g10_design_decisions.py` (G10, via `validate_run.py`) checks the machine face.
 
+### 5. State coverage enumeration
+
+Before acceptance, enumerate the reachable states on a **temporary route** that is not part of the shipped route table, and render `empty`, `loading`, `error`, `permission`, and `dense`. Each render yields one **candidate L6 evidence row** — criterion text plus artifact path — for `ux-spec` to declare and `ui-evaluator` to accept or reject. A state that cannot be rendered records an observable gap reason instead of disappearing.
+
+**Done when:** each of the five states has a render path or an observable gap reason. This is the step that keeps "happy path only" from arriving at acceptance; the resulting observable routes home through the recirculate map's R2 row, never a fresh penalty.
+
 ### Branch, structure still open
 
 If template is underdetermined, offer 2–3 IA variants (same `spec`, different main-region weight), one-line tradeoff each, pick one, then complete step 4. This branch is the C tier above: record it as a `tier: compare` DD entry instead of leaving the trade-off in conversation only.
