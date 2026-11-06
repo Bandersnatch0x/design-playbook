@@ -816,6 +816,17 @@ class WorkbenchRequestHandler(http.server.BaseHTTPRequestHandler):
             # A request-bound capability reads its own request only; it
             # never sees a sibling task in the same project (R11).
             raise _Rejection(UNAUTHORIZED)
+        params = dict(parse_qsl(query, keep_blank_values=True))
+        if params:
+            # The counter is concurrency metadata, not the context payload
+            # (T-127); the Agent client reads it before every work write.
+            if params != {"fields": "counter"}:
+                raise _Rejection(INVALID_INPUT)
+            self._drain_body()
+            self._respond(
+                self.server.work.counter(segments[0], segments[2], principal=principal)
+            )
+            return
         if query:
             raise _Rejection(INVALID_INPUT)
         self._drain_body()

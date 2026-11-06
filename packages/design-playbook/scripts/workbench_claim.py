@@ -92,15 +92,17 @@ def request_task(
     data = None
     if verb is not None:
         # Every work write compares the request counter (T-127): read the
-        # current row with the same credential, then send its counter.
+        # current one with the same credential, then send it. The counter is
+        # concurrency metadata, so this read does not require the
+        # `read-context` grant the agent needs for the context payload.
         current = _request_json(
             opener,
             urllib.request.Request(
-                f"{project_url}/requests/{request_id}",
+                f"{project_url}/requests/{request_id}?fields=counter",
                 method="GET",
                 headers=headers,
             ),
-            what="request read",
+            what="request counter read",
         )
         try:
             expected = int(current["request"]["counter"])
