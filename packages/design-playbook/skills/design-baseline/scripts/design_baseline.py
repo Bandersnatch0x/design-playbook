@@ -626,16 +626,20 @@ def prepare(project_root: Path | str, run_root: Path | str) -> dict[str, Any]:
     )
 
 
+def _frontmatter_block(text: str) -> str | None:
+    match = re.match(r"\A---\s*\n(.*?)\n---\s*(?:\n|\Z)", text, re.DOTALL)
+    return match.group(1) if match else None
+
+
 def _validate_baseline_document(path: Path, project: Path) -> list[dict[str, str]]:
     try:
         text = _read_text_capped(path, "baseline document").replace("\r\n", "\n")
     except (OSError, UnicodeError) as error:
         raise BaselineError(f"cannot read baseline document: {error}") from error
 
-    frontmatter = re.match(r"\A---\s*\n(.*?)\n---\s*(?:\n|\Z)", text, re.DOTALL)
-    if frontmatter is None:
+    metadata = _frontmatter_block(text)
+    if metadata is None:
         raise BaselineError("baseline is missing YAML frontmatter")
-    metadata = frontmatter.group(1)
     if not re.search(r"(?m)^name:\s*\S.*$", metadata):
         raise BaselineError("baseline frontmatter is missing name")
     colors = re.search(r"(?ms)^colors:\s*\n((?:[ \t]+[^\n]*(?:\n|$))*)", metadata)
@@ -1024,6 +1028,402 @@ def verify(project_root: Path | str, run_root: Path | str) -> dict[str, Any]:
     return state
 
 
+# ---------------------------------------------------------------------------
+# Structured findings (T-146)
+#
+# ``verify`` stays the fail-closed binding gate and keeps raising
+# ``BaselineError``. This layer projects the same judgments, plus declaration
+# checks that are mechanically decidable from the baseline document, into
+# stable rows: ``{severity, path, code, message}``. A check whose inputs cannot
+# be resolved is reported as ``advisory`` instead of being treated as a pass.
+# Codes are product-owned identifiers; downstream gates match on them.
+# ---------------------------------------------------------------------------
+
+FINDINGS_SCHEMA = "design-baseline-findings/v1"
+
+CODE_REFERENCE_BROKEN = "baseline.reference-broken"
+CODE_CONTRAST_INSUFFICIENT = "baseline.contrast-insufficient"
+CODE_TOKEN_ORPHANED = "baseline.token-orphaned"
+CODE_PRIMARY_COLOR_MISSING = "baseline.primary-color-missing"
+CODE_PRIMARY_FONT_MISSING = "baseline.primary-font-missing"
+CODE_BINDING_INVALID = "baseline.binding-invalid"
+CODE_CHECK_UNAVAILABLE = "baseline.check-unavailable"
+
+FINDING_CODES = (
+    CODE_REFERENCE_BROKEN,
+    CODE_CONTRAST_INSUFFICIENT,
+    CODE_TOKEN_ORPHANED,
+    CODE_PRIMARY_COLOR_MISSING,
+    CODE_PRIMARY_FONT_MISSING,
+    CODE_BINDING_INVALID,
+    CODE_CHECK_UNAVAILABLE,
+)
+
+_SEVERITY_RANK = {"error": 0, "warning": 1, "advisory": 2}
+_MIN_TEXT_CONTRAST = 4.5
+_MIN_PRIMARY_CONTRAST = 3.0
+_MAX_COLOR_RESOLUTION_DEPTH = 4
+_TOKEN_DEFINITION_RE = re.compile(r"(--[A-Za-z0-9_-]+)\s*:\s*([^`;{}\n]+)")
+_FONT_DECLARATION_RE = re.compile(
+    r"(?i)(?:font-family|font families?)\s*:\s*([^;\n`]+)")
+_BACKTICK_VALUE_RE = re.compile(r"`([^`\n]+)`")
+_FAMILY_NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9 _-]*")
+
+
+def _finding(severity: str, path: str, code: str, message: str) -> dict[str, str]:
+    if severity not in _SEVERITY_RANK:
+        raise ValueError(f"unknown finding severity: {severity}")
+    if code not in FINDING_CODES:
+        raise ValueError(f"unknown finding code: {code}")
+    return {"severity": severity, "path": path, "code": code, "message": message}
+
+
+def _parse_hex_color(value: str) -> tuple[float, float, float] | None:
+    match = re.fullmatch(r"#([0-9a-fA-F]{3,8})", value.strip())
+    if match is None:
+        return None
+    digits = match.group(1)
+    if len(digits) in (3, 4):
+        digits = "".join(character * 2 for character in digits[:3])
+    elif len(digits) in (6, 8):
+        digits = digits[:6]
+    else:
+        return None
+    return tuple(int(digits[index:index + 2], 16) / 255 for index in (0, 2, 4))
+
+
+def _relative_luminance(rgb: tuple[float, float, float]) -> float:
+    channels = [
+        channel / 12.92 if channel <= 0.03928 else ((channel + 0.055) / 1.055) ** 2.4
+        for channel in rgb
+    ]
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+
+
+def _contrast_ratio(
+        first: tuple[float, float, float],
+        second: tuple[float, float, float]) -> float:
+    lighter, darker = sorted(
+        (_relative_luminance(first), _relative_luminance(second)), reverse=True)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def _token_definitions(text: str) -> dict[str, str]:
+    return {
+        name: value.strip().strip("'\"")
+        for name, value in _TOKEN_DEFINITION_RE.findall(text)
+    }
+
+
+def _resolve_color_literal(
+        value: Any, tokens: dict[str, str], depth: int = 0) -> str | None:
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip().strip("'\"")
+    variable = re.fullmatch(r"var\(\s*(--[A-Za-z0-9_-]+)\s*(?:,.*)?\)", candidate)
+    if variable is not None:
+        candidate = variable.group(1)
+    if candidate.startswith("--"):
+        if depth >= _MAX_COLOR_RESOLUTION_DEPTH or candidate not in tokens:
+            return None
+        return _resolve_color_literal(tokens[candidate], tokens, depth + 1)
+    return candidate if _parse_hex_color(candidate) is not None else None
+
+
+def _resolve_color(
+        value: Any, tokens: dict[str, str]) -> tuple[float, float, float] | None:
+    literal = _resolve_color_literal(value, tokens)
+    return _parse_hex_color(literal) if literal is not None else None
+
+
+def _frontmatter_colors(metadata: str) -> dict[str, str]:
+    block = re.search(r"(?ms)^colors:\s*\n((?:[ \t]+[^\n]*(?:\n|$))*)", metadata)
+    if block is None:
+        return {}
+    return {
+        match.group(1): match.group(2).strip().strip("'\"")
+        for match in re.finditer(r"(?m)^\s{2,}([A-Za-z0-9_-]+):\s*(\S.*)$", block.group(1))
+    }
+
+
+def _primary_color_findings(path: str, colors: dict[str, str]) -> list[dict[str, str]]:
+    value = colors.get("primary")
+    if (value is None or not value.strip() or value.strip().lower() == "unresolved"
+            or value.strip().startswith("<")):
+        return [_finding(
+            "error", path, CODE_PRIMARY_COLOR_MISSING,
+            "frontmatter colors declare no resolved primary role")]
+    return []
+
+
+def _contrast_findings(
+        path: str, colors: dict[str, str],
+        tokens: dict[str, str]) -> list[dict[str, str]]:
+    findings: list[dict[str, str]] = []
+    pairs = (
+        ("text", "background", _MIN_TEXT_CONTRAST),
+        ("primary", "background", _MIN_PRIMARY_CONTRAST),
+    )
+    for foreground, background, minimum in pairs:
+        # A missing role is reported by its own check, not as an unverified
+        # contrast pair.
+        if foreground not in colors or background not in colors:
+            continue
+        foreground_rgb = _resolve_color(colors[foreground], tokens)
+        background_rgb = _resolve_color(colors[background], tokens)
+        if foreground_rgb is None or background_rgb is None:
+            unresolved = foreground if foreground_rgb is None else background
+            findings.append(_finding(
+                "advisory", path, CODE_CHECK_UNAVAILABLE,
+                f"contrast {foreground}/{background} is unverified: "
+                f"{unresolved} value {colors[unresolved]!r} is not a literal "
+                "color or a resolvable token"))
+            continue
+        ratio = _contrast_ratio(foreground_rgb, background_rgb)
+        if ratio < minimum:
+            findings.append(_finding(
+                "error", path, CODE_CONTRAST_INSUFFICIENT,
+                f"{foreground}/{background} contrast {ratio:.2f}:1 is below "
+                f"the {minimum:.2f}:1 minimum"))
+    return findings
+
+
+def _declares_family(value: str) -> bool:
+    candidate = value.strip().strip("`'\"")
+    if not candidate or (candidate.startswith("<") and candidate.endswith(">")):
+        return False
+    return re.search(r"[A-Za-z]", candidate) is not None
+
+
+def _font_declared(text: str, sections: dict[str, str]) -> bool:
+    if any(_declares_family(match.group(1))
+           for match in _FONT_DECLARATION_RE.finditer(text)):
+        return True
+    if any("font" in name.lower() and _declares_family(value)
+           for name, value in _token_definitions(text).items()):
+        return True
+    typography = sections.get(_normalize_heading("Typography Rules"))
+    if typography is None:
+        return False
+    for value in _BACKTICK_VALUE_RE.findall(typography):
+        if any(_FAMILY_NAME_RE.fullmatch(part.strip().strip("'\""))
+               for part in value.split(",")):
+            return True
+    return False
+
+
+def _primary_font_findings(
+        path: str, text: str, sections: dict[str, str]) -> list[dict[str, str]]:
+    if _font_declared(text, sections):
+        return []
+    if _normalize_heading("Typography Rules") in sections:
+        return [_finding(
+            "error", path, CODE_PRIMARY_FONT_MISSING,
+            "Typography Rules declares no font family")]
+    return [_finding(
+        "advisory", path, CODE_CHECK_UNAVAILABLE,
+        "primary font is unverified: no typography section or font "
+        "declaration to judge")]
+
+
+def _first_party_source_text(project: Path) -> str | None:
+    sources = _collect_sources(project)
+    if not sources:
+        return None
+    chunks: list[str] = []
+    for source in sources:
+        try:
+            chunks.append(source.read_text(encoding="utf-8-sig"))
+        except (OSError, UnicodeError):
+            continue
+    return "\n".join(chunks) if chunks else None
+
+
+def _token_findings(
+        path: str, text: str, project: Path) -> list[dict[str, str]]:
+    tokens = _token_definitions(text)
+    if not tokens:
+        return [_finding(
+            "advisory", path, CODE_CHECK_UNAVAILABLE,
+            "token references are unverified: the baseline declares no tokens")]
+    source_text = _first_party_source_text(project)
+    if source_text is None:
+        return [_finding(
+            "advisory", path, CODE_CHECK_UNAVAILABLE,
+            "token references are unverified: no first-party frontend source")]
+    haystack = source_text.lower()
+    findings: list[dict[str, str]] = []
+    for name, value in sorted(tokens.items()):
+        if name.lower() in haystack:
+            continue
+        literal = _resolve_color_literal(value, tokens)
+        if literal is not None and literal.lower() in haystack:
+            continue
+        findings.append(_finding(
+            "warning", path, CODE_TOKEN_ORPHANED,
+            f"token {name} is declared in the baseline but no first-party "
+            "source references it"))
+    return findings
+
+
+def _reference_findings(
+        project: Path, baseline_relative: str,
+        state: dict[str, Any]) -> list[dict[str, str]]:
+    baseline_path = _safe_relative_file(project, baseline_relative, "baseline")
+    text = _read_text_capped(baseline_path, "baseline document").replace("\r\n", "\n")
+    sections = _parse_sections(text)
+    document_sources = _parse_sources(
+        sections.get(_normalize_heading("Source Evidence & Confidence"), ""))
+    document_map = {entry["path"]: entry.get("sha256") for entry in document_sources}
+    state_map: dict[str, Any] = {}
+    if isinstance(state.get("sources"), list):
+        for entry in state["sources"]:
+            if isinstance(entry, dict) and isinstance(entry.get("path"), str):
+                state_map[entry["path"]] = entry.get("sha256")
+
+    findings: list[dict[str, str]] = []
+    for relative in sorted(set(document_map) | set(state_map)):
+        declared = document_map.get(relative)
+        bound = state_map.get(relative)
+        if declared is None or bound is None:
+            findings.append(_finding(
+                "error", relative, CODE_REFERENCE_BROKEN,
+                "source is recorded in only one of the baseline document and "
+                "the bound state"))
+            continue
+        if declared != bound:
+            findings.append(_finding(
+                "error", relative, CODE_REFERENCE_BROKEN,
+                "document sha256 differs from the bound state record"))
+            continue
+        if not isinstance(declared, str) or not re.fullmatch(r"[0-9a-f]{64}", declared):
+            findings.append(_finding(
+                "error", relative, CODE_REFERENCE_BROKEN,
+                "source record lacks a 64-hex sha256"))
+            continue
+        try:
+            source_path = _safe_relative_file(project, relative, "baseline source")
+        except BaselineError as error:
+            findings.append(_finding(
+                "error", relative, CODE_REFERENCE_BROKEN, str(error)))
+            continue
+        actual = _sha256(source_path)
+        if actual != declared:
+            findings.append(_finding(
+                "error", relative, CODE_REFERENCE_BROKEN,
+                f"source sha256 {actual[:12]}... does not match the declared "
+                f"{declared[:12]}..."))
+
+    for promotion in state.get("promotions") or []:
+        if not isinstance(promotion, dict) or promotion.get("kind") != "component":
+            continue
+        target = promotion.get("target")
+        recorded = promotion.get("source_sha256")
+        if not isinstance(target, str) or not recorded:
+            continue
+        try:
+            source_path = _safe_relative_file(
+                project, target, "promoted component source")
+        except BaselineError as error:
+            findings.append(_finding(
+                "error", target, CODE_REFERENCE_BROKEN, str(error)))
+            continue
+        if _sha256(source_path) != recorded:
+            findings.append(_finding(
+                "error", target, CODE_REFERENCE_BROKEN,
+                "promoted component source changed since promotion"))
+    return findings
+
+
+def _declaration_findings(
+        project: Path, baseline_relative: str) -> list[dict[str, str]]:
+    baseline_path = _safe_relative_file(project, baseline_relative, "baseline")
+    text = _read_text_capped(baseline_path, "baseline document").replace("\r\n", "\n")
+    colors = _frontmatter_colors(_frontmatter_block(text) or "")
+    tokens = _token_definitions(text)
+    sections = _parse_sections(text)
+    findings = _primary_color_findings(baseline_relative, colors)
+    findings += _contrast_findings(baseline_relative, colors, tokens)
+    findings += _primary_font_findings(baseline_relative, text, sections)
+    findings += _token_findings(baseline_relative, text, project)
+    return findings
+
+
+def _findings_result(
+        state: dict[str, Any], findings: list[dict[str, str]],
+        *, waived: bool) -> dict[str, Any]:
+    ordered = sorted(
+        findings,
+        key=lambda item: (
+            _SEVERITY_RANK[item["severity"]], item["path"], item["code"],
+            item["message"]))
+    counts = {
+        severity: sum(1 for item in ordered if item["severity"] == severity)
+        for severity in _SEVERITY_RANK
+    }
+    baseline = state.get("baseline")
+    binding = None
+    if isinstance(baseline, dict):
+        binding = {"path": baseline.get("path"), "sha256": baseline.get("sha256")}
+    return {
+        "schema": FINDINGS_SCHEMA,
+        "waived": waived,
+        "baseline": binding,
+        "findings": ordered,
+        "gate": {
+            "verdict": "fail" if counts["error"] else "pass",
+            "errors": counts["error"],
+            "warnings": counts["warning"],
+            "advisories": counts["advisory"],
+        },
+    }
+
+
+def verify_findings(project_root: Path | str, run_root: Path | str) -> dict[str, Any]:
+    """Return the machine-readable projection of ``verify``'s judgments.
+
+    Findings use ``{severity, path, code, message}`` with stable codes from
+    ``FINDING_CODES``. ``gate.verdict`` is ``fail`` only when at least one
+    ``error`` finding exists; warnings and advisories are reported without
+    blocking. A waived baseline disables drift checks by explicit decision.
+    """
+
+    project, run = _roots(project_root, run_root)
+    state = _load_state(project, run)
+    if state.get("status") == "waived":
+        return _findings_result(state, [], waived=True)
+
+    findings: list[dict[str, str]] = []
+    baseline = state.get("baseline")
+    relative = baseline.get("path") if isinstance(baseline, dict) else None
+    if relative not in {candidate.as_posix() for candidate in CANDIDATES}:
+        findings.append(_finding(
+            "error", "DESIGN.md", CODE_BINDING_INVALID,
+            f"bound baseline path is not a supported candidate: {relative!r}"))
+        relative = None
+    if relative is not None:
+        try:
+            findings.extend(_reference_findings(project, relative, state))
+        except BaselineError as error:
+            findings.append(_finding(
+                "error", relative, CODE_BINDING_INVALID, str(error)))
+        try:
+            findings.extend(_declaration_findings(project, relative))
+        except BaselineError as error:
+            findings.append(_finding(
+                "error", relative, CODE_BINDING_INVALID, str(error)))
+
+    try:
+        verify(project, run)
+    except BaselineError as error:
+        # An error finding already fails the gate; keep one row per root cause
+        # instead of stacking a generic binding error on top.
+        if not any(item["severity"] == "error" for item in findings):
+            findings.append(_finding(
+                "error", relative or "DESIGN.md", CODE_BINDING_INVALID, str(error)))
+    return _findings_result(state, findings, waived=False)
+
+
 def main(argv: list[str] | None = None) -> int:
     # T-081: piped stdout/stderr defaults to the ANSI code page (GBK on
     # zh-CN Windows); force UTF-8 so ensure_ascii=False JSON survives.
@@ -1033,7 +1433,7 @@ def main(argv: list[str] | None = None) -> int:
             stream.reconfigure(encoding=_PIPED_STREAM_ENCODING)
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for command in ("prepare", "verify"):
+    for command in ("prepare", "verify", "findings"):
         subparser = subparsers.add_parser(command)
         subparser.add_argument("project_root", type=Path)
         subparser.add_argument("run_root", type=Path)
@@ -1063,6 +1463,8 @@ def main(argv: list[str] | None = None) -> int:
             result = promote(args.project_root, args.run_root, args.component,
                              args.entry, kind=args.kind,
                              governance_log=args.governance_log)
+        elif args.command == "findings":
+            result = verify_findings(args.project_root, args.run_root)
         else:
             result = verify(args.project_root, args.run_root)
     except BaselineError as error:
@@ -1079,6 +1481,8 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
     print(json.dumps(result, indent=2, ensure_ascii=False))
+    if args.command == "findings" and result["gate"]["verdict"] == "fail":
+        return 1
     return 0
 
 

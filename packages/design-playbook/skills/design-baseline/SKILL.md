@@ -30,6 +30,7 @@ Public interface:
 prepare(project_root, run_root) -> state
 confirm(project_root, run_root, decision, reason=None) -> state
 verify(project_root, run_root) -> state
+verify_findings(project_root, run_root) -> findings
 ```
 
 CLI:
@@ -38,11 +39,14 @@ CLI:
 python scripts/design_baseline.py prepare <project_root> <run_root>
 python scripts/design_baseline.py confirm <project_root> <run_root> --decision accept|waive [--reason ...]
 python scripts/design_baseline.py verify  <project_root> <run_root>
+python scripts/design_baseline.py findings <project_root> <run_root>
 ```
 
 On Windows, non-ASCII `--reason` text can be mangled between shell and Python (ANSI code page, e.g. GBK on zh-CN). When argv carries undecodable bytes, `confirm` refuses with an error instead of persisting mojibake. Prefer the module API (`confirm(project_root, run_root, decision, reason=...)`) or ASCII text for CLI `--reason` with non-ASCII content.
 
 State is a cache, not authority. Every public call resolves paths against the supplied project root. `verify` re-hashes the bound baseline and its first-party sources before returning a downstream binding. Fill and other consumers may only use a binding that just passed `verify`.
+
+`verify_findings` is the machine-readable projection of the same judgments: stable rows `{severity, path, code, message}` plus a `gate.verdict`. Codes are product-owned identifiers listed in `FINDING_CODES`. Only `error` rows fail the gate; `warning` rows are reported without blocking; a check whose inputs cannot be resolved is `advisory`, never a silent pass. The `findings` CLI prints the same payload and exits `1` when the gate fails.
 
 | `status` | Meaning |
 | --- | --- |
