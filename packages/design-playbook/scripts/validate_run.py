@@ -187,6 +187,9 @@ from design_playbook.scripts.shaping_log import (  # noqa: E402
 from design_playbook.scripts.dd_entries import DD_HEADING  # noqa: E402
 from design_playbook.scripts.g10_design_decisions import check_g10  # noqa: E402
 from design_playbook.scripts.repair_rounds import check_rounds  # noqa: E402
+from design_playbook.scripts.repair_evidence import (  # noqa: E402
+    check_repair_evidence,
+)
 from design_playbook.scripts.run_profile import validate_run_profile  # noqa: E402
 
 # vNext S3 gates: method-semantics keys (G6-adjacent), interaction-track
@@ -346,6 +349,12 @@ def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
     # Fires only when the report carries round annotations or a close_reason
     # (legacy reports without them stay silent).
     errs += check_rounds(pointback_text, verdict_facts=facts.verdict)
+    # G4 repair evidence (T-152): a closure that declares repair-evidence:
+    # must bind both halves (failure state + repaired state) to the same
+    # criterion and viewport in the evidence manifest. Fires only when the
+    # annotation is present (legacy reports without it stay silent), and an
+    # unpaired closure is blocked proof, so the verdict stays Recirculate.
+    errs += check_repair_evidence(pointback_text, entries)
     # G11 (vNext S1): six-block reports must carry a Coverage statement with
     # the exhaustive status + explicit unreviewed list (existence only).
     errs += check_coverage(pointback_text, required=require_coverage)

@@ -114,7 +114,18 @@ For a repaired blocker, record exactly one closure line whose target is the find
 
 ```text
 - closes: <id or exact issue value> -> recirculate -> fix -> re-eval -> 0 blocking
+  repair-evidence: before=evidence/L6.3-empty-r1.png after=evidence/L6.3-empty-r2.png
 ```
+
+The `repair-evidence:` line is the pair behind the closure, and it is the finding's required proof: the failing half and the repaired half, each
+bound through `evidence/manifest.jsonl` to the same criterion and the same `request.viewport`. Half a pair is `blocked`, so the closure does not
+close and the verdict stays `Recirculate` — never `Pass`. Do not write the pair from memory or from the producer's narration; it is the capture
+the manifest already binds.
+
+Repeat-state detection is not narration either. Identical bytes on both halves is `G4.repair_evidence_unchanged` (the failing surface is still
+standing). A blocker reappearing after a repair keeps its `id` and increments `rounds:`, and the existing two-cycle stop in
+[`references/repair.md`](references/repair.md) is the checkpoint — two rounds without new evidence stops the recirculation. The machine face is
+`scripts/validate_run.py`; it decides the pair once, so neither the loop nor a second gate re-implements the verdict.
 
 **Done when:** the explicit verdict is structurally unique. Blocking sources are non-empty. Every blocking finding has exactly one matching closure before `Pass`. A blocking finding cannot be waived inside a Pass artifact. Without a user in the loop, blocking findings remain in recirculate and the run requests a decision. Re-evaluate only after an explicit user decision updates the owning declaration or severity. Record it against the user's statement or decision record. The final Pass artifact contains no blocking severity.
 
@@ -150,7 +161,7 @@ Positive findings are acceptance evidence, not decoration. Every L6 `pass` on im
 
 After Recirculate, use [`references/repair.md`](references/repair.md) for the smallest owning declaration, the R1-R5 second-hop route, and which evidence to invalidate.
 
-The artifact shape behind this verdict is machine-checkable. `scripts/validate_run.py` gates L1-L6 and ordered `Given, then When, then Then` in every top-level L6 item. It requires one non-empty four-field evidence row per `L6.<n>`, allowed evidence results, and all-pass evidence for `Pass`. It also requires four non-empty finding fields, one explicit verdict, and one exact issue-linked closure per blocking finding. These checks are the completion criteria above, not extra prose.
+The artifact shape behind this verdict is machine-checkable. `scripts/validate_run.py` gates L1-L6 and ordered `Given, then When, then Then` in every top-level L6 item. It requires one non-empty four-field evidence row per `L6.<n>`, allowed evidence results, and all-pass evidence for `Pass`. It also requires four non-empty finding fields, one explicit verdict, and one exact issue-linked closure per blocking finding. When a closure declares `repair-evidence:`, it requires both halves bound to one criterion and viewport (`G4.repair_evidence_*`). These checks are the completion criteria above, not extra prose.
 
 After Recirculate, use [`references/repair.md`](references/repair.md) for the smallest owning declaration and which evidence to invalidate.
 
