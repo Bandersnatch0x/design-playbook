@@ -269,6 +269,26 @@ class WorkRequestService:
         )
         return {"request": payload}
 
+    def counter(self, project_id: str, request_id: str, *, principal: object = None) -> dict:
+        """The concurrency counter alone, without the context payload.
+
+        Every work write compares this counter (T-127). The read is
+        authorized by the request-bound capability and its live lease;
+        ``read-context`` gates the context payload, not the concurrency
+        metadata, so an Agent granted only ``propose-source`` can still
+        claim and report.
+        """
+        if principal is not None and getattr(principal, "request_id", None) is not None:
+            self._require_agent(request_id, principal, scope="read", read_context=False)
+        self.service.require_project(project_id, scope="read")
+        row = self._request_row(project_id, request_id)
+        return {
+            "request": {
+                "requestId": row["request_id"],
+                "counter": int(row["counter"]),
+            }
+        }
+
     # -- maintainer writes ----------------------------------------------
 
     def create(
@@ -628,7 +648,8 @@ class WorkRequestService:
     # -- agent writes (request-bound capability) -------------------------
 
     def _require_agent(
-        self, request_id: str, principal: object, *, scope: str = "write"
+        self, request_id: str, principal: object, *, scope: str = "write",
+        read_context: bool = True,
     ) -> dict:
         row = self.store.work_request(request_id)
         if row is None:
@@ -648,7 +669,9 @@ class WorkRequestService:
         if self._expired(row):
             raise WorkbenchError(STALE_EVIDENCE, detail="request expired")
         if scope == "read":
-            if "read-context" not in rowshape.load(row["allowed_actions_json"], []):
+            if read_context and "read-context" not in rowshape.load(
+                row["allowed_actions_json"], []
+            ):
                 raise WorkbenchError(UNAUTHORIZED)
             attempt = self.store.latest_work_attempt(request_id)
             if attempt is not None and attempt["state"] == "running":

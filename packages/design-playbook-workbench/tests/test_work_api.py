@@ -515,6 +515,54 @@ class RequestBoundCapabilityReachTest(WorkApiTestCase):
         )
         self.assertEqual(peek.status, 401, peek.text)
 
+    def test_the_counter_read_is_metadata_not_the_context(self) -> None:
+        request = self.create_request(allowedActions=["propose-source"])
+        consented = self.request_action(
+            "consent",
+            request_id=request["requestId"],
+            payload={"digest": request["contextDigest"]},
+        )
+        self.assertEqual(consented.status, 200, consented.text)
+        token = self.agent_token(request)
+        read_url = (
+            f"/api/v1/projects/{self.project_id}/requests/{request['requestId']}"
+        )
+        counter = http_request(
+            self.h.runtime, f"{read_url}?fields=counter", capability=token
+        )
+        self.assertEqual(counter.status, 200, counter.text)
+        self.assertEqual(
+            counter.json["request"],
+            {
+                "requestId": request["requestId"],
+                "counter": consented.json["counter"],
+            },
+        )
+        # The full read still needs the grant the maintainer withheld.
+        full = http_request(self.h.runtime, read_url, capability=token)
+        self.assertEqual(full.status, 401, full.text)
+        # Only the one counter view is a query this route accepts.
+        unknown = http_request(
+            self.h.runtime, f"{read_url}?fields=context", capability=token
+        )
+        self.assertEqual(unknown.status, 400, unknown.text)
+        # The claim spends the same metadata read and succeeds.
+        claimed = http_request(
+            self.h.runtime,
+            f"/api/v1/projects/{self.project_id}/actions/requests/"
+            f"{request['requestId']}/claim",
+            method="POST",
+            body={
+                "operation": {
+                    "operationId": "op_api_counter_claim",
+                    "payload": {"action": "claim"},
+                    "expectedCounter": counter.json["request"]["counter"],
+                }
+            },
+            capability=token,
+        )
+        self.assertEqual(claimed.status, 200, claimed.text)
+
     def test_it_cannot_submit_a_proposal_directly(self) -> None:
         _, token = self._agent_ready("直写任务")
         body = {

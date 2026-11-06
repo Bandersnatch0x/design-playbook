@@ -64,6 +64,32 @@ def _load_workbench_harness():
 HARNESS = _load_workbench_harness()
 
 
+class _NoCounterResponse:
+    """A service reply that carries the request row but no counter."""
+
+    def __init__(self, payload: dict) -> None:
+        self._body = json.dumps(payload).encode("utf-8")
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> bool:
+        return False
+
+
+class _RecordingOpener:
+    def __init__(self, payload: dict) -> None:
+        self.payload = payload
+        self.requests: list = []
+
+    def __call__(self, request, timeout=None):
+        self.requests.append(request)
+        return _NoCounterResponse(self.payload)
+
+
 class WorkbenchClaimTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.h = HARNESS.WorkbenchHarness()
@@ -132,7 +158,7 @@ class WorkbenchClaimTestCase(unittest.TestCase):
         assert confirmed.status == 200, confirmed.text
         return confirmed.json["result"]
 
-    def _create_request(self) -> dict:
+    def _create_request(self, allowed_actions: list[str] | None = None) -> dict:
         created = self._post(
             f"/api/v1/projects/{self.project_id}/actions/requests",
             {
@@ -144,7 +170,8 @@ class WorkbenchClaimTestCase(unittest.TestCase):
                 "contextSelectionId": self.selection["selectionId"],
                 "expiresInSeconds": 3600,
                 "plan": {"reuse": [], "adapt": [], "new": ["标题"]},
-                "allowedActions": ["read-context", "propose-source"],
+                "allowedActions": allowed_actions
+                or ["read-context", "propose-source"],
                 "resultSchema": {"required": ["summary"]},
             },
         )
@@ -216,6 +243,19 @@ class WorkbenchClaimTest(WorkbenchClaimTestCase):
                 request_id=request["requestId"], data_dir=self.data_dir
             )
 
+    def test_a_counter_read_without_a_counter_refuses(self) -> None:
+        request = self._create_request()
+        self._consent(request)
+        opener = _RecordingOpener({"request": {"requestId": request["requestId"]}})
+        with self.assertRaises(workbench_claim.ClaimError) as caught:
+            workbench_claim.claim_request(
+                request_id=request["requestId"],
+                data_dir=self.data_dir,
+                opener=opener,
+            )
+        self.assertIn("carried no counter", str(caught.exception))
+        self.assertTrue(opener.requests[0].full_url.endswith("?fields=counter"))
+
 
 class WorkbenchTaskTest(WorkbenchClaimTestCase):
     def ready(self) -> tuple[dict, dict]:
@@ -285,6 +325,25 @@ class WorkbenchTaskTest(WorkbenchClaimTestCase):
                          "<h1>新标题</h1>")
         for output in (read.stdout, beat.stdout, submitted.stdout, submitted.stderr):
             self.assertNotIn(record["token"].encode(), output)
+
+    def test_a_propose_only_request_can_still_claim_and_report(self) -> None:
+        # The counter read is concurrency metadata, not the context grant
+        # (T-127): a request that allows only source proposals still works.
+        request = self._create_request(["propose-source"])
+        self._consent(request)
+        claimed = workbench_claim.claim_request(
+            request_id=request["requestId"], data_dir=self.data_dir
+        )
+        lease = claimed["result"]["lease"]
+        beat = self.cli(
+            "heartbeat", request["requestId"], *self.lease_args(lease),
+            "--stage", "完成标题", "--count", "1",
+        )
+        self.assertEqual(beat.returncode, 0, beat.stderr)
+        # The full context read still refuses: read-context was not granted.
+        read = self.cli("read", request["requestId"])
+        self.assertEqual(read.returncode, 1)
+        self.assertIn(b"unauthorized", read.stderr)
 
     def test_failure_reports_the_observed_reason(self) -> None:
         request, lease = self.ready()

@@ -520,7 +520,10 @@ writes now compare the request counter through the one mutation gate:
 and `fail_attempt` require the caller's `expectedCounter` and refuse a stale
 or absent one. The workbench client reads the current row before acting, so
 an agent write between render and click is a conflict rather than a lost
-update. Proposals have no counter column; the payload digest is their
+update. The Agent client reads the counter through its request-bound
+capability without requiring the `read-context` grant: the counter is
+concurrency metadata, while `read-context` gates the context payload.
+Proposals have no counter column; the payload digest is their
 concurrency unit, recorded in `CONTEXT.md`. Project archives and context
 selections keep `require_counter=False`: the former takes no client counter,
 the latter carries the canvas counter, and both stay outside this amendment.
