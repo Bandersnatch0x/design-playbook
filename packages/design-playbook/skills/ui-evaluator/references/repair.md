@@ -55,3 +55,20 @@ invalidated:
 ```
 
 Re-evaluation runs the invalidated set plus adjacent primary-path nodes only (minimum repair). The two-cycle stop policy for a repeated blocker stays in force.
+
+## Paired repair evidence
+
+A closure closes on a pair, declared beside it:
+
+```text
+- closes: L6.3 -> fix -> re-eval -> 0 blocking
+  repair-evidence: before=evidence/L6.3-empty-r1.png after=evidence/L6.3-empty-r2.png
+```
+
+- Both halves resolve through `evidence/manifest.jsonl` to the same `criterion` and the same `request.viewport`; bytes must differ.
+- Missing half, unbound artifact, mismatched criterion or viewport, and byte-identical halves are all `blocked`. A blocked closure is not a
+  closure, so the verdict stays `Recirculate`.
+- Repeat-state detection is the two-cycle stop above: the blocker keeps its `id`, `rounds:` increments, and two rounds without new evidence
+  narrate `close_reason: escalated-stop`. The byte-identity check is the same question asked of the artifacts instead of the finding.
+- `scripts/validate_run.py` owns the judgment (rules `G4.repair_evidence_*`). Neither this map nor the closure line re-decides it.
+

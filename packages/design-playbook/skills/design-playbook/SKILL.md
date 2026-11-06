@@ -579,6 +579,17 @@ When a finding has no owner or you need the observable-to-declaration routing, u
 duplicate it here).
 Fix only the owning layer, then resume from the step that consumes it.
 
+A closure is evidence, not a sentence. Every repaired blocker closes on a **bound pair** — the failing state and the repaired state — declared on
+the closure trail as `repair-evidence: before=<artifact> after=<artifact>`. Both halves resolve through `evidence/manifest.jsonl` to the same
+criterion and the same `request.viewport`, and their bytes must differ. A closure missing either half is `blocked`, so the verdict stays
+`Recirculate`; it is never a `Pass`.
+
+Repeat-state detection has two faces, both already machine-checked. Byte-identical halves (`G4.repair_evidence_unchanged`) mean the failing
+surface is still standing. A blocker that survives two repair rounds is the existing two-cycle stop (`rounds:` then `close_reason:
+escalated-stop`), not a second rule.
+
+One implementation: `scripts/validate_run.py` judges the pair. Do not re-decide it here or in a second gate.
+
 ## Contracts on this pipeline
 
 | Contract | Skill |
