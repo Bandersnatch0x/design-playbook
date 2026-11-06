@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "design-playbook/evidence/manifest_v1.schema.json",
+  "title": "Evidence manifest entry v1",
+  "description": "One binding line of `<run>/evidence/manifest.jsonl` exactly as scripts/evidence_manifest.py append_entry writes it. The manifest is append-only JSON Lines; each line is one entry. The request snapshot mirrors what the read side accepts (complete viewport + complete freeze, unknown extra keys tolerated).",
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "string",
+      "description": "Write time, ISO 8601 with seconds and an explicit offset.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "criterion": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The declared criterion this artifact proves."
+    },
+    "artifact": {
+      "type": "string",
+      "description": "Bare filename under the run's evidence/ directory (no directory parts).",
+      "pattern": "^(?!\\.{1,2}$)[^/\\\\]+$"
+    },
+    "sha256": {
+      "type": "string",
+      "description": "Lowercase hex SHA-256 of the artifact bytes.",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "request": {
+      "type": "object",
+      "description": "Capture contract v1 snapshot echoed from the provider, stored verbatim.",
+      "properties": {
+        "schemaVersion": {"type": "integer", "const": 1},
+        "viewport": {
+          "type": "object",
+          "properties": {
+            "width": {"type": "integer", "minimum": 1},
+            "height": {"type": "integer", "minimum": 1},
+            "devicePixelRatio": {"type": "number", "minimum": 0.1},
+            "colorScheme": {
+              "type": "string",
+              "enum": ["dark", "light", "no-preference"]
+            }
+          },
+          "required": ["width", "height", "devicePixelRatio", "colorScheme"]
+        },
+        "freeze": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "waitFonts": {"type": "boolean"},
+            "networkIdle": {"type": "boolean"}
+          },
+          "required": ["enabled", "waitFonts", "networkIdle"]
+        }
+      },
+      "required": ["schemaVersion", "viewport", "freeze"]
+    },
+    "capture": {
+      "type": "object",
+      "description": "Optional original provider call, stored verbatim."
+    },
+    "source": {
+      "type": "string",
+      "description": "Optional free-text provenance note."
+    },
+    "observed_state": {
+      "type": "string",
+      "description": "What the provider (or human) actually saw; never a planned label."
+    },
+    "result": {
+      "type": "string",
+      "description": "Provider result verbatim."
+    },
+    "error": {
+      "type": "string",
+      "description": "Provider error verbatim; empty on success."
+    },
+    "method": {
+      "type": "string",
+      "description": "Method-semantics declaration; key rules live in scripts/method_semantics.py.",
+      "enum": [
+        "controlled-comparison",
+        "expert-review",
+        "field-observation",
+        "interview",
+        "runtime-observation",
+        "static-inspection",
+        "survey",
+        "telemetry",
+        "user-test"
+      ]
+    },
+    "observation": {"type": "string"},
+    "interpretation": {"type": "string"},
+    "scope": {"type": "string"},
+    "population": {"type": "string"},
+    "ethics": {"type": "string"}
+  },
+  "required": ["ts", "criterion", "artifact", "sha256", "request"],
+  "additionalProperties": false
+}

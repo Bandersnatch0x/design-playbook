@@ -266,3 +266,41 @@ def capture_contract_schema_fragment() -> dict[str, Any]:
         },
         "required": ["schemaVersion", "viewport"],
     }
+
+
+def capture_result_schema() -> dict[str, Any]:
+    """JSON Schema for the payload ``execute_capture_plan`` returns (T-145).
+
+    Mirrors ``capture_runtime._captured``/``_failed``: five keys always
+    present, ``request`` only once a snapshot exists, ``warnings`` only on a
+    misrooted run, ``probe_artifact`` only for a probed screenshot. The
+    nested ``request`` reuses the contract fragment so the advertised shape
+    and the parser cannot drift.
+    """
+    contract = capture_contract_schema_fragment()
+    return {
+        "type": "object",
+        "properties": {
+            "artifact": {"type": "string"},
+            "observed_state": {"type": "string"},
+            "result": {"type": "string", "enum": ["captured", "failed"]},
+            "error": {"type": "string"},
+            "written_path": {"type": "string"},
+            "request": {
+                "type": "object",
+                "properties": contract["properties"],
+                "required": contract["required"],
+                "additionalProperties": False,
+            },
+            "warnings": {"type": "array", "items": {"type": "string"}},
+            "probe_artifact": {"type": "string"},
+        },
+        "required": [
+            "artifact",
+            "observed_state",
+            "result",
+            "error",
+            "written_path",
+        ],
+        "additionalProperties": False,
+    }

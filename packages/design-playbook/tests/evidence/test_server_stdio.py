@@ -243,6 +243,31 @@ class EvidencePurePathTests(unittest.TestCase):
         # DEF-4: the dev-mode run-root escape hatch must be discoverable.
         self.assertIn("run_root", schema["properties"])
 
+    def test_declared_output_schema_matches_a_real_payload(self) -> None:
+        # T-145: the advertised outputSchema must describe what the runtime
+        # actually returns, not a hand-written approximation.
+        from design_playbook.mcp._schema import violations
+        from design_playbook.mcp.evidence import server as evidence_server
+
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "plan.md").write_text("# plan", encoding="utf-8")
+            with mock.patch.object(
+                capture_runtime, "_run_root", return_value=Path(tmp)
+            ):
+                payload = capture_runtime.execute_capture_plan(
+                    _v1_capture_args(artifact_path="evidence/ok.png"),
+                    _FakeBrowserAdapter(),
+                )
+
+        output_schema = evidence_server._tool_schema()["outputSchema"]
+        self.assertEqual(violations(payload, output_schema), [])
+
+        # The failure payload shares the same five required keys.
+        failed = capture_runtime.execute_capture_plan(
+            _v1_capture_args(schemaVersion=2), _FakeBrowserAdapter()
+        )
+        self.assertEqual(violations(failed, output_schema), [])
+
     def test_runtime_rejects_unknown_fields(self) -> None:
         for forbidden in ("criterion", "criterion_ref", "criterion_id", "unexpected"):
             with self.subTest(forbidden=forbidden), self.assertRaisesRegex(
