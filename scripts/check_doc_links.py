@@ -10,7 +10,14 @@ placeholder targets are out of scope. Public links into local planning or
 scratch assets fail even when the file exists. Historical surfaces (docs/releases,
 docs/deprecations) are append-only records and not re-checked.
 
-Exit 0 + "DOC LINKS OK"; exit 1 + one line per broken link.
+Product content (skills, commands, CONTEXT.md) also names repository files in
+inline code — `mcp/evidence/server.py`, `references/repair.md`. Markdown links
+are not used there, so a renamed or deleted module used to leave a pointer no
+gate looked at. `check_code_pointers` reads the repository-rooted and
+plugin-internal forms as existence claims; see `CODE_POINTER_SURFACES` for
+what is in scope and what is deliberately not.
+
+Exit 0 + "DOC LINKS OK"; exit 1 + one line per broken link or code pointer.
 
 Usage: check_doc_links.py [--root <repo root>]
 """
@@ -56,6 +63,40 @@ PLANNING_DIRS = frozenset({
     "spec", "specs", "plan", "plans", "research", "issue", "issues",
     "ticket", "tickets",
 })
+
+# Product content that names repository files in inline code. Only these
+# surfaces are in scope: they are shipped, hand-maintained product text, unlike
+# historical records (docs/releases, docs/deprecations, dated CONTEXT entries).
+CODE_POINTER_SURFACES = (
+    "CONTEXT.md",
+    "packages/design-playbook/skills",
+    "packages/design-playbook/commands",
+)
+# CONTEXT.md keeps an append-only dated history below this heading. A dated
+# entry records what was true then; rewriting it for today's tree would falsify
+# the record, so the pointer check stops here.
+CODE_POINTER_HISTORY_HEADING = "\n## Effort history"
+# Inline-code forms that name a file this repository ships: repository-rooted
+# trees, plugin-internal trees, and `<skill>/references/`. Everything else in
+# inline code — run artifacts (`evidence/manifest.jsonl`), personal trees
+# (`.agents/`, `.scratch/`), project config (`.design-playbook/`), tool config
+# (`.stitch/`, `.zed/`), version tags (`page-probe/v1`) — is not a claim about
+# this repository's file tree and is not read as one.
+CODE_POINTER_PREFIXES = (
+    "packages/", "scripts/", "docs/", "tests/", ".github/",
+    "mcp/", "skills/", "commands/", "lib/", "references/", "examples/",
+    "showcase/", "codex/", ".claude-plugin/", ".codex-plugin/",
+)
+PATH_TOKEN = re.compile(r"`([^`\n]+)`")
+PATH_TOKEN_SHAPE = re.compile(r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+/?$")
+PATH_TOKEN_SUFFIX = re.compile(r"\.[A-Za-z0-9]{1,6}$")
+# Deliberate pointers outside this repository's tree, one token at a time with
+# the reason its target cannot live here. Nothing is exempted to silence a
+# pointer this repository owns; a new entry needs the same kind of reason.
+EXEMPT_CODE_POINTERS = {
+    "references/03-webview-survival.md":
+        "names another installed skill's own reference set, not a shipped file",
+}
 
 
 def collect_files(root: Path) -> list[Path]:
@@ -316,6 +357,72 @@ def check_file(path: Path, root: Path, *, public: bool = True,
     return problems
 
 
+def collect_code_pointer_files(root: Path) -> list[Path]:
+    files: list[Path] = []
+    for surface in CODE_POINTER_SURFACES:
+        target = root / surface
+        if target.is_file():
+            files.append(target)
+        elif target.is_dir():
+            files.extend(sorted(target.rglob("*.md")))
+    return files
+
+
+def code_pointer_text(path: Path) -> str:
+    """Product text with append-only history removed (CONTEXT.md only)."""
+    text = path.read_text(encoding="utf-8")
+    cut = text.find(CODE_POINTER_HISTORY_HEADING)
+    if path.name == "CONTEXT.md" and cut != -1:
+        text = text[:cut]
+    return text
+
+
+def code_pointer_bases(root: Path, path: Path) -> list[Path]:
+    """Where a product pointer may be rooted.
+
+    Repository root and plugin root cover ``scripts/…`` and ``mcp/…``; the
+    skills tree covers ``ui-picker/references/…``; every skill directory covers
+    ``references/…`` named from another skill; the file's own directory covers
+    a reference file naming a sibling.
+    """
+    plugin = root / "packages" / "design-playbook"
+    skills = plugin / "skills"
+    bases = [root, plugin, skills]
+    if skills.is_dir():
+        bases.extend(sorted(entry for entry in skills.iterdir() if entry.is_dir()))
+    bases.append(path.parent)
+    return bases
+
+
+def check_code_pointers(path: Path, root: Path) -> list[str]:
+    """Inline-code file pointers in one product surface must resolve."""
+    try:
+        text = code_pointer_text(path)
+    except (OSError, UnicodeError) as exc:
+        return [f"{_rel(path, root)}: unreadable: {exc}"]
+    skills = root / "packages" / "design-playbook" / "skills"
+    skill_names = (
+        tuple(sorted(entry.name for entry in skills.iterdir() if entry.is_dir()))
+        if skills.is_dir() else ()
+    )
+    bases = code_pointer_bases(root, path)
+    problems: list[str] = []
+    for match in PATH_TOKEN.finditer(text):
+        token = match.group(1).strip()
+        if token in EXEMPT_CODE_POINTERS or not PATH_TOKEN_SHAPE.match(token):
+            continue
+        rooted = token.startswith(CODE_POINTER_PREFIXES) and bool(
+            PATH_TOKEN_SUFFIX.search(token) or token.endswith("/"))
+        skill_reference = any(
+            token.startswith(f"{name}/references/") for name in skill_names)
+        if not (rooted or skill_reference):
+            continue
+        if not any((base / token).exists() for base in bases):
+            problems.append(
+                f"{_rel(path, root)}: broken code pointer -> `{token}`")
+    return problems
+
+
 def _rel(path: Path, root: Path) -> str:
     return str(path.relative_to(root)).replace("\\", "/")
 
@@ -343,6 +450,9 @@ def main(argv: list[str]) -> int:
         return 2
     for path in files:
         problems.extend(check_file(path, root, ignored=ignored))
+    code_files = collect_code_pointer_files(root)
+    for path in code_files:
+        problems.extend(check_code_pointers(path, root))
     for directory in sorted(PLANNING_DIRS):
         misplaced = root / "docs" / directory
         if misplaced.exists():
@@ -353,8 +463,9 @@ def main(argv: list[str]) -> int:
         for item in problems:
             print(f"  FAIL  {item}")
         return 1
-    print(f"DOC LINKS OK: {len(files)} markdown surfaces, no broken "
-          "relative links")
+    print(f"DOC LINKS OK: {len(files)} markdown surfaces and "
+          f"{len(code_files)} product surfaces, no broken relative links or "
+          "code pointers")
     return 0
 
 

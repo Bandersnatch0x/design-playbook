@@ -492,8 +492,22 @@ def validate_command_frontmatter() -> None:
         check(bool(meta.get("description")), f"{cmd.name} has description frontmatter")
 
 
+RELEASE_BASELINE = re.compile(
+    r"Current repository release baseline: `v([0-9]+\.[0-9]+\.[0-9]+)`")
+
+
+def context_release_baseline() -> str | None:
+    """The version CONTEXT.md names as the current release baseline."""
+    context = ROOT / "CONTEXT.md"
+    if not context.is_file():
+        return None
+    match = RELEASE_BASELINE.search(context.read_text(encoding="utf-8"))
+    return match.group(1) if match else None
+
+
 def validate_release_identity(pj: dict) -> None:
-    print("== Release identity (ADR-0015): version vs command inventory ==")
+    print("== Release identity (ADR-0015): version vs command inventory "
+          "and CONTEXT baseline ==")
     version_text = pj.get("version", "")
     shipped_commands = frozenset(p.stem for p in (PKG / "commands").glob("*.md"))
     expected = _checks.expected_commands(version_text)
@@ -508,6 +522,23 @@ def validate_release_identity(pj: dict) -> None:
             False,
             f"version {version_text} has no declared command inventory "
             f"(ADR-0015); add an entry to COMMAND_INVENTORY in scripts/_checks.py",
+        )
+    # CONTEXT.md states the repository's release baseline as a current fact.
+    # It must name the version the manifests ship and have a release record;
+    # otherwise the document points at a boundary that no longer exists.
+    baseline = context_release_baseline()
+    check(baseline is not None,
+          "CONTEXT.md declares a release baseline "
+          "('Current repository release baseline: `vX.Y.Z`')")
+    if baseline is not None:
+        check(
+            baseline == version_text,
+            f"CONTEXT.md release baseline matches plugin.json version "
+            f"(context=v{baseline}, plugin=v{version_text})",
+        )
+        check(
+            (ROOT / "docs" / "releases" / f"v{baseline}.md").is_file(),
+            f"docs/releases/v{baseline}.md exists for the declared baseline",
         )
 
 

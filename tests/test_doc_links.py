@@ -299,6 +299,85 @@ def test_cli_reports_unreadable_git_rules(tmp_path):
     assert "cannot classify document visibility" in result.stderr
 
 
+def test_code_pointer_to_a_deleted_module_fails_the_gate(tmp_path):
+    # T-143: the pointer this gate was added for. Inline code named a module
+    # that no longer existed and no gate read it.
+    write(tmp_path, "packages/design-playbook/skills/demo/SKILL.md",
+          "After the capture, see `mcp/evidence/capture_snapshot.py`.\n")
+    write(tmp_path, "packages/design-playbook/mcp/evidence/capture_runtime.py")
+
+    result = run_gate(tmp_path)
+
+    assert result.returncode == 1
+    assert "broken code pointer -> `mcp/evidence/capture_snapshot.py`" in result.stdout
+
+
+def test_code_pointer_to_an_existing_module_passes(tmp_path):
+    write(tmp_path, "packages/design-playbook/skills/demo/SKILL.md",
+          "After the capture, see `mcp/evidence/capture_runtime.py`.\n")
+    write(tmp_path, "packages/design-playbook/mcp/evidence/capture_runtime.py")
+
+    result = run_gate(tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "code pointers" in result.stdout
+
+
+@pytest.mark.parametrize("token", [
+    "evidence/manifest.jsonl",   # run-root artifact, not a repository file
+    "reference/contract.md",     # run-root artifact
+    ".scratch/<run>/plan.md",    # personal tree plus placeholder
+    ".agents/specs/private.md",  # untracked personal planning
+    "page-probe/v1",             # schema version tag
+    "tools/list",                # protocol verb
+])
+def test_inline_code_outside_the_pointer_scope_is_not_a_claim(tmp_path, token):
+    page = write(tmp_path, "packages/design-playbook/skills/demo/SKILL.md",
+                 f"Write `{token}` next to the run.\n")
+    assert links.check_code_pointers(page, tmp_path) == []
+
+
+def test_current_context_pointer_is_checked_but_dated_history_is_not(tmp_path):
+    page = write(tmp_path, "CONTEXT.md", (
+        "# Context\n\n"
+        "Baseline per `docs/releases/v0.0.1.md`.\n\n"
+        "## Effort history\n\n"
+        "- 2026-01-01: the spec lived at `docs/specs/removed.md`.\n"
+    ))
+
+    errors = links.check_code_pointers(page, tmp_path)
+
+    assert len(errors) == 1
+    assert "docs/releases/v0.0.1.md" in errors[0]
+
+
+def test_cross_skill_reference_resolves_and_reports(tmp_path):
+    write(tmp_path, "packages/design-playbook/skills/ui-evaluator/references/repair.md")
+    page = write(tmp_path, "packages/design-playbook/skills/design-playbook/SKILL.md",
+                 "See ui-evaluator `references/repair.md`; ignore `references/missing.md`.\n")
+
+    errors = links.check_code_pointers(page, tmp_path)
+
+    assert len(errors) == 1
+    assert "`references/missing.md`" in errors[0]
+
+
+def test_code_pointer_exemptions_are_named_one_token_at_a_time():
+    # An exemption is a reviewed decision, not a wildcard: widening the set has
+    # to edit this test.
+    assert set(links.EXEMPT_CODE_POINTERS) == {"references/03-webview-survival.md"}
+    assert all(reason.strip() for reason in links.EXEMPT_CODE_POINTERS.values())
+
+
+def test_shipped_product_content_has_no_broken_code_pointers():
+    surfaces = links.collect_code_pointer_files(ROOT)
+
+    assert {path.name for path in surfaces} >= {"CONTEXT.md", "SKILL.md"}
+    problems = [item for path in surfaces
+                for item in links.check_code_pointers(path, ROOT)]
+    assert problems == []
+
+
 def test_fresh_clone_policy_chain_without_local_history(tmp_path):
     surfaces = [
         "AGENTS.md",
