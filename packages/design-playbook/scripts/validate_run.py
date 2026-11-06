@@ -71,26 +71,39 @@ Usage:
   validate_run.py <spec.md> <point-back.md>
       [--preview-dir <path>] [--decision-report <path>]
       [--evidence-dir <path>] [--run-root <path>]
-      [--require-preview] [--require-evidence] [--strict]
-      [--format text|json]
+      [--legacy] [--require-preview] [--require-evidence]
+      [--require-coverage] [--strict] [--format text|json]
 Exit 0 + "RUN OK"; exit 1 + one line per artifact violation; exit 2 on usage
 or artifact I/O errors. JSON mode projects the same findings as a list.
-In-process consumers construct ``RunInputs`` and call ``run(inputs)``.
+In-process consumers construct ``RunInputs`` and call ``run(inputs)``; their
+defaults stay legacy so existing projections (run_status, aggregate) keep
+their published meaning. Only the CLI default changed.
 
-Strict quality mode (opt-in):
+Strict quality mode (CLI default, fail closed):
   --require-preview   fail when preview did not occur (G5 must fire)
   --require-evidence  fail when no evidence/ binding is present (G6 must fire)
   --require-coverage  fail when the report lacks a Coverage statement (G11)
-  --strict            shorthand for all require flags
+  --strict            shorthand for all three require flags
+  --legacy            explicit opt-out for old reports: the three require
+                      checks above stay disengaged. Cannot be combined
+                      with --strict or any --require-* flag.
+A bare invocation (no strictness flag at all) behaves as --strict. Passing
+one --require-* flag explicitly keeps its historical meaning: only that
+check engages (so --require-preview alone does not inspect the audit
+marker).
 
 Forgery boundary (ADR-0033 D12): a skeleton point-back carrying
-``audited: false`` passes non-strict validation but is rejected by
+``audited: false`` is rejected by the default CLI and by
 --strict / --require-evidence / --require-coverage with the AUDIT.unaudited
 finding; a present-but-ambiguous marker (duplicate, indented, commented,
 or malformed) is likewise rejected with AUDIT.ambiguous_marker — no new
 gate number; the marker facts come from the single audit_preferences
 module. --require-preview alone does not reject: the preview confirmation
-is a pre-audit floor and may legitimately precede the audit.
+is a pre-audit floor and may legitimately precede the audit. When the user
+legitimately skips the optional audit, the skeleton keeps its marker, its
+skip reason, and its limitation statement; ``--legacy`` checks that
+report's structure only, and its RUN OK must never be reported as an audit
+pass.
 """
 import argparse
 import sys
@@ -218,8 +231,11 @@ def _audit_marker_findings(
             owner="point-back.md#audited",
             expected="an audited point-back, or no require flags",
             actual="audited: false with require flags engaged",
-            repair="Run the ui-evaluator audit and replace the skeleton, "
-                   "or drop the require flags for this unaudited run",
+            repair="Run the ui-evaluator audit and replace the skeleton; "
+                   "if the user legitimately skipped that optional audit, "
+                   "keep the marker, skip reason, and limitation statement "
+                   "and check structure with --legacy (never as an audit "
+                   "pass)",
         )]
     return [finding(
         "AUDIT.ambiguous_marker",
@@ -338,20 +354,26 @@ def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
     ):
         errs.append(finding(
             "G5.require_preview",
-            "G5 preview: --require-preview set but preview did not occur "
-            "(pass --preview-dir with preview artifacts)",
+            "G5 preview: --require-preview (or the CLI fail-closed default) "
+            "is engaged but preview did not occur (pass --preview-dir with "
+            "preview artifacts)",
             owner="--require-preview",
             expected="preview artifacts present",
             actual="preview did not occur",
-            repair="Pass --preview-dir with preview artifacts or drop the flag",
+            repair="Pass --preview-dir with preview artifacts so the "
+                   "preview confirmation can be checked; --legacy is only "
+                   "for structural inspection of an old or unaudited report "
+                   "and does not waive the preview-confirmation requirement "
+                   "for acceptance",
         ))
     errs += check_preview(pd, dr, preview_snapshot)
     if require_evidence:
         if ed is None or not ed.is_dir():
             errs.append(finding(
                 "G6.require_evidence_dir",
-                "G6 evidence: --require-evidence set but --evidence-dir "
-                "is missing or not a directory",
+                "G6 evidence: --require-evidence (or the CLI fail-closed "
+                "default) is engaged but --evidence-dir is missing or not a "
+                "directory",
                 owner="--require-evidence",
                 expected="existing --evidence-dir",
                 actual="missing or not a directory",
@@ -360,8 +382,9 @@ def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
         elif not _ledger_has_evidence_binding(pointback_text, observed_rows):
             errs.append(finding(
                 "G6.require_evidence_binding",
-                "G6 evidence: --require-evidence set but no ledger "
-                "`observed` references an evidence/ artifact",
+                "G6 evidence: --require-evidence (or the CLI fail-closed "
+                "default) is engaged but no ledger `observed` references an "
+                "evidence/ artifact",
                 owner="point-back.md#evidence",
                 expected="at least one observed: evidence/… row",
                 actual="no evidence/ binding",
@@ -554,13 +577,22 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         "--strict",
         action="store_true",
         help="shorthand for --require-preview --require-evidence "
-             "--require-coverage",
+             "--require-coverage; kept for compatibility (the bare CLI "
+             "default is already strict)",
     )
     parser.add_argument(
         "--require-coverage",
         action="store_true",
         help="strict mode: fail when the point-back lacks a Coverage "
-             "statement block even in legacy shape",
+             "statement block (G11 must fire)",
+    )
+    parser.add_argument(
+        "--legacy",
+        action="store_true",
+        help="opt out of the default strict mode for old reports: leaves "
+             "--require-preview, --require-evidence, and --require-coverage "
+             "disengaged for this invocation; cannot be combined with "
+             "--strict or any --require-* flag",
     )
     parser.add_argument(
         "--format",
@@ -586,6 +618,30 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     )
     args = parser.parse_args(argv[1:])
     if args.strict:
+        # --strict keeps its historical shorthand meaning.
+        args.require_preview = True
+        args.require_evidence = True
+        args.require_coverage = True
+    strictness_flags = (
+        ("--strict", args.strict),
+        ("--require-preview", args.require_preview),
+        ("--require-evidence", args.require_evidence),
+        ("--require-coverage", args.require_coverage),
+    )
+    if args.legacy:
+        engaged = [flag for flag, on in strictness_flags if on]
+        if engaged:
+            parser.error(
+                f"--legacy cannot be combined with {' / '.join(engaged)}; "
+                "drop --legacy for the default strict mode, or drop the "
+                "strictness flag to keep the explicit legacy opt-out"
+            )
+        # Explicit opt-out: every require flag stays off (argparse default).
+        return args
+    if not any(on for _flag, on in strictness_flags):
+        # Fail closed by default: a bare CLI invocation behaves as --strict.
+        # An explicit --require-* keeps its own historical meaning (only that
+        # flag engages), and --legacy above is the only way to opt out.
         args.require_preview = True
         args.require_evidence = True
         args.require_coverage = True

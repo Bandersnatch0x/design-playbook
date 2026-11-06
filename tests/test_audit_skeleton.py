@@ -12,8 +12,9 @@ Acceptance coverage (issue #67):
   construction (lockstep test pins template vs parsers);
 * parse_audit_marker reports marker facts without policy;
 * closed-loop anti-forgery round trip: skeleton generated -> marker
-  parsed as unaudited -> non-strict validate passes / --strict and the
-  --require-* flags reject -> run_status projects "not audited".
+  parsed as unaudited -> default validate (fail closed) and --strict and
+  the --require-* flags reject, --legacy accepts -> run_status projects
+  "not audited".
 """
 from __future__ import annotations
 
@@ -200,9 +201,10 @@ class AuditMarkerTests(unittest.TestCase):
 
 class ClosedLoopAntiForgeryTests(unittest.TestCase):
     """Issue #67 acceptance 1 + spec #65 centerpiece: skeleton generated ->
-    marker parsed as unaudited -> non-strict validate passes / --strict and
-    the --require-* flags reject -> run_status projects "not audited".
-    Only the single deep module makes this round trip testable."""
+    marker parsed as unaudited -> default validate (fail closed), --strict,
+    and the --require-* flags reject; --legacy accepts -> run_status
+    projects "not audited". Only the single deep module makes this round
+    trip testable."""
 
     def _skeleton_pair(self, tmp: Path) -> tuple[Path, Path]:
         spec_path = tmp / "spec.md"
@@ -214,12 +216,24 @@ class ClosedLoopAntiForgeryTests(unittest.TestCase):
         )
         return spec_path, pointback_path
 
-    def test_non_strict_validation_passes_the_skeleton(self) -> None:
+    def test_legacy_validation_passes_the_skeleton(self) -> None:
+        # ADR-0033 D5 keeps the skeleton downstream-safe, and D12 keeps it
+        # out of the audit gates. The CLI now fails closed by default, so
+        # accepting an unaudited skeleton requires the explicit --legacy
+        # opt-out; the default rejection is pinned separately below.
+        with tempfile.TemporaryDirectory() as tmp:
+            spec, pointback = self._skeleton_pair(Path(tmp))
+            result = _validate(spec, pointback, "--legacy")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("RUN OK", result.stdout)
+
+    def test_default_validation_rejects_the_skeleton(self) -> None:
+        # Fail-closed default: a bare invocation behaves as --strict.
         with tempfile.TemporaryDirectory() as tmp:
             spec, pointback = self._skeleton_pair(Path(tmp))
             result = _validate(spec, pointback)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("RUN OK", result.stdout)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn(AUDIT_DIAGNOSTIC, result.stdout)
 
     def test_strict_rejects_the_skeleton_with_audit_finding(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

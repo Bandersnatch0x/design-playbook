@@ -81,6 +81,11 @@ Manifest line must embed the provider `request` (or equivalent schemaVersion + v
 
 ## Post-run verify (script: `verify --run-root …`)
 
+`verify` is an inspection tool, not an acceptance gate: preview* and observe* may be legitimately
+skipped with narration, so the script asks `validate_run.py` for the explicit `--legacy` structural
+reading. A legacy RUN OK means the run's shape holds; it does not turn a skipped audit or preview
+into a pass.
+
 Automated:
 
 - [ ] Required files: `spec.md`, `plan.md`, `decision-report.md`, `point-back.md`

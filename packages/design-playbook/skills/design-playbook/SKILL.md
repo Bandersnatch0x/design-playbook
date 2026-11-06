@@ -115,8 +115,9 @@ Generate it with the module's `skeleton_pointback(spec_text)`, marked `audited: 
 python -c "import sys; sys.path.insert(0, '<plugin>'); from pathlib import Path; from design_playbook.scripts.audit_preferences import skeleton_pointback; run = Path('.scratch/<run>'); (run / 'point-back.md').write_text(skeleton_pointback((run / 'spec.md').read_text(encoding='utf-8')), encoding='utf-8')"
 ```
 
-Never edit out the `audited: false` marker or upgrade the skeleton's verdict: `validate_run --strict` / `--require-evidence` / `--require-coverage` reject skeleton runs,
+Never edit out the `audited: false` marker or upgrade the skeleton's verdict: the default `validate_run` (fail closed) and `--strict` / `--require-evidence` / `--require-coverage` reject skeleton runs,
 `run_status` projects *not audited*, and `aggregate_runs` surfaces them as unaudited (ADR-0033 D12).
+When the user legitimately skips the optional audit, deliver the skeleton with its `audited: false` marker, its one-line skip reason, and its limitation statement; checking that report's structure uses the explicit `--legacy` opt-out, and the resulting RUN OK must never be presented as an audit pass.
 Optionality is a convenience for honest users, not a forgery channel.
 
 Tier-obligation waiver: an explicit user skip of `craft-guard` authorizes the corresponding P2/P3 obligation downgrade (full-catalog evaluation,
@@ -332,7 +333,7 @@ Do not run observe against a Fill that predates the current confirmed report.
 Log the re-Fill (or acceptance) once in `preview/log.md`.
 
 **Done when:** either preview was skipped (no adapter), or a `confirm-round-*.json` with `confirmed: true` and `floor_pass: true` matches the current decision report.
-G5 applies when `validate_run.py` is given `--preview-dir` or `--decision-report`.
+G5's conditional confirmation checks apply when `validate_run.py` is given `--preview-dir` or `--decision-report`; the CLI also requires preview occurrence by default, so a run whose preview was legitimately skipped is checked with the explicit `--legacy` opt-out (structural reading only).
 Run its single gate right after the confirm record lands: `python scripts/g5_preview.py .scratch/<run>/preview/`.
 A confirmed record without `floor_pass` fails G5. Empty or garbage feedback is a silent false-pass that must not reach Fill.
 When Fill already existed, the re-Fill signal above is satisfied.
@@ -511,7 +512,7 @@ Full authority model (three ledgers: spec names what to prove, manifest what hap
 
 **Done when:** either observe was skipped (no provider, ledger `observed` free-text), or each runtime-proven criterion has a manifest entry
 whose artifact exists.
-G6 applies when `validate_run.py` is given `--evidence-dir`.
+G6's conditional binding checks apply when `validate_run.py` is given `--evidence-dir`; the CLI also requires at least one bound evidence row by default, so a run whose observe step was legitimately skipped is checked with the explicit `--legacy` opt-out (structural reading only).
 Run its single gate right after manifest binding: `python scripts/g6_evidence.py .scratch/<run>/point-back.md`.
 And if any capture used a mirror surface, the point-back includes the required mirror finding.
 
@@ -541,6 +542,7 @@ Do not only leave paths buried in tool logs.
 Cross-run review of multiple `.scratch/<run>/` runs lives in command run-review (cross-run, not a step of this run).
 
 Machine seam (optional local check): `python scripts/validate_run.py <spec.md> <point-back.md> [--preview-dir <preview/>] [--decision-report <report>] [--evidence-dir <evidence/>] [--run-root <run>]`.
+The CLI fails closed by default: a bare invocation requires preview, a bound evidence row, and a Coverage statement. `--legacy` is the explicit structural check for old reports and for a legitimately skipped-audit skeleton; its RUN OK is not an audit pass, so never present it as one.
 
 ### 11. Static run handoff (optional, on request)
 
