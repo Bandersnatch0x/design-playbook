@@ -18,6 +18,15 @@ from design_playbook.scripts.run_facts import (  # noqa: E402
     capture_run_facts,
     resolve_declared_fill,
 )
+from design_playbook.scripts.validate_run import RunInputs, run  # noqa: E402
+
+PROFILE_PLAN = (
+    "<!-- run-profile: v1 -->\n"
+    "```yaml\n"
+    "tier: P2\n"
+    "confirmed_by: user + 2026-11-06T00:00:00Z\n"
+    "```\n"
+)
 
 
 class RunFactsOptionalArtifactTests(unittest.TestCase):
@@ -219,6 +228,118 @@ class DeclaredFillResolutionTests(unittest.TestCase):
             facts = capture_run_facts(run_root=root)
             self.assertEqual(facts.fenced_fill_declarations, ())
             self.assertEqual(facts.plan_fill_artifacts, ("exists.html",))
+
+
+class ExplicitPlanPathTests(unittest.TestCase):
+    def test_read_plan_without_a_run_root_is_complete(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = Path(tmp) / "plan.md"
+            plan.write_text(PROFILE_PLAN, encoding="utf-8")
+            facts = capture_run_facts(plan_path=plan)
+            self.assertIsNone(facts.run_root)
+            self.assertEqual(facts.artifact_state("plan"), "complete")
+            self.assertEqual(facts.artifact_state("run_profile"), "complete")
+            self.assertEqual(facts.run_profile.tier, "P2")
+            for artifact in ("decision_report", "craft_guard", "shaping",
+                             "baseline", "manifest"):
+                self.assertEqual(facts.artifact_state(artifact), "missing")
+
+    def test_missing_plan_path_is_missing_not_unreadable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            facts = capture_run_facts(plan_path=Path(tmp) / "plan.md")
+            self.assertEqual(facts.artifact_state("plan"), "missing")
+            self.assertEqual(facts.artifact_state("run_profile"), "missing")
+            self.assertIsNone(facts.run_profile)
+
+    def test_unreadable_plan_path_is_unreadable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            plan = Path(tmp) / "plan.md"
+            plan.write_bytes(b"\xff\xfe")
+            facts = capture_run_facts(plan_path=plan)
+            self.assertEqual(facts.artifact_state("plan"), "unreadable")
+            self.assertEqual(facts.artifact_state("run_profile"), "unreadable")
+
+    def test_plan_path_wins_over_the_root_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            root.mkdir()
+            (root / "plan.md").write_text("# plan without a profile\n",
+                                          encoding="utf-8")
+            elsewhere = Path(tmp) / "elsewhere" / "plan.md"
+            elsewhere.parent.mkdir()
+            elsewhere.write_text(PROFILE_PLAN, encoding="utf-8")
+            facts = capture_run_facts(run_root=root, plan_path=elsewhere)
+            self.assertEqual(facts.run_profile.tier, "P2")
+            self.assertEqual(facts.artifact_state("plan"), "complete")
+            self.assertNotIn("plan without a profile", facts.plan_text)
+
+
+class SuppliedSnapshotPolicyTests(unittest.TestCase):
+    def _write_pair(self, root: Path) -> tuple[Path, Path]:
+        spec = root / "spec.md"
+        spec.write_text("# spec\n", encoding="utf-8")
+        pointback = root / "point-back.md"
+        pointback.write_text("# point-back\n", encoding="utf-8")
+        return spec, pointback
+
+    def _profile_rules(self, root: Path, facts, *, require: bool) -> set[str]:
+        errs, _warns = run(RunInputs(
+            spec_path=str(root / "spec.md"),
+            point_back_path=str(root / "point-back.md"),
+            run_root=str(root),
+            run_facts=facts,
+            require_run_profile=require,
+        ))
+        return {error.rule_id for error in errs}
+
+    def test_plan_appearing_after_capture_does_not_satisfy_the_requirement(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            spec, pointback = self._write_pair(root)
+            facts = capture_run_facts(
+                spec_path=spec, pointback_path=pointback, run_root=root)
+            (root / "plan.md").write_text(PROFILE_PLAN, encoding="utf-8")
+            rules = self._profile_rules(root, facts, require=True)
+            self.assertIn("G12.run_profile", rules)
+
+    def test_captured_profile_survives_deletion_and_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            spec, pointback = self._write_pair(root)
+            (root / "plan.md").write_text(PROFILE_PLAN, encoding="utf-8")
+            facts = capture_run_facts(
+                spec_path=spec, pointback_path=pointback, run_root=root)
+            (root / "plan.md").write_text(
+                PROFILE_PLAN.replace("run-profile: v1", "run-profile: v99"),
+                encoding="utf-8",
+            )
+            rules = self._profile_rules(root, facts, require=True)
+            self.assertNotIn("G12.run_profile", rules)
+            self.assertEqual(facts.run_profile.version, 1)
+
+    def test_explicit_plan_path_snapshot_satisfies_the_requirement(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            root.mkdir()
+            spec, pointback = self._write_pair(root)
+            plan = Path(tmp) / "plans" / "plan.md"
+            plan.parent.mkdir()
+            plan.write_text(PROFILE_PLAN, encoding="utf-8")
+            facts = capture_run_facts(
+                spec_path=spec, pointback_path=pointback, plan_path=plan)
+            rules = self._profile_rules(root, facts, require=True)
+            self.assertNotIn("G12.run_profile", rules)
+
+    def test_requirement_off_keeps_the_missing_profile_silent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            spec, pointback = self._write_pair(root)
+            facts = capture_run_facts(
+                spec_path=spec, pointback_path=pointback, run_root=root)
+            rules = self._profile_rules(root, facts, require=False)
+            self.assertNotIn("G12.run_profile", rules)
 
 
 if __name__ == "__main__":

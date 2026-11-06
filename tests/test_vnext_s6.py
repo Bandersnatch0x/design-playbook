@@ -172,7 +172,7 @@ class P3ChainWalkthroughTests(unittest.TestCase):
             (run / "plan.md").unlink()
             _write(run / "point-back.md", _strip_matrix(
                 (run / "point-back.md").read_text(encoding="utf-8")))
-            result = _validate(run, project)
+            result = _validate(run, project, "--legacy")
             self.assertEqual(result.returncode, 0, result.stdout)
 
 

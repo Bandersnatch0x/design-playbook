@@ -77,7 +77,8 @@ Exit 0 + "RUN OK"; exit 1 + one line per artifact violation; exit 2 on usage
 or artifact I/O errors. JSON mode projects the same findings as a list.
 In-process consumers construct ``RunInputs`` and call ``run(inputs)``; their
 defaults stay legacy so existing projections (run_status, aggregate) keep
-their published meaning. Only the CLI default changed.
+their published meaning. Only the CLI default changed; a caller that wants
+the complete profile requirement sets ``RunInputs.require_run_profile``.
 
 Strict quality mode (CLI default, fail closed):
   --require-preview   fail when preview did not occur (G5 must fire)
@@ -91,6 +92,17 @@ A bare invocation (no strictness flag at all) behaves as --strict. Passing
 one --require-* flag explicitly keeps its historical meaning: only that
 check engages (so --require-preview alone does not inspect the audit
 marker).
+
+Run profile (ADR-0029 D2):
+  Every mode reads one plan location: <run-root>/plan.md when --run-root is
+  given, otherwise the positional point-back's own directory. There is no
+  existence fallback and no cwd, spec-dir, or ancestor search. A bare or
+  --strict call requires that plan's run-profile block, so a missing plan,
+  an empty plan, and a readable plan without the block all exit 1 with
+  G12.run_profile. --legacy and an explicit --require-* selection do not
+  add the profile requirement, but they read the same plan: a profile the
+  shared parser recognizes as malformed fails G12 in every mode. A plan
+  read or encoding failure stays an operational exit 2.
 
 Forgery boundary (ADR-0033 D12): a skeleton point-back carrying
 ``audited: false`` is rejected by the default CLI and by
@@ -268,6 +280,7 @@ class RunInputs:
     contract_run: str | None = None
     shaping_dir: str | None = None
     run_facts: RunFacts | None = None
+    require_run_profile: bool = False
 
 
 def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
@@ -290,17 +303,7 @@ def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
         spec_path=Path(spec_path), pointback_path=Path(pb_path),
         preview_dir=pd, evidence_dir=ed, run_root=rr,
     )
-    profile = facts.run_profile
-    if profile is not None:
-        for error in validate_run_profile(profile):
-            errs.append(finding(
-                "G12.run_profile",
-                f"run-profile invalid: {error}",
-                owner="plan.md#run-profile",
-                expected="supported v1 run-profile with valid tier and confirmation",
-                actual=error,
-                repair="Fix the run-profile block before running vNext gates",
-            ))
+    # Operational read failures settle before profile policy (exit 2).
     operational_errors = tuple(
         error for error in facts.read_errors if error.artifact != "manifest"
     )
@@ -311,6 +314,18 @@ def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
                 2, "No such file or directory", str(failure.path)
             )
         raise OSError(failure.message)
+    # Snapshot only: the plan is never re-read here to fill a gap.
+    profile = facts.run_profile
+    if profile is not None or inputs.require_run_profile:
+        for error in validate_run_profile(profile):
+            errs.append(finding(
+                "G12.run_profile",
+                f"run-profile invalid: {error}",
+                owner="plan.md#run-profile",
+                expected="supported v1 run-profile with valid tier and confirmation",
+                actual=error,
+                repair="Fix the run-profile block before running vNext gates",
+            ))
     spec_text = facts.spec_text
     pointback_text = facts.pointback_text
     observed_rows = ledger_observed(pointback_text, facts.ledger)
@@ -591,8 +606,9 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="opt out of the default strict mode for old reports: leaves "
              "--require-preview, --require-evidence, and --require-coverage "
-             "disengaged for this invocation; cannot be combined with "
-             "--strict or any --require-* flag",
+             "disengaged and does not require the run-profile for this "
+             "invocation (a malformed profile is still rejected); cannot be "
+             "combined with --strict or any --require-* flag",
     )
     parser.add_argument(
         "--format",
@@ -617,6 +633,15 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
              "(defaults to <run-root>/shaping when --run-root is set)",
     )
     args = parser.parse_args(argv[1:])
+    # Taken before --strict expands below, so an explicit trio is not --strict.
+    args.require_run_profile = not args.legacy and (
+        args.strict
+        or not (
+            args.require_preview
+            or args.require_evidence
+            or args.require_coverage
+        )
+    )
     if args.strict:
         # --strict keeps its historical shorthand meaning.
         args.require_preview = True
@@ -665,6 +690,19 @@ def main(argv: list[str]) -> int:
         return 2
 
     try:
+        rr = Path(args.run_root) if args.run_root else None
+        plan_path = (
+            rr / "plan.md" if rr is not None
+            else Path(args.point_back).parent / "plan.md"
+        )
+        facts = capture_run_facts(
+            spec_path=Path(args.spec),
+            pointback_path=Path(args.point_back),
+            preview_dir=Path(args.preview_dir) if args.preview_dir else None,
+            evidence_dir=Path(args.evidence_dir) if args.evidence_dir else None,
+            run_root=rr,
+            plan_path=plan_path,
+        )
         errs, warns = run(RunInputs(
             spec_path=args.spec,
             point_back_path=args.point_back,
@@ -678,6 +716,8 @@ def main(argv: list[str]) -> int:
             contract_run=args.contract_run,
             shaping_dir=args.shaping_dir,
             require_coverage=args.require_coverage,
+            run_facts=facts,
+            require_run_profile=args.require_run_profile,
         ))
     except (OSError, UnicodeError) as exc:
         if fmt == "json":

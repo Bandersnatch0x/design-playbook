@@ -133,6 +133,7 @@ class _OptionalRunFacts:
     shaping_error: str | None = None
     craft_guard_text: str = ""
     read_errors: tuple[ArtifactReadFact, ...] = ()
+    plan_probed: bool = False
 
 
 def _read_manifest(
@@ -300,13 +301,27 @@ def _plan_fill_artifacts(
     )
 
 
-def _read_optional_run_facts(run_root: Path | None) -> _OptionalRunFacts:
+def _read_optional_run_facts(
+    run_root: Path | None, plan_path: Path | None = None
+) -> _OptionalRunFacts:
     """Load optional vNext artifacts into one immutable snapshot."""
-    if run_root is None:
-        return _OptionalRunFacts()
-
-    plan_text, plan_error = _read_text("plan", run_root / "plan.md")
+    if plan_path is not None:
+        plan_file: Path | None = plan_path
+    elif run_root is not None:
+        plan_file = run_root / "plan.md"
+    else:
+        plan_file = None
+    plan_text, plan_error = _read_text("plan", plan_file)
     profile = parse_run_profile(plan_text) if plan_text else None
+    if run_root is None:
+        return _OptionalRunFacts(
+            plan_text=plan_text,
+            run_profile=profile,
+            read_errors=tuple(
+                error for error in (plan_error,) if error is not None
+            ),
+            plan_probed=plan_file is not None,
+        )
 
     entries: tuple[DDEntry, ...] = ()
     report_text = ""
@@ -339,6 +354,7 @@ def _read_optional_run_facts(run_root: Path | None) -> _OptionalRunFacts:
         shaping_error=shaping_error,
         craft_guard_text=craft_guard_text,
         read_errors=errors,
+        plan_probed=plan_file is not None,
     )
 
 
@@ -364,13 +380,14 @@ def _artifact_states(
     shaping_events: tuple[dict[str, Any], ...] | None,
     shaping_error: str | None,
     run_profile: RunProfile | None,
+    plan_probed: bool,
 ) -> tuple[tuple[str, str], ...]:
     """One uniform presence fact per run artifact, captured while loading.
 
     ``spec``/``point_back`` record no read error when no path was selected,
     so their absence is derived from the path; the optional artifacts always
     produce an error object (missing or unreadable) or none (complete) once
-    a run root is probed - without a root they were never read at all.
+    probed.
     """
     states: list[tuple[str, str]] = [
         (
@@ -387,7 +404,15 @@ def _artifact_states(
         ),
     ]
     by_artifact = {error.artifact: error for error in optional_errors}
-    for artifact in ("plan", "decision_report", "craft_guard"):
+    states.append(
+        (
+            "plan",
+            _error_state(by_artifact.get("plan"))
+            if plan_probed
+            else STATE_MISSING,
+        )
+    )
+    for artifact in ("decision_report", "craft_guard"):
         error = by_artifact.get(artifact)
         if error is None and run_root is None:
             states.append((artifact, STATE_MISSING))
@@ -434,9 +459,15 @@ def capture_run_facts(
     preview_dir: Path | None = None,
     evidence_dir: Path | None = None,
     run_root: Path | None = None,
+    plan_path: Path | None = None,
     pointback_fallback_encoding: str | None = None,
 ) -> RunFacts:
-    """Load a run once and return syntax/integrity facts over that snapshot."""
+    """Load a run once and return syntax/integrity facts over that snapshot.
+
+    ``plan_path`` selects the plan read location without widening run-root
+    discovery: it never changes ``run_root`` and never probes preview,
+    evidence, craft, shaping, or decision artifacts on its own.
+    """
 
     if run_root is not None:
         if spec_path is None:
@@ -461,7 +492,7 @@ def capture_run_facts(
     baseline_text, baseline_error = _read_baseline(run_root)
     manifest_lines, manifest_errors, manifest_state, manifest_raw = _read_manifest(evidence_dir)
     preview = inspect_preview(preview_dir) if preview_dir is not None else None
-    optional = _read_optional_run_facts(run_root)
+    optional = _read_optional_run_facts(run_root, plan_path)
     plan_declared, plan_fenced = _scan_fill_declarations(optional.plan_text)
     return RunFacts(
         run_root=run_root,
@@ -508,5 +539,6 @@ def capture_run_facts(
             shaping_events=optional.shaping_events,
             shaping_error=optional.shaping_error,
             run_profile=optional.run_profile,
+            plan_probed=optional.plan_probed,
         ),
     )
