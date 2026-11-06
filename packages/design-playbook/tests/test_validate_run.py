@@ -4,6 +4,7 @@
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -1903,6 +1904,293 @@ def main() -> int:
             "G11 coverage",
             legacy=True,
         )
+
+    i2_example = PACKAGE / "examples" / "export-upgrade"
+    i2_complete_modes = (("default", ()), ("strict", ("--strict",)))
+    i2_structural_modes = (
+        ("legacy", ("--legacy",)),
+        ("selective", ("--require-evidence", "--require-coverage")),
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        i2_root = Path(tmp)
+
+        def _example_copy(name: str) -> tuple[Path, Path]:
+            base = i2_root / name
+            shutil.copytree(i2_example / "run", base / "run")
+            shutil.copytree(i2_example / "project", base / "project")
+            return base / "run", base / "project"
+
+        def _case_args(
+            run_dir: Path,
+            project_dir: Path,
+            flags: tuple[str, ...],
+            *,
+            rooted: bool = True,
+        ) -> list[str]:
+            args = [
+                "--preview-dir", str(run_dir / "preview"),
+                "--decision-report", str(run_dir / "decision-report.md"),
+                "--evidence-dir", str(run_dir / "evidence"),
+                "--contract-project", str(project_dir),
+                "--contract-run", str(run_dir),
+                "--shaping-dir", str(run_dir / "shaping"),
+            ]
+            if rooted:
+                args.extend(("--run-root", str(run_dir)))
+            return args + list(flags)
+
+        def _profile_probe(spec: Path, pb: Path, *extra: str) -> tuple[int, set[str]]:
+            result = run(spec, pb, "--format", "json", *extra)
+            return result.returncode, _json_rule_ids(result) or set()
+
+        valid_run, valid_project = _example_copy("valid")
+        for mode, flags in (*i2_complete_modes, *i2_structural_modes):
+            code, rules = _profile_probe(
+                valid_run / "spec.md", valid_run / "point-back.md",
+                *_case_args(valid_run, valid_project, flags),
+            )
+            if code != 0 or rules:
+                failures.append(
+                    f"i2/valid/{mode}: the complete sample must stay green; "
+                    f"got exit {code} rules={sorted(rules)}"
+                )
+            else:
+                print(f"  ok    i2/valid/{mode} passes with its run-profile")
+
+        def _profile_required(name: str, plan_text: str | None) -> None:
+            run_dir, project = _example_copy(name)
+            plan = run_dir / "plan.md"
+            if plan_text is None:
+                plan.unlink()
+            else:
+                plan.write_text(plan_text, encoding="utf-8")
+            for mode, flags in i2_complete_modes:
+                code, rules = _profile_probe(
+                    run_dir / "spec.md", run_dir / "point-back.md",
+                    *_case_args(run_dir, project, flags),
+                )
+                if code != 1 or "G12.run_profile" not in rules:
+                    failures.append(
+                        f"i2/{name}/{mode}: complete acceptance must reject a "
+                        "run without a valid run-profile (exit 1, "
+                        f"G12.run_profile); got exit {code} rules={sorted(rules)}"
+                    )
+                else:
+                    print(f"  ok    i2/{name}/{mode} requires the run-profile")
+            for mode, flags in i2_structural_modes:
+                code, rules = _profile_probe(
+                    run_dir / "spec.md", run_dir / "point-back.md",
+                    *_case_args(run_dir, project, flags),
+                )
+                if code != 0 or rules:
+                    failures.append(
+                        f"i2/{name}/{mode}: the structural reading must not "
+                        f"require a profile; got exit {code} rules={sorted(rules)}"
+                    )
+                else:
+                    print(f"  ok    i2/{name}/{mode} keeps the structural reading")
+
+        _profile_required("missing-plan", None)
+        _profile_required("empty-plan", "")
+        _profile_required("no-profile-block", "# plan\n\nno profile marker here\n")
+
+        adjacent_run, adjacent_project = _example_copy("adjacent")
+        for mode, flags in (*i2_complete_modes, *i2_structural_modes):
+            code, rules = _profile_probe(
+                adjacent_run / "spec.md", adjacent_run / "point-back.md",
+                *_case_args(adjacent_run, adjacent_project, flags, rooted=False),
+            )
+            if code != 0 or rules:
+                failures.append(
+                    f"i2/adjacent/{mode}: a valid plan next to the point-back "
+                    f"must be read without --run-root; got exit {code} "
+                    f"rules={sorted(rules)}"
+                )
+            else:
+                print(f"  ok    i2/adjacent/{mode} reads the neighbouring plan")
+
+        broken_run, broken_project = _example_copy("adjacent-broken")
+        broken_plan = (broken_run / "plan.md").read_text(encoding="utf-8")
+        (broken_run / "plan.md").write_text(
+            broken_plan.replace("run-profile: v1", "run-profile: v99", 1),
+            encoding="utf-8",
+        )
+        for mode, flags in (*i2_complete_modes, *i2_structural_modes):
+            code, rules = _profile_probe(
+                broken_run / "spec.md", broken_run / "point-back.md",
+                *_case_args(broken_run, broken_project, flags, rooted=False),
+            )
+            if code != 1 or "G12.run_profile" not in rules:
+                failures.append(
+                    f"i2/adjacent-broken/{mode}: an unsupported profile next to "
+                    "the point-back must be rejected in every mode; got "
+                    f"exit {code} rules={sorted(rules)}"
+                )
+            else:
+                print(f"  ok    i2/adjacent-broken/{mode} rejects the bad profile")
+
+        matrix_run, matrix_project = _example_copy("p3-matrix")
+        matrix_pb = matrix_run / "point-back.md"
+        matrix_text = matrix_pb.read_text(encoding="utf-8")
+        matrix_pb.write_text(
+            matrix_text[:matrix_text.index("采样矩阵:")]
+            + matrix_text[matrix_text.index("未审:", matrix_text.index("采样矩阵:")):],
+            encoding="utf-8",
+        )
+        for mode, flags in (("default", ()), ("legacy", ("--legacy",))):
+            code, rules = _profile_probe(
+                matrix_run / "spec.md", matrix_pb,
+                *_case_args(matrix_run, matrix_project, flags, rooted=False),
+            )
+            if code != 1 or "G11.matrix_required" not in rules:
+                failures.append(
+                    f"i2/p3-matrix/{mode}: the neighbouring P3 profile must "
+                    "engage the existing matrix obligation; got "
+                    f"exit {code} rules={sorted(rules)}"
+                )
+            else:
+                print(f"  ok    i2/p3-matrix/{mode} engages the P3 obligation")
+
+        g8_run, g8_project = _example_copy("g8-needs-root")
+        g8_craft = (g8_run / "craft-guard.md").read_text(encoding="utf-8")
+        (g8_run / "craft-guard.md").write_text(
+            "\n".join(line for line in g8_craft.splitlines()
+                      if not line.startswith("| PERF-01@2 ")) + "\n",
+            encoding="utf-8",
+        )
+        rooted_code, rooted_rules = _profile_probe(
+            g8_run / "spec.md", g8_run / "point-back.md",
+            *_case_args(g8_run, g8_project, ()),
+        )
+        unrooted_code, unrooted_rules = _profile_probe(
+            g8_run / "spec.md", g8_run / "point-back.md",
+            *_case_args(g8_run, g8_project, (), rooted=False),
+        )
+        if rooted_code != 1 or "G8.run_missing_row" not in rooted_rules:
+            failures.append(
+                "i2/g8-needs-root/rooted: an invalid craft-guard under "
+                f"--run-root must fail G8; got exit {rooted_code} "
+                f"rules={sorted(rooted_rules)}"
+            )
+        elif unrooted_code != 0 or unrooted_rules:
+            failures.append(
+                "i2/g8-needs-root/unrooted: without --run-root the run must "
+                f"not probe craft-guard; got exit {unrooted_code} "
+                f"rules={sorted(unrooted_rules)}"
+            )
+        else:
+            print("  ok    i2/g8-needs-root keeps the G8 boundary at --run-root")
+
+        fallback_run, fallback_project = _example_copy("no-fallback")
+        fallback_plan = (fallback_run / "plan.md").read_text(encoding="utf-8")
+        (fallback_run / "plan.md").unlink()
+        (fallback_run.parent / "plan.md").write_text(
+            fallback_plan, encoding="utf-8")
+        sibling = i2_root / "sibling"
+        sibling.mkdir()
+        (sibling / "plan.md").write_text(fallback_plan, encoding="utf-8")
+        code, rules = _profile_probe(
+            fallback_run / "spec.md", fallback_run / "point-back.md",
+            *_case_args(fallback_run, fallback_project, ("--strict",)),
+        )
+        if code != 1 or "G12.run_profile" not in rules:
+            failures.append(
+                "i2/no-fallback/strict: a run without its own plan.md must not "
+                f"borrow a neighbouring plan; got exit {code} "
+                f"rules={sorted(rules)}"
+            )
+        else:
+            print("  ok    i2/no-fallback/strict rejects the borrowed plan")
+
+        wins_run, wins_project = _example_copy("root-plan-wins")
+        wins_pb = wins_run / "point-back.md"
+        wins_text = wins_pb.read_text(encoding="utf-8")
+        wins_pb.write_text(
+            wins_text[:wins_text.index("采样矩阵:")]
+            + wins_text[wins_text.index("未审:", wins_text.index("采样矩阵:")):],
+            encoding="utf-8",
+        )
+        # The neighbouring plan declares a different valid tier, so the rule
+        # set names which of the two plans was read.
+        (wins_run.parent / "plan.md").write_text(
+            "<!-- run-profile: v1 -->\n```yaml\ntier: P2\n"
+            "confirmed_by: user + 2026-11-06T00:00:00Z\n```\n",
+            encoding="utf-8",
+        )
+        wins_code, wins_rules = _profile_probe(
+            wins_run / "spec.md", wins_pb,
+            *_case_args(wins_run, wins_project, ()),
+        )
+        if wins_code != 1 or wins_rules != {"G11.matrix_required"}:
+            failures.append(
+                "i2/root-plan-wins: --run-root/plan.md must govern over the "
+                "point-back's neighbouring plan; got exit "
+                f"{wins_code} rules={sorted(wins_rules)}"
+            )
+        else:
+            print("  ok    i2/root-plan-wins takes the root plan's tier")
+
+        cwd_run, cwd_project = _example_copy("cwd-stray")
+        (i2_root / "plan.md").write_text(
+            "<!-- run-profile: v99 -->\n```yaml\ntier: P9\n```\n",
+            encoding="utf-8",
+        )
+        stray = subprocess.run(
+            [sys.executable, str(VALIDATOR),
+             str(cwd_run / "spec.md"), str(cwd_run / "point-back.md"),
+             "--format", "json",
+             *_case_args(cwd_run, cwd_project, ())],
+            capture_output=True, text=True, encoding="utf-8",
+            cwd=str(i2_root),
+        )
+        code = stray.returncode
+        rules = _json_rule_ids(stray) or set()
+        if code != 0 or rules:
+            failures.append(
+                "i2/cwd-stray: a stray plan.md in the process cwd must not be "
+                f"read; got exit {code} rules={sorted(rules)}"
+            )
+        else:
+            print("  ok    i2/cwd-stray ignores the cwd plan")
+
+        g5_run, g5_project = _example_copy("g5-no-preview")
+        g5_probe = run(
+            g5_run / "spec.md", g5_run / "point-back.md", "--format", "json",
+            "--decision-report", str(g5_run / "decision-report.md"),
+            "--evidence-dir", str(g5_run / "evidence"),
+            "--contract-project", str(g5_project),
+            "--contract-run", str(g5_run),
+            "--shaping-dir", str(g5_run / "shaping"),
+        )
+        g5_code = g5_probe.returncode
+        g5_rules = _json_rule_ids(g5_probe) or set()
+        if (
+            g5_code != 1
+            or "G5.require_preview" not in g5_rules
+            or "G12.run_profile" in g5_rules
+        ):
+            failures.append(
+                "i2/g5-no-preview: the neighbouring plan must not bypass G5; "
+                f"got exit {g5_code} rules={sorted(g5_rules)}"
+            )
+        else:
+            print("  ok    i2/g5-no-preview keeps the G5 requirement")
+
+        io_run, io_project = _example_copy("unreadable-plan")
+        (io_run / "plan.md").write_bytes(b"\xff\xfe")
+        for mode, flags in (*i2_complete_modes, *i2_structural_modes):
+            result = run(
+                io_run / "spec.md", io_run / "point-back.md", "--format", "json",
+                *_case_args(io_run, io_project, flags),
+            )
+            if result.returncode != 2 or "USAGE.io_error" not in result.stdout:
+                failures.append(
+                    f"i2/unreadable-plan/{mode}: a plan read failure must stay "
+                    f"an operational exit 2; got {result.returncode} "
+                    f"{result.stdout!r}"
+                )
+            else:
+                print(f"  ok    i2/unreadable-plan/{mode} stays an I/O exit 2")
 
     # --- ADR-0008 frontend floor JS intercept (playwright) ---
     # CI has no playwright (see ci.yml: browser suites stay local/release).
