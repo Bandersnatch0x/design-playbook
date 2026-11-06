@@ -7,12 +7,15 @@ Usage:
   python packages/design-playbook/scripts/generate_adapter.py --list
 
 Tier-1 agents (codex) regenerate committed snapshots inside the package.
-Tier-2/3 agents write into --out (defaults to cwd of the caller).
+Tier-2/3 agents write into --out (defaults to cwd of the caller).  A row that
+declares a skills landing (``row.skills_landing``, T-151 / I12) also receives
+the portable skills tree there, unless the target is the package itself.
 
 ``--list`` also shows the package-wide bundles available besides the matrix
 rows.  A bundle is one layout many hosts read, addressed by its own name
 rather than by a matrix row (``agent-plugins`` = ``plugin.json`` +
-``mcp.json``); a dead matrix row emits nothing at all.
+``mcp.json``; ``agents-marketplace`` = the second layout's catalog); a dead
+matrix row emits nothing at all.
 
 Dry-run prints a JSON manifest to stdout:
   {"agent": "...", "version": "...", "files": [{"path": "...", "sha256": "..."}]}
@@ -763,8 +766,96 @@ def _agent_plugins_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
     ]
 
 
+
+# --- Install landing and the second marketplace layout (T-151 / I12) --------
+# ``init`` lays the portable surfaces into the consuming project.  The landing
+# directory is a matrix fact (``AgentRow.skills_landing``) and the catalog's
+# identity is the canonical manifest, so neither is re-typed into a second
+# inventory that then drifts from the rows (ADR-0042, ADR-0004).
+
+#: The second marketplace layout's catalog — the ``.agents/plugins`` face the
+#: non-Claude hosts read, beside the Claude ``.claude-plugin`` one.
+_AGENTS_MARKETPLACE = ".agents/plugins/marketplace.json"
+
+
+def _install_landing_files(version: str, row: AgentRow) -> list[tuple[str, str]]:
+    """``<landing>/<skill>/…`` for *row* — the skill tree, as hosts read it.
+
+    The whole skill directory travels, not just ``SKILL.md``: each skill
+    points at its own ``references/*`` by relative path, so a landing without
+    them is a skill whose links are already broken.  Reference files are
+    copied verbatim; only ``SKILL.md`` takes the generated-by header, since
+    that is the file whose frontmatter the reading hosts parse.
+
+    Only the package's own skill directories are written: ``.agents/skills/``
+    is a shared project directory, so a skill the project brought itself keeps
+    its name and its files.  A row with no landing point
+    (``skills_landing is None``) emits nothing.
+    """
+    landing = row.skills_landing
+    if landing is None:
+        return []
+    header = markers.generated_by_html(version)
+    skills_root = _PKG_DIR / "skills"
+    files: list[tuple[str, str]] = []
+    for skill_dir in sorted(d for d in skills_root.iterdir() if d.is_dir()):
+        for path in sorted(skill_dir.rglob("*")):
+            if not path.is_file() or "__pycache__" in path.parts:
+                continue
+            rel = path.relative_to(skills_root).as_posix()
+            text = path.read_text(encoding="utf-8")
+            if path.name == "SKILL.md":
+                text = _header_after_frontmatter(text, header)
+            files.append((f"{landing}/{rel}", text))
+    return files
+
+
+def _render_agents_marketplace(version: str) -> str:
+    """The second marketplace layout's catalog — the ``.agents/plugins`` face.
+
+    One package identity, read from the same manifest the Claude catalog and
+    every adapter render from, written in the shape that face expects.  The
+    file used to be hand-typed beside its Claude twin, which is how the two
+    publish surfaces drift; generating it means the identity has one source
+    and the drift gate can see it (T-151 / I12).
+
+    The *surface* list deliberately lives one level down, in the portable
+    bundle's ``plugin.json``: that format's vocabulary excludes agents from
+    its catalogs, so listing them here would be an unknown key in a manifest
+    a foreign host parses.  ``version`` is unused for the same reason the
+    committed file carries none — this catalog has no version field.
+    """
+    src = _read_claude_plugin()
+    data = {
+        "name": src["name"],
+        "interface": {"displayName": src["name"]},
+        "plugins": [
+            {
+                "name": src["name"],
+                "source": {"source": "local", "path": "./packages/design-playbook"},
+                "policy": {
+                    "installation": "AVAILABLE",
+                    "authentication": "ON_INSTALL",
+                },
+                "category": "Design",
+            }
+        ],
+    }
+    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+
+def _agents_marketplace_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
+    """``.agents/plugins/marketplace.json`` relative to the project root.
+
+    ``out_dir`` is unused: the file's location is the convention, not a
+    choice — it must sit beside ``plugins/`` for the host to find it.
+    """
+    return [(_AGENTS_MARKETPLACE, _render_agents_marketplace(version))]
+
+
 _BUNDLE_RENDERERS: dict[str, Renderer] = {
     "agent-plugins": _agent_plugins_files,
+    "agents-marketplace": _agents_marketplace_files,
 }
 
 
@@ -852,7 +943,17 @@ def render_entries(
         out_dir = _PKG_DIR if row.tier == 1 else Path.cwd()
 
     version = _get_version()
-    return version, out_dir, renderer(version, out_dir)
+    files = renderer(version, out_dir)
+    # A consuming project also gets the portable skills landing, when the row
+    # declares one (``skills_landing``: absent for the native row and for the
+    # Tier-3 floor); the package itself never does.  A Tier-1 snapshot is
+    # regenerated *inside* the package
+    # (``--out PKG``), which is a maintainer target rather than a project that
+    # hosts read: a project-level ``.agents/`` tree there would collide with
+    # the repository's own ignored ``.agents/`` area and could never ship.
+    if out_dir.resolve() != _PKG_DIR:
+        files = _install_landing_files(version, row) + files
+    return version, out_dir, files
 
 
 def render(agent: str, out_dir: Path | None = None, *, dry_run: bool = False) -> dict:

@@ -225,7 +225,7 @@ npx design-playbook init <agent>
 | **Tier 2**（生成） | Cursor、Gemini CLI、OpenCode、Windsurf、GitHub Copilot、Zed | skills 以各平台 rules 格式输出 + 项目级 MCP 配置；commands 降级为提示文档 |
 | **Tier 3**（兜底） | Kiro、Amp、Jules、Qwen Code 等共 22 个——`npx design-playbook --list` | 含 orchestrator 合约 + MCP 安装指南的 `AGENTS.md` |
 
-Claude Code 为原生平台。Tier 2/3 为生成适配器，已诚实说明降级内容。当前库存见[适配器矩阵](./packages/design-playbook/scripts/adapter_matrix.py)，分层语义见 [ADR-0042](./docs/adr/0042-multi-platform-adapter-generator.md)。
+Claude Code 为原生平台。Tier 2/3 为生成适配器，已诚实说明降级内容。Tier 1–2 宿主还会把整套 skills 落到项目级 `.agents/skills/`（含 references）；Claude 保持自身布局——插件直接读包内 `skills/`，不生成落点副本；Tier 3 兜底层只发 `AGENTS.md`，任何一层拿到的安装面都不超过该行声明的能力类。当前库存见[适配器矩阵](./packages/design-playbook/scripts/adapter_matrix.py)，分层语义见 [ADR-0042](./docs/adr/0042-multi-platform-adapter-generator.md)。
 
 ## 🔗 与生态组合
 

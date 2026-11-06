@@ -61,6 +61,31 @@ GENERATING_AGENTS = [
     row.agent for row in matrix_mod.MATRIX if not row.native and row.generates
 ]
 
+# Every non-native row also carries the portable skills landing (T-151 / I12):
+# the package's whole skills tree, references included.  Counted off disk so
+# adding a skill does not require touching every per-renderer total.
+LANDED_FILES = len([
+    p for p in (PKG / "skills").rglob("*")
+    if p.is_file() and "__pycache__" not in p.parts
+])
+LANDED_SKILLS = len(list((PKG / "skills").glob("*/SKILL.md")))
+
+# Rows that declare a skills landing — every generating row except the Tier-3
+# floor, which the matrix declares as AGENTS.md-only (T-151 / I12).
+LANDING_AGENTS = [row.agent for row in matrix_mod.MATRIX if row.skills_landing]
+
+_LANDING_PREFIX = matrix_mod.AGENTS_SKILLS_DIR + "/"
+
+
+def _is_verbatim_landing(rel: str) -> bool:
+    """True for a landed copy the generator does not author.
+
+    A skill's own ``references/*`` travel unmodified so its relative pointers
+    still resolve; they are not artifacts we stamp, so the generated-by
+    header rule does not apply to them.
+    """
+    return rel.startswith(_LANDING_PREFIX) and not rel.endswith("/SKILL.md")
+
 
 class MatrixSchemaTests(unittest.TestCase):
     """adapter_matrix.py: schema validation."""
@@ -568,8 +593,10 @@ class CursorRendererTests(unittest.TestCase):
 
     def test_total_file_count(self) -> None:
         paths = [e["path"] for e in self.manifest["files"]]
-        # 9 skills + 1 commands + 1 mcp note + 1 mcp.json = 12
-        self.assertEqual(len(paths), 12)
+        # 9 skills + 1 commands + 1 mcp note + 1 mcp.json = 12, plus the
+        # skills landing (.agents/skills/SKILL.md × 9) every non-native row
+        # now carries (T-151 / I12).
+        self.assertEqual(len(paths), 12 + LANDED_FILES)
 
 
 class WindsurfRendererTests(unittest.TestCase):
@@ -609,8 +636,8 @@ class WindsurfRendererTests(unittest.TestCase):
         self.assertIn("design-playbook-preview", text)
 
     def test_total_file_count(self) -> None:
-        # 9 rules + 8 workflows + 1 mcp guide = 18
-        self.assertEqual(len(self.manifest["files"]), 18)
+        # 9 rules + 8 workflows + 1 mcp guide = 18, plus the skills landing.
+        self.assertEqual(len(self.manifest["files"]), 18 + LANDED_FILES)
 
 
 class GeminiCLIRendererTests(unittest.TestCase):
@@ -815,7 +842,10 @@ class FrontmatterHeaderPlacementTests(unittest.TestCase):
 
     def test_frontmatter_artifacts_open_with_fence_then_generated_by(self) -> None:
         fm_artifacts = 0
+        landed = 0
         for agent, rel, text in self.rendered:
+            if _is_verbatim_landing(rel):
+                continue  # copied, not authored: no stamp of ours belongs here
             lines = text.split("\n")
             # Regression guard — the exact #115 bug shape: generated-by comment
             # on line 1 with the frontmatter opener demoted to line 2.
@@ -826,6 +856,8 @@ class FrontmatterHeaderPlacementTests(unittest.TestCase):
             if lines[0] != "---":
                 continue  # plain artifact (markdown guide, JSON, TOML, marker block)
             fm_artifacts += 1
+            if rel.startswith(_LANDING_PREFIX):
+                landed += 1
             try:
                 close = lines.index("---", 1)
             except ValueError:
@@ -836,10 +868,16 @@ class FrontmatterHeaderPlacementTests(unittest.TestCase):
                 lines[close + 1], self._GENERATED_BY_LINE,
                 f"{agent}:{rel}: generated-by comment must be the first line after "
                 f"the frontmatter block, got {lines[close + 1]!r}")
-        # 11 cursor .mdc (9 skills + commands + mcp note) + 9 copilot .instructions.md
-        self.assertEqual(fm_artifacts, 20,
-                         f"expected 20 frontmatter-bearing artifacts across the matrix, "
-                         f"got {fm_artifacts}")
+        # 11 cursor .mdc (9 skills + commands + mcp note) + 9 copilot
+        # .instructions.md — the artifacts this generator authors.
+        self.assertEqual(fm_artifacts - landed, 20,
+                         f"expected 20 authored frontmatter-bearing artifacts across "
+                         f"the matrix, got {fm_artifacts - landed}")
+        # ...and the landed SKILL.md copies follow the same rule, one per
+        # skill per landing row.
+        self.assertEqual(landed, LANDED_SKILLS * len(LANDING_AGENTS),
+                         f"expected {LANDED_SKILLS * len(LANDING_AGENTS)} landed "
+                         f"SKILL.md copies, got {landed}")
 
 
 class Tier3RendererTests(unittest.TestCase):
@@ -884,6 +922,8 @@ class Tier3RendererTests(unittest.TestCase):
         self.assertIn("<!-- design-playbook:begin -->", text)
 
     def test_total_file_count(self) -> None:
+        # AGENTS.md only: the Tier-3 capability class is the floor, so this
+        # tier gets no skills landing (T-151 / I12).
         self.assertEqual(len(self.manifest["files"]), 1)
         self.assertEqual(self.manifest["files"][0]["path"], "AGENTS.md")
 
@@ -1265,6 +1305,189 @@ class AgentPluginsBundleTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("agent-plugins", result.stdout)
+
+
+class InstallLandingTests(unittest.TestCase):
+    """Install landing points (T-151 / I12).
+
+    Two landing classes, decided by the matrix row rather than by the
+    renderer: the native row keeps its own layout (the host reads the
+    package's ``skills/`` in place), every other row lands the same skills
+    tree under ``AGENTS_SKILLS_DIR`` in the consuming project."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp())
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    # --- landing rule -----------------------------------------------------
+
+    def test_claude_row_has_no_generated_landing(self) -> None:
+        # Native row: the host consumes the package directly, so a landing
+        # copy would be a second inventory nobody loads.  The generator
+        # refuses loudly rather than writing one under another name.
+        row = matrix_mod.get_agent("claude-code")
+        self.assertTrue(row.native)
+        self.assertIsNone(row.skills_landing)
+        with self.assertRaises(NotImplementedError):
+            gen_mod.render("claude-code", out_dir=self.tmp, dry_run=False)
+        self.assertEqual(list(self.tmp.rglob("*")), [])
+
+    def test_non_claude_row_lands_at_agents_skills(self) -> None:
+        manifest = gen_mod.render("cursor", out_dir=self.tmp, dry_run=False)
+        landed = [p for p in self.tmp.rglob("*")
+                  if p.is_file()
+                  and p.relative_to(self.tmp).as_posix().startswith(_LANDING_PREFIX)]
+        self.assertTrue(landed, "a non-native row must land a skills tree")
+        for path in landed:
+            rel = path.relative_to(self.tmp).as_posix()
+            self.assertTrue(rel.startswith(_LANDING_PREFIX), rel)
+        # Every skill travels whole — SKILL.md plus the references it points
+        # at — so the landed copy is not a skill with broken links.
+        self.assertEqual(
+            {p.parent.name for p in landed if p.name == "SKILL.md"},
+            {d.name for d in (PKG / "skills").iterdir() if d.is_dir()},
+        )
+        for path in landed:
+            rel = path.relative_to(self.tmp / matrix_mod.AGENTS_SKILLS_DIR)
+            self.assertTrue((PKG / "skills" / rel).is_file(),
+                            f"landed {rel} has no package source")
+        # The host's own adapter is still written alongside the landing.
+        self.assertIn(".cursor/rules/design-playbook.mdc",
+                      [f["path"] for f in manifest["files"]])
+
+    def test_landing_is_verbatim_beside_the_stamped_skill(self) -> None:
+        gen_mod.render("cursor", out_dir=self.tmp, dry_run=False)
+        landing = self.tmp / matrix_mod.AGENTS_SKILLS_DIR
+        stamped = (landing / "ui-picker" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertTrue(stamped.startswith("---\n"))
+        self.assertIn(markers.MARKER_TEXT, stamped)
+        reference = (landing / "ui-picker" / "references" / "template.md").read_text(
+            encoding="utf-8")
+        source = (PKG / "skills" / "ui-picker" / "references" / "template.md").read_text(
+            encoding="utf-8")
+        self.assertEqual(reference, source, "references travel unmodified")
+
+    def test_init_alias_lands_through_the_documented_command(self) -> None:
+        # ``npx design-playbook init <agent>`` is the surface the docs tell a
+        # user to run; prove the landing survives that path, not just the
+        # in-process render.
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node not found on PATH — skipping cli.js smoke")
+        out = self.tmp / "cli"
+        result = subprocess.run(
+            [node, str(CLI_JS), "init", "cursor", "--out", str(out)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            cwd=PKG, timeout=60,
+        )
+        self.assertEqual(result.returncode, 0,
+                         f"cli.js init failed:\n{result.stdout}\n{result.stderr}")
+        self.assertTrue((out / matrix_mod.AGENTS_SKILLS_DIR / "design-playbook"
+                         / "SKILL.md").is_file())
+        self.assertTrue((out / ".cursor" / "rules" / "design-playbook.mdc").is_file())
+
+    def test_tier3_floor_keeps_its_agents_md_only_surface(self) -> None:
+        # The landing must not hand a tier more than the matrix declares:
+        # Tier-3 is the AGENTS.md floor, so its rows emit no skills tree even
+        # though they are non-native.
+        for row in matrix_mod.MATRIX:
+            if row.tier != 3:
+                continue
+            self.assertIsNone(row.skills_landing, row.agent)
+        # Counter-check: the boundary is the tier, not "nothing lands anywhere".
+        self.assertEqual(
+            {row.tier for row in matrix_mod.MATRIX if row.skills_landing}, {1, 2}
+        )
+        for agent in ("generic", "qoder", "trae", "amp"):
+            with tempfile.TemporaryDirectory() as tmp:
+                out = Path(tmp)
+                manifest = gen_mod.render(agent, out_dir=out, dry_run=False)
+                self.assertEqual([e["path"] for e in manifest["files"]], ["AGENTS.md"])
+                self.assertFalse((out / matrix_mod.AGENTS_SKILLS_DIR).exists(),
+                                 f"{agent}: a tier-3 row must not land a skills tree")
+
+    def test_landing_leaves_the_projects_own_skills_alone(self) -> None:
+        # .agents/skills/ is a shared directory: the landing writes only the
+        # package's own skill names, so a skill the project brought survives.
+        sibling = self.tmp / matrix_mod.AGENTS_SKILLS_DIR / "team-own" / "SKILL.md"
+        sibling.parent.mkdir(parents=True)
+        sibling.write_text("---\nname: team-own\n---\n\nteam rules\n", encoding="utf-8")
+        gen_mod.render("cursor", out_dir=self.tmp, dry_run=False)
+        self.assertEqual(sibling.read_text(encoding="utf-8"),
+                         "---\nname: team-own\n---\n\nteam rules\n")
+
+    def test_landing_is_not_written_into_the_package(self) -> None:
+        # Tier-1 snapshots are regenerated inside the package; a
+        # project-level landing there would be a copy nobody reads (and the
+        # repository's own ignored .agents/ area).
+        _version, out, entries = gen_mod.render_entries("codex", PKG)
+        self.assertEqual(out, PKG)
+        self.assertFalse(
+            any(rel.startswith(_LANDING_PREFIX) for rel, _c in entries),
+            [rel for rel, _c in entries],
+        )
+
+    # --- the second marketplace layout ------------------------------------
+
+    def _committed_catalog(self) -> str:
+        return (ROOT / ".agents" / "plugins" / "marketplace.json").read_text(
+            encoding="utf-8")
+
+    def test_second_format_catalog_is_generated_not_hand_typed(self) -> None:
+        # The drift pin: the committed catalog must be exactly what the
+        # generator renders.  Editing it by hand fails here.
+        manifest = gen_mod.render("agents-marketplace", out_dir=self.tmp, dry_run=False)
+        self.assertEqual(
+            [f["path"] for f in manifest["files"]],
+            [".agents/plugins/marketplace.json"],
+        )
+        written = (self.tmp / ".agents" / "plugins" / "marketplace.json").read_text(
+            encoding="utf-8")
+        self.assertEqual(written, self._committed_catalog())
+
+    def test_second_format_catalog_is_sourced_from_the_canonical_manifest(self) -> None:
+        catalog = json.loads(self._committed_catalog())
+        canonical = json.loads(
+            (PKG / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        self.assertEqual(catalog["name"], canonical["name"])
+        entry = catalog["plugins"][0]
+        self.assertEqual(entry["name"], canonical["name"])
+        # The catalog advertises the package the matrix renders for, so the
+        # entry and the rows cannot point at different trees.
+        path = entry["source"]["path"]
+        self.assertEqual((ROOT / path).resolve(), PKG.resolve())
+
+    def test_second_format_catalog_carries_no_invented_host_keys(self) -> None:
+        # Agent Plugins' own vocabulary excludes agents/commands/hooks from
+        # its manifests: the surface list lives in the portable bundle's
+        # plugin.json (matrix-rendered), not as an unknown key in a catalog
+        # a foreign host parses.
+        catalog = json.loads(self._committed_catalog())
+        self.assertEqual(set(catalog), {"name", "interface", "plugins"})
+        self.assertEqual(
+            set(catalog["plugins"][0]),
+            {"name", "source", "policy", "category"},
+        )
+
+    def test_second_format_catalog_has_a_drift_gate_registered(self) -> None:
+        # generated_artifacts.py is the register validate.py walks: an
+        # artifact with no row has no gate and can ship stale.
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import generated_artifacts  # noqa: E402
+
+        names = {a.name for a in generated_artifacts.ARTIFACTS}
+        self.assertIn("agents marketplace catalog", names)
+        for artifact in generated_artifacts.ARTIFACTS:
+            if artifact.name != "agents marketplace catalog":
+                continue
+            self.assertIn("adapter_matrix", artifact.source)
+            self.assertEqual(artifact.generator,
+                             "packages/design-playbook/scripts/generate_adapter.py")
+            self.assertEqual(artifact.artifacts,
+                             (".agents/plugins/marketplace.json",))
+            self.assertEqual(artifact.gate, "tests/test_adapter_generator.py")
 
 
 if __name__ == "__main__":

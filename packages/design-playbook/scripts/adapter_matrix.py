@@ -31,6 +31,15 @@ from dataclasses import dataclass
 #: ADR-0045 2026-11-06 amendment).
 STATUSES: tuple[str, ...] = ("active", "deprecated", "rebranded", "dead")
 
+#: Where ``init`` lands a row's skill tree inside the consuming project
+#: (T-151 / I12).  One directory serves every host that reads the
+#: project-level convention instead of a vendor-specific rules folder, so the
+#: landing point is a matrix fact rather than a per-renderer choice.  Two
+#: kinds of row have no landing point at all (``None`` below): the native row,
+#: whose host consumes the package's own ``skills/`` tree in place, and every
+#: Tier-3 row, whose declared capability class is the AGENTS.md floor.
+AGENTS_SKILLS_DIR = ".agents/skills"
+
 
 @dataclass(frozen=True)
 class AgentRow:
@@ -89,6 +98,29 @@ class AgentRow:
         apart so the two never share an error message.
         """
         return self.status != "dead"
+
+    @property
+    def skills_landing(self) -> str | None:
+        """Project-relative directory ``init`` lands this row's skills in.
+
+        ``None`` in two cases, for two different reasons:
+
+        - a native row: the host already reads the package's ``skills/`` tree
+          in place, so a landing copy is a duplicate nobody loads;
+        - a Tier-3 row: that tier *is* the matrix's declaration "this product
+          gets the shared AGENTS.md floor, nothing more".  Landing the whole
+          skills tree there would make the install surface deliver more than
+          the capability class the matrix advertises, which is the drift the
+          tier column exists to prevent.
+
+        Every other row gets ``AGENTS_SKILLS_DIR`` — the project-level
+        convention those hosts read.  Should a Tier-3 host later be *confirmed*
+        to read that directory, the fix is a per-row record of that reading,
+        not a guess by tier.
+        """
+        if self.native or self.tier == 3:
+            return None
+        return AGENTS_SKILLS_DIR
 
 
 # Tier 1 — full fidelity (skills + commands + MCP + hooks where supported).
