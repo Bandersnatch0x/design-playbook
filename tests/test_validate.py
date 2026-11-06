@@ -62,7 +62,11 @@ class ValidateGateTests(unittest.TestCase):
         # artifact honest, and the fixture must carry those gate files or the
         # register check would fail on a legitimate partial tree.
         (self.root / "tests").mkdir()
-        for gate in ("test_adapter_drift.py", "test_ui_shared_parity.py"):
+        for gate in (
+            "test_adapter_drift.py",
+            "test_adapter_generator.py",
+            "test_ui_shared_parity.py",
+        ):
             shutil.copy2(ROOT / "tests" / gate, self.root / "tests" / gate)
         # Private plans and tickets are not validator inputs.
         (self.root / ".agents" / "plugins").mkdir(parents=True)

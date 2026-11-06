@@ -44,6 +44,16 @@ ARTIFACTS: tuple[GeneratedArtifact, ...] = (
         gate="tests/test_adapter_drift.py",
     ),
     GeneratedArtifact(
+        name="agents marketplace catalog",
+        source=(
+            "packages/design-playbook/scripts/adapter_matrix.py + "
+            "packages/design-playbook/.claude-plugin/plugin.json"
+        ),
+        generator="packages/design-playbook/scripts/generate_adapter.py",
+        artifacts=(".agents/plugins/marketplace.json",),
+        gate="tests/test_adapter_generator.py",
+    ),
+    GeneratedArtifact(
         name="run console snapshot contract",
         source="packages/design-playbook/mcp/run_console/snapshot_v1.schema.json",
         generator="scripts/generate_snapshot_contract.py",

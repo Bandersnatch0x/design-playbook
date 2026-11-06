@@ -229,7 +229,7 @@ npx design-playbook init <agent>
 | **Tier 2** (generated) | Cursor, Gemini CLI, OpenCode, Windsurf, GitHub Copilot, Zed | Skills as platform rules + project-level MCP config; commands degrade to prompt docs. Zed: `.rules` (first-match aware — skipped if a competing rules file exists without one) + `.zed/settings.json` context_servers |
 | **Tier 3** (floor) | 22 total, including Kiro, Amp, Jules, Qwen Code — `npx design-playbook --list` | `AGENTS.md` with orchestrator contract + MCP install guide |
 
-Claude Code is the native surface. Tier-2/3 outputs are generated adapters with honest degradation. Current inventory: [adapter matrix](./packages/design-playbook/scripts/adapter_matrix.py); tier semantics: [ADR-0042](./docs/adr/0042-multi-platform-adapter-generator.md).
+Claude Code is the native surface. Tier-2/3 outputs are generated adapters with honest degradation. Tier 1–2 hosts additionally land the portable skills tree at `.agents/skills/` — the project-level convention those hosts read, references included. Claude keeps its own layout (the plugin loads the package's `skills/` in place), and the Tier-3 floor ships its `AGENTS.md` alone: no tier receives more surface than its row declares. Current inventory: [adapter matrix](./packages/design-playbook/scripts/adapter_matrix.py); tier semantics: [ADR-0042](./docs/adr/0042-multi-platform-adapter-generator.md).
 
 ## 🔗 Stack with ecosystem
 
