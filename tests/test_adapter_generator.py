@@ -13,6 +13,10 @@ Tests:
   7. Frontmatter header placement (issue #115) — matrix-driven: every rendered
      artifact that opens with frontmatter has ``---`` as its literal first line
      and the generated-by comment as the first line after the block.
+  8. Lifecycle status (T-149 / S7) — status/successor validation, and a dead
+     row emitting nothing (with the counter-example).
+  9. agent_plugins bundle (T-149 / S4) — the portable plugin.json + mcp.json
+     layout, with its declared surface list pinned to the matrix render.
 """
 from __future__ import annotations
 
@@ -48,6 +52,14 @@ def _load_module(path: Path, name: str):
 
 matrix_mod = _load_module(PKG / "scripts" / "adapter_matrix.py", "dpb_adapter_matrix")
 gen_mod = _load_module(GENERATOR, "dpb_generate_adapter")
+
+# Rows the generator emits an adapter for: not native (host consumes the
+# package directly) and not dead (no product left to run it).  Every
+# matrix-driven sweep below uses this, so a newly dead row drops out of all of
+# them at once instead of failing one loop at a time.
+GENERATING_AGENTS = [
+    row.agent for row in matrix_mod.MATRIX if not row.native and row.generates
+]
 
 
 class MatrixSchemaTests(unittest.TestCase):
@@ -120,6 +132,73 @@ class MatrixSchemaTests(unittest.TestCase):
     def test_a_tier3_row_cannot_name_a_dedicated_renderer(self) -> None:
         with self.assertRaises(ValueError):
             matrix_mod.AgentRow(agent="over-declared", tier=3, renderer="codex")
+
+
+class MatrixLifecycleTests(unittest.TestCase):
+    """AgentRow.status / successor — the lifecycle dimension (T-149 / S7)."""
+
+    def test_default_status_is_active(self) -> None:
+        row = matrix_mod.AgentRow(agent="brand-new", tier=3)
+        self.assertEqual(row.status, "active")
+        self.assertIsNone(row.successor)
+        self.assertTrue(row.generates)
+
+    def test_illegal_status_value_is_rejected(self) -> None:
+        # The whole point of the field: a typo like "dea" must not read as
+        # "some other lifecycle" and silently keep generating.
+        with self.assertRaises(ValueError) as ctx:
+            matrix_mod.AgentRow(agent="typo", tier=3, status="dea")
+        self.assertIn("status must be one of", str(ctx.exception))
+
+    def test_rebranded_row_must_name_its_successor(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            matrix_mod.AgentRow(agent="rebranded-without-target", tier=3,
+                                status="rebranded")
+        self.assertIn("successor", str(ctx.exception))
+
+    def test_active_row_cannot_carry_a_successor(self) -> None:
+        with self.assertRaises(ValueError):
+            matrix_mod.AgentRow(agent="active-with-successor", tier=3,
+                                status="active", successor="elsewhere")
+
+    def test_dead_row_does_not_generate(self) -> None:
+        row = matrix_mod.AgentRow(agent="gone", tier=3, status="dead")
+        self.assertFalse(row.generates)
+
+    def test_deprecated_and_rebranded_rows_still_generate(self) -> None:
+        # Only ``dead`` stops output: a deprecated surface and a renamed one
+        # both still exist under the name this row carries.
+        deprecated = matrix_mod.AgentRow(agent="old", tier=3, status="deprecated")
+        rebranded = matrix_mod.AgentRow(agent="renamed", tier=3,
+                                        status="rebranded", successor="new")
+        self.assertTrue(deprecated.generates)
+        self.assertTrue(rebranded.generates)
+
+    def test_known_dead_row_is_roo_code(self) -> None:
+        # Roo Code shut down (2026-05, S7 evidence): the row stays (breadth is
+        # frozen) but it is marked, so no adapter is generated for a host that
+        # is gone.
+        row = matrix_mod.get_agent("roo-code")
+        self.assertIsNotNone(row)
+        self.assertEqual(row.status, "dead")
+        self.assertFalse(row.generates)
+
+    def test_known_rebranded_row_is_windsurf(self) -> None:
+        # Windsurf was folded into Devin Local (2026-09, S7 evidence).
+        row = matrix_mod.get_agent("windsurf")
+        self.assertIsNotNone(row)
+        self.assertEqual(row.status, "rebranded")
+        self.assertEqual(row.successor, "devin")
+        self.assertTrue(row.generates)
+
+    def test_every_non_active_row_is_explained(self) -> None:
+        # A lifecycle mark without a successor or a stated reason is how a
+        # matrix rots: every non-active row must at least be a known status,
+        # and a rebranded one must point somewhere.
+        for row in matrix_mod.MATRIX:
+            self.assertIn(row.status, matrix_mod.STATUSES, row.agent)
+            if row.status == "rebranded":
+                self.assertTrue(row.successor, f"{row.agent}: needs a successor")
 
 
 def _sha256_lf(data: bytes) -> str:
@@ -726,15 +805,13 @@ class FrontmatterHeaderPlacementTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.rendered: list[tuple[str, str, str]] = []  # (agent, rel_path, text)
-        for row in matrix_mod.MATRIX:
-            if row.native:
-                continue
+        for agent in GENERATING_AGENTS:
             with tempfile.TemporaryDirectory() as tmp:
                 out = Path(tmp)
-                manifest = gen_mod.render(row.agent, out_dir=out, dry_run=False)
+                manifest = gen_mod.render(agent, out_dir=out, dry_run=False)
                 for entry in manifest["files"]:
                     text = (out / entry["path"]).read_text(encoding="utf-8")
-                    cls.rendered.append((row.agent, entry["path"], text))
+                    cls.rendered.append((agent, entry["path"], text))
 
     def test_frontmatter_artifacts_open_with_fence_then_generated_by(self) -> None:
         fm_artifacts = 0
@@ -818,29 +895,63 @@ class Tier3RendererTests(unittest.TestCase):
                 self.assertEqual(m["files"][0]["path"], "AGENTS.md")
 
     def test_all_22_tier3_agents_have_renderers(self) -> None:
-        tier3 = [row.agent for row in matrix_mod.MATRIX if row.tier == 3]
+        tier3 = [row for row in matrix_mod.MATRIX if row.tier == 3]
         self.assertEqual(len(tier3), 22)
-        for agent in tier3:
+        for row in tier3:
+            if not row.generates:
+                continue  # dead rows emit nothing (see RendererDispatchTests)
             with tempfile.TemporaryDirectory() as tmp:
-                m = gen_mod.render(agent, out_dir=Path(tmp), dry_run=True)
-                self.assertEqual(m["agent"], agent)
+                m = gen_mod.render(row.agent, out_dir=Path(tmp), dry_run=True)
+                self.assertEqual(m["agent"], row.agent)
 
 
 class RendererDispatchTests(unittest.TestCase):
     """Dispatch keys off the matrix row (issue #111): dedicated renderer or
     AGENTS.md floor fallback for every non-native row; native rows emit nothing."""
 
-    def test_every_non_native_row_renders_without_not_implemented(self) -> None:
-        for row in matrix_mod.MATRIX:
-            if row.native:
-                continue
+    def test_every_generating_row_renders_without_not_implemented(self) -> None:
+        for agent in GENERATING_AGENTS:
             with tempfile.TemporaryDirectory() as tmp:
                 try:
-                    m = gen_mod.render(row.agent, out_dir=Path(tmp), dry_run=True)
+                    m = gen_mod.render(agent, out_dir=Path(tmp), dry_run=True)
                 except NotImplementedError as exc:
-                    self.fail(f"{row.agent}: non-native row must never hit NotImplementedError: {exc}")
-                self.assertEqual(m["agent"], row.agent)
-                self.assertGreater(len(m["files"]), 0, f"{row.agent}: expected at least one artifact")
+                    self.fail(f"{agent}: a generating row must never hit NotImplementedError: {exc}")
+                self.assertEqual(m["agent"], agent)
+                self.assertGreater(len(m["files"]), 0, f"{agent}: expected at least one artifact")
+
+    def test_dead_row_emits_nothing_and_says_why(self) -> None:
+        # Counter-example to the sweep above: a dead row is refused, loudly,
+        # and writes no file.
+        dead = [row for row in matrix_mod.MATRIX if not row.generates]
+        self.assertTrue(dead, "matrix must carry at least one dead row to pin this")
+        for row in dead:
+            with tempfile.TemporaryDirectory() as tmp:
+                with self.assertRaises(NotImplementedError) as ctx:
+                    gen_mod.render(row.agent, out_dir=Path(tmp), dry_run=False)
+                self.assertIn(row.status, str(ctx.exception))
+                self.assertIn(row.agent, str(ctx.exception))
+                self.assertEqual(list(Path(tmp).rglob("*")), [],
+                                 f"{row.agent}: dead row must not write files")
+
+    def test_dead_row_renderer_resolution_is_none(self) -> None:
+        row = matrix_mod.AgentRow(agent="hypothetical-dead", tier=3, status="dead")
+        self.assertIsNone(gen_mod._renderer_for(row))
+
+    def test_dead_row_not_advertised_as_renderer_ready(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(GENERATOR), "--list"],
+            capture_output=True, text=True, encoding="utf-8",
+            cwd=PKG, timeout=15,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for row in matrix_mod.MATRIX:
+            if row.generates:
+                continue
+            line = next((ln for ln in result.stdout.splitlines() if row.agent in ln), "")
+            self.assertTrue(line, f"{row.agent} missing from --list")
+            self.assertIn(f"[{row.status}]", line)
+            self.assertNotIn("renderer ready", line,
+                             f"{row.agent} is dead and must not be offered")
 
     def test_native_row_emits_nothing(self) -> None:
         native_rows = [row for row in matrix_mod.MATRIX if row.native]
@@ -907,7 +1018,9 @@ class Tier2ListTests(unittest.TestCase):
 
     def test_all_tier3_agents_shown_as_ready(self) -> None:
         out = self._list_output()
-        tier3_agents = [row.agent for row in matrix_mod.MATRIX if row.tier == 3]
+        tier3_agents = [
+            row.agent for row in matrix_mod.MATRIX if row.tier == 3 and row.generates
+        ]
         for agent in tier3_agents:
             line = next((ln for ln in out.splitlines() if agent in ln), "")
             self.assertIn("renderer ready", line, f"{agent} not shown as renderer ready")
@@ -1037,6 +1150,121 @@ class ZedRendererTests(unittest.TestCase):
             first = (Path(tmp) / ".rules").read_text(encoding="utf-8")
             gen_mod.render("zed", out_dir=Path(tmp), dry_run=False)
             self.assertEqual((Path(tmp) / ".rules").read_text(encoding="utf-8"), first)
+
+
+class AgentPluginsBundleTests(unittest.TestCase):
+    """agent_plugins bundle (T-149 / S4): one portable plugin layout —
+    ``plugin.json`` + ``mcp.json`` — rendered from the capability matrix, not
+    a second hand-written manifest per host."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp())
+        self.manifest = gen_mod.render("agent-plugins", out_dir=self.tmp, dry_run=False)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _plugin_json(self) -> dict:
+        return json.loads((self.tmp / "plugin.json").read_text(encoding="utf-8"))
+
+    def test_emits_the_two_layout_files(self) -> None:
+        self.assertEqual(
+            [f["path"] for f in self.manifest["files"]], ["plugin.json", "mcp.json"]
+        )
+
+    def test_plugin_json_mirrors_the_canonical_manifest(self) -> None:
+        with (PKG / ".claude-plugin" / "plugin.json").open(encoding="utf-8") as f:
+            canonical = json.load(f)
+        data = self._plugin_json()
+        self.assertEqual(data["name"], canonical["name"])
+        self.assertEqual(data["version"], canonical["version"])
+        self.assertEqual(data["description"], canonical["description"])
+        self.assertEqual(data["license"], canonical["license"])
+
+    def test_plugin_json_points_at_package_skills_and_mcp(self) -> None:
+        data = self._plugin_json()
+        self.assertEqual(data["skills"], "./skills/")
+        self.assertEqual(data["mcpServers"], "./mcp.json")
+        self.assertTrue((PKG / "skills").is_dir(),
+                        "the referenced skills directory must exist in the package")
+
+    def test_declared_agents_equal_the_matrix_render(self) -> None:
+        # The pin: the declared surface list IS the matrix rendered.  Expected
+        # value computed independently (not via the generator's own helper), so
+        # a wrong filter in the implementation cannot duplicate itself here.
+        expected = [
+            {"id": row.agent, "tier": row.tier, "status": row.status}
+            for row in matrix_mod.MATRIX
+            if not row.native and row.generates
+        ]
+        self.assertEqual(self._plugin_json()["agents"], expected)
+
+    def test_dead_and_native_rows_are_not_advertised(self) -> None:
+        ids = {entry["id"] for entry in self._plugin_json()["agents"]}
+        self.assertNotIn("roo-code", ids, "dead row must not be advertised")
+        self.assertNotIn("claude-code", ids, "native row owns its own layout")
+        self.assertIn("windsurf", ids, "a rebranded row still generates")
+        windsurf = next(e for e in self._plugin_json()["agents"] if e["id"] == "windsurf")
+        self.assertEqual(windsurf["status"], "rebranded")
+
+    def test_a_newly_dead_row_drops_out_of_the_bundle(self) -> None:
+        # Counter-example to the pin above: flipping one row to dead removes it
+        # from the bundle without touching the bundle code.
+        original = gen_mod.MATRIX
+        gen_mod.MATRIX = tuple(
+            matrix_mod.AgentRow(agent="cursor", tier=2, renderer="cursor",
+                                status="dead")
+            if row.agent == "cursor" else row
+            for row in original
+        )
+        try:
+            ids = {e["id"] for e in gen_mod._agent_surface_entries()}
+        finally:
+            gen_mod.MATRIX = original
+        self.assertNotIn("cursor", ids)
+
+    def test_mcp_json_carries_both_servers_as_stdio(self) -> None:
+        data = json.loads((self.tmp / "mcp.json").read_text(encoding="utf-8"))
+        servers = data["mcpServers"]
+        self.assertEqual(
+            set(servers), {"design-playbook-preview", "design-playbook-evidence"}
+        )
+        for srv in servers.values():
+            self.assertEqual(srv["type"], "stdio")
+            self.assertEqual(srv["command"], "python")
+            self.assertTrue(srv["args"][0].endswith("server.py"), srv)
+            self.assertEqual(srv["cwd"], ".")
+
+    def test_claude_layout_is_not_touched(self) -> None:
+        paths = [f["path"] for f in self.manifest["files"]]
+        self.assertFalse(any(p.startswith(".claude-plugin") for p in paths), paths)
+
+    def test_dry_run_writes_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = gen_mod.render("agent-plugins", out_dir=Path(tmp), dry_run=True)
+            self.assertEqual(len(manifest["files"]), 2)
+            self.assertEqual(list(Path(tmp).rglob("*")), [])
+
+    def test_render_entries_seam_matches_render(self) -> None:
+        version, out, entries = gen_mod.render_entries("agent-plugins", self.tmp)
+        self.assertEqual(out, self.tmp)
+        self.assertEqual(version, self.manifest["version"])
+        self.assertEqual(
+            [rel for rel, _c in entries], [f["path"] for f in self.manifest["files"]]
+        )
+        self.assertEqual(
+            [hashlib.sha256(c.encode("utf-8")).hexdigest() for _rel, c in entries],
+            [f["sha256"] for f in self.manifest["files"]],
+        )
+
+    def test_bundle_is_listed_by_cli(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(GENERATOR), "--list"],
+            capture_output=True, text=True, encoding="utf-8",
+            cwd=PKG, timeout=15,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("agent-plugins", result.stdout)
 
 
 if __name__ == "__main__":
