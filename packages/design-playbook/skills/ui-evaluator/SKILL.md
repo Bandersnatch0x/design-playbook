@@ -1,6 +1,9 @@
 ---
 name: ui-evaluator
 description: Run evidence-backed UI acceptance. Use after generating a page, or when the user wants a design review or recirculatable critique against declared goals and success criteria.
+context: fork
+agent: design-playbook:ui-evaluator
+background: false
 ---
 
 # ui-evaluator
@@ -9,13 +12,58 @@ description: Run evidence-backed UI acceptance. Use after generating a page, or 
 
 ## Isolation
 
-Run as a **fork subagent**. Inputs are run artifacts only: `spec`, the decision report, the evidence ledger and manifest, and the captures they bind. Producer conversation, plan notes, and prior-turn justification are **not** inputs — a claim that cannot be re-derived from those artifacts does not exist for this review. Inherited declarations count when an artifact names them by path or value, never as a transcript. Source alone is not rendered proof; with no bound artifact the row is `blocked`, not a pass.
+Run in a fresh child context, never in the producer's conversation. This skill declares
+`context: fork` with the read-only `design-playbook:ui-evaluator` agent; on verified host build
+2.1.318 the child starts from this skill text plus the delegation arguments and receives no
+producer chat, plan notes, self-assessment, or preferred verdict.
+
+Inputs are the delegation's **allowed set**: the run root's observation artifacts; the dependency
+paths the delegation names explicitly, as absolute paths prepared by the caller; this skill's
+`references/`; and the public rule registry index with the `rules/` part files it links. Producer
+conversation, plan notes, and prior-turn justification are **not** inputs — a claim that cannot be
+re-derived from those artifacts does not exist for this review. Missing or unreadable evidence stays
+`blocked`; never rebuild it from source or from narration. Inherited declarations count when an
+artifact names them by path or value, never as a transcript.
+
+Read nothing outside that set. File entries are exact paths: a named file is read directly, and
+only a listed directory may be enumerated with `Glob` or `Grep` — never Glob a parent directory to
+find a named file. A relative declaration that does not resolve uniquely inside the set is
+`blocked`; never search the worktree, the package, or a neighbouring run to find it.
+
+Review outputs are not inputs. A `point-back.md`, a `raw-child-final.txt`, or an archived review
+conclusion — under any name or copy inside the run — is the artifact this review replaces or a
+prior verdict. On a first review they are excluded. Only when the delegation declares an explicit
+re-review may you consume the named history entries (ledger rows, finding ids, closure records) —
+never the prior verdict, coverage, or limitations prose.
+
+**Formatting-only correction mode** is the one exception: the delegation may supply exactly the
+complete current report plus the named machine format errors as immutable source. You then change
+only the named structural fix; every finding, evidence result, and the verdict stays unchanged. It
+is not a re-acceptance, and a truncated or incomplete report never enters it.
+
+Preparation reads only the allowed set: no personal session history, memory files, or
+proof/verification scripts.
+
+Source alone is not rendered proof; with no bound artifact the row is `blocked`, not a pass.
+
+This is conversation isolation, not an OS or filesystem sandbox. `Read`, `Glob`, and `Grep` can
+technically reach any path the host permits, so the evidence is the input discipline plus the tool
+trace the caller audits. In the Limitations statement, name the roots you actually read and every
+path outside the allowed set; a trace outside the set is not artifact-only evidence. A check that
+inspects the conversation for earlier turns is defense-in-depth only — it depends on the model
+obeying it and is not a host-enforced detector.
+
+If the host starts no fresh child context, isolation is unavailable. Report `isolation: unavailable`
+and name the fresh-context or manual-review path; never run the review inline and label it isolated.
+The producer may know the public criteria and rubric; isolation removes producer history and
+self-assessment, not the acceptance standards. Measure against the current registry and the bound
+evidence.
 
 ## Steps
 
 ### 1. Bind declarations
 
-Identify which of these apply to this surface (repo files, prior turns, or design-playbook defaults):
+Identify which of these apply to this surface (the run artifacts and the declarations they name by path or value, or design-playbook defaults):
 `spec` · `domain` · `craft` · `design` · `components` · `template`.
 
 When a verified `.scratch/<run>/design-baseline/state.json` binds a baseline (`status: ready`, path from `baseline.path`), include it as the project-specific visual declaration. It can support design-drift findings but is never L6 runtime proof by itself. An explicit `status: waived` disables baseline-drift checks for that run. It does not waive `spec`, accessibility, or craft checks.
@@ -57,7 +105,7 @@ result:    pass|fail|blocked|N/A
 
 `observed` is either an **artifact path** (relative to the run root, e.g. `evidence/L6.3-error.png`) when a runtime capture was bound by a manifest, or **free-text** describing a manual observation. Both are legitimate. The machine seam (G6) only validates artifact-path references. When using an artifact path, keep the path as the **leading token** of the line (e.g. `observed: evidence/L6.3-error.png`). Trailing commentary is tolerated by G6; it reads the leading token, breaking on whitespace, `(` / `（`, or `,` / `，` / `:` / `：`. Other punctuation (em dash, slashes, etc.) will be treated as part of the path, so put elaboration on a separate `note:` line for clarity when unsure.
 
-Evidence is captured, not judged. A manifest entry records that an artifact was collected at a state; it does not say the criterion passed. `pass`/`fail` is this evaluator's verdict against `required` vs `observed`. A screenshot can prove a criterion false. Three ledgers, each one authority: `spec` L6 names **what to prove**. The manifest records **what happened**. This ledger decides **what it means**. Providers produce artifacts. The manifest binds them to criteria. The evaluator decides. For a `page-probe/v1` sidecar, read `layout.measurement_status`, `defects.measurement_status`, `console.measurement_status`, and — when the capture carried a `design` — `renderTokens.measurement_status` **before** interpreting `leaks` / `tapFails` / `consoleErrors` / `renderTokens.findings`; `blocked` or `unmeasured` is ledger `blocked`, never a clean pass. An empty `renderTokens.findings` array is not a pass on its own: it is empty both when the bound axes conform and when they were `undecidable`, so a non-empty `renderTokens.undecidable` blocks those axes. The `design` echo is the **caller's declaration**, not a confirmed user decision — do not read it as the user having approved a palette, type scale, or radius system. Those arrays are candidate observations, not automatic blocking. A fail or blocked L6×viewport pair is not rescued by another viewport's pass. `captured`/`ok` is not proof the declared target page was reached.
+Evidence is captured, not judged. A manifest entry records that an artifact was collected at a state; it does not say the criterion passed. `pass`/`fail` is this evaluator's verdict against `required` vs `observed`. A screenshot can prove a criterion false. Three ledgers, each one authority: `spec` L6 names **what to prove**. The manifest records **what happened**. This ledger decides **what it means**. Providers produce artifacts. The manifest binds them to criteria. The evaluator decides. A manifest entry is binding and request metadata, not an execution result: when the artifact is missing or the tool cannot read it — for example an unopenable binary trace — the criterion stays `blocked`, and the manifest's action or state fields never substitute for the artifact. A single static screenshot proves one state, not continuous update; a continuous-progress claim needs the interaction or sequence record. For a `page-probe/v1` sidecar, read `layout.measurement_status`, `defects.measurement_status`, `console.measurement_status`, and — when the capture carried a `design` — `renderTokens.measurement_status` **before** interpreting `leaks` / `tapFails` / `consoleErrors` / `renderTokens.findings`; `blocked` or `unmeasured` is ledger `blocked`, never a clean pass. An empty `renderTokens.findings` array is not a pass on its own: it is empty both when the bound axes conform and when they were `undecidable`, so a non-empty `renderTokens.undecidable` blocks those axes. The `design` echo is the **caller's declaration**, not a confirmed user decision — do not read it as the user having approved a palette, type scale, or radius system. Those arrays are candidate observations, not automatic blocking. A fail or blocked L6×viewport pair is not rescued by another viewport's pass. `captured`/`ok` is not proof the declared target page was reached.
 
 For implemented UI, visible-state proof is a rendered inspection at the declared target viewport. Behavior proof is an interaction trace or automated check. Code-health proof is the relevant available test, type and lint, or affected build result. Planning-only proof is declaration coverage and must not claim a render or test occurred. Non-L6 declaration checks may be supporting observations or findings. They do not enter the machine ledger.
 
@@ -149,20 +197,35 @@ The report artifact remains `point-back.md` (no new file). The machine face is u
 
 An empty Findings block is a fact, not an omission: keep the `## Findings` heading and write the single literal marker line `findings: none` inside it. Never transcribe a placeholder ('none blocking', 'not applicable') into finding field values, a placeholder is not a finding, and cross-run derivation groups field values verbatim.
 
+Keep entries concise, but never drop a criterion, a necessary finding, or a matrix cell for length. Do not replace content with a truncation marker, and do not switch models to fit a limit.
+
 Coverage levels:
 - **exhaustive**: primary path, required rare paths, and per-page five-state matrix, with no exceptions.
 - **sampled**: edge cases by five-state x page matrix, with reasons recorded.
 - **explicit unreviewed**: everything else, never defaults to pass. Unreviewed is not pass: it produces no pass contribution.
 
+When the run profile is P3, the Coverage statement carries the sampling matrix the machine gate reads — the marker line, then one line per spec-declared L5 cell:
+
+```text
+采样矩阵:
+- <page>/<state>: <sampling evidence or capture>
+- <page>/<state>: 未审 — <reason>
+```
+
+A missing cell line is a coverage gap, not prose to summarize. Keep the marker and one line per declared cell even when most cells are unreviewed.
+
 Positive findings are acceptance evidence, not decoration. Every L6 `pass` on implemented UI requires at least one bound rendered or interaction artifact. Measurement and source corroborate but never carry a pass alone. Planning-only passes rest on declaration coverage and must not claim a render or test occurred. Missing evidence is `blocked` (unverifiable), never `fail`, "not tested" and "tested and failed" are different facts.
 
-**Done when:** all six blocks are present. The Coverage statement names the exhaustive completion status and the explicit unreviewed list (G11). Every pass row cites bound evidence. Limitations name the judgment-class dimensions and assumed dependencies. Machine check right after writing point-back.md: `python scripts/g2_g4_pointback.py .scratch/<run>/point-back.md` (structural gate; the repair-proof obligation over captured artifact facts is decided by `validate_run.py`), do not wait for the end-of-run `validate_run.py` sweep.
+**Done when:** all six blocks are present. The Coverage statement names the exhaustive completion status and the explicit unreviewed list (G11). Every pass row cites bound evidence. Limitations name the judgment-class dimensions, assumed dependencies, and the roots actually read. Return the report as your final message; do not write files or run commands. The caller writes the returned text verbatim to `point-back.md` and runs `python scripts/g2_g4_pointback.py .scratch/<run>/point-back.md` right away (structural gate; the repair-proof obligation over captured artifact facts is decided by `validate_run.py`), without waiting for the end-of-run `validate_run.py` sweep.
+
+If the caller returns the machine validation's structure errors for a complete current report, use
+the formatting-only correction mode: correct only those structures — block names, sampling-matrix
+lines, repair-evidence pair bindings, a coverage marker's case — and keep every finding, evidence
+result, and the verdict unchanged. Structural repair is not a re-judgment.
 
 After Recirculate, use [`references/repair.md`](references/repair.md) for the smallest owning declaration, the R1-R5 second-hop route, and which evidence to invalidate.
 
 The artifact shape behind this verdict is machine-checkable. `scripts/validate_run.py` gates L1-L6 and ordered `Given, then When, then Then` in every top-level L6 item. It requires one non-empty four-field evidence row per `L6.<n>`, allowed evidence results, and all-pass evidence for `Pass`. It also requires four non-empty finding fields, one explicit verdict, and one exact issue-linked closure per blocking finding. A blocking finding a closure claims to close must name its `criteria:`; complete acceptance then checks the association, the declared proof type, and the named pair (visible-state repairs) or the declared-type retest (nonvisual repairs) through the same G6 binding and captured-bytes owner (`G4.repair_evidence_*`, `G4.repair_association_*`, `G6.*`). These checks are the completion criteria above, not extra prose.
-
-After Recirculate, use [`references/repair.md`](references/repair.md) for the smallest owning declaration and which evidence to invalidate.
 
 ## Recirculate map (authoritative)
 

@@ -44,6 +44,9 @@ timeout must stay visible; never substitute fake captures to turn this gate gree
 
 ## Evidence boundaries
 
+What the evaluator's fresh-context fork does and does not guarantee, the build it was verified
+on, and the manual fallback are recorded in [evaluator isolation](evaluator-isolation.md).
+
 This is a deterministic integration regression, inspired by a prior local inbox
 walkthrough. It does not execute model generation or collect real human approval.
 Review, confirmation, and contract-binding inputs are test fixtures. Browser

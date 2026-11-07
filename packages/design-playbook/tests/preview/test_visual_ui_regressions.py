@@ -332,6 +332,25 @@ def _wait_for_editor_idle(page) -> None:
         " return s.ready && !s.stale && !s.pendingRequest; }")
 
 
+def _focus_history_action(page, index: int) -> None:
+    """Focus undo/redo only after React renders it enabled.
+
+    The bridge receipt writes ``#dpb-visual-count`` synchronously inside the
+    message handler, and the protocol store is idle by then, while React's
+    commit that enables the action buttons (and renders the new stack) lands
+    after it. Wait on the rendered state: ``focus()`` on a disabled control is
+    a silent no-op, and the next key would land on ``<body>``, where the review
+    keymap consumes it before the visual editor sees it. Asserting focus keeps
+    that failure at the seam instead of a count timeout.
+    """
+    from playwright.sync_api import expect
+
+    button = page.locator(".dpb-react-actions button").nth(index)
+    expect(button).to_be_enabled()
+    button.focus()
+    expect(button).to_be_focused()
+
+
 @pytest.fixture
 def pending_visual_edit(editor_page):
     from playwright.sync_api import expect
@@ -389,14 +408,13 @@ def test_n1_visual_button_shortcuts_own_visual_history(pending_visual_edit, modi
 
     page = pending_visual_edit
     count = page.locator("#dpb-visual-count")
-    actions = page.locator(".dpb-react-actions button")
     for redo in (f"{modifier}+Shift+z", f"{modifier}+y"):
         _wait_for_editor_idle(page)
-        actions.first.focus()
+        _focus_history_action(page, 0)
         page.keyboard.press(f"{modifier}+z")
         expect(count).to_have_text("0")
         _wait_for_editor_idle(page)
-        actions.nth(1).focus()
+        _focus_history_action(page, 1)
         page.keyboard.press(redo)
         expect(count).to_have_text("1")
 

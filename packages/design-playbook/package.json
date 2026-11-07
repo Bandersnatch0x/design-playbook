@@ -34,6 +34,7 @@
     "mcp.json",
     "skills",
     "commands",
+    "agents",
     "hooks",
     "mcp",
     "scripts",
