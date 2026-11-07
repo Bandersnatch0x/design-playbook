@@ -12,4 +12,6 @@ Self-authored samples for onboarding and dogfood. **Not** ports of any upstream 
 | [settings-decision-report.md](settings-decision-report.md) | ui-picker decision report before code |
 | [point-back-findings.md](point-back-findings.md) | evaluator output shape + recirculate |
 
+2026-11-07 (T-158): the bundled `export-upgrade/` and `dogfood/` `design-baseline/state.json` files are **illustrative demo values** (stale relative-root bindings kept for the walkthrough). Complete `validate_run.py` acceptance re-verifies a present baseline, so executable tests copy the scenario to `<project>/.scratch/run` and bind a real baseline through `prepare`/`confirm` instead of trusting these files.
+
 Agent-loaded SSOT remains `../skills/*/references/*`. These files are human-facing packs you can paste into a session.

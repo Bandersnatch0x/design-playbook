@@ -125,6 +125,7 @@ report's structure only, and its RUN OK must never be reported as an audit
 pass.
 """
 import argparse
+import hashlib
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -173,6 +174,7 @@ from design_playbook.scripts.g6_warnings import (  # noqa: E402
 from design_playbook.scripts.g6_records import ledger_observed  # noqa: E402
 from design_playbook.scripts.run_facts import (  # noqa: E402
     STATE_MISSING,
+    BaselineCapture,
     RunFacts,
     capture_run_facts,
 )
@@ -305,6 +307,245 @@ class RunInputs:
     shaping_dir: str | None = None
     run_facts: RunFacts | None = None
     require_run_profile: bool = False
+    # Complete acceptance (bare or --strict CLI) also verifies a present
+    # design baseline from the captured RunFacts snapshot. The default keeps
+    # in-process, selective, legacy, status and aggregate callers read-only;
+    # completeness is never inferred from arbitrary --require-* combinations.
+    require_baseline_verification: bool = False
+
+
+BASELINE_FINDINGS_SCHEMA = "design-baseline-findings/v1"
+_BASELINE_SEVERITIES = frozenset({"error", "warning", "advisory"})
+
+
+def _baseline_binding_finding(
+        message: str, *, owner: str, repair: str) -> Finding:
+    """Named blocking error for an unusable/absent baseline capture."""
+    return finding(
+        "baseline.binding-invalid",
+        message,
+        owner=owner,
+        expected="verified baseline binding (fresh, identity-matched capture)",
+        actual=message,
+        repair=repair,
+    )
+
+
+def _baseline_binding_identity(value: object) -> tuple[object, object] | None:
+    """Normalize one baseline binding the way the owner reports it.
+
+    A non-dict (including ``None``) means "no binding"; otherwise the owner's
+    path/sha256 pair is compared. Comparing normalized values keeps a genuine
+    owner failure (e.g. ready state without a binding) from being rewritten
+    as a snapshot mismatch, while a changed binding still fails.
+    """
+    if not isinstance(value, dict):
+        return None
+    return (value.get("path"), value.get("sha256"))
+
+
+def _baseline_acceptance_findings(
+        inputs: RunInputs,
+        facts: RunFacts,
+) -> tuple[list[Finding], list[Finding]]:
+    """Project the captured baseline result; never re-read or re-verify.
+
+    Complete acceptance consumes one immutable capture. The baseline owner is
+    not called from ``run()`` and no baseline/DESIGN/source file is reopened
+    here: a supplied snapshot stays exactly as captured. Baseline codes become
+    ``rule_id`` values, findings paths become owners, and severities/messages
+    are preserved (errors block; warnings and advisories stay visible).
+    """
+    errs: list[Finding] = []
+    warns: list[Finding] = []
+    rr = Path(inputs.run_root) if inputs.run_root else None
+    run_authority = (
+        rr.resolve() if rr is not None
+        else Path(inputs.point_back_path).resolve().parent
+    )
+    if inputs.contract_run:
+        declared_run = Path(inputs.contract_run).resolve()
+        if declared_run != run_authority:
+            errs.append(_baseline_binding_finding(
+                f"--contract-run {str(declared_run)!r} is not this run's root "
+                f"{str(run_authority)!r}; complete acceptance takes the run "
+                "from --run-root or the explicit point-back parent",
+                owner="--contract-run",
+                repair="Pass the same run root to --contract-run, or omit it",
+            ))
+
+    payload = facts.baseline_findings
+    if payload is None:
+        if facts.baseline_state_error is not None:
+            errs.append(_baseline_binding_finding(
+                facts.baseline_state_error,
+                owner="design-baseline/state.json",
+                repair="Repair the baseline state through design-baseline "
+                       "prepare/confirm and re-run acceptance",
+            ))
+        elif facts.artifact_state("baseline") != STATE_MISSING:
+            errs.append(_baseline_binding_finding(
+                "baseline state is present but complete acceptance has no "
+                "fresh captured result; pass --contract-project so the "
+                "baseline owner can verify it",
+                owner="--contract-project",
+                repair="Pass --contract-project <project root> (and --run-root "
+                       "when it differs from the point-back directory)",
+            ))
+        # No state at all: complete acceptance adds no DESIGN.md obligation.
+        return errs, warns
+
+    if not inputs.contract_project:
+        errs.append(_baseline_binding_finding(
+            "captured baseline result has no authorized project; complete "
+            "acceptance requires the explicit --contract-project",
+            owner="--contract-project",
+            repair="Pass --contract-project <project root>",
+        ))
+        return errs, warns
+    expected_project = str(Path(inputs.contract_project).resolve())
+    if facts.baseline_capture_project != expected_project:
+        errs.append(_baseline_binding_finding(
+            f"captured baseline project {facts.baseline_capture_project!r} "
+            f"does not match --contract-project {expected_project!r}",
+            owner="--contract-project",
+            repair="Recapture from the project root this invocation verifies",
+        ))
+    if facts.baseline_capture_run != str(run_authority):
+        errs.append(_baseline_binding_finding(
+            f"captured baseline run {facts.baseline_capture_run!r} does not "
+            f"match this run {str(run_authority)!r}",
+            owner="--run-root",
+            repair="Capture from this run root (--run-root / point-back parent)",
+        ))
+    if errs:
+        # A capture for another identity must not be projected as this run's.
+        return errs, warns
+    # The findings payload is only meaningful for the state text that was
+    # verified. Recompute the recorded digest from the frozen text and bind
+    # the payload's waiver/baseline identity to that frozen state, so a
+    # supplied snapshot cannot pair clean findings with an altered state
+    # (e.g. decision=None) or a missing digest. No file is reopened here.
+    state_text = facts.baseline_state_text
+    state_digest = facts.baseline_capture_state_sha256
+    if not state_text or not state_digest:
+        errs.append(_baseline_binding_finding(
+            "captured baseline result lacks its frozen state text or digest",
+            owner="design-baseline/state.json",
+            repair="Re-capture with the packaged baseline owner; never "
+                   "hand-build a findings-only snapshot",
+        ))
+        return errs, warns
+    actual_digest = hashlib.sha256(state_text.encode("utf-8")).hexdigest()
+    if actual_digest != state_digest:
+        errs.append(_baseline_binding_finding(
+            "captured baseline state text does not match its recorded digest; "
+            "the frozen result was modified after capture",
+            owner="design-baseline/state.json",
+            repair="Re-capture the baseline; never edit a frozen capture",
+        ))
+        return errs, warns
+    frozen_state = facts.baseline_state
+    if not isinstance(frozen_state, dict):
+        errs.append(_baseline_binding_finding(
+            "captured baseline state text is not an object",
+            owner="design-baseline/state.json",
+            repair="Re-capture with the packaged baseline owner",
+        ))
+        return errs, warns
+    waived_flag = payload.get("waived")
+    status = frozen_state.get("status")
+    captured_rows = payload.get("findings")
+    captured_gate = payload.get("gate")
+    has_error_row = isinstance(captured_rows, list) and any(
+        isinstance(row, dict) and row.get("severity") == "error"
+        for row in captured_rows)
+    gate_failed = (
+        isinstance(captured_gate, dict)
+        and captured_gate.get("verdict") == "fail")
+    if status == "ready":
+        consistent = waived_flag is False
+    elif status == "waived":
+        # A valid waiver carries waived=True; the owner's rejected-waiver
+        # capture legitimately carries waived=False plus a failing payload.
+        consistent = waived_flag is True or (has_error_row and gate_failed)
+    else:
+        # Pending/ambiguous/unreadable states always carry a failure row.
+        consistent = has_error_row and gate_failed
+    if not consistent:
+        errs.append(_baseline_binding_finding(
+            f"captured findings and frozen state disagree on the waiver/state "
+            f"(waived={waived_flag!r}, status={status!r})",
+            owner="design-baseline/state.json",
+            repair="Re-capture the baseline so findings and state come from "
+                   "one verification",
+        ))
+        return errs, warns
+    if status == "ready":
+        if _baseline_binding_identity(payload.get("baseline")) != (
+                _baseline_binding_identity(frozen_state.get("baseline"))):
+            errs.append(_baseline_binding_finding(
+                "captured findings binding does not match the frozen state "
+                "baseline",
+                owner="design-baseline/state.json",
+                repair="Re-capture the baseline so findings and state come "
+                       "from one verification",
+            ))
+            return errs, warns
+    if payload.get("schema") != BASELINE_FINDINGS_SCHEMA:
+        errs.append(_baseline_binding_finding(
+            f"captured baseline findings schema is not {BASELINE_FINDINGS_SCHEMA}",
+            owner="design-baseline/state.json",
+            repair="Re-capture with the packaged baseline owner",
+        ))
+        return errs, warns
+    rows = payload.get("findings")
+    gate = payload.get("gate")
+    gate_verdict = gate.get("verdict") if isinstance(gate, dict) else None
+    if not isinstance(rows, list) or gate_verdict not in {"pass", "fail"}:
+        errs.append(_baseline_binding_finding(
+            "captured baseline findings payload is malformed",
+            owner="design-baseline/state.json",
+            repair="Re-capture with the packaged baseline owner",
+        ))
+        return errs, warns
+    error_rows = 0
+    for row in rows:
+        if (
+            not isinstance(row, dict)
+            or row.get("severity") not in _BASELINE_SEVERITIES
+            or not isinstance(row.get("code"), str)
+            or not isinstance(row.get("path"), str)
+            or not isinstance(row.get("message"), str)
+        ):
+            errs.append(_baseline_binding_finding(
+                "captured baseline findings payload has a malformed row",
+                owner="design-baseline/state.json",
+                repair="Re-capture with the packaged baseline owner",
+            ))
+            return errs, warns
+        projected = finding(
+            row["code"],
+            row["message"],
+            owner=row["path"],
+            expected="baseline satisfies its bound declaration and provenance",
+            actual=row["message"],
+            repair="Run `design-baseline findings <project> <run>` for the "
+                   "full report, then repair the named baseline/source artifact",
+            severity=row["severity"],
+        )
+        if row["severity"] == "error":
+            error_rows += 1
+            errs.append(projected)
+        else:
+            warns.append(projected)
+    if gate_verdict == "fail" and error_rows == 0:
+        errs.append(_baseline_binding_finding(
+            "captured baseline gate failed without an error row",
+            owner="design-baseline/state.json",
+            repair="Re-capture with the packaged baseline owner",
+        ))
+    return errs, warns
 
 
 def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
@@ -318,14 +559,24 @@ def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
     contract_project = inputs.contract_project
     contract_run = inputs.contract_run
     shaping_dir = inputs.shaping_dir
+    require_baseline_verification = inputs.require_baseline_verification
     errs: list[Finding] = []
     warns: list[Finding] = []
     pd = Path(inputs.preview_dir) if inputs.preview_dir else None
     ed = Path(inputs.evidence_dir) if inputs.evidence_dir else None
     rr = Path(inputs.run_root) if inputs.run_root else None
+    # Narrow complete-acceptance probe: with no supplied snapshot and no
+    # --run-root, the explicit point-back parent is where a present baseline
+    # state may be *detected* (never where the project/DESIGN/source authority
+    # comes from). Other optional artifacts keep their existing discovery.
+    baseline_run_root = None
+    if inputs.run_facts is None and require_baseline_verification:
+        baseline_run_root = (
+            rr if rr is not None else Path(pb_path).resolve().parent)
     facts = inputs.run_facts or capture_run_facts(
         spec_path=Path(spec_path), pointback_path=Path(pb_path),
         preview_dir=pd, evidence_dir=ed, run_root=rr,
+        baseline_run_root=baseline_run_root,
     )
     # Operational read failures settle before profile policy (exit 2).
     operational_errors = tuple(
@@ -529,6 +780,16 @@ def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
             ),
         )
 
+    # Baseline acceptance (T-158): only the complete profile consumes a
+    # present baseline, and only from the immutable capture in RunFacts.
+    # run() never calls the baseline owner or reopens state/DESIGN/sources;
+    # an uncaptured or identity-mismatched result blocks instead of passing.
+    if require_baseline_verification:
+        baseline_errs, baseline_warns = _baseline_acceptance_findings(
+            inputs, facts)
+        errs += baseline_errs
+        warns += baseline_warns
+
     # G13 (conditional, T-153): a contract on disk is checked for its
     # declared axes. The run-level discovery is <run-root>/reference/
     # contract.md; a run with no reference material reports nothing, and an
@@ -667,12 +928,16 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--contract-project",
         default=None,
-        help="optional project dir containing contract.json for G7",
+        help="optional project dir containing contract.json for G7; also the "
+             "explicit project authorization for complete-acceptance baseline "
+             "verification",
     )
     parser.add_argument(
         "--contract-run",
         default=None,
-        help="optional run dir containing contract-bind.json for G7",
+        help="optional run dir containing contract-bind.json for G7; when "
+             "complete acceptance verifies a baseline it must agree with "
+             "--run-root (or the explicit point-back parent)",
     )
     parser.add_argument(
         "--shaping-dir",
@@ -682,7 +947,10 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     )
     args = parser.parse_args(argv[1:])
     # Taken before --strict expands below, so an explicit trio is not --strict.
-    args.require_run_profile = not args.legacy and (
+    # The complete profile is one selection: bare CLI or --strict. Selective
+    # --require-* invocations and --legacy keep their existing narrower scope
+    # and never inherit complete-acceptance baseline verification.
+    complete_profile = not args.legacy and (
         args.strict
         or not (
             args.require_preview
@@ -690,6 +958,8 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
             or args.require_coverage
         )
     )
+    args.require_run_profile = complete_profile
+    args.require_baseline_verification = complete_profile
     if args.strict:
         # --strict keeps its historical shorthand meaning.
         args.require_preview = True
@@ -743,6 +1013,20 @@ def main(argv: list[str]) -> int:
             rr / "plan.md" if rr is not None
             else Path(args.point_back).parent / "plan.md"
         )
+        # Complete acceptance captures a present baseline once, with the
+        # explicit project authorization. Without --contract-project no
+        # project content is read; the state file at this run authority is
+        # still probed for presence so a present baseline cannot disappear.
+        # The run is --run-root or the explicit point-back parent, never a
+        # search; --contract-run is compared in run().
+        baseline_run = (
+            rr if rr is not None else Path(args.point_back).parent)
+        baseline_capture = None
+        if args.require_baseline_verification and args.contract_project:
+            baseline_capture = BaselineCapture(
+                project_root=Path(args.contract_project),
+                run_root=baseline_run,
+            )
         facts = capture_run_facts(
             spec_path=Path(args.spec),
             pointback_path=Path(args.point_back),
@@ -750,6 +1034,10 @@ def main(argv: list[str]) -> int:
             evidence_dir=Path(args.evidence_dir) if args.evidence_dir else None,
             run_root=rr,
             plan_path=plan_path,
+            baseline_capture=baseline_capture,
+            baseline_run_root=(
+                baseline_run if args.require_baseline_verification else None
+            ),
         )
         errs, warns = run(RunInputs(
             spec_path=args.spec,
@@ -766,6 +1054,7 @@ def main(argv: list[str]) -> int:
             require_coverage=args.require_coverage,
             run_facts=facts,
             require_run_profile=args.require_run_profile,
+            require_baseline_verification=args.require_baseline_verification,
         ))
     except (OSError, UnicodeError) as exc:
         if fmt == "json":

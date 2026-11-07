@@ -6,6 +6,8 @@ project diagnostics and resume narration from one ``RunFacts`` snapshot.
 """
 from __future__ import annotations
 
+import hashlib
+import importlib.util
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -54,6 +56,18 @@ STATED_ARTIFACTS = (
 
 
 @dataclass(frozen=True)
+class BaselineCapture:
+    """Explicit project/run authority for one complete-acceptance capture.
+
+    ``state.project_root`` is an identity assertion, never read authority: the
+    caller names both roots here and the baseline owner compares them.
+    """
+
+    project_root: Path
+    run_root: Path
+
+
+@dataclass(frozen=True)
 class RunFacts:
     """One immutable view of the artifacts consumed by run policy."""
 
@@ -89,6 +103,14 @@ class RunFacts:
     # kept as a fact so run-status can name them instead of hiding the skip.
     fenced_fill_declarations: tuple[str, ...] = ()
     manifest_raw_text: str = ""
+    # Complete-acceptance capture (T-158). ``_baseline_findings`` None means
+    # no fresh capture was requested; it never means verified clean. The
+    # project/run strings are the resolved identities actually captured, and
+    # the digest is sha256 of the exact captured state text.
+    _baseline_findings: str | None = None
+    baseline_capture_project: str | None = None
+    baseline_capture_run: str | None = None
+    baseline_capture_state_sha256: str | None = None
 
     @property
     def manifest_entries(self) -> tuple[dict[str, Any], ...]:
@@ -101,6 +123,18 @@ class RunFacts:
         if self._baseline_text is None:
             return None
         return json.loads(self._baseline_text)
+
+    @property
+    def baseline_state_text(self) -> str | None:
+        """Exact captured state text; None when no capture was requested."""
+        return self._baseline_text
+
+    @property
+    def baseline_findings(self) -> dict[str, Any] | None:
+        """Detached baseline findings payload; None = never captured."""
+        if self._baseline_findings is None:
+            return None
+        return json.loads(self._baseline_findings)
 
     def artifact_state(self, artifact: str) -> str:
         """``complete`` | ``missing`` | ``unreadable`` for one run artifact.
@@ -209,6 +243,89 @@ def _read_baseline(run_root: Path | None) -> tuple[str | None, str | None]:
         return text, None
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         return None, str(exc)
+
+
+def _read_baseline_strict(
+    run_root: Path | None,
+) -> tuple[str | None, str | None]:
+    """Complete-acceptance presence read, delegated to the owner entry.
+
+    Kept separate from ``_read_baseline`` so status/aggregate retain the
+    historical reader and its bounded behavior. The owner's ``_state_presence``
+    is the single presence/type/containment/capped-read rule; a read failure
+    or an oversized state is an error, never "absent".
+    """
+    if run_root is None:
+        return None, None
+    try:
+        return _design_baseline_owner()._state_presence(run_root)
+    except RuntimeError as error:
+        return None, str(error)
+
+
+_BASELINE_OWNER: Any | None = None
+
+
+def _design_baseline_owner() -> Any:
+    """Load the design-baseline skill payload once (skill payload is SSOT).
+
+    The owner ships beside ``scripts/`` in the package root, so it is resolved
+    relative to this file: never from state content, the caller's cwd, or an
+    ancestor search.
+    """
+    global _BASELINE_OWNER
+    if _BASELINE_OWNER is None:
+        path = (
+            Path(__file__).resolve().parents[1]
+            / "skills" / "design-baseline" / "scripts" / "design_baseline.py"
+        )
+        spec = importlib.util.spec_from_file_location(
+            "design_baseline_owner", path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"design-baseline owner is not loadable: {path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _BASELINE_OWNER = module
+    return _BASELINE_OWNER
+
+
+def _capture_baseline(
+    capture: BaselineCapture,
+) -> tuple[
+    str | None, str | None, str | None, str | None, str | None, str | None
+]:
+    """Capture one verified baseline result through the skill-payload owner.
+
+    Returns ``(state_text, state_error, findings_json, project, run, digest)``.
+    The owner's optional capture reads ``state.json`` exactly once and reports
+    absence as an explicit ``None`` payload; text, findings, identity, and
+    digest therefore come from the same read. Absent state is all-``None`` (no
+    baseline, no obligation). Any collection, identity, or payload failure
+    becomes ``state_error`` so complete acceptance fails closed instead of
+    reading as verified clean.
+    """
+    try:
+        captured = _design_baseline_owner().capture_optional(
+            capture.project_root, capture.run_root)
+    except RuntimeError as error:
+        # BaselineError subclasses RuntimeError; a broken install raises the
+        # same way. Both must block, never disappear.
+        return None, str(error), None, None, None, None
+    if captured is None:
+        # True absence: no baseline, no obligation.
+        return None, None, None, None, None, None
+    findings = captured.get("findings") if isinstance(captured, dict) else None
+    state_text = captured.get("state_text") if isinstance(captured, dict) else None
+    if not isinstance(findings, dict) or not isinstance(state_text, str):
+        return None, "baseline capture returned no findings payload", None, None, None, None
+    return (
+        state_text,
+        None,
+        json.dumps(findings, ensure_ascii=False, sort_keys=True),
+        str(capture.project_root.resolve()),
+        str(capture.run_root.resolve()),
+        hashlib.sha256(state_text.encode("utf-8")).hexdigest(),
+    )
 
 
 def _read_reference_contract(
@@ -456,7 +573,6 @@ def _artifact_states(
         profile_state = STATE_COMPLETE
     if run_root is None:
         shaping_state = STATE_MISSING
-        baseline_state = STATE_MISSING
     else:
         if shaping_error:
             shaping_state = STATE_UNREADABLE
@@ -464,12 +580,14 @@ def _artifact_states(
             shaping_state = STATE_MISSING
         else:
             shaping_state = STATE_COMPLETE
-        if baseline_error:
-            baseline_state = STATE_UNREADABLE
-        elif baseline_text is None:
-            baseline_state = STATE_MISSING
-        else:
-            baseline_state = STATE_COMPLETE
+    # Baseline presence follows the baseline read itself: it may come from an
+    # explicit baseline_run_root when complete acceptance omits --run-root.
+    if baseline_error:
+        baseline_state = STATE_UNREADABLE
+    elif baseline_text is None:
+        baseline_state = STATE_MISSING
+    else:
+        baseline_state = STATE_COMPLETE
     states.extend(
         (
             ("manifest", manifest_state),
@@ -490,12 +608,25 @@ def capture_run_facts(
     run_root: Path | None = None,
     plan_path: Path | None = None,
     pointback_fallback_encoding: str | None = None,
+    baseline_capture: BaselineCapture | None = None,
+    baseline_run_root: Path | None = None,
 ) -> RunFacts:
     """Load a run once and return syntax/integrity facts over that snapshot.
 
     ``plan_path`` selects the plan read location without widening run-root
     discovery: it never changes ``run_root`` and never probes preview,
     evidence, craft, shaping, or decision artifacts on its own.
+
+    ``baseline_capture`` is the explicit complete-acceptance request: the
+    baseline owner reads and verifies the present state once, and its exact
+    text plus findings payload are frozen here. Without it the default stays
+    the state-only read (status, aggregate, legacy, selective callers).
+
+    ``baseline_run_root`` is a deliberately narrow exception for complete
+    acceptance without ``--run-root``: it names where the state file may be
+    *probed for presence*, without widening any other optional artifact
+    discovery or authorizing the project. It never reads DESIGN.md or
+    provenance sources.
     """
 
     if run_root is not None:
@@ -518,7 +649,27 @@ def capture_run_facts(
         pointback_path,
         fallback_encoding=pointback_fallback_encoding,
     )
-    baseline_text, baseline_error = _read_baseline(run_root)
+    baseline_findings_text: str | None = None
+    baseline_capture_project: str | None = None
+    baseline_capture_run: str | None = None
+    baseline_capture_state_sha256: str | None = None
+    if baseline_capture is None:
+        if baseline_run_root is not None:
+            # Complete acceptance: absent is the only silent presence state;
+            # non-files, dangling links, and read failures are present-invalid.
+            baseline_text, baseline_error = _read_baseline_strict(
+                baseline_run_root)
+        else:
+            baseline_text, baseline_error = _read_baseline(run_root)
+    else:
+        (
+            baseline_text,
+            baseline_error,
+            baseline_findings_text,
+            baseline_capture_project,
+            baseline_capture_run,
+            baseline_capture_state_sha256,
+        ) = _capture_baseline(baseline_capture)
     manifest_lines, manifest_errors, manifest_state, manifest_raw = _read_manifest(evidence_dir)
     preview = inspect_preview(preview_dir) if preview_dir is not None else None
     optional = _read_optional_run_facts(run_root, plan_path)
@@ -543,6 +694,10 @@ def capture_run_facts(
         existing_paths=_existing_paths(run_root),
         _baseline_text=baseline_text,
         baseline_state_error=baseline_error,
+        _baseline_findings=baseline_findings_text,
+        baseline_capture_project=baseline_capture_project,
+        baseline_capture_run=baseline_capture_run,
+        baseline_capture_state_sha256=baseline_capture_state_sha256,
         read_errors=tuple(
             error
             for error in (spec_error, pointback_error)

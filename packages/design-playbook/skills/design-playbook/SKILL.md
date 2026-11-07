@@ -554,8 +554,8 @@ Do not only leave paths buried in tool logs.
 
 Cross-run review of multiple `.scratch/<run>/` runs lives in command run-review (cross-run, not a step of this run).
 
-Machine seam (optional local check): `python scripts/validate_run.py <spec.md> <point-back.md> [--preview-dir <preview/>] [--decision-report <report>] [--evidence-dir <evidence/>] [--run-root <run>]`.
-The CLI fails closed by default: a bare invocation requires preview, a bound evidence row, a Coverage statement, and the run-profile block from the plan it resolves for the run (`<run-root>/plan.md` with `--run-root`, otherwise the point-back's own directory; no fallback, no discovery search). `--legacy` is the explicit structural check for old reports and for a legitimately skipped-audit skeleton; it does not require a missing run-profile, but a profile that is present and malformed still fails G12 in every mode. Its RUN OK is not an audit pass, so never present it as one.
+Machine seam (optional local check): `python scripts/validate_run.py <spec.md> <point-back.md> [--preview-dir <preview/>] [--decision-report <report>] [--evidence-dir <evidence/>] [--run-root <run>] [--contract-project <project>]`.
+The CLI fails closed by default: a bare invocation requires preview, a bound evidence row, a Coverage statement, and the run-profile block from the plan it resolves for the run (`<run-root>/plan.md` with `--run-root`, otherwise the point-back's own directory; no fallback, no discovery search). It also verifies a present `design-baseline/state.json` once through the baseline owner: pass `--contract-project <project>` (the run is `--run-root`, or the explicit point-back's directory) so a ready binding is re-checked and a waived one keeps only its validated decision and source hashes; absent state adds no obligation. `--legacy` is the explicit structural check for old reports and for a legitimately skipped-audit skeleton; it does not require a missing run-profile, but a profile that is present and malformed still fails G12 in every mode. Its RUN OK is not an audit pass, so never present it as one.
 
 ### 11. Static run handoff (optional, on request)
 
