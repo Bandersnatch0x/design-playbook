@@ -469,6 +469,60 @@ disposition: info
         rules = {f.rule_id for f in g11_coverage.check_coverage(broken)}
         self.assertIn("G11.missing_unreviewed_list", rules)
 
+    # T-160: English coverage markers are case-insensitive. proof5 actually wrote
+    # "Exhaustive completion:" / "Explicit unreviewed list:" and the old parser
+    # only matched lowercase; CJK markers and every missing-marker failure stay.
+    PROOF5_COVERAGE = """## Coverage statement
+
+Coverage level: sampled. Exhaustive completion: not achieved — only two of the ten spec-declared five-state cells have any rendered text evidence, and no readable/bound interaction record covers P1-P3. Unreviewed cells produce no pass contribution.
+
+采样矩阵:
+- main-list/initial: 未审 — default last-week view not captured; the bound a11y tree is an unknown-state feed view.
+- main-list/loading: evidence/L6.1-status-round2.a11y.json — status-item progressbar and "导出中…" present; no busy/disabled export control appears in the tree.
+- main-list/success: evidence/L6.1-status-round2.a11y.json — done entry link "导出 08-07~08-13 — 完成，查看结果" present.
+- main-list/failure: 未审 — no error-state item plus retry capture.
+- main-list/empty: 未审 — no non-white empty state plus CTA capture.
+- export-dialog/initial: 未审 — no export-dialog capture exists.
+- export-dialog/loading: 未审 — no busy dialog capture.
+- export-dialog/success: 未审 — no download-done notice capture.
+- export-dialog/failure: 未审 — no cap role=alert or failure-plus-retry capture.
+- export-dialog/empty: 未审 — no disabled-entry capture.
+
+Explicit unreviewed list: main-list initial/failure/empty; export-dialog initial/loading/success/failure/empty; viewer permission degradation; cap toast and retry; keyboard traversal and focus; color contrast; 200% text zoom; toast timing/live region; Fill styling source and token usage; dialog component semantics; preview seam log (preview/log.md absent).
+"""
+
+    def test_coverage_gate_accepts_proof5_capitalized_markers(self) -> None:
+        self.assertEqual(
+            g11_coverage.check_coverage(self.PROOF5_COVERAGE, required=True), []
+        )
+
+    def test_coverage_gate_accepts_uppercase_and_hyphenated_markers(self) -> None:
+        text = (
+            "## Coverage statement\n\n"
+            "EXHAUSTIVE completion: done.\n"
+            "MUST-REVIEW items: all.\n"
+            "UNREVIEWED: none.\n"
+        )
+        self.assertEqual(g11_coverage.check_coverage(text, required=True), [])
+
+    def test_coverage_gate_fires_when_capitalized_status_missing(self) -> None:
+        text = (
+            "## Coverage statement\n\n"
+            "Completion: done.\n"
+            "Unreviewed: none.\n"
+        )
+        rules = {f.rule_id for f in g11_coverage.check_coverage(text, required=True)}
+        self.assertEqual(rules, {"G11.missing_exhaustive_status"})
+
+    def test_coverage_gate_fires_when_capitalized_unreviewed_missing(self) -> None:
+        text = (
+            "## Coverage statement\n\n"
+            "Exhaustive completion: done.\n"
+            "Cells are tracked elsewhere.\n"
+        )
+        rules = {f.rule_id for f in g11_coverage.check_coverage(text, required=True)}
+        self.assertEqual(rules, {"G11.missing_unreviewed_list"})
+
     def test_coverage_gate_skips_legacy_reports(self) -> None:
         legacy = "# pb\n\n## Evidence ledger\n\n(ledger rows only)\n"
         self.assertEqual(g11_coverage.check_coverage(legacy), [])

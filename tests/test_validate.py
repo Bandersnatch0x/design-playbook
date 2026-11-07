@@ -1281,6 +1281,118 @@ class ValidateGateTests(unittest.TestCase):
         self.assertEqual(offenders, [], f"backslash continuations: {offenders}")
 
 
+    def test_bare_fork_agent_name_fails(self) -> None:
+        # A bare agent name silently selects the host's general-purpose child;
+        # the gate must require the plugin namespace.
+        skill = (
+            self.root / "packages" / "design-playbook" / "skills"
+            / "ui-evaluator" / "SKILL.md"
+        )
+        skill.write_text(
+            skill.read_text(encoding="utf-8").replace(
+                "agent: design-playbook:ui-evaluator", "agent: ui-evaluator"
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("fork agent is namespaced", result.stdout)
+
+    def test_missing_fork_agent_definition_fails(self) -> None:
+        (self.root / "packages" / "design-playbook" / "agents"
+         / "ui-evaluator.md").unlink()
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("read-only evaluator agent definition ships", result.stdout)
+        self.assertIn("fork agent definition ships", result.stdout)
+
+    def test_removed_fork_configuration_fails(self) -> None:
+        skill = (
+            self.root / "packages" / "design-playbook" / "skills"
+            / "ui-evaluator" / "SKILL.md"
+        )
+        skill.write_text(
+            skill.read_text(encoding="utf-8").replace("context: fork\n", ""),
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("at least one skill declares context: fork", result.stdout)
+
+    def _add_unrelated_fork_skill(self) -> None:
+        skill = (
+            self.root / "packages" / "design-playbook" / "skills"
+            / "unrelated-fork" / "SKILL.md"
+        )
+        skill.parent.mkdir(parents=True)
+        skill.write_text(
+            "---\nname: unrelated-fork\ndescription: unrelated fork skill\n"
+            "context: fork\nagent: design-playbook:ui-evaluator\n"
+            "background: false\n---\n\nunrelated body\n",
+            encoding="utf-8",
+        )
+
+    def test_unrelated_fork_cannot_mask_a_missing_evaluator_fork(self) -> None:
+        evaluator = (
+            self.root / "packages" / "design-playbook" / "skills"
+            / "ui-evaluator" / "SKILL.md"
+        )
+        evaluator.write_text(
+            evaluator.read_text(encoding="utf-8").replace("context: fork\n", ""),
+            encoding="utf-8",
+        )
+        self._add_unrelated_fork_skill()
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ui-evaluator itself declares context: fork", result.stdout)
+
+    def test_unrelated_fork_cannot_mask_a_background_evaluator(self) -> None:
+        evaluator = (
+            self.root / "packages" / "design-playbook" / "skills"
+            / "ui-evaluator" / "SKILL.md"
+        )
+        evaluator.write_text(
+            evaluator.read_text(encoding="utf-8").replace(
+                "background: false", "background: true"
+            ),
+            encoding="utf-8",
+        )
+        self._add_unrelated_fork_skill()
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "ui-evaluator itself runs in the foreground (background: false)",
+            result.stdout,
+        )
+
+    def test_evaluator_agent_with_a_write_tool_fails(self) -> None:
+        agent = (
+            self.root / "packages" / "design-playbook" / "agents"
+            / "ui-evaluator.md"
+        )
+        agent.write_text(
+            agent.read_text(encoding="utf-8").replace(
+                "tools: Read, Glob, Grep", "tools: Read, Glob, Grep, Write"
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.validate()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("tools are read-only", result.stdout)
+
+
 class GitIgnoreBoundaryTests(unittest.TestCase):
     def test_evidence_runtime_sources_are_trackable_without_run_artifacts(self) -> None:
         sources = [

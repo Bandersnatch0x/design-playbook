@@ -41,8 +41,10 @@ def _make_inventory_tree(
     skills: tuple[str, ...] = ("design-playbook", "ui-picker"),
     commands: tuple[str, ...] = ("design-io", "run-review"),
     scripts: tuple[str, ...] = ("audit_preferences.py", "validate_run.py"),
+    agents: tuple[str, ...] = ("ui-evaluator",),
     with_manifest: bool = True,
     with_portable_manifests: bool = True,
+    with_agents: bool = True,
 ) -> None:
     _write_json(root / "package.json", {"name": "design-playbook", "version": version})
     if with_portable_manifests:
@@ -56,6 +58,11 @@ def _make_inventory_tree(
         command = root / "commands" / f"{name}.md"
         command.parent.mkdir(parents=True, exist_ok=True)
         command.write_text(f"# {name}\n", encoding="utf-8")
+    if with_agents:
+        for name in agents:
+            agent = root / "agents" / f"{name}.md"
+            agent.parent.mkdir(parents=True, exist_ok=True)
+            agent.write_text(f"---\nname: {name}\n---\n", encoding="utf-8")
     for name in scripts:
         script = root / "scripts" / name
         script.parent.mkdir(parents=True, exist_ok=True)
@@ -95,6 +102,7 @@ class InventoryTests(unittest.TestCase):
             "version": "0.10.0",
             "skills": ["design-playbook", "ui-picker"],
             "commands": ["design-io", "run-review"],
+            "agents": ["ui-evaluator"],
             "scripts": ["audit_preferences", "validate_run"],
             "mcp_servers": [
                 "design-playbook-evidence",
@@ -105,8 +113,8 @@ class InventoryTests(unittest.TestCase):
         for inventory in (plugin, npm):
             self.assertEqual(
                 {key: inventory[key] for key in (
-                    "version", "skills", "commands", "scripts", "mcp_servers",
-                    "portable_manifests",
+                    "version", "skills", "commands", "agents", "scripts",
+                    "mcp_servers", "portable_manifests",
                 )},
                 expected,
             )
@@ -172,6 +180,11 @@ class InventoryTests(unittest.TestCase):
             ["mcp.json", "plugin.json"],
         )
 
+    def test_source_expectations_include_the_evaluator_agent(self) -> None:
+        self.assertEqual(
+            smoke._source_expectations()["agents"], ["ui-evaluator"]
+        )
+
     def test_portable_bundle_missing_from_npm_fails_closed(self) -> None:
         """T-156: plugin.json + mcp.json are the portable entry surface. If
         files[] omits them, the installed package has no portable plugin and
@@ -185,6 +198,23 @@ class InventoryTests(unittest.TestCase):
             actual = smoke._inspect_npm_inventory(shipped)
 
         with self.assertRaisesRegex(smoke.SmokeFailure, "portable_manifests mismatch"):
+            smoke._assert_inventory(actual, expected, "npm package")
+
+    def test_agent_definition_missing_from_npm_fails_closed(self) -> None:
+        """T-160: a fork skill whose agent definition is not in files[] falls
+        back to the host's general-purpose child silently. The shipped
+        inventory must name the missing agents surface, not pass on version."""
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source"
+            shipped = Path(tmp) / "shipped"
+            _make_inventory_tree(source)
+            _make_inventory_tree(shipped, with_agents=False)
+            expected = smoke._inspect_npm_inventory(source)
+            actual = smoke._inspect_npm_inventory(shipped)
+
+        self.assertEqual(expected["agents"], ["ui-evaluator"])
+        self.assertEqual(actual["agents"], [])
+        with self.assertRaisesRegex(smoke.SmokeFailure, "agents mismatch"):
             smoke._assert_inventory(actual, expected, "npm package")
 
 
@@ -222,6 +252,13 @@ class PortableBundlePackagingTests(unittest.TestCase):
             set(),
             "plugin.json/mcp.json must be in package.json files[]",
         )
+
+    def test_package_tarball_ships_the_evaluator_agent(self) -> None:
+        # T-160: the fork target must exist in the published tarball, not only
+        # in the source tree — an omitted agents/ entry silently downgrades
+        # the isolated review to the host's general-purpose child.
+        membership = _npm_pack_files(ROOT / "packages" / "design-playbook", self.npm)
+        self.assertIn("agents/ui-evaluator.md", membership)
 
     def test_a_files_allowlist_without_the_bundle_is_red(self) -> None:
         # The counterexample: the same check over a package whose files[]

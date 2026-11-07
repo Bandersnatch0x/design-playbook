@@ -537,7 +537,17 @@ Record the skip in the skip list and show the run artifact index below as usual.
 `run_status` projects *not audited* for such a run.
 Never present the skeleton as an audit result.
 
-Otherwise invoke ui-evaluator.
+Otherwise invoke ui-evaluator through its fresh-context fork. This step is the parent: it resolves the target first, then delegates an explicit allowed set of absolute paths and never pastes its own conversation or verdict.
+
+Preparation: parent and child read only the target-resolution inputs and the allowed set — not review outputs, personal session history, memory, or proof/verification scripts.
+
+1. Resolve the target first: `project_target.py` precedes any project or run enumeration and any project file read. This plugin's own command and references may be read first; the experiment input and neighbouring runs or projects must not be read or scanned. Allowed set: the run root's observation artifacts; the resolved project's declared dependencies; the evaluator's bundled `references/`; the public rule registry index and its `rules/` part files. A relative reference that does not resolve uniquely inside that set stays `blocked`; the child must not search the worktree, the package, or a neighbouring run. File entries are exact paths; only a listed directory may be enumerated, and named files are read directly rather than through a parent-directory Glob.
+2. A first review excludes the review-output category — any `point-back.md`, `raw-child-final.txt`, or archived review conclusion, under any name or copy inside the run. A re-review is explicit and names only the history entries it may read (ledger rows, finding ids, closure records), never a prior verdict or coverage prose — except the formatting-only correction mode in step 4.
+3. Invoke the skill exactly once and keep that call's returned text unchanged. Save it as `.scratch/<run>/raw-child-final.txt`; run the existing report contract (six blocks, the run's sampling matrix, `g2_g4_pointback.py`) on it. If the return is incomplete or truncated, record `delivery: unavailable`, keep an existing `point-back.md` unchanged, and stop — no transcript search, no re-invocation, no second child.
+4. Only a complete return is published: the raw copy must equal `child_final.encode("utf-8")`; `point-back.md` must equal either that value or the declared slice from `## Evidence ledger` on. Trimming the raw copy, changing bytes inside the selected report, or changing its trailing newline is a writeback defect. Then run the existing machine validation and record its real result. **Formatting-only correction mode:** a complete current report plus the named machine format errors may return to the isolated evaluator as immutable source; every finding, evidence result, and the verdict stays unchanged and only the named structural fix may change. A truncated or incomplete return never enters this mode, and no report from another review may be used.
+5. Check the reported trace: the Limitations statement names the roots read. If it names a path outside the allowed set, or the host transcript shows one, record `artifact-only: unavailable` with the paths and do not present the verdict as isolated acceptance.
+6. If the host starts no fresh child context, report `isolation: unavailable` and route the review to a fresh session or a human; never run it inline and call it isolated.
+
 Issues must point back to a declaration.
 The report is the six-block `point-back.md` (ledger / findings / positive findings / coverage statement / limitations statement / verdict).
 Recirculated blockers route through the two-hop map (declaration artifact then R1-R5) and record the `invalidated:` evidence set.
