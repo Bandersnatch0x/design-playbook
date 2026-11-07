@@ -703,12 +703,14 @@ _AGENT_PLUGINS_MCP_SCHEMA = (
 _AGENT_PLUGINS_NAMESPACE = "io.github.bandersnatch0x.design-playbook"
 
 #: The fixed component paths the portable layout references, relative to the
-#: plugin root.  Without them the emitted manifest is metadata whose targets
-#: do not exist, which is why rendering refuses a target that lacks them.
-_AGENT_PLUGINS_REQUIRED_PATHS: tuple[str, ...] = (
-    "skills",
-    "mcp/preview/server.py",
-    "mcp/evidence/server.py",
+#: plugin root, with the filesystem kind each must resolve to.  A missing path
+#: makes the emitted manifest metadata whose targets do not exist; a present
+#: path of the wrong kind (a regular file named ``skills``, a directory named
+#: ``server.py``) is equally unusable, so both are refused.
+_AGENT_PLUGINS_REQUIRED_KINDS: tuple[tuple[str, str], ...] = (
+    ("skills", "directory"),
+    ("mcp/preview/server.py", "regular file"),
+    ("mcp/evidence/server.py", "regular file"),
 )
 
 def _agent_surface_entries() -> list[dict]:
@@ -791,18 +793,31 @@ def _check_agent_plugins_root(out_dir: Path) -> None:
 
     The manifest names no components — clients find them at conventions — so
     a render into a directory without ``skills/`` or the MCP server files
-    produces a manifest whose plugin has nothing to load.  Failing here keeps
-    "generated" from meaning "two JSON files that happen to parse".
+    produces a manifest whose plugin has nothing to load.  A present but
+    wrong-kind entry (a regular file named ``skills``, a directory named
+    ``server.py``) is just as unusable — the published format treats such a
+    fixed location as an invalid component — so both are refused.  The kind
+    check follows links, so a symlink resolving inside the root stays a
+    legitimate directory or file; containment itself is the client's §4.1
+    obligation, not a new prohibition here.
     """
-    missing = [
-        rel for rel in _AGENT_PLUGINS_REQUIRED_PATHS if not (out_dir / rel).exists()
-    ]
-    if missing:
+    problems: list[str] = []
+    for rel, expected in _AGENT_PLUGINS_REQUIRED_KINDS:
+        path = out_dir / rel
+        right_kind = path.is_dir() if expected == "directory" else path.is_file()
+        if right_kind:
+            continue
+        if path.exists():
+            problems.append(f"{rel} must be a {expected}")
+        else:
+            problems.append(f"{rel} is missing (expected a {expected})")
+    if problems:
         raise ValueError(
-            f"agent-plugins: {out_dir} is not a complete package root — missing "
-            f"{', '.join(missing)}; the portable layout references the package's "
-            "skills/ and mcp/*/server.py in place, so render into the package "
-            "root (or a copy of it)"
+            f"agent-plugins: {out_dir} is not a complete package root — "
+            + "; ".join(problems)
+            + "; the portable layout references the package's skills/ and "
+            "mcp/*/server.py in place, so render into the package root "
+            "(or a copy of it)"
         )
 
 

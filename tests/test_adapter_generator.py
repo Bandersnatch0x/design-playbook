@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -1375,6 +1376,83 @@ class AgentPluginsBundleTests(unittest.TestCase):
         message = str(caught.exception)
         self.assertIn("package root", message)
         self.assertIn("skills", message)
+
+    def _wrong_kind_root(
+        self, rel: str, *, as_directory: bool
+    ) -> Path:
+        """A temp root where *rel* has the wrong filesystem kind."""
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        self._complete_root(root)
+        path = root / rel
+        if path.is_dir():
+            shutil.rmtree(path)
+        elif path.exists():
+            path.unlink()
+        if as_directory:
+            path.mkdir(parents=True)
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("wrong kind", encoding="utf-8")
+        return root
+
+    def test_wrong_kind_skills_is_refused(self) -> None:
+        # §6.2: a fixed location with the wrong filesystem kind invalidates
+        # the component.  `exists()` alone accepted a regular file named
+        # `skills`, producing a manifest whose skills can never load.
+        root = self._wrong_kind_root("skills", as_directory=False)
+        with self.assertRaises(ValueError) as caught:
+            gen_mod.render("agent-plugins", out_dir=root, dry_run=False)
+        message = str(caught.exception)
+        self.assertIn("skills", message)
+        self.assertIn("directory", message)
+        self.assertFalse((root / "plugin.json").exists(), "refusal must write nothing")
+        self.assertFalse((root / "mcp.json").exists(), "refusal must write nothing")
+
+    def test_wrong_kind_preview_entry_is_refused(self) -> None:
+        root = self._wrong_kind_root("mcp/preview/server.py", as_directory=True)
+        with self.assertRaises(ValueError) as caught:
+            gen_mod.render("agent-plugins", out_dir=root, dry_run=True)
+        message = str(caught.exception)
+        self.assertIn("mcp/preview/server.py", message)
+        self.assertIn("regular file", message)
+
+    def test_wrong_kind_evidence_entry_is_refused(self) -> None:
+        root = self._wrong_kind_root("mcp/evidence/server.py", as_directory=True)
+        with self.assertRaises(ValueError) as caught:
+            gen_mod.render("agent-plugins", out_dir=root, dry_run=True)
+        message = str(caught.exception)
+        self.assertIn("mcp/evidence/server.py", message)
+        self.assertIn("regular file", message)
+
+    def test_valid_kinds_are_accepted_and_entries_are_usable(self) -> None:
+        # Green control for the wrong-kind counterexamples: a directory
+        # `skills` plus two regular-file entries (self.tmp from setUp) is a
+        # complete root, and the returned entries are the usable manifests.
+        _version, out, entries = gen_mod.render_entries("agent-plugins", self.tmp)
+        self.assertEqual(out, self.tmp)
+        self.assertEqual([rel for rel, _content in entries], ["plugin.json", "mcp.json"])
+        self.assertTrue((self.tmp / "skills").is_dir())
+        for rel in ("mcp/preview/server.py", "mcp/evidence/server.py"):
+            self.assertTrue((self.tmp / rel).is_file())
+
+    def test_contained_symlink_keeps_a_valid_kind(self) -> None:
+        # §4.1 allows links that resolve inside the plugin root; the kind
+        # check must not blanket-reject them (stat follows the link).
+        real = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, real, ignore_errors=True)
+        self._complete_root(real)
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        try:
+            os.symlink(real / "skills", root / "skills", target_is_directory=True)
+            for rel in ("mcp/preview/server.py", "mcp/evidence/server.py"):
+                (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                os.symlink(real / rel, root / rel)
+        except (OSError, NotImplementedError) as exc:
+            self.skipTest(f"symlink creation unavailable: {exc}")
+        _version, _out, entries = gen_mod.render_entries("agent-plugins", root)
+        self.assertEqual([rel for rel, _content in entries], ["plugin.json", "mcp.json"])
 
     def test_default_target_is_the_package_root(self) -> None:
         _version, out, _entries = gen_mod.render_entries("agent-plugins")
