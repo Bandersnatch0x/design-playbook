@@ -30,6 +30,12 @@ if str(_PKG_ROOT) not in sys.path:
 _COMPONENT_DIR = _PKG_ROOT / "mcp" / "evidence"
 
 from design_playbook.mcp.evidence import capture_runtime  # noqa: E402
+from design_playbook.mcp.evidence.capture_contract import (  # noqa: E402
+    DESIGN_AXES,
+)
+from design_playbook.mcp.evidence.page_defects import (  # noqa: E402
+    probe_render_tokens,
+)
 
 SERVER = _COMPONENT_DIR / "server.py"
 FIXTURE_HTML = """<!DOCTYPE html>
@@ -242,6 +248,13 @@ class EvidencePurePathTests(unittest.TestCase):
         self.assertIn("freeze", schema["properties"])
         # DEF-4: the dev-mode run-root escape hatch must be discoverable.
         self.assertIn("run_root", schema["properties"])
+        # T-155: the optional declared-design binding is advertised (composed
+        # from the contract fragment, not hand-written here).
+        self.assertEqual(
+            set(schema["properties"]["design"]["properties"]),
+            set(DESIGN_AXES),
+        )
+        self.assertNotIn("design", schema["required"])
 
     def test_declared_output_schema_matches_a_real_payload(self) -> None:
         # T-145: the advertised outputSchema must describe what the runtime
@@ -540,6 +553,33 @@ class _FakeBrowserAdapter:
         return self.observed_state
 
 
+class _FakeProbeAdapter:
+    """Probe seam with the real render-token parser and a scripted page.
+
+    Only ``page.evaluate`` is faked: ``probe_render_tokens`` builds the real
+    probe JS from whatever declaration the runtime threaded through, so a test
+    can read the JS back and see whether the binding arrived.
+    """
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+        self.probe_js: list[str] = []
+
+    def capture_and_probe(self, **request):
+        self.calls.append(request)
+        request["out_path"].parent.mkdir(parents=True, exist_ok=True)
+        request["out_path"].write_bytes(b"fake-artifact")
+
+        def evaluate(js: str) -> dict:
+            self.probe_js.append(js)
+            return {"findings": [], "undecidable": [], "distinctFontSizes": [16.0]}
+
+        return {
+            "observed_state": "rendered",
+            "render_tokens": probe_render_tokens(evaluate, request.get("design")),
+        }
+
+
 class EvidenceRuntimeTests(unittest.TestCase):
     """Capture behavior through the runtime interface and a fake adapter."""
 
@@ -597,6 +637,92 @@ class EvidenceRuntimeTests(unittest.TestCase):
             self.assertIn("artifact already exists", payload["error"])
             self.assertEqual(fake.calls, [])
             self.assertEqual(artifact.read_bytes(), b"original")
+
+    def test_declared_design_reaches_probe_and_sidecar(self) -> None:
+        declared = {
+            "fontSizes": [14, 16, 20, 24],
+            "colors": ["#1a1a1a", "#f5f5f5"],
+            "radii": [4, 8, 12, 20],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "evidence").mkdir()
+            fake = _FakeProbeAdapter()
+            with mock.patch.object(capture_runtime, "_run_root", return_value=root):
+                payload = capture_runtime.execute_capture_plan(
+                    _v1_capture_args(design=declared), fake
+                )
+
+            self.assertEqual(payload["result"], "captured", payload)
+            # The declaration travels verbatim, and the manifest-bound
+            # snapshot keeps the same value the probe ran against.
+            self.assertEqual(payload["request"]["design"], declared)
+            self.assertEqual(fake.calls[0]["design"], payload["request"]["design"])
+            # The JS the page was asked to evaluate carries the declaration.
+            self.assertEqual(len(fake.probe_js), 1)
+            self.assertIn('"rgb(26, 26, 26)"', fake.probe_js[0])
+
+            sidecar = json.loads(
+                (root / "evidence" / "x.probe.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(sidecar["design"], payload["request"]["design"])
+            self.assertEqual(sidecar["renderTokens"]["measurement_status"], "measured")
+            self.assertEqual(sidecar["renderTokens"]["measurement_error"], "")
+            self.assertEqual(sidecar["renderTokens"]["findings"], [])
+            self.assertEqual(sidecar["renderTokens"]["undecidable"], [])
+            self.assertEqual(sidecar["renderTokens"]["distinctFontSizes"], [16.0])
+
+    def test_unbound_capture_succeeds_with_every_axis_undecidable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "evidence").mkdir()
+            fake = _FakeProbeAdapter()
+            with mock.patch.object(capture_runtime, "_run_root", return_value=root):
+                payload = capture_runtime.execute_capture_plan(
+                    _v1_capture_args(), fake
+                )
+
+            # No binding is not a failure: the screenshot still lands.
+            self.assertEqual(payload["result"], "captured", payload)
+            self.assertNotIn("design", payload["request"])
+            self.assertNotIn("design", fake.calls[0])
+            sidecar = json.loads(
+                (root / "evidence" / "x.probe.json").read_text(encoding="utf-8")
+            )
+            self.assertNotIn("design", sidecar)
+            self.assertEqual(sidecar["renderTokens"]["measurement_status"], "measured")
+            # Measured, but every axis says why it could not be judged.
+            self.assertEqual(sidecar["renderTokens"]["findings"], [])
+            self.assertEqual(
+                [note["axis"] for note in sidecar["renderTokens"]["undecidable"]],
+                ["font-size", "radius", "color"],
+            )
+
+    def test_malformed_design_is_rejected_before_the_browser(self) -> None:
+        cases = (
+            (None, "design must be an object"),
+            ({"fontSizes": 16}, "design.fontSizes must be an array of literals"),
+            ({"colors": {"text": "#000"}}, "design.colors must be an array"),
+            ({"spacing": [8]}, "design.spacing is not a declared token axis"),
+        )
+        for design, expected in cases:
+            with self.subTest(design=design):
+                with tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    (root / "evidence").mkdir()
+                    fake = _FakeProbeAdapter()
+                    with mock.patch.object(
+                        capture_runtime, "_run_root", return_value=root
+                    ):
+                        payload = capture_runtime.execute_capture_plan(
+                            _v1_capture_args(design=design), fake
+                        )
+
+                    self.assertEqual(payload["result"], "failed")
+                    self.assertIn(expected, payload["error"])
+                    self.assertEqual(fake.calls, [])
+                    self.assertFalse((root / "evidence" / "x.png").exists())
+                    self.assertFalse((root / "evidence" / "x.probe.json").exists())
 
 
 # This module drives a real browser: the no-chromium CI job deselects it by marker.
@@ -710,6 +836,83 @@ class EvidenceCaptureTests(unittest.TestCase):
             kinds = {row["kind"] for row in sidecar["leaks"]}
             self.assertIn("undefined", kinds)
             self.assertEqual(sidecar["defects"]["measurement_status"], "measured")
+
+    # The declaration the two render-token fixtures are written against.
+    DECLARED = {
+        "fontSizes": [14, 16, 20, 24],
+        "colors": ["#f5f5f5", "#ffffff", "#1a1a1a", "#0b6bcb"],
+        "radii": [4, 8, 12, 20],
+    }
+    _RENDER_VIEWPORT = {
+        "width": 1280,
+        "height": 900,
+        "devicePixelRatio": 1.0,
+        "colorScheme": "light",
+    }
+
+    def _render_capture(self, fixture: str, **overrides) -> tuple[dict, dict]:
+        """Capture one render-token fixture through the public runtime entry."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "evidence").mkdir()
+            payload = self._capture(
+                root,
+                _v1_capture_args(
+                    url=(_COMPONENT_DIR / "fixtures" / fixture).resolve().as_uri(),
+                    state="ok",
+                    artifact_path="evidence/render.png",
+                    viewport=dict(self._RENDER_VIEWPORT),
+                    **overrides,
+                ),
+            )
+            self.assertEqual(payload["result"], "captured", payload)
+            sidecar = json.loads(
+                (root / "evidence" / "render.probe.json").read_text(encoding="utf-8")
+            )
+            return payload, sidecar
+
+    def test_declared_binding_legal_page_reports_no_findings(self) -> None:
+        payload, sidecar = self._render_capture(
+            "render-tokens-legal.html", design=self.DECLARED
+        )
+        # The declaration is bound on the request snapshot and the sidecar.
+        self.assertEqual(payload["request"]["design"], self.DECLARED)
+        self.assertEqual(sidecar["design"], self.DECLARED)
+        render = sidecar["renderTokens"]
+        self.assertEqual(render["measurement_status"], "measured", render)
+        self.assertEqual(render["undecidable"], [])
+        self.assertEqual(render["findings"], [])
+        self.assertEqual(render["distinctFontSizes"], [16.0, 20.0])
+
+    def test_declared_binding_deviation_reports_findings(self) -> None:
+        _payload, sidecar = self._render_capture(
+            "render-tokens-deviant.html", design=self.DECLARED
+        )
+        render = sidecar["renderTokens"]
+        self.assertEqual(render["measurement_status"], "measured", render)
+        self.assertEqual(
+            {(row["axis"], row["kind"], row["value"]) for row in render["findings"]},
+            {
+                ("font-size", "off-scale-size", "17"),
+                ("color", "off-palette-color", "rgb(0, 0, 238)"),
+                ("radius", "inner-radius-not-concentric", "12"),
+                ("radius", "inner-radius-exceeds-outer", "20"),
+            },
+        )
+
+    def test_unbound_capture_is_undecidable_not_clean(self) -> None:
+        # The same legal page, captured without a declaration: the screenshot
+        # still lands, but an empty finding list is explicitly not conformance.
+        payload, sidecar = self._render_capture("render-tokens-legal.html")
+        self.assertNotIn("design", payload["request"])
+        self.assertNotIn("design", sidecar)
+        render = sidecar["renderTokens"]
+        self.assertEqual(render["measurement_status"], "measured", render)
+        self.assertEqual(render["findings"], [])
+        self.assertEqual(
+            sorted(note["axis"] for note in render["undecidable"]),
+            ["color", "font-size", "radius"],
+        )
 
     def test_async_init_wait_for_state_reaches_ok(self) -> None:
         page = _COMPONENT_DIR / "fixtures" / "async-init.html"

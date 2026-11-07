@@ -412,6 +412,15 @@ After craft, probe MCP `tools/list` for `execute_capture_plan`.
      Optional `freeze` defaults to `{enabled: true, waitFonts: true, networkIdle: false}`, freeze is on by default in observe*.
      Missing or unknown schema versions fail closed with a recapture instruction.
      There is no dual-read for unversioned evidence.
+     Optional `design` binds the capture to the **caller's** declared token scales: `fontSizes`, `radii` (px numbers or `"16px"` strings),
+     and `colors` (hex or `rgb()` literals), each an array.
+     Omit the key to declare no binding; an explicit `null`, a scalar or object axis, an unknown axis, or an object where an axis belongs
+     fails closed at the contract boundary **before the browser starts**.
+     A partial declaration leaves the omitted axes undecidable.
+     The declaration is the caller's, not a confirmed user decision: the runtime does not search `DESIGN.md`, read a path, or fetch a URL,
+     and does not claim user confirmation.
+     Token references and relative units are not resolved at the boundary; an unreadable literal inside an array is the probe's
+     `undecidable` fact, never a silent clean axis and never a boundary error.
      The provider returns `{artifact, observed_state, result, error, written_path, request}` and never sees the criterion.
      Prefer `written_path` (absolute) when locating the file.
      If it points outside `.scratch/<run>/`, recapture with the optional `run_root` argument (absolute run root, this call only) or fix `DESIGN_PLAYBOOK_RUN_ROOT`
@@ -424,13 +433,17 @@ After craft, probe MCP `tools/list` for `execute_capture_plan`.
      Dark / 压力包 are not default seeds.
      Sidecar probe: a screenshot capture that the adapter can probe also writes `<stem>.probe.json` (`page-probe/v1`: top-level `layout` / `leaks`
      / `tapFails` / `consoleErrors` plus `layout|defects|console.measurement_status` and `measurement_error`), facts, not a judgment.
+     A bound capture also gains the `renderTokens` face (`findings` / `undecidable` / `distinctFontSizes` / `measurement_status` /
+     `measurement_error`) and echoes the `design` it ran against; the key is **absent** (not `null`) when unbound.
+     A provider that does not implement the render-token face leaves it `unmeasured` — blocked evidence, never a clean pass.
      G6 binds only `manifest.artifact` (evidence/-relative leaf, no `evidence/` prefix) to the ledger `observed` leading token (`evidence/<leaf>`).
      `probe_artifact` is not a binding key.
      When the L6 Then is a layout / leak / tap-target / console fact, the primary artifact is the probe JSON leaf.
      The originating screenshot call stays in `capture` (`type`/`url`/`state`/`actions`/`artifact_path`) and Provider
-     `request` (schemaVersion, viewport, and freeze only).
+     `request` (schemaVersion, viewport, freeze, and the optional `design` the capture was bound to; store the complete request snapshot).
      One capture may append one manifest line per criterion.
-     Evaluator must read `measurement_status` on the relevant face before interpreting arrays; `blocked`/`unmeasured` is not a clean zero-hit.
+     Evaluator must read `measurement_status` on the relevant face (including `renderTokens`) before interpreting arrays; `blocked`/`unmeasured`
+     is not a clean zero-hit, and an empty `renderTokens.findings` with a non-empty `undecidable` is not a pass.
      Session: optional `storage_state` is a run-root-relative Playwright JSON path kept outside `evidence/` and out of `run-handoff`.
      Record that path under `capture.storage_state` (see `mcp/evidence/capture_runtime.py`).
      Never copy file bytes, cookies, or tokens into manifest, logs, or diagnostics.

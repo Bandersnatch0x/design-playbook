@@ -51,6 +51,25 @@
             "networkIdle": {"type": "boolean"}
           },
           "required": ["enabled", "waitFonts", "networkIdle"]
+        },
+        "design": {
+          "type": "object",
+          "description": "Optional declared design tokens the screenshot probe compared rendered computed values against: three array-of-literal axes. Absent means the capture declared no token binding, so every render-token axis is reported undecidable in the sidecar rather than clean; a present-and-unreadable binding fails the capture before the browser starts.",
+          "properties": {
+            "fontSizes": {
+              "type": "array",
+              "description": "Declared type scale: px numbers or '16px' strings."
+            },
+            "colors": {
+              "type": "array",
+              "description": "Declared palette: hex or rgb() color literals."
+            },
+            "radii": {
+              "type": "array",
+              "description": "Declared radius scale: px numbers or '12px' strings."
+            }
+          },
+          "additionalProperties": false
         }
       },
       "required": ["schemaVersion", "viewport", "freeze"]

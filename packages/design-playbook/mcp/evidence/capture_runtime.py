@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import math
 import os
+from collections.abc import Mapping
 from contextvars import ContextVar
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Protocol
@@ -36,6 +37,7 @@ from design_playbook.mcp.evidence.disclosure import (
 from design_playbook.mcp.evidence.page_defects import (
     PROBE_SCHEMA,
     probe_defects,
+    probe_render_tokens,
 )
 from design_playbook.mcp.util import log as _log
 
@@ -51,6 +53,7 @@ ALLOWED_ARGUMENTS = frozenset(
         "overwrite",
         "viewport",
         "freeze",
+        "design",
         "storage_state",
         "run_root",
     }
@@ -86,8 +89,16 @@ class ProbeBrowserAdapter(Protocol):
         out_path: Path,
         viewport: dict[str, Any],
         freeze: dict[str, Any],
+        design: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Capture an artifact and evaluate the layout probe before teardown."""
+        """Capture an artifact and evaluate the page probes before teardown.
+
+        ``design`` is the declared token binding, passed only when the capture
+        contract carried one. An unbound capture never passes the keyword, so a
+        pre-T-155 adapter's plain probe path stays source-compatible; a bound
+        capture against such an adapter fails closed with ``TypeError``
+        (surfaced as ``result: failed``) rather than running unbound.
+        """
 
 
 def _failed(
@@ -202,11 +213,40 @@ def _console_face(probed: dict[str, Any]) -> tuple[list[str], dict[str, str]]:
     return rows, _measurement_meta("measured", "", missing=missing)
 
 
-def _write_probe_sidecar(probe_rel: str, probed: dict[str, Any]) -> str:
+def _render_token_face(
+    probed: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, str]], list[float], dict[str, str]]:
+    """Map the adapter's render-token facts to sidecar rows + measurement meta.
+
+    ``undecidable`` travels with the findings so an empty finding list can
+    never be read as conformance: an unbound capture names all three axes here.
+    """
+    facts = probed.get("render_tokens")
+    missing = "render token probe not returned"
+    if facts is None:
+        return [], [], [], _measurement_meta(None, None, missing=missing)
+    return (
+        list(getattr(facts, "findings", ()) or ()),
+        list(getattr(facts, "undecidable", ()) or ()),
+        list(getattr(facts, "distinct_font_sizes", ()) or ()),
+        _measurement_meta(
+            getattr(facts, "measurement_status", "unmeasured"),
+            getattr(facts, "measurement_error", ""),
+            missing=missing,
+        ),
+    )
+
+
+def _write_probe_sidecar(
+    probe_rel: str,
+    probed: dict[str, Any],
+    design: Mapping[str, Any] | None = None,
+) -> str:
     """Write page-probe/v1 JSON next to a screenshot.
 
     Path containment failures raise ValueError so a probing capture cannot
-    report success without a sidecar.
+    report success without a sidecar. ``design`` is the declaration the probe
+    ran against, echoed verbatim; it is absent (not null) when unbound.
     """
     out_path = _resolve_artifact_path(probe_rel)
     metrics = probed.get("metrics")
@@ -243,6 +283,9 @@ def _write_probe_sidecar(probe_rel: str, probed: dict[str, Any]) -> str:
             missing="defect probe not returned",
         )
     console_rows, console_meta = _console_face(probed)
+    render_findings, render_notes, render_sizes, render_meta = _render_token_face(
+        probed
+    )
     payload = {
         "schema": PROBE_SCHEMA,
         "layout": layout,
@@ -251,7 +294,15 @@ def _write_probe_sidecar(probe_rel: str, probed: dict[str, Any]) -> str:
         "consoleErrors": console_rows,
         "defects": defects_meta,
         "console": console_meta,
+        "renderTokens": {
+            "findings": render_findings,
+            "undecidable": render_notes,
+            "distinctFontSizes": render_sizes,
+            **render_meta,
+        },
     }
+    if design is not None:
+        payload["design"] = design
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2),
@@ -704,13 +755,15 @@ class PlaywrightBrowserAdapter:
         freeze: dict[str, Any],
         probe: bool,
         storage_state: str | None = None,
+        design: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Single Playwright capture path shared by the two adapter seams.
 
         ``probe=False`` stops after the observed state (the plain
         :class:`BrowserAdapter` contract); ``probe=True`` additionally
-        evaluates layout and defect probes on the same page before teardown
-        so the screenshot and its sidecar share one browser pass.
+        evaluates the layout, defect and rendered-token probes on the same page
+        before teardown so the screenshot and its sidecar share one browser
+        pass. ``design`` is the declared token binding (None = unbound).
         """
         with self._sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
@@ -763,10 +816,12 @@ class PlaywrightBrowserAdapter:
                 raw = page.evaluate(LAYOUT_PROBE_JS)
                 metrics = probe_layout(lambda _js: raw)
                 defects = probe_defects(page.evaluate)
+                render_tokens = probe_render_tokens(page.evaluate, design)
                 return {
                     "observed_state": observed,
                     "metrics": metrics,
                     "defects": defects,
+                    "render_tokens": render_tokens,
                     "console_errors": console_errors,
                 }
             finally:
@@ -805,6 +860,7 @@ class PlaywrightBrowserAdapter:
         viewport: dict[str, Any],
         freeze: dict[str, Any],
         storage_state: str | None = None,
+        design: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Capture and probe the same page before closing its browser."""
         return self._capture_page(
@@ -816,6 +872,7 @@ class PlaywrightBrowserAdapter:
             freeze=freeze,
             probe=True,
             storage_state=storage_state,
+            design=design,
         )
 
 
@@ -1000,11 +1057,19 @@ def _capture(
     }
     if storage_state_path:
         capture_kwargs["storage_state"] = storage_state_path
+    # The declared token binding rides the same request; it is offered to the
+    # probe adapter only when bound. An unbound capture never shows a pre-T-155
+    # adapter an unknown keyword; a bound one against an old signature fails
+    # closed (TypeError -> result: failed) instead of running unbound.
+    design = request.get("design")
+    probe_kwargs = dict(capture_kwargs)
+    if design is not None:
+        probe_kwargs["design"] = design
     probe_payload: dict[str, Any] | None = None
     try:
         probe_fn = getattr(browser_adapter, "capture_and_probe", None)
         if cap_type == "screenshot" and callable(probe_fn):
-            probe_payload = probe_fn(**capture_kwargs)
+            probe_payload = probe_fn(**probe_kwargs)
             observed = str(probe_payload.get("observed_state") or "unknown")
         else:
             observed = browser_adapter.capture(**capture_kwargs)
@@ -1041,7 +1106,7 @@ def _capture(
         # info and not raw exception text. No clean sidecar is written;
         # the failure carries written_path, the non-secret absolute
         # artifact path.
-            wrote_probe = _write_probe_sidecar(probe_rel, probe_payload)
+            wrote_probe = _write_probe_sidecar(probe_rel, probe_payload, design)
         except ValueError as exc:
             return _failed(
                 rel,
