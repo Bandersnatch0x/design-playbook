@@ -85,7 +85,8 @@ or artifact I/O errors. JSON mode projects the same findings as a list.
 In-process consumers construct ``RunInputs`` and call ``run(inputs)``; their
 defaults stay legacy so existing projections (run_status, aggregate) keep
 their published meaning. Only the CLI default changed; a caller that wants
-the complete profile requirement sets ``RunInputs.require_run_profile``.
+the complete profile requirement sets ``RunInputs.require_run_profile`` and,
+for repair-proof obligations, ``RunInputs.require_repair_evidence``.
 
 Strict quality mode (CLI default, fail closed):
   --require-preview   fail when preview did not occur (G5 must fire)
@@ -99,6 +100,21 @@ A bare invocation (no strictness flag at all) behaves as --strict. Passing
 one --require-* flag explicitly keeps its historical meaning: only that
 check engages (so --require-preview alone does not inspect the audit
 marker).
+
+Repair evidence (T-152 / T-159, ADR-0045 2026-11-07 amendment):
+  Complete acceptance (bare or --strict) derives one proof obligation from
+  every blocking finding that exactly one closure claims to close. The
+  finding must name its L6 criteria (`criteria:`), the spec must declare a
+  known proof type for each, visible-state (screenshot) repairs must carry one
+  named before/after pair belonging to that closure, and the criterion's
+  current ledger row must pass. Before must be the finding's own failure
+  artifact; after must be the exact artifact the current ledger row observes.
+  --legacy and explicit --require-* selections keep the structural reading:
+  an annotation that exists is validated through the same G6 owner, but no
+  pair or proof-type obligation is invented and the run must not be reported
+  as complete acceptance. Artifact bytes are frozen during the explicit
+  snapshot capture; supplying a snapshot without those facts fails as
+  unavailable rather than re-reading disk.
 
 Run profile (ADR-0029 D2):
   Every mode reads one plan location: <run-root>/plan.md when --run-root is
@@ -149,7 +165,12 @@ from design_playbook.scripts._diagnostics import (  # noqa: E402
 
 # Gate modules own the individual rule sets (ADR-0023): the orchestrator
 # below only wires artifact paths, strict-mode flags, and finding order.
-from design_playbook.scripts.g1_spec import _l6_items, check_spec  # noqa: E402
+from design_playbook.scripts.g1_spec import (  # noqa: E402
+    SpecificationProjectionError,
+    _l6_items,
+    check_spec,
+    project_proof_requirements,
+)
 from design_playbook.scripts.g2_g4_pointback import check_pointback  # noqa: E402
 
 # Audit-preferences forgery boundary (ADR-0033 D12, issue #67): the marker
@@ -312,6 +333,10 @@ class RunInputs:
     # in-process, selective, legacy, status and aggregate callers read-only;
     # completeness is never inferred from arbitrary --require-* combinations.
     require_baseline_verification: bool = False
+    # Complete acceptance derives repair-proof obligations from each uniquely
+    # closed blocking finding. Set from the same complete-profile value; an
+    # explicit --require-* selection keeps its narrower structural reading.
+    require_repair_evidence: bool = False
 
 
 BASELINE_FINDINGS_SCHEMA = "design-baseline-findings/v1"
@@ -548,6 +573,20 @@ def _baseline_acceptance_findings(
     return errs, warns
 
 
+def _proof_requirements(spec_text: str):
+    """G1 proof requirements, or none when the spec cannot be projected.
+
+    A malformed spec already fails G1 with named findings; this projection
+    must not turn that into a traceback. No projection means no known proof
+    type, so a complete-acceptance repair obligation stays blocked rather
+    than guessing.
+    """
+    try:
+        return project_proof_requirements(spec_text)
+    except SpecificationProjectionError:
+        return ()
+
+
 def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
     """Return ``(errors, warnings)``. Errors fail the run; warnings do not."""
     spec_path = inputs.spec_path
@@ -621,12 +660,20 @@ def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
     # Fires only when the report carries round annotations or a close_reason
     # (legacy reports without them stay silent).
     errs += check_rounds(pointback_text, verdict_facts=facts.verdict)
-    # G4 repair evidence (T-152): a closure that declares repair-evidence:
-    # must bind both halves (failure state + repaired state) to the same
-    # criterion and viewport in the evidence manifest. Fires only when the
-    # annotation is present (legacy reports without it stay silent), and an
-    # unpaired closure is blocked proof, so the verdict stays Recirculate.
-    errs += check_repair_evidence(pointback_text, entries)
+    # G4 repair evidence (T-152 / T-159): complete acceptance derives proof
+    # obligations from each uniquely closed blocking finding - declared
+    # criteria, known proof type, one named pair for visible-state repairs,
+    # and a passing current retest. Legacy and explicit --require-* selections
+    # validate annotations that exist without inventing new obligations.
+    # Every reference resolves through the one G6 owner over frozen facts.
+    errs += check_repair_evidence(
+        pointback_text,
+        entries,
+        requirements=_proof_requirements(spec_text),
+        ledger=facts.ledger,
+        artifact_facts=facts.evidence_artifacts,
+        require_complete=inputs.require_repair_evidence,
+    )
     # G11 (vNext S1): six-block reports must carry a Coverage statement with
     # the exhaustive status + explicit unreviewed list (existence only).
     errs += check_coverage(pointback_text, required=require_coverage)
@@ -689,6 +736,12 @@ def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
     errs += check_evidence(
         pointback_text, len(_l6_items(spec_text)), ed, rr,
         observed_rows=observed_rows, entries=entries,
+        # A supplied snapshot is never re-read: ``None`` (facts not captured)
+        # becomes an explicit empty tuple, so every needed reference reports
+        # G6.artifact_facts_unavailable instead of falling back to disk.
+        artifact_facts=(
+            facts.evidence_artifacts
+            if facts.evidence_artifacts is not None else ()),
     )
     method_rows = [
         (values[0].split()[0], row.values("result")[0], row.artifact_token)
@@ -960,6 +1013,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     )
     args.require_run_profile = complete_profile
     args.require_baseline_verification = complete_profile
+    args.require_repair_evidence = complete_profile
     if args.strict:
         # --strict keeps its historical shorthand meaning.
         args.require_preview = True
@@ -1055,6 +1109,7 @@ def main(argv: list[str]) -> int:
             run_facts=facts,
             require_run_profile=args.require_run_profile,
             require_baseline_verification=args.require_baseline_verification,
+            require_repair_evidence=args.require_repair_evidence,
         ))
     except (OSError, UnicodeError) as exc:
         if fmt == "json":

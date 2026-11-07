@@ -14,7 +14,6 @@ from design_playbook.mcp.evidence.containment import (
     REASON_NOT_REGULAR_FILE,
     read_under,
 )
-from design_playbook.mcp.evidence.capture_contract import validate_capture_snapshot
 from design_playbook.mcp.evidence.path_syntax import probe_sidecar_rel
 from design_playbook.mcp.run_console.repair_packet import derive_repair_packet
 from design_playbook.mcp.run_console.snapshot_builder import build_snapshot, SnapshotBuildError
@@ -25,7 +24,9 @@ from design_playbook.scripts.g1_spec import (
     project_scope_links,
 )
 from design_playbook.scripts.g6_evidence import (
-    bound_capture_request, check_evidence, select_bound_entry,
+    PROOF_CAPTURE_TYPES,
+    EvidenceReference,
+    validate_references,
 )
 from design_playbook.scripts.g11_coverage import check_sampling_matrix, project_sampling
 from design_playbook.scripts.pointback_projection import (
@@ -35,11 +36,6 @@ from design_playbook.scripts.run_facts import capture_run_facts
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 REPORT_SCHEMA_VERSION = 1
-PROOF_CAPTURE_TYPES = {
-    "screenshot": "screenshot",
-    "a11y_tree": "a11y tree",
-    "interaction_trace": "interaction trace",
-}
 
 
 class FrontendReviewError(ValueError):
@@ -154,31 +150,59 @@ def _binding_result(integrity: str, reasons: list[str], source: str | None = Non
             "source": source, "content_hash": content_hash}
 
 
-def _binding(root: Path, criterion: str, token: str, entries: list[dict],
-             expected_count: int, required: dict) -> dict:
-    errors = check_evidence("", expected_count, root / "evidence", root,
-                            observed_rows=[(criterion, token)], entries=entries)
-    reasons = [error.rule_id for error in errors]
-    leaf = token[len("evidence/"):]
-    try:
-        entry = select_bound_entry(entries, criterion, leaf)
-    except ValueError as unorderable:
-        # Selector-owned reason code: a malformed or offset-less ts
-        # (``invalid-binding-timestamp``) is not the same defect as two
-        # distinct entries sharing the latest instant.
-        return _binding_result("inconsistent", [str(unorderable)])
+_G6_REASON = {
+    "artifact_missing": "G6.artifact_missing",
+    "escape": "G6.escape",
+    "artifact_unreadable": "G6.artifact_unreadable",
+    "artifact_facts_unavailable": "G6.artifact_facts_unavailable",
+    "reference_prefix": "G6.reference_prefix",
+    "unknown_criterion": "G6.unknown_criterion",
+    "no_binding": "G6.no_binding",
+    "capture_schema": "G6.capture_schema",
+    "capture_viewport": "G6.capture_viewport",
+    "capture_viewport_shape": "G6.capture_viewport_shape",
+    "capture_freeze": "G6.capture_freeze",
+    "capture_design_shape": "capture.bad_design_shape",
+    "capture_contract": "capture.contract",
+    "proof_type": "proof-type-mismatch",
+    "artifact_hash_mismatch": "artifact-hash-mismatch",
+    "artifact_hash_malformed": "artifact-hash-mismatch",
+    "artifact_hash_unavailable": "artifact-hash-unavailable",
+}
+
+
+def _binding(criterion: str, token: str, entries: list[dict],
+             expected_count: int, required: dict, facts) -> dict:
+    """One binding shape for every outcome; unbound entries carry explicit nulls.
+
+    The containment, binding, capture-contract, proof-type, and declared-hash
+    parts all come from the one G6 ``validate_references`` owner over the
+    snapshot's frozen artifact facts. This report keeps only its own
+    applicability/status projection (state, primary-artifact match, spec
+    viewport) and the integrity classification.
+    """
+    proof = required["proof"]
+    binding = validate_references(
+        [EvidenceReference(
+            criterion, token,
+            proof=proof if proof in PROOF_CAPTURE_TYPES else None)],
+        entries,
+        {f"L6.{n}" for n in range(1, expected_count + 1)},
+        facts.evidence_artifacts,
+    )[0]
+    for diagnostic in binding.diagnostics:
+        if diagnostic.code == "binding_conflict":
+            # Selector-owned reason code: a malformed or offset-less ts
+            # (``invalid-binding-timestamp``) is not the same defect as two
+            # distinct entries sharing the latest instant.
+            return _binding_result("inconsistent", [diagnostic.detail])
+    reasons = [_G6_REASON.get(d.code, "G6." + d.code)
+               for d in binding.diagnostics]
+    entry = binding.entry
     if entry is None:
         return _binding_result("missing", reasons or ["required-proof-missing"])
-    resolved = read_under(root, token)
-    if not resolved.ok:
-        return _binding_result("missing", reasons or ["artifact-unavailable"])
-    request = bound_capture_request(entry)
-    reasons += ["capture." + fact.code for fact in validate_capture_snapshot(request)]
     capture = entry.get("capture")
     if isinstance(capture, dict):
-        expected_type = PROOF_CAPTURE_TYPES.get(required["proof"])
-        if expected_type is not None and capture.get("type") != expected_type:
-            reasons.append("proof-type-mismatch")
         if required["state"] is not None and capture.get("state") != required["state"]:
             reasons.append("state-mismatch")
         artifact_path = capture.get("artifact_path")
@@ -189,20 +213,19 @@ def _binding(root: Path, criterion: str, token: str, entries: list[dict],
             reasons.append("capture-artifact-mismatch")
     else:
         reasons.append("capture-metadata-unavailable")
-    viewport = request.get("viewport")
+    viewport = binding.viewport
     if required["viewport"] and (not isinstance(viewport, dict) or any(
             viewport.get(key) != value for key, value in required["viewport"].items())):
         reasons.append("viewport-mismatch")
-    try:
-        actual = hashlib.sha256(resolved.path.read_bytes()).hexdigest()
-    except OSError:
+    if binding.sha256 is None:
         return _binding_result("missing", reasons + ["artifact-unreadable"])
-    expected = entry.get("sha256")
-    if expected != actual:
-        reasons.append("artifact-hash-mismatch" if expected else "artifact-hash-unavailable")
-    integrity = "stale" if "artifact-hash-mismatch" in reasons else "invalid" if reasons else "complete"
+    if entry.get("sha256") is None:
+        reasons.append("artifact-hash-unavailable")
+    integrity = ("stale" if "artifact-hash-mismatch" in reasons
+                 else "invalid" if reasons else "complete")
     return _binding_result(integrity, sorted(set(reasons)),
-                           f"evidence/manifest.jsonl#{criterion}", "sha256:" + actual)
+                           f"evidence/manifest.jsonl#{criterion}",
+                           "sha256:" + binding.sha256)
 
 
 def _evidence_gaps(root: Path, requirements, filename: str, digest: str | None,
@@ -234,7 +257,8 @@ def _evidence_gaps(root: Path, requirements, filename: str, digest: str | None,
                   sorted({"evidence/" + entry["artifact"] for entry in entries
                           if entry.get("criterion") == requirement.criterion
                           and isinstance(entry.get("artifact"), str)}))
-        bindings = [_binding(root, requirement.criterion, token, entries, len(ids), required)
+        bindings = [_binding(requirement.criterion, token, entries,
+                             len(ids), required, facts)
                     for token in tokens]
         complete = any(item["integrity"] == "complete" for item in bindings)
         availability = requirement.availability

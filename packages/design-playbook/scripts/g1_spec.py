@@ -74,7 +74,14 @@ class ScopeLink:
 
 @dataclass(frozen=True)
 class ProofRequirement:
-    """Optional precise evidence seed; unparsed prose remains unavailable."""
+    """Optional precise evidence seed; unparsed prose remains unavailable.
+
+    ``proof`` is one exact token from the seed grammar: a visual capture type
+    (``screenshot`` / ``a11y_tree`` / ``interaction_trace``) or a declared
+    nonvisual role (``automated_check`` / ``declaration_coverage``). The
+    nonvisual tokens select existing evaluator evidence duties; they add no
+    MCP capture type and no manifest protocol.
+    """
 
     criterion: str
     availability: str
@@ -83,25 +90,40 @@ class ProofRequirement:
     viewport: tuple[int, int] | None = None
 
 
+PROOF_TYPES = (
+    "screenshot",
+    "a11y_tree",
+    "interaction_trace",
+    "automated_check",
+    "declaration_coverage",
+)
+_PROOF_SEED = re.compile(
+    r"^[ \t]*(?:[-*][ \t]+)?Required evidence:\s*([^\r\n]+)", re.M)
+_PROOF_VALUE = re.compile(
+    r"(" + "|".join(PROOF_TYPES) + r")"
+    r"(?:; state=([\w-]{1,64}))?"
+    r"(?:; viewport=([1-9]\d{0,4})x([1-9]\d{0,4}))?")
+
+
 def project_proof_requirements(text: str) -> tuple[ProofRequirement, ...]:
     specification = project_specification(text)
     requirements = []
     for criterion, item in zip(specification.criteria, _l6_items(text)):
-        seeds = re.findall(r"^[ \t]*Required evidence:\s*([^\r\n]+)", item, re.M)
+        # The canonical spec template writes the seed as an indented bullet
+        # under the L6 criterion; existing reports may write the plain form.
+        seeds = _PROOF_SEED.findall(item)
         if len(seeds) != 1:
             requirements.append(ProofRequirement(
                 criterion.criterion_id, "inconsistent" if seeds else "unknown"))
             continue
-        match = re.fullmatch(
-            r"(screenshot|a11y_tree|interaction_trace)"
-            r"(?:; state=([\w-]{1,64}))?"
-            r"(?:; viewport=([1-9]\d{0,4})x([1-9]\d{0,4}))?", seeds[0].strip())
+        match = _PROOF_VALUE.fullmatch(seeds[0].strip())
         if match is None:
             requirements.append(ProofRequirement(criterion.criterion_id, "unknown"))
             continue
         proof, state, width, height = match.groups()
         viewport = (int(width), int(height)) if width and height else None
-        requirements.append(ProofRequirement(criterion.criterion_id, "known", proof, state, viewport))
+        requirements.append(ProofRequirement(
+            criterion.criterion_id, "known", proof, state, viewport))
     return tuple(requirements)
 
 

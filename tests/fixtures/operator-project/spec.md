@@ -52,4 +52,5 @@ and review inputs in this fixture are simulated, not external trial evidence.
 
 - Given pending tasks When the first task is completed Then its state and summary update (path: P1).
 - Given tasks When clear all is requested Then cancel preserves tasks and confirmation leads to an empty state with a working CTA (path: P2).
+  - Required evidence: screenshot; state=confirmation; viewport=1280x800
 - Given a sync error When retry is selected Then the error disappears and tasks remain usable (path: P3).

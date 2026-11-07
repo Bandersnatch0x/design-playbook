@@ -587,6 +587,32 @@ and a two-axis review. The spend gate above otherwise remains in force, and no
 item here changes the preview floor, the evidence binding rule, or the
 confirmation authority.
 
+## Amendment (2026-11-07): repaired-blocker evidence enforcement
+
+The maintainer authorized the remaining research backlog on 2026-11-06, which
+names repair claims requiring paired before/after evidence (I8). This amendment
+records the resulting acceptance semantics so later work does not relitigate
+them item by item:
+
+> Complete acceptance derives proof obligations from each uniquely closed
+> blocking finding. A finding names its declared L6 criteria; unknown
+> association or proof type is blocked, never an implicit legacy exemption.
+> Visible-state repairs require a named before/after pair belonging to that
+> closure; other proof types retain their declared retest obligations and do
+> not require screenshots. Evidence references share the existing G6 binding
+> and captured-file-integrity owner. Declared hashes must match captured bytes;
+> required repair pairs must carry hashes. Unchanged image bytes establish
+> insufficient visual change evidence, not functional failure; changed bytes do
+> not establish criterion success. Explicit legacy and selective validation
+> retain structural scope. The finding `criteria:` field and precise nonvisual
+> proof tokens are part of this amendment, not retroactive claims about older
+> reports.
+
+The amendment adds no capture type, no manifest protocol, and no second
+integrity authority. Authorization to implement is not a completion claim:
+delivery still requires the ticket's full repository gates, unweakened
+assertions, and a two-axis review.
+
 ## Release authorization
 
 The gate above requires a separate maintainer decision for each release. The

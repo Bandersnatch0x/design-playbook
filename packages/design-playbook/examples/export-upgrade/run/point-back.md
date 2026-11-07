@@ -38,6 +38,7 @@ severity: S3
 track:    interaction
 confidence: high
 disposition: blocking
+criteria: L6.2
 evidence:  evidence/L6.2-return-first.json（首轮返回后状态区为空）
 dd:       DD-0003
 ```
@@ -92,3 +93,4 @@ invalidated:
 **Pass.**
 
 - closes: 切页返回后全局状态区清空，导出结果不可获知 -> recirculate -> DD-0004 supersedes DD-0003 -> Re-Fill + 失效集重评 -> 0 blocking
+  repair-evidence: criterion=L6.2 before=evidence/L6.2-return-first.json after=evidence/L6.2-return-trace.json

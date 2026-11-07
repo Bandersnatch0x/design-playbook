@@ -64,5 +64,7 @@ L4 declares control behavior only; reuse / no-internal-change constraints must n
 ## L6 验收标准
 
 - Given 模拟运行进行中 When 离开并返回队列页 Then 全局控制台运行 feed 恢复显示且状态可续读（证据：交互记录）(path: P1)
+  - Required evidence: interaction_trace; viewport=1280x800
 - Given 多运行并发 When 在全局控制台触发全局暂停 Then 进行中运行进入 paused 且控制台持续反馈（证据：交互记录）(path: P2)
+  - Required evidence: interaction_trace; viewport=1280x800
 - Given 控制台 feed 达到上限 When 新运行入队 Then 最旧完成条目让位且失败项不静默丢失（证据：交互记录）(path: P3)

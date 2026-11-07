@@ -28,7 +28,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from design_playbook.mcp.evidence.containment import read_artifact
 from design_playbook.mcp.run_console.contract import (
     SNAPSHOT_VERSION,
     validate_snapshot,
@@ -51,14 +50,21 @@ from design_playbook.scripts.g1_spec import (
     SpecificationProjectionError,
     project_specification,
 )
-from design_playbook.scripts.g6_evidence import check_evidence
+from design_playbook.scripts.g6_evidence import (
+    EvidenceReference,
+    validate_references,
+)
 from design_playbook.scripts.pointback_projection import (
     NonKnownFinding,
     PointBackProjectionError,
     VerdictDisposition,
     project_pointback,
 )
-from design_playbook.scripts.run_facts import RunFacts, capture_run_facts
+from design_playbook.scripts.run_facts import (
+    STATE_MISSING,
+    RunFacts,
+    capture_run_facts,
+)
 from design_playbook.scripts.run_metadata import (
     PackageMetadataProjection,
     project_limitations,
@@ -116,11 +122,11 @@ _RETAINED_FIELDS = (
     "freshness",
 )
 
-_UNBINDABLE_RULES = frozenset(
-    {"G6.artifact_missing", "G6.escape", "G6.no_binding", "G6.unknown_criterion",
-     "G6.binding_conflict"}
-)
-_DEGRADING_RULES = frozenset({"G6.artifact_missing", "G6.escape"})
+# Binding availability is the shared G6 validation result itself: any G6
+# finding for this row means the artifact is not a publishable binding, and a
+# declared binding that cannot be established degrades the manifest source.
+# Keeping a hand-maintained subset of failure codes here is exactly the drift
+# that let a stale declared digest stay published.
 
 # Fixed source refs of the fifteen-key registry (parity section 2).
 _REF_SELECTED_RUN = "source.selected-run"
@@ -229,10 +235,6 @@ class _DraftAssertion:
 
 def _digest_text(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def _digest_bytes(data: bytes) -> str:
-    return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
 def _digest_json(value: Any) -> str:
@@ -348,10 +350,7 @@ class _Builder:
         if mid_build_hook is not None:
             mid_build_hook()
         verify = self._capture()
-        self._artifact_hashes_verified = {
-            relpath: self._read_artifact_hash(relpath)
-            for relpath in self._artifact_sources
-        }
+        self._artifact_hashes_verified = self._frozen_hashes(verify.facts)
         document = self._assemble(capture, verify, projection)
         # The packet is a derived section of the contract, filled here from
         # the sections just assembled; the final check validates all of it.
@@ -381,15 +380,23 @@ class _Builder:
         except (OSError, UnicodeDecodeError):
             return None, "unreadable"
 
-    def _read_artifact_hash(self, relpath: str) -> str | None:
-        result = read_artifact(relpath, self._run_root)
-        if not result.ok or result.path is None:
-            return None
-        try:
-            data = result.path.read_bytes()
-        except OSError:
-            return None
-        return _digest_bytes(data)
+    def _frozen_hashes(self, facts: RunFacts) -> dict[str, str | None]:
+        """Digests of the artifacts one capture froze, keyed by G6 reference.
+
+        The projection reads no artifact after its capture: the binding view
+        and the freshness view both come from the two captures' immutable
+        facts. A file rewritten between the captures is therefore reported as
+        changed (or unverified when it disappeared), never published as bytes
+        that never passed the shared G6 owner.
+        """
+        by_reference = {
+            fact.reference: (f"sha256:{fact.sha256}" if fact.ok else None)
+            for fact in (facts.evidence_artifacts or ())
+        }
+        return {
+            reference: by_reference.get(reference)
+            for reference in self._artifact_sources
+        }
 
 
     def _manifest_state(self, facts: RunFacts, projection: _Projection) -> str:
@@ -848,23 +855,28 @@ class _Builder:
     ) -> list[dict[str, Any]]:
         """Project the Manifest evidence binding for one ledger row.
 
-        The G6 owner seam decides whether the row's artifact is bound; this
-        method only reads the bound artifact through containment and hashes
-        it. Unbound or escaped artifacts are never projected as evidence.
+        The G6 owner seam decides whether the row's artifact is bound: any G6
+        finding for this row means no publishable binding, and the manifest
+        source degrades. A bound row publishes the digest the shared owner
+        validated over this capture's frozen facts; no artifact is read here,
+        so a later filesystem view can never replace it.
         """
         token = evaluation.artifact_token
         if not isinstance(token, str) or not token.casefold().startswith("evidence/"):
             return []
-        g6_findings = check_evidence(
-            facts.pointback_text,
-            len(criteria_ids),
-            facts.evidence_dir,
-            self._run_root,
-            observed_rows=[(evaluation.criterion_id, token)],
-            entries=self._manifest_entries(facts),
-        )
-        if any(finding.rule_id in _UNBINDABLE_RULES for finding in g6_findings):
-            if any(finding.rule_id in _DEGRADING_RULES for finding in g6_findings):
+        binding = validate_references(
+            [EvidenceReference(evaluation.criterion_id, token)],
+            self._manifest_entries(facts),
+            {f"L6.{n}" for n in range(1, len(criteria_ids) + 1)},
+            # The projection consumes the snapshot's frozen facts; a snapshot
+            # without them fails closed instead of re-reading the artifact.
+            facts.evidence_artifacts,
+        )[0]
+        if binding.diagnostics:
+            # A present manifest whose declared binding cannot be established
+            # is a degraded source; an absent manifest keeps its own "missing"
+            # read state instead of being renamed malformed.
+            if facts.artifact_state("manifest") != STATE_MISSING:
                 acc.manifest_degraded = True
             return []
         leaf = token[len("evidence/"):]
@@ -873,14 +885,21 @@ class _Builder:
         except SourceRegistryError:
             acc.manifest_degraded = True
             return []
-        relpath = source.capture_targets[0]
-        artifact_hash = self._read_artifact_hash(relpath)
+        # Key the artifact by the shared G6 reference identity that validated
+        # this capture. The registry's canonical target spelling may lowercase
+        # a legal mixed-case name, so the registry spelling cannot key the
+        # second capture's facts; this identity can.
+        reference = binding.canonical
+        # The published digest is the one the shared G6 owner validated over
+        # the frozen capture facts - never a later filesystem view.
+        artifact_hash = (
+            None if binding.sha256 is None else f"sha256:{binding.sha256}")
         if artifact_hash is None:
             acc.manifest_degraded = True
             return []
-        self._artifact_sources[relpath] = source
+        self._artifact_sources[reference] = source
         self._sources[source.source_ref] = source
-        self._artifact_hashes_observed[relpath] = artifact_hash
+        self._artifact_hashes_observed[reference] = artifact_hash
         slug = source.source_ref[len("source.evidence-artifact."):]
         return [
             {
@@ -1064,8 +1083,8 @@ class _Builder:
             "complete",
             projection.limitations_digest,
         )
-        for relpath, source in self._artifact_sources.items():
-            hash_value = artifact_hashes.get(relpath)
+        for reference, source in self._artifact_sources.items():
+            hash_value = artifact_hashes.get(reference)
             add(source, "complete" if hash_value is not None else "missing", hash_value)
         return observations
 

@@ -16,8 +16,78 @@ from design_playbook.scripts.g1_spec import (  # noqa: E402
     SpecificationProjection,
     SpecificationProjectionError,
     check_spec,
+    project_proof_requirements,
     project_specification,
 )
+
+
+def _spec_with_seed(seed: str) -> str:
+    return f"""# Spec
+
+## L1 Goal
+- Goal: Deliver checkout.
+## L2 Structure
+Page.
+## L3 Flow
+Flow.
+## L4 Details
+Details.
+## L5 Edges
+Edges.
+## L6 Acceptance
+- Given a cart, When checkout runs, Then an order exists.
+{seed}
+"""
+
+
+class ProofRequirementSyntaxTests(unittest.TestCase):
+    """T-159 phase A: exact proof seeds, including the template's bullet."""
+
+    def _requirement(self, seed: str):
+        return project_proof_requirements(_spec_with_seed(seed))[0]
+
+    def test_canonical_indented_bullet_is_read(self) -> None:
+        requirement = self._requirement(
+            "  - Required evidence: screenshot; state=empty; viewport=1280x800")
+        self.assertEqual(requirement.availability, "known")
+        self.assertEqual(requirement.proof, "screenshot")
+        self.assertEqual(requirement.state, "empty")
+        self.assertEqual(requirement.viewport, (1280, 800))
+
+    def test_plain_seed_keeps_working(self) -> None:
+        requirement = self._requirement(
+            "  Required evidence: screenshot; state=empty; viewport=390x844")
+        self.assertEqual(requirement.availability, "known")
+        self.assertEqual(requirement.proof, "screenshot")
+        self.assertEqual(requirement.viewport, (390, 844))
+
+    def test_exact_nonvisual_tokens_are_known(self) -> None:
+        for proof in ("automated_check", "declaration_coverage"):
+            with self.subTest(proof=proof):
+                requirement = self._requirement(f"  Required evidence: {proof}")
+                self.assertEqual(
+                    (requirement.availability, requirement.proof),
+                    ("known", proof))
+                self.assertIsNone(requirement.state)
+                self.assertIsNone(requirement.viewport)
+
+    def test_prose_and_inexact_spellings_stay_unknown(self) -> None:
+        for seed in (
+            "  Required evidence: automated checks are run",
+            "  Required evidence: declaration coverage",
+            "  Required evidence: a screenshot",
+        ):
+            with self.subTest(seed=seed):
+                requirement = self._requirement(seed)
+                self.assertEqual(
+                    (requirement.availability, requirement.proof),
+                    ("unknown", None))
+
+    def test_multiple_seeds_stay_inconsistent(self) -> None:
+        requirement = self._requirement(
+            "  Required evidence: screenshot\n"
+            "  Required evidence: automated_check")
+        self.assertEqual(requirement.availability, "inconsistent")
 
 
 class SpecificationProjectionTests(unittest.TestCase):

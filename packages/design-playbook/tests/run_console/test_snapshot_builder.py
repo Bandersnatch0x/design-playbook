@@ -24,6 +24,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
@@ -48,6 +49,13 @@ from design_playbook.mcp.run_console.snapshot_builder import (  # noqa: E402
 from design_playbook.mcp.run_console.source_registry import (  # noqa: E402
     select_source_registry,
 )
+from design_playbook.mcp.run_console import snapshot_builder  # noqa: E402
+from tests.test_repair_acceptance import (  # noqa: E402
+    AFTER_PNG,
+    BEFORE_PNG,
+    _prepare,
+    _snapshot,
+)
 
 _FIXTURES = _COMPONENT_DIR / "fixtures"
 _SESSION_SECRET = b"builder-test-session-secret-005"
@@ -64,12 +72,25 @@ _CONTRACT_BIND = {
     "stale_fields": [],
     "blockers": [],
 }
+_ARTIFACT_BYTES = b"fake-png-bytes-for-l6-3"
+_CAPTURE_REQUEST = {
+    "schemaVersion": 1,
+    "viewport": {"width": 1280, "height": 800,
+                 "devicePixelRatio": 1.0, "colorScheme": "light"},
+    "freeze": {"enabled": True, "waitFonts": True, "networkIdle": False},
+}
+# A legal binding for the artifact the fixture actually writes: the capture
+# contract request and the real digest, so the shared G6 owner has nothing to
+# reject and the Console projection tests exercise the bound path.
 _MANIFEST_ENTRY = {
     "criterion": "L6.3",
     "artifact": "L6.3-error.png",
     "ts": "2026-08-25T09:00:00+08:00",
+    "request": dict(_CAPTURE_REQUEST),
+    "capture": {"type": "screenshot", "state": "error",
+                "artifact_path": "evidence/L6.3-error.png"},
+    "sha256": hashlib.sha256(_ARTIFACT_BYTES).hexdigest(),
 }
-_ARTIFACT_BYTES = b"fake-png-bytes-for-l6-3"
 
 # Owner-valid scenario point-backs: the Point-back projection seam rejects
 # a Recirculate verdict without a Findings section and a bare unaudited
@@ -910,6 +931,204 @@ class BuilderSafetyTest(_BuilderTestCase):
             self.built.registry.run_id,
             self.document["identity"]["run"]["result"]["runId"],
         )
+
+
+def _rename_after_artifact(run: Path) -> Path:
+    """Rename the L6.2 after artifact to a legal mixed-case name.
+
+    The registry accepts uppercase letters in the artifact file name while its
+    canonical spelling lowercases the tail; every declared reference
+    (manifest, ledger observed, repair pair) follows the real file name. The
+    bytes, digest, and owner decisions are unchanged.
+    """
+    mixed = "L6.2-EMPTY-r2.PNG"
+    evidence = run / "evidence"
+    renamed = evidence / mixed
+    (evidence / "L6.2-empty-r2.png").rename(renamed)
+    manifest = evidence / "manifest.jsonl"
+    rows = [
+        json.loads(line) for line in manifest.read_text(
+            encoding="utf-8").splitlines() if line.strip()
+    ]
+    for row in rows:
+        if row.get("artifact") == "L6.2-empty-r2.png":
+            row["artifact"] = mixed
+            row["capture"]["artifact_path"] = f"evidence/{mixed}"
+    manifest.write_text(
+        "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows),
+        encoding="utf-8")
+    pointback = run / "point-back.md"
+    pointback.write_text(pointback.read_text(encoding="utf-8").replace(
+        "L6.2-empty-r2.png", mixed), encoding="utf-8")
+    return renamed
+
+
+class FrozenCaptureFactTests(unittest.TestCase):
+    """S3: a published binding digest is the digest the shared G6 owner validated.
+
+    The projection reads the first capture's immutable facts and freshness
+    verification reads the second capture's; a file rewritten between those
+    boundaries is reported through the existing changed/unverified contract,
+    never published as a fresh digest that never passed G6.
+    """
+
+    def _build_with_mutations(self, run: Path, mutations: dict):
+        original = snapshot_builder._Builder._capture
+        calls = {"count": 0}
+
+        def capture(builder):
+            captured = original(builder)
+            calls["count"] += 1
+            action = mutations.get(calls["count"])
+            if action is not None:
+                action(run)
+            return captured
+
+        with mock.patch.object(
+                snapshot_builder._Builder, "_capture", capture):
+            document = _snapshot(run)
+        return document, calls["count"]
+
+    def _artifact_source(self, document: dict, needle: str) -> dict:
+        for item in document["sources"]["items"]:
+            if (item["sourceRef"].startswith("source.evidence-artifact.")
+                    and needle.casefold() in item["sourceRef"].casefold()):
+                return item
+        raise AssertionError(f"no artifact source matching {needle!r}")
+
+    def _bindings(self, document: dict) -> list:
+        return _assertion(
+            document, "evaluation.criteria.l6-2")["result"]["evidenceBindings"]
+
+    def _digest(self, data: bytes) -> str:
+        return "sha256:" + hashlib.sha256(data).hexdigest()
+
+    def test_a_change_after_the_first_capture_is_not_published_as_current(
+            self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, run = _prepare(Path(tmp))
+            after = run / "evidence" / "L6.2-empty-r2.png"
+            frozen = self._digest(after.read_bytes())
+            mutated = self._digest(BEFORE_PNG)
+            self.assertNotEqual(frozen, mutated)
+
+            document, captures = self._build_with_mutations(
+                run, {1: lambda _run: after.write_bytes(BEFORE_PNG)})
+
+            self.assertEqual(captures, 2)
+            bindings = self._bindings(document)
+            self.assertEqual(bindings[0]["contentHash"], frozen)
+            record = self._artifact_source(document, "l6-2-empty-r2-png")
+            self.assertEqual(record["observedHash"], frozen)
+            self.assertEqual(record["verifiedHash"], mutated)
+            self.assertEqual(record["freshness"], "changed")
+            self.assertEqual(
+                document["identity"]["snapshot"]["buildState"], "degraded")
+
+    def test_an_unchanged_artifact_keeps_the_frozen_digest_current(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, run = _prepare(Path(tmp))
+            after = run / "evidence" / "L6.2-empty-r2.png"
+            frozen = self._digest(after.read_bytes())
+
+            document, _ = self._build_with_mutations(run, {})
+
+            self.assertEqual(self._bindings(document)[0]["contentHash"], frozen)
+            record = self._artifact_source(document, "l6-2-empty-r2-png")
+            self.assertEqual(record["freshness"], "current")
+            self.assertEqual(
+                document["identity"]["snapshot"]["buildState"], "current")
+
+    def test_a_later_normal_build_refuses_the_changed_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, run = _prepare(Path(tmp))
+            (run / "evidence" / "L6.2-empty-r2.png").write_bytes(BEFORE_PNG)
+
+            document = _snapshot(run)
+
+            self.assertEqual(self._bindings(document), [])
+            self.assertEqual(
+                _source(document, "source.evidence-manifest")["readState"],
+                "malformed")
+
+    def test_an_artifact_missing_at_the_second_capture_is_unverified(
+            self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, run = _prepare(Path(tmp))
+            after = run / "evidence" / "L6.2-empty-r2.png"
+            frozen = self._digest(after.read_bytes())
+
+            document, _ = self._build_with_mutations(
+                run, {1: lambda _run: after.unlink()})
+
+            self.assertEqual(self._bindings(document)[0]["contentHash"], frozen)
+            record = self._artifact_source(document, "l6-2-empty-r2-png")
+            self.assertEqual(record["observedHash"], frozen)
+            self.assertIsNone(record["verifiedHash"])
+            self.assertEqual(record["freshness"], "unverified")
+            self.assertEqual(
+                document["identity"]["snapshot"]["buildState"], "degraded")
+
+    def test_a_legal_mixed_case_artifact_stays_current(self) -> None:
+        # R1: the registry's canonical target spelling lowercases the name, but
+        # the published binding and the second-capture lookup must keep the
+        # shared G6 reference identity that validated the first capture.
+        with tempfile.TemporaryDirectory() as tmp:
+            _, run = _prepare(Path(tmp))
+            renamed = _rename_after_artifact(run)
+            frozen = self._digest(renamed.read_bytes())
+
+            document, _ = self._build_with_mutations(run, {})
+
+            bindings = self._bindings(document)
+            self.assertEqual(bindings[0]["contentHash"], frozen)
+            record = self._artifact_source(document, "l6-2-empty-r2")
+            self.assertEqual(record["observedHash"], frozen)
+            self.assertEqual(record["verifiedHash"], frozen)
+            self.assertEqual(record["freshness"], "current")
+            self.assertEqual(
+                document["identity"]["snapshot"]["buildState"], "current")
+
+    def test_a_mixed_case_artifact_changed_between_captures_reports_changed(
+            self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, run = _prepare(Path(tmp))
+            renamed = _rename_after_artifact(run)
+            frozen = self._digest(renamed.read_bytes())
+            mutated = self._digest(BEFORE_PNG)
+
+            document, _ = self._build_with_mutations(
+                run, {1: lambda _run: renamed.write_bytes(BEFORE_PNG)})
+
+            self.assertEqual(
+                self._bindings(document)[0]["contentHash"], frozen)
+            record = self._artifact_source(document, "l6-2-empty-r2")
+            self.assertEqual(record["observedHash"], frozen)
+            self.assertEqual(record["verifiedHash"], mutated)
+            self.assertEqual(record["freshness"], "changed")
+            self.assertEqual(
+                document["identity"]["snapshot"]["buildState"], "degraded")
+
+    def test_a_third_filesystem_view_is_not_used_for_verification(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, run = _prepare(Path(tmp))
+            after = run / "evidence" / "L6.2-empty-r2.png"
+            frozen = self._digest(after.read_bytes())
+            second = self._digest(BEFORE_PNG)
+            later = self._digest(AFTER_PNG)
+
+            document, captures = self._build_with_mutations(run, {
+                1: lambda _run: after.write_bytes(BEFORE_PNG),
+                2: lambda _run: after.write_bytes(AFTER_PNG),
+            })
+
+            self.assertEqual(captures, 2)
+            self.assertEqual(self._bindings(document)[0]["contentHash"], frozen)
+            record = self._artifact_source(document, "l6-2-empty-r2-png")
+            self.assertEqual(record["observedHash"], frozen)
+            self.assertEqual(record["verifiedHash"], second)
+            self.assertNotEqual(record["verifiedHash"], later)
+            self.assertEqual(record["freshness"], "changed")
 
 
 if __name__ == "__main__":

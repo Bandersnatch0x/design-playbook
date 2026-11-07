@@ -39,6 +39,7 @@ track:    interaction
 confidence: high
 disposition: blocking
 route:     R3
+criteria:  L6.1
 evidence:  evidence/L6.1-return-first.json（首轮返回后 feed 为空）
 dd:       DD-0001
 ```
@@ -52,6 +53,7 @@ track:    product
 confidence: high
 disposition: blocking
 route:     R4
+criteria:  L6.2
 evidence:  evidence/L6.2-pause-first.json（首轮 a11y 树节点无名无 role）
 ```
 
@@ -119,4 +121,6 @@ invalidated:
 **Pass.**
 
 - closes: 切页返回后全局控制台 feed 清空，运行状态不可续读 -> recirculate -> DD-0002 supersedes DD-0001 -> Re-Fill + 失效集重评 -> 0 blocking
+  repair-evidence: criterion=L6.1 before=evidence/L6.1-return-first.json after=evidence/L6.1-return-trace.json
 - closes: 全局暂停按钮无可访问名称与 role，辅助技术不可操作 -> recirculate -> R4 修复（role=button + 可访问名）+ a11y 复走查重采 -> 0 blocking
+  repair-evidence: criterion=L6.2 before=evidence/L6.2-pause-first.json after=evidence/L6.2-pause-trace.json

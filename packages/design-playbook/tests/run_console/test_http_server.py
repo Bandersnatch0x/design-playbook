@@ -85,12 +85,27 @@ _CONTRACT_BIND = {
     "stale_fields": [],
     "blockers": [],
 }
-_MANIFEST_ENTRY = {
-    "criterion": "L6.3",
-    "artifact": "L6.3-error.png",
-    "ts": "2026-08-25T09:00:00+08:00",
-}
 _HTML_ARTIFACT = (_FIXTURES / "evidence-artifact.html").read_bytes()
+_CAPTURE_REQUEST = {
+    "schemaVersion": 1,
+    "viewport": {"width": 1280, "height": 800,
+                 "devicePixelRatio": 1.0, "colorScheme": "light"},
+    "freeze": {"enabled": True, "waitFonts": True, "networkIdle": False},
+}
+def _manifest_entry(artifact_bytes: bytes) -> dict:
+    """One legal manifest binding for the artifact bytes actually written."""
+    return {
+        "criterion": "L6.3",
+        "artifact": "L6.3-error.png",
+        "ts": "2026-08-25T09:00:00+08:00",
+        "request": dict(_CAPTURE_REQUEST),
+        "capture": {"type": "screenshot", "state": "error",
+                    "artifact_path": "evidence/L6.3-error.png"},
+        "sha256": hashlib.sha256(artifact_bytes).hexdigest(),
+    }
+
+
+_MANIFEST_ENTRY = _manifest_entry(_HTML_ARTIFACT)
 
 
 class _Clock:
@@ -114,7 +129,8 @@ def _make_root(base: Path, name: str = "run-a", *, artifact: bytes = _HTML_ARTIF
     _write(root, "plan.md", (_FIXTURES / "plan-profile.md").read_text(encoding="utf-8"))
     _write(root, "point-back.md", (_FIXTURES / "point-back-pass-closed.md").read_text(encoding="utf-8"))
     _write(root, "contract-bind.json", json.dumps(_CONTRACT_BIND))
-    _write(root, "evidence/manifest.jsonl", json.dumps(_MANIFEST_ENTRY) + "\n")
+    _write(root, "evidence/manifest.jsonl",
+           json.dumps(_manifest_entry(artifact)) + "\n")
     (root / "evidence" / "L6.3-error.png").write_bytes(artifact)
     (root / "preview").mkdir()
     return root

@@ -64,4 +64,5 @@ L4 declares control behavior only; reuse / no-internal-change constraints must n
 
 - Given 导出进行中 When 查看全局状态区 Then 进行中任务有持续进度反馈（证据：交互记录）(path: P1)
 - Given 导出进行中 When 离开并返回主列表 Then 任务条目恢复显示且完成后结果可获知（证据：交互记录）(path: P2)
+  - Required evidence: interaction_trace; viewport=1280x800
 - Given 导出完成 When 从状态区打开完成态条目 Then 可获得导出结果入口（证据：交互记录）(path: P3)

@@ -88,15 +88,17 @@ class LedgerFacts:
     rows: tuple[LedgerRow, ...]
 
 
-def _artifact_token(raw_observed: str) -> str:
-    """Derive the leading artifact token from the raw observed value.
+def artifact_token(raw_value: str) -> str:
+    """Derive the leading artifact token from one raw field value.
 
     Matches the historical G6 derivation: the leading run up to the first
     tolerated separator, or the whole raw value when it starts with a
-    separator. Empty input yields an empty token.
+    separator. Empty input yields an empty token. G6 and the finding
+    ``evidence:`` projection share this one token rule so a repair half and a
+    ledger observation cannot disagree on what the artifact token is.
     """
-    match = _ARTIFACT_TOKEN.match(raw_observed)
-    return match.group(0) if match else raw_observed
+    match = _ARTIFACT_TOKEN.match(raw_value)
+    return match.group(0) if match else raw_value
 
 
 def parse_ledger(text: str) -> LedgerFacts:
@@ -125,6 +127,6 @@ def parse_ledger(text: str) -> LedgerFacts:
         rows.append(LedgerRow(
             occurrences=occurrences,
             raw_observed=raw_observed,
-            artifact_token=_artifact_token(raw_observed),
+            artifact_token=artifact_token(raw_observed),
         ))
     return LedgerFacts(tuple(rows))

@@ -13,14 +13,26 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from design_playbook.mcp.evidence.ledger_syntax import LedgerFacts, parse_ledger
+from design_playbook.mcp.evidence.ledger_syntax import (
+    LedgerFacts,
+    artifact_token,
+    parse_ledger,
+)
 from design_playbook.mcp.preview.integrity import PreviewSnapshot, inspect_preview
 from design_playbook.scripts.dd_entries import DDEntry, parse_dd_entries
+from design_playbook.scripts.finding_syntax import parse_closures, parse_findings
+from design_playbook.scripts.g6_records import (
+    EvidenceArtifactFact,
+    collect_evidence_artifacts,
+    evidence_authority,
+    ledger_observed,
+)
 from design_playbook.scripts.run_profile import RunProfile, parse_run_profile
 from design_playbook.scripts.shaping_log import (
     ShapingLogError,
     parse_shaping_log,
 )
+from design_playbook.scripts.stages import EVIDENCE_PREFIX
 from design_playbook.scripts.verdict_syntax import VerdictFacts, parse_verdict
 
 
@@ -103,6 +115,11 @@ class RunFacts:
     # kept as a fact so run-status can name them instead of hiding the skip.
     fenced_fill_declarations: tuple[str, ...] = ()
     manifest_raw_text: str = ""
+    # T-159: one immutable fact per artifact reference this run names. ``None``
+    # means the capture did not collect them (an old or hand-built snapshot);
+    # an empty tuple means collection ran and the run names no artifacts.
+    # Projection consumes these facts and never falls back to a file read.
+    evidence_artifacts: tuple[EvidenceArtifactFact, ...] | None = None
     # Complete-acceptance capture (T-158). ``_baseline_findings`` None means
     # no fresh capture was requested; it never means verified clean. The
     # project/run strings are the resolved identities actually captured, and
@@ -599,6 +616,58 @@ def _artifact_states(
     return tuple(states)
 
 
+def _evidence_references(pointback_text: str, ledger: LedgerFacts) -> tuple[str, ...]:
+    """Every explicitly named evidence reference in one point-back text.
+
+    The collection is a projection over syntax facts, not a directory scan:
+    ledger observed tokens, finding ``evidence:`` leading tokens, and both
+    halves of every repair annotation (attached or orphan). Free-text values
+    that never name an ``evidence/`` artifact are not references.
+    """
+    references: list[str] = []
+
+    def add(value: str) -> None:
+        if value.casefold().startswith(EVIDENCE_PREFIX):
+            references.append(value)
+
+    for _criterion, observed in ledger_observed(pointback_text, ledger):
+        add(observed)
+    for finding in parse_findings(pointback_text):
+        for value in finding.get("evidence") or ():
+            add(artifact_token(value))
+    closures = parse_closures(pointback_text)
+    annotations = list(closures.orphan_annotations)
+    for closure in closures.closures:
+        annotations.extend(closure.annotations)
+    for annotation in annotations:
+        for name in ("before", "after"):
+            for value in annotation.values(name):
+                add(value)
+    return tuple(references)
+
+
+def _manifest_references(manifest_lines: tuple[str, ...]) -> tuple[str, ...]:
+    """Evidence references the manifest itself names.
+
+    The frontend projection consumes a manifest-bound artifact even before a
+    point-back cites it (capture happened, review not written yet). Those are
+    explicit references in text the capture already read - not a directory
+    walk - so the same explicit-root collector freezes them. Containment still
+    rejects unknown, escaping, or non-evidence names without opening them, and
+    deduplication keeps a reference shared with the point-back read once.
+    """
+    references: list[str] = []
+    for line in manifest_lines:
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        artifact = entry.get("artifact") if isinstance(entry, dict) else None
+        if isinstance(artifact, str) and artifact:
+            references.append(EVIDENCE_PREFIX + artifact)
+    return tuple(references)
+
+
 def capture_run_facts(
     *,
     spec_path: Path | None = None,
@@ -610,6 +679,7 @@ def capture_run_facts(
     pointback_fallback_encoding: str | None = None,
     baseline_capture: BaselineCapture | None = None,
     baseline_run_root: Path | None = None,
+    collect_evidence: bool = True,
 ) -> RunFacts:
     """Load a run once and return syntax/integrity facts over that snapshot.
 
@@ -627,6 +697,13 @@ def capture_run_facts(
     *probed for presence*, without widening any other optional artifact
     discovery or authorizing the project. It never reads DESIGN.md or
     provenance sources.
+
+    ``collect_evidence`` is the explicit artifact-fact collection boundary.
+    When on (the snapshot default), every evidence reference the point-back
+    names, plus every artifact the run's manifest already binds, is resolved
+    and streamed once under the one explicit authority root and frozen into
+    ``RunFacts.evidence_artifacts``. Projection never re-reads them.
+    ``manifest_entries`` turns it off because it only needs entry text.
     """
 
     if run_root is not None:
@@ -674,6 +751,23 @@ def capture_run_facts(
     preview = inspect_preview(preview_dir) if preview_dir is not None else None
     optional = _read_optional_run_facts(run_root, plan_path)
     plan_declared, plan_fenced = _scan_fill_declarations(optional.plan_text)
+    ledger = parse_ledger(pointback_text)
+    evidence_artifacts: tuple[EvidenceArtifactFact, ...] | None
+    references = _evidence_references(pointback_text, ledger) if collect_evidence else ()
+    if collect_evidence:
+        references += _manifest_references(manifest_lines)
+    authority = evidence_authority(run_root, evidence_dir)
+    if not collect_evidence:
+        evidence_artifacts = None
+    elif not references:
+        evidence_artifacts = ()
+    elif authority is None:
+        # No explicit authority root: the references stay unverified rather
+        # than borrowing a parent directory or the cwd.
+        evidence_artifacts = None
+    else:
+        evidence_artifacts = collect_evidence_artifacts(
+            references, run_root=authority)
     return RunFacts(
         run_root=run_root,
         spec_path=spec_path,
@@ -686,8 +780,9 @@ def capture_run_facts(
         plan_fill_artifacts=_plan_fill_artifacts(run_root, plan_declared),
         fenced_fill_declarations=plan_fenced,
         manifest_raw_text=manifest_raw,
+        evidence_artifacts=evidence_artifacts,
         craft_guard_text=optional.craft_guard_text,
-        ledger=parse_ledger(pointback_text),
+        ledger=ledger,
         verdict=parse_verdict(pointback_text),
         preview=preview,
         _manifest_lines=manifest_lines,

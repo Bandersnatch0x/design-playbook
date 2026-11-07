@@ -21,10 +21,15 @@ from design_playbook.mcp.evidence.capture_contract import (  # noqa: E402
     parse_capture_contract,
 )
 from design_playbook.mcp.evidence.disclosure import ViewportMetrics  # noqa: E402
+from design_playbook.mcp.evidence.ledger_syntax import parse_ledger  # noqa: E402
 from design_playbook.mcp.evidence.page_defects import DefectFacts  # noqa: E402
 from design_playbook.scripts.finding_syntax import (  # noqa: E402
+    CLOSURE_LINE,
+    closure_target_candidates,
     closure_targets,
     finding_is_currently_closed,
+    normalise_issue,
+    parse_closures,
     parse_findings,
 )
 from design_playbook.scripts.g2_g4_pointback import check_pointback  # noqa: E402
@@ -303,6 +308,326 @@ class FindingIdentityTests(unittest.TestCase):
         self.assertIn("G4.round_stop_missing", _rules(check_rounds(text)))
         passing = text.replace("**Recirculate.**", "**Pass.**")
         self.assertIn("G4.duplicate_closure", _rules(check_pointback(passing, 1)))
+
+
+class RepairClosureSyntaxTests(unittest.TestCase):
+    """T-159 phase A: the ``criteria:`` field and closure annotation facts."""
+
+    def test_criteria_field_keeps_duplicate_occurrences(self) -> None:
+        parsed = parse_findings(
+            "issue: empty state\nsource: design\nfix: layout\n"
+            "severity: S3\ndisposition: blocking\n"
+            "criteria: L6.3\ncriteria: L6.4\n"
+        )[0]
+        self.assertEqual(parsed["criteria"], ["L6.3", "L6.4"])
+
+    def test_criteria_does_not_become_ledger_grammar(self) -> None:
+        text = (
+            "issue: empty state\nsource: design\nfix: layout\nseverity: S3\n"
+            "criteria: L6.3\n"
+        )
+        self.assertEqual(parse_ledger(text).rows, ())
+
+    def test_annotation_only_block_is_still_not_a_finding(self) -> None:
+        self.assertEqual(parse_findings("criteria: L6.3\n"), [])
+
+    def test_indented_repair_line_attaches_to_the_preceding_closure(self) -> None:
+        text = (
+            "# pb\n\n"
+            "- closes: F-1 -> fix -> re-eval -> 0 blocking\n"
+            "  repair-evidence: criterion=L6.3 "
+            "before=evidence/a.png after=evidence/b.png\n"
+        )
+        facts = parse_closures(text)
+        self.assertEqual(len(facts.closures), 1)
+        closure = facts.closures[0]
+        self.assertEqual(
+            (closure.target, closure.identity, closure.line), ("F-1", "f-1", 3))
+        self.assertEqual(facts.orphan_annotations, ())
+        annotation = closure.annotations[0]
+        self.assertEqual(annotation.line, 4)
+        self.assertEqual(annotation.values("criterion"), ("L6.3",))
+        self.assertEqual(annotation.values("before"), ("evidence/a.png",))
+        self.assertEqual(annotation.values("after"), ("evidence/b.png",))
+        self.assertEqual(annotation.unknown_fields, ())
+
+    def test_unindented_repair_line_is_an_orphan_fact(self) -> None:
+        text = (
+            "- closes: F-1 -> fix -> re-eval -> 0 blocking\n"
+            "- repair-evidence: before=evidence/a.png after=evidence/b.png\n"
+        )
+        facts = parse_closures(text)
+        self.assertEqual(facts.closures[0].annotations, ())
+        self.assertEqual(len(facts.orphan_annotations), 1)
+        self.assertEqual(facts.orphan_annotations[0].line, 2)
+
+    def test_blank_line_ends_attachment(self) -> None:
+        text = (
+            "- closes: F-1 -> fix -> re-eval -> 0 blocking\n"
+            "\n"
+            "  repair-evidence: before=evidence/a.png after=evidence/b.png\n"
+        )
+        facts = parse_closures(text)
+        self.assertEqual(facts.closures[0].annotations, ())
+        self.assertEqual(len(facts.orphan_annotations), 1)
+
+    def test_adjacent_closures_do_not_share_annotations(self) -> None:
+        text = (
+            "- closes: F-1 -> fix -> re-eval -> 0 blocking\n"
+            "  repair-evidence: before=evidence/a.png after=evidence/b.png\n"
+            "- closes: F-2 -> fix -> re-eval -> 0 blocking\n"
+            "  repair-evidence: criterion=L6.4 "
+            "before=evidence/c.png after=evidence/d.png\n"
+        )
+        facts = parse_closures(text)
+        self.assertEqual(
+            [closure.target for closure in facts.closures], ["F-1", "F-2"])
+        self.assertEqual(
+            facts.closures[0].annotations[0].values("criterion"), ())
+        self.assertEqual(
+            facts.closures[1].annotations[0].values("criterion"), ("L6.4",))
+
+    def test_duplicate_halves_and_unknown_keys_survive(self) -> None:
+        text = (
+            "- closes: F-1 -> fix -> re-eval -> 0 blocking\n"
+            "  repair-evidence: criterion=L6.3 criterion=L6.4 "
+            "before=evidence/a.png before=evidence/a2.png "
+            "after=evidence/b.png note=kept\n"
+        )
+        annotation = parse_closures(text).closures[0].annotations[0]
+        self.assertEqual(annotation.values("criterion"), ("L6.3", "L6.4"))
+        self.assertEqual(
+            annotation.values("before"), ("evidence/a.png", "evidence/a2.png"))
+        self.assertEqual(annotation.values("after"), ("evidence/b.png",))
+        self.assertEqual(annotation.unknown_fields, ("note",))
+
+    def test_legacy_closure_targets_remain_the_same_projection(self) -> None:
+        text = (
+            "- closes: F-1 -> fix -> re-eval -> 0 blocking\n"
+            "  repair-evidence: before=evidence/a.png after=evidence/b.png\n"
+            "- closes: Another Issue -> fix -> re-eval -> 0 blocking\n"
+            "- repair-evidence: before=evidence/orphan.png\n"
+        )
+        facts = parse_closures(text)
+        self.assertEqual(
+            closure_targets(text),
+            [closure.identity for closure in facts.closures])
+        self.assertEqual(closure_targets(text), ["f-1", "another issue"])
+
+    def test_issue_id_collision_is_visible_as_two_candidates(self) -> None:
+        findings = parse_findings(
+            "issue: first\nsource: spec\nfix: a\nseverity: S3\nid: F-1\n\n"
+            "issue: F-1\nsource: spec\nfix: b\nseverity: S3\n"
+        )
+        self.assertEqual(closure_target_candidates(findings, "F-1"), (0, 1))
+
+    def test_shared_closure_identity_is_visible_as_two_candidates(self) -> None:
+        findings = parse_findings(
+            "issue: same copy\nsource: spec\nfix: a\nseverity: S3\n\n"
+            "issue: same copy\nsource: spec\nfix: b\nseverity: S3\n"
+        )
+        self.assertEqual(
+            closure_target_candidates(findings, "same copy"), (0, 1))
+        self.assertEqual(closure_target_candidates(findings, "missing"), ())
+
+    def test_unique_target_resolves_to_one_candidate(self) -> None:
+        findings = parse_findings(
+            "issue: overflow\nsource: spec\nfix: a\nseverity: S3\nid: F-1\n"
+        )
+        self.assertEqual(closure_target_candidates(findings, "f-1"), (0,))
+        self.assertEqual(closure_target_candidates(findings, "overflow"), (0,))
+
+
+VALID_ANNOTATION = (
+    "criterion=L6.1 before=evidence/a.png after=evidence/b.png")
+CLOSURE_WITH_ANNOTATION = (
+    "- closes: F-1 -> fix -> re-eval -> 0 blocking\n  repair-evidence: ")
+
+
+class RepairAnnotationFidelityTests(unittest.TestCase):
+    """T-159: malformed annotation text stays a syntax fact.
+
+    Dropping an empty duplicate value or a bare word would make a malformed
+    line indistinguishable from a well-formed one, so G4 could never reject it.
+    """
+
+    def _annotation(self, suffix: str):
+        facts = parse_closures(CLOSURE_WITH_ANNOTATION + VALID_ANNOTATION + suffix)
+        return facts.closures[0].annotations[0]
+
+    def test_empty_duplicate_value_survives(self) -> None:
+        annotation = self._annotation(" before=")
+        self.assertEqual(
+            annotation.values("before"), ("evidence/a.png", ""))
+
+    def test_empty_unknown_value_survives_as_unknown_field(self) -> None:
+        annotation = self._annotation(" bogus=")
+        self.assertEqual(annotation.values("bogus"), ("",))
+        self.assertEqual(annotation.unknown_fields, ("bogus",))
+
+    def test_bare_word_is_unconsumed_not_dropped(self) -> None:
+        annotation = self._annotation(" bogus")
+        self.assertEqual(annotation.unconsumed, ("bogus",))
+        self.assertEqual(annotation.values("bogus"), ())
+
+    def test_malformed_and_valid_annotations_are_distinguishable(self) -> None:
+        well_formed = self._annotation("")
+        self.assertEqual(well_formed.unconsumed, ())
+        self.assertNotEqual(
+            (well_formed.occurrences, well_formed.unconsumed),
+            (self._annotation(" bogus").occurrences,
+             self._annotation(" bogus").unconsumed),
+        )
+
+
+class RepairAttachmentBoundaryTests(unittest.TestCase):
+    """T-159: only an annotation indented under *its own* closure item attaches.
+
+    A new closure item (whatever its trailing count), a heading, or a relative
+    dedent ends attachment; the orphaned annotation is never borrowed by the
+    previous item.
+    """
+
+    def test_nonzero_sibling_closure_ends_attachment(self) -> None:
+        text = (
+            "  - closes: F-1 -> fix -> re-eval -> 0 blocking\n"
+            "  - closes: F-2 -> fix -> re-eval -> 1 blocking\n"
+            "    repair-evidence: " + VALID_ANNOTATION + "\n"
+        )
+        facts = parse_closures(text)
+        self.assertEqual(facts.closures[0].annotations, ())
+        self.assertEqual(len(facts.orphan_annotations), 1)
+        self.assertEqual(facts.orphan_annotations[0].line, 3)
+
+    def test_indented_heading_ends_attachment(self) -> None:
+        text = (
+            "- closes: F-1 -> fix -> re-eval -> 0 blocking\n"
+            "  ## Other section\n"
+            "  repair-evidence: " + VALID_ANNOTATION + "\n"
+        )
+        facts = parse_closures(text)
+        self.assertEqual(facts.closures[0].annotations, ())
+        self.assertEqual(len(facts.orphan_annotations), 1)
+        self.assertEqual(facts.orphan_annotations[0].line, 3)
+
+    def test_relative_dedent_ends_attachment(self) -> None:
+        text = (
+            "    - closes: F-1 -> fix -> re-eval -> 0 blocking\n"
+            "  repair-evidence: " + VALID_ANNOTATION + "\n"
+        )
+        facts = parse_closures(text)
+        self.assertEqual(facts.closures[0].annotations, ())
+        self.assertEqual(len(facts.orphan_annotations), 1)
+        self.assertEqual(facts.orphan_annotations[0].line, 2)
+
+    def test_deeper_indent_than_the_item_still_attaches(self) -> None:
+        text = (
+            "  - closes: F-1 -> fix -> re-eval -> 0 blocking\n"
+            "      repair-evidence: " + VALID_ANNOTATION + "\n"
+        )
+        facts = parse_closures(text)
+        self.assertEqual(len(facts.closures[0].annotations), 1)
+        self.assertEqual(facts.orphan_annotations, ())
+
+    def test_bullet_on_previous_line_keeps_the_historic_projection(self) -> None:
+        # The original ``CLOSURE_LINE`` expression tolerated a bullet and a
+        # line break before ``closes:``; the new projection must not narrow it.
+        text = "-\ncloses: F-1 -> fix -> re-eval -> 0 blocking\n"
+        self.assertEqual(
+            [normalise_issue(target) for target in CLOSURE_LINE.findall(text)],
+            ["f-1"],
+        )
+        self.assertEqual(closure_targets(text), ["f-1"])
+
+    def test_indentation_comes_from_the_bullet_not_the_keyword(self) -> None:
+        # The bullet sits at column 0, so a two-space annotation is deeper
+        # than the item and attaches; the closure's reported line is the line
+        # the target is written on (2), not the bullet line.
+        text = (
+            "-\ncloses: F-1 -> fix -> re-eval -> 0 blocking\n"
+            "  repair-evidence: " + VALID_ANNOTATION + "\n"
+        )
+        facts = parse_closures(text)
+        self.assertEqual(facts.closures[0].line, 2)
+        self.assertEqual(len(facts.closures[0].annotations), 1)
+        self.assertEqual(facts.orphan_annotations, ())
+
+    def test_multiline_zero_sibling_ends_attachment(self) -> None:
+        # A closure item may keep its bullet on the previous line (the historic
+        # expression tolerated that). The annotation under it belongs to F-2;
+        # it must never be borrowed by F-1.
+        text = (
+            "- closes: F-1 -> fix -> 0 blocking\n"
+            "  -\n"
+            "    closes: F-2 -> fix -> 0 blocking\n"
+            "    repair-evidence: " + VALID_ANNOTATION + "\n"
+        )
+        facts = parse_closures(text)
+        self.assertEqual(
+            [(closure.target, closure.line) for closure in facts.closures],
+            [("F-1", 1), ("F-2", 3)])
+        self.assertEqual(facts.closures[0].annotations, ())
+        self.assertEqual(facts.closures[1].annotations[0].line, 4)
+        self.assertEqual(
+            facts.closures[1].annotations[0].values("criterion"), ("L6.1",))
+        self.assertEqual(facts.orphan_annotations, ())
+
+    def test_multiline_nonzero_sibling_ends_attachment(self) -> None:
+        text = (
+            "- closes: F-1 -> fix -> 0 blocking\n"
+            "  -\n"
+            "    closes: F-2 -> fix -> 1 blocking\n"
+            "    repair-evidence: " + VALID_ANNOTATION + "\n"
+        )
+        facts = parse_closures(text)
+        self.assertEqual(
+            [closure.target for closure in facts.closures], ["F-1"])
+        self.assertEqual(facts.closures[0].annotations, ())
+        self.assertEqual(
+            [annotation.line for annotation in facts.orphan_annotations], [4])
+
+    def test_arrowless_multiline_item_ends_attachment(self) -> None:
+        # An item start does not depend on the ``0 blocking`` count: a
+        # ``closes:`` item without an arrow tail still ends the previous item.
+        text = (
+            "- closes: F-1 -> fix -> 0 blocking\n"
+            "  -\n"
+            "    closes: F-2\n"
+            "    repair-evidence: " + VALID_ANNOTATION + "\n"
+        )
+        facts = parse_closures(text)
+        self.assertEqual(facts.closures[0].annotations, ())
+        self.assertEqual(
+            [annotation.line for annotation in facts.orphan_annotations], [4])
+
+    def test_multiline_then_single_line_item_boundaries(self) -> None:
+        text = (
+            "-\ncloses: F-1 -> fix -> 0 blocking\n"
+            "  repair-evidence: " + VALID_ANNOTATION + "\n"
+            "- closes: F-2 -> fix -> 0 blocking\n"
+        )
+        facts = parse_closures(text)
+        self.assertEqual(
+            [(closure.target, closure.line) for closure in facts.closures],
+            [("F-1", 2), ("F-2", 4)])
+        self.assertEqual(len(facts.closures[0].annotations), 1)
+        self.assertEqual(facts.closures[1].annotations, ())
+
+    def test_annotations_stay_with_their_own_item_across_mixed_forms(self) -> None:
+        text = (
+            "- closes: F-1 -> fix -> 0 blocking\n"
+            "  repair-evidence: " + VALID_ANNOTATION + "\n"
+            "  -\n"
+            "    closes: F-2 -> fix -> 0 blocking\n"
+            "    repair-evidence: criterion=L6.4 "
+            "before=evidence/c.png after=evidence/d.png\n"
+        )
+        facts = parse_closures(text)
+        self.assertEqual(
+            [closure.annotations[0].values("criterion")
+             for closure in facts.closures],
+            [("L6.1",), ("L6.4",)])
+        self.assertEqual(facts.orphan_annotations, ())
 
 
 class ProbeSidecarTests(unittest.TestCase):

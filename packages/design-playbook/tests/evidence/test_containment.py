@@ -26,6 +26,7 @@ These tests pin:
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -94,7 +95,14 @@ def _unlink_native(path: Path) -> None:
     if os.name == "nt":
         import ctypes
 
-        ctypes.windll.kernel32.DeleteFileW(str(path))
+        try:
+            is_dir = path.is_dir() and not path.is_symlink()
+        except OSError:
+            is_dir = False
+        if is_dir:
+            ctypes.windll.kernel32.RemoveDirectoryW(str(path))
+        else:
+            ctypes.windll.kernel32.DeleteFileW(str(path))
     else:
         os.unlink(path)
 
@@ -111,9 +119,18 @@ def _make_symlink_or_skip(test: unittest.TestCase, real: Path, link: Path) -> No
     ``TemporaryDirectory`` teardown does not crash the safe-delete shim.
     """
     try:
-        os.symlink(real, link)
+        os.symlink(real, link, target_is_directory=real.is_dir())
     except (OSError, NotImplementedError):
-        test.skipTest("symlinks unavailable on this OS")
+        # Windows without Developer Mode refuses symlinks but still allows
+        # junctions; a junction is the same directory reparse point for
+        # containment and exercises the identical code path.
+        if os.name != "nt" or not real.is_dir():
+            test.skipTest("symlinks unavailable on this OS")
+        created = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(real)],
+            capture_output=True, text=True)
+        if created.returncode != 0:
+            test.skipTest("neither symlinks nor junctions available")
     try:
         link.resolve(strict=False)
     except OSError:
@@ -503,6 +520,123 @@ class SymlinkEscapeRealpathTests(unittest.TestCase):
             with patch.object(Path, "resolve", patched_resolve):
                 result = read_artifact("evidence/link.txt", root)
             self.assertEqual(result.reason, REASON_SYMLINK_ESCAPE)
+
+
+class BoundaryOutsideRunRootTests(unittest.TestCase):
+    """T-159: ``<run_root>/evidence`` itself linked outside the run root.
+
+    The under-boundary check alone would pass here - the candidate really is
+    under the resolved boundary - so the boundary's real path is required to
+    belong to the explicit run root before the candidate is judged. This is
+    not the TOCTOU class: the link is static and the read genuinely reaches a
+    file outside the selected run.
+    """
+
+    def _linked_run(self, tmp: str) -> tuple[Path, Path, Path]:
+        root = Path(tmp) / "run"
+        outside = Path(tmp) / "outside"
+        root.mkdir()
+        outside.mkdir()
+        (outside / "proof.bin").write_bytes(b"OUTSIDE_EXPLICIT_RUN_ROOT")
+        _make_symlink_or_skip(self, outside, root / "evidence")
+        return root, outside, root / "evidence"
+
+    def test_read_artifact_rejects_boundary_link_outside_run_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _outside, link = self._linked_run(tmp)
+            try:
+                result = read_artifact("evidence/proof.bin", root)
+                self.assertEqual(result.reason, REASON_SYMLINK_ESCAPE)
+                self.assertIsNone(result.path)
+            finally:
+                _unlink_native(link)
+
+    def test_write_target_rejects_boundary_link_outside_run_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, _outside, link = self._linked_run(tmp)
+            try:
+                result = write_target("evidence/new.bin", root)
+                self.assertEqual(result.reason, REASON_SYMLINK_ESCAPE)
+            finally:
+                _unlink_native(link)
+
+    def test_boundary_link_inside_run_root_still_accepted(self) -> None:
+        # Containment is about the run root, not about forbidding links: a
+        # boundary linked to another directory of the same run stays legal.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            real = root / "captures"
+            real.mkdir()
+            (real / "a.png").write_text("png", encoding="utf-8")
+            link = root / "evidence"
+            _make_symlink_or_skip(self, real, link)
+            try:
+                result = read_artifact("evidence/a.png", root)
+                self.assertTrue(result.ok, result)
+            finally:
+                _unlink_native(link)
+
+    def test_intermediate_directory_link_outside_run_root_rejected(self) -> None:
+        # An ancestor link below the boundary: ``evidence/nested`` points
+        # outside, and the artifact is read through it. The canonical check
+        # already rejects this; the case is pinned so a future rewrite of the
+        # boundary rule cannot reopen the ancestor-link class.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            outside = Path(tmp) / "outside"
+            (root / "evidence").mkdir(parents=True)
+            outside.mkdir()
+            (outside / "proof.bin").write_bytes(b"OUTSIDE")
+            link = root / "evidence" / "nested"
+            _make_symlink_or_skip(self, outside, link)
+            try:
+                result = read_artifact("evidence/nested/proof.bin", root)
+                self.assertEqual(result.reason, REASON_CANONICAL_ESCAPE)
+                self.assertIsNone(result.path)
+            finally:
+                _unlink_native(link)
+
+
+class StatFailureTests(unittest.TestCase):
+    """T-159: a filesystem error during the existence check is a fact.
+
+    ``candidate.is_file()`` can raise ``PermissionError`` (or another
+    ``OSError``); one unreadable reference must not abort a whole capture.
+    Non-``OSError`` programming errors still propagate.
+    """
+
+    def test_read_artifact_maps_stat_permission_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _evidence_run(tmp)
+            with patch.object(
+                Path, "is_file", side_effect=PermissionError("denied at stat")
+            ):
+                result = read_artifact("evidence/a.png", root)
+            self.assertEqual(result.reason, REASON_RESOLUTION_FAILURE)
+            self.assertIsNone(result.path)
+
+    def test_stat_programming_error_still_propagates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _evidence_run(tmp)
+            with patch.object(
+                Path, "is_file", side_effect=TypeError("not a path")
+            ):
+                with self.assertRaises(TypeError):
+                    read_artifact("evidence/a.png", root)
+
+    def test_g6_artifact_fact_records_stat_failure_without_raising(self) -> None:
+        from design_playbook.scripts import g6_records
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _evidence_run(tmp)
+            with patch.object(
+                Path, "is_file", side_effect=PermissionError("denied at stat")
+            ):
+                facts = g6_records.collect_evidence_artifacts(
+                    ["evidence/a.png"], run_root=root)
+            self.assertEqual(len(facts), 1)
+            self.assertFalse(facts[0].ok)
+            self.assertEqual(facts[0].reason, REASON_RESOLUTION_FAILURE)
 
 
 class ToctouLimitTests(unittest.TestCase):
