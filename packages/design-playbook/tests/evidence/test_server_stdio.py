@@ -914,6 +914,168 @@ class EvidenceCaptureTests(unittest.TestCase):
             ["color", "font-size", "radius"],
         )
 
+    def _capture_under_design(
+        self, design: dict, *, fixture: str = "render-tokens-legal.html",
+        html: str | None = None,
+    ) -> tuple[dict, dict]:
+        """Capture the legal render-token fixture under one declaration."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "evidence").mkdir()
+            if html is not None:
+                page = root / "page.html"
+                page.write_text(html, encoding="utf-8")
+                url = page.resolve().as_uri()
+            else:
+                url = (_COMPONENT_DIR / "fixtures" / fixture).resolve().as_uri()
+            payload = self._capture(
+                root,
+                _v1_capture_args(
+                    url=url,
+                    state="ok",
+                    artifact_path="evidence/render.png",
+                    viewport=dict(self._RENDER_VIEWPORT),
+                    design=design,
+                ),
+            )
+            sidecar_path = root / "evidence" / "render.probe.json"
+            self.assertTrue(sidecar_path.is_file(), payload)
+            sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            self.assertTrue((root / "evidence" / "render.png").is_file(), payload)
+            return payload, sidecar
+
+    def test_declared_non_finite_px_literals_stay_undecidable(self) -> None:
+        design = {
+            **self.DECLARED,
+            "fontSizes": [14, 16, 20, 24, "NaNpx", "Infinitypx", "1e309px"],
+        }
+        payload, sidecar = self._capture_under_design(design)
+        self.assertEqual(payload["result"], "captured", payload)
+        render = sidecar["renderTokens"]
+        self.assertEqual(render["measurement_status"], "measured", render)
+        # The legal sizes still resolve, and the non-finite literals are named
+        # rather than silently absent from a "clean" result.
+        self.assertEqual(render["findings"], [])
+        reasons = " ".join(
+            note["reason"]
+            for note in render["undecidable"]
+            if note["axis"] == "font-size"
+        )
+        for literal in ("NaNpx", "Infinitypx", "1e309px"):
+            self.assertIn(repr(literal), reasons)
+
+    def test_declared_translucent_colors_stay_undecidable(self) -> None:
+        design = {
+            **self.DECLARED,
+            "colors": [
+                "#f5f5f5",
+                "#ffffff",
+                "#0b6bcb",
+                "rgb(26 26 26 / 10%)",
+                "rgba(26, 26, 26, 0.1)",
+            ],
+        }
+        payload, sidecar = self._capture_under_design(design)
+        self.assertEqual(payload["result"], "captured", payload)
+        render = sidecar["renderTokens"]
+        self.assertEqual(render["measurement_status"], "measured", render)
+        reasons = [
+            note["reason"]
+            for note in render["undecidable"]
+            if note["axis"] == "color"
+        ]
+        self.assertEqual(len(reasons), 2, render["undecidable"])
+        for literal in ("rgb(26 26 26 / 10%)", "rgba(26, 26, 26, 0.1)"):
+            self.assertTrue(
+                any(repr(literal) in reason for reason in reasons), reasons
+            )
+        # The painted text color is opaque 26,26,26 and no comparable declared
+        # entry covers it; the page is not called clean.
+        self.assertIn(
+            ("color", "off-palette-color", "rgb(26, 26, 26)"),
+            {(row["axis"], row["kind"], row["value"]) for row in render["findings"]},
+        )
+
+    def test_declared_overflow_color_channel_keeps_capture_and_undecidable(self) -> None:
+        design = {**self.DECLARED, "colors": ["rgb(1e309,0,0)"]}
+        payload, sidecar = self._capture_under_design(design)
+        self.assertEqual(payload["result"], "captured", payload)
+        render = sidecar["renderTokens"]
+        self.assertEqual(render["measurement_status"], "measured", render)
+        reasons = [
+            note["reason"]
+            for note in render["undecidable"]
+            if note["axis"] == "color"
+        ]
+        # No usable palette entry (the axis note) plus the unreadable literal;
+        # an empty finding list is therefore not conformance.
+        self.assertEqual(len(reasons), 2, render["undecidable"])
+        self.assertTrue(
+            any("'rgb(1e309,0,0)'" in reason for reason in reasons), reasons
+        )
+
+    def test_declared_non_css_numeric_literals_stay_undecidable(self) -> None:
+        # float() reads "1_6px" as 16 and "rgb(2_6,...)" as 26; neither is a
+        # CSS number, so the browser paints nothing and the owner must say so.
+        design = {
+            **self.DECLARED,
+            "fontSizes": [14, 16, 20, 24, "1_6px"],
+            "colors": ["#f5f5f5", "#ffffff", "rgb(2_6,26,26)", "#0b6bcb"],
+        }
+        payload, sidecar = self._capture_under_design(design)
+        self.assertEqual(payload["result"], "captured", payload)
+        render = sidecar["renderTokens"]
+        self.assertEqual(render["measurement_status"], "measured", render)
+        reasons = " ".join(note["reason"] for note in render["undecidable"])
+        self.assertIn("'1_6px'", reasons)
+        self.assertIn("'rgb(2_6,26,26)'", reasons)
+        # The painted text colour is opaque 26,26,26 and no comparable entry
+        # covers it: the page is not called clean.
+        self.assertIn(
+            ("color", "off-palette-color", "rgb(26, 26, 26)"),
+            {(row["axis"], row["kind"], row["value"]) for row in render["findings"]},
+        )
+
+    def test_declared_non_css_whitespace_literals_stay_undecidable(self) -> None:
+        # NBSP and vertical tab are not CSS whitespace; the browser rejects
+        # both literals, so the owner must name them instead of trimming.
+        design = {
+            **self.DECLARED,
+            "fontSizes": [14, 16, 20, 24, "\u00a016px"],
+            "colors": ["#f5f5f5", "#ffffff", "rgb(26\u000b26 26)", "#0b6bcb"],
+        }
+        payload, sidecar = self._capture_under_design(design)
+        self.assertEqual(payload["result"], "captured", payload)
+        render = sidecar["renderTokens"]
+        self.assertEqual(render["measurement_status"], "measured", render)
+        reasons = " ".join(note["reason"] for note in render["undecidable"])
+        self.assertIn("'\\xa016px'", reasons)
+        self.assertIn("'rgb(26\\x0b26 26)'", reasons)
+        self.assertIn(
+            ("color", "off-palette-color", "rgb(26, 26, 26)"),
+            {(row["axis"], row["kind"], row["value"]) for row in render["findings"]},
+        )
+
+    def test_declared_fractional_color_matches_the_painted_color(self) -> None:
+        # The browser paints rgb(12.5,12.5,12.5) as rgb(13, 13, 13); a banker's
+        # round would map the declaration to rgb(12, 12, 12) and report a false
+        # deviation.
+        html = (
+            "<!doctype html><html><head><meta charset='utf-8'></head>"
+            "<body style='color: rgb(12.5,12.5,12.5); background: #ffffff;"
+            " margin: 0' data-state='ok'><p>fractional</p></body></html>"
+        )
+        design = {"colors": ["#ffffff", "rgb(12.5,12.5,12.5)"]}
+        payload, sidecar = self._capture_under_design(design, html=html)
+        self.assertEqual(payload["result"], "captured", payload)
+        render = sidecar["renderTokens"]
+        self.assertEqual(render["measurement_status"], "measured", render)
+        self.assertEqual(render["findings"], [])
+        self.assertEqual(
+            [note for note in render["undecidable"] if note["axis"] == "color"],
+            [],
+        )
+
     def test_async_init_wait_for_state_reaches_ok(self) -> None:
         page = _COMPONENT_DIR / "fixtures" / "async-init.html"
         with tempfile.TemporaryDirectory() as tmp:
