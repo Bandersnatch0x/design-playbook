@@ -1,6 +1,6 @@
 # Design-decision entries (DD blocks)
 
-Protocol reference for versioned decision records appended to `decision-report.md`. The top block (scene, density, template, regions, components, baseline changes, and risks) is the Fill consumption face and stays byte-identical. DD entry blocks are its evidence layer. Append them after it in the same field-block style as the rule registry. Machine face: `scripts/g10_design_decisions.py` (G10, orchestrated by `validate_run.py`; fires only when DD blocks are present).
+Protocol reference for versioned decision records appended to `decision-report.md`. The top block (scene, density, template, regions, components, baseline changes, and risks) is the Fill consumption face and stays byte-identical. Machine face: `scripts/g10_design_decisions.py` (G10, orchestrated by `validate_run.py`) checks that the top block declares those five axes whenever the report exists; DD entry blocks are its evidence layer, appended after it in the same field-block style as the rule registry, and are checked when present.
 
 ## Tiers and triggers
 

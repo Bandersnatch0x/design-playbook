@@ -105,7 +105,15 @@ def _review(run: Path, *, repaired: bool) -> None:
 
 def _confirm_fixture(run: Path, html: bytes) -> None:
     (run / "decision-report.md").write_text(
-        "# Simulated approval input\nAutomated test fixture, not real approval.\n",
+        "# Simulated approval input\n"
+        "Automated test fixture, not real approval.\n\n"
+        "```text\n"
+        "scene: operator journey\n"
+        "density: console-tight\n"
+        "template: table shell with a status region\n"
+        "regions: main -> list table; status -> row state summary\n"
+        "components: row action -> Button (secondary); status -> Badge\n"
+        "```\n",
         encoding="utf-8",
     )
     (run / "preview" / "round-1.html").write_bytes(html)

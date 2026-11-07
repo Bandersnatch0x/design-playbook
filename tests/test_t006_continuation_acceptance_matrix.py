@@ -85,6 +85,14 @@ invalidated:
 _DECISION_REPORT = (
     "# Decision report\n"
     "\n"
+    "```text\n"
+    "scene: ops queue monitor\n"
+    "density: console-tight\n"
+    "template: table shell with a filter toolbar\n"
+    "regions: toolbar -> filters; main -> queue table; status -> run summary\n"
+    "components: row action -> Button (secondary); status -> Badge\n"
+    "```\n"
+    "\n"
     "Round 1: the queue-monitor prototype was reviewed against the spec\n"
     "and confirmed by the user.\n"
 )
