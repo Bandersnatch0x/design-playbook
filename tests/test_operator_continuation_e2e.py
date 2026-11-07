@@ -80,13 +80,17 @@ def _review(run: Path, *, repaired: bool) -> None:
     finding = (
         "issue: clear all has no confirmation\nsource: L6.2\n"
         "fix: add consequence confirmation and preserve tasks on cancel\n"
-        "severity: S3\ndisposition: blocking"
+        "severity: S3\ndisposition: blocking\n"
+        "criteria: L6.2\n"
+        f"evidence: {'evidence/L6.2-before.png' if repaired else 'evidence/L6.2.png'}"
     )
     closure = (
         "## Recirculate closure trail\n\n"
         "- closes: clear all has no confirmation -> reopen `spec L6.2` -> "
         "fix: explicit confirmation -> re-eval: cancel preserves tasks, "
         "confirm clears -> **0 blocking**\n"
+        "  repair-evidence: criterion=L6.2 "
+        "before=evidence/L6.2-before.png after=evidence/L6.2.png\n"
         if repaired else
         "invalidated:\n  - criterion: L6.2\n    artifacts: [evidence/L6.2.png]\n"
         "    reason: destructive action needs repair and re-capture\n"
@@ -130,7 +134,10 @@ def _confirm_fixture(run: Path, html: bytes) -> None:
     )
 
 
-def _capture_paths(project: Path, run: Path, *, repaired: bool) -> None:
+def _capture_paths(
+    project: Path, run: Path, *, repaired: bool,
+    preserved_entries: tuple[dict, ...] = (),
+) -> list[dict]:
     paths = [
         [{"do": "press", "selector": "[data-complete]", "key": "Enter"}],
         [{"do": "click", "selector": "#clear"}],
@@ -138,26 +145,59 @@ def _capture_paths(project: Path, run: Path, *, repaired: bool) -> None:
     ]
     # A unique selector exercises the keyboard path on the actual Fill.
     paths[0][0]["selector"] = "#tasks li:first-child [data-complete]"
-    if repaired:
-        paths[1].append({"do": "click", "selector": "#confirm"})
+    # The repaired visible state is the consequence confirmation itself; the
+    # final empty state is byte-identical to the pre-fix failure state, so it
+    # cannot evidence the visible repair. The browser assertions below still
+    # exercise cancel/confirm and the empty CTA end to end.
     entries = []
     for n, actions in enumerate(paths, 1):
+        state = ("confirmation" if n == 2 and repaired
+                 else "empty" if n == 2 else "ok")
         result = json.loads(_command(project, "-c", CAPTURE_CODE, data={
             "schemaVersion": 1, "url": (project / "index.html").as_uri(),
-            "type": "screenshot", "state": "empty" if n == 2 else "ok",
+            "type": "screenshot", "state": state,
             "artifact_path": f"evidence/L6.{n}.png", "overwrite": repaired,
             "viewport": {"width": 1280, "height": 800,
                          "devicePixelRatio": 1, "colorScheme": "light"},
             "actions": actions,
         }))
         assert result["result"] == "captured", result
-        assert Path(result["written_path"]).read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
-        entries.append({"criterion": f"L6.{n}", "artifact": f"L6.{n}.png",
-                        "ts": STAMP, "request": result["request"]})
+        written = Path(result["written_path"])
+        written_bytes = written.read_bytes()
+        assert written_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+        entries.append({
+            "criterion": f"L6.{n}", "artifact": f"L6.{n}.png",
+            "ts": STAMP, "request": result["request"],
+            "capture": {"type": "screenshot", "state": state,
+                        "artifact_path": f"evidence/L6.{n}.png"},
+            "sha256": hashlib.sha256(written_bytes).hexdigest(),
+        })
     # Manifest binding is a harness/owner action, never performed by the Provider.
+    all_entries = list(preserved_entries) + entries
     (run / "evidence" / "manifest.jsonl").write_text(
-        "".join(json.dumps(entry) + "\n" for entry in entries), encoding="utf-8",
+        "".join(json.dumps(entry) + "\n" for entry in all_entries),
+        encoding="utf-8",
     )
+    return entries
+
+
+def _preserve_failure_capture(run: Path, entries: list[dict]) -> dict:
+    """Keep the genuine pre-repair L6.2 capture as the named failure artifact.
+
+    The repair re-capture overwrites ``L6.2.png``; copying the captured bytes
+    before that overwrite preserves the actual failure state for the named
+    before/after pair. No metadata or digest is invented: the preserved entry
+    describes the same capture, with its real file digest.
+    """
+    source = next(entry for entry in entries if entry["artifact"] == "L6.2.png")
+    preserved = json.loads(json.dumps(source))
+    preserved["artifact"] = "L6.2-before.png"
+    preserved["capture"]["artifact_path"] = "evidence/L6.2-before.png"
+    shutil.copyfile(run / "evidence" / "L6.2.png",
+                    run / "evidence" / "L6.2-before.png")
+    preserved["sha256"] = hashlib.sha256(
+        (run / "evidence" / "L6.2-before.png").read_bytes()).hexdigest()
+    return preserved
 
 
 @contextmanager
@@ -228,7 +268,8 @@ def test_extra_project_blocker_to_repaired_handoff(tmp_path: Path) -> None:
             app.locator("#clear").click()
             expect(app.locator("#tasks li")).to_have_count(0)
             expect(app.locator("#confirmation")).to_be_hidden()
-            _capture_paths(project, run, repaired=False)
+            initial_entries = _capture_paths(project, run, repaired=False)
+            failure_entry = _preserve_failure_capture(run, initial_entries)
             _review(run, repaired=False)
             pending = _cli(project, "run_handoff.py", run)
             assert pending["verdict"] == "Pending"
@@ -271,7 +312,8 @@ def test_extra_project_blocker_to_repaired_handoff(tmp_path: Path) -> None:
                 ), encoding="utf-8")
                 app.reload()
                 _exercise_inbox(app)
-                _capture_paths(project, run, repaired=True)
+                _capture_paths(project, run, repaired=True,
+                               preserved_entries=(failure_entry,))
                 _review(run, repaired=True)
                 read_boundary = _tree_digest(project)
                 console.locator("#refresh-button").click()
