@@ -106,6 +106,22 @@ def _zero_findings_pair() -> tuple[Path, Path]:
     return PASS / "zero-findings.spec.md", PASS / "zero-findings.point-back.md"
 
 
+# A decision report that is shape-valid since T-153: G10 now reads the
+# top-block axes (scene / density / template / regions / components) whenever
+# a report exists, so fixtures whose report content is irrelevant to the test
+# still have to declare them.
+_SHAPE_VALID_REPORT = (
+    "# decision report\n\n"
+    "```text\n"
+    "scene: ops list\n"
+    "density: console-tight\n"
+    "template: table shell with a status region\n"
+    "regions: main -> list table; status -> row state summary\n"
+    "components: row action -> Button (secondary); status -> Badge\n"
+    "```\n"
+)
+
+
 def _json_rule_ids(
     result: subprocess.CompletedProcess[str],
 ) -> set[str] | None:
@@ -805,7 +821,7 @@ def main() -> int:
         )
 
         _write_text(preview / "round-1.html", prototype_body.decode("utf-8"))
-        _write_text(run_root / "decision-report.md", "# decision report\n")
+        _write_text(run_root / "decision-report.md", _SHAPE_VALID_REPORT)
         _write_text(
             preview / "confirm-round-1.json",
             json.dumps(
@@ -1076,7 +1092,7 @@ def main() -> int:
                 _confirm_record(1, prototype_html_hash=h1), ensure_ascii=False, indent=2
             ),
         )
-        _write_text(run_root / "decision-report.md", "# decision report\n")
+        _write_text(run_root / "decision-report.md", _SHAPE_VALID_REPORT)
         expect_invalid(
             failures,
             "g5-stale-old-round-confirmed",
@@ -1131,7 +1147,7 @@ def main() -> int:
                 ensure_ascii=False,
             ),
         )
-        _write_text(run_root / "decision-report.md", "# decision report\n")
+        _write_text(run_root / "decision-report.md", _SHAPE_VALID_REPORT)
         expect_invalid(
             failures,
             "g5-decision-entry-makes-latest-round-current",
@@ -1159,7 +1175,7 @@ def main() -> int:
                 indent=2,
             ),
         )
-        _write_text(run_root / "decision-report.md", "# decision report\n")
+        _write_text(run_root / "decision-report.md", _SHAPE_VALID_REPORT)
         expect_invalid(
             failures,
             "g5-prototype-hash-mismatch",
@@ -1186,7 +1202,7 @@ def main() -> int:
                 _confirm_record(1, prototype_html_hash=h1), ensure_ascii=False, indent=2
             ),
         )
-        _write_text(run_root / "decision-report.md", "# decision report\n")
+        _write_text(run_root / "decision-report.md", _SHAPE_VALID_REPORT)
         expect_valid(
             failures,
             "g5-prototype-hash-match",
@@ -1216,7 +1232,7 @@ def main() -> int:
                 indent=2,
             ),
         )
-        _write_text(run_root / "decision-report.md", "# decision report\n")
+        _write_text(run_root / "decision-report.md", _SHAPE_VALID_REPORT)
         expect_valid(
             failures,
             "g5-prototype-hash-crlf-normalized",
@@ -1375,7 +1391,7 @@ def main() -> int:
                 indent=2,
             ),
         )
-        _write_text(run_root / "decision-report.md", "# decision report\n")
+        _write_text(run_root / "decision-report.md", _SHAPE_VALID_REPORT)
         expect_invalid(
             failures,
             "g5-prototype-path-escapes-preview",

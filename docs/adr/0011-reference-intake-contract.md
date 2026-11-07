@@ -59,3 +59,20 @@ Open Design's `reference-design-contract` and open-codesign's reference decompos
 - Automatic React/Vue/Flutter export from a screenshot
 - Keyword-only skill auto-routing as the primary trigger
 - Shipping third-party brand kits inside the plugin package
+
+## Amendment (2026-11-06, T-153): a present contract is shape-checked
+
+Decision 5 ("no new gate") held while the contract was prose-only. The
+remaining gap was that the artifact was declared in the stage table and
+consumed by three skills, yet nothing read it: a contract declaring none of
+its template headings passed every seam.
+
+- G13 (`scripts/g13_reference_contract.py`) checks only runs that carry
+  `reference/contract.md`: every contract-template heading plus the
+  `always / ask / never hints:` and `Captured at` markers must be declared.
+  Repair points at the template SSOT.
+- Decision 5 still holds where it matters: a run without reference material
+  is never a finding, and a section left blank-and-noted is not one either —
+  axis declaration is checked, not section prose.
+- The judgment has one home. `tests/test_reference_intake_fixtures.py`
+  remains a fixture inventory, not a second implementation.

@@ -46,7 +46,21 @@ def _write(path: Path, text: str) -> None:
 
 
 def _rules(report: str, **kwargs) -> set[str]:
-    return {f.rule_id for f in check_g10(report, **kwargs)}
+    return {f.rule_id for f in check_g10(TOP_BLOCK + report, **kwargs)}
+
+
+# T-153: G10 reads the verbatim top block whenever a report exists. These
+# cases judge the DD-entry rules, so a shape-valid top block is a constant
+# prefix rather than a per-case concern.
+TOP_BLOCK = """```text
+scene: s2 fixture
+density: console-tight
+template: table shell
+regions: main -> list table
+components: row action -> Button (secondary)
+```
+
+"""
 
 
 R_BLOCK = """## DD-0001 — trigger
@@ -185,7 +199,7 @@ class DDEntryParseTests(unittest.TestCase):
         self.assertEqual(entry.supersedes_ref, "")
 
     def test_report_without_entries_is_ignored(self) -> None:
-        text = "# Decision report\n\n```text\nscene: x\n```\n"
+        text = "# Decision report\n\n" + TOP_BLOCK + "No DD entries.\n"
         self.assertEqual(parse_dd_entries(text), [])
         self.assertEqual(check_g10(text), [])
 
@@ -266,7 +280,7 @@ class DDEntryParseTests(unittest.TestCase):
             "summary: fixed name plus stamp, deviations: none, assets: []}\n",
             "summary: fixed name plus stamp, deviations: none, assets: []\n",
         )
-        findings = check_g10(_report(broken))
+        findings = check_g10(TOP_BLOCK + _report(broken))
         rule_ids = [f.rule_id for f in findings]
         self.assertIn("G10.fold_unterminated", rule_ids)
         self.assertTrue(

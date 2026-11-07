@@ -23,6 +23,7 @@ const state = {
   documentProject: null,
   documentAsset: null,
   canvasProject: null,
+  canvasLoadSeq: 0,
   canvases: [],
   canvas: null,
   canvasDocument: null,
@@ -3165,6 +3166,26 @@ function layerSelection(action) {
 
 // -- board and canvas lifecycle ------------------------------------------
 
+// A canvas read owns the panel only until a newer one starts (or the panel
+// switches project). Without this, a slow list response can land after a
+// newer reload has filled the select and clear it again, leaving zero
+// options next to a fully rendered board.
+function beginCanvasLoad() {
+  state.canvasLoadSeq += 1;
+  return {
+    seq: state.canvasLoadSeq,
+    projectId: state.canvasProject ? state.canvasProject.projectId : null,
+  };
+}
+
+function canvasLoadIsCurrent(token) {
+  const project = state.canvasProject;
+  return (
+    token.seq === state.canvasLoadSeq &&
+    token.projectId === (project ? project.projectId : null)
+  );
+}
+
 async function loadCanvases() {
   const project = state.canvasProject;
   if (!project) {
@@ -3174,8 +3195,10 @@ async function loadCanvases() {
     setCanvasSaveState("idle", "画布尚未就绪：正在打开项目。");
     return;
   }
+  const token = beginCanvasLoad();
   try {
     const payload = await api(canvasPath(""));
+    if (!canvasLoadIsCurrent(token)) return;
     state.canvases = payload.canvases || [];
     elements.canvasSelect.textContent = "";
     for (const row of state.canvases) {
@@ -3198,13 +3221,16 @@ async function loadCanvases() {
         : state.canvases[0].canvasId
     );
   } catch (error) {
+    if (!canvasLoadIsCurrent(token)) return;
     showCanvasError(error, "读取画布列表");
   }
 }
 
 async function loadCanvas(canvasId) {
+  const token = beginCanvasLoad();
   try {
     const payload = await api(canvasPath("/" + canvasId));
+    if (!canvasLoadIsCurrent(token)) return;
     state.canvas = payload.canvas;
     state.canvasCounter = payload.canvas.counter;
     state.canvasDocument = payload.document;
@@ -3221,6 +3247,7 @@ async function loadCanvas(canvasId) {
     renderContext(null);
     await loadSnapshots();
   } catch (error) {
+    if (!canvasLoadIsCurrent(token)) return;
     showCanvasError(error, "读取画布");
   }
 }
