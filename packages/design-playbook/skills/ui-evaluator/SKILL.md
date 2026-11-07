@@ -110,22 +110,21 @@ Order: **blocking** first (broken L5/L6, unsafe dangerous ops, removed focus rin
 - **Pass.** zero blocking. Every L6 criterion has exactly one evidence row. For Pass, every required evidence row passes (every evidence result is `pass`). Token gaps are logged or fixed.
 - **Recirculate.** each blocking `source` names the step and declaration to reopen in design-playbook; `fail` or `blocked` evidence remains visible.
 
-For a repaired blocker, record exactly one closure line whose target is the finding `id` when present, otherwise the issue text (same normalisation as G4):
+For a repaired blocker, name the criteria on the finding and record exactly one closure line whose target is the finding `id` when present, otherwise the issue text (same normalisation as G4):
 
 ```text
+criteria: L6.3
+evidence: evidence/L6.3-empty-r1.png
+
 - closes: <id or exact issue value> -> recirculate -> fix -> re-eval -> 0 blocking
-  repair-evidence: before=evidence/L6.3-empty-r1.png after=evidence/L6.3-empty-r2.png
+  repair-evidence: criterion=L6.3 before=evidence/L6.3-empty-r1.png after=evidence/L6.3-empty-r2.png
 ```
 
-The `repair-evidence:` line is the pair behind the closure, and it is the finding's required proof: the failing half and the repaired half, each
-bound through `evidence/manifest.jsonl` to the same criterion and the same `request.viewport`. Half a pair is `blocked`, so the closure does not
-close and the verdict stays `Recirculate` — never `Pass`. Do not write the pair from memory or from the producer's narration; it is the capture
-the manifest already binds.
+Complete acceptance derives the obligation from the finding, so deleting the annotation cannot bypass it. A visible-state (`screenshot`) repair needs one named pair: `before` is the finding's own failure artifact, `after` is the exact artifact the criterion's current ledger row observes, and both bind through `evidence/manifest.jsonl` to the same criterion and one complete viewport. A required pair must declare matching SHA-256 digests. `a11y_tree` and `interaction_trace` retest in their declared type and do not require screenshots; `automated_check` and `declaration_coverage` keep the evaluator's judgment boundary. Half a pair is `blocked`, so the closure does not close and the verdict stays `Recirculate` — never `Pass`. Do not write the pair from memory or from the producer's narration; it is the capture the manifest already binds.
 
-Repeat-state detection is not narration either. Identical bytes on both halves is `G4.repair_evidence_unchanged` (the failing surface is still
-standing). A blocker reappearing after a repair keeps its `id` and increments `rounds:`, and the existing two-cycle stop in
-[`references/repair.md`](references/repair.md) is the checkpoint — two rounds without new evidence stops the recirculation. The machine face is
-`scripts/validate_run.py`; it decides the pair once, so neither the loop nor a second gate re-implements the verdict.
+`--legacy` and explicit `--require-*` selections keep the structural reading: an annotation that exists is validated through the same G6 owner, but no new pair or proof-type obligation is invented and that result is not complete acceptance.
+
+Repeat-state detection is not narration either. Byte-identical *visual* halves are `G4.repair_evidence_unchanged`: the pair is insufficient to demonstrate the declared visible change, not proof that the function still fails. A blocker reappearing after a repair keeps its `id` and increments `rounds:`, and the existing two-cycle stop in [`references/repair.md`](references/repair.md) is the checkpoint — two rounds without new evidence stops the recirculation. The machine face is `scripts/validate_run.py`; it decides the pair once, so neither the loop nor a second gate re-implements the verdict.
 
 **Done when:** the explicit verdict is structurally unique. Blocking sources are non-empty. Every blocking finding has exactly one matching closure before `Pass`. A blocking finding cannot be waived inside a Pass artifact. Without a user in the loop, blocking findings remain in recirculate and the run requests a decision. Re-evaluate only after an explicit user decision updates the owning declaration or severity. Record it against the user's statement or decision record. The final Pass artifact contains no blocking severity.
 
@@ -157,11 +156,11 @@ Coverage levels:
 
 Positive findings are acceptance evidence, not decoration. Every L6 `pass` on implemented UI requires at least one bound rendered or interaction artifact. Measurement and source corroborate but never carry a pass alone. Planning-only passes rest on declaration coverage and must not claim a render or test occurred. Missing evidence is `blocked` (unverifiable), never `fail`, "not tested" and "tested and failed" are different facts.
 
-**Done when:** all six blocks are present. The Coverage statement names the exhaustive completion status and the explicit unreviewed list (G11). Every pass row cites bound evidence. Limitations name the judgment-class dimensions and assumed dependencies. Machine check right after writing point-back.md: `python scripts/g2_g4_pointback.py .scratch/<run>/point-back.md`, do not wait for the end-of-run `validate_run.py` sweep.
+**Done when:** all six blocks are present. The Coverage statement names the exhaustive completion status and the explicit unreviewed list (G11). Every pass row cites bound evidence. Limitations name the judgment-class dimensions and assumed dependencies. Machine check right after writing point-back.md: `python scripts/g2_g4_pointback.py .scratch/<run>/point-back.md` (structural gate; the repair-proof obligation over captured artifact facts is decided by `validate_run.py`), do not wait for the end-of-run `validate_run.py` sweep.
 
 After Recirculate, use [`references/repair.md`](references/repair.md) for the smallest owning declaration, the R1-R5 second-hop route, and which evidence to invalidate.
 
-The artifact shape behind this verdict is machine-checkable. `scripts/validate_run.py` gates L1-L6 and ordered `Given, then When, then Then` in every top-level L6 item. It requires one non-empty four-field evidence row per `L6.<n>`, allowed evidence results, and all-pass evidence for `Pass`. It also requires four non-empty finding fields, one explicit verdict, and one exact issue-linked closure per blocking finding. When a closure declares `repair-evidence:`, it requires both halves bound to one criterion and viewport (`G4.repair_evidence_*`). These checks are the completion criteria above, not extra prose.
+The artifact shape behind this verdict is machine-checkable. `scripts/validate_run.py` gates L1-L6 and ordered `Given, then When, then Then` in every top-level L6 item. It requires one non-empty four-field evidence row per `L6.<n>`, allowed evidence results, and all-pass evidence for `Pass`. It also requires four non-empty finding fields, one explicit verdict, and one exact issue-linked closure per blocking finding. A blocking finding a closure claims to close must name its `criteria:`; complete acceptance then checks the association, the declared proof type, and the named pair (visible-state repairs) or the declared-type retest (nonvisual repairs) through the same G6 binding and captured-bytes owner (`G4.repair_evidence_*`, `G4.repair_association_*`, `G6.*`). These checks are the completion criteria above, not extra prose.
 
 After Recirculate, use [`references/repair.md`](references/repair.md) for the smallest owning declaration and which evidence to invalidate.
 

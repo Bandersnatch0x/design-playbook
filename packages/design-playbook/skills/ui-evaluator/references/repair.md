@@ -58,17 +58,49 @@ Re-evaluation runs the invalidated set plus adjacent primary-path nodes only (mi
 
 ## Paired repair evidence
 
-A closure closes on a pair, declared beside it:
+Complete acceptance derives one proof obligation from every blocking finding a
+single closure claims to close. The finding names the criteria; the closure
+carries the pair; the ledger carries the retest:
 
 ```text
-- closes: L6.3 -> fix -> re-eval -> 0 blocking
-  repair-evidence: before=evidence/L6.3-empty-r1.png after=evidence/L6.3-empty-r2.png
+issue: empty state primary action is hidden
+disposition: blocking
+criteria: L6.3
+evidence: evidence/L6.3-empty-r1.png
+
+- closes: <id or exact issue value> -> recirculate -> fix -> re-eval -> 0 blocking
+  repair-evidence: criterion=L6.3 before=evidence/L6.3-empty-r1.png after=evidence/L6.3-empty-r2.png
 ```
 
-- Both halves resolve through `evidence/manifest.jsonl` to the same `criterion` and the same `request.viewport`; bytes must differ.
-- Missing half, unbound artifact, mismatched criterion or viewport, and byte-identical halves are all `blocked`. A blocked closure is not a
-  closure, so the verdict stays `Recirculate`.
-- Repeat-state detection is the two-cycle stop above: the blocker keeps its `id`, `rounds:` increments, and two rounds without new evidence
-  narrate `close_reason: escalated-stop`. The byte-identity check is the same question asked of the artifacts instead of the finding.
-- `scripts/validate_run.py` owns the judgment (rules `G4.repair_evidence_*`). Neither this map nor the closure line re-decides it.
+- `criteria:` holds one or more exact `L6.<n>` tokens. A closed blocker with no
+  criteria, an unknown criterion, or a duplicate fails closed. An annotation
+  may omit `criterion=` only when the finding declares exactly one criterion;
+  it then inherits that one value.
+- The closure must resolve to that finding alone. A shared issue text or an
+  `id:` that collides with another finding's issue cannot be consumed.
+- **Visible-state (screenshot) repairs** need exactly one named pair per
+  closure x criterion. `before` must be the finding's own `evidence:`
+  artifact; `after` must be the artifact the criterion's current ledger row
+  observes. Both halves bind through `evidence/manifest.jsonl` to that
+  criterion and share one complete viewport; a required pair must declare
+  matching SHA-256 digests.
+- **`a11y_tree` / `interaction_trace`** repairs retest in their declared type
+  and do not require screenshots. An explicitly written pair is still
+  validated, but its absence creates no visual obligation.
+- **`automated_check` / `declaration_coverage`** keep the evaluator's existing
+  judgment boundary. A free-text observation needs no capture request; a
+  referenced `evidence/` file still passes the same binding and integrity
+  checks.
+- Byte-identical *visual* halves are `G4.repair_evidence_unchanged`: the pair
+  is insufficient to demonstrate the declared visible change - not a claim
+  that the function still fails. Changed bytes never establish criterion
+  success either; the criterion's ledger result must pass.
+- `--legacy` and explicit `--require-*` selections keep the structural
+  reading: an annotation that exists is validated through the same G6 owner,
+  but no pair or proof-type obligation is invented and the result must not be
+  reported as complete acceptance.
+
+`scripts/validate_run.py` owns the judgment (rules `G4.repair_evidence_*` and
+`G4.repair_association_*`; artifact facts and integrity keep their `G6.*`
+codes). Neither this map nor the closure line re-decides it.
 

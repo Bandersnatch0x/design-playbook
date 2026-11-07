@@ -105,11 +105,15 @@ def _resolve_candidate(
 
     Rejects, in order: native/POSIX/Windows absolute paths; any ``..``
     segment (defence in depth before resolution); resolution failures
-    (OSError during resolve); canonical escapes (resolved candidate leaves
-    the boundary root); observed symlink escapes (realpath leaves the
-    boundary root - Path.resolve and os.path.realpath can disagree on
-    symlink chains across platforms). When ``require_existing_file`` is set,
-    a candidate that is not an existing regular file is rejected last.
+    (OSError during resolve); a boundary that does not itself resolve inside
+    the candidate root (a directory symlink or junction at the boundary would
+    otherwise widen the read/write authority beyond the explicit root);
+    canonical escapes (resolved candidate leaves the boundary root); observed
+    symlink escapes (realpath leaves the boundary root - Path.resolve and
+    os.path.realpath can disagree on symlink chains across platforms). When
+    ``require_existing_file`` is set, a candidate that is not an existing
+    regular file is rejected last; a stat that raises OSError is a
+    resolution failure, not an exception the caller must handle.
     """
     requested = Path(relpath)
 
@@ -139,6 +143,22 @@ def _resolve_candidate(
     except OSError:
         return ContainmentResult(None, REASON_RESOLUTION_FAILURE)
 
+    # 3b. The boundary must itself resolve inside the explicit candidate root.
+    #     A directory symlink or junction at the boundary (``<run_root>/evidence``
+    #     -> outside) would make the under-boundary check below pass while the
+    #     artifact lives outside the selected run, so the boundary's real path
+    #     is required to belong to the resolved root before the candidate is
+    #     judged against it. ``read_under`` passes the same root twice, so the
+    #     check is a no-op there.
+    try:
+        boundary_real = Path(os.path.realpath(boundary))
+        root_real = Path(os.path.realpath(candidate_root.resolve(strict=False)))
+        boundary_real.relative_to(root_real)
+    except OSError:
+        return ContainmentResult(None, REASON_RESOLUTION_FAILURE)
+    except ValueError:
+        return ContainmentResult(None, REASON_SYMLINK_ESCAPE)
+
     # 4. Canonical escape: the resolved candidate must stay under the
     #    boundary root. For the evidence operations this catches ``spec.md``
     #    and ``skills/x`` (siblings of evidence/).
@@ -158,9 +178,17 @@ def _resolve_candidate(
 
     # 6. Read side: require an existing regular file. The write side permits
     #    a nonexistent suffix and stops here (the Provider's manifest-refusal
-    #    and overwrite checks are separate policy, not containment).
-    if require_existing_file and not candidate.is_file():
-        return ContainmentResult(None, REASON_NOT_REGULAR_FILE)
+    #    and overwrite checks are separate policy, not containment). A stat
+    #    that raises a filesystem error (e.g. PermissionError) is a stable
+    #    resolution failure, not an exception that aborts a whole capture;
+    #    non-OSError programming errors still propagate.
+    if require_existing_file:
+        try:
+            is_file = candidate.is_file()
+        except OSError:
+            return ContainmentResult(None, REASON_RESOLUTION_FAILURE)
+        if not is_file:
+            return ContainmentResult(None, REASON_NOT_REGULAR_FILE)
 
     return ContainmentResult(candidate, "")
 

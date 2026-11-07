@@ -14,4 +14,6 @@ Self-authored samples for onboarding and dogfood. **Not** ports of any upstream 
 
 2026-11-07 (T-158): the bundled `export-upgrade/` and `dogfood/` `design-baseline/state.json` files are **illustrative demo values** (stale relative-root bindings kept for the walkthrough). Complete `validate_run.py` acceptance re-verifies a present baseline, so executable tests copy the scenario to `<project>/.scratch/run` and bind a real baseline through `prepare`/`confirm` instead of trusting these files.
 
+2026-11-07 (T-159): both fixtures' closed blocking findings now declare `criteria:` and carry the named `repair-evidence:` pair that complete acceptance derives from the finding. The pair halves are real files whose manifest `sha256` values match their bytes. The artifacts remain synthesized scripted-walkthrough JSONs (never renamed as native provider captures); their rows exist to exercise the machine contract, not to claim a real UI repair.
+
 Agent-loaded SSOT remains `../skills/*/references/*`. These files are human-facing packs you can paste into a session.

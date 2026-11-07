@@ -500,7 +500,10 @@ def main(argv: list[str]) -> int:
         prog="g2_g4_pointback.py",
         description="G2/G4 point-back gate: the six-block report's ledger, "
                     "findings, and verdict satisfy the syntax and closure "
-                    "rules (including round-based escalated-stop counting).",
+                    "rules (including round-based escalated-stop counting). "
+                    "Repair-evidence obligations over frozen artifact facts "
+                    "(T-159) belong to validate_run.py; this single gate "
+                    "does not evaluate them.",
     )
     parser.add_argument(
         "point_back",

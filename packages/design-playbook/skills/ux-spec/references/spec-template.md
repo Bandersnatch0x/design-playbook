@@ -54,8 +54,8 @@ schema 2 adds the L2-L5 structured field blocks (per-page duty table, path table
 
 ## L6 Acceptance criteria
 - Each acceptance criterion is a top-level list item containing `Given`, then `When`, then `Then` in that fixed order. State its required evidence. Cite a reachable path from the L3 path table as `(path: P<n>)`.
-  - Required evidence: declaration coverage / target-viewport render / interaction record or automated check / applicable test, type, lint, build
-  - When evidence is a runtime state, name the capture seed (state to capture + capture type, e.g. "error-state screenshot"). Do not write selector, URL, and actions
+  - Required evidence: <screenshot | a11y_tree | interaction_trace | automated_check | declaration_coverage>[; state=<state>][; viewport=<w>x<h>]
+  - Only that exact token form is machine-read. Prose ("screenshots and a test", "interaction record") stays unknown, and complete acceptance cannot close a blocking finding against an unknown proof type. `automated_check` and `declaration_coverage` are nonvisual retest roles; they add no capture type. When evidence is a runtime state, name the capture seed (state to capture + capture type). Do not write selector, URL, and actions
 
 Design done definition: <plain paragraph, not a list item. Every top-level bullet in this section is machine-counted as a criterion>
 

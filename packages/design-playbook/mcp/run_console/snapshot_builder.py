@@ -862,6 +862,11 @@ class _Builder:
             self._run_root,
             observed_rows=[(evaluation.criterion_id, token)],
             entries=self._manifest_entries(facts),
+            # The projection consumes the snapshot's frozen facts; a snapshot
+            # without them fails closed instead of re-reading the artifact.
+            artifact_facts=(
+                facts.evidence_artifacts
+                if facts.evidence_artifacts is not None else ()),
         )
         if any(finding.rule_id in _UNBINDABLE_RULES for finding in g6_findings):
             if any(finding.rule_id in _DEGRADING_RULES for finding in g6_findings):

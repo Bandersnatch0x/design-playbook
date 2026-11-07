@@ -592,16 +592,21 @@ When a finding has no owner or you need the observable-to-declaration routing, u
 duplicate it here).
 Fix only the owning layer, then resume from the step that consumes it.
 
-A closure is evidence, not a sentence. Every repaired blocker closes on a **bound pair** — the failing state and the repaired state — declared on
-the closure trail as `repair-evidence: before=<artifact> after=<artifact>`. Both halves resolve through `evidence/manifest.jsonl` to the same
-criterion and the same `request.viewport`, and their bytes must differ. A closure missing either half is `blocked`, so the verdict stays
-`Recirculate`; it is never a `Pass`.
+A closure is evidence, not a sentence. The finding names its criteria (`criteria: L6.<n>`); a visible-state repair closes on a **named pair** — the
+failing state and the repaired state — declared on that closure's trail as `repair-evidence: criterion=L6.<n> before=<artifact> after=<artifact>`.
+Both halves resolve through `evidence/manifest.jsonl` to that criterion and one complete viewport, and a required pair declares matching SHA-256
+digests. A closure missing either half is `blocked`, so the verdict stays `Recirculate`; it is never a `Pass`.
 
-Repeat-state detection has two faces, both already machine-checked. Byte-identical halves (`G4.repair_evidence_unchanged`) mean the failing
-surface is still standing. A blocker that survives two repair rounds is the existing two-cycle stop (`rounds:` then `close_reason:
-escalated-stop`), not a second rule.
+The obligation comes from the finding, not from the annotation: deleting the annotation cannot bypass complete acceptance. `a11y_tree` and
+`interaction_trace` repairs retest in their declared type without screenshots; `automated_check` and `declaration_coverage` keep the evaluator's
+judgment boundary. `--legacy` and explicit `--require-*` selections keep the structural reading and are never reported as complete acceptance.
 
-One implementation: `scripts/validate_run.py` judges the pair. Do not re-decide it here or in a second gate.
+Repeat-state detection has two faces, both machine-checked. Byte-identical visual halves (`G4.repair_evidence_unchanged`) mean the pair is
+insufficient to demonstrate the declared visible change, not that the function still fails. A blocker that survives two repair rounds is the
+existing two-cycle stop (`rounds:` then `close_reason: escalated-stop`), not a second rule.
+
+One implementation: `scripts/validate_run.py` judges the association, pair, and retest over frozen artifact facts. Do not re-decide it here or in
+a second gate.
 
 ## Contracts on this pipeline
 

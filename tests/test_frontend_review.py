@@ -275,6 +275,25 @@ def test_normalized_capture_snapshot_without_capture_metadata_stays_unavailable(
     assert not any(reason.startswith("capture.") for reason in gap["reasons"])
 
 
+def test_malformed_capture_design_blocks_the_binding(tmp_path):
+    # F4: the shared G6 owner must preserve every capture-contract failure.
+    # A malformed design binding used to reach the report as complete/available
+    # because the shared mapping ignored bad_design_shape.
+    run = make_run(tmp_path)
+    write_evidence(run)
+    manifest = run / "evidence/manifest.jsonl"
+    entry = json.loads(manifest.read_text(encoding="utf-8"))
+    entry["request"]["design"] = {"fontSizes": 42}
+    manifest.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+
+    result = status(run, "--scope", "path:P1", "--json")
+    assert result.returncode == 0, result.stderr
+    gap = json.loads(result.stdout)["evidence_gaps"][0]
+    assert gap["binding"] == "invalid"
+    assert gap["status"] == "blocked"
+    assert "capture.bad_design_shape" in gap["reasons"]
+
+
 def test_capture_metadata_takes_precedence_over_legacy_request_aliases(tmp_path):
     run = make_run(tmp_path)
     write_evidence(run)
@@ -649,25 +668,32 @@ def test_read_time_manifest_deletion_requires_refresh(tmp_path, monkeypatch):
     assert report["reverification"]["next_command"]["value"] is None
 
 
-def test_repeated_unverified_owner_reads_cannot_be_promoted_to_current(tmp_path, monkeypatch):
+def test_a_transient_unverified_owner_read_cannot_be_promoted_to_current(tmp_path, monkeypatch):
+    # T-159: G6 now freezes one artifact fact per capture instead of re-reading
+    # bytes during every binding projection. A read that fails in either the
+    # snapshot owner or the fact collection stays an unavailable fact, so the
+    # report still cannot claim a current, verified result.
     sys.path.insert(0, str(PACKAGE))
     from design_playbook.scripts.frontend_review import build_frontend_review
     run = make_run(tmp_path)
     write_evidence(run)
     original = Path.read_bytes
     artifact_reads = 0
+    failures = 0
 
     def read(path):
-        nonlocal artifact_reads
+        nonlocal artifact_reads, failures
         if path.name == "L6.1-error.png":
             artifact_reads += 1
             if artifact_reads % 3 == 2:
+                failures += 1
                 raise OSError("temporary filesystem read failure")
         return original(path)
 
     monkeypatch.setattr(Path, "read_bytes", read)
     report = build_frontend_review(run, ("path:P1",))
-    assert artifact_reads >= 6
+    assert artifact_reads >= 4
+    assert failures >= 1
     assert report["freshness"] == "stale"
     assert report["reverification"]["next_command"]["value"] is None
 
