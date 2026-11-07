@@ -28,6 +28,7 @@ def _common(root: Path, version: Any) -> dict[str, Any]:
     skills_dir = root / "skills"
     commands_dir = root / "commands"
     scripts_dir = root / "scripts"
+    agents_dir = root / "agents"
     return {
         "version": version,
         "skills": sorted(
@@ -36,6 +37,12 @@ def _common(root: Path, version: Any) -> dict[str, Any]:
         ) if skills_dir.is_dir() else [],
         "commands": sorted(path.stem for path in commands_dir.glob("*.md"))
         if commands_dir.is_dir() else [],
+        # T-160: the read-only evaluator is a native agent definition, so the
+        # installed plugin and the published tarball must both carry it. A
+        # dropped agents/ directory silently returns the forked skill to the
+        # host's general-purpose child.
+        "agents": sorted(path.stem for path in agents_dir.glob("*.md"))
+        if agents_dir.is_dir() else [],
         # Issue #71: the shipped scripts are a public surface (package.json
         # files[] ships scripts/); the precise inventory fails closed on a
         # dropped module (e.g. audit_preferences, ADR-0033). Underscore-
@@ -135,7 +142,7 @@ def _plugin_entrypoint(spec: dict[str, Any]) -> str:
 def compare(actual: dict[str, Any], expected: dict[str, Any], label: str) -> dict[str, Any]:
     """Fail closed on every normalized public inventory field."""
     for key in (
-        "version", "skills", "commands", "scripts", "mcp_servers",
+        "version", "skills", "commands", "agents", "scripts", "mcp_servers",
         "mcp_entrypoints", "portable_manifests",
     ):
         if actual.get(key) != expected.get(key):
