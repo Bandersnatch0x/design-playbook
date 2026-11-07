@@ -511,19 +511,106 @@ def _validate_source_records(project: Path, sources: Any) -> list[dict[str, str]
     return normalized
 
 
-def _load_state(project: Path, run: Path) -> dict[str, Any]:
+def _state_presence(run: Path) -> tuple[str | None, str | None]:
+    """Single owner-owned presence boundary for the run-local state file.
+
+    Takes only the explicit run root and never reads the project, DESIGN.md,
+    or baseline sources. Returns ``(text, None)`` for a regular state the run
+    contains; ``(None, None)`` only when the state is truly absent; and
+    ``(None, message)`` when a present path is unusable (symlinked state
+    directory or leaf, including dangling links; non-regular file; resolved
+    escape from the run root; failed or oversized read). No caller may restate
+    this rule: run_facts and capture delegate here.
+    """
+
     state_path = _state_path(run)
-    if state_path.is_symlink() or not state_path.is_file():
-        raise BaselineError(f"baseline state does not exist: {state_path}")
+    state_directory = state_path.parent
+    # The leaf and every ancestor under the run root are untrusted: a
+    # symlinked ``design-baseline`` directory would otherwise make the owner
+    # read a state file outside the explicit run. Reject the symlink, then
+    # re-assert containment of the resolved path before any open.
+    if state_directory.is_symlink():
+        return None, (
+            f"baseline state directory must not be a symlink: {state_directory}")
+    if state_path.is_symlink():
+        return None, f"baseline state must not be a symlink: {state_path}"
+    if not state_path.exists():
+        return None, None
+    if not state_path.is_file():
+        return None, f"baseline state is not a regular file: {state_path}"
+    if not _inside(state_path.resolve(), run.resolve()):
+        return None, f"baseline state escapes run root: {state_path}"
     try:
-        state = json.loads(_read_text_capped(state_path, "baseline state"))
+        text = _read_text_capped(state_path, "baseline state")
+    except BaselineError as error:
+        return None, str(error)
+    try:
+        json.loads(text)
+    except json.JSONDecodeError as error:
+        return None, f"cannot read baseline state: {error}"
+    return text, None
+
+
+def _validate_state_fields(state: dict[str, Any]) -> None:
+    """Type-check the external state fields this owner consumes.
+
+    Rejects only shapes that would otherwise reach set membership, hashing, or
+    iteration with a non-scalar value; semantic validity stays with the
+    existing checks (including a ready state without a binding, which keeps its
+    owner result). Unknown extension fields are untouched, so forward-
+    compatible state stays readable.
+    """
+
+    baseline = state.get("baseline")
+    if isinstance(baseline, dict):
+        for field in ("path", "origin"):
+            value = baseline.get(field)
+            if value is not None and not isinstance(value, str):
+                raise BaselineError(
+                    f"baseline {field} must be a string: {value!r}")
+    decision = state.get("decision")
+    if isinstance(decision, dict):
+        kind = decision.get("kind")
+        if kind is not None and not isinstance(kind, str):
+            raise BaselineError(
+                f"baseline decision kind must be a string: {kind!r}")
+    if "promotions" in state and not isinstance(state["promotions"], list):
+        raise BaselineError("baseline promotions must be a list")
+
+
+def _state_from_text(project: Path, text: str) -> dict[str, Any]:
+    """Parse and validate one already-read state text (no I/O)."""
+
+    try:
+        state = json.loads(text)
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise BaselineError(f"cannot read baseline state: {error}") from error
     if not isinstance(state, dict) or state.get("schema") != SCHEMA:
         raise BaselineError("unsupported baseline state schema")
     if state.get("project_root") != str(project):
         raise BaselineError("baseline state is bound to a different project root")
+    _validate_state_fields(state)
     return state
+
+
+def _load_state_text(project: Path, run: Path) -> tuple[dict[str, Any], str]:
+    """Load one state file and keep the exact text the caller may freeze.
+
+    The returned text is the captured identity of the state a complete
+    acceptance verified; callers must not re-read the file to describe the
+    same result.
+    """
+
+    text, presence_error = _state_presence(run)
+    if presence_error is not None:
+        raise BaselineError(presence_error)
+    if text is None:
+        raise BaselineError(f"baseline state does not exist: {_state_path(run)}")
+    return _state_from_text(project, text), text
+
+
+def _load_state(project: Path, run: Path) -> dict[str, Any]:
+    return _load_state_text(project, run)[0]
 
 
 def _candidate_snapshot(project: Path, candidates: list[Path]) -> dict[str, str]:
@@ -957,11 +1044,15 @@ def promote(
     return verify(project, run)
 
 
-def verify(project_root: Path | str, run_root: Path | str) -> dict[str, Any]:
-    """Return a verified binding for downstream consumers."""
+def _verify_state(project: Path, state: dict[str, Any]) -> None:
+    """Validate one already-loaded state with every check ``verify`` applies.
 
-    project, run = _roots(project_root, run_root)
-    state = _load_state(project, run)
+    Shared by ``verify``, the findings projection and ``capture`` so complete
+    acceptance cannot diverge on waiver/source/baseline rules.  Reads only the
+    project files those checks name; never re-reads the state file and never
+    writes.
+    """
+
     status = state.get("status")
     decision = state.get("decision")
 
@@ -975,7 +1066,7 @@ def verify(project_root: Path | str, run_root: Path | str) -> dict[str, Any]:
         ):
             raise BaselineError("invalid baseline waiver decision")
         _validate_source_records(project, state.get("sources"))
-        return state
+        return
 
     if status != "ready":
         raise BaselineError(f"baseline is not ready: {status}")
@@ -1025,6 +1116,14 @@ def verify(project_root: Path | str, run_root: Path | str) -> dict[str, Any]:
             if _sha256(source_path) != recorded:
                 raise BaselineError(
                     f"promoted component source drifted: {target}")
+
+
+def verify(project_root: Path | str, run_root: Path | str) -> dict[str, Any]:
+    """Return a verified binding for downstream consumers."""
+
+    project, run = _roots(project_root, run_root)
+    state = _load_state(project, run)
+    _verify_state(project, state)
     return state
 
 
@@ -1379,18 +1478,26 @@ def _findings_result(
     }
 
 
-def verify_findings(project_root: Path | str, run_root: Path | str) -> dict[str, Any]:
-    """Return the machine-readable projection of ``verify``'s judgments.
+def _findings_projection(project: Path, state: dict[str, Any]) -> dict[str, Any]:
+    """Project one already-loaded state into the findings payload.
 
-    Findings use ``{severity, path, code, message}`` with stable codes from
-    ``FINDING_CODES``. ``gate.verdict`` is ``fail`` only when at least one
-    ``error`` finding exists; warnings and advisories are reported without
-    blocking. A waived baseline disables drift checks by explicit decision.
+    A ``waived`` state keeps its explicit exemption only when the same waiver
+    decision and source-hash validation ``verify`` applies succeeds; a forged
+    or absent decision and a drifted source become one blocking
+    ``baseline.binding-invalid`` row instead of an empty pass.
     """
 
-    project, run = _roots(project_root, run_root)
-    state = _load_state(project, run)
     if state.get("status") == "waived":
+        try:
+            _verify_state(project, state)
+        except BaselineError as error:
+            return _findings_result(
+                state,
+                [_finding(
+                    "error", STATE_RELATIVE.as_posix(),
+                    CODE_BINDING_INVALID, str(error))],
+                waived=False,
+            )
         return _findings_result(state, [], waived=True)
 
     findings: list[dict[str, str]] = []
@@ -1414,7 +1521,7 @@ def verify_findings(project_root: Path | str, run_root: Path | str) -> dict[str,
                 "error", relative, CODE_BINDING_INVALID, str(error)))
 
     try:
-        verify(project, run)
+        _verify_state(project, state)
     except BaselineError as error:
         # An error finding already fails the gate; keep one row per root cause
         # instead of stacking a generic binding error on top.
@@ -1422,6 +1529,70 @@ def verify_findings(project_root: Path | str, run_root: Path | str) -> dict[str,
             findings.append(_finding(
                 "error", relative or "DESIGN.md", CODE_BINDING_INVALID, str(error)))
     return _findings_result(state, findings, waived=False)
+
+
+def verify_findings(project_root: Path | str, run_root: Path | str) -> dict[str, Any]:
+    """Return the machine-readable projection of ``verify``'s judgments.
+
+    Findings use ``{severity, path, code, message}`` with stable codes from
+    ``FINDING_CODES``. ``gate.verdict`` is ``fail`` only when at least one
+    ``error`` finding exists; warnings and advisories are reported without
+    blocking. A waived baseline disables drift checks by explicit decision,
+    after the waiver decision and its source hashes pass ``verify``'s checks.
+    """
+
+    project, run = _roots(project_root, run_root)
+    state = _load_state(project, run)
+    return _findings_projection(project, state)
+
+
+def capture_optional(
+    project_root: Path | str, run_root: Path | str
+) -> dict[str, Any] | None:
+    """Capture one verified baseline result, or ``None`` when state is absent.
+
+    Reads ``state.json`` exactly once through the shared presence boundary.
+    Absence is decided from the explicit run root **before** the present-
+    baseline project/run containment rule: an absent baseline adds no
+    obligation, so a legitimate sibling/G7 layout must not fail on it. Only a
+    present state enters ``_roots`` and the schema/identity checks, continuing
+    from the same text. Absence is explicit here (``None``) instead of an error
+    the caller must match by string; present-invalid state still raises
+    ``BaselineError``. Explicit project/run arguments only — state content
+    never grants read authority.
+    """
+
+    run = Path(run_root).resolve()
+    state_text, presence_error = _state_presence(run)
+    if presence_error is not None:
+        raise BaselineError(presence_error)
+    if state_text is None:
+        return None
+    project, run = _roots(project_root, run_root)
+    state = _state_from_text(project, state_text)
+    return {
+        "state_text": state_text,
+        "findings": _findings_projection(project, state),
+    }
+
+
+def capture(project_root: Path | str, run_root: Path | str) -> dict[str, Any]:
+    """Collect one verified baseline result for complete acceptance.
+
+    Reads ``state.json`` exactly once and returns the exact captured text plus
+    the existing findings payload, so a caller can freeze both into its own
+    immutable snapshot without re-reading state or re-running checks. Raises
+    ``BaselineError`` when state is absent, unreadable, the wrong schema, or
+    bound to another project root; a present but invalid binding/waiver is a
+    failing findings payload, never an empty pass. Explicit project/run
+    arguments only — state content never grants read authority.
+    """
+
+    captured = capture_optional(project_root, run_root)
+    if captured is None:
+        project, run = _roots(project_root, run_root)
+        raise BaselineError(f"baseline state does not exist: {_state_path(run)}")
+    return captured
 
 
 def main(argv: list[str] | None = None) -> int:

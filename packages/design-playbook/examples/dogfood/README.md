@@ -13,6 +13,10 @@ S6 dogfood fixture（vNext 切片 6，工单 #41）：对本仓库自己的 show
 - 性质：**静态合成**（synthesized walkthrough）——工件的证据/哈希/事务记录为演示值，
   不依赖 chromium 与任何 provider 运行时；机器面由 `validate_run.py` 全量消费
   （见 `tests/test_vnext_s6.py` 的 dogfood 走查）。
+- 2026-11-07（T-158）：`run/design-baseline/state.json` 与基线的 `DESIGN.md` 绑定仅作
+  演示（相对根、目录外布局，保留走查语义）。完整 `validate_run.py` 验收会重验在场
+  baseline，因此执行测试把场景复制到临时 `<project>/.scratch/run` 并经
+  `prepare`/`confirm` 生成真实绑定，不直接信任本目录的静态绑定值。
 
 ## 走查要点（LR0-LR10）
 

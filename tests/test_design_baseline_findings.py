@@ -97,6 +97,33 @@ def _bind(project: Path, run: Path) -> dict:
     return design_baseline.verify_findings(project, run)
 
 
+def _waive(project: Path, run: Path) -> Path:
+    """Prepare + confirm a real waiver, returning its state file.
+
+    The project has first-party sources but no existing DESIGN.md, so prepare
+    produces a bound draft and confirm(waive) records an explicit decision
+    over the source hashes — the legitimate waiver path.
+    """
+
+    source = project / "src" / "styles" / "theme.css"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text(THEME_CSS, encoding="utf-8")
+    design_baseline.prepare(project, run)
+    design_baseline.confirm(
+        project,
+        run,
+        decision="waive",
+        reason="User accepts legacy visual drift for this run",
+    )
+    return run / "design-baseline" / "state.json"
+
+
+def _rewrite_state(state_path: Path, mutate) -> None:
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    mutate(state)
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+
 def _codes(result: dict) -> list[str]:
     return [finding["code"] for finding in result["findings"]]
 
@@ -304,6 +331,108 @@ class DesignBaselineFindingTests(unittest.TestCase):
             failed = json.loads(failed_output.getvalue())
             self.assertEqual(failed_code, 1)
             self.assertEqual(failed["gate"]["verdict"], "fail")
+
+
+class DesignBaselineWaiverFindingTests(unittest.TestCase):
+    """T-158: a waived state is an exemption only when its decision and
+    source hashes pass the same validation ``verify`` applies."""
+
+    def test_valid_waiver_stays_an_explicit_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "product"
+            run = project / ".scratch" / "waiver-control"
+            _waive(project, run)
+
+            verified = design_baseline.verify(project, run)
+            result = design_baseline.verify_findings(project, run)
+
+            self.assertEqual(verified["status"], "waived")
+            self.assertTrue(result["waived"])
+            self.assertEqual(result["findings"], [])
+            self.assertEqual(result["gate"]["verdict"], "pass")
+
+    def test_forged_waiver_reason_is_not_a_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "product"
+            run = project / ".scratch" / "waiver-forged"
+            state_path = _waive(project, run)
+            _rewrite_state(
+                state_path,
+                lambda state: state.__setitem__(
+                    "decision",
+                    {
+                        "kind": "waived",
+                        "reason": "   ",
+                        "confirmed_at": "2026-11-07T00:00:00Z",
+                    },
+                ),
+            )
+
+            with self.assertRaises(design_baseline.BaselineError) as ctx:
+                design_baseline.verify(project, run)
+            self.assertIn("invalid baseline waiver decision", str(ctx.exception))
+
+            result = design_baseline.verify_findings(project, run)
+
+            self.assertFalse(result["waived"])
+            self.assertEqual(result["gate"]["verdict"], "fail")
+            errors = [
+                finding
+                for finding in result["findings"]
+                if finding["severity"] == "error"
+            ]
+            self.assertEqual(len(errors), 1)
+            self.assertEqual(errors[0]["code"], design_baseline.CODE_BINDING_INVALID)
+            self.assertEqual(errors[0]["path"], "design-baseline/state.json")
+            self.assertIn("invalid baseline waiver decision", errors[0]["message"])
+
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                exit_code = design_baseline.main(
+                    ["findings", str(project), str(run)])
+            self.assertEqual(exit_code, 1)
+            self.assertEqual(
+                json.loads(output.getvalue())["gate"]["verdict"], "fail")
+
+    def test_missing_waiver_decision_is_not_a_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "product"
+            run = project / ".scratch" / "waiver-no-decision"
+            state_path = _waive(project, run)
+            _rewrite_state(state_path, lambda state: state.__setitem__("decision", None))
+
+            with self.assertRaises(design_baseline.BaselineError):
+                design_baseline.verify(project, run)
+
+            result = design_baseline.verify_findings(project, run)
+
+            self.assertFalse(result["waived"])
+            self.assertEqual(result["gate"]["verdict"], "fail")
+            self.assertEqual(_codes(result), [design_baseline.CODE_BINDING_INVALID])
+
+    def test_waived_source_drift_is_not_a_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "product"
+            run = project / ".scratch" / "waiver-drift"
+            _waive(project, run)
+            (project / "src" / "styles" / "theme.css").write_text(
+                ":root { --color-primary: #000000; }\n", encoding="utf-8"
+            )
+
+            with self.assertRaises(design_baseline.BaselineError) as ctx:
+                design_baseline.verify(project, run)
+            self.assertIn("baseline source changed", str(ctx.exception))
+
+            result = design_baseline.verify_findings(project, run)
+
+            self.assertFalse(result["waived"])
+            self.assertEqual(result["gate"]["verdict"], "fail")
+            error = result["findings"][0]
+            self.assertEqual(error["severity"], "error")
+            self.assertEqual(error["code"], design_baseline.CODE_BINDING_INVALID)
+            self.assertEqual(error["path"], "design-baseline/state.json")
+            self.assertIn("baseline source changed: src/styles/theme.css",
+                          error["message"])
 
 
 if __name__ == "__main__":

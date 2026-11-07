@@ -13,6 +13,9 @@ S1-S5 suites); in-process for the pure gate functions.
 """
 from __future__ import annotations
 
+import importlib.util
+import json
+import re
 import shutil
 import subprocess
 import sys
@@ -36,6 +39,27 @@ P2_POINTBACK = (PKG / "examples" / "export-entry" / "run" / "point-back.md"
                 ).read_text(encoding="utf-8")
 P2_SPEC = (PKG / "examples" / "export-entry" / "run" / "spec.md"
            ).read_text(encoding="utf-8")
+
+BASELINE_OWNER = (
+    PKG / "skills" / "design-baseline" / "scripts" / "design_baseline.py")
+_BASELINE_SPEC = importlib.util.spec_from_file_location(
+    "design_baseline_s6", BASELINE_OWNER)
+if _BASELINE_SPEC is None or _BASELINE_SPEC.loader is None:
+    raise RuntimeError(f"cannot load baseline owner: {BASELINE_OWNER}")
+design_baseline = importlib.util.module_from_spec(_BASELINE_SPEC)
+_BASELINE_SPEC.loader.exec_module(design_baseline)
+
+# First-party source for the executable fixtures' generated baseline. The
+# static example projects ship no frontend source, so a real prepare/confirm
+# binding needs one; the run scenario itself is unchanged.
+THEME_CSS = """:root {
+  --color-background: #ffffff;
+  --color-surface: #f7f8fa;
+  --color-text: #1a1a1a;
+  --color-primary: #2457d6;
+}
+body { font-family: Inter, system-ui, sans-serif; }
+"""
 
 
 def _write(path: Path, text: str) -> None:
@@ -70,6 +94,38 @@ def _copy_fixture(base: Path, tmp: Path) -> tuple[Path, Path]:
     project = Path(tmp) / "project"
     shutil.copytree(base / "run", run)
     shutil.copytree(base / "project", project)
+    return run, project
+
+
+def _prepare_executable(base: Path, tmp: Path) -> tuple[Path, Path]:
+    """Rebuild a static example as an executable complete-acceptance fixture.
+
+    Both distributed examples carry stale baseline state bound to a relative
+    project root, in a sibling ``project/`` + ``run/`` layout that violates the
+    baseline owner's run-inside-project containment. Complete CLI acceptance
+    now verifies a present baseline, so the fixture must live at
+    ``<project>/.scratch/run`` and bind through real prepare/confirm calls.
+    The scenario artifacts are copied verbatim; only the current-binding sha
+    references in the report are re-pointed at the freshly generated baseline.
+    """
+
+    project = Path(tmp) / "project"
+    run = project / ".scratch" / "run"
+    shutil.copytree(base / "project", project)
+    shutil.copytree(base / "run", run)
+    shutil.rmtree(run / "design-baseline", ignore_errors=True)
+    _write(project / "src" / "theme.css", THEME_CSS)
+    design_baseline.prepare(project, run)
+    design_baseline.confirm(project, run, decision="accept")
+    state = json.loads(
+        (run / "design-baseline" / "state.json").read_text(encoding="utf-8"))
+    report = run / "decision-report.md"
+    text = report.read_text(encoding="utf-8")
+    current = re.search(r"(?m)^design-baseline:.*?([0-9a-f]{64})", text)
+    if current is None:
+        raise AssertionError("fixture report has no design-baseline line")
+    _write(report, text.replace(
+        current.group(1), state["baseline"]["sha256"]))
     return run, project
 
 
@@ -133,13 +189,15 @@ class P3ChainWalkthroughTests(unittest.TestCase):
     declared (and effective) tier only."""
 
     def test_export_upgrade_full_p3_chain_strict(self) -> None:
-        result = _validate(P3_RUN, P3_BASE / "project", "--strict")
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("RUN OK", result.stdout)
+        with tempfile.TemporaryDirectory() as tmp:
+            run, project = _prepare_executable(P3_BASE, tmp)
+            result = _validate(run, project, "--strict")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("RUN OK", result.stdout)
 
     def test_export_upgrade_missing_matrix_breaks_the_chain(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            run, project = _copy_fixture(P3_BASE, tmp)
+            run, project = _prepare_executable(P3_BASE, tmp)
             _write(run / "point-back.md", _strip_matrix(
                 (run / "point-back.md").read_text(encoding="utf-8")))
             result = _validate(run, project)
@@ -149,7 +207,7 @@ class P3ChainWalkthroughTests(unittest.TestCase):
 
     def test_effective_tier_after_recorded_upgrade_demands_matrix(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            run, project = _copy_fixture(P3_BASE, tmp)
+            run, project = _prepare_executable(P3_BASE, tmp)
             plan = (run / "plan.md").read_text(encoding="utf-8")
             plan = plan.replace(
                 "tier: P3",
@@ -181,13 +239,15 @@ class DogfoodFixtureTests(unittest.TestCase):
     surface passes the full P3 chain (static synthesized artifacts)."""
 
     def test_dogfood_full_p3_chain_strict(self) -> None:
-        result = _validate(DOG_RUN, DOG_BASE / "project", "--strict")
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("RUN OK", result.stdout)
+        with tempfile.TemporaryDirectory() as tmp:
+            run, project = _prepare_executable(DOG_BASE, tmp)
+            result = _validate(run, project, "--strict")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("RUN OK", result.stdout)
 
     def test_dogfood_missing_matrix_breaks_the_chain(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            run, project = _copy_fixture(DOG_BASE, tmp)
+            run, project = _prepare_executable(DOG_BASE, tmp)
             _write(run / "point-back.md", _strip_matrix(
                 (run / "point-back.md").read_text(encoding="utf-8")))
             result = _validate(run, project)
@@ -199,7 +259,7 @@ class DogfoodFixtureTests(unittest.TestCase):
         # row and the run-level registry gate fires (no silent predicate
         # skip on the full profile).
         with tempfile.TemporaryDirectory() as tmp:
-            run, project = _copy_fixture(DOG_BASE, tmp)
+            run, project = _prepare_executable(DOG_BASE, tmp)
             craft = (run / "craft-guard.md").read_text(encoding="utf-8")
             lines = [line for line in craft.splitlines()
                      if not line.startswith("| PERF-01@2 ")]
