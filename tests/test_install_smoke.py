@@ -42,8 +42,12 @@ def _make_inventory_tree(
     commands: tuple[str, ...] = ("design-io", "run-review"),
     scripts: tuple[str, ...] = ("audit_preferences.py", "validate_run.py"),
     with_manifest: bool = True,
+    with_portable_manifests: bool = True,
 ) -> None:
     _write_json(root / "package.json", {"name": "design-playbook", "version": version})
+    if with_portable_manifests:
+        _write_json(root / "plugin.json", {"name": "design-playbook", "version": version})
+        _write_json(root / "mcp.json", {"mcpServers": {}})
     for name in skills:
         skill = root / "skills" / name
         skill.mkdir(parents=True)
@@ -96,10 +100,14 @@ class InventoryTests(unittest.TestCase):
                 "design-playbook-evidence",
                 "design-playbook-preview",
             ],
+            "portable_manifests": ["mcp.json", "plugin.json"],
         }
         for inventory in (plugin, npm):
             self.assertEqual(
-                {key: inventory[key] for key in ("version", "skills", "commands", "scripts", "mcp_servers")},
+                {key: inventory[key] for key in (
+                    "version", "skills", "commands", "scripts", "mcp_servers",
+                    "portable_manifests",
+                )},
                 expected,
             )
         self.assertEqual(set(plugin["mcp_entrypoints"]), set(expected["mcp_servers"]))
@@ -157,6 +165,80 @@ class InventoryTests(unittest.TestCase):
         expected = smoke._source_expectations()
         self.assertIn("audit_preferences", expected["scripts"])
         self.assertIn("validate_run", expected["scripts"])
+
+    def test_source_expectations_include_the_portable_bundle(self) -> None:
+        self.assertEqual(
+            smoke._source_expectations()["portable_manifests"],
+            ["mcp.json", "plugin.json"],
+        )
+
+    def test_portable_bundle_missing_from_npm_fails_closed(self) -> None:
+        """T-156: plugin.json + mcp.json are the portable entry surface. If
+        files[] omits them, the installed package has no portable plugin and
+        the smoke must name the missing surface, not pass on version alone."""
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source"
+            shipped = Path(tmp) / "shipped"
+            _make_inventory_tree(source)
+            _make_inventory_tree(shipped, with_portable_manifests=False)
+            expected = smoke._inspect_npm_inventory(source)
+            actual = smoke._inspect_npm_inventory(shipped)
+
+        with self.assertRaisesRegex(smoke.SmokeFailure, "portable_manifests mismatch"):
+            smoke._assert_inventory(actual, expected, "npm package")
+
+
+def _npm_pack_files(package_dir: Path, npm: str) -> set[str]:
+    """The file list npm would publish from *package_dir*."""
+    completed = subprocess.run(
+        [npm, "pack", "--dry-run", "--ignore-scripts", "--json"],
+        cwd=package_dir,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=180,
+        check=True,
+    )
+    return {entry["path"] for entry in json.loads(completed.stdout)[0]["files"]}
+
+
+def _missing_portable_manifests(membership: set[str]) -> set[str]:
+    return {"plugin.json", "mcp.json"} - membership
+
+
+class PortableBundlePackagingTests(unittest.TestCase):
+    """T-156: the portable bundle is a distribution surface, not just a
+    committed snapshot — the real pack inventory must carry both manifests."""
+
+    def setUp(self) -> None:
+        self.npm = shutil.which("npm")
+        if self.npm is None:
+            self.skipTest("npm not found on PATH — skipping tarball membership")
+
+    def test_package_tarball_ships_the_portable_bundle(self) -> None:
+        membership = _npm_pack_files(ROOT / "packages" / "design-playbook", self.npm)
+        self.assertEqual(
+            _missing_portable_manifests(membership),
+            set(),
+            "plugin.json/mcp.json must be in package.json files[]",
+        )
+
+    def test_a_files_allowlist_without_the_bundle_is_red(self) -> None:
+        # The counterexample: the same check over a package whose files[]
+        # omits the two manifests names exactly what is missing.
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = Path(tmp)
+            _write_json(
+                fixture / "package.json",
+                {"name": "fixture-pkg", "version": "0.0.0", "files": ["index.js"]},
+            )
+            (fixture / "index.js").write_text("", encoding="utf-8")
+            membership = _npm_pack_files(fixture, self.npm)
+
+        self.assertEqual(
+            _missing_portable_manifests(membership),
+            {"mcp.json", "plugin.json"},
+        )
 
 
 class InstalledMetadataTests(unittest.TestCase):

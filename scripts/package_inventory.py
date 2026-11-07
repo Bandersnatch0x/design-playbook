@@ -49,6 +49,13 @@ def _common(root: Path, version: Any) -> dict[str, Any]:
             and not path.stem.startswith("_")
             and not path.stem.startswith("test_")
         ) if scripts_dir.is_dir() else [],
+        # T-156: the portable Agent Plugins bundle is a public entry surface.
+        # It only works if both manifests ship in the installed package, so
+        # the inventory compares the tarball contents (from_npm) against the
+        # source tree (from_source) — a files[] omission fails the smoke.
+        "portable_manifests": sorted(
+            name for name in ("mcp.json", "plugin.json") if (root / name).is_file()
+        ),
     }
 
 
@@ -127,7 +134,10 @@ def _plugin_entrypoint(spec: dict[str, Any]) -> str:
 
 def compare(actual: dict[str, Any], expected: dict[str, Any], label: str) -> dict[str, Any]:
     """Fail closed on every normalized public inventory field."""
-    for key in ("version", "skills", "commands", "scripts", "mcp_servers", "mcp_entrypoints"):
+    for key in (
+        "version", "skills", "commands", "scripts", "mcp_servers",
+        "mcp_entrypoints", "portable_manifests",
+    ):
         if actual.get(key) != expected.get(key):
             raise InventoryError(
                 f"{label} {key} mismatch: expected {expected.get(key)!r}, "

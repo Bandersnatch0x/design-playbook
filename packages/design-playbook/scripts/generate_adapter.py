@@ -683,18 +683,35 @@ def _zed_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
 
 # --- Package-wide bundles (T-149 / S4) -------------------------------------
 # One portable plugin layout — ``plugin.json`` + ``mcp.json`` at the plugin
-# root, with ``skills/`` referenced in place — that any host reading that
-# layout can install from a single directory.  This is an *additional* face:
-# the Claude layout (``.claude-plugin/``) and the per-host renderers above are
-# untouched.  A bundle is not a matrix row (it serves many hosts at once), so
-# it is addressed by its own name and its declared surface list is derived
-# from the matrix.
+# root, with ``skills/`` and the MCP servers at fixed sibling paths — that a
+# host reading that layout can install from a single directory.  This is an
+# *additional* face: the Claude layout (``.claude-plugin/``) and the per-host
+# renderers above are untouched.  A bundle is not a matrix row (it serves many
+# hosts at once), so it is addressed by its own name and its declared surface
+# list is derived from the matrix.
+#
+# The manifest schema is closed.  Everything the format defines lives in the
+# fixed component paths; only the portable metadata fields may appear at the
+# top level, and our non-portable build metadata stays under a reverse-domain
+# extension namespace that clients are required to ignore.
+_AGENT_PLUGINS_PLUGIN_SCHEMA = (
+    "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
+)
+_AGENT_PLUGINS_MCP_SCHEMA = (
+    "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
+)
+_AGENT_PLUGINS_NAMESPACE = "io.github.bandersnatch0x.design-playbook"
 
-_AGENT_PLUGINS_EXTRA = {
-    "skills": "./skills/",
-    "mcpServers": "./mcp.json",
-}
-
+#: The fixed component paths the portable layout references, relative to the
+#: plugin root, with the filesystem kind each must resolve to.  A missing path
+#: makes the emitted manifest metadata whose targets do not exist; a present
+#: path of the wrong kind (a regular file named ``skills``, a directory named
+#: ``server.py``) is equally unusable, so both are refused.
+_AGENT_PLUGINS_REQUIRED_KINDS: tuple[tuple[str, str], ...] = (
+    ("skills", "directory"),
+    ("mcp/preview/server.py", "regular file"),
+    ("mcp/evidence/server.py", "regular file"),
+)
 
 def _agent_surface_entries() -> list[dict]:
     """The surface list the bundle declares — derived from the matrix.
@@ -712,8 +729,17 @@ def _agent_surface_entries() -> list[dict]:
 
 
 def _render_agent_plugins_json(version: str) -> str:
+    """The portable manifest — only the closed schema's fields.
+
+    Components are *not* declared here: the format discovers skills from
+    ``skills/`` and MCP servers from ``mcp.json``, and any other top-level
+    field is a schema violation.  The surface list is our own build metadata,
+    so it rides in ``extensions`` under a reverse-domain namespace that
+    clients must ignore — portable, and outside the portable core.
+    """
     src = _read_claude_plugin()
     data = {
+        "$schema": _AGENT_PLUGINS_PLUGIN_SCHEMA,
         "name": src["name"],
         "version": version,
         "description": src["description"],
@@ -722,34 +748,77 @@ def _render_agent_plugins_json(version: str) -> str:
         "repository": _REPO_URL,
         "license": src["license"],
         "keywords": src["keywords"],
-        "skills": _AGENT_PLUGINS_EXTRA["skills"],
-        "mcpServers": _AGENT_PLUGINS_EXTRA["mcpServers"],
-        "agents": _agent_surface_entries(),
+        "extensions": {
+            _AGENT_PLUGINS_NAMESPACE: {"agents": _agent_surface_entries()},
+        },
     }
     return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
 
 
 def _render_agent_plugins_mcp_json() -> str:
+    """The portable MCP config — ``$schema`` + closed stdio server variants.
+
+    ``cwd`` is omitted (the format defaults it to the plugin root) and paths
+    are ``${PLUGIN_ROOT}``-rooted, the only form that resolves in a client
+    that installs the package anywhere.  ``timeout`` is a Claude-only field
+    with no portability: a closed-variant client would reject the entry.
+
+    ``env`` is omitted too: portable clients expand only ``${PLUGIN_ROOT}``
+    and ``${PLUGIN_DATA}``, so a ``${DESIGN_PLAYBOOK_RUN_ROOT:-}`` template
+    would reach the server literally — overriding a host that did set the
+    variable with a non-path, and reading as "set" rather than unset.  A
+    caller that needs a run root passes it explicitly; inheriting one from
+    the host must keep working.
+    """
     data = {
+        "$schema": _AGENT_PLUGINS_MCP_SCHEMA,
         "mcpServers": {
             "design-playbook-preview": {
                 "type": "stdio",
                 "command": "python",
-                "args": ["./mcp/preview/server.py"],
-                "cwd": ".",
-                "timeout": 3600000,
+                "args": ["${PLUGIN_ROOT}/mcp/preview/server.py"],
             },
             "design-playbook-evidence": {
                 "type": "stdio",
                 "command": "python",
-                "args": ["./mcp/evidence/server.py"],
-                "cwd": ".",
-                "env_vars": ["DESIGN_PLAYBOOK_RUN_ROOT"],
-                "timeout": 3600000,
+                "args": ["${PLUGIN_ROOT}/mcp/evidence/server.py"],
             },
-        }
+        },
     }
     return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+
+def _check_agent_plugins_root(out_dir: Path) -> None:
+    """Refuse a target that cannot host the layout's fixed component paths.
+
+    The manifest names no components — clients find them at conventions — so
+    a render into a directory without ``skills/`` or the MCP server files
+    produces a manifest whose plugin has nothing to load.  A present but
+    wrong-kind entry (a regular file named ``skills``, a directory named
+    ``server.py``) is just as unusable — the published format treats such a
+    fixed location as an invalid component — so both are refused.  The kind
+    check follows links, so a symlink resolving inside the root stays a
+    legitimate directory or file; containment itself is the client's §4.1
+    obligation, not a new prohibition here.
+    """
+    problems: list[str] = []
+    for rel, expected in _AGENT_PLUGINS_REQUIRED_KINDS:
+        path = out_dir / rel
+        right_kind = path.is_dir() if expected == "directory" else path.is_file()
+        if right_kind:
+            continue
+        if path.exists():
+            problems.append(f"{rel} must be a {expected}")
+        else:
+            problems.append(f"{rel} is missing (expected a {expected})")
+    if problems:
+        raise ValueError(
+            f"agent-plugins: {out_dir} is not a complete package root — "
+            + "; ".join(problems)
+            + "; the portable layout references the package's skills/ and "
+            "mcp/*/server.py in place, so render into the package root "
+            "(or a copy of it)"
+        )
 
 
 def _agent_plugins_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
@@ -757,9 +826,10 @@ def _agent_plugins_files(version: str, out_dir: Path) -> list[tuple[str, str]]:
 
     ``skills/`` is referenced in place, not copied — the package's skills
     directory is the SSOT (ADR-0004) and a rendered copy would be a second
-    inventory to keep in sync.  ``out_dir`` is unused: the layout is the same
-    wherever it lands.
+    inventory to keep in sync.  ``out_dir`` is therefore not a scratch
+    directory: it must be the package root the manifest describes.
     """
+    _check_agent_plugins_root(out_dir)
     return [
         ("plugin.json", _render_agent_plugins_json(version)),
         ("mcp.json", _render_agent_plugins_mcp_json()),
@@ -858,6 +928,12 @@ _BUNDLE_RENDERERS: dict[str, Renderer] = {
     "agents-marketplace": _agents_marketplace_files,
 }
 
+#: Bundles with a committed snapshot at the package root, so the drift gate
+#: covers them exactly like a tier-1 row.  ``agent-plugins`` is here because
+#: its manifest is shipped verbatim to portable clients; the marketplace
+#: catalog lives outside the package and is checked by its generator test.
+SNAPSHOT_BUNDLES: tuple[str, ...] = ("agent-plugins",)
+
 
 # Dedicated renderers by name.  Which rows use which renderer is a matrix
 # fact (``AgentRow.renderer``); a Tier-1/2 row cannot be built without one,
@@ -902,12 +978,16 @@ def _bundle_entries(
 
     Bundles default to cwd (they are laid down in the consuming project, like
     Tier-2/3 output) and have no matrix row, so they cannot be reached through
-    the row path.
+    the row path.  A snapshot bundle is the exception: its committed home is
+    the package root, which is also the only directory whose ``skills/`` and
+    ``mcp/`` its manifest can truthfully describe.
     """
     renderer = _BUNDLE_RENDERERS.get(name)
     if renderer is None:
         raise ValueError(f"unknown agent: {name!r}")
-    target = out_dir if out_dir is not None else Path.cwd()
+    if out_dir is None:
+        out_dir = _PKG_DIR if name in SNAPSHOT_BUNDLES else Path.cwd()
+    target = out_dir
     version = _get_version()
     return version, target, renderer(version, target)
 
@@ -960,7 +1040,8 @@ def render(agent: str, out_dir: Path | None = None, *, dry_run: bool = False) ->
     """Render adapter artifacts for *agent*. Returns the manifest dict.
 
     When *dry_run* is True, no files are written.
-    Tier-1 agents default out_dir to PKG; Tier-2/3 default to cwd.
+    Tier-1 agents and snapshot bundles default out_dir to PKG; Tier-2/3
+    agents default to cwd.
     """
     version, out_dir, files = render_entries(agent, out_dir)
 
@@ -1008,7 +1089,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--out",
         metavar="DIR",
-        help="Output directory (default: PKG for Tier-1, cwd for Tier-2/3)",
+        help="Output directory (default: PKG for Tier-1 and snapshot bundles, cwd otherwise)",
     )
     parser.add_argument(
         "--dry-run",
