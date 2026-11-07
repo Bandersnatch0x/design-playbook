@@ -381,7 +381,7 @@ Otherwise:
 
 Invoke craft-guard.
 Apply loading tiers, motion purpose, hierarchy, CJK type.
-Craft rules live in the first-party registry (`references/rules.md`): evaluate each entry's applicability predicate (P1: touch-surface subset; P2/P3: full
+Craft rules live in the first-party registry (index `references/rules.md`, entries under `references/rules/`): evaluate each entry's applicability predicate (P1: touch-surface subset; P2/P3: full
 catalog) and write seven-column audit rows to `.scratch/<run>/craft-guard.md`.
 For native desktop, `craft-guard` owns shared UI above the render-surface seam and defers to `native-craft` below it.
 If a finding crosses the seam, split it into separate point-backs to the owning declarations.

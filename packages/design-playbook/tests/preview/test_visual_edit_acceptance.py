@@ -21,7 +21,10 @@ import sys
 import tempfile
 import threading
 import unittest
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest import mock
 
 from .conftest import expand_inspector_section
 from collections.abc import Callable
@@ -62,6 +65,23 @@ PROTOTYPE = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 
 # This module drives a real browser: the no-chromium CI job deselects it by marker.
 pytestmark = pytest.mark.browser
+
+
+def _bind_browser_safe_loopback(handler: type) -> ThreadingHTTPServer:
+    """Bind an ephemeral editor-fixture port Chromium can navigate to.
+
+    ``ThreadingHTTPServer(("127.0.0.1", 0), ...)`` can land on a port Chromium
+    refuses (``net::ERR_UNSAFE_PORT``; observed 6697 on this machine), which
+    leaves the fixture serving an origin the browser cannot open. Reuse the
+    production blocked-port list and rebind instead of serving a dead origin.
+    """
+    for _ in range(20):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        if server.server_address[1] not in review_session._BROWSER_BLOCKED_PORTS:
+            return server
+        server.server_close()
+    raise RuntimeError("no browser-safe ephemeral port for the editor fixture")
+
 
 class _PlaywrightEditAdapter:
     """Drive one review session: pick an element, edit it, then approve."""
@@ -410,6 +430,35 @@ class VisualEditNegativeTests(unittest.TestCase):
 
 
 
+class _LoopbackFixturePortTests(unittest.TestCase):
+    """The editor fixture must never serve an origin Chromium refuses."""
+
+    def test_blocked_first_port_is_released_and_rebound(self) -> None:
+        # 6697 was the observed net::ERR_UNSAFE_PORT from a real preview run.
+        blocked_port = 6697
+        self.assertIn(blocked_port, review_session._BROWSER_BLOCKED_PORTS)
+        ports = iter([blocked_port, 51000])
+        made = []
+
+        class _FakeServer:
+            def __init__(self, address) -> None:
+                self.server_address = address
+                self.closed = False
+
+            def server_close(self) -> None:
+                self.closed = True
+
+        def _fake_bind(address, handler):
+            server = _FakeServer(("127.0.0.1", next(ports)))
+            made.append(server)
+            return server
+
+        with mock.patch(f"{__name__}.ThreadingHTTPServer", _fake_bind):
+            server = _bind_browser_safe_loopback(SimpleHTTPRequestHandler)
+        self.assertEqual(server.server_address[1], 51000)
+        self.assertTrue(made[0].closed, "the blocked port must be released")
+
+
 @unittest.skipUnless(sync_playwright is not None, "playwright is not installed")
 class VisualEditorRegressionTests(unittest.TestCase):
     """Direct user input and tool calls share the same acknowledged edits."""
@@ -467,14 +516,11 @@ class VisualEditorRegressionTests(unittest.TestCase):
             window.testEditorRoot.render(window.testEditorElement);
             """)
         if loopback:
-            from functools import partial
-            from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-
             directory = tempfile.TemporaryDirectory()
             self.addCleanup(directory.cleanup)
             Path(directory.name, "index.html").write_text(html, encoding="utf-8")
-            server = ThreadingHTTPServer(
-                ("127.0.0.1", 0), partial(SimpleHTTPRequestHandler, directory=directory.name)
+            server = _bind_browser_safe_loopback(
+                partial(SimpleHTTPRequestHandler, directory=directory.name)
             )
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()

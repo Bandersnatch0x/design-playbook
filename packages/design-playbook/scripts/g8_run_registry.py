@@ -37,7 +37,10 @@ if str(_PKG_ROOT) not in sys.path:
 
 from design_playbook.scripts import rules_registry  # noqa: E402
 from design_playbook.scripts._diagnostics import Finding, finding  # noqa: E402
-from design_playbook.scripts.rules_registry import RegistryError  # noqa: E402
+from design_playbook.scripts.rules_registry import (  # noqa: E402
+    RegistryError,
+    RegistryLayoutError,
+)
 from design_playbook.scripts.run_profile import (  # noqa: E402
     parse_run_profile,
     validate_run_profile,
@@ -52,10 +55,12 @@ FULL_EVALUATION_TIERS = frozenset({"P2", "P3"})
 
 
 def load_registry(path: Path | None = None) -> tuple[list, str]:
-    """Parse the registry entries (shared parser, product-level format)."""
+    """Load the registry entries and flat text through the shared loader."""
     target = path or REGISTRY_PATH
-    text = target.read_text(encoding="utf-8")
-    return rules_registry.parse_registry(text), text
+    return (
+        rules_registry.load_registry(target),
+        rules_registry.load_registry_text(target),
+    )
 
 
 def _reviewable(entry) -> bool:
@@ -152,7 +157,7 @@ def main(argv: list[str]) -> int:
         return 2
     try:
         entries, _ = load_registry()
-    except (OSError, UnicodeError) as exc:
+    except (OSError, UnicodeError, RegistryLayoutError) as exc:
         print(f"G8 INVALID: cannot read the registry: {exc}", file=sys.stderr)
         return 2
     tier = None

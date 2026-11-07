@@ -43,8 +43,8 @@ from design_playbook.scripts.shaping_log import (  # noqa: E402
     parse_shaping_log,
 )
 
-REGISTRY_TEXT = (PKG / "skills" / "design-playbook" / "references"
-                 / "rules.md").read_text(encoding="utf-8")
+REGISTRY_PATH = PKG / "skills" / "design-playbook" / "references" / "rules.md"
+REGISTRY_TEXT = rules_registry.load_registry_text(REGISTRY_PATH)
 FIXTURE_RUN = PKG / "examples" / "export-entry" / "run"
 
 

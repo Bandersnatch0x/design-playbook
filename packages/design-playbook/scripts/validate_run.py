@@ -217,6 +217,9 @@ from design_playbook.scripts.g8_run_registry import (  # noqa: E402
     check_g8_run,
     load_registry,
 )
+from design_playbook.scripts.rules_registry import (  # noqa: E402
+    RegistryLayoutError,
+)
 from design_playbook.scripts.g11_coverage import check_sampling_matrix  # noqa: E402
 from design_playbook.scripts.interaction_dimensions import (  # noqa: E402
     check_dimensions,
@@ -542,14 +545,15 @@ def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
         try:
             craft_text = facts.craft_guard_text
             registry_entries, _ = load_registry()
-        except (OSError, UnicodeError):
+        except (OSError, UnicodeError, RegistryLayoutError) as exc:
             errs.append(finding(
                 "G8.run_registry",
                 "G8 run: craft-guard.md present but the audit log or the "
                 "registry could not be read",
                 owner="craft-guard.md",
                 expected="readable craft-guard.md and rules.md",
-                actual="read error",
+                actual=(str(exc) if isinstance(exc, RegistryLayoutError)
+                        else "read error"),
                 repair="Restore the files or drop the audit log",
             ))
         else:
