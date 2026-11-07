@@ -575,6 +575,11 @@ here:
   skip-excuse tables may name the blocked-not-passed consequence.
 - **Context budget (I11).** The registry split clause may be revisited, which
   supersedes the earlier recorded reading that the clause could never trigger.
+  Implemented 2026-11-07 (T-154): entries are split by ID prefix into
+  per-family part files under `rules/` while `rules.md` stays the index
+  carrying the global entry order. ID prefixes are physical part names, not
+  capability-domain groups, so the >30-entry / >3-domain trigger and every
+  rule's D4 domain are unchanged; the clause now measures the loaded layout.
 
 Authorization to implement is not a completion claim. Every item still lands
 through its own ticket with the full repository gates, unweakened assertions,
