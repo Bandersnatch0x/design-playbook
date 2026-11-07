@@ -38,7 +38,7 @@ REQUEST = {
 }
 
 
-def _written_entry() -> dict:
+def _written_entry(request: dict | None = None) -> dict:
     """Write a real manifest line and return the parsed on-disk entry."""
     with tempfile.TemporaryDirectory() as tmp:
         run_dir = Path(tmp)
@@ -48,7 +48,7 @@ def _written_entry() -> dict:
             run_dir,
             criterion="L6.1",
             artifact="capture.png",
-            request=REQUEST,
+            request=dict(request if request is not None else REQUEST),
             source="decision-1",
             observed_state="ok",
             result="captured",
@@ -83,6 +83,27 @@ class ManifestSchemaTest(unittest.TestCase):
 
         assert validate_manifest_entry(entry) == []
         assert entry["request"] == REQUEST
+
+    def test_declared_design_binding_validates_and_malformed_ones_do_not(self) -> None:
+        design = {
+            "fontSizes": [14, 16, 20, 24],
+            "colors": ["#f5f5f5", "#ffffff"],
+            "radii": [4, 8, 12, 20],
+        }
+        entry = _written_entry({**REQUEST, "design": design})
+
+        assert validate_manifest_entry(entry) == []
+        assert entry["request"]["design"] == design
+
+        for bad in ({"spacing": [8]}, {"fontSizes": 16}, {"colors": {"text": "#000"}},
+                    None, "always", [16]):
+            broken = json.loads(json.dumps(entry))
+            broken["request"]["design"] = bad
+            assert validate_manifest_entry(broken), bad
+        # Absent is the only unbound shape, and it stays valid.
+        unbound = json.loads(json.dumps(entry))
+        unbound["request"].pop("design")
+        assert validate_manifest_entry(unbound) == []
 
     def test_malformed_entries_are_rejected(self) -> None:
         entry = _written_entry()

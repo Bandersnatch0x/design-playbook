@@ -10,17 +10,22 @@ Covers the three capture_contract.py surfaces (ADR-0018 enforcement site 1):
     fragment the provider tool schema composes (const/enum/required shared
     with parse, so schema and parser cannot drift).
 
-Deliberately no lockstep test: the seam between the provider schema and the
-parser is the shared module constants, not a second mirror implementation.
-The one directional check (validate accepts parse output) pins the read side
-to the write side's normalization.
+The seam between the provider schema and the parser is the shared module
+constants, not a second mirror implementation. That is not enough on its own:
+one accepted/rejected corpus is pushed through all four readers (parser,
+advertised input schema, snapshot validator, manifest schema) in
+``DesignBindingCorpusTests``, so a field whose *acceptance* drifts between
+layers fails here even when each layer is internally consistent.
 """
 from __future__ import annotations
 
+import json
 import math
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
 # One import seam (ADR-0022): package root on sys.path once, then absolute
 # design_playbook.* imports below. No per-runtime sys.path adapters.
@@ -28,14 +33,27 @@ _PKG_ROOT = Path(__file__).resolve().parents[2]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
+from design_playbook.mcp._schema import violations  # noqa: E402
 from design_playbook.mcp.evidence.capture_contract import (  # noqa: E402
     CAPTURE_SCHEMA_VERSION,
     COLOR_SCHEMES,
+    DESIGN_AXES,
     MIN_VIEWPORT_DPR,
     RECAPTURE_HINT,
     capture_contract_schema_fragment,
     parse_capture_contract,
     validate_capture_snapshot,
+)
+from design_playbook.mcp.evidence.manifest_schema import (  # noqa: E402
+    validate_manifest_entry,
+)
+from design_playbook.mcp.evidence.page_defects import (  # noqa: E402
+    probe_render_tokens,
+)
+from design_playbook.mcp.evidence.server import _tool_schema  # noqa: E402
+from design_playbook.scripts.evidence_manifest import (  # noqa: E402
+    ManifestAppendError,
+    append_entry,
 )
 
 _FULL_VIEWPORT = {
@@ -44,6 +62,21 @@ _FULL_VIEWPORT = {
     "devicePixelRatio": 1.0,
     "colorScheme": "light",
 }
+
+# The same declaration shape the render-token fixtures are bound to.
+_DESIGN = {
+    "fontSizes": [14, 16, 20, 24],
+    "colors": ["#1a1a1a", "#ffffff"],
+    "radii": [4, 8, 12, 20],
+}
+_FULL_FREEZE = {"enabled": True, "waitFonts": True, "networkIdle": False}
+
+
+class _Absent:
+    """Corpus marker: the ``design`` key is not present at all."""
+
+
+_ABSENT = _Absent()
 
 
 def _full_request(**overrides):
@@ -185,6 +218,60 @@ class CaptureContractParseTests(unittest.TestCase):
             ["freeze", "schemaVersion", "viewport"],
         )
 
+    def test_design_absent_is_the_only_unbound_shape(self) -> None:
+        # Absence of the key is the one way to say "no binding".
+        self.assertNotIn("design", parse_capture_contract({
+            "schemaVersion": 1,
+            "viewport": dict(_FULL_VIEWPORT),
+        }))
+        # An explicit null is a present-but-unreadable binding: rejected, not
+        # read as unbound.
+        with self.assertRaises(ValueError) as ctx:
+            parse_capture_contract({
+                "schemaVersion": 1,
+                "viewport": dict(_FULL_VIEWPORT),
+                "design": None,
+            })
+        self.assertIn("design must be an object", str(ctx.exception))
+
+    def test_declared_axes_are_echoed_as_array_literals(self) -> None:
+        parsed = parse_capture_contract({
+            "schemaVersion": 1,
+            "viewport": dict(_FULL_VIEWPORT),
+            "design": _DESIGN,
+        })
+        self.assertEqual(parsed["design"], _DESIGN)
+        self.assertIsNot(parsed["design"]["radii"], _DESIGN["radii"])
+        # A partial declaration carries only the axes the caller declared, so
+        # the probe reports the rest undecidable rather than reading a default.
+        partial = parse_capture_contract({
+            "schemaVersion": 1,
+            "viewport": dict(_FULL_VIEWPORT),
+            "design": {"radii": [12]},
+        })
+        self.assertEqual(partial["design"], {"radii": [12]})
+
+    def test_malformed_design_fails_the_capture_closed(self) -> None:
+        cases = [
+            ("always", "design must be an object"),
+            (None, "design must be an object"),
+            ([16], "design must be an object"),
+            ({"spacing": [8]}, "design.spacing is not a declared token axis"),
+            ({"fontSizes": 16}, "design.fontSizes must be an array of literals"),
+            ({"fontSizes": "16px"}, "design.fontSizes must be an array"),
+            ({"colors": {"text": "#000"}}, "design.colors must be an array"),
+            ({"radii": None}, "design.radii must be an array of literals"),
+        ]
+        for design, expected in cases:
+            with self.subTest(design=design):
+                with self.assertRaises(ValueError) as ctx:
+                    parse_capture_contract({
+                        "schemaVersion": 1,
+                        "viewport": dict(_FULL_VIEWPORT),
+                        "design": design,
+                    })
+                self.assertIn(expected, str(ctx.exception))
+
 
 class CaptureContractValidateTests(unittest.TestCase):
     """Read side: full-shape facts, empty list = valid, never raises."""
@@ -292,6 +379,28 @@ class CaptureContractValidateTests(unittest.TestCase):
         request = _full_request(note="future-field")
         self.assertEqual(validate_capture_snapshot(request), [])
 
+    def test_optional_design_binding_reads_back_or_fails_closed(self) -> None:
+        self.assertEqual(validate_capture_snapshot(_full_request()), [])
+        self.assertEqual(
+            validate_capture_snapshot(_full_request(design=_DESIGN)),
+            [],
+        )
+        # Provider-echoed parse output must always validate, declaration
+        # included (one directional seam pin; no lockstep mirror).
+        self.assertEqual(
+            validate_capture_snapshot(parse_capture_contract({
+                "schemaVersion": 1,
+                "viewport": dict(_FULL_VIEWPORT),
+                "design": _DESIGN,
+            })),
+            [],
+        )
+        for design in ("always", None, [16], {"spacing": [8]}, {"colors": 7},
+                       {"fontSizes": {"px": 16}}):
+            with self.subTest(design=design):
+                facts = validate_capture_snapshot(_full_request(design=design))
+                self.assertEqual(facts[0].code, "bad_design_shape")
+
 
 class CaptureContractSchemaFragmentTests(unittest.TestCase):
     """JSON Schema fragment: const/enum/required shared with the parser."""
@@ -303,7 +412,7 @@ class CaptureContractSchemaFragmentTests(unittest.TestCase):
         self.assertEqual(set(fragment["required"]), {"schemaVersion", "viewport"})
         self.assertEqual(
             set(fragment["properties"]),
-            {"schemaVersion", "viewport", "freeze"},
+            {"schemaVersion", "viewport", "freeze", "design"},
         )
 
     def test_schema_version_const_matches_parser(self) -> None:
@@ -337,6 +446,17 @@ class CaptureContractSchemaFragmentTests(unittest.TestCase):
         enum = fragment["properties"]["viewport"]["properties"]["colorScheme"]["enum"]
         self.assertEqual(enum, sorted(COLOR_SCHEMES))
 
+    def test_design_axes_in_schema_match_parser_constants(self) -> None:
+        design = capture_contract_schema_fragment()["properties"]["design"]
+        self.assertEqual(design["type"], "object")
+        self.assertIs(design["additionalProperties"], False)
+        self.assertEqual(set(design["properties"]), set(DESIGN_AXES))
+        for axis, schema in design["properties"].items():
+            with self.subTest(axis=axis):
+                self.assertEqual(schema["type"], "array")
+        # Optional, like freeze's defaults: the request is valid without it.
+        self.assertNotIn("design", capture_contract_schema_fragment()["required"])
+
     def test_freeze_defaults_in_schema_match_parse_defaults(self) -> None:
         fragment = capture_contract_schema_fragment()
         freeze = fragment["properties"]["freeze"]
@@ -349,6 +469,158 @@ class CaptureContractSchemaFragmentTests(unittest.TestCase):
         for key, value in parsed["freeze"].items():
             with self.subTest(key=key):
                 self.assertEqual(freeze["properties"][key]["default"], value)
+
+
+def _corpus_args(design: object) -> dict[str, Any]:
+    """A complete capture call carrying one corpus ``design`` value."""
+    args: dict[str, Any] = {
+        "schemaVersion": 1,
+        "url": "about:blank",
+        "type": "screenshot",
+        "state": "ok",
+        "actions": [],
+        "artifact_path": "evidence/x.png",
+        "viewport": dict(_FULL_VIEWPORT),
+    }
+    if design is not _ABSENT:
+        args["design"] = design
+    return args
+
+
+def _corpus_snapshot(design: object) -> dict[str, Any]:
+    """A complete request snapshot carrying one corpus ``design`` value."""
+    snapshot: dict[str, Any] = {
+        "schemaVersion": 1,
+        "viewport": dict(_FULL_VIEWPORT),
+        "freeze": dict(_FULL_FREEZE),
+    }
+    if design is not _ABSENT:
+        snapshot["design"] = design
+    return snapshot
+
+
+def _appended_entry(request: dict[str, Any]) -> dict[str, Any]:
+    """Write one real manifest line for ``request`` and read it back."""
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = Path(tmp)
+        (run_dir / "evidence").mkdir()
+        (run_dir / "evidence" / "capture.png").write_bytes(b"png-bytes")
+        append_entry(
+            run_dir,
+            criterion="L6.1",
+            artifact="capture.png",
+            request=request,
+            source="decision-1",
+            observed_state="ok",
+            result="captured",
+            error="",
+            method="runtime-observation",
+            observation="the button rendered",
+            scope="one run",
+        )
+        line = (run_dir / "evidence" / "manifest.jsonl").read_text(encoding="utf-8")
+    return json.loads(line)
+
+
+# One accept/reject corpus. ``True`` = every layer must accept the value,
+# ``False`` = every layer must reject it. An array whose *items* are unreadable
+# literals is still a readable declaration: the boundary does not type the
+# items, so a token reference stays a probe fact instead of a caller error.
+_DESIGN_CORPUS: tuple[tuple[str, object, bool], ...] = (
+    ("omitted key", _ABSENT, True),
+    ("empty object declares nothing", {}, True),
+    ("legal three axes", _DESIGN, True),
+    ("one axis only", {"radii": [4, 8]}, True),
+    ("unreadable literals in an array", {"fontSizes": ["var(--x)", "1rem"]}, True),
+    ("non-literal nested in an array", {"fontSizes": [{"px": 16}]}, True),
+    ("explicit null", None, False),
+    ("scalar axis", {"fontSizes": 16}, False),
+    ("string axis", {"radii": "12px"}, False),
+    ("name->literal object axis", {"colors": {"text": "#000"}}, False),
+    ("object nested where an array belongs", {"fontSizes": {"px": [16]}}, False),
+    ("unknown axis", {"spacing": [8]}, False),
+    ("non-object binding", ["#000"], False),
+    ("one good axis beside a scalar", {"fontSizes": [16], "colors": 7}, False),
+)
+
+
+class DesignBindingCorpusTests(unittest.TestCase):
+    """One corpus, four readers: parser, inputSchema, snapshot, manifest."""
+
+    def test_every_layer_agrees_on_the_same_corpus(self) -> None:
+        input_schema = _tool_schema()["inputSchema"]
+        # A valid written entry, to mutate into the rejected shapes below.
+        valid_entry = _appended_entry(_corpus_snapshot(_DESIGN))
+
+        for name, design, accepted in _DESIGN_CORPUS:
+            with self.subTest(design=name):
+                args = _corpus_args(design)
+
+                # 1. Parser (write authority).
+                try:
+                    parsed = parse_capture_contract(args)
+                except ValueError as exc:
+                    self.assertFalse(accepted, f"parser rejected a legal {name}: {exc}")
+                    parsed = None
+                else:
+                    self.assertTrue(accepted, f"parser accepted an illegal {name}")
+
+                # 2. Advertised tool input schema.
+                schema_violations = violations(args, input_schema)
+                self.assertEqual(
+                    schema_violations == [], accepted,
+                    f"inputSchema disagrees on {name}: {schema_violations}",
+                )
+
+                # 3. Snapshot validator (read authority: empty = valid).
+                facts = validate_capture_snapshot(_corpus_snapshot(design))
+                self.assertEqual(
+                    facts == [], accepted,
+                    f"snapshot reader disagrees on {name}: {[f.code for f in facts]}",
+                )
+
+                # 4. Manifest layer: the real writer refuses a snapshot the
+                #    read side rejects, and the schema rejects it on read-back.
+                broken = json.loads(json.dumps(valid_entry))
+                if design is _ABSENT:
+                    broken["request"].pop("design", None)
+                else:
+                    broken["request"]["design"] = design
+                entry_violations = validate_manifest_entry(broken)
+                self.assertEqual(
+                    entry_violations == [], accepted,
+                    f"manifest schema disagrees on {name}: {entry_violations}",
+                )
+                if accepted:
+                    # The bound snapshot is what the manifest records, and the
+                    # writer takes it verbatim.
+                    assert parsed is not None
+                    written = _appended_entry(parsed)
+                    self.assertEqual(validate_manifest_entry(written), [])
+                    self.assertEqual(
+                        written["request"].get("design"),
+                        parsed.get("design"),
+                    )
+                else:
+                    with self.assertRaises(ManifestAppendError):
+                        _appended_entry(_corpus_snapshot(design))
+
+    def test_unreadable_literals_stay_undecidable_not_clean(self) -> None:
+        # The boundary accepts these arrays; the probe must then refuse to call
+        # the page clean for an axis it could not read.
+        def clean_page(_js: str) -> dict[str, Any]:
+            return {"findings": [], "undecidable": [], "distinctFontSizes": [16.0]}
+
+        for design, axes in (
+            ({"fontSizes": ["var(--x)", "1rem"]}, {"font-size", "radius", "color"}),
+            ({"fontSizes": [{"px": 16}]}, {"font-size", "radius", "color"}),
+            ({}, {"font-size", "radius", "color"}),
+        ):
+            with self.subTest(design=design):
+                facts = probe_render_tokens(clean_page, design)
+                self.assertEqual(facts.findings, ())
+                self.assertEqual(facts.measurement_status, "measured")
+                self.assertEqual({note["axis"] for note in facts.undecidable}, axes)
 
 
 if __name__ == "__main__":

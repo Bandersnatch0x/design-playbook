@@ -7,6 +7,7 @@ JavaScript and the fail-closed parser for evaluate output.
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -342,8 +343,8 @@ def declared_token_axes(
         notes.extend(
             {
                 "axis": axis,
-                "reason": f"declared {key} entry {literal!r} is not a px number: "
-                "a relative unit depends on the rendered root size",
+                "reason": f"declared {key} entry {literal!r} is not a finite px "
+                "number: a unit or value with no rendered size cannot be compared",
             }
             for literal in rejected
         )
@@ -359,8 +360,8 @@ def declared_token_axes(
     notes.extend(
         {
             "axis": "color",
-            "reason": f"declared palette entry {literal!r} is not a hex or rgb() "
-            "color (a token reference or keyword has to be resolved first)",
+            "reason": f"declared palette entry {literal!r} is not an opaque hex "
+            "or rgb() color: only an opaque literal has a comparable computed value",
         }
         for literal in rejected_colors
     )
@@ -430,6 +431,37 @@ def _render_token_js(axes: Mapping[str, Any]) -> str:
     )
 
 
+# CSS Syntax <number>: optional sign, ASCII digits with an optional fraction
+# (or a leading dot), optional exponent. ``float()`` is more permissive than
+# CSS — it reads PEP 515 underscores, Unicode digits, ``inf`` and ``nan`` — so
+# the grammar is checked before the conversion, never the other way round.
+_CSS_NUMBER = re.compile(
+    r"[+-]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
+)
+# CSS Syntax whitespace is exactly TAB, LF, FF, CR and SPACE. ``str.strip()``
+# and ``str.split()`` also consume NBSP, vertical tab and other Unicode spaces,
+# which CSS keeps inside the token — so trimming must use this subset and let
+# the number grammar reject whatever is left.
+_CSS_WHITESPACE = " \t\n\r\f"
+_CSS_WS_RUN = re.compile(r"[ \t\n\r\f]+")
+
+
+def _css_trim(text: str) -> str:
+    """Strip only CSS whitespace from both ends."""
+    return text.strip(_CSS_WHITESPACE)
+
+
+def _css_number(text: str) -> float | None:
+    """The value of a complete CSS ``<number>`` token, or None when it is not one."""
+    if _CSS_NUMBER.fullmatch(text) is None:
+        return None
+    try:
+        number = float(text)
+    except (ValueError, OverflowError):
+        return None
+    return number if math.isfinite(number) else None
+
+
 def _px_values(value: object) -> tuple[list[float], list[str]]:
     """Read a declared px scale; anything else comes back as rejected text."""
     if value is None:
@@ -443,13 +475,20 @@ def _px_values(value: object) -> tuple[list[float], list[str]]:
     for item in items:
         number: float | None = None
         if type(item) in (int, float):
-            number = float(item)
-        elif isinstance(item, str) and item.strip().lower().endswith("px"):
             try:
-                number = float(item.strip()[:-2].strip())
-            except ValueError:
+                number = float(item)
+            except OverflowError:
                 number = None
-        if number is None or number < 0:
+        elif isinstance(item, str):
+            text = _css_trim(item)
+            # A CSS dimension has no space between the number and the unit, and
+            # the number part must be the whole prefix: "1_6px" and "16 px" are
+            # not dimensions even though float() would read their number.
+            number = _css_number(text[:-2]) if text[-2:].lower() == "px" else None
+        # "NaNpx"/"Infinitypx"/"1e309px" have no rendered size to compare, and
+        # json.dumps would hand the page a bare NaN/Infinity scale entry that
+        # the browser never parses as a font size. Reject, never default.
+        if number is None or not math.isfinite(number) or number < 0:
             rejected.append(str(item))
         else:
             values.append(number)
@@ -484,10 +523,15 @@ _RGB_COLOR = re.compile(r"^rgba?\(([^)]+)\)$")
 
 
 def _color_key(value: object) -> str | None:
-    """Return the ``rgb(r, g, b)`` key the browser computes for a literal."""
+    """Return the ``rgb(r, g, b)`` key the browser computes for a literal.
+
+    Only an opaque literal has a comparable computed value: a translucent
+    colour composes over whatever is behind it, so it is rejected (and thus
+    named undecidable) rather than silently compared as its opaque channels.
+    """
     if not isinstance(value, str):
         return None
-    text = value.strip().lower()
+    text = _css_trim(value).lower()
     match = _HEX_COLOR.match(text)
     if match:
         digits = match.group(1)
@@ -498,16 +542,57 @@ def _color_key(value: object) -> str | None:
         match = _RGB_COLOR.match(text)
         if not match:
             return None
-        parts = [part for part in re.split(r"[\s,/]+", match.group(1)) if part]
-        if len(parts) < 3:
+        parts, alpha = _rgb_body(match.group(1))
+        if parts is None or (alpha is not None and not _opaque_alpha(alpha)):
             return None
-        try:
-            channels = [int(round(float(part))) for part in parts[:3]]
-        except ValueError:
-            return None
+        channels = []
+        for part in parts:
+            value = _css_number(part)
+            if value is None or value < 0 or value > 255:
+                return None
+            # The browser serializes a fractional channel by rounding to the
+            # nearest integer with ties toward +infinity (12.5 -> 13); Python's
+            # round() is banker's rounding and would produce 12.
+            channels.append(int(math.floor(value + 0.5)))
     if any(channel < 0 or channel > 255 for channel in channels):
         return None
     return "rgb({}, {}, {})".format(*channels)
+
+
+def _rgb_body(body: str) -> tuple[list[str] | None, str | None]:
+    """Split a modern ``rgb()`` body into three channels and an optional alpha.
+
+    The comma form takes ``rgb(r, g, b[, a])``; the space form takes
+    ``rgb(r g b[ / a])``. Anything else is malformed, and a malformed literal
+    is never read as an opaque colour.
+    """
+    if "/" in body:
+        if body.count("/") != 1:
+            return None, None
+        channel_text, alpha_text = body.split("/")
+        parts = _CSS_WS_RUN.split(_css_trim(channel_text))
+        alpha = _css_trim(alpha_text)
+        if not alpha or len(parts) != 3 or not all(parts):
+            return None, None
+        return parts, alpha
+    if "," in body:
+        parts = [_css_trim(part) for part in body.split(",")]
+        if len(parts) not in (3, 4) or not all(parts):
+            return None, None
+        return parts[:3], (parts[3] if len(parts) == 4 else None)
+    parts = _CSS_WS_RUN.split(_css_trim(body))
+    if len(parts) != 3 or not all(parts):
+        return None, None
+    return parts, None
+
+
+def _opaque_alpha(text: str) -> bool:
+    """True only for the alpha spellings that paint fully opaque."""
+    if text.endswith("%"):
+        value = _css_number(text[:-1])
+        return value is not None and value == 100
+    value = _css_number(text)
+    return value is not None and value == 1
 
 
 def _finding_rows(value: object, errors: list[str]) -> tuple[dict[str, Any], ...]:
