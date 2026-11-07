@@ -919,8 +919,14 @@ def validate_registry(banned: re.Pattern[str]) -> list[rules_registry.RuleEntry]
     # placeholder entries need the full three-state predicate + blocked exit.
     registry_path = PKG.joinpath(*rules_registry.RULES_PATH_PARTS)
     check(registry_path.is_file(), f"registry present: {registry_path.relative_to(ROOT)}")
-    registry_text = registry_path.read_text(encoding="utf-8") if registry_path.exists() else ""
-    registry_entries = rules_registry.parse_registry(registry_text)
+    registry_text = ""
+    registry_entries: list[rules_registry.RuleEntry] = []
+    if registry_path.is_file():
+        try:
+            registry_entries = rules_registry.load_registry(registry_path)
+            registry_text = rules_registry.load_registry_text(registry_path)
+        except rules_registry.RegistryLayoutError as exc:
+            check(False, f"registry layout loads: {exc}")
     registry_errors = rules_registry.validate_registry(registry_entries)
     _registry_craft_ids = tuple(
         entry.id for entry in registry_entries if entry.id.startswith("CRAFT-")
@@ -1164,12 +1170,11 @@ def validate_threshold_sources(entries: list[rules_registry.RuleEntry]) -> None:
 
 
 def validate_registry_split(entries: list[rules_registry.RuleEntry]) -> None:
-    """V-4: the registry's own split clause, enforced."""
+    """V-4: the registry's own split clause, measured on the real layout."""
     print("\n== Registry split clause (V-4) ==")
     groups = {entry.fields.get("capability-domain", "") for entry in entries}
-    single_file = True  # one rules.md until the split lands; the split replaces this check
     check(
-        not (single_file and (len(entries) > 30 or len(groups) > 3)),
+        not rules_registry.registry_split_errors(entries),
         f"registry within the single-file limits ({len(entries)} entries <= 30, "
         f"{len(groups)} capability-domain group(s) <= 3), or split",
     )

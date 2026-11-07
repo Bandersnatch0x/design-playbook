@@ -109,10 +109,10 @@ class EditHookTests(unittest.TestCase):
 
         text = (
             PKG / "skills" / "design-playbook" / "references" / "rules.md"
-        ).read_text(encoding="utf-8")
+        )
         registered = {
             status["ruleId"] for status in rules_registry.machine_detector_statuses(
-                rules_registry.parse_registry(text))
+                rules_registry.load_registry(text))
         }
         self.assertEqual(RULE_ID, edit_hook.CONTRAST_RULE)
         # Every machine-detector rule is named as decidable or not — the hook

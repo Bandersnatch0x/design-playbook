@@ -22,9 +22,10 @@ if str(PKG / "scripts") not in sys.path:
 import rules_registry  # noqa: E402  (standalone seam, same as validate.py)
 from detectors._shared import DetectorInputError  # noqa: E402
 
-REGISTRY_TEXT = (
+REGISTRY_PATH = (
     PKG / "skills" / "design-playbook" / "references" / "rules.md"
-).read_text(encoding="utf-8")
+)
+REGISTRY_TEXT = rules_registry.load_registry_text(REGISTRY_PATH)
 
 CONTRAST_POSITIVE = {"appearances": [{"name": "light", "pairs": [
     {"label": "Muted body", "foreground": "#777777",
