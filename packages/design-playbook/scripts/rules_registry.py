@@ -46,8 +46,8 @@ SPLIT_GROUP_LIMIT = 3
 
 # An index declares its physical parts and the global entry order in one
 # fenced block. The info string is the marker; plain rule entries never use it.
-INDEX_FENCE = re.compile(r"```registry-index[ \t]*\n(.*?)```", re.S)
-INDEX_OPEN = re.compile(r"```registry-index[ \t]*(?:\n|$)")
+# The opener is recognized before it is validated: a near miss is a layout
+# error, not a fallback to the single-file path.
 INDEX_PART_LINE = re.compile(r"^part:[ \t]*(\S.*?)[ \t]*$", re.M)
 INDEX_ORDER_LINE = re.compile(r"^order:[ \t]*(.+?)[ \t]*$", re.M)
 INDEX_SCHEMA_LINE = re.compile(r"^schemaVersion:[ \t]*(\S.*?)[ \t]*$", re.M)
@@ -306,27 +306,55 @@ def _index_error(message: str, repair: str) -> RegistryLayoutError:
 
 
 def parse_index(text: str) -> RegistryIndex | None:
-    """Parse the ``registry-index`` block; ``None`` for a single-file registry."""
-    blocks = INDEX_FENCE.findall(text)
-    openings = INDEX_OPEN.findall(text)
-    if not openings:
+    """Parse the ``registry-index`` block; ``None`` for a single-file registry.
+
+    An attempted declaration is detected before its syntax is validated, so a
+    malformed opener (extra info string, stray space, missing backtick) fails
+    closed instead of falling through to the single-file path.
+    """
+    lines = text.splitlines()
+    attempts: list[tuple[int, str]] = []
+    for index, line in enumerate(lines):
+        if not line.startswith("`"):
+            continue
+        info = line.lstrip("`").strip()
+        if info and info.split(maxsplit=1)[0] == "registry-index":
+            attempts.append((index, line))
+    if not attempts:
         return None
-    if len(openings) != len(blocks):
+    if len(attempts) > 1:
         raise _index_error(
-            f"registry-index fence is not closed ({len(openings)} opening, "
-            f"{len(blocks)} closed)",
-            "Close the registry-index block with ```",
-        )
-    if len(blocks) > 1:
-        raise _index_error(
-            f"index carries {len(blocks)} registry-index blocks; exactly one "
-            "is allowed",
+            f"index carries {len(attempts)} registry-index declarations; "
+            "exactly one is allowed",
             "Keep one registry-index block and list every part in it",
+        )
+    open_index, open_line = attempts[0]
+    if not re.fullmatch(r"```registry-index[ \t]*", open_line):
+        raise _index_error(
+            f"registry-index opening is malformed: {open_line!r}",
+            "Write exactly ```registry-index on its own line",
+        )
+    body: list[str] = []
+    closed = False
+    for line in lines[open_index + 1:]:
+        if line.startswith("`"):
+            if re.fullmatch(r"```[ \t]*", line):
+                closed = True
+                break
+            raise _index_error(
+                f"registry-index closing fence is malformed: {line!r}",
+                "Close the block with exactly ``` on its own line",
+            )
+        body.append(line)
+    if not closed:
+        raise _index_error(
+            "registry-index fence is not closed",
+            "Close the registry-index block with ```",
         )
     parts: list[str] = []
     order: tuple[str, ...] = ()
     schema = ""
-    for raw_line in blocks[0].splitlines():
+    for raw_line in body:
         line = raw_line.strip()
         if not line:
             continue
@@ -489,6 +517,12 @@ def load_registry(path: Path) -> list[RuleEntry]:
     text, index, parts = _read_layout(path)
     if index is None:
         entries = parse_registry(text)
+        if not entries:
+            raise _index_error(
+                f"registry {path.name} declares no index and carries no "
+                "rule entries",
+                "Ship a non-empty registry or a valid registry-index",
+            )
         for entry in entries:
             entry.source = path.name
         return entries

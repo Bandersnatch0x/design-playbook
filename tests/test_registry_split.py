@@ -6,9 +6,12 @@ index cannot yield an empty registry that reads as green.
 """
 from __future__ import annotations
 
+import io
+import json
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -23,6 +26,7 @@ import rules_registry  # noqa: E402  (standalone seam, same as validate.py)
 from design_playbook.scripts import g8_run_registry as g8  # noqa: E402
 from design_playbook.scripts import g10_design_decisions as g10  # noqa: E402
 from design_playbook.scripts import rules_registry as pkg_rules  # noqa: E402
+from design_playbook.scripts import validate_run as vr  # noqa: E402
 
 REGISTRY_PATH = PKG / "skills" / "design-playbook" / "references" / "rules.md"
 
@@ -248,6 +252,52 @@ class LayoutFailureTests(unittest.TestCase):
             rules_registry.load_registry(index)
         self.assertIn("not closed", str(caught.exception))
 
+    def test_malformed_index_openings_fail_closed(self) -> None:
+        # Only the canonical opener declares an index; every near miss is an
+        # explicit failure instead of falling back to an empty single file.
+        body = ENTRY.format(entry_id="CRAFT-01", domain="D4")
+        (self.root / "rules").mkdir(exist_ok=True)
+        (self.root / "rules" / "craft.md").write_text(body, encoding="utf-8")
+        manifest = (
+            "schemaVersion: 1\npart: rules/craft.md\norder: CRAFT-01\n"
+        )
+        variants = {
+            "info-string suffix": f"```registry-index broken\n{manifest}```\n",
+            "space after backticks": f"``` registry-index\n{manifest}```\n",
+            "two backticks": f"``registry-index\n{manifest}```\n",
+            "unknown fence, no entries": (
+                f"```yaml\n{manifest}```\n"
+            ),
+        }
+        for label, text in variants.items():
+            with self.subTest(label):
+                index = self.root / "rules.md"
+                index.write_text("# Fixture\n\n" + text, encoding="utf-8")
+                with self.assertRaises(rules_registry.RegistryLayoutError):
+                    rules_registry.load_registry(index)
+
+    def test_closing_fence_suffix_fails_closed(self) -> None:
+        body = ENTRY.format(entry_id="CRAFT-01", domain="D4")
+        (self.root / "rules").mkdir(exist_ok=True)
+        (self.root / "rules" / "craft.md").write_text(body, encoding="utf-8")
+        index = self.root / "rules.md"
+        index.write_text(
+            "# Fixture\n\n```registry-index\nschemaVersion: 1\n"
+            "part: rules/craft.md\norder: CRAFT-01\n```invalid\n",
+            encoding="utf-8",
+        )
+        with self.assertRaises(rules_registry.RegistryLayoutError) as caught:
+            rules_registry.load_registry(index)
+        self.assertIn("closing", str(caught.exception).lower())
+
+    def test_prose_only_single_file_fails_closed(self) -> None:
+        # An empty or unrecognized registry must not read as a green audit.
+        path = self.root / "rules.md"
+        path.write_text("# Registry\n\nNo rule entries here.\n", encoding="utf-8")
+        with self.assertRaises(rules_registry.RegistryLayoutError) as caught:
+            rules_registry.load_registry(path)
+        self.assertIn("no rule entries", str(caught.exception).lower())
+
 
 DD_REPORT = """## DD-0001 — trigger
 
@@ -259,7 +309,7 @@ status: confirmed-agent
 constraints:
   baseline: waived: none bound this run
   spec: [l4.export-trigger]
-  rules: [BOGUS-99@1]
+  rules: [NOPE-99@1]
 selection: {candidate: Button (icon + label), rationale: role table names it}
 confirmation:
   kind: agent
@@ -308,6 +358,89 @@ class ConsumerFailureTests(unittest.TestCase):
         with mock.patch.object(g8, "REGISTRY_PATH", index):
             self.assertEqual(g8.main(["g8", str(craft)]), 2,
                              "G8 must report the unreadable layout, not OK")
+
+    def test_g10_malformed_index_opening_reports_unreadable(self) -> None:
+        (self.root / "rules").mkdir(exist_ok=True)
+        (self.root / "rules" / "craft.md").write_text(
+            ENTRY.format(entry_id="CRAFT-01", domain="D4"), encoding="utf-8"
+        )
+        index = self.root / "rules.md"
+        index.write_text(
+            "# Fixture\n\n```registry-index broken\nschemaVersion: 1\n"
+            "part: rules/craft.md\norder: CRAFT-01\n```\n",
+            encoding="utf-8",
+        )
+        with mock.patch.object(g10, "_REGISTRY_PARTS", (str(index),)):
+            findings = g10.check_g10(DD_REPORT)
+        self.assertIn("G10.registry_unreadable",
+                      {item.rule_id for item in findings})
+
+    def test_g10_healthy_registry_flags_unknown_rule(self) -> None:
+        findings = g10.check_g10(DD_REPORT)
+        self.assertIn("G10.bad_rules_ref",
+                      {item.rule_id for item in findings})
+
+    def test_g8_p3_empty_audit_reports_every_missing_row(self) -> None:
+        entries, _ = g8.load_registry()
+        self.assertEqual(len(g8.check_g8_run("", entries, "P3")), 30)
+
+    def test_g8_real_cli_p3_empty_audit_exits_1(self) -> None:
+        craft = self.root / "craft-guard.md"
+        craft.write_text("", encoding="utf-8")
+        plan = PKG / "examples" / "dogfood" / "run" / "plan.md"
+        self.assertEqual(g8.main(["g8", str(craft), "--plan", str(plan)]), 1)
+
+    def test_g8_real_cli_malformed_index_opening_exits_2(self) -> None:
+        (self.root / "rules").mkdir(exist_ok=True)
+        (self.root / "rules" / "craft.md").write_text(
+            ENTRY.format(entry_id="CRAFT-01", domain="D4"), encoding="utf-8"
+        )
+        index = self.root / "rules.md"
+        index.write_text(
+            "# Fixture\n\n```registry-index broken\nschemaVersion: 1\n"
+            "part: rules/craft.md\norder: CRAFT-01\n```\n",
+            encoding="utf-8",
+        )
+        craft = self.root / "craft-guard.md"
+        craft.write_text("", encoding="utf-8")
+        plan = PKG / "examples" / "dogfood" / "run" / "plan.md"
+        with mock.patch.object(g8, "REGISTRY_PATH", index):
+            self.assertEqual(
+                g8.main(["g8", str(craft), "--plan", str(plan)]), 2,
+                "malformed declaration must not print G8 OK",
+            )
+
+    def test_validate_run_main_projects_layout_error_as_json(self) -> None:
+        run = PKG / "examples" / "export-entry" / "run"
+        argv = [
+            "validate_run.py", str(run / "spec.md"), str(run / "point-back.md"),
+            "--run-root", str(run), "--legacy", "--format", "json",
+        ]
+        baseline = io.StringIO()
+        with redirect_stdout(baseline):
+            self.assertEqual(vr.main(argv), 0)
+        self.assertEqual(json.loads(baseline.getvalue()), [])
+
+        (self.root / "rules").mkdir(exist_ok=True)
+        (self.root / "rules" / "craft.md").write_text(
+            ENTRY.format(entry_id="CRAFT-01", domain="D4"), encoding="utf-8"
+        )
+        index = self.root / "rules.md"
+        index.write_text(
+            "# Fixture\n\n```registry-index\nschemaVersion: 1\n"
+            "part: rules/missing.md\norder: CRAFT-01\n```\n",
+            encoding="utf-8",
+        )
+        output = io.StringIO()
+        with mock.patch.object(g8, "REGISTRY_PATH", index), \
+                redirect_stdout(output):
+            code = vr.main(argv)
+        self.assertEqual(code, 1)
+        findings = json.loads(output.getvalue())
+        self.assertTrue(
+            any(item["rule_id"] == "G8.run_registry" for item in findings),
+            "the layout failure must render through the existing G8 diagnostic",
+        )
 
 
 if __name__ == "__main__":
