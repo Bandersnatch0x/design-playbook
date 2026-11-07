@@ -8,7 +8,9 @@ Issue #37 exit criteria: these hang off the existing CI unit-test step
 """
 from __future__ import annotations
 
+import importlib.util
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -38,6 +40,56 @@ P3_STATE = json.loads(
     (P3_RUN / "design-baseline" / "state.json").read_text(encoding="utf-8"))
 SHA = "a" * 64
 OTHER_SHA = "b" * 64
+
+_BASELINE_OWNER_PATH = (
+    PKG / "skills" / "design-baseline" / "scripts" / "design_baseline.py")
+_BASELINE_SPEC = importlib.util.spec_from_file_location(
+    "design_baseline_s2", _BASELINE_OWNER_PATH)
+if _BASELINE_SPEC is None or _BASELINE_SPEC.loader is None:
+    raise RuntimeError(f"cannot load baseline owner: {_BASELINE_OWNER_PATH}")
+design_baseline = importlib.util.module_from_spec(_BASELINE_SPEC)
+_BASELINE_SPEC.loader.exec_module(design_baseline)
+
+# Full-chain executable fixtures need first-party source for a real baseline
+# binding; the static export-upgrade project ships none.
+THEME_CSS = """:root {
+  --color-background: #ffffff;
+  --color-surface: #f7f8fa;
+  --color-text: #1a1a1a;
+  --color-primary: #2457d6;
+}
+body { font-family: Inter, system-ui, sans-serif; }
+"""
+
+
+def _prepare_executable(tmp: Path) -> tuple[Path, Path]:
+    """Copy the export-upgrade scenario into owner containment and bind a baseline.
+
+    Complete acceptance verifies a present baseline, so the executable copy
+    must live at ``<project>/.scratch/run`` (run inside project) with a real
+    prepare/confirm binding instead of the static sibling run's stale state.
+    Scenario artifacts stay verbatim; only the report's current-binding sha
+    references are re-pointed at the generated baseline.
+    """
+
+    project = tmp / "project"
+    run = project / ".scratch" / "run"
+    shutil.copytree(P3_BASE / "project", project)
+    shutil.copytree(P3_RUN, run)
+    shutil.rmtree(run / "design-baseline", ignore_errors=True)
+    _write(project / "src" / "theme.css", THEME_CSS)
+    design_baseline.prepare(project, run)
+    design_baseline.confirm(project, run, decision="accept")
+    state = json.loads(
+        (run / "design-baseline" / "state.json").read_text(encoding="utf-8"))
+    report = run / "decision-report.md"
+    text = report.read_text(encoding="utf-8")
+    current = re.search(r"(?m)^design-baseline:.*?([0-9a-f]{64})", text)
+    if current is None:
+        raise AssertionError("fixture report has no design-baseline line")
+    _write(report, text.replace(
+        current.group(1), state["baseline"]["sha256"]))
+    return run, project
 
 
 def _write(path: Path, text: str) -> None:
@@ -645,20 +697,22 @@ class RunProfileSignalTests(unittest.TestCase):
 class FixtureWalkthroughTests(unittest.TestCase):
     """Issue #37: the fixture run demonstrates the whole E-tier arc."""
 
-    def _validate(self, *extra: str) -> subprocess.CompletedProcess[str]:
+    def _validate(
+        self, run: Path, project: Path, *extra: str
+    ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [
                 sys.executable,
                 str(PKG / "scripts" / "validate_run.py"),
-                str(P3_RUN / "spec.md"),
-                str(P3_RUN / "point-back.md"),
-                "--preview-dir", str(P3_RUN / "preview"),
-                "--decision-report", str(P3_RUN / "decision-report.md"),
-                "--evidence-dir", str(P3_RUN / "evidence"),
-                "--run-root", str(P3_RUN),
-                "--contract-project", str(P3_BASE / "project"),
-                "--contract-run", str(P3_RUN),
-                "--shaping-dir", str(P3_RUN / "shaping"),
+                str(run / "spec.md"),
+                str(run / "point-back.md"),
+                "--preview-dir", str(run / "preview"),
+                "--decision-report", str(run / "decision-report.md"),
+                "--evidence-dir", str(run / "evidence"),
+                "--run-root", str(run),
+                "--contract-project", str(project),
+                "--contract-run", str(run),
+                "--shaping-dir", str(run / "shaping"),
                 *extra,
             ],
             capture_output=True, text=True, check=False,
@@ -666,14 +720,18 @@ class FixtureWalkthroughTests(unittest.TestCase):
         )
 
     def test_full_p3_chain_reaches_pass_with_preview(self) -> None:
-        result = self._validate()
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("RUN OK", result.stdout)
+        with tempfile.TemporaryDirectory() as tmp:
+            run, project = _prepare_executable(Path(tmp))
+            result = self._validate(run, project)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("RUN OK", result.stdout)
 
     def test_strict_mode_passes(self) -> None:
         # preview occurred on this fixture, so --require-preview can fire
-        result = self._validate("--strict")
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        with tempfile.TemporaryDirectory() as tmp:
+            run, project = _prepare_executable(Path(tmp))
+            result = self._validate(run, project, "--strict")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_g10_breaks_when_decision_id_link_drifts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
