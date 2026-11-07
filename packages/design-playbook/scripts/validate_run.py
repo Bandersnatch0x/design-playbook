@@ -171,7 +171,11 @@ from design_playbook.scripts.g6_warnings import (  # noqa: E402
 # Preview occurrence facts for the strict-mode G5 check; G5 rules themselves
 # live in g5_preview.py (C1 / ADR-0004 keeps the integrity rules bundled).
 from design_playbook.scripts.g6_records import ledger_observed  # noqa: E402
-from design_playbook.scripts.run_facts import RunFacts, capture_run_facts  # noqa: E402
+from design_playbook.scripts.run_facts import (  # noqa: E402
+    STATE_MISSING,
+    RunFacts,
+    capture_run_facts,
+)
 
 try:
     from design_playbook.scripts.g7_contract_drift import check_g7 as check_g7
@@ -488,23 +492,26 @@ def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
     dr_g10 = dr if dr is not None else (
         rr / "decision-report.md" if rr is not None else None
     )
-    if dr is None:
-        # Standard path: the report already rides the RunFacts capture.
-        report_text = facts.decision_report_text
-    elif rr is not None and dr.resolve() == (rr / "decision-report.md").resolve():
-        # An explicit path naming the captured standard file: use the
-        # captured text (one read, no re-read race window).
+    if dr is None or (
+        rr is not None and dr.resolve() == (rr / "decision-report.md").resolve()
+    ):
+        # Standard path (default, or an explicit path naming the captured
+        # standard file): presence and text both ride the RunFacts snapshot.
+        # Re-statting here would let one snapshot's verdict flip when the file
+        # is created or deleted after capture (ADR-0039).
+        report_present = (
+            facts.artifact_state("decision_report") != STATE_MISSING
+        )
         report_text = facts.decision_report_text
     else:
         # Explicit path may point outside the captured run root (same
-        # justification as the explicit --shaping-dir re-read above).
+        # justification as the explicit --shaping-dir re-read above); it has
+        # no snapshot fact, so presence and text come from this read.
         try:
             report_text = dr.read_text(encoding="utf-8") if dr.is_file() else ""
         except (OSError, UnicodeError):
             report_text = ""
-    report_present = bool(report_text) or (
-        dr_g10 is not None and dr_g10.is_file()
-    )
+        report_present = bool(report_text) or dr.is_file()
     if report_present:
         errs += check_g10(
             report_text,

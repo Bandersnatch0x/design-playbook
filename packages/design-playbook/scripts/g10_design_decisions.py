@@ -79,29 +79,35 @@ def _fmt(owner: str) -> str:
 # declaration line; regions/components are list-shaped and only have to be
 # declared. Tolerance matches the rest of the machine face: the canonical
 # ```text fence, or — for reports predating the fence — the top matter before
-# the first appended DD entry (same reading as component_candidates). A
-# markdown-heading declaration ("## Regions ...") counts.
-_TOP_FENCE = re.compile(r"```text[ \t]*\n(.*?)```", re.DOTALL)
+# the first appended DD entry (same reading as component_candidates).
+#
+# A declaration is one of the two documented forms, nothing looser:
+#   - topmatter / fenced colon line: ``scene: ops`` (value may be empty)
+#   - markdown heading: ``## Regions（映射 spec L2）`` (annotation is the value)
+# The axis name is a whole token — the separator must follow immediately — so
+# ``density_hint:`` and ``scenery:`` name different keys, and a prose
+# sentence opening with an axis word declares nothing.
 _TOP_DD_HEADING = re.compile(r"(?m)^##\s+DD-")
 _SCALAR_AXES = ("scene", "density", "template")
 _LIST_AXES = ("regions", "components")
-_AXIS_LINE = re.compile(
-    r"(?mi)^[ \t]*(?:#{1,6}[ \t]*)?(scene|density|template|regions|components)"
-    r"[ \t]*(?::|[（(])?[ \t]*(?P<value>.*)$")
+_AXIS_COLON_LINE = re.compile(
+    r"(?mi)^[ \t]*(?P<axis>scene|density|template|regions|components)"
+    r"[ \t]*(?P<sep>:|：)[ \t]*(?P<value>.*)$")
+_AXIS_HEADING = re.compile(
+    r"(?mi)^[ \t]*#{1,6}[ \t]+"
+    r"(?P<axis>scene|density|template|regions|components)"
+    r"(?=[ \t（(：:]|$)[ \t]*(?:[:：][ \t]*)?(?P<value>.*)$")
 
 
 def _top_region(report_text: str) -> str:
-    """The report's top-block region (fence, or text before DD blocks).
+    """The report's top-block region: everything before the first DD entry.
 
-    The fence only counts while it sits ahead of the first DD entry: a fenced
-    block inside an appended entry is entry content, not the Fill face.
+    The whole prefix counts, so topmatter lines and an optional fenced block
+    both declare axes; a fence inside an appended entry is entry content, not
+    the Fill face, and stays outside.
     """
     heading = _TOP_DD_HEADING.search(report_text)
-    limit = heading.start() if heading is not None else len(report_text)
-    fence = _TOP_FENCE.search(report_text)
-    if fence is not None and fence.start() < limit:
-        return fence.group(1)
-    return report_text[:limit]
+    return report_text[: heading.start()] if heading is not None else report_text
 
 
 def _top_block_checks(report_text: str) -> list[Finding]:
@@ -114,8 +120,18 @@ def _top_block_checks(report_text: str) -> list[Finding]:
     """
     region = _top_region(report_text)
     declared: dict[str, str] = {}
-    for match in _AXIS_LINE.finditer(region):
-        declared.setdefault(match.group(1).lower(), match.group("value").strip())
+    declarations = sorted(
+        (
+            match
+            for pattern in (_AXIS_COLON_LINE, _AXIS_HEADING)
+            for match in pattern.finditer(region)
+        ),
+        key=lambda match: match.start(),
+    )
+    for match in declarations:
+        declared.setdefault(
+            match.group("axis").lower(), match.group("value").strip()
+        )
     missing = [
         axis for axis in _SCALAR_AXES + _LIST_AXES if axis not in declared
     ]
