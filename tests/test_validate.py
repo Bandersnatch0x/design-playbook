@@ -1100,8 +1100,9 @@ class ValidateGateTests(unittest.TestCase):
         # ADR-0040 positioning: the Codex picker copy is a leading truncation
         # of the canonical description. Template and snapshot can drift
         # together -- that is how the pre-0.24 framing survived the pinned
-        # description trio -- so this counterexample moves all four published
-        # description sites in place and leaves the adapter drift gate clean.
+        # description trio -- so this counterexample moves every published
+        # description site in place (including the generated portable
+        # manifest, T-156) and leaves the adapter drift gate clean.
         source = (
             self.root / "packages" / "design-playbook"
             / ".claude-plugin" / "plugin.json"
@@ -1112,6 +1113,7 @@ class ValidateGateTests(unittest.TestCase):
             "packages/design-playbook/.claude-plugin/plugin.json",
             "packages/design-playbook/.codex-plugin/plugin.json",
             "packages/design-playbook/package.json",
+            "packages/design-playbook/plugin.json",
             ".claude-plugin/marketplace.json",
         ):
             path = self.root / relative

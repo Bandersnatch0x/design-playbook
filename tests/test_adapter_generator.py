@@ -1193,12 +1193,37 @@ class ZedRendererTests(unittest.TestCase):
 
 
 class AgentPluginsBundleTests(unittest.TestCase):
-    """agent_plugins bundle (T-149 / S4): one portable plugin layout —
+    """agent_plugins bundle (T-149 / S4, T-156): one portable plugin layout —
     ``plugin.json`` + ``mcp.json`` — rendered from the capability matrix, not
-    a second hand-written manifest per host."""
+    a second hand-written manifest per host.
+
+    The layout is closed: ``plugin.json`` carries only the portable metadata
+    fields, ``mcp.json`` only ``$schema`` + ``mcpServers``, and the components
+    live at fixed sibling paths (``skills/``, ``mcp/*/server.py``).  A target
+    without those siblings cannot be an installable plugin, so it is refused
+    instead of producing a manifest that points at nothing.
+    """
+
+    NS = "io.github.bandersnatch0x.design-playbook"
+    PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
+    MCP_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
+    ALLOWED_MANIFEST_KEYS = {
+        "$schema", "name", "version", "description", "author", "homepage",
+        "repository", "license", "keywords", "extensions",
+    }
+    ALLOWED_STDIO_KEYS = {"type", "command", "args", "env", "cwd"}
+
+    @staticmethod
+    def _complete_root(root: Path) -> None:
+        """The sibling paths the portable layout references, as stubs."""
+        for rel in ("skills/.keep", "mcp/preview/server.py", "mcp/evidence/server.py"):
+            path = root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("", encoding="utf-8")
 
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
+        self._complete_root(self.tmp)
         self.manifest = gen_mod.render("agent-plugins", out_dir=self.tmp, dry_run=False)
 
     def tearDown(self) -> None:
@@ -1206,6 +1231,12 @@ class AgentPluginsBundleTests(unittest.TestCase):
 
     def _plugin_json(self) -> dict:
         return json.loads((self.tmp / "plugin.json").read_text(encoding="utf-8"))
+
+    def _mcp_json(self) -> dict:
+        return json.loads((self.tmp / "mcp.json").read_text(encoding="utf-8"))
+
+    def _declared_agents(self) -> list[dict]:
+        return self._plugin_json()["extensions"][self.NS]["agents"]
 
     def test_emits_the_two_layout_files(self) -> None:
         self.assertEqual(
@@ -1221,30 +1252,88 @@ class AgentPluginsBundleTests(unittest.TestCase):
         self.assertEqual(data["description"], canonical["description"])
         self.assertEqual(data["license"], canonical["license"])
 
-    def test_plugin_json_points_at_package_skills_and_mcp(self) -> None:
+    def test_plugin_json_is_a_closed_portable_manifest(self) -> None:
+        # The portable manifest schema is closed: components are discovered at
+        # fixed sibling paths, never declared as top-level fields.
         data = self._plugin_json()
-        self.assertEqual(data["skills"], "./skills/")
-        self.assertEqual(data["mcpServers"], "./mcp.json")
-        self.assertTrue((PKG / "skills").is_dir(),
-                        "the referenced skills directory must exist in the package")
+        self.assertLessEqual(set(data), self.ALLOWED_MANIFEST_KEYS)
+        self.assertEqual(data["$schema"], self.PLUGIN_SCHEMA)
+        self.assertEqual(set(data) & {"skills", "mcpServers", "agents"}, set())
+
+    def test_mcp_json_is_a_closed_portable_config(self) -> None:
+        data = self._mcp_json()
+        self.assertEqual(set(data), {"$schema", "mcpServers"})
+        self.assertEqual(data["$schema"], self.MCP_SCHEMA)
+        self.assertEqual(
+            set(data["mcpServers"]),
+            {"design-playbook-preview", "design-playbook-evidence"},
+        )
+        for srv in data["mcpServers"].values():
+            self.assertLessEqual(set(srv), self.ALLOWED_STDIO_KEYS)
+            self.assertEqual(srv["type"], "stdio")
+            self.assertEqual(srv["command"], "python")
+            # Omitted cwd means "plugin root" in the portable format; an
+            # explicit "." is not one of its permitted forms.
+            self.assertNotIn("cwd", srv)
+            self.assertTrue(srv["args"][0].startswith("${PLUGIN_ROOT}/"), srv)
+            # T-156: portable clients expand only ${PLUGIN_ROOT} and
+            # ${PLUGIN_DATA}.  Emitting an env template for any other
+            # variable would reach the server literally — shadowing a valid
+            # host value and reading as "set".  Run roots are call-level.
+            self.assertNotIn("env", srv, "no env overrides in the portable config")
+
+    def test_portable_config_declares_no_unexpandable_templates(self) -> None:
+        text = (self.tmp / "mcp.json").read_text(encoding="utf-8")
+        self.assertNotIn("DESIGN_PLAYBOOK_RUN_ROOT", text)
+        self.assertNotRegex(
+            text,
+            r"\$\{[^}]*:-[^}]*\}",
+            "shell-default templates do not expand in portable clients",
+        )
+
+    def test_mcp_targets_exist_in_the_real_package(self) -> None:
+        # T-156: a manifest is not "installable" because two JSON strings
+        # match; the targets it names must exist in the package root.
+        data = self._mcp_json()
+        targets = [
+            srv["args"][0].removeprefix("${PLUGIN_ROOT}/")
+            for srv in data["mcpServers"].values()
+        ]
+        self.assertEqual(
+            targets, ["mcp/preview/server.py", "mcp/evidence/server.py"]
+        )
+        for rel in targets:
+            self.assertTrue((PKG / rel).is_file(), f"missing runtime target: {rel}")
+        self.assertTrue((PKG / "skills").is_dir())
+
+    def test_committed_snapshot_matches_the_generator(self) -> None:
+        for rel in ("plugin.json", "mcp.json"):
+            self.assertTrue((PKG / rel).is_file(), f"missing committed snapshot: {rel}")
+        _version, _out, entries = gen_mod.render_entries("agent-plugins", PKG)
+        for rel, content in entries:
+            committed = (PKG / rel).read_text(encoding="utf-8")
+            self.assertEqual(committed, content, f"stale snapshot: {rel}")
 
     def test_declared_agents_equal_the_matrix_render(self) -> None:
         # The pin: the declared surface list IS the matrix rendered.  Expected
         # value computed independently (not via the generator's own helper), so
         # a wrong filter in the implementation cannot duplicate itself here.
+        # It lives in our own extension namespace: clients that do not
+        # implement the namespace ignore it, and it is not portable core.
         expected = [
             {"id": row.agent, "tier": row.tier, "status": row.status}
             for row in matrix_mod.MATRIX
             if not row.native and row.generates
         ]
-        self.assertEqual(self._plugin_json()["agents"], expected)
+        self.assertEqual(self._declared_agents(), expected)
 
     def test_dead_and_native_rows_are_not_advertised(self) -> None:
-        ids = {entry["id"] for entry in self._plugin_json()["agents"]}
+        agents = self._declared_agents()
+        ids = {entry["id"] for entry in agents}
         self.assertNotIn("roo-code", ids, "dead row must not be advertised")
         self.assertNotIn("claude-code", ids, "native row owns its own layout")
         self.assertIn("windsurf", ids, "a rebranded row still generates")
-        windsurf = next(e for e in self._plugin_json()["agents"] if e["id"] == "windsurf")
+        windsurf = next(e for e in agents if e["id"] == "windsurf")
         self.assertEqual(windsurf["status"], "rebranded")
 
     def test_a_newly_dead_row_drops_out_of_the_bundle(self) -> None:
@@ -1263,27 +1352,33 @@ class AgentPluginsBundleTests(unittest.TestCase):
             gen_mod.MATRIX = original
         self.assertNotIn("cursor", ids)
 
-    def test_mcp_json_carries_both_servers_as_stdio(self) -> None:
-        data = json.loads((self.tmp / "mcp.json").read_text(encoding="utf-8"))
-        servers = data["mcpServers"]
-        self.assertEqual(
-            set(servers), {"design-playbook-preview", "design-playbook-evidence"}
-        )
-        for srv in servers.values():
-            self.assertEqual(srv["type"], "stdio")
-            self.assertEqual(srv["command"], "python")
-            self.assertTrue(srv["args"][0].endswith("server.py"), srv)
-            self.assertEqual(srv["cwd"], ".")
-
     def test_claude_layout_is_not_touched(self) -> None:
         paths = [f["path"] for f in self.manifest["files"]]
         self.assertFalse(any(p.startswith(".claude-plugin") for p in paths), paths)
 
     def test_dry_run_writes_nothing(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            manifest = gen_mod.render("agent-plugins", out_dir=Path(tmp), dry_run=True)
-            self.assertEqual(len(manifest["files"]), 2)
-            self.assertEqual(list(Path(tmp).rglob("*")), [])
+        before = {
+            p.relative_to(self.tmp).as_posix() for p in self.tmp.rglob("*")
+        }
+        manifest = gen_mod.render("agent-plugins", out_dir=self.tmp, dry_run=True)
+        self.assertEqual(len(manifest["files"]), 2)
+        after = {p.relative_to(self.tmp).as_posix() for p in self.tmp.rglob("*")}
+        self.assertEqual(after, before)
+
+    def test_incomplete_target_is_refused(self) -> None:
+        # An empty directory cannot host the layout: the manifest would name
+        # skills/ and mcp servers that are not there.  Refuse loudly rather
+        # than call the two JSON files an installable package.
+        with tempfile.TemporaryDirectory() as empty:
+            with self.assertRaises(ValueError) as caught:
+                gen_mod.render("agent-plugins", out_dir=Path(empty), dry_run=True)
+        message = str(caught.exception)
+        self.assertIn("package root", message)
+        self.assertIn("skills", message)
+
+    def test_default_target_is_the_package_root(self) -> None:
+        _version, out, _entries = gen_mod.render_entries("agent-plugins")
+        self.assertEqual(out.resolve(), PKG.resolve())
 
     def test_render_entries_seam_matches_render(self) -> None:
         version, out, entries = gen_mod.render_entries("agent-plugins", self.tmp)

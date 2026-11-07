@@ -1,0 +1,171 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "design-playbook",
+  "version": "0.25.7",
+  "description": "Evidence-backed UI delivery for coding agents working on existing Web products: declared criteria, criterion-bound artifacts, findings linked to declarations, and repair guidance. Evaluator review does not replace human semantic approval.",
+  "author": {
+    "name": "Bandersnatch0x",
+    "url": "https://github.com/Bandersnatch0x"
+  },
+  "homepage": "https://github.com/Bandersnatch0x/design-playbook",
+  "repository": "https://github.com/Bandersnatch0x/design-playbook",
+  "license": "MIT",
+  "keywords": [
+    "ui",
+    "ux",
+    "design",
+    "design-io",
+    "design-playbook",
+    "spec",
+    "craft",
+    "evaluator",
+    "console",
+    "cjk"
+  ],
+  "extensions": {
+    "io.github.bandersnatch0x.design-playbook": {
+      "agents": [
+        {
+          "id": "codex",
+          "tier": 1,
+          "status": "active"
+        },
+        {
+          "id": "cursor",
+          "tier": 2,
+          "status": "active"
+        },
+        {
+          "id": "gemini-cli",
+          "tier": 2,
+          "status": "active"
+        },
+        {
+          "id": "opencode",
+          "tier": 2,
+          "status": "active"
+        },
+        {
+          "id": "windsurf",
+          "tier": 2,
+          "status": "rebranded"
+        },
+        {
+          "id": "github-copilot",
+          "tier": 2,
+          "status": "active"
+        },
+        {
+          "id": "zed",
+          "tier": 2,
+          "status": "active"
+        },
+        {
+          "id": "qoder",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "kiro-ide",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "kiro-cli",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "amp",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "auggie",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "codebuddy",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "forge",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "ibm-bob",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "jules",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "kilo-code",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "pi",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "qwen-code",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "shai",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "tabnine",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "mistral-vibe",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "kimi-code",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "iflow",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "junie",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "antigravity",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "trae",
+          "tier": 3,
+          "status": "active"
+        },
+        {
+          "id": "generic",
+          "tier": 3,
+          "status": "active"
+        }
+      ]
+    }
+  }
+}
