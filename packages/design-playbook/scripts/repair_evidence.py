@@ -23,7 +23,10 @@ Complete acceptance (CLI bare / ``--strict``) derives one obligation per
 declared criterion of every blocking finding a single closure claims to have
 closed. Missing association, unknown proof type, unknown criterion, orphan or
 duplicated annotation, missing half, and a pair borrowed from another closure
-all fail closed. ``--legacy`` and explicit ``--require-*`` selections keep the
+all fail closed. Duplicate explicit annotations for one closure x criterion are
+a structural error in every mode; the unchanged-bytes rule applies to declared
+visible-state proofs only, so a declared automated check or trace keeps an
+identical pair. ``--legacy`` and explicit ``--require-*`` selections keep the
 structural reading: an annotation that exists is validated, but no new pair or
 proof-type obligation is invented.
 
@@ -88,10 +91,17 @@ class _LedgerRetest:
 
 
 def _canonical_criterion(token: str) -> str | None:
+    """Exact ``L6.<n>`` shape without converting the digits to an integer.
+
+    The pattern already rejects leading zeros, so the validated digit string
+    is canonical as written. Converting it would let an external Markdown token
+    with thousands of digits raise the interpreter's int-conversion limit; the
+    declared criterion set rejects the unknown number with a named diagnostic.
+    """
     match = _CRITERION_TOKEN.fullmatch(token.strip())
     if match is None:
         return None
-    return f"L6.{int(match.group(1))}"
+    return f"L6.{match.group(1)}"
 
 
 def _criteria_tokens(values) -> list[str]:
@@ -121,6 +131,74 @@ def _finding_criteria(finding: dict[str, list[str]]) -> tuple[list[str], list[Fi
                 f"criteria: repeats {token}; each criterion may be named once"))
         seen.add(token)
     return tokens, errs
+
+
+def _resolved_annotation_criterion(
+    annotation: ClosureRepairAnnotation,
+    finding_dict: dict[str, list[str]],
+    requirements: dict[str, ProofRequirement],
+) -> str | None:
+    """The one criterion an explicit annotation settles, or None when unknown.
+
+    Mirrors the mode paths' resolution: an explicit ``criterion=`` must be a
+    declared requirement; otherwise the annotation inherits the finding's
+    criterion only when that finding declares exactly one distinct token.
+    """
+    values = annotation.values("criterion")
+    if values:
+        criterion = _canonical_criterion(values[0])
+        return criterion if criterion in requirements else None
+    tokens, _errs = _finding_criteria(finding_dict)
+    distinct = list(dict.fromkeys(tokens))
+    return distinct[0] if len(distinct) == 1 else None
+
+
+def _duplicate_annotation_findings(
+    *,
+    findings: list[dict[str, list[str]]],
+    closures: tuple[ClosureFact, ...],
+    requirements: dict[str, ProofRequirement],
+) -> tuple[list[Finding], set[ClosureRepairAnnotation], set[tuple[int, str]]]:
+    """Mode-shared check: one annotation per closure x criterion.
+
+    Duplicate annotations are a structural error in every reading; complete
+    acceptance only adds the absent-proof obligation on top. Returns the
+    diagnostics, the annotations the check owns, and the flagged
+    ``(closure line, criterion)`` keys so the mode paths neither re-report the
+    duplicate nor demand the absent pair.
+    """
+    errs: list[Finding] = []
+    owned: set[ClosureRepairAnnotation] = set()
+    keys: set[tuple[int, str]] = set()
+    for closure in closures:
+        candidates = closure_target_candidates(findings, closure.target)
+        if len(candidates) != 1:
+            continue
+        finding_dict = findings[candidates[0]]
+        groups: dict[str, list[ClosureRepairAnnotation]] = {}
+        for annotation in closure.annotations:
+            if _annotation_problems(annotation):
+                continue  # the mode paths report the malformed annotation
+            criterion = _resolved_annotation_criterion(
+                annotation, finding_dict, requirements)
+            if criterion is None:
+                continue  # unknown association is reported by the mode path
+            groups.setdefault(criterion, []).append(annotation)
+        for criterion, group in groups.items():
+            if len(group) < 2:
+                continue
+            keys.add((closure.line, criterion))
+            owned.update(group)
+            errs.append(_repair_finding(
+                "G4.repair_evidence_duplicate",
+                f"closure {closure.target!r} has {len(group)} repair "
+                f"annotations for {criterion}; exactly one pair may settle a "
+                "criterion",
+                expected="one annotation per closure x criterion",
+                actual=str(len(group)),
+                repair="Keep one pair; delete the extra annotation",
+            ))
+    return errs, owned, keys
 
 
 def _ledger_retests(facts: LedgerFacts) -> dict[str, list[_LedgerRetest]]:
@@ -285,6 +363,7 @@ def _check_complete_obligation(
     retests: dict[str, list[_LedgerRetest]],
     entries: list[dict],
     artifact_facts: tuple[EvidenceArtifactFact, ...] | None,
+    duplicate_keys: frozenset[tuple[int, str]] = frozenset(),
 ) -> tuple[list[Finding], set[ClosureRepairAnnotation]]:
     """One closed blocking finding's complete-acceptance obligation."""
     errs: list[Finding] = []
@@ -361,6 +440,10 @@ def _check_complete_obligation(
 
     valid_criteria = set(requirements)
     for criterion in declared:
+        if (closure.line, criterion) in duplicate_keys:
+            # The mode-shared structural phase already reported the duplicate;
+            # this criterion has no single pair to evaluate.
+            continue
         requirement = requirements[criterion]
         proof = requirement.proof
         rows = retests.get(criterion, [])
@@ -399,34 +482,15 @@ def _check_complete_obligation(
                            "then cite it in the ledger",
                 ))
         candidates = by_criterion.get(criterion, [])
-        if proof in _VISUAL_PROOFS:
-            if not candidates:
-                errs.append(_repair_finding(
-                    "G4.repair_evidence_missing",
-                    f"{criterion} needs one named before/after pair and the "
-                    "closure declares none",
-                    expected=f"repair-evidence: criterion={criterion} "
-                             "before=<failure> after=<repaired>",
-                    actual="no annotation",
-                    repair="Declare the visible-state pair under this closure",
-                ))
-            elif len(candidates) > 1:
-                errs.append(_repair_finding(
-                    "G4.repair_evidence_duplicate",
-                    f"{criterion} has {len(candidates)} repair annotations; "
-                    "exactly one pair may settle a criterion",
-                    expected="one annotation per closure x criterion",
-                    actual=str(len(candidates)),
-                    repair="Keep one pair; delete the extra annotation",
-                ))
-        elif len(candidates) > 1:
+        if proof in _VISUAL_PROOFS and not candidates:
             errs.append(_repair_finding(
-                "G4.repair_evidence_duplicate",
-                f"{criterion} has {len(candidates)} repair annotations; "
-                "exactly one pair may settle a criterion",
-                expected="at most one annotation per closure x criterion",
-                actual=str(len(candidates)),
-                repair="Keep one pair; delete the extra annotation",
+                "G4.repair_evidence_missing",
+                f"{criterion} needs one named before/after pair and the "
+                "closure declares none",
+                expected=f"repair-evidence: criterion={criterion} "
+                         "before=<failure> after=<repaired>",
+                actual="no annotation",
+                repair="Declare the visible-state pair under this closure",
             ))
 
         annotation = candidates[0] if len(candidates) == 1 else None
@@ -642,6 +706,10 @@ def _check_legacy_annotation(
                 f"annotation on line {annotation.line} has no criterion= and "
                 "its finding declares no single criterion to inherit"))
             return errs
+    requirement = requirements.get(criterion)
+    proof = (requirement.proof
+             if requirement is not None and requirement.availability == "known"
+             else None)
     missing = _unpaired(annotation)
     if missing:
         errs.append(_repair_finding(
@@ -672,7 +740,8 @@ def _check_legacy_annotation(
                    f"after={after_binding.viewport!r}",
             repair="Recapture both halves at one viewport",
         ))
-    if (not before_binding.diagnostics
+    if (proof in _VISUAL_PROOFS
+            and not before_binding.diagnostics
             and not after_binding.diagnostics
             and before_binding.sha256 is not None
             and before_binding.sha256 == after_binding.sha256):
@@ -733,6 +802,14 @@ def check_repair_evidence(
         for index in closure_target_candidates(findings, closure.target):
             matched.setdefault(index, []).append(closure)
 
+    # Duplicate explicit annotations are structural in every mode; complete
+    # acceptance keeps only the absent-required-proof obligation.
+    duplicate_errs, duplicate_owned, duplicate_keys = (
+        _duplicate_annotation_findings(
+            findings=findings, closures=closure_facts.closures,
+            requirements=requirement_map))
+    errs.extend(duplicate_errs)
+
     consumed: set[ClosureRepairAnnotation] = set()
     if require_complete:
         for index, finding_dict in enumerate(findings):
@@ -760,6 +837,7 @@ def check_repair_evidence(
                 retests=retests,
                 entries=entries,
                 artifact_facts=artifact_facts,
+                duplicate_keys=frozenset(duplicate_keys),
             )
             errs.extend(obligation_errs)
             consumed.update(obligation_consumed)
@@ -767,7 +845,7 @@ def check_repair_evidence(
     for closure in closure_facts.closures:
         candidates = closure_target_candidates(findings, closure.target)
         for annotation in closure.annotations:
-            if annotation in consumed:
+            if annotation in consumed or annotation in duplicate_owned:
                 continue
             errs.extend(_check_legacy_annotation(
                 annotation=annotation,

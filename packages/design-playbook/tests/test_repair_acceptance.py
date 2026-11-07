@@ -436,6 +436,56 @@ class CompleteAcceptanceCliTests(unittest.TestCase):
                 self.assertNotIn("Traceback", result.stderr)
                 self.assertIn("G6.proof_type", _rules(result))
 
+    def test_an_overlong_criterion_is_a_named_error_not_a_crash(self) -> None:
+        # B: an external Markdown token must never reach int() and blow up the
+        # JSON CLI; the validated digit string is rejected by the declared set.
+        with tempfile.TemporaryDirectory() as tmp:
+            project, run = _prepare(Path(tmp))
+            path = run / "point-back.md"
+            text = path.read_text(encoding="utf-8")
+            path.write_text(text.replace(
+                f"criteria: {CRITERION}",
+                "criteria: L6." + "9" * 4301, 1), encoding="utf-8")
+
+            result = _validate(run, "--format", "json", project=project)
+
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertIn("G4.repair_requirement_unavailable", _rules(result))
+
+    def test_console_does_not_publish_a_stale_digest_binding(self) -> None:
+        # C: the Console binding must derive from the shared G6 result instead
+        # of a hand-maintained subset of failure codes.
+        with tempfile.TemporaryDirectory() as tmp:
+            _, run = _prepare(Path(tmp))
+            control = _criterion(_snapshot(run), CRITERION)
+            self.assertNotEqual(control["result"]["evidenceBindings"], [])
+            self.assertNotEqual(_source_state(
+                _snapshot(run), "source.evidence-manifest"), "malformed")
+
+            rows = _manifest_rows(run)
+            next(row for row in rows
+                 if row["artifact"] == "L6.2-empty-r2.png")["sha256"] = "0" * 64
+            _write_manifest_rows(run, rows)
+
+            stale = _criterion(_snapshot(run), CRITERION)
+            self.assertEqual(stale["result"]["evidenceBindings"], [])
+            self.assertEqual(
+                stale["result"]["outcome"], control["result"]["outcome"])
+            self.assertEqual(
+                _source_state(_snapshot(run), "source.evidence-manifest"),
+                "malformed")
+
+            rows = _manifest_rows(run)
+            next(row for row in rows
+                 if row["artifact"] == "L6.2-empty-r2.png")["sha256"] = (
+                hashlib.sha256(
+                    (run / "evidence" / "L6.2-empty-r2.png").read_bytes()
+                ).hexdigest())
+            _write_manifest_rows(run, rows)
+            restored = _criterion(_snapshot(run), CRITERION)
+            self.assertNotEqual(restored["result"]["evidenceBindings"], [])
+
     def test_nonvisual_retest_must_match_the_declared_viewport(self) -> None:
         # F3: a captured retest keeps the criterion's declared viewport even
         # when no screenshot pair is required.
@@ -482,6 +532,26 @@ def _write_manifest_rows(run: Path, rows: list[dict]) -> None:
         encoding="utf-8")
 
 
+def _snapshot(run: Path) -> dict:
+    from design_playbook.mcp.run_console.snapshot_builder import build_snapshot
+    return build_snapshot(
+        selected_root=run, package_root=PACKAGE,
+        session_secret=b"final-axis-probe-only",
+        now="2026-11-08T00:00:00Z").document
+
+
+def _criterion(document: dict, criterion_id: str) -> dict:
+    return next(
+        item for item in document["evaluation"]["criteria"]
+        if item["result"]["criterionId"] == criterion_id)
+
+
+def _source_state(document: dict, source_ref: str) -> str:
+    return next(
+        item["readState"] for item in document["sources"]["items"]
+        if item["sourceRef"] == source_ref)
+
+
 class ModeScopeTests(unittest.TestCase):
     def test_legacy_does_not_derive_the_new_obligation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -513,6 +583,31 @@ class ModeScopeTests(unittest.TestCase):
                 "--require-coverage")
 
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_duplicate_annotations_are_rejected_in_every_mode(self) -> None:
+        # D: duplicate same closure x criterion annotations are a structural
+        # error in complete, legacy, and selective readings alike.
+        identical = (f"  repair-evidence: criterion={CRITERION} "
+                     f"before={BEFORE_TOKEN} after={AFTER_TOKEN}\n")
+        conflicting = (f"  repair-evidence: criterion={CRITERION} "
+                       f"before={AFTER_TOKEN} after={BEFORE_TOKEN}\n")
+        for label, extra in (("identical", identical),
+                             ("conflicting", conflicting)):
+            for flags in ((), ("--legacy",), ("--require-preview",)):
+                with self.subTest(label=label, flags=flags), \
+                        tempfile.TemporaryDirectory() as tmp:
+                    _, run = _prepare(Path(tmp))
+                    path = run / "point-back.md"
+                    path.write_text(
+                        path.read_text(encoding="utf-8") + extra,
+                        encoding="utf-8")
+
+                    result = _validate(run, *flags, "--format", "json")
+
+                    self.assertEqual(
+                        result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIn(
+                        "G4.repair_evidence_duplicate", _rules(result))
 
     def test_legacy_still_rejects_a_fabricated_digest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

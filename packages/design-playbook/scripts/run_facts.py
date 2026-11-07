@@ -668,6 +668,28 @@ def _evidence_references(pointback_text: str, ledger: LedgerFacts) -> tuple[str,
     return tuple(references)
 
 
+def _manifest_references(manifest_lines: tuple[str, ...]) -> tuple[str, ...]:
+    """Evidence references the manifest itself names.
+
+    The frontend projection consumes a manifest-bound artifact even before a
+    point-back cites it (capture happened, review not written yet). Those are
+    explicit references in text the capture already read - not a directory
+    walk - so the same explicit-root collector freezes them. Containment still
+    rejects unknown, escaping, or non-evidence names without opening them, and
+    deduplication keeps a reference shared with the point-back read once.
+    """
+    references: list[str] = []
+    for line in manifest_lines:
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        artifact = entry.get("artifact") if isinstance(entry, dict) else None
+        if isinstance(artifact, str) and artifact:
+            references.append(EVIDENCE_PREFIX + artifact)
+    return tuple(references)
+
+
 def capture_run_facts(
     *,
     spec_path: Path | None = None,
@@ -700,9 +722,10 @@ def capture_run_facts(
 
     ``collect_evidence`` is the explicit artifact-fact collection boundary.
     When on (the snapshot default), every evidence reference the point-back
-    names is resolved and streamed once under the one explicit authority root
-    and frozen into ``RunFacts.evidence_artifacts``. Projection never re-reads
-    them. ``manifest_entries`` turns it off because it only needs entry text.
+    names, plus every artifact the run's manifest already binds, is resolved
+    and streamed once under the one explicit authority root and frozen into
+    ``RunFacts.evidence_artifacts``. Projection never re-reads them.
+    ``manifest_entries`` turns it off because it only needs entry text.
     """
 
     if run_root is not None:
@@ -753,6 +776,8 @@ def capture_run_facts(
     ledger = parse_ledger(pointback_text)
     evidence_artifacts: tuple[EvidenceArtifactFact, ...] | None
     references = _evidence_references(pointback_text, ledger) if collect_evidence else ()
+    if collect_evidence:
+        references += _manifest_references(manifest_lines)
     authority = _evidence_authority(run_root, evidence_dir)
     if not collect_evidence:
         evidence_artifacts = None

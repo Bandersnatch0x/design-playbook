@@ -58,7 +58,11 @@ from design_playbook.scripts.pointback_projection import (
     VerdictDisposition,
     project_pointback,
 )
-from design_playbook.scripts.run_facts import RunFacts, capture_run_facts
+from design_playbook.scripts.run_facts import (
+    STATE_MISSING,
+    RunFacts,
+    capture_run_facts,
+)
 from design_playbook.scripts.run_metadata import (
     PackageMetadataProjection,
     project_limitations,
@@ -116,11 +120,11 @@ _RETAINED_FIELDS = (
     "freshness",
 )
 
-_UNBINDABLE_RULES = frozenset(
-    {"G6.artifact_missing", "G6.escape", "G6.no_binding", "G6.unknown_criterion",
-     "G6.binding_conflict"}
-)
-_DEGRADING_RULES = frozenset({"G6.artifact_missing", "G6.escape"})
+# Binding availability is the shared G6 validation result itself: any G6
+# finding for this row means the artifact is not a publishable binding, and a
+# declared binding that cannot be established degrades the manifest source.
+# Keeping a hand-maintained subset of failure codes here is exactly the drift
+# that let a stale declared digest stay published.
 
 # Fixed source refs of the fifteen-key registry (parity section 2).
 _REF_SELECTED_RUN = "source.selected-run"
@@ -848,9 +852,11 @@ class _Builder:
     ) -> list[dict[str, Any]]:
         """Project the Manifest evidence binding for one ledger row.
 
-        The G6 owner seam decides whether the row's artifact is bound; this
-        method only reads the bound artifact through containment and hashes
-        it. Unbound or escaped artifacts are never projected as evidence.
+        The G6 owner seam decides whether the row's artifact is bound: any G6
+        finding for this row means no publishable binding, and the manifest
+        source degrades. Only a shared-result-clean row is read through
+        containment and hashed; a failed row is never rehashed to bypass the
+        frozen fact error.
         """
         token = evaluation.artifact_token
         if not isinstance(token, str) or not token.casefold().startswith("evidence/"):
@@ -868,8 +874,11 @@ class _Builder:
                 facts.evidence_artifacts
                 if facts.evidence_artifacts is not None else ()),
         )
-        if any(finding.rule_id in _UNBINDABLE_RULES for finding in g6_findings):
-            if any(finding.rule_id in _DEGRADING_RULES for finding in g6_findings):
+        if g6_findings:
+            # A present manifest whose declared binding cannot be established
+            # is a degraded source; an absent manifest keeps its own "missing"
+            # read state instead of being renamed malformed.
+            if facts.artifact_state("manifest") != STATE_MISSING:
                 acc.manifest_degraded = True
             return []
         leaf = token[len("evidence/"):]

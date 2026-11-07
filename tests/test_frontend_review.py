@@ -275,6 +275,23 @@ def test_normalized_capture_snapshot_without_capture_metadata_stays_unavailable(
     assert not any(reason.startswith("capture.") for reason in gap["reasons"])
 
 
+def test_manifest_evidence_without_a_pointback_stays_available(tmp_path):
+    # A captured artifact with no review report yet is a legitimate projection
+    # input: the manifest reference is frozen at the explicit capture boundary,
+    # so the gap stays complete instead of reading as an unavailable fact.
+    run = make_run(tmp_path)
+    write_evidence(run)
+    (run / "point-back.md").unlink()
+
+    result = status(run, "--scope", "path:P1", "--json")
+    assert result.returncode == 0, result.stderr
+    gap = json.loads(result.stdout)["evidence_gaps"][0]
+    assert gap["availability"] == "known"
+    assert gap["binding"] == "complete"
+    assert gap["status"] == "available"
+    assert "G6.artifact_facts_unavailable" not in gap["reasons"]
+
+
 def test_malformed_capture_design_blocks_the_binding(tmp_path):
     # F4: the shared G6 owner must preserve every capture-contract failure.
     # A malformed design binding used to reach the report as complete/available

@@ -64,12 +64,25 @@ _CONTRACT_BIND = {
     "stale_fields": [],
     "blockers": [],
 }
+_ARTIFACT_BYTES = b"fake-png-bytes-for-l6-3"
+_CAPTURE_REQUEST = {
+    "schemaVersion": 1,
+    "viewport": {"width": 1280, "height": 800,
+                 "devicePixelRatio": 1.0, "colorScheme": "light"},
+    "freeze": {"enabled": True, "waitFonts": True, "networkIdle": False},
+}
+# A legal binding for the artifact the fixture actually writes: the capture
+# contract request and the real digest, so the shared G6 owner has nothing to
+# reject and the Console projection tests exercise the bound path.
 _MANIFEST_ENTRY = {
     "criterion": "L6.3",
     "artifact": "L6.3-error.png",
     "ts": "2026-08-25T09:00:00+08:00",
+    "request": dict(_CAPTURE_REQUEST),
+    "capture": {"type": "screenshot", "state": "error",
+                "artifact_path": "evidence/L6.3-error.png"},
+    "sha256": hashlib.sha256(_ARTIFACT_BYTES).hexdigest(),
 }
-_ARTIFACT_BYTES = b"fake-png-bytes-for-l6-3"
 
 # Owner-valid scenario point-backs: the Point-back projection seam rejects
 # a Recirculate verdict without a Findings section and a bare unaudited

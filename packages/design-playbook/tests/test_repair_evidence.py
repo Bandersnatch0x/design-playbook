@@ -414,6 +414,28 @@ class LegacyStructuralTests(unittest.TestCase):
         self.assertIn("G4.repair_association_missing",
                       _rules(_check(text, self.layout, complete=False)))
 
+    def _make_identical_halves(self) -> None:
+        self.layout.after.write_bytes(BEFORE_BYTES)
+        self.layout.entries[1] = _entry(
+            "L6.3-empty-r2.png", BEFORE_BYTES,
+            ts="2026-11-07T11:00:00+08:00")
+
+    def test_a_nonvisual_pair_with_identical_bytes_is_not_rejected(self) -> None:
+        # E: the unchanged-bytes rule is a visible-state rule; a declared
+        # automated check keeps its explicit pair without a byte-difference
+        # obligation.
+        self._make_identical_halves()
+        requirements = (ProofRequirement("L6.3", "known", "automated_check"),)
+        self.assertEqual(
+            _check(_repair_text(), self.layout, complete=False,
+                   requirements=requirements), [])
+
+    def test_a_visual_pair_with_identical_bytes_is_still_rejected(self) -> None:
+        self._make_identical_halves()
+        self.assertIn(
+            "G4.repair_evidence_unchanged",
+            _rules(_check(_repair_text(), self.layout, complete=False)))
+
     def test_a_single_finding_criterion_is_inherited(self) -> None:
         text = _repair_text().replace("criterion=L6.3 ", "")
         self.assertEqual(_check(text, self.layout, complete=False), [])
