@@ -1360,6 +1360,108 @@ class CanvasJourneyTest(unittest.TestCase):
         self.assertEqual(stored["validation"]["instanceCount"], 200)
         self.assertEqual(len(stored["document"]["boards"][0]["nodes"]), 200)
 
+    def test_a_stale_canvas_list_cannot_clear_a_newer_reload(self) -> None:
+        """An older list read must not wipe the select a newer load filled.
+
+        The panel reads the canvas list on open and again on reload. On a
+        loaded CI host the first (empty) read landed after the reload had
+        filled the select and before its detail arrived: the stale response
+        cleared the options and nulled the state, then the detail painted 200
+        nodes next to an empty select -- options 0, nodes 200, save
+        "已保存（已载入服务端状态）". Reproduced by holding the old list
+        response until the new list is applied and releasing it before the new
+        detail, so the ordering no longer depends on machine speed.
+        """
+        created = self.h.action(
+            self.project_id,
+            "instances",
+            payload={"assetId": self.asset["assetId"]},
+        )
+        self.assertEqual(created.status, 200, created.text)
+        instance_id = created.json["result"]["instanceId"]
+        nodes = [
+            {
+                "id": f"i{index}",
+                "type": "instance",
+                "children": [],
+                "props": {"instanceId": instance_id, "params": {}},
+                "layout": {"x": (index % 20) * 30, "y": (index // 20) * 30,
+                           "width": 20, "height": 20, "z": index},
+            }
+            for index in range(200)
+        ]
+        document = {
+            "name": "满画布",
+            "boards": [
+                {"id": "b_full", "name": "满", "width": 1200, "height": 800,
+                 "nodes": nodes, "flowEdges": []}
+            ],
+        }
+        created_canvas = http_request(
+            self.h.runtime,
+            f"/api/v1/projects/{self.project_id}/actions/canvases",
+            method="POST",
+            body={
+                "operation": {
+                    "operationId": "op_ui_stale_list",
+                    "payload": {"action": "canvases"},
+                },
+                "name": "满画布",
+                "document": document,
+            },
+            token=self.h.token,
+            origin=self.h.runtime.origin,
+        )
+        self.assertEqual(created_canvas.status, 200, created_canvas.text)
+
+        stale: list = []
+        detail: list = []
+
+        def hold_stale(route):
+            if not stale:
+                stale.append(route)
+                return
+            route.continue_()
+
+        def hold_detail(route):
+            if not detail:
+                detail.append(route)
+                return
+            route.continue_()
+
+        self.page.route("**/api/v1/projects/*/canvases", hold_stale)
+        self.page.route("**/api/v1/projects/*/canvases/*", hold_detail)
+
+        # 1. Reopening the panel starts a list read against the old (empty)
+        #    state; it stays in flight.
+        row_action(self.page, "canvas").click()
+        deadline = time.time() + 10
+        while not stale and time.time() < deadline:
+            self.page.wait_for_timeout(50)
+        self.assertEqual(len(stale), 1, "the panel's list read was not intercepted")
+
+        # 2. A newer reload passes: its list fills the select, its detail is
+        #    held so the stale list can land first.
+        self.page.click("#canvas-reload")
+        expect(self.page.locator("#canvas-select option")).to_have_count(1)
+        deadline = time.time() + 10
+        while not detail and time.time() < deadline:
+            self.page.wait_for_timeout(50)
+        self.assertEqual(len(detail), 1, "the reload's detail read was not intercepted")
+
+        # 3. The stale empty list answers, then the new detail.
+        stale[0].fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({"canvases": []}),
+        )
+        detail[0].continue_()
+        expect(self.page.locator(".canvas-node")).to_have_count(200)
+        expect(self.page.locator("#canvas-save-state")).to_contain_text("已保存")
+
+        # The newer load owns the panel; the older response must not have
+        # cleared the select it filled.
+        expect(self.page.locator("#canvas-select option")).to_have_count(1)
 
     def test_a_drag_reconciles_the_stage_instead_of_rebuilding_it(self) -> None:
         """R15 selection/drag response: one moved node must not recreate the rest.
