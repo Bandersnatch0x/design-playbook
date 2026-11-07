@@ -27,6 +27,15 @@ FREEZE_DEFAULTS = {
     "waitFonts": True,
     "networkIdle": False,
 }
+# Declared design-token axes a capture may be bound to. These are the same
+# three axes ``page_defects.declared_token_axes`` reads, so the contract
+# boundary and the render-token probe cannot disagree about what is declared.
+DESIGN_AXES = ("fontSizes", "colors", "radii")
+_DESIGN_AXIS_DESCRIPTIONS = {
+    "fontSizes": "Declared type scale: px numbers (or '16px' strings).",
+    "colors": "Declared palette: hex or rgb() color literals.",
+    "radii": "Declared radius scale: px numbers (or '12px' strings).",
+}
 
 
 @dataclass(frozen=True)
@@ -82,13 +91,51 @@ def _bad_freeze(freeze: dict[str, Any]) -> str | None:
     return None
 
 
+def _bad_design(design: object) -> str | None:
+    """First malformed ``design`` field, or None when the binding is usable.
+
+    A binding is an object of the three named axes, each an **array** of
+    literals. Nothing else is a binding: a scalar axis, a name→literal object
+    and an explicit ``null`` are caller mistakes at the boundary, not a second
+    declaration shape. Which *literal* inside an array is unreadable stays the
+    probe's call (a token reference or a relative unit comes back
+    ``undecidable``, never clean), so the array items are deliberately not
+    typed here.
+    """
+    if not isinstance(design, dict):
+        return (
+            "design must be an object of declared token axes; expected one of "
+            f"{sorted(DESIGN_AXES)}"
+        )
+    for key in design:
+        if key not in DESIGN_AXES:
+            return (
+                f"design.{key} is not a declared token axis; "
+                f"expected one of {sorted(DESIGN_AXES)}"
+            )
+    for axis in DESIGN_AXES:
+        if axis in design and not isinstance(design[axis], (list, tuple)):
+            return f"design.{axis} must be an array of literals"
+    return None
+
+
+def _copy_declared_axes(design: dict[str, Any]) -> dict[str, Any]:
+    """Echo a checked declaration as fresh literal arrays, declared axes only.
+
+    An axis the caller omitted stays omitted, so the probe reports it
+    ``undecidable`` instead of reading a default as a bound declaration.
+    """
+    return {axis: list(design[axis]) for axis in DESIGN_AXES if axis in design}
+
+
 def parse_capture_contract(args: dict[str, Any]) -> dict[str, Any]:
     """Validate capture contract v1 fields and return a normalized request.
 
     Write authority (ADR-0018): raises ValueError with a recapture instruction
     for missing/unknown versions or an incomplete viewport. Pure — no browser
     side effects. The normalized output is what the provider echoes into the
-    manifest request snapshot, so real snapshots always carry freeze defaults.
+    manifest request snapshot, so real snapshots always carry freeze defaults
+    and, when bound, the declared token axes as literal lists.
     """
     if "schemaVersion" not in args:
         raise ValueError(
@@ -125,7 +172,17 @@ def parse_capture_contract(args: dict[str, Any]) -> dict[str, Any]:
     if bad_freeze is not None:
         raise ValueError(bad_freeze)
 
-    return {
+    # Optional, but an *absent* key is the only way to say "unbound": a
+    # present key must be a readable binding, so an explicit null fails here
+    # like any other malformed declaration.
+    design: dict[str, Any] | None = None
+    if "design" in args:
+        bad_design = _bad_design(args.get("design"))
+        if bad_design is not None:
+            raise ValueError(bad_design)
+        design = _copy_declared_axes(args["design"])
+
+    request = {
         "schemaVersion": CAPTURE_SCHEMA_VERSION,
         "viewport": {
             "width": width,
@@ -135,6 +192,9 @@ def parse_capture_contract(args: dict[str, Any]) -> dict[str, Any]:
         },
         "freeze": freeze,
     }
+    if design is not None:
+        request["design"] = design
+    return request
 
 
 def validate_capture_snapshot(snapshot: object) -> list[CaptureFact]:
@@ -146,8 +206,11 @@ def validate_capture_snapshot(snapshot: object) -> list[CaptureFact]:
     the read side requires the recorded snapshot to be self-contained so the
     manifest alone can reproduce the capture (ADR-0018). Malformed viewport
     shape or missing freeze therefore fail closed (sanctioned correction; was
-    lax in the old hand-written G6 checks). Unknown extra keys are tolerated
-    (host-neutral forward compatibility).
+    lax in the old hand-written G6 checks). ``design`` is optional and its
+    *absence* means the capture declared no token binding; a present key —
+    including an explicit null — must be a readable object of array axes, so
+    an unbound capture is never read as a bound clean one. Unknown extra keys
+    are tolerated (host-neutral forward compatibility).
     """
     if not isinstance(snapshot, dict):
         return [CaptureFact(
@@ -198,6 +261,22 @@ def validate_capture_snapshot(snapshot: object) -> list[CaptureFact]:
             expected="freeze enabled/waitFonts/networkIdle booleans",
             actual=bad_freeze,
         )]
+    # ``design`` is the one optional contract field, and absence is the only
+    # way to say "unbound": every render-token axis is then undecidable.
+    # A present key — including an explicit null — must be readable, so a
+    # malformed binding can never be read as if it were a valid one.
+    if "design" in snapshot:
+        bad_design = _bad_design(snapshot.get("design"))
+        if bad_design is not None:
+            return [CaptureFact(
+                "bad_design_shape",
+                bad_design,
+                expected=(
+                    "design object with declared axes "
+                    f"{sorted(DESIGN_AXES)} as literal lists"
+                ),
+                actual=bad_design,
+            )]
     return []
 
 
@@ -260,6 +339,27 @@ def capture_contract_schema_fragment() -> dict[str, Any]:
                         "type": "boolean",
                         "default": FREEZE_DEFAULTS["networkIdle"],
                     },
+                },
+                "additionalProperties": False,
+            },
+            "design": {
+                "type": "object",
+                "description": (
+                    "Optional declared design tokens the screenshot probe "
+                    "compares rendered computed values against. Omit the key "
+                    "entirely to declare no binding; every axis is then "
+                    "reported undecidable, never clean. An axis is an array "
+                    "of literals — a scalar, a name→literal object or an "
+                    "explicit null is rejected before the browser starts. "
+                    "Root-level only, no token-reference resolution: a "
+                    "literal the probe cannot read stays undecidable."
+                ),
+                "properties": {
+                    axis: {
+                        "type": "array",
+                        "description": _DESIGN_AXIS_DESCRIPTIONS[axis],
+                    }
+                    for axis in DESIGN_AXES
                 },
                 "additionalProperties": False,
             },
