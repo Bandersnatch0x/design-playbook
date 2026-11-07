@@ -179,6 +179,32 @@ def collect_evidence_artifacts(
     return tuple(facts)
 
 
+def evidence_authority(
+    run_root: Path | None, evidence_dir: Path | None,
+) -> Path | None:
+    """The one explicit root artifact references may be read under.
+
+    ``run_root`` wins; an explicit ``evidence_dir`` contributes only its
+    parent. When both are named they must agree - the manifest root and the
+    file root never split. Any other source (``state.project_root``, a manifest
+    path, cwd) is not authority; without a root the references stay
+    uncollected. Both I/O seams (capture and the compatibility gate) share this
+    one decision so neither can read a manifest under one root and bytes under
+    another.
+    """
+    if run_root is not None:
+        if evidence_dir is not None:
+            try:
+                if evidence_dir.resolve() != (run_root / "evidence").resolve():
+                    return None
+            except OSError:
+                return None
+        return run_root
+    if evidence_dir is not None:
+        return evidence_dir.parent
+    return None
+
+
 def binding_instant(ts: object) -> datetime | None:
     """Parse one manifest ``ts`` into an offset-aware instant.
 

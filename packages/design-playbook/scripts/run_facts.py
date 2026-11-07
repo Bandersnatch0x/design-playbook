@@ -24,6 +24,7 @@ from design_playbook.scripts.finding_syntax import parse_closures, parse_finding
 from design_playbook.scripts.g6_records import (
     EvidenceArtifactFact,
     collect_evidence_artifacts,
+    evidence_authority,
     ledger_observed,
 )
 from design_playbook.scripts.run_profile import RunProfile, parse_run_profile
@@ -615,29 +616,6 @@ def _artifact_states(
     return tuple(states)
 
 
-def _evidence_authority(
-    run_root: Path | None, evidence_dir: Path | None,
-) -> Path | None:
-    """The one explicit root artifact references may be read under.
-
-    ``run_root`` wins; an explicit ``evidence_dir`` contributes only its
-    parent. When both are named they must agree - the manifest root and the
-    file root never split. Any other source (``state.project_root``, a manifest
-    path, cwd) is not authority; without a root the facts stay uncollected.
-    """
-    if run_root is not None:
-        if evidence_dir is not None:
-            try:
-                if evidence_dir.resolve() != (run_root / "evidence").resolve():
-                    return None
-            except OSError:
-                return None
-        return run_root
-    if evidence_dir is not None:
-        return evidence_dir.parent
-    return None
-
-
 def _evidence_references(pointback_text: str, ledger: LedgerFacts) -> tuple[str, ...]:
     """Every explicitly named evidence reference in one point-back text.
 
@@ -778,7 +756,7 @@ def capture_run_facts(
     references = _evidence_references(pointback_text, ledger) if collect_evidence else ()
     if collect_evidence:
         references += _manifest_references(manifest_lines)
-    authority = _evidence_authority(run_root, evidence_dir)
+    authority = evidence_authority(run_root, evidence_dir)
     if not collect_evidence:
         evidence_artifacts = None
     elif not references:

@@ -47,6 +47,7 @@ from design_playbook.scripts.g6_records import (  # noqa: E402
     EvidenceArtifactFact,
     binding_instant,
     collect_evidence_artifacts,
+    evidence_authority,
     latest_by_instant,
     ledger_observed,
     manifest_entries,
@@ -607,16 +608,23 @@ def check_evidence(
     are not required to reference evidence.
 
     ``artifact_facts`` is optional: when omitted this I/O seam probes the
-    evidence directory and collects the facts for its own observed references
-    once, then delegates to the pure ``validate_references``. A caller holding
-    a snapshot passes its frozen tuple (including an empty one) so the
+    evidence directory, resolves the one explicit authority root through the
+    shared owner, and collects the facts for its own observed references once,
+    then delegates to the pure ``validate_references``. A caller holding a
+    snapshot passes its frozen tuple (including an empty one) so the
     projection performs no directory check and never re-reads disk.
+
+    With an existing evidence directory and active evidence references, a
+    root mismatch opens and collects no artifact bytes (the manifest text is
+    already read as ``entries``): each reference reports the existing
+    ``G6.artifact_facts_unavailable`` diagnostic instead of an empty success,
+    so a manifest under one root can never be verified against bytes from
+    another. A missing evidence directory keeps its existing conditional
+    behavior, and supplied frozen facts are never re-read.
     """
     if artifact_facts is None:
         if evidence_dir is None or not evidence_dir.is_dir():
             return []
-    root = (run_root if run_root is not None
-            else (evidence_dir.parent if evidence_dir is not None else None))
     entries = entries if entries is not None else manifest_entries(evidence_dir)
     valid_criteria = {f"L6.{n}" for n in range(1, expected_l6 + 1)}
     rows = observed_rows if observed_rows is not None else ledger_observed(pointback_text)
@@ -633,8 +641,13 @@ def check_evidence(
         return []
     facts = artifact_facts
     if facts is None:
-        facts = collect_evidence_artifacts(
-            [reference.token for reference in references], run_root=root)
+        authority = evidence_authority(run_root, evidence_dir)
+        if authority is None:
+            facts = None
+        else:
+            facts = collect_evidence_artifacts(
+                [reference.token for reference in references],
+                run_root=authority)
     errs: list[Finding] = []
     for binding in validate_references(references, entries, valid_criteria, facts):
         if binding.diagnostics:
