@@ -45,7 +45,7 @@
 
 - **档位**：每个 run 的 `plan.md` 头部必写 `run-profile` 结构化块（tier P1|P2|P3 + 判据核对 + 跳过清单 + 升档事件）；升档自动、降档需用户；G12 机器复盘。
 - **成形**：`ux-spec` S0-S6 会话工件 `.scratch/<run>/shaping/`（shaping-log.jsonl + 派生 queue.json），G9 校验出口。
-- **规则**：注册表 `skills/design-playbook/references/rules.md`（G8 产品级 + run 级共享解析器）；项目级治理日志 `rules-governance.jsonl`（仅用户决定性事件）。
+- **规则**：注册表 `skills/design-playbook/references/rules.md`（索引，条目分片在同目录 `rules/`；G8 产品级 + run 级共享解析器）；项目级治理日志 `rules-governance.jsonl`（仅用户决定性事件）。
 - **设计决策**：decision-report 顶块后追加 DD 条目块（R/C/E 三档，G10）；E 档确认搭乘 preview 事务。
 - **评审**：point-back 六块报告（+Positive/Coverage/Limitations）+ `invalidated:` 失效集 + finding 附加字段；G11 消费 Coverage statement（P3 档强制五态×页面采样矩阵块）。
 - **示例**：`packages/design-playbook/examples/`（export-entry P2 / export-upgrade P3 / dogfood S6 自举全链 / rules-governance 治理走查）。

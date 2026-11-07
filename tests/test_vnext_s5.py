@@ -34,8 +34,8 @@ from design_playbook.scripts import rules_governance as rg  # noqa: E402
 from design_playbook.scripts.finding_syntax import severity_axis  # noqa: E402
 from design_playbook.scripts.g2_g4_pointback import check_pointback  # noqa: E402
 
-REGISTRY_TEXT = (PKG / "skills" / "design-playbook" / "references"
-                 / "rules.md").read_text(encoding="utf-8")
+REGISTRY_PATH = PKG / "skills" / "design-playbook" / "references" / "rules.md"
+REGISTRY_TEXT = rules_registry.load_registry_text(REGISTRY_PATH)
 GOVERNANCE_FIXTURE = (
     PKG / "examples" / "rules-governance" / "rules-governance.jsonl"
 )

@@ -541,10 +541,8 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("VALIDATION FAILED", result.stdout)
 
     def test_registry_enum_drift_fails(self) -> None:
-        registry = (
-            self.root / "packages" / "design-playbook" / "skills"
-            / "design-playbook" / "references" / "rules.md"
-        )
+        registry = self._pkg("skills", "design-playbook", "references",
+                             "rules", "craft.md")
         text = registry.read_text(encoding="utf-8")
         self.assertIn("id: CRAFT-01", text)
         registry.write_text(
@@ -583,21 +581,51 @@ class ValidateGateTests(unittest.TestCase):
         self.assertIn("SKILL.md restates no duration threshold (found", result.stdout)
 
     def test_measured_threshold_without_threshold_line_fails(self) -> None:
-        self._edit(self._pkg("skills", "design-playbook", "references", "rules.md"),
+        self._edit(self._pkg("skills", "design-playbook", "references",
+                             "rules", "perf.md"),
                    "threshold: placeholder-from = 300ms; indicator-from = 2s; timeout-at = 10s\n", "")
         result = self.validate()
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("PERF-01: measured-threshold entry has no threshold field", result.stdout)
 
     def test_thirty_first_registry_entry_trips_the_split_clause(self) -> None:
-        registry = self._pkg("skills", "design-playbook", "references", "rules.md")
-        text = registry.read_text(encoding="utf-8")
+        # The split clause measures the entry-bearing layout: a *single-file*
+        # registry over 30 entries must red. Rebuild rules.md as that
+        # single-file form from the shipped parts, then add the 31st entry.
+        references = self._pkg("skills", "design-playbook", "references")
+        parts = sorted((references / "rules").glob("*.md"))
+        self.assertTrue(parts)
+        text = "\n\n".join(part.read_text(encoding="utf-8") for part in parts)
         start = text.index("## CRAFT-11 — ")
-        extra = text[start:].replace("CRAFT-11", "CRAFT-12")
-        registry.write_text(text.rstrip("\n") + "\n\n" + extra, encoding="utf-8")
+        end = text.find("\n## ", start + 1)
+        block = text[start:end] if end != -1 else text[start:]
+        extra = block.replace("CRAFT-11", "CRAFT-12")
+        (references / "rules.md").write_text(
+            text.rstrip("\n") + "\n\n" + extra, encoding="utf-8")
         result = self.validate()
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("FAIL  registry within the single-file limits (31 entries", result.stdout)
+
+    def test_split_layout_satisfies_the_split_clause(self) -> None:
+        # Same 31st entry, but inside one part: the registry stays split, so
+        # the clause is satisfied and the only new failure is the entry's own.
+        part = self._pkg("skills", "design-playbook", "references",
+                         "rules", "craft.md")
+        text = part.read_text(encoding="utf-8")
+        start = text.index("## CRAFT-11 — ")
+        end = text.find("\n## ", start + 1)
+        block = text[start:end] if end != -1 else text[start:]
+        extra = block.replace("CRAFT-11", "CRAFT-12")
+        part.write_text(text.rstrip("\n") + "\n\n" + extra, encoding="utf-8")
+        index = self._pkg("skills", "design-playbook", "references", "rules.md")
+        index.write_text(
+            index.read_text(encoding="utf-8").replace(
+                "CRAFT-11\n", "CRAFT-11 CRAFT-12\n", 1),
+            encoding="utf-8",
+        )
+        result = self.validate()
+        self.assertNotIn("FAIL  registry within the single-file limits", result.stdout)
+        self.assertIn("ok    registry within the single-file limits (31 entries", result.stdout)
 
     def test_external_name_in_a_skill_fails(self) -> None:
         craft = self._pkg("skills", "craft-guard", "references", "craft.md")
@@ -909,7 +937,8 @@ class ValidateGateTests(unittest.TestCase):
     def test_self_audit_reads_the_registry_floor(self) -> None:
         # Read-through: raise the registry's text floor and a token pair that
         # passes today (muted on surface, 7.2:1 in dark) starts failing.
-        self._edit(self._pkg("skills", "design-playbook", "references", "rules.md"),
+        self._edit(self._pkg("skills", "design-playbook", "references",
+                             "rules", "a11y.md"),
                    "text-contrast >= 4.5:1", "text-contrast >= 7.5:1")
         result = self.validate()
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
@@ -986,10 +1015,8 @@ class ValidateGateTests(unittest.TestCase):
     def test_registry_reference_drift_fails(self) -> None:
         # G8 reference existence: related/overrides/supersedes must resolve
         # to registry ids with pinned versions.
-        registry = (
-            self.root / "packages" / "design-playbook" / "skills"
-            / "design-playbook" / "references" / "rules.md"
-        )
+        registry = self._pkg("skills", "design-playbook", "references",
+                             "rules", "craft.md")
         text = registry.read_text(encoding="utf-8")
         self.assertIn("related: CRAFT-06@1", text)
         registry.write_text(

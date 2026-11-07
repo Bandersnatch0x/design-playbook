@@ -325,6 +325,13 @@ def test_round3_console_single_primary_compact_mobile_row(console_page):
     assert refresh_box["x"] + refresh_box["width"] <= 320
 
 
+def _wait_for_editor_idle(page) -> None:
+    """History shortcuts ignore keypresses while a request is in flight."""
+    page.wait_for_function(
+        "() => { const s = window.dpbVisualEditorState();"
+        " return s.ready && !s.stale && !s.pendingRequest; }")
+
+
 @pytest.fixture
 def pending_visual_edit(editor_page):
     from playwright.sync_api import expect
@@ -341,9 +348,7 @@ def pending_visual_edit(editor_page):
     # The count renders before the receipt round trip is fully settled, and the
     # history shortcuts ignore a keypress while a request is in flight. Wait for
     # the editor to be idle so the first press is the one under test.
-    page.wait_for_function(
-        "() => { const s = window.dpbVisualEditorState();"
-        " return s.ready && !s.stale && !s.pendingRequest; }")
+    _wait_for_editor_idle(page)
     return page
 
 
@@ -386,9 +391,11 @@ def test_n1_visual_button_shortcuts_own_visual_history(pending_visual_edit, modi
     count = page.locator("#dpb-visual-count")
     actions = page.locator(".dpb-react-actions button")
     for redo in (f"{modifier}+Shift+z", f"{modifier}+y"):
+        _wait_for_editor_idle(page)
         actions.first.focus()
         page.keyboard.press(f"{modifier}+z")
         expect(count).to_have_text("0")
+        _wait_for_editor_idle(page)
         actions.nth(1).focus()
         page.keyboard.press(redo)
         expect(count).to_have_text("1")
