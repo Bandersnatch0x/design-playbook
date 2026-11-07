@@ -619,24 +619,31 @@ def test_previous_proposal_hash_is_revalidated_before_copy(tmp_path):
 
 
 def test_read_time_source_change_cannot_return_a_current_proposal(tmp_path, monkeypatch):
+    # The artifact is read once per capture by the collector, not during the
+    # projection; inject the real source change at that capture read seam.
     sys.path.insert(0, str(PACKAGE))
     from design_playbook.scripts.frontend_review import build_frontend_review
+    from design_playbook.scripts import g6_records
     run = make_run(tmp_path)
     write_evidence(run)
-    original = Path.read_bytes
+    original = g6_records._open_binary
+    opens = 0
     changed = False
 
     def read(path):
-        nonlocal changed
-        value = original(path)
-        if path.name == "L6.1-error.png" and not changed:
-            changed = True
-            (run / "spec.md").write_text(SPEC.replace("390x844", "400x800"), encoding="utf-8")
-        return value
+        nonlocal opens, changed
+        if path.name == "L6.1-error.png":
+            opens += 1
+            if opens == 2 and not changed:
+                changed = True
+                (run / "spec.md").write_text(
+                    SPEC.replace("390x844", "400x800"), encoding="utf-8")
+        return original(path)
 
-    monkeypatch.setattr(Path, "read_bytes", read)
+    monkeypatch.setattr(g6_records, "_open_binary", read)
     report = build_frontend_review(run, ("path:P1",))
-    assert changed
+    assert changed, "the capture read seam was not reached"
+    assert opens >= 2
     assert report["freshness"] == "stale"
     assert report["reverification"]["next_command"]["value"] is None
 
@@ -663,54 +670,59 @@ def test_proposal_provenance_uses_the_selected_legacy_spec(tmp_path):
 
 
 def test_read_time_manifest_deletion_requires_refresh(tmp_path, monkeypatch):
+    # Deletion lands after the first capture already read the manifest and
+    # before the verifying capture, at the collector's real read seam.
     sys.path.insert(0, str(PACKAGE))
     from design_playbook.scripts.frontend_review import build_frontend_review
+    from design_playbook.scripts import g6_records
     run = make_run(tmp_path)
     write_evidence(run)
-    original = Path.read_bytes
+    original = g6_records._open_binary
+    opens = 0
     deleted = False
 
     def read(path):
-        nonlocal deleted
-        value = original(path)
-        if path.name == "L6.1-error.png" and not deleted:
-            deleted = True
-            (run / "evidence/manifest.jsonl").unlink()
-        return value
+        nonlocal opens, deleted
+        if path.name == "L6.1-error.png":
+            opens += 1
+            if opens == 2 and not deleted:
+                deleted = True
+                (run / "evidence/manifest.jsonl").unlink()
+        return original(path)
 
-    monkeypatch.setattr(Path, "read_bytes", read)
+    monkeypatch.setattr(g6_records, "_open_binary", read)
     report = build_frontend_review(run, ("path:P1",))
-    assert deleted
+    assert deleted, "the capture read seam was not reached"
     assert report["freshness"] == "stale"
     assert report["reverification"]["next_command"]["value"] is None
 
 
 def test_a_transient_unverified_owner_read_cannot_be_promoted_to_current(tmp_path, monkeypatch):
-    # T-159: G6 now freezes one artifact fact per capture instead of re-reading
-    # bytes during every binding projection. A read that fails in either the
-    # snapshot owner or the fact collection stays an unavailable fact, so the
-    # report still cannot claim a current, verified result.
+    # T-159: the projection never re-reads artifact bytes; each capture freezes
+    # one fact through the collector's read seam. A transient failure at the
+    # verifying capture stays an unavailable fact, so the report cannot claim a
+    # current, verified result.
     sys.path.insert(0, str(PACKAGE))
     from design_playbook.scripts.frontend_review import build_frontend_review
+    from design_playbook.scripts import g6_records
     run = make_run(tmp_path)
     write_evidence(run)
-    original = Path.read_bytes
-    artifact_reads = 0
+    original = g6_records._open_binary
+    opens = 0
     failures = 0
 
     def read(path):
-        nonlocal artifact_reads, failures
+        nonlocal opens, failures
         if path.name == "L6.1-error.png":
-            artifact_reads += 1
-            if artifact_reads % 3 == 2:
+            opens += 1
+            if opens == 3:
                 failures += 1
                 raise OSError("temporary filesystem read failure")
         return original(path)
 
-    monkeypatch.setattr(Path, "read_bytes", read)
+    monkeypatch.setattr(g6_records, "_open_binary", read)
     report = build_frontend_review(run, ("path:P1",))
-    assert artifact_reads >= 4
-    assert failures >= 1
+    assert failures >= 1, "the capture read seam was not reached"
     assert report["freshness"] == "stale"
     assert report["reverification"]["next_command"]["value"] is None
 
