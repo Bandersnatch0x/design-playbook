@@ -12,8 +12,9 @@ so a CRLF checkout of a clean snapshot is not drift). The blocking-vs-report
 semantic split between the two consumers stays with the consumers; this
 module owns only the comparison and its refresh repair text.
 
-Snapshot agents come from ``adapter_matrix.TIER1_SNAPSHOT_AGENTS``, so a
-second tier-1 snapshot agent is covered by both gates without editing either.
+Snapshot agents come from ``adapter_matrix.TIER1_SNAPSHOT_AGENTS`` plus the
+package-root bundles in ``generate_adapter.SNAPSHOT_BUNDLES`` (T-156), so a
+new snapshot target is covered by both gates without editing either.
 The compare runs in-process over ``render_entries`` (no subprocess, hence no
 timeout indirection); every failure surfaces as an ``error`` row instead of
 an exception so neither consumer can crash on a bad snapshot file.
@@ -29,7 +30,10 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from adapter_matrix import TIER1_SNAPSHOT_AGENTS  # noqa: E402
-from generate_adapter import render_entries  # noqa: E402
+from generate_adapter import SNAPSHOT_BUNDLES, render_entries  # noqa: E402
+
+#: Every name the compare walks: matrix tier-1 rows, then package bundles.
+SNAPSHOT_TARGETS: tuple[str, ...] = TIER1_SNAPSHOT_AGENTS + SNAPSHOT_BUNDLES
 
 _REFRESH_CMD = (
     "python packages/design-playbook/scripts/generate_adapter.py {agent}"
@@ -47,7 +51,7 @@ def compare_snapshots(pkg_root: Path) -> list[dict]:
     ok/fail wording and blocking semantics.
     """
     rows: list[dict] = []
-    for agent in TIER1_SNAPSHOT_AGENTS:
+    for agent in SNAPSHOT_TARGETS:
         try:
             version, _out_dir, entries = render_entries(agent, pkg_root)
         except (ValueError, OSError, NotImplementedError) as exc:

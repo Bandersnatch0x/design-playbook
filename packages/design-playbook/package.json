@@ -30,6 +30,8 @@
     "directory": "packages/design-playbook"
   },
   "files": [
+    "plugin.json",
+    "mcp.json",
     "skills",
     "commands",
     "hooks",
