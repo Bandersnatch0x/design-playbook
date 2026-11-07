@@ -57,6 +57,33 @@ A split of inspect script + hand-written `confirm.json` was rejected as the long
 - Extraction can expose legacy inconsistency; it must preserve contradictions under gaps rather than average them into false authority.
 - Agents may enrich draft wording (`[inferred confidence=…]`) but must not hand-author gate status, paths, or hashes.
 
+## 2026-11-07 amendment — complete acceptance verifies a present baseline (T-158)
+
+Decision 6 above stays the owner rule, but the complete `validate_run.py`
+profile (bare CLI or `--strict`, chosen before flag expansion) now consumes a
+present baseline instead of only narrating it:
+
+- The baseline owner (`design-baseline`) is still the only verifier. Complete
+  acceptance captures one result at the explicit boundary: `--contract-project`
+  authorizes the project, the run is `--run-root` or the explicit point-back
+  parent, and `--contract-run`, when present, must agree. `state.project_root`
+  remains an identity assertion, never a read authority.
+- `RunFacts` freezes the exact captured state text, captured findings payload,
+  and captured project/run identity/digest. `validate_run.run()` projects those
+  rows only; it never calls the owner or reopens baseline/DESIGN/source files
+  (ADR-0039 snapshot semantics).
+- Ready state is freshly re-verified; waived state requires the validated
+  decision and source hashes; unreadable/malformed/unauthorized/identity-
+  mismatched present state blocks with `baseline.binding-invalid`. Absent state
+  adds no obligation. Original owner codes, paths, severities, and messages are
+  preserved (errors block; warnings/advisories stay visible).
+- Selective `--require-*`, `--legacy`, in-process callers (default off),
+  `run_status`, and the run aggregate remain read-only state projections; they
+  do not inherit complete acceptance by accident.
+- The distributed static example runs keep their state files as illustrative
+  only; executable acceptance tests build `project/.scratch/run` and bind
+  through real `prepare`/`confirm`.
+
 ## Rejected alternatives
 
 - **Extend `reference-intake` to own the project baseline.** Rejected: reference intake is run-local, may contain third-party material, and is intentionally not a gate.

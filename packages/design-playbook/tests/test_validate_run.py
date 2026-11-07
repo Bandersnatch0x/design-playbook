@@ -2,8 +2,10 @@
 """Regression-test the deterministic run seam and its diagnostics."""
 
 import hashlib
+import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -20,6 +22,26 @@ FAIL = FIX / "fail"
 # Reports that only satisfy the pre-2026-11 non-strict mode. They are valid
 # solely under the explicit --legacy opt-out.
 LEGACY = FIX / "legacy"
+
+_BASELINE_OWNER_PATH = (
+    PACKAGE / "skills" / "design-baseline" / "scripts" / "design_baseline.py")
+_BASELINE_SPEC = importlib.util.spec_from_file_location(
+    "design_baseline_seam", _BASELINE_OWNER_PATH)
+if _BASELINE_SPEC is None or _BASELINE_SPEC.loader is None:
+    raise RuntimeError(f"cannot load baseline owner: {_BASELINE_OWNER_PATH}")
+design_baseline = importlib.util.module_from_spec(_BASELINE_SPEC)
+_BASELINE_SPEC.loader.exec_module(design_baseline)
+
+# Executable complete-acceptance fixtures need first-party source for a real
+# baseline binding; the static example projects ship none.
+THEME_CSS = """:root {
+  --color-background: #ffffff;
+  --color-surface: #f7f8fa;
+  --color-text: #1a1a1a;
+  --color-primary: #2457d6;
+}
+body { font-family: Inter, system-ui, sans-serif; }
+"""
 
 
 def run(spec: Path, pointback: Path, *extra: str) -> subprocess.CompletedProcess[str]:
@@ -157,6 +179,36 @@ def _write_text(path: Path, text: str) -> None:
     """Create parent dirs and write a UTF-8 file inside a temp run root."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _executable_example(base: Path, tmp: Path) -> tuple[Path, Path]:
+    """Copy a static example into owner containment and bind a real baseline.
+
+    Complete acceptance verifies a present baseline, so executable copies use
+    ``<project>/.scratch/run`` (the owner requires the run inside the project),
+    drop the stale state, and bind through prepare/confirm. The report's
+    current-binding references are re-pointed at the generated sha; scenario
+    artifacts otherwise stay verbatim.
+    """
+    project = Path(tmp) / "project"
+    run_dir = project / ".scratch" / "run"
+    shutil.copytree(base / "project", project)
+    shutil.copytree(base / "run", run_dir)
+    shutil.rmtree(run_dir / "design-baseline", ignore_errors=True)
+    _write_text(project / "src" / "theme.css", THEME_CSS)
+    design_baseline.prepare(project, run_dir)
+    design_baseline.confirm(project, run_dir, decision="accept")
+    state = json.loads(
+        (run_dir / "design-baseline" / "state.json").read_text(
+            encoding="utf-8"))
+    report = run_dir / "decision-report.md"
+    text = report.read_text(encoding="utf-8")
+    current = re.search(r"(?m)^design-baseline:.*?([0-9a-f]{64})", text)
+    if current is None:
+        raise AssertionError("fixture report has no design-baseline line")
+    _write_text(report, text.replace(
+        current.group(1), state["baseline"]["sha256"]))
+    return run_dir, project
 
 
 def _confirm_record(
@@ -1477,33 +1529,34 @@ def main() -> int:
 
     # The default is not a blanket reject: a run that satisfies all three
     # obligations passes bare, exactly as it passed under --strict.
-    full_run = PACKAGE / "examples" / "export-upgrade" / "run"
-    full_run_project = PACKAGE / "examples" / "export-upgrade" / "project"
-    full_args = (
-        "--preview-dir", str(full_run / "preview"),
-        "--decision-report", str(full_run / "decision-report.md"),
-        "--evidence-dir", str(full_run / "evidence"),
-        "--run-root", str(full_run),
-        "--contract-project", str(full_run_project),
-        "--contract-run", str(full_run),
-        "--shaping-dir", str(full_run / "shaping"),
-    )
-    full_default = run(full_run / "spec.md", full_run / "point-back.md",
-                       *full_args)
-    full_strict = run(full_run / "spec.md", full_run / "point-back.md",
-                      "--strict", *full_args)
-    if (
-        full_default.returncode != 0
-        or "RUN OK" not in full_default.stdout
-        or full_default.returncode != full_strict.returncode
-    ):
-        failures.append(
-            "default/full-run: a fully obligated run must pass bare and "
-            f"match --strict; bare={full_default.returncode} "
-            f"strict={full_strict.returncode} stdout={full_default.stdout!r}"
+    with tempfile.TemporaryDirectory() as tmp:
+        full_run, full_run_project = _executable_example(
+            PACKAGE / "examples" / "export-upgrade", Path(tmp))
+        full_args = (
+            "--preview-dir", str(full_run / "preview"),
+            "--decision-report", str(full_run / "decision-report.md"),
+            "--evidence-dir", str(full_run / "evidence"),
+            "--run-root", str(full_run),
+            "--contract-project", str(full_run_project),
+            "--contract-run", str(full_run),
+            "--shaping-dir", str(full_run / "shaping"),
         )
-    else:
-        print("  ok    bare default passes a fully obligated run")
+        full_default = run(full_run / "spec.md", full_run / "point-back.md",
+                           *full_args)
+        full_strict = run(full_run / "spec.md", full_run / "point-back.md",
+                          "--strict", *full_args)
+        if (
+            full_default.returncode != 0
+            or "RUN OK" not in full_default.stdout
+            or full_default.returncode != full_strict.returncode
+        ):
+            failures.append(
+                "default/full-run: a fully obligated run must pass bare and "
+                f"match --strict; bare={full_default.returncode} "
+                f"strict={full_strict.returncode} stdout={full_default.stdout!r}"
+            )
+        else:
+            print("  ok    bare default passes a fully obligated run")
 
     # --legacy cannot silently downgrade an explicit strict request.
     for conflicting in (
@@ -1931,10 +1984,7 @@ def main() -> int:
         i2_root = Path(tmp)
 
         def _example_copy(name: str) -> tuple[Path, Path]:
-            base = i2_root / name
-            shutil.copytree(i2_example / "run", base / "run")
-            shutil.copytree(i2_example / "project", base / "project")
-            return base / "run", base / "project"
+            return _executable_example(i2_example, i2_root / name)
 
         def _case_args(
             run_dir: Path,
