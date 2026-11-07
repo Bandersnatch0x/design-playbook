@@ -1438,19 +1438,27 @@ class AgentPluginsBundleTests(unittest.TestCase):
 
     def test_contained_symlink_keeps_a_valid_kind(self) -> None:
         # §4.1 allows links that resolve inside the plugin root; the kind
-        # check must not blanket-reject them (stat follows the link).
-        real = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, real, ignore_errors=True)
-        self._complete_root(real)
+        # check must not blanket-reject them (stat follows the link).  The
+        # payload lives *inside* the same temp root, so the links this test
+        # creates are genuinely contained — a link target outside the root
+        # would exercise the escaping case instead, which this control is not.
         root = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        payload = root / "_payload"
+        payload.mkdir()
+        self._complete_root(payload)
         try:
-            os.symlink(real / "skills", root / "skills", target_is_directory=True)
+            os.symlink(payload / "skills", root / "skills", target_is_directory=True)
             for rel in ("mcp/preview/server.py", "mcp/evidence/server.py"):
                 (root / rel).parent.mkdir(parents=True, exist_ok=True)
-                os.symlink(real / rel, root / rel)
+                os.symlink(payload / rel, root / rel)
         except (OSError, NotImplementedError) as exc:
             self.skipTest(f"symlink creation unavailable: {exc}")
+        for rel in ("skills", "mcp/preview/server.py", "mcp/evidence/server.py"):
+            # Premise of the control: the target resolves inside the plugin
+            # root.  `relative_to` raises ValueError if the link escapes.
+            inside = (root / rel).resolve().relative_to(root.resolve())
+            self.assertTrue(inside.as_posix(), f"{rel} resolves inside the root")
         _version, _out, entries = gen_mod.render_entries("agent-plugins", root)
         self.assertEqual([rel for rel, _content in entries], ["plugin.json", "mcp.json"])
 
