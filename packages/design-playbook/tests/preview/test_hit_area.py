@@ -34,7 +34,7 @@ SMALL_TARGETS = """([scope, floor]) => {
 
 def hit_floor() -> float:
     registry = _PKG / "skills" / "design-playbook" / "references" / "rules.md"
-    entries = rules_registry.parse_registry(registry.read_text(encoding="utf-8"))
+    entries = rules_registry.load_registry(registry)
     return rules_registry.threshold(entries, "A11Y-04", "hit-area-floor").value
 
 

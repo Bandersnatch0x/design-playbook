@@ -18,8 +18,11 @@ if str(PKG / "scripts") not in sys.path:
 
 import rules_registry  # noqa: E402  (standalone seam, same as validate.py)
 
-REGISTRY_TEXT = (PKG / "skills" / "design-playbook" / "references"
-                 / "rules.md").read_text(encoding="utf-8")
+REGISTRY_PATH = (PKG / "skills" / "design-playbook" / "references"
+                 / "rules.md")
+# Flat text in the index's declared order: the same entries the loader
+# returns, in a form a test can mutate with plain string replacement.
+REGISTRY_TEXT = rules_registry.load_registry_text(REGISTRY_PATH)
 
 
 def _errors(text: str) -> list[str]:

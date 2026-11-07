@@ -23,6 +23,7 @@ from __future__ import annotations
 import importlib
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable
 
 try:  # package import seam (design_playbook.* context)
@@ -37,6 +38,20 @@ RULES_PATH_PARTS = (
 ID_PATTERN = re.compile(r"^[A-Z][A-Z0-9]*-[0-9]{2}$")
 ENTRY_HEADING = re.compile(r"^## ([A-Z][A-Z0-9]*-[0-9]{2})\b", re.M)
 FIELD_LINE = re.compile(r"^([a-z][a-z0-9-]*):[ \t]*(.*)$", re.M)
+
+# V-4 limits. Kept here so the product-level gate and the layout-aware
+# measurement read the same numbers; the registry header states the clause.
+SPLIT_ENTRY_LIMIT = 30
+SPLIT_GROUP_LIMIT = 3
+
+# An index declares its physical parts and the global entry order in one
+# fenced block. The info string is the marker; plain rule entries never use it.
+INDEX_FENCE = re.compile(r"```registry-index[ \t]*\n(.*?)```", re.S)
+INDEX_OPEN = re.compile(r"```registry-index[ \t]*(?:\n|$)")
+INDEX_PART_LINE = re.compile(r"^part:[ \t]*(\S.*?)[ \t]*$", re.M)
+INDEX_ORDER_LINE = re.compile(r"^order:[ \t]*(.+?)[ \t]*$", re.M)
+INDEX_SCHEMA_LINE = re.compile(r"^schemaVersion:[ \t]*(\S.*?)[ \t]*$", re.M)
+INDEX_KNOWN_PREFIXES = ("schemaVersion:", "part:", "order:")
 
 
 class RegistryError(str):
@@ -72,6 +87,10 @@ class RegistryError(str):
             "actual": self.actual,
             "repair": self.repair,
         }
+
+
+class RegistryLayoutError(Exception):
+    """The registry cannot be loaded from its declared layout (fail closed)."""
 
 CAPABILITY_DOMAINS = frozenset(f"D{i}" for i in range(1, 9))
 EXECUTES_IN = frozenset({
@@ -219,6 +238,10 @@ class RuleEntry:
 
     id: str
     fields: dict[str, str] = field(default_factory=dict)
+    #: Part file the entry was read from ("" for a bare ``parse_registry``
+    #: call). The split measurement derives the physical layout from it; the
+    #: pure parser never fills it.
+    source: str = ""
 
     @property
     def version(self) -> int:
@@ -253,7 +276,12 @@ def _fenced_block(body: str) -> str:
 
 
 def parse_registry(text: str) -> list[RuleEntry]:
-    """Parse registry entries into RuleEntry objects (no validation)."""
+    """Parse registry entries into RuleEntry objects (no validation).
+
+    Pure text parsing: it never opens a file and never resolves a split
+    layout. Use :func:`load_registry` when a path is available and the
+    registry may be an index over part files.
+    """
     entries: list[RuleEntry] = []
     for entry_id, body in _entry_blocks(text):
         block = _fenced_block(body)
@@ -263,6 +291,258 @@ def parse_registry(text: str) -> list[RuleEntry]:
         }
         entries.append(RuleEntry(id=entry_id, fields=fields))
     return entries
+
+
+@dataclass(frozen=True)
+class RegistryIndex:
+    """The physical layout an index file declares."""
+
+    parts: tuple[str, ...]
+    order: tuple[str, ...]
+
+
+def _index_error(message: str, repair: str) -> RegistryLayoutError:
+    return RegistryLayoutError(f"{message} (repair: {repair})")
+
+
+def parse_index(text: str) -> RegistryIndex | None:
+    """Parse the ``registry-index`` block; ``None`` for a single-file registry."""
+    blocks = INDEX_FENCE.findall(text)
+    openings = INDEX_OPEN.findall(text)
+    if not openings:
+        return None
+    if len(openings) != len(blocks):
+        raise _index_error(
+            f"registry-index fence is not closed ({len(openings)} opening, "
+            f"{len(blocks)} closed)",
+            "Close the registry-index block with ```",
+        )
+    if len(blocks) > 1:
+        raise _index_error(
+            f"index carries {len(blocks)} registry-index blocks; exactly one "
+            "is allowed",
+            "Keep one registry-index block and list every part in it",
+        )
+    parts: list[str] = []
+    order: tuple[str, ...] = ()
+    schema = ""
+    for raw_line in blocks[0].splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if not line.startswith(INDEX_KNOWN_PREFIXES):
+            raise _index_error(
+                f"registry-index line {line!r} is not schemaVersion/part/order",
+                "Remove unknown manifest lines",
+            )
+        if line.startswith("part:"):
+            match = INDEX_PART_LINE.match(line)
+            if not match:
+                raise _index_error(
+                    "registry-index part line has no path",
+                    "Write 'part: <relative .md path>'",
+                )
+            parts.append(match.group(1))
+        elif line.startswith("order:"):
+            if order:
+                raise _index_error(
+                    "registry-index declares more than one order line",
+                    "Keep a single order line with every entry id",
+                )
+            match = INDEX_ORDER_LINE.match(line)
+            if not match:
+                raise _index_error(
+                    "registry-index order line is empty",
+                    "List every entry id on the order line",
+                )
+            order = tuple(
+                token for token in re.split(r"[,\s]+", match.group(1)) if token
+            )
+        else:
+            match = INDEX_SCHEMA_LINE.match(line)
+            if not match:
+                raise _index_error(
+                    "registry-index schemaVersion line is empty",
+                    "Write 'schemaVersion: 1'",
+                )
+            schema = match.group(1)
+    if schema != "1":
+        raise _index_error(
+            f"registry-index schemaVersion is {schema!r}, expected '1'",
+            "Write 'schemaVersion: 1'",
+        )
+    if not parts:
+        raise _index_error(
+            "registry-index lists no parts",
+            "List each part file under the index",
+        )
+    if not order:
+        raise _index_error(
+            "registry-index lists no entry order",
+            "List every entry id on the order line",
+        )
+    return RegistryIndex(tuple(parts), order)
+
+
+def _resolve_part(index_path: Path, relative: str) -> Path:
+    """Resolve one part path under the index's directory (no escapes)."""
+    part = Path(relative)
+    if part.is_absolute():
+        raise _index_error(
+            f"registry part {relative!r} is absolute",
+            "Use a path relative to the index file",
+        )
+    resolved = (index_path.parent / part).resolve()
+    if not resolved.is_relative_to(index_path.parent.resolve()):
+        raise _index_error(
+            f"registry part {relative!r} escapes the index directory",
+            "Keep part paths inside the index directory",
+        )
+    if not resolved.is_file():
+        raise _index_error(
+            f"registry part {relative!r} is missing",
+            "Create the part file or remove it from the index",
+        )
+    return resolved
+
+
+def _read_layout(
+    path: Path,
+) -> tuple[str, RegistryIndex | None, list[tuple[str, Path]]]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise _index_error(
+            f"registry {path} is unreadable: {exc}",
+            "Ship the registry index alongside its parts",
+        ) from exc
+    index = parse_index(text)
+    if index is None:
+        return text, None, []
+    parts = [(relative, _resolve_part(path, relative)) for relative in index.parts]
+    return text, index, parts
+
+
+def _ordered_entries(
+    index: RegistryIndex,
+    parts: list[tuple[str, Path]],
+) -> dict[str, RuleEntry]:
+    """Parse every part and return entries keyed by id (validated layout)."""
+    by_id: dict[str, RuleEntry] = {}
+    for relative, part_path in parts:
+        try:
+            part_text = part_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise _index_error(
+                f"registry part {relative!r} is unreadable: {exc}",
+                "Ship every part named by the index",
+            ) from exc
+        part_entries = parse_registry(part_text)
+        if not part_entries:
+            raise _index_error(
+                f"registry part {relative!r} carries no rule entries",
+                "Remove the empty part from the index or write its entries",
+            )
+        for entry in part_entries:
+            if entry.id in by_id:
+                raise _index_error(
+                    f"registry part {relative!r} repeats entry {entry.id}",
+                    "Keep each entry in exactly one part",
+                )
+            entry.source = relative
+            by_id[entry.id] = entry
+    seen_order: set[str] = set()
+    for entry_id in index.order:
+        if entry_id in seen_order:
+            raise _index_error(
+                f"registry-index order repeats {entry_id}",
+                "List each entry id once",
+            )
+        seen_order.add(entry_id)
+    unknown = [entry_id for entry_id in index.order if entry_id not in by_id]
+    omitted = [entry_id for entry_id in by_id if entry_id not in seen_order]
+    if unknown:
+        raise _index_error(
+            f"registry-index order names {len(unknown)} unknown id(s): "
+            + ", ".join(unknown[:5]),
+            "List exactly the ids the parts carry",
+        )
+    if omitted:
+        raise _index_error(
+            f"registry-index order omits {len(omitted)} registered id(s): "
+            + ", ".join(omitted[:5]),
+            "Add the missing ids to the order line",
+        )
+    return by_id
+
+
+def load_registry(path: Path) -> list[RuleEntry]:
+    """Load the registry from an explicit path, index or single file.
+
+    An index resolves its parts relative to itself and returns entries in the
+    index's declared global order; a plain registry file parses as before.
+    Every layout defect (missing part, duplicate id, order omission/extra,
+    path escape, index carrying entries) raises :class:`RegistryLayoutError`
+    instead of yielding a partial or empty registry.
+    """
+    path = Path(path)
+    text, index, parts = _read_layout(path)
+    if index is None:
+        entries = parse_registry(text)
+        for entry in entries:
+            entry.source = path.name
+        return entries
+    if _entry_blocks(text):
+        raise _index_error(
+            f"registry index {path.name} carries rule entries; entries live "
+            "in its parts",
+            "Move the entry blocks into the parts listed by the index",
+        )
+    by_id = _ordered_entries(index, parts)
+    return [by_id[entry_id] for entry_id in index.order]
+
+
+def load_registry_text(path: Path) -> str:
+    """Return the registry as one text in declared order (lint / test seam).
+
+    For a single-file registry this is the file text unchanged. For an index
+    it is the index prose followed by its entry blocks in the declared global
+    order, so a text-level consumer sees the same entries a caller of
+    :func:`load_registry` sees.
+    """
+    path = Path(path)
+    text, index, parts = _read_layout(path)
+    if index is None:
+        return text
+    _ordered_entries(index, parts)
+    blocks: dict[str, str] = {}
+    for relative, part_path in parts:
+        for entry_id, body in _entry_blocks(part_path.read_text(encoding="utf-8")):
+            blocks[entry_id] = body
+    return text.rstrip() + "\n\n" + "".join(
+        blocks[entry_id] for entry_id in index.order
+    )
+
+
+def registry_split_errors(entries: list[RuleEntry]) -> list[str]:
+    """V-4: the registry's split clause, measured against the real layout.
+
+    A registry is *single-file* when every entry came from one source (a bare
+    ``parse_registry`` has no source, so it counts as one). A split registry
+    satisfies the clause; a single-file registry over either limit must
+    split. The limits and the capability-domain grouping are unchanged.
+    """
+    groups = {entry.fields.get("capability-domain", "") for entry in entries}
+    single_file = len({entry.source for entry in entries}) <= 1
+    if single_file and (
+        len(entries) > SPLIT_ENTRY_LIMIT or len(groups) > SPLIT_GROUP_LIMIT
+    ):
+        return [
+            f"registry within the single-file limits ({len(entries)} entries "
+            f"<= {SPLIT_ENTRY_LIMIT}, {len(groups)} capability-domain "
+            f"group(s) <= {SPLIT_GROUP_LIMIT}), or split"
+        ]
+    return []
 
 
 def _parse_owner(value: str) -> list[tuple[str, list[str]]]:

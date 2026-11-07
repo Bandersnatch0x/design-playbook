@@ -33,7 +33,7 @@ TEXT_SIZES = """(scope) => {
 
 def floors() -> tuple[float, float]:
     registry = _PKG / "skills" / "design-playbook" / "references" / "rules.md"
-    entries = rules_registry.parse_registry(registry.read_text(encoding="utf-8"))
+    entries = rules_registry.load_registry(registry)
     return (rules_registry.threshold(entries, "A11Y-05", "latin-text-min").value,
             rules_registry.threshold(entries, "A11Y-05", "cjk-text-min").value)
 

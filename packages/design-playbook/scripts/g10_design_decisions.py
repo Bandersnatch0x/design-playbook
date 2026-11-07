@@ -47,17 +47,22 @@ from design_playbook.scripts.dd_entries import (  # noqa: E402
     parse_dd_entries,
     positive_dd_refs,
 )
-from design_playbook.scripts.rules_registry import RULES_PATH_PARTS, parse_registry  # noqa: E402
+from design_playbook.scripts.rules_registry import (  # noqa: E402
+    RULES_PATH_PARTS,
+    RegistryLayoutError,
+    load_registry,
+    parse_registry,
+)
 
 _REGISTRY_PARTS = RULES_PATH_PARTS
 RULE_REF = re.compile(r"^([A-Z][A-Z0-9]*-[0-9]{2})@([0-9]+)$")
 
 
-def default_registry_text() -> str | None:
-    """Read the bundled rule registry; None when not shipped alongside."""
+def default_registry_versions() -> dict[str, int] | None:
+    """Registry id -> version from the bundled layout; None when not shipped."""
     path = Path(__file__).resolve().parents[1].joinpath(*_REGISTRY_PARTS)
     try:
-        return path.read_text(encoding="utf-8")
+        return {entry.id: entry.version for entry in load_registry(path)}
     except OSError:
         return None
 
@@ -508,10 +513,22 @@ def _rules_checks(
         registry_text: str | None) -> list[Finding]:
     errs: list[Finding] = []
     registry = None
-    if registry_text is None:
-        registry_text = default_registry_text()
     if registry_text:
         registry = _registry_ids(registry_text)
+    else:
+        try:
+            registry = default_registry_versions()
+        except RegistryLayoutError as exc:
+            errs.append(finding(
+                "G10.registry_unreadable",
+                f"G10 decisions: registry layout is unreadable: {exc}",
+                owner="rules.md",
+                expected="readable registry index and parts",
+                actual=str(exc),
+                repair="Fix the registry layout; rule-reference checks must "
+                       "not be skipped",
+            ))
+            registry = None
     for entry in entries:
         for ref in entry.rules_refs:
             match = RULE_REF.match(ref)

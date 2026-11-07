@@ -63,6 +63,42 @@ class TestMeasureSkills:
         assert counts, "surface is non-empty"
 
 
+class TestRecursiveReferences:
+    def test_nested_part_files_are_counted_with_relative_paths(
+        self, tmp_path: Path
+    ) -> None:
+        skill = tmp_path / "skills" / "demo"
+        (skill / "references" / "rules").mkdir(parents=True)
+        (skill / "SKILL.md").write_text(
+            "# demo\nRead `references/index.md` and references/other.md.\n",
+            encoding="utf-8",
+        )
+        (skill / "references" / "index.md").write_text("index\n", encoding="utf-8")
+        (skill / "references" / "rules" / "part.md").write_text(
+            "part body\n", encoding="utf-8"
+        )
+        report = cb.measure_skills(tmp_path)
+        demo = report["skills"][0]
+        assert [ref["path"] for ref in demo["references"]] == [
+            "index.md", "rules/part.md",
+        ]
+        assert demo["references_tokens_est"] == sum(
+            ref["tokens_est"] for ref in demo["references"]
+        )
+        # SKILL.md names the index; the part under it is not an entry point.
+        assert [ref["path"] for ref in demo["entry_references"]] == ["index.md"]
+        assert report["declared_subsets"] == []
+
+    def test_orchestrator_registry_parts_reach_the_report(self) -> None:
+        report = cb.measure_skills(REAL_PKG)
+        dp = next(s for s in report["skills"] if s["skill"] == "design-playbook")
+        paths = {ref["path"] for ref in dp["references"]}
+        assert "rules.md" in paths
+        assert any(path.startswith("rules/") for path in paths), paths
+        entry_paths = {ref["path"] for ref in dp["entry_references"]}
+        assert "rules.md" in entry_paths
+
+
 class TestReadOnlyBoundary:
     def test_never_writes_or_opens_for_write(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def _boom(*args: object, **kwargs: object) -> None:

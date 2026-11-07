@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Context budget for design-playbook skills (report-only).
 
-Walks ``skills/*/SKILL.md`` and ``skills/*/references/*.md`` under the
-package root and reports the context weight of the skill surface: the
-always-loaded SKILL.md face per skill, its on-demand references, and the
-worst-case full-pipeline total. Purely informational — no thresholds, no
-gates, no writes, no network.
+Walks ``skills/*/SKILL.md`` and every ``*.md`` under ``skills/*/references/``
+recursively (registry parts included, each with a distinguishable relative
+path) and reports the context weight of the skill surface: the always-loaded
+SKILL.md face per skill, its on-demand references, the files SKILL.md itself
+names as entry points, and the worst-case full-pipeline total. No shipped
+spec or contract declares a reference subset, so every number is the full
+surface; the JSON carries ``declared_subsets: []`` rather than implying one.
+Purely informational — no thresholds, no gates, no writes, no network.
 
 Token counts are character-level estimates, never tokenizer-exact:
 ``ascii_chars / 4 + non_ascii_chars`` (CJK prose runs near one token per
@@ -20,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -37,14 +41,27 @@ def estimate_tokens(text: str) -> int:
     return (len(text) - non_ascii) // 4 + non_ascii
 
 
-def _measure_file(path: Path) -> dict:
+def _measure_file(path: Path, base: Path | None = None) -> dict:
     text = path.read_text(encoding="utf-8", errors="replace")
     chars = len(text)
     return {
-        "path": path.name,
+        "path": path.relative_to(base).as_posix() if base else path.name,
         "chars": chars,
         "tokens_est": estimate_tokens(text),
     }
+
+
+#: A reference file the always-loaded SKILL.md names, as a link or inline code.
+SKILL_REFERENCE = re.compile(r"references/[A-Za-z0-9_./-]+\.md")
+
+
+def _entry_references(skill_file: Path, references: list[dict]) -> list[dict]:
+    """References named by SKILL.md itself (the always-loaded entry points)."""
+    text = skill_file.read_text(encoding="utf-8", errors="replace")
+    named = {
+        match.split("references/", 1)[1] for match in SKILL_REFERENCE.findall(text)
+    }
+    return [ref for ref in references if ref["path"] in named]
 
 
 def measure_skills(package_root: Path) -> dict:
@@ -55,15 +72,28 @@ def measure_skills(package_root: Path) -> dict:
         skill_file = skill_dir / "SKILL.md"
         if not skill_file.is_file():
             continue
+        references_dir = skill_dir / "references"
+        references = (
+            [
+                _measure_file(path, references_dir)
+                for path in sorted(references_dir.rglob("*.md"))
+                if path.is_file()
+            ]
+            if references_dir.is_dir()
+            else []
+        )
+        entry_references = _entry_references(skill_file, references)
         skill = {
             "skill": skill_dir.name,
             "skill_md": _measure_file(skill_file),
-            "references": [
-                _measure_file(p) for p in sorted((skill_dir / "references").glob("*.md"))
-            ],
+            "references": references,
+            "entry_references": entry_references,
         }
         skill["references_tokens_est"] = sum(
-            ref["tokens_est"] for ref in skill["references"]
+            ref["tokens_est"] for ref in references
+        )
+        skill["entry_tokens_est"] = sum(
+            ref["tokens_est"] for ref in entry_references
         )
         skill["skill_tokens_est"] = skill["skill_md"]["tokens_est"]
         skill["total_tokens_est"] = (
@@ -85,8 +115,13 @@ def measure_skills(package_root: Path) -> dict:
         "total": {
             "skill_md_tokens_est": sum(s["skill_tokens_est"] for s in skills),
             "references_tokens_est": sum(s["references_tokens_est"] for s in skills),
+            "entry_tokens_est": sum(s["entry_tokens_est"] for s in skills),
             "worst_case_pipeline_tokens_est": sum(s["total_tokens_est"] for s in skills),
         },
+        # No shipped spec or contract declares a reference subset, so every
+        # measurement above is the full surface; a declared subset would have
+        # to arrive with its own declaration before it could be measured.
+        "declared_subsets": [],
         "heaviest_files": heaviest[:10],
     }
 
@@ -109,6 +144,10 @@ def _text_view(report: dict) -> str:
         f"{'TOTAL':<18} {t['skill_md_tokens_est']:>10} "
         f"{t['references_tokens_est']:>10} "
         f"{t['worst_case_pipeline_tokens_est']:>10}",
+        "",
+        "reference entry points named by SKILL.md (index files): "
+        f"{t['entry_tokens_est']} tokens_est",
+        "declared reference subsets: none — full references counted",
         "",
         "heaviest files (tokens_est):",
     ]

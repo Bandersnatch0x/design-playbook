@@ -46,7 +46,7 @@ past timeout-at                  timeout + retry (or cancel)
 
 ### Replace AI slop with the target look
 
-For implemented UI, evaluate registry-entry applicability predicates in [`../design-playbook/references/rules.md`](../design-playbook/references/rules.md). Use the subset declared by the active spec and contract, or the full catalog when none is declared. Run every entry whose predicate evaluates to `applicable` against rendered UI plus relevant source. Execution protocol and the row format live in [`references/detectors.md`](references/detectors.md). Write exactly one seven-column audit row per **applicable** entry to `.scratch/<run>/craft-guard.md`:
+For implemented UI, evaluate registry-entry applicability predicates in the registry index [`../design-playbook/references/rules.md`](../design-playbook/references/rules.md) and its `rules/` part files. Use the subset declared by the active spec and contract, or the full catalog when none is declared. Run every entry whose predicate evaluates to `applicable` against rendered UI plus relevant source. Execution protocol and the row format live in [`references/detectors.md`](references/detectors.md). Write exactly one seven-column audit row per **applicable** entry to `.scratch/<run>/craft-guard.md`:
 
 | ID@ver | Applicability | Predicate reason / missing proof | Result | Rendered evidence | Source evidence | Exception check | Positive fix |
 | --- | --- | --- | --- | --- | --- | --- | --- |
