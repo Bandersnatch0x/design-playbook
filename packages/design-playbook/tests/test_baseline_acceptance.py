@@ -659,6 +659,82 @@ class CompleteAcceptanceCliTests(unittest.TestCase):
                 if item["rule_id"] == "baseline.binding-invalid")
             self.assertIn("run root escapes project root", error["message"])
 
+    def test_malformed_baseline_path_type_yields_named_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project, run = _locate(Path(tmp))
+            _bind(project, run)
+            state_path = run / "design-baseline" / "state.json"
+            original_text = state_path.read_text(encoding="utf-8")
+            _rewrite_state(run, lambda state: state["baseline"].__setitem__(
+                "path", []))
+
+            result = _validate(run, "--format", "json", project=project)
+
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+            error = next(
+                item for item in _json_findings(result)
+                if item["rule_id"] == "baseline.binding-invalid")
+            self.assertEqual(error["owner"], "design-baseline/state.json")
+            self.assertIn("baseline path", error["message"])
+
+            # Restoring the same state returns to the normal positive control.
+            state_path.write_text(original_text, encoding="utf-8")
+            restored = _validate(run, "--format", "json", project=project)
+            self.assertEqual(
+                restored.returncode, 0, restored.stdout + restored.stderr)
+
+    def test_malformed_decision_kind_type_yields_named_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project, run = _locate(Path(tmp))
+            _bind(project, run)
+            _rewrite_state(run, lambda state: state["decision"].__setitem__(
+                "kind", []))
+
+            result = _validate(run, "--format", "json", project=project)
+
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+            error = next(
+                item for item in _json_findings(result)
+                if item["rule_id"] == "baseline.binding-invalid")
+            self.assertEqual(error["owner"], "design-baseline/state.json")
+            self.assertIn("decision kind", error["message"])
+
+    def test_malformed_baseline_origin_type_yields_named_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project, run = _locate(Path(tmp))
+            _bind(project, run)
+            _rewrite_state(run, lambda state: state["baseline"].__setitem__(
+                "origin", {}))
+
+            result = _validate(run, "--format", "json", project=project)
+
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+            error = next(
+                item for item in _json_findings(result)
+                if item["rule_id"] == "baseline.binding-invalid")
+            self.assertEqual(error["owner"], "design-baseline/state.json")
+            self.assertIn("baseline origin", error["message"])
+
+    def test_malformed_promotions_type_yields_named_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project, run = _locate(Path(tmp))
+            _bind(project, run)
+            _rewrite_state(run, lambda state: state.__setitem__(
+                "promotions", None))
+
+            result = _validate(run, "--format", "json", project=project)
+
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+            error = next(
+                item for item in _json_findings(result)
+                if item["rule_id"] == "baseline.binding-invalid")
+            self.assertEqual(error["owner"], "design-baseline/state.json")
+            self.assertIn("promotions", error["message"])
+
     def test_ready_state_without_binding_preserves_the_owner_failure(self) -> None:
         # The owner genuinely rejects a ready state with no binding; the
         # projection must keep that row (path/message), not replace it with a

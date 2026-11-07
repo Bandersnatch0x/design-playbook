@@ -551,6 +551,33 @@ def _state_presence(run: Path) -> tuple[str | None, str | None]:
     return text, None
 
 
+def _validate_state_fields(state: dict[str, Any]) -> None:
+    """Type-check the external state fields this owner consumes.
+
+    Rejects only shapes that would otherwise reach set membership, hashing, or
+    iteration with a non-scalar value; semantic validity stays with the
+    existing checks (including a ready state without a binding, which keeps its
+    owner result). Unknown extension fields are untouched, so forward-
+    compatible state stays readable.
+    """
+
+    baseline = state.get("baseline")
+    if isinstance(baseline, dict):
+        for field in ("path", "origin"):
+            value = baseline.get(field)
+            if value is not None and not isinstance(value, str):
+                raise BaselineError(
+                    f"baseline {field} must be a string: {value!r}")
+    decision = state.get("decision")
+    if isinstance(decision, dict):
+        kind = decision.get("kind")
+        if kind is not None and not isinstance(kind, str):
+            raise BaselineError(
+                f"baseline decision kind must be a string: {kind!r}")
+    if "promotions" in state and not isinstance(state["promotions"], list):
+        raise BaselineError("baseline promotions must be a list")
+
+
 def _state_from_text(project: Path, text: str) -> dict[str, Any]:
     """Parse and validate one already-read state text (no I/O)."""
 
@@ -562,6 +589,7 @@ def _state_from_text(project: Path, text: str) -> dict[str, Any]:
         raise BaselineError("unsupported baseline state schema")
     if state.get("project_root") != str(project):
         raise BaselineError("baseline state is bound to a different project root")
+    _validate_state_fields(state)
     return state
 
 
