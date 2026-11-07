@@ -485,6 +485,63 @@ def validate_skill_frontmatter() -> None:
             check(bool(meta.get("description")), f"{skill_dir.name} has description frontmatter")
 
 
+def validate_isolated_evaluator() -> None:
+    print("== Isolated evaluator invocation (T-160) ==")
+    plugin_name = _read_json(PKG / ".claude-plugin" / "plugin.json").get("name")
+    agents_dir = PKG / "agents"
+    agent_path = agents_dir / "ui-evaluator.md"
+    check(agents_dir.is_dir(), "agents/ at plugin root")
+    check(agent_path.is_file(), "read-only evaluator agent definition ships")
+    if agent_path.is_file():
+        meta, _body = frontmatter.parse_frontmatter(agent_path.read_text(encoding="utf-8"))
+        check(meta.get("name") == "ui-evaluator",
+              "evaluator agent name is ui-evaluator")
+        check(bool(meta.get("description")), "evaluator agent has description")
+        tools = {part.strip() for part in meta.get("tools", "").split(",") if part.strip()}
+        check(tools == {"Read", "Glob", "Grep"},
+              f"evaluator agent tools are read-only (got {sorted(tools)})")
+        check(meta.get("omitClaudeMd") == "true",
+              "evaluator agent omits CLAUDE.md instruction injection")
+        check(meta.get("model") == "inherit",
+              "evaluator agent inherits the user model")
+    fork_skills: list[tuple[str, dict[str, str]]] = []
+    for skill_dir in sorted((PKG / "skills").iterdir()):
+        skill_file = skill_dir / "SKILL.md"
+        if not skill_file.is_file():
+            continue
+        meta, _body = frontmatter.parse_frontmatter(skill_file.read_text(encoding="utf-8"))
+        if meta.get("context") == "fork":
+            fork_skills.append((skill_dir.name, meta))
+    check(bool(fork_skills), "at least one skill declares context: fork")
+    for skill_name, meta in fork_skills:
+        agent_id = meta.get("agent", "")
+        owner, _, local = agent_id.partition(":")
+        check(
+            bool(local) and owner == plugin_name,
+            f"{skill_name} fork agent is namespaced {plugin_name}:<agent> (got {agent_id!r})",
+        )
+        check(
+            bool(local) and (agents_dir / f"{local}.md").is_file(),
+            f"{skill_name} fork agent definition ships (agents/{local}.md)",
+        )
+        check(meta.get("background") == "false",
+              f"{skill_name} fork runs in the foreground (background: false)")
+    package_files = _read_json(PKG / "package.json").get("files", [])
+    check("agents" in package_files, "package.json files[] ships agents/")
+    evaluator_meta, _body = frontmatter.parse_frontmatter(
+        (PKG / "skills" / "ui-evaluator" / "SKILL.md").read_text(encoding="utf-8")
+    )
+    # T-160 N1: the named evaluator's own fork metadata is the contract. The
+    # generic loop above only proves *some* skill forks, so an unrelated fork
+    # would mask the evaluator silently falling back to inline.
+    check(evaluator_meta.get("context") == "fork",
+          "ui-evaluator itself declares context: fork")
+    check(evaluator_meta.get("background") == "false",
+          "ui-evaluator itself runs in the foreground (background: false)")
+    check(evaluator_meta.get("agent") == f"{plugin_name}:ui-evaluator",
+          f"ui-evaluator forks the shipped agent ({plugin_name}:ui-evaluator)")
+
+
 def validate_command_frontmatter() -> None:
     print("== Command frontmatter ==")
     for cmd in sorted((PKG / "commands").glob("*.md")):
@@ -1640,6 +1697,7 @@ CHECKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("validate_adapter_drift", (), ()),
     ("validate_publish_manifest", ("claude_version",), ("npmj",)),
     ("validate_skill_frontmatter", (), ()),
+    ("validate_isolated_evaluator", (), ()),
     ("validate_command_frontmatter", (), ()),
     ("validate_release_identity", ("pj",), ()),
     ("validate_capability_claims", (), ()),

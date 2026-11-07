@@ -48,6 +48,16 @@ EXTRA_FIELD_MARKER = re.compile(
 EXHAUSTIVE_MARKERS = ("必审", "exhaustive", "must-review")
 UNREVIEWED_MARKERS = ("未审", "unreviewed", "not-reviewed", "declared-unreviewed")
 
+
+def _has_marker(section: str, markers: tuple[str, ...]) -> bool:
+    """Marker presence, case-insensitive for the English spellings.
+
+    T-160: a report that writes "Exhaustive completion:" or "UNREVIEWED:" is
+    stating the same status; lower() leaves the CJK markers unchanged.
+    """
+    lowered = section.lower()
+    return any(marker.lower() in lowered for marker in markers)
+
 # Sampling-matrix block (S3, Q3=A): the marker line opts the report into
 # per-cell enumeration; each list line names one spec-declared cell. The
 # state token is validated against FIVE_STATES by the check itself so a
@@ -95,9 +105,7 @@ def check_coverage(text: str, *, required: bool = False) -> list[Finding]:
                    "explicit unreviewed list",
         ))
         return errs
-    has_exhaustive = any(
-        marker in section for marker in EXHAUSTIVE_MARKERS
-    )
+    has_exhaustive = _has_marker(section, EXHAUSTIVE_MARKERS)
     if not has_exhaustive:
         errs.append(finding(
             "G11.missing_exhaustive_status",
@@ -109,9 +117,7 @@ def check_coverage(text: str, *, required: bool = False) -> list[Finding]:
             repair="State which exhaustive (must-review) items completed "
                    "and which are coverage gaps",
         ))
-    has_unreviewed = any(
-        marker in section for marker in UNREVIEWED_MARKERS
-    )
+    has_unreviewed = _has_marker(section, UNREVIEWED_MARKERS)
     if not has_unreviewed:
         errs.append(finding(
             "G11.missing_unreviewed_list",
