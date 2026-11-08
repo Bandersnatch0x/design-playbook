@@ -101,11 +101,14 @@ after the version published, that is a new version, not a retag.
 
 The ADR-0045 release decision may include `contentSha256` alongside `tag`,
 `decision`, `authority`, and `reason`. It is the lowercase SHA-256 digest of the
-ASCII commit ID returned by `git rev-parse HEAD`, with trailing whitespace
-removed, **not** a hash of the working tree or the raw Git commit object.
+newline-joined `git ls-tree -r HEAD` entry lines after the line for
+`docs/adr/0045-external-evidence-spend-gate.md` itself is removed, encoded as
+UTF-8. It binds the tree recorded by HEAD, **not** the working tree, the commit
+id, or the raw Git commit object; excluding the ADR keeps the digest stable
+before and after the record is committed.
 A matching digest passes; a malformed digest, an unreadable HEAD, or a mismatch
 refuses authorization even when the version/tag is unchanged. An absent field
 prints `WARN  release-authorization-content-unbound` and preserves legacy tag-only
-approval. This is opt-in commit binding, not author authentication; the separate
+approval. This is opt-in tree binding, not author authentication; the separate
 clean-tree and other release gates remain required. No authorization is granted
 by these instructions, and no release decision is created automatically.

@@ -621,11 +621,11 @@ block and refuses the tag when it is missing, malformed, or names another tag.
 
 ```release-authorization
 {
-  "tag": "v0.25.7",
+  "tag": "v0.25.8",
   "decision": "approved",
   "authority": "maintainer",
-  "reason": "Patch release of the architecture-deepening branch (PR #131): one owner per concept across publication, canvas legality/undo patches, document writes, stored-row shapes and asset identity, the run-console/preview/adapters/gates surfaces, and the Repair Packet becoming a required Run Snapshot v1 section (ADR-0050); work-request counters are enforced under the ADR-0045 T-127 amendment. No command, skill, or MCP server changes. Knowingly not done: client route derivation for the workbench web app (ADR-0048 scope) and the .aoci baseline maintenance for the removed capture_snapshot.py.",
-  "contentSha256": "b2787f93c849ff1532b771e035126a0f3bec3193a6b0f2836f07fea0a4a2ffb7"
+  "reason": "Patch release by the maintainer's 2026-11-08 decision to publish the smallest increment from v0.25.7. It carries the accepted changes on main through a3043b4: complete acceptance now fails closed by default with explicit --legacy/--require-* migration, run-profile and present-baseline validation, named repair-proof obligations under one captured-byte integrity authority, rendered design-token probes, an isolated read-only evaluator, generated install and portable manifests, detector-bound rules with a narrow edit hook, workbench counter/canvas correctness, and ordered registry shards. No command, skill, or MCP server is added or removed. Public catalog submission remains paused.",
+  "contentSha256": "50a0915330a0c2190c289a5f40c00c976e1f9f32d83407aa29c5ca99807f151d"
 }
 ```
 
