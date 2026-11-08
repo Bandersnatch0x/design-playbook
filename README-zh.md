@@ -25,7 +25,7 @@
 
 | 面 | 由谁承载 |
 | :--- | :--- |
-| **带证据的验收** | `ui-evaluator` + point-back 台账：发现必须引用绑定判据的证据，闭环轨迹是 run 产物，不是聊天摘要 |
+| **带证据的验收** | `ui-evaluator` + point-back 台账：评审器在全新只读子上下文中、按显式工件允许集评审——这是会话隔离，不是文件系统沙箱；发现必须引用绑定判据的证据，闭环轨迹是 run 产物，不是聊天摘要 |
 | **存量产品的 UI 改动** | `design-baseline` 在改动既有产品之前先发现、校验或生成项目 `DESIGN.md` |
 
 | | |
@@ -108,7 +108,7 @@ codex plugin add design-playbook@design-playbook
 
 版本权威：`packages/design-playbook/package.json` 与
 `packages/design-playbook/.claude-plugin/plugin.json` 保持版本一致；
-桥接包、根 catalog、README 徽章和生成的 Codex 快照随之同步。
+桥接包、根 catalog、README 徽章、生成的便携 `plugin.json` / `mcp.json` 清单和 Codex 快照均由它们重新生成。
 
 </details>
 
@@ -122,6 +122,7 @@ codex plugin add design-playbook@design-playbook
 | **回流（recirculate）** | blocking 发现回流到 owning 阶段直到闭环；闭环轨迹本身就是 run 产物的一部分 |
 | **不能静默跳过** | 跳过审计仍会产出 point-back 骨架，但标记 `audited: false`——strict 校验不把它当已审计结果放行 |
 | **缺失不等于不适用** | 必需证据缺失为 `blocked`；`not-applicable` 必须有未触发的适用条件与理由，不能因为取证工具不可用就判不适用 |
+| **修复证明** | 声称完成可见状态修复的闭包必须点名判据，并绑定 `before` / `after` 两次采集且 SHA-256 不同；字节变化本身不能单独证明判据通过 |
 
 [历史案例与用户旅程](./packages/design-playbook/showcase/README.md#user-journey)：三次独立任务，外加一个[完整的当前实跑](./packages/design-playbook/showcase/case-reader/index.html)（案例阅读器）——规格、真实预览确认、Fill、工艺审计、运行取证、评审、静态交付全程打包，并附[跨 run 回顾报告](./packages/design-playbook/showcase/run-review-2026-09-08.md)。SwarSight 队列案例保留了规格、设计决策与评审修复记录，早于当前计划交接和运行取证要求。
 
@@ -177,7 +178,7 @@ design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?
 | `ui-picker` | 🧱 骨架 + 组件语义 + 设计决策条目（记录/对比/探索三档） |
 | `craft-guard` | 🛡️ 细节工艺检查——间距、层级、动效等手作细节（反 AI 味），对照内置规则表 |
 | `native-craft` | 🖥️ 桌面原生手感声明 |
-| `ui-evaluator` | ✅ 验收——每个发现都指回它违反的声明，blocking 发现回流重修 |
+| `ui-evaluator` | ✅ 验收——每个发现都指回它违反的声明，blocking 发现回流重修；以会话隔离的只读 fork 运行（不是文件系统沙箱），产出者对话不是输入 |
 | `component-distill` | 已有跨 run 组件/token 晋升提案，只出报告；持久晋升需用户裁决，不属于单 run 管线 |
 
 **八个命令**：`design-io`（全链路）· `ux-spec`（只出 spec）· `ui-review`（只验收）· `run-review`（跨 run 复盘）· `run-status`（阶段与恢复叙述）· `run-handoff`（为已评审 run 出静态交付包）· `doctor`（安装面健康）· `component-distill`（跨 run 提案，不自动晋升）
@@ -193,7 +194,7 @@ design-baseline? → reference-intake? → ux-spec? → plan? → (native-craft?
 | :--- | :--- | :--- |
 | **P1** 点修 | 单一 owning 层 point-back 修复，不触碰 decided 字段 | 注册表子集求值；R4/R5（+R2 行级）路由 |
 | **P2** 标准 | 基线内功能变更（新判据、R/C 决策） | 适用谓词全求值；成形会话 + G9/G10 |
-| **P3** 全量 | decided 字段修订（supersedes）、结构性重构、E 档决策 | G1-G12 全谱 + 采样矩阵完整执行 |
+| **P3** 全量 | decided 字段修订（supersedes）、结构性重构、E 档决策 | G1-G13 全谱（G13 仅在存在参考契约时触发）+ 采样矩阵完整执行 |
 
 </details>
 
@@ -208,7 +209,7 @@ Preview / Evidence MCP 运行时已放进主插件（`packages/design-playbook/m
 | 适配器 | MCP 工具 | 启用 | 说明 |
 | :--- | :--- | :--- | :--- |
 | `design-playbook-preview` | `preview_prototype` | `preview*` 人工确认门（G5） | 已打包；需系统 Edge/Chrome 弹窗（缺失回退默认浏览器） |
-| `design-playbook-evidence` | `execute_capture_plan` | `observe*` 运行时取证（G6）——需 Playwright + Chromium | 已打包；取证在运行时仍可选 |
+| `design-playbook-evidence` | `execute_capture_plan` | `observe*` 运行时取证（G6），含渲染态设计 token 探针——需 Playwright + Chromium | 已打包；取证在运行时仍可选 |
 
 文档：[preview](./packages/design-playbook-preview/#install--mcp-config) · [evidence](./packages/design-playbook-evidence/#install--mcp-config)
 
@@ -244,7 +245,7 @@ Claude Code 为原生平台。Tier 2/3 为生成适配器，已诚实说明降�
 - **Run Console**——已交付、状态 **experimental（实验性）**：本地单 run 控制台，把已有 run 产物投影成运营者可直接读的意图、来源判定、阻塞来源与下一 owner（含派生 Repair Packet，以及 `run-status` 发出的显式 `open-console` 延续动作）。保持**本地、受试用门禁约束**（尚未获得外部授权）、不是云端 Workspace、永远不会成为第二运行态权威。
 - **MCP 打包配置**：marketplace 路径包含包内 MCP 运行时配置；registry 发布包可能未包含根 MCP 配置，需要宿主显式注册。
 - **Windows 上的 Console loopback**：本地 Console 使用 loopback 传输；历史 dogfood 曾遇到传输中断，不能把本地 loopback 当作固定平台保证。
-- **证明 vs 形态**——`scripts/validate_run.py` 机检的是 run 产物的*形态*与闭环轨迹；不宣称每个未来 run 自动就是高质量 UI。历史结论仅适用于各自记录的案例，不代表当前完整链路通过，也不是统计保证。
+- **证明 vs 形态**——`scripts/validate_run.py` 默认执行**完整验收**：preview、证据、Coverage、合法 run-profile、存在 baseline 时的 baseline 校验与修复证明缺一即失败，不因缺失而跳过；`--legacy` 才是显式的纯结构检查，显式 `--require-*` 选择也只保留它点名的范围。两者都不宣称每个未来 run 自动就是高质量 UI。历史结论仅适用于各自记录的案例，不代表当前完整链路通过，也不是统计保证。
 
 ## 📄 许可
 

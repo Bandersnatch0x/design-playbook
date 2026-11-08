@@ -99,7 +99,8 @@ Strict quality mode (CLI default, fail closed):
 A bare invocation (no strictness flag at all) behaves as --strict. Passing
 one --require-* flag explicitly keeps its historical meaning: only that
 check engages (so --require-preview alone does not inspect the audit
-marker).
+marker, and --require-coverage checks G11 alone rather than turning on
+preview, evidence, run-profile, baseline, or repair proof).
 
 Repair evidence (T-152 / T-159, ADR-0045 2026-11-07 amendment):
   Complete acceptance (bare or --strict) derives one proof obligation from
@@ -916,6 +917,12 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="validate_run.py",
         description="Deterministic seam over Design I/O run artifacts.",
+        epilog=(
+            "A single --require-* flag engages only its own check: "
+            "--require-coverage alone does not turn on preview, evidence, "
+            "run-profile, baseline, or repair proof. --legacy cannot be "
+            "combined with --strict or any --require-*."
+        ),
     )
     parser.add_argument("spec", help="path to spec.md")
     parser.add_argument("point_back", help="path to point-back.md")

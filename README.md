@@ -25,7 +25,7 @@ For a frontend or product engineer changing an existing Web UI with a coding age
 
 | Surface | What carries it |
 | :--- | :--- |
-| **Acceptance with proof** | `ui-evaluator` + the point-back ledger: findings cite criterion-bound evidence; the closure trail is a run artifact, not a chat summary |
+| **Acceptance with proof** | `ui-evaluator` + the point-back ledger: the evaluator runs in a fresh read-only child context against an explicit artifact allow-set — conversation isolation, not a filesystem sandbox — and findings cite criterion-bound evidence; the closure trail is a run artifact, not a chat summary |
 | **Existing-product UI work** | `design-baseline` discovers, validates, or drafts the project's `DESIGN.md` *before* changing a live product |
 
 | | |
@@ -111,7 +111,8 @@ codex plugin add design-playbook@design-playbook
 
 Version SSOT: `packages/design-playbook/package.json` and
 `packages/design-playbook/.claude-plugin/plugin.json` stay version-locked; the
-sibling bundle, root catalog, README badges, and generated Codex snapshot follow them.
+sibling bundle, root catalog, README badges, and generated portable
+`plugin.json` / `mcp.json` manifests and Codex snapshot are regenerated from them.
 
 </details>
 
@@ -125,6 +126,7 @@ Acceptance records keep their evidence limits visible:
 | **Recirculate** | Blocking findings flow back to the owning stage until they close; the closure trail is part of the run artifacts |
 | **No silent skip** | Skipping the audit still carries the point-back skeleton, marked `audited: false` — strict validation refuses it as a final result |
 | **Missing is not inapplicable** | Missing required proof is `blocked`; `not-applicable` needs an unmet applicability condition and a reason, not an unavailable capture tool |
+| **Repair proof** | A closure claiming a visible-state repair names its criterion and binds `before` / `after` captures with different SHA-256 digests; changed bytes never establish a pass on their own |
 
 [Historical cases and journey coverage](./packages/design-playbook/showcase/README.md#user-journey): three independent requests, plus one [complete current live run](./packages/design-playbook/showcase/case-reader/index.html) (case reader) that packages the whole chain — spec, real preview confirmations, Fill, craft audit, captured evidence, review, static handoff — with a [cross-run review report](./packages/design-playbook/showcase/run-review-2026-09-08.md). The SwarSight queue case retains its specification, design decisions, and review / repair record; it predates the current plan and capture requirements.
 
@@ -180,7 +182,7 @@ Nine skills in the package (`/design-playbook:<name>`):
 | `ui-picker` | 🧱 Shell + component semantics + design-decision entries (record / compare / explore tiers) |
 | `craft-guard` | 🛡️ Detail-craft check — spacing, hierarchy, motion (anti-AI-slop) against the built-in rule registry |
 | `native-craft` | 🖥️ Native-feel desktop declaration |
-| `ui-evaluator` | ✅ Acceptance — every finding points back to its declaration; blocking ones recirculate |
+| `ui-evaluator` | ✅ Acceptance — every finding points back to its declaration; blocking ones recirculate. Runs as a conversation-isolated read-only fork (not a filesystem sandbox), so producer conversation is not an input |
 | `component-distill` | Existing cross-run, report-only component/token promotion proposals; durable promotion requires a user decision. Not a single-run pipeline step |
 
 **Eight commands:** `design-io` (full pipeline) · `ux-spec` (spec only) · `ui-review` (accept only) · `run-review` (cross-run) · `run-status` (phase + resume narration) · `run-handoff` (static delivery package for a reviewed run) · `doctor` (install health) · `component-distill` (cross-run proposals, no automatic promotion)
@@ -196,7 +198,7 @@ Every run declares a tier in the `plan.md` **run-profile** block — process wei
 | :--- | :--- | :--- |
 | **P1** point-fix | Single-owning-layer point-back repair, no decided-field touch | Registry subset evaluation; R4/R5 (+R2 line) routes |
 | **P2** standard | In-baseline feature change (new criteria, R/C decisions) | Full predicate evaluation; shaping session + G9/G10 |
-| **P3** full | Decided-field revision (supersedes), structural re-composition, E-tier decisions | G1-G12 full spectrum + sampling matrix fully executed |
+| **P3** full | Decided-field revision (supersedes), structural re-composition, E-tier decisions | G1-G13 full spectrum (G13 only when a reference contract exists) + sampling matrix fully executed |
 
 </details>
 
@@ -212,7 +214,7 @@ orchestrator still **probes** and skips steps when a host has no MCP tools.
 | Adapter | MCP tool | Enables | Notes |
 | :--- | :--- | :--- | :--- |
 | `design-playbook-preview` | `preview_prototype` | `preview*` human confirm gate (G5) | Bundled; needs system Edge/Chrome for the popup (falls back to default browser) |
-| `design-playbook-evidence` | `execute_capture_plan` | `observe*` runtime evidence (G6) — needs Playwright + Chromium | Bundled; capture still optional at runtime |
+| `design-playbook-evidence` | `execute_capture_plan` | `observe*` runtime evidence (G6), including rendered design-token probes — needs Playwright + Chromium | Bundled; capture still optional at runtime |
 
 Docs: [preview](./packages/design-playbook-preview/#install--mcp-config) · [evidence](./packages/design-playbook-evidence/#install--mcp-config)
 
@@ -248,7 +250,7 @@ Not another style/palette pack — this plugin owns the **delivery pipeline, evi
 - **Run Console** — shipped and **experimental**: a local, single-run console projecting existing run artifacts so an operator can see intent, source verdict, blocker source, and next owner without opening raw files — including a derived Repair Packet and an explicit `open-console` continuation from `run-status`. It stays **local and trial-gated** (no external authorization yet), is not a cloud Workspace, and never becomes a second run-state authority.
 - **Packaging MCP config** — marketplace path includes package-local MCP runtime config; published registry packages may omit a root MCP config and need explicit host registration.
 - **Console loopback on Windows** — local Console open uses loopback transport; dogfood saw a transport abort there, so do not treat loopback as a fixed-platform guarantee.
-- **Proof vs. shape** — `scripts/validate_run.py` machine-checks the run-artifact *shape* and the closure trail; it does not claim every future run is automatically high-quality UI. Historical verdicts apply only to their recorded cases, not a current end-to-end run or a statistical guarantee.
+- **Proof vs. shape** — `scripts/validate_run.py` runs **complete acceptance by default**: preview, evidence, coverage, a valid run-profile, baseline verification when a baseline is present, and named repair proof are required, and a missing one fails rather than skipping; `--legacy` is the explicit structural-only check, and an explicit `--require-*` selection keeps only the scope it names. Neither claims every future run is automatically high-quality UI. Historical verdicts apply only to their recorded cases, not a current end-to-end run or a statistical guarantee.
 
 ## 📄 License
 

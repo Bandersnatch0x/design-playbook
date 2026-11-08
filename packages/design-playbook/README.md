@@ -142,6 +142,8 @@ mcp.json               ← portable MCP config, ${PLUGIN_ROOT}-rooted stdio (gen
 mcp/{preview,evidence}/← MCP adapter runtimes (preview_prototype / execute_capture_plan)
 skills/<name>/SKILL.md ← model-invoked skills
 commands/<name>.md     ← slash commands; see invocation tables above
+agents/ui-evaluator.md ← read-only evaluator fork (conversation isolation)
+hooks/hooks.json       ← post-edit hook (source-decidable contrast subset)
 codex/AGENTS.md        ← Codex bridge notes
 examples/              ← self-authored onboarding samples
 LICENSE · NOTICE       ← authored-only scope
