@@ -8,6 +8,7 @@ import json
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -236,6 +237,91 @@ def _missing_portable_manifests(membership: set[str]) -> set[str]:
     return {"plugin.json", "mcp.json"} - membership
 
 
+def _pack_tarball(package_dir: Path, npm: str, destination: Path) -> Path:
+    """Pack *package_dir* for real — the tarball bytes are the artifact."""
+    completed = subprocess.run(
+        [npm, "pack", "--ignore-scripts", "--json", "--pack-destination", str(destination)],
+        cwd=package_dir,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=180,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise AssertionError(
+            f"npm pack exit {completed.returncode}: {completed.stderr[-2000:]}"
+        )
+    [entry] = json.loads(completed.stdout)
+    return destination / entry["filename"]
+
+
+def _extract_tarball(tarball: Path, destination: Path) -> Path:
+    """Extract *tarball* into a fresh temp directory; never the live tree."""
+    destination.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(tarball, "r:gz") as archive:
+        archive.extractall(destination, filter="data")
+    return destination / "package"
+
+
+_PACKED_WIRE = "".join(
+    json.dumps(message) + "\n"
+    for message in (
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2025-06-18"},
+        },
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+    )
+)
+
+
+def _packed_server_versions(package_root: Path) -> dict[str, dict[str, object]]:
+    """Run both packed stdio servers and return their initialize/tools reply."""
+    observed: dict[str, dict[str, object]] = {}
+    for server in ("preview", "evidence"):
+        completed = smoke._run_command(
+            [
+                sys.executable,
+                "-X",
+                "utf8",
+                str(package_root / "mcp" / server / "server.py"),
+            ],
+            cwd=package_root,
+            timeout=60,
+            input_text=_PACKED_WIRE,
+        )
+        responses = {
+            payload["id"]: payload
+            for payload in map(json.loads, completed.stdout.splitlines())
+            if isinstance(payload, dict) and isinstance(payload.get("id"), int)
+        }
+        info = responses[1]["result"]["serverInfo"]
+        observed[server] = {
+            "name": info.get("name"),
+            "version": info.get("version"),
+            "tools": [tool["name"] for tool in responses[2]["result"]["tools"]],
+        }
+    return observed
+
+
+def _assert_packed_versions_match(package_root: Path) -> dict[str, dict[str, object]]:
+    """The packed servers must report the version of the package they ship in."""
+    declared = json.loads(
+        (package_root / "package.json").read_text(encoding="utf-8")
+    )["version"]
+    observed = _packed_server_versions(package_root)
+    for server, info in observed.items():
+        if info["version"] != declared:
+            raise AssertionError(
+                f"packed {server} initialize.version {info['version']!r} "
+                f"does not match package.json version {declared!r}"
+            )
+    return observed
+
+
 class PortableBundlePackagingTests(unittest.TestCase):
     """T-156: the portable bundle is a distribution surface, not just a
     committed snapshot — the real pack inventory must carry both manifests."""
@@ -276,6 +362,58 @@ class PortableBundlePackagingTests(unittest.TestCase):
             _missing_portable_manifests(membership),
             {"mcp.json", "plugin.json"},
         )
+
+
+class PackedMcpVersionTests(unittest.TestCase):
+    """T-161: the published tarball must carry the MCP version of record.
+
+    ``mcp/version.py`` reads ``.claude-plugin/plugin.json`` as its only
+    authority, so the npm ``files`` allowlist must ship that exact file. Only
+    a real pack plus a real stdio handshake proves the installed package
+    reports its own version; a source-tree probe or mocked transport passes
+    while the tarball silently reports ``0.0.0``.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.npm = shutil.which("npm")
+        if cls.npm is None:
+            raise unittest.SkipTest("npm not found on PATH — skipping packed MCP version")
+        cls._tmp = tempfile.TemporaryDirectory(prefix="packed-mcp-version-")
+        cls.addClassCleanup(cls._tmp.cleanup)
+        cls.package_dir = ROOT / "packages" / "design-playbook"
+        cls.tarball = _pack_tarball(cls.package_dir, cls.npm, Path(cls._tmp.name))
+
+    def _extracted(self, name: str) -> Path:
+        return _extract_tarball(self.tarball, Path(self._tmp.name) / name)
+
+    def test_packed_servers_report_the_packaged_version(self) -> None:
+        package_root = self._extracted("positive")
+        observed = _assert_packed_versions_match(package_root)
+
+        self.assertTrue(
+            (package_root / ".claude-plugin" / "plugin.json").is_file(),
+            "the tarball must carry mcp/version.py's only version source",
+        )
+        self.assertEqual(
+            {server: info["tools"] for server, info in observed.items()},
+            {
+                "preview": ["preview_prototype"],
+                "evidence": ["execute_capture_plan"],
+            },
+        )
+
+    def test_version_assertion_rejects_a_tarball_without_the_manifest(
+        self,
+    ) -> None:
+        # Negative control: removing the canonical manifest from the extracted
+        # temp package (never the live tree) makes both servers report 0.0.0,
+        # which the version assertion must reject rather than pass.
+        package_root = self._extracted("negative")
+        (package_root / ".claude-plugin" / "plugin.json").unlink(missing_ok=True)
+
+        with self.assertRaisesRegex(AssertionError, r"0\.0\.0"):
+            _assert_packed_versions_match(package_root)
 
 
 class InstalledMetadataTests(unittest.TestCase):
