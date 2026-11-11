@@ -25,6 +25,30 @@ from design_playbook.scripts.pointback_projection import (  # noqa: E402
 
 
 class PointBackProjectionTests(unittest.TestCase):
+    def test_a_case_variant_ledger_criterion_projects_under_its_id(self) -> None:
+        # G2 accepts the spelling case-insensitively; the projection must key
+        # the row under the same canonical id the caller declared.
+        text = """# Point-back
+
+audited: true
+
+## Verdict
+
+Pass
+
+## Evidence ledger
+
+criterion: l6.1
+required: checkout succeeds
+observed: completed order
+result: pass
+"""
+
+        projection = project_pointback(text, ("L6.1",))
+
+        self.assertEqual(projection.criteria[0].criterion_id, "L6.1")
+        self.assertEqual(projection.criteria[0].outcome, "pass")
+
     def test_projects_audited_verdict_criteria_and_coverage_immutably(self) -> None:
         text = """# Point-back
 

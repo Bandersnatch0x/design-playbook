@@ -938,6 +938,42 @@ def main() -> int:
             *_g6_args(case), legacy=True,
         )
 
+    # G6 stays conditional on an evidence authority: a legacy or selective
+    # reading that names no --run-root / --evidence-dir must not turn every
+    # cited evidence/ artifact into an unavailable failure.
+    bound_case = PASS / "g6-evidence-bound"
+    expect_valid(
+        failures,
+        "g6-evidence-refs-without-authority/legacy",
+        g6_spec,
+        bound_case / "point-back.md",
+        legacy=True,
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        coverage_pb = Path(tmp) / "point-back.md"
+        _write_text(
+            coverage_pb,
+            (bound_case / "point-back.md").read_text(encoding="utf-8")
+            + "\n## Coverage statement\n\n"
+              "必审: primary path complete\n未审: none\n",
+        )
+        expect_valid(
+            failures,
+            "g6-evidence-refs-without-authority/selective",
+            g6_spec,
+            coverage_pb,
+            "--require-coverage",
+        )
+    # Complete acceptance keeps the fail-closed reading: with no evidence
+    # authority, the required evidence gate names the missing directory.
+    expect_invalid(
+        failures,
+        "g6-evidence-refs-without-authority/default",
+        g6_spec,
+        bound_case / "point-back.md",
+        "--evidence-dir is missing or not a directory",
+    )
+
     expect_invalid(
         failures,
         "g6-dangling-ref",

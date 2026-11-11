@@ -15,6 +15,7 @@ if str(PKG) not in sys.path:
 
 from design_playbook.scripts.run_facts import (  # noqa: E402
     STATED_ARTIFACTS,
+    _manifest_references,
     capture_run_facts,
     resolve_declared_fill,
 )
@@ -340,6 +341,22 @@ class SuppliedSnapshotPolicyTests(unittest.TestCase):
                 spec_path=spec, pointback_path=pointback, run_root=root)
             rules = self._profile_rules(root, facts, require=False)
             self.assertNotIn("G12.run_profile", rules)
+
+
+class ManifestReferenceTests(unittest.TestCase):
+    def test_a_leaf_artifact_gets_one_prefix(self) -> None:
+        self.assertEqual(
+            _manifest_references(('{"artifact": "a.png"}',)),
+            ("evidence/a.png",))
+
+    def test_an_already_prefixed_artifact_is_not_prefixed_again(self) -> None:
+        self.assertEqual(
+            _manifest_references(('{"artifact": "evidence/a.png"}',)),
+            ("evidence/a.png",))
+
+    def test_unusable_lines_contribute_nothing(self) -> None:
+        self.assertEqual(
+            _manifest_references(("not json", '{"artifact": ""}')), ())
 
 
 if __name__ == "__main__":

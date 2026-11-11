@@ -168,6 +168,13 @@ class CompleteObligationTests(unittest.TestCase):
     def test_a_complete_visual_repair_passes(self) -> None:
         self.assertEqual(_check(_repair_text(), self.layout), [])
 
+    def test_a_case_variant_ledger_criterion_still_finds_the_retest(self) -> None:
+        # G2 accepts `l6.3` as the same criterion; the repair obligation must
+        # look it up under that same canonical spelling instead of reporting
+        # zero rows and hiding the real cause.
+        text = _repair_text().replace("criterion: L6.3", "criterion: l6.3")
+        self.assertEqual(_check(text, self.layout), [])
+
     def test_omitting_the_annotation_is_blocked(self) -> None:
         text = (
             "# point-back\n\n## Evidence ledger\n" + LEDGER
@@ -498,6 +505,20 @@ class LegacyStructuralCliTests(unittest.TestCase):
             "  repair-evidence: criterion=L6.1 "
             "before=evidence/L6.1-r1.png after=evidence/L6.1-r2.png\n")
         result = self._validate(run_dir)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("RUN OK", result.stdout)
+
+    def test_no_evidence_authority_keeps_the_structural_reading(self) -> None:
+        # Legacy names no --evidence-dir/--run-root: G6's conditional gate is
+        # off, so a shape-valid pair is not reported as unavailable proof.
+        run_dir = self._run_dir(
+            "  repair-evidence: criterion=L6.1 "
+            "before=evidence/L6.1-r1.png after=evidence/L6.1-r2.png\n")
+        result = subprocess.run(
+            [sys.executable, str(VALIDATOR), str(run_dir / "spec.md"),
+             str(run_dir / "point-back.md"), "--legacy"],
+            capture_output=True, text=True, encoding="utf-8",
+        )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("RUN OK", result.stdout)
 

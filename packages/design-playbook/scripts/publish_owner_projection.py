@@ -58,6 +58,7 @@ if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
 from design_playbook.mcp.evidence.ledger_syntax import (  # noqa: E402
+    criterion_token,
     parse_ledger,
 )
 
@@ -213,7 +214,7 @@ def criteria_rows(ledger_text: str, entries: list[dict]) -> list[dict]:
     for entry in entries:
         criterion = entry.get("criterion")
         if isinstance(criterion, str) and criterion:
-            bindings.setdefault(criterion, []).append(
+            bindings.setdefault(criterion_token(criterion), []).append(
                 prefixed_digest(entry.get("sha256"))
             )
 
@@ -224,7 +225,7 @@ def criteria_rows(ledger_text: str, entries: list[dict]) -> list[dict]:
         results = ledger_row.values("result")
         if not criteria:
             raise ProjectionPublishError("ledger row has no criterion id")
-        criterion_id = criteria[0]
+        criterion_id = criterion_token(criteria[0])
         if len(criteria) > 1:
             raise ProjectionPublishError(
                 f"ledger row for {criterion_id} repeats its criterion id"

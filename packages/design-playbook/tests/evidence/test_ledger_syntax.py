@@ -24,6 +24,7 @@ if str(_PKG_ROOT) not in sys.path:
 from design_playbook.mcp.evidence.ledger_syntax import (  # noqa: E402
     FieldOccurrence,
     LedgerRow,
+    criterion_token,
     parse_ledger,
 )
 from design_playbook.scripts.g6_records import ledger_observed  # noqa: E402
@@ -178,6 +179,29 @@ class ArtifactTokenTests(unittest.TestCase):
         # at the consumer, so it is treated as free text).
         row = _row("criterion: L6.1\nobserved: (free text comment)\n")
         self.assertEqual(row.artifact_token, "(free text comment)")
+
+
+class CriterionTokenTests(unittest.TestCase):
+    """The criterion token is canonicalized once for G4 and G6.
+
+    G2 accepts the spelling case-insensitively and folds leading zeros, so the
+    gates downstream must look the row up under the same spelling or one gate
+    accepts a row the next reports missing.
+    """
+
+    def test_spelling_is_canonicalized(self):
+        self.assertEqual(criterion_token("L6.3"), "L6.3")
+        self.assertEqual(criterion_token("l6.3"), "L6.3")
+        self.assertEqual(criterion_token("L6.03"), "L6.3")
+        self.assertEqual(criterion_token("  L6.12  extra"), "L6.12")
+
+    def test_unknown_shapes_keep_their_leading_token(self):
+        self.assertEqual(criterion_token("L7.1"), "L7.1")
+        self.assertEqual(criterion_token(""), "")
+
+    def test_ledger_projection_uses_the_canonical_spelling(self):
+        text = "criterion: L6.03\nobserved: evidence/a.png\nresult: pass\n"
+        self.assertEqual(ledger_observed(text), [("L6.3", "evidence/a.png")])
 
 
 class LedgerFactsShapeTests(unittest.TestCase):
