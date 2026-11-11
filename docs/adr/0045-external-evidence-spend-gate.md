@@ -621,11 +621,11 @@ block and refuses the tag when it is missing, malformed, or names another tag.
 
 ```release-authorization
 {
-  "tag": "v0.25.8",
+  "tag": "v0.25.9",
   "decision": "approved",
   "authority": "maintainer",
-  "reason": "Patch release by the maintainer's 2026-11-08 decision to publish the smallest increment from v0.25.7. It carries the accepted changes on main through a3043b4: complete acceptance now fails closed by default with explicit --legacy/--require-* migration, run-profile and present-baseline validation, named repair-proof obligations under one captured-byte integrity authority, rendered design-token probes, an isolated read-only evaluator, generated install and portable manifests, detector-bound rules with a narrow edit hook, workbench counter/canvas correctness, and ordered registry shards. No command, skill, or MCP server is added or removed. Public catalog submission remains paused.",
-  "contentSha256": "50a0915330a0c2190c289a5f40c00c976e1f9f32d83407aa29c5ca99807f151d"
+  "reason": "Patch release by the maintainer's 2026-11-11 decision to publish the smallest increment from v0.25.8. It restores the pre-v0.25.8 conditional scope of the G6 evidence gate when no explicit evidence authority is given, while complete acceptance stays fail-closed through the required-evidence gate; it also canonicalizes the leading criterion token to L6.<n> across ledger syntax, repair evidence, point-back projection, and owner publication, prefixes manifest references exactly once, and corrects the authority diagnostics. No command, skill, or MCP server is added or removed. Public catalog submission remains paused.",
+  "contentSha256": "762e1cc9137ff24c40987a699edf11cf3abc9b917dc569fb37e62436c5821574"
 }
 ```
 
