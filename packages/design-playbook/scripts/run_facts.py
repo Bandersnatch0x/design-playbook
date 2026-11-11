@@ -664,7 +664,12 @@ def _manifest_references(manifest_lines: tuple[str, ...]) -> tuple[str, ...]:
             continue
         artifact = entry.get("artifact") if isinstance(entry, dict) else None
         if isinstance(artifact, str) and artifact:
-            references.append(EVIDENCE_PREFIX + artifact)
+            # A manifest may name the artifact by leaf (normal) or already as
+            # an evidence-relative path; prefix exactly once.
+            if artifact.casefold().startswith(EVIDENCE_PREFIX):
+                references.append(artifact)
+            else:
+                references.append(EVIDENCE_PREFIX + artifact)
     return tuple(references)
 
 

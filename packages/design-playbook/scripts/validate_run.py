@@ -115,7 +115,10 @@ Repair evidence (T-152 / T-159, ADR-0045 2026-11-07 amendment):
   pair or proof-type obligation is invented and the run must not be reported
   as complete acceptance. Artifact bytes are frozen during the explicit
   snapshot capture; supplying a snapshot without those facts fails as
-  unavailable rather than re-reading disk.
+  unavailable rather than re-reading disk. With no evidence authority named
+  at all (no --run-root / --evidence-dir, no supplied snapshot) the G6
+  reference check keeps its historical conditional scope and stays off;
+  complete acceptance still fails the required-evidence gate.
 
 Run profile (ADR-0029 D2):
   Every mode reads one plan location: <run-root>/plan.md when --run-root is
@@ -193,6 +196,9 @@ from design_playbook.scripts.g6_warnings import (  # noqa: E402
 
 # Preview occurrence facts for the strict-mode G5 check; G5 rules themselves
 # live in g5_preview.py (C1 / ADR-0004 keeps the integrity rules bundled).
+from design_playbook.mcp.evidence.ledger_syntax import (  # noqa: E402
+    criterion_token,
+)
 from design_playbook.scripts.g6_records import ledger_observed  # noqa: E402
 from design_playbook.scripts.run_facts import (  # noqa: E402
     STATE_MISSING,
@@ -667,12 +673,23 @@ def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
     # and a passing current retest. Legacy and explicit --require-* selections
     # validate annotations that exist without inventing new obligations.
     # Every reference resolves through the one G6 owner over frozen facts.
+    # Resolve the one artifact-fact value the evidence gates read. A supplied
+    # authority (--run-root / --evidence-dir) keeps the fail-closed reading: a
+    # missing fact is ``()`` so every reference reports unavailable. With no
+    # authority at all the conditional gate keeps its historical scope: G4's
+    # structural reading skips reference verification, and G6 stays off.
+    if facts.evidence_artifacts is not None:
+        evidence_facts = facts.evidence_artifacts
+    elif ed is not None or rr is not None:
+        evidence_facts = ()
+    else:
+        evidence_facts = None
     errs += check_repair_evidence(
         pointback_text,
         entries,
         requirements=_proof_requirements(spec_text),
         ledger=facts.ledger,
-        artifact_facts=facts.evidence_artifacts,
+        artifact_facts=evidence_facts,
         require_complete=inputs.require_repair_evidence,
     )
     # G11 (vNext S1): six-block reports must carry a Coverage statement with
@@ -737,15 +754,15 @@ def run(inputs: RunInputs) -> tuple[list[Finding], list[Finding]]:
     errs += check_evidence(
         pointback_text, len(_l6_items(spec_text)), ed, rr,
         observed_rows=observed_rows, entries=entries,
-        # A supplied snapshot is never re-read: ``None`` (facts not captured)
-        # becomes an explicit empty tuple, so every needed reference reports
-        # G6.artifact_facts_unavailable instead of falling back to disk.
-        artifact_facts=(
-            facts.evidence_artifacts
-            if facts.evidence_artifacts is not None else ()),
+        # A supplied snapshot is never re-read: a captured ``None`` becomes an
+        # explicit empty tuple, so every needed reference reports
+        # G6.artifact_facts_unavailable instead of falling back to disk. With
+        # no evidence authority at all, ``None`` keeps the conditional gate
+        # off (the historical reading) instead of failing every reference.
+        artifact_facts=evidence_facts,
     )
     method_rows = [
-        (values[0].split()[0], row.values("result")[0], row.artifact_token)
+        (criterion_token(values[0]), row.values("result")[0], row.artifact_token)
         for row in facts.ledger.rows
         if (values := row.values("criterion")) and values[0]
         and row.values("result") and row.values("result")[0]

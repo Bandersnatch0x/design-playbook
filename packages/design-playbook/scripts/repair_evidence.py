@@ -34,7 +34,12 @@ Every artifact reference - ledger observed, finding failure evidence, repair
 before/after - goes through the one G6 ``validate_references`` owner over the
 snapshot's frozen artifact facts. This module contributes only closure,
 association, and sufficiency diagnostics; it never opens a file, never parses
-a capture request, and never compares bytes itself.
+a capture request, and never compares bytes itself. ``artifact_facts=None``
+means no evidence authority was supplied at all (no ``--run-root`` /
+``--evidence-dir``, no supplied snapshot): the structural reading validates
+annotation shape, association, pairing, and the ``evidence/`` prefix, but
+does not claim a binding it cannot inspect. Complete acceptance always
+supplies the frozen facts, so a stripped snapshot still reports unavailable.
 
 Byte-identical visual halves are ``G4.repair_evidence_unchanged``: the pair is
 insufficient to demonstrate the declared visible change. That is not a
@@ -49,6 +54,7 @@ from dataclasses import dataclass
 from design_playbook.mcp.evidence.ledger_syntax import (
     LedgerFacts,
     artifact_token,
+    criterion_token,
     parse_ledger,
 )
 from design_playbook.scripts._diagnostics import Finding, finding
@@ -207,7 +213,7 @@ def _ledger_retests(facts: LedgerFacts) -> dict[str, list[_LedgerRetest]]:
         criterion_values = row.values("criterion")
         if not criterion_values or not criterion_values[0]:
             continue
-        token = criterion_values[0].split()[0]
+        token = criterion_token(criterion_values[0])
         result_values = row.values("result")
         retests.setdefault(token, []).append(_LedgerRetest(
             criterion=token,
@@ -723,6 +729,18 @@ def _check_legacy_annotation(
         return errs
     before_ref, after_ref = _pair_refs(
         annotation, criterion, None, require_hash=False)
+    if artifact_facts is None:
+        # Structural reading with no evidence authority (no --run-root /
+        # --evidence-dir, no supplied snapshot): G6's conditional gate is off,
+        # so bindability cannot be judged. The tokens must still be
+        # evidence-relative; shape and pairing were checked above.
+        bindings = validate_references(
+            [before_ref, after_ref], entries, set(requirements), None)
+        for binding in bindings:
+            for diagnostic in binding.diagnostics:
+                if diagnostic.code == "reference_prefix":
+                    errs.append(reference_finding(binding, diagnostic))
+        return errs
     g6_errs, bindings = _g6_findings(
         [before_ref, after_ref], entries, set(requirements), artifact_facts)
     errs.extend(g6_errs)
@@ -772,10 +790,12 @@ def check_repair_evidence(
 
     ``requirements`` is the G1 proof-requirement projection; its criterion set
     is the declared L6 universe. ``ledger`` and ``artifact_facts`` come from
-    the same capture as ``text``; a missing fact fails as unavailable and is
-    never re-read. ``require_complete`` is set from the same complete-profile
-    value as the CLI's other complete-acceptance requirements - it is never
-    inferred from the individual ``--require-*`` flags.
+    the same capture as ``text``; an empty tuple fails every reference as
+    unavailable and is never re-read, while ``None`` means no evidence
+    authority was supplied, so the structural reading skips binding checks.
+    ``require_complete`` is set from the same complete-profile value as the
+    CLI's other complete-acceptance requirements - it is never inferred from
+    the individual ``--require-*`` flags.
     """
     findings = parse_findings(text)
     closure_facts = parse_closures(text)

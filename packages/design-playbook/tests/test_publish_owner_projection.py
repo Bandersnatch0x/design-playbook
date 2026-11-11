@@ -128,6 +128,12 @@ class TranscriptionTest(PublisherTestCase):
         # N/A is not applicable, which is not a pass.
         self.assertEqual(rows[1]["verdict"], "unknown")
 
+    def test_a_case_variant_criterion_is_published_canonically(self) -> None:
+        rows = criteria_rows(LEDGER.replace("criterion: L6.1", "criterion: l6.1"),
+                             self.entries)
+        self.assertEqual(rows[0]["criterionId"], "L6.1")
+        self.assertEqual(rows[0]["evidenceHashes"], ["sha256:" + DIGEST_A])
+
     def test_criterion_evidence_hashes_come_from_the_manifest(self) -> None:
         rows = criteria_rows(LEDGER, self.entries)
         self.assertEqual(rows[0]["evidenceHashes"], ["sha256:" + DIGEST_A])

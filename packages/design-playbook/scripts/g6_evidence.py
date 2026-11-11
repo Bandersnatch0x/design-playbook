@@ -439,9 +439,10 @@ def reference_finding(
             owner="validate_run.py",
             expected="artifact bytes frozen during the explicit capture",
             actual=detail or "artifact facts not captured",
-            repair="Recapture the run snapshot with evidence collection so "
-                   "the reference can be verified; a supplied snapshot is "
-                   "never re-read",
+            repair="Pass --run-root (or --evidence-dir) so the run's "
+                   "artifacts are captured, or recapture the snapshot with "
+                   "evidence collection; a supplied snapshot is never "
+                   "re-read",
         )
     if code == "reference_prefix":
         return finding(

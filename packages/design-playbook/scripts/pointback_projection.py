@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Literal, cast
 
-from design_playbook.mcp.evidence.ledger_syntax import parse_ledger
+from design_playbook.mcp.evidence.ledger_syntax import (
+    criterion_token,
+    parse_ledger,
+)
 from design_playbook.scripts.audit_preferences import parse_audit_marker
 from design_playbook.scripts.finding_syntax import (
     VALID_DISPOSITIONS,
@@ -210,7 +213,7 @@ def project_pointback(
         verdict = VerdictDisposition.NO_CANONICAL_VALUE
 
     rows_by_criterion = {
-        row.values("criterion")[0]: row
+        criterion_token(row.values("criterion")[0]): row
         for row in ledger_facts.rows
         if row.values("criterion")
     }

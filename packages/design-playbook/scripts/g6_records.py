@@ -21,7 +21,11 @@ from datetime import datetime
 from pathlib import Path
 
 from design_playbook.mcp.evidence import containment
-from design_playbook.mcp.evidence.ledger_syntax import LedgerFacts, parse_ledger
+from design_playbook.mcp.evidence.ledger_syntax import (
+    LedgerFacts,
+    criterion_token,
+    parse_ledger,
+)
 from design_playbook.scripts.stages import EVIDENCE_PREFIX
 
 
@@ -33,9 +37,10 @@ def ledger_observed(
 
     Projects the G6 view from the single ledger syntax-facts module
     (ADR-0025). The criterion is the first whitespace-delimited token of the
-    row's first ``criterion`` value; the observed token is the derived leading
-    artifact token of the row's first ``observed`` value. A row contributes a
-    pair only when both are non-empty - matching the historical parser's
+    row's first ``criterion`` value, canonicalized to ``L6.<n>`` (the spelling
+    G2 accepts); the observed token is the derived leading artifact token of
+    the row's first ``observed`` value. A row contributes a pair only when
+    both are non-empty - matching the historical parser's
     ``^criterion:\\s*(\\S+)`` and ``^observed:\\s*(.+)`` row-inclusion rule.
 
     Trailing commentary after the token (whitespace or a (full/half-width)
@@ -56,8 +61,8 @@ def ledger_observed(
             continue
         if not row.raw_observed:
             continue
-        criterion_token = criterion_values[0].split()[0]
-        pairs.append((criterion_token, row.artifact_token))
+        pairs.append((
+            criterion_token(criterion_values[0]), row.artifact_token))
     return pairs
 
 

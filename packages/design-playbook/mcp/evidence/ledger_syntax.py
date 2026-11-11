@@ -101,6 +101,27 @@ def artifact_token(raw_value: str) -> str:
     return match.group(0) if match else raw_value
 
 
+_CRITERION_TOKEN = re.compile(r"(?i)L6\.([0-9]+)\Z")
+
+
+def criterion_token(raw_value: str) -> str:
+    """The leading criterion token, canonicalized to ``L6.<n>``.
+
+    G2 accepts the criterion spelling case-insensitively and maps leading
+    zeros to the same number, so G4 and G6 must look the ledger up under that
+    same canonical spelling or a row one gate accepted reads as missing to
+    the next. Unknown shapes keep their first token verbatim - the shape
+    diagnostic belongs to G2.
+    """
+    parts = raw_value.split()
+    token = parts[0] if parts else ""
+    match = _CRITERION_TOKEN.fullmatch(token)
+    if match is None:
+        return token
+    digits = match.group(1).lstrip("0") or "0"
+    return f"L6.{digits}"
+
+
 def parse_ledger(text: str) -> LedgerFacts:
     """Parse Evidence ledger point-back text into syntax facts.
 
