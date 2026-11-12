@@ -74,6 +74,25 @@ const elements = {
   rows: document.getElementById("project-rows"),
   removedProjects: document.getElementById("removed-projects"),
   removedProjectList: document.getElementById("removed-project-list"),
+  workspaceHeader: document.getElementById("workspace-header"),
+  workspaceWelcome: document.getElementById("workspace-welcome"),
+  workspaceOverview: document.getElementById("workspace-overview"),
+  workspaceTitle: document.getElementById("workspace-title"),
+  ovAssets: document.getElementById("ov-assets"),
+  ovCanvas: document.getElementById("ov-canvas"),
+  ovWork: document.getElementById("ov-work"),
+  ovOwner: document.getElementById("ov-owner"),
+  ovLife: document.getElementById("ov-life"),
+  ovProposals: document.getElementById("ov-proposals"),
+  workspacePath: document.getElementById("workspace-path"),
+  workspaceState: document.getElementById("workspace-state"),
+  workspaceGrants: document.getElementById("workspace-grants"),
+  wsAssets: document.getElementById("ws-assets"),
+  wsCanvas: document.getElementById("ws-canvas"),
+  wsWork: document.getElementById("ws-work"),
+  wsOwner: document.getElementById("ws-owner"),
+  wsLife: document.getElementById("ws-life"),
+  wsProposals: document.getElementById("ws-proposals"),
   rowTemplate: document.getElementById("project-row-template"),
   live: document.getElementById("live"),
   proposalsPanel: document.getElementById("proposals-panel"),
@@ -483,6 +502,7 @@ function focusIntoPanel(target) {
   }
   state.panelTriggerStack.push(trigger instanceof HTMLElement ? trigger : null);
   for (const sibling of panels) sibling.hidden = sibling !== panel;
+  syncWorkspaceHome();
   target.setAttribute("tabindex", "-1");
   target.focus();
 }
@@ -492,6 +512,7 @@ function restorePanelTrigger() {
   if (!trigger || !document.contains(trigger)) return;
   const parent = trigger.closest(".panel");
   if (workspacePanels().includes(parent)) parent.hidden = false;
+  syncWorkspaceHome();
   if (!trigger.closest("[hidden]")) trigger.focus();
 }
 
@@ -515,6 +536,9 @@ function failSession(message) {
   elements.sessionError.hidden = false;
   elements.sessionErrorMessage.textContent = message;
   elements.probeForm.hidden = true;
+  elements.workspaceHeader.hidden = true;
+  elements.workspaceOverview.hidden = true;
+  elements.workspaceWelcome.hidden = true;
 }
 
 let clickedButton = null;
@@ -682,6 +706,34 @@ function grantLabel(scopes) {
   return scopes.map((scope) => labels[scope] || scope).join("、");
 }
 
+function currentProject() {
+  return state.projects.find(
+    (project) => project.projectId === state.currentProjectId
+  ) || null;
+}
+
+function connectionText(value) {
+  return value === "connected"
+    ? "已连接"
+    : value === "disconnected"
+      ? "已断开"
+      : value;
+}
+
+function syncWorkspaceHome() {
+  const project = currentProject();
+  const anyOpen = workspacePanels().some((panel) => !panel.hidden);
+  elements.workspaceHeader.hidden = !project;
+  elements.workspaceWelcome.hidden = Boolean(project) || anyOpen;
+  elements.workspaceOverview.hidden = !project || anyOpen;
+  if (!project) return;
+  elements.workspaceTitle.textContent = project.name;
+  elements.workspacePath.textContent = project.canonicalPath;
+  elements.workspaceState.dataset.state = project.connectionState;
+  elements.workspaceState.textContent = connectionText(project.connectionState);
+  elements.workspaceGrants.textContent = `授权 ${grantLabel(project.grantScopes)}`;
+}
+
 function renderProjects() {
   elements.rows.textContent = "";
   const projects = state.projects;
@@ -696,17 +748,14 @@ function renderProjects() {
       cell.dataset.label = headers[index].textContent;
     });
     row.querySelector(".project-name").textContent = project.name;
-    row.querySelector(".current-flag").hidden =
-      project.projectId !== state.currentProjectId;
+    const isCurrent = project.projectId === state.currentProjectId;
+    row.querySelector(".current-flag").hidden = !isCurrent;
+    row.querySelector(".open-button").hidden = isCurrent;
     row.querySelector(".project-path").textContent = project.canonicalPath;
     const badge = row.querySelector(".state-badge");
     const connected = project.connectionState === "connected";
     badge.dataset.state = project.connectionState;
-    badge.textContent = connected
-      ? "已连接"
-      : project.connectionState === "disconnected"
-        ? "已断开"
-        : project.connectionState;
+    badge.textContent = connectionText(project.connectionState);
     row.querySelector(".grant-list").textContent = grantLabel(project.grantScopes);
     row.querySelector(".open-button").addEventListener("click", () => openProject(project));
     wireRowMenu(row);
@@ -725,6 +774,7 @@ function renderProjects() {
     elements.rows.appendChild(fragment);
   }
   renderRemovedProjects();
+  syncWorkspaceHome();
 }
 
 function renderRemovedProjects() {
@@ -1364,8 +1414,8 @@ async function openAssets(project) {
   elements.assetsScope.textContent = `目录：${project.canonicalPath}`;
   elements.assetsPanel.hidden = false;
   elements.assetsError.hidden = true;
-  await loadAssets();
   focusIntoPanel(elements.assetsHeading);
+  await loadAssets();
 }
 
 function assetQueryString() {
@@ -5179,6 +5229,31 @@ async function restoreBackup() {
   }
 }
 
+function wireWorkspaceActions() {
+  const actions = [
+    [elements.wsAssets, openAssets],
+    [elements.wsCanvas, openCanvas],
+    [elements.wsWork, openWork],
+    [elements.wsOwner, openOwner],
+    [elements.wsLife, openLifecycle],
+    [elements.wsProposals, openProposals],
+    [elements.ovAssets, openAssets],
+    [elements.ovCanvas, openCanvas],
+    [elements.ovWork, openWork],
+    [elements.ovOwner, openOwner],
+    [elements.ovLife, openLifecycle],
+    [elements.ovProposals, openProposals],
+  ];
+  for (const [button, open] of actions) {
+    if (!button) continue;
+    button.addEventListener("click", () => {
+      const project = currentProject();
+      if (project) open(project);
+    });
+  }
+}
+
+wireWorkspaceActions();
 elements.backupCreate.addEventListener("click", createBackup);
 elements.backupVerify.addEventListener("click", verifyBackup);
 elements.restoreRun.addEventListener("click", restoreBackup);
