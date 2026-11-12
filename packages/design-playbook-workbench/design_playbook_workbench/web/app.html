@@ -33,7 +33,7 @@
     </p>
   </section>
 
-  <section class="panel" aria-labelledby="add-heading">
+  <section class="panel" id="add-panel" aria-labelledby="add-heading">
     <h2 id="add-heading">添加本机项目目录</h2>
     <p class="hint">
       输入项目的<strong>绝对目录</strong>。登记的只是工作台访问授权，
@@ -44,33 +44,34 @@
       <input id="project-path" name="path" type="text" spellcheck="false"
              placeholder="D:\work\my-product" required
              aria-describedby="project-path-help">
-      <button type="submit" id="probe-button">检查目录</button>
+      <button type="submit" id="probe-button" class="primary">检查目录</button>
     </form>
     <p id="project-path-help" class="hint">
       只接受本机绝对路径。相对路径、文件名、网络路径与当前用户主目录本身会被拒绝。
     </p>
 
-    <div id="candidate" class="candidate" hidden aria-labelledby="candidate-heading">
-      <h3 id="candidate-heading">确认登记</h3>
-      <dl class="facts">
-        <dt>规范化绝对路径</dt><dd id="candidate-path"></dd>
-        <dt>目录身份</dt><dd id="candidate-identity"></dd>
-        <dt>授权范围</dt><dd id="candidate-scope">只读发现</dd>
-      </dl>
-      <p class="hint" id="candidate-warning">
-        登记前请核对以上路径与身份。目录移动、权限撤回或身份变化后本工作台会显示断开，不会自动匹配同名目录。
-      </p>
-      <form id="register-form" class="row-form" autocomplete="off">
-        <label for="project-name">项目名称（可选）</label>
-        <input id="project-name" name="name" type="text" maxlength="120"
-               placeholder="默认使用目录名">
-        <button type="submit" id="register-button" class="primary">登记项目</button>
-        <button type="button" id="cancel-candidate" class="secondary">取消</button>
-      </form>
-    </div>
   </section>
 
-  <section class="panel" aria-labelledby="list-heading">
+  <section class="panel candidate" id="candidate" hidden aria-labelledby="candidate-heading">
+    <h3 id="candidate-heading">确认登记</h3>
+    <dl class="facts">
+      <dt>规范化绝对路径</dt><dd id="candidate-path"></dd>
+      <dt>目录身份</dt><dd id="candidate-identity"></dd>
+      <dt>授权范围</dt><dd id="candidate-scope">只读发现</dd>
+    </dl>
+    <p class="hint" id="candidate-warning">
+      登记前请核对以上路径与身份。目录移动、权限撤回或身份变化后本工作台会显示断开，不会自动匹配同名目录。
+    </p>
+    <form id="register-form" class="row-form" autocomplete="off">
+      <label for="project-name">项目名称（可选）</label>
+      <input id="project-name" name="name" type="text" maxlength="120"
+             placeholder="默认使用目录名">
+      <button type="submit" id="register-button" class="primary">登记项目</button>
+      <button type="button" id="cancel-candidate" class="secondary">取消</button>
+    </form>
+  </section>
+
+  <section class="panel" id="project-panel" aria-labelledby="list-heading">
     <div class="panel-head">
       <h2 id="list-heading">项目</h2>
       <button type="button" id="refresh-button" class="secondary">重新探测</button>
@@ -99,6 +100,77 @@
         本地源目录永远不会被改动。
       </p>
       <ul id="removed-project-list"></ul>
+    </div>
+  </section>
+
+  <section id="workspace-header" class="panel workspace-header" hidden aria-labelledby="workspace-title">
+    <div class="workspace-identity">
+      <p class="workspace-kicker">当前项目</p>
+      <h2 id="workspace-title">—</h2>
+      <p id="workspace-path" class="workspace-path"></p>
+      <p class="workspace-meta">
+        <span id="workspace-state" class="state-badge"></span>
+        <span id="workspace-grants"></span>
+      </p>
+      <p class="hint workspace-hint">从能力入口打开资产、画布、任务、验证、生命周期或提案。</p>
+    </div>
+    <nav class="workspace-actions" aria-label="项目能力">
+      <button type="button" id="ws-assets" class="primary">资产</button>
+      <button type="button" id="ws-canvas" class="secondary">画布</button>
+      <button type="button" id="ws-work" class="secondary">任务</button>
+      <button type="button" id="ws-owner" class="secondary">验证</button>
+      <button type="button" id="ws-life" class="secondary">生命周期</button>
+      <button type="button" id="ws-proposals" class="secondary">提案</button>
+    </nav>
+  </section>
+
+  <section id="workspace-welcome" class="panel workspace-welcome" aria-labelledby="workspace-welcome-title">
+    <p class="workspace-kicker">工作台</p>
+    <h2 id="workspace-welcome-title">从一个本机项目开始</h2>
+    <p class="hint">
+      在左侧登记项目目录。登记后，项目卡会显示连接状态；当前项目会在这里打开资产、画布、任务、验证、生命周期和提案。
+    </p>
+  </section>
+
+  <section class="panel workspace-overview" id="workspace-overview" hidden aria-labelledby="workspace-overview-title">
+    <div class="workspace-overview-head">
+      <div>
+        <p class="workspace-kicker">工作区</p>
+        <h2 id="workspace-overview-title">从这里开始</h2>
+      </div>
+    </div>
+    <p class="hint">选择一个能力进入当前项目。每个面板只读写当前项目。</p>
+    <div class="overview-grid">
+      <button type="button" class="overview-card overview-card-accent" id="ov-assets">
+        <span class="overview-index">01</span>
+        <span class="overview-title">资产</span>
+        <span class="overview-desc">导入、检索、版本与隔离预览</span>
+      </button>
+      <button type="button" class="overview-card" id="ov-canvas">
+        <span class="overview-index">02</span>
+        <span class="overview-title">画布</span>
+        <span class="overview-desc">编排、实例与固定快照</span>
+      </button>
+      <button type="button" class="overview-card" id="ov-work">
+        <span class="overview-index">03</span>
+        <span class="overview-title">任务</span>
+        <span class="overview-desc">智能体接手与结果</span>
+      </button>
+      <button type="button" class="overview-card" id="ov-owner">
+        <span class="overview-index">04</span>
+        <span class="overview-title">验证</span>
+        <span class="overview-desc">原负责方投影与回流</span>
+      </button>
+      <button type="button" class="overview-card" id="ov-life">
+        <span class="overview-index">05</span>
+        <span class="overview-title">生命周期</span>
+        <span class="overview-desc">归档、回收站与安全删除</span>
+      </button>
+      <button type="button" class="overview-card" id="ov-proposals">
+        <span class="overview-index">06</span>
+        <span class="overview-title">提案</span>
+        <span class="overview-desc">diff、批准应用与恢复</span>
+      </button>
     </div>
   </section>
 

@@ -196,6 +196,38 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         expect(self.page.locator("#asset-detail")).to_be_visible()
         expect(self.page.locator("#asset-detail-heading")).to_have_text("brand.md")
 
+    def test_workspace_header_and_rail_open_the_panels(self) -> None:
+        self._open_session()
+        expect(self.page.locator("#workspace-welcome")).to_be_visible()
+        expect(self.page.locator("#workspace-header")).to_be_hidden()
+        directory = self.h.make_directory("workspace-rail")
+        self._add_project(directory, name="Rail")
+        row = self.page.locator("#project-rows tr").first
+        expect(self.page.locator("#workspace-header")).to_be_hidden()
+        row.locator(".open-button").click()
+        expect(self.page.locator("#workspace-header")).to_be_visible()
+        expect(self.page.locator("#workspace-welcome")).to_be_hidden()
+        expect(self.page.locator("#workspace-title")).to_have_text("Rail")
+        self.page.click("#ws-assets")
+        expect(self.page.locator("#assets-panel")).to_be_visible()
+        self.page.keyboard.press("Escape")
+        expect(self.page.locator("#assets-panel")).to_be_hidden()
+        self.page.click("#ws-canvas")
+        expect(self.page.locator("#canvas-panel")).to_be_visible()
+
+    def test_workspace_overview_opens_a_panel_and_returns(self) -> None:
+        self._open_session()
+        directory = self.h.make_directory("workspace-overview")
+        self._add_project(directory, name="Overview")
+        row = self.page.locator("#project-rows tr").first
+        row.locator(".open-button").click()
+        expect(self.page.locator("#workspace-overview")).to_be_visible()
+        self.page.click("#ov-assets")
+        expect(self.page.locator("#assets-panel")).to_be_visible()
+        expect(self.page.locator("#workspace-overview")).to_be_hidden()
+        self.page.keyboard.press("Escape")
+        expect(self.page.locator("#workspace-overview")).to_be_visible()
+
     def test_disconnected_rebind_and_removal_journey(self) -> None:
         self._open_session()
         directory = self.h.make_directory("vanish")
