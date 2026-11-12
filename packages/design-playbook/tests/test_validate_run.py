@@ -973,6 +973,32 @@ def main() -> int:
         bound_case / "point-back.md",
         "--evidence-dir is missing or not a directory",
     )
+    # An authority that names a real directory still binds: the manifest and
+    # the bytes share the one explicit root, so the conditional gate runs.
+    expect_valid(
+        failures,
+        "g6-evidence-refs-with-evidence-dir-only",
+        g6_spec,
+        bound_case / "point-back.md",
+        "--evidence-dir", str(bound_case / "evidence"),
+        legacy=True,
+    )
+    # A named but inconsistent authority is fail-closed: the capture refuses
+    # to bind a manifest under one root to bytes under another, so the
+    # snapshot carries no facts and every reference reports unavailable.
+    with tempfile.TemporaryDirectory() as tmp:
+        mismatched_evidence = Path(tmp) / "evidence"
+        mismatched_evidence.mkdir()
+        expect_invalid(
+            failures,
+            "g6-evidence-authority-mismatch",
+            g6_spec,
+            bound_case / "point-back.md",
+            "no captured artifact facts in this snapshot",
+            "--evidence-dir", str(mismatched_evidence),
+            "--run-root", str(bound_case),
+            "--require-evidence",
+        )
 
     expect_invalid(
         failures,
