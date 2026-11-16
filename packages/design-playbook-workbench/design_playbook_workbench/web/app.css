@@ -602,18 +602,22 @@ select option {
   #proposals-panel, #canvas-panel, #work-panel, #owner-panel,
   #life-panel, #settings-panel { grid-column: 2; grid-row: 2; }
 
-  #add-panel .row-form {
+  #add-panel .row-form,
+  #candidate .row-form {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 0.4rem;
     align-items: stretch;
   }
-  #add-panel .row-form label { flex: none; }
+  #add-panel .row-form label,
+  #candidate .row-form label { flex: none; }
   #add-panel .row-form input,
-  #add-panel .row-form button { width: 100%; }
-  #add-panel .facts { grid-template-columns: minmax(0, 1fr); gap: 0.15rem; }
-  #add-panel .facts dt { margin-top: 0.35rem; }
-  #add-panel .facts dd { margin-bottom: 0.25rem; }
+  #add-panel .row-form button,
+  #candidate .row-form input,
+  #candidate .row-form button { width: 100%; }
+  #candidate .facts { grid-template-columns: minmax(0, 1fr); gap: 0.15rem; }
+  #candidate .facts dt { margin-top: 0.35rem; }
+  #candidate .facts dd { margin-bottom: 0.25rem; }
 
   #project-panel .project-table,
   #project-panel .project-table tbody,

@@ -106,6 +106,7 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         self.page.reload()
         expect(self.page.locator("#session-error")).to_be_visible()
         expect(self.page.locator("#session-state")).to_contain_text("会话不可用")
+        expect(self.page.locator("#workspace-welcome")).to_be_hidden()
 
     def test_shell_without_bootstrap_shows_no_project_data_or_credential(self) -> None:
         self.page.goto(self.origin + "/")
@@ -212,6 +213,8 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         expect(self.page.locator("#assets-panel")).to_be_visible()
         self.page.keyboard.press("Escape")
         expect(self.page.locator("#assets-panel")).to_be_hidden()
+        expect(self.page.locator("#workspace-overview")).to_be_visible()
+        expect(self.page.locator("#ws-assets")).to_be_focused()
         self.page.click("#ws-canvas")
         expect(self.page.locator("#canvas-panel")).to_be_visible()
 
@@ -226,6 +229,38 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         expect(self.page.locator("#assets-panel")).to_be_visible()
         expect(self.page.locator("#workspace-overview")).to_be_hidden()
         self.page.keyboard.press("Escape")
+        expect(self.page.locator("#workspace-overview")).to_be_visible()
+        expect(self.page.locator("#ov-assets")).to_be_focused()
+
+    def test_capability_from_another_row_follows_that_project(self) -> None:
+        # The workspace makes one project current and the header names it:
+        # a panel opened from a row must not leave the header on another one.
+        self._open_session()
+        first = self.h.make_directory("alpha-row")
+        second = self.h.make_directory("beta-row")
+        self._add_project(first, name="First")
+        self.page.fill("#project-path", str(second))
+        self.page.click("#probe-button")
+        expect(self.page.locator("#candidate")).to_be_visible()
+        self.page.fill("#project-name", "Second")
+        self.page.click("#register-button")
+        expect(self.page.locator("#project-rows tr")).to_have_count(2)
+
+        first_row = self.page.locator("#project-rows tr", has_text="First")
+        second_row = self.page.locator("#project-rows tr", has_text="Second")
+        first_row.locator(".more-button").click()
+        first_row.locator(".assets-button").click()
+        expect(self.page.locator("#assets-panel")).to_be_visible()
+        expect(self.page.locator("#workspace-title")).to_have_text("First")
+        expect(first_row.locator(".current-flag")).to_be_visible()
+        expect(first_row.locator(".open-button")).to_be_hidden()
+
+        # Switching the current project closes the open panel, so the header
+        # can never describe a different project than the panel below it.
+        second_row.locator(".open-button").click()
+        expect(self.page.locator("#assets-panel")).to_be_hidden()
+        expect(self.page.locator("#workspace-title")).to_have_text("Second")
+        expect(second_row.locator(".current-flag")).to_be_visible()
         expect(self.page.locator("#workspace-overview")).to_be_visible()
 
     def test_disconnected_rebind_and_removal_journey(self) -> None:
@@ -2861,6 +2896,13 @@ class IndependentReviewRegressionTest(unittest.TestCase):
         expect(
             self.page.locator("#project-rows tr").last.locator(".current-flag")
         ).to_be_visible()
+        # The chosen row no longer offers "设为当前"; the other row still does.
+        expect(
+            self.page.locator("#project-rows tr").last.locator(".open-button")
+        ).to_be_hidden()
+        expect(
+            self.page.locator("#project-rows tr").first.locator(".open-button")
+        ).to_be_visible()
         per_row = self.page.evaluate(
             "() => Array.from(document.querySelectorAll('#project-rows tr')).map("
             "(row) => Array.from(row.querySelectorAll('.current-flag'))"
@@ -3063,6 +3105,55 @@ class DesktopViewportAndZoomJourneyTest(unittest.TestCase):
             if row["focusable"] and not row["indicatorChanged"]
         ]
         self.assertEqual(missing, [], "focusable controls without a focus indicator")
+
+    def test_wide_layout_puts_the_workspace_in_the_right_column(self) -> None:
+        # >=1600px is the operator layout: add/project panels on the left,
+        # the current project and its panels on the right, canvas across both.
+        self._view(1920, 1080, 1)
+        self.page.locator("#project-rows tr .open-button").first.click()
+        expect(self.page.locator("#workspace-header")).to_be_visible()
+        expect(self.page.locator("#workspace-overview")).to_be_visible()
+
+        # Card rows carry list semantics; the off-screen headers leave the
+        # accessibility tree instead of describing a table that is not drawn.
+        expect(self.page.locator("#project-table")).to_have_attribute("role", "list")
+        expect(
+            self.page.locator("#project-rows tr").first
+        ).to_have_attribute("role", "listitem")
+        expect(
+            self.page.locator("#project-table thead")
+        ).to_have_attribute("aria-hidden", "true")
+
+        add = self.page.locator("#add-panel").bounding_box()
+        header = self.page.locator("#workspace-header").bounding_box()
+        overview = self.page.locator("#workspace-overview").bounding_box()
+        projects = self.page.locator("#project-panel").bounding_box()
+        main = self.page.locator("#main").bounding_box()
+        self.assertIsNotNone(add)
+        self.assertIsNotNone(header)
+        self.assertIsNotNone(overview)
+        self.assertIsNotNone(projects)
+        self.assertIsNotNone(main)
+        self.assertGreater(header["x"], add["x"] + add["width"])
+        self.assertAlmostEqual(header["y"], add["y"], delta=2)
+        self.assertAlmostEqual(overview["x"], header["x"], delta=2)
+        self.assertAlmostEqual(overview["y"], projects["y"], delta=2)
+
+        self.page.click("#ws-canvas")
+        expect(self.page.locator("#canvas-panel")).to_be_visible()
+        canvas = self.page.locator("#canvas-panel").bounding_box()
+        self.assertIsNotNone(canvas)
+        self.assertAlmostEqual(canvas["x"], add["x"], delta=2)
+        self.assertAlmostEqual(canvas["width"], main["width"], delta=3)
+
+        # Narrowing restores the real table.
+        self._view(1366, 768, 1)
+        expect(self.page.locator("#project-table")).not_to_have_attribute(
+            "role", "list"
+        )
+        expect(
+            self.page.locator("#project-rows tr").first
+        ).not_to_have_attribute("role", "listitem")
 
 
 if __name__ == "__main__":  # pragma: no cover - manual run

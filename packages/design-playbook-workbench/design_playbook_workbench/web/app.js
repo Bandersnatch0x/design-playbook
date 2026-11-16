@@ -509,7 +509,12 @@ function focusIntoPanel(target) {
 
 function restorePanelTrigger() {
   const trigger = state.panelTriggerStack.pop();
-  if (!trigger || !document.contains(trigger)) return;
+  if (!trigger || !document.contains(trigger)) {
+    // The trigger can be detached (a project switch re-renders the rows);
+    // the workspace still has to come back from the panel view.
+    syncWorkspaceHome();
+    return;
+  }
   const parent = trigger.closest(".panel");
   if (workspacePanels().includes(parent)) parent.hidden = false;
   syncWorkspaceHome();
@@ -734,6 +739,48 @@ function syncWorkspaceHome() {
   elements.workspaceGrants.textContent = `授权 ${grantLabel(project.grantScopes)}`;
 }
 
+const wideWorkspace = window.matchMedia("(min-width: 1600px)");
+
+// The wide layout turns table rows into cards. Explicit roles keep the list
+// navigable for assistive tech once `display: block` drops the table roles;
+// narrow layouts restore the real table unchanged.
+function syncProjectTableSemantics() {
+  const wide = wideWorkspace.matches;
+  const head = elements.table.querySelector("thead");
+  const caption = elements.table.querySelector("caption");
+  if (wide) {
+    elements.table.setAttribute("role", "list");
+    elements.table.setAttribute("aria-label", caption.textContent);
+    elements.rows.setAttribute("role", "presentation");
+    head.setAttribute("aria-hidden", "true");
+  } else {
+    elements.table.removeAttribute("role");
+    elements.table.removeAttribute("aria-label");
+    elements.rows.removeAttribute("role");
+    head.removeAttribute("aria-hidden");
+  }
+  for (const row of elements.rows.querySelectorAll("tr")) {
+    if (wide) row.setAttribute("role", "listitem");
+    else row.removeAttribute("role");
+  }
+}
+
+wideWorkspace.addEventListener("change", syncProjectTableSemantics);
+
+function applyProjectRow(row, project) {
+  const isCurrent = project.projectId === state.currentProjectId;
+  row.querySelector(".project-name").textContent = project.name;
+  row.querySelector(".current-flag").hidden = !isCurrent;
+  row.querySelector(".open-button").hidden = isCurrent;
+  row.querySelector(".project-path").textContent = project.canonicalPath;
+  const badge = row.querySelector(".state-badge");
+  badge.dataset.state = project.connectionState;
+  badge.textContent = connectionText(project.connectionState);
+  row.querySelector(".grant-list").textContent = grantLabel(project.grantScopes);
+  row.querySelector(".rebind-button").hidden =
+    project.connectionState === "connected";
+}
+
 function renderProjects() {
   elements.rows.textContent = "";
   const projects = state.projects;
@@ -747,33 +794,30 @@ function renderProjects() {
     row.querySelectorAll("td").forEach((cell, index) => {
       cell.dataset.label = headers[index].textContent;
     });
-    row.querySelector(".project-name").textContent = project.name;
-    const isCurrent = project.projectId === state.currentProjectId;
-    row.querySelector(".current-flag").hidden = !isCurrent;
-    row.querySelector(".open-button").hidden = isCurrent;
-    row.querySelector(".project-path").textContent = project.canonicalPath;
-    const badge = row.querySelector(".state-badge");
-    const connected = project.connectionState === "connected";
-    badge.dataset.state = project.connectionState;
-    badge.textContent = connectionText(project.connectionState);
-    row.querySelector(".grant-list").textContent = grantLabel(project.grantScopes);
+    applyProjectRow(row, project);
     row.querySelector(".open-button").addEventListener("click", () => openProject(project));
     wireRowMenu(row);
     row.querySelector(".rename-button").addEventListener("click", () => renameProject(project));
     row.querySelector(".grants-button").addEventListener("click", () => editGrants(project));
-    row.querySelector(".proposals-button").addEventListener("click", () => openProposals(project));
-    row.querySelector(".canvas-button").addEventListener("click", () => openCanvas(project));
-    row.querySelector(".work-button").addEventListener("click", () => openWork(project));
-    row.querySelector(".owner-button").addEventListener("click", () => openOwner(project));
-    row.querySelector(".life-button").addEventListener("click", () => openLifecycle(project));
-    row.querySelector(".assets-button").addEventListener("click", () => openAssets(project));
-    const rebind = row.querySelector(".rebind-button");
-    rebind.hidden = connected;
-    rebind.addEventListener("click", () => rebindProject(project));
+    row.querySelector(".proposals-button").addEventListener(
+      "click", () => openForProject(project, openProposals));
+    row.querySelector(".canvas-button").addEventListener(
+      "click", () => openForProject(project, openCanvas));
+    row.querySelector(".work-button").addEventListener(
+      "click", () => openForProject(project, openWork));
+    row.querySelector(".owner-button").addEventListener(
+      "click", () => openForProject(project, openOwner));
+    row.querySelector(".life-button").addEventListener(
+      "click", () => openForProject(project, openLifecycle));
+    row.querySelector(".assets-button").addEventListener(
+      "click", () => openForProject(project, openAssets));
+    row.querySelector(".rebind-button").addEventListener(
+      "click", () => rebindProject(project));
     row.querySelector(".remove-button").addEventListener("click", () => removeProject(project));
     elements.rows.appendChild(fragment);
   }
   renderRemovedProjects();
+  syncProjectTableSemantics();
   syncWorkspaceHome();
 }
 
@@ -793,6 +837,25 @@ function renderRemovedProjects() {
     item.append(label, button);
     elements.removedProjectList.appendChild(item);
   }
+}
+
+// Refresh what the open reply returned without rebuilding rows: a row the
+// maintainer is acting on keeps focus and its open trigger stays attached.
+function refreshProjectList() {
+  const rows = Array.from(elements.rows.querySelectorAll("tr"));
+  const sameOrder =
+    rows.length === state.projects.length &&
+    rows.every(
+      (row, index) => row.dataset.projectId === state.projects[index].projectId
+    );
+  if (!sameOrder) {
+    renderProjects();
+    return;
+  }
+  rows.forEach((row, index) => applyProjectRow(row, state.projects[index]));
+  renderRemovedProjects();
+  syncProjectTableSemantics();
+  syncWorkspaceHome();
 }
 
 async function deleteProjectData(project) {
@@ -953,9 +1016,37 @@ async function onRegister(event) {
   }
 }
 
-async function openProject(project) {
+// A panel must never outlive the project it was opened for: the workspace
+// header and every open panel show the same project, as the overview says.
+function closeWorkspacePanels() {
+  for (const panel of workspacePanels()) panel.hidden = true;
+  elements.assetPreviewFrame.hidden = true;
+  elements.assetPreviewFrame.removeAttribute("src");
+  elements.instanceFrame.hidden = true;
+  elements.instanceFrame.removeAttribute("src");
+  elements.tokensPreviewFrame.hidden = true;
+  elements.tokensPreviewFrame.removeAttribute("src");
+  elements.canvasSnapshotFrame.hidden = true;
+  elements.canvasSnapshotFrame.removeAttribute("src");
+  state.panelTriggerStack = [];
+  state.assetsProject = null;
+  state.documentProject = null;
+  state.documentAsset = null;
+  state.tokensProject = null;
+  state.tokensAsset = null;
+  state.canvasProject = null;
+  state.workProject = null;
+  state.workSelectedId = null;
+  state.ownerProject = null;
+  state.lifeProject = null;
+  state.proposalsProject = null;
+  syncWorkspaceHome();
+}
+
+async function setCurrentProject(project) {
+  const changed = project.projectId !== state.currentProjectId;
   try {
-    await api(ROUTES.projectAction(project.projectId, "open"), {
+    const response = await api(ROUTES.projectAction(project.projectId, "open"), {
       method: "POST",
       body: {
         operation: mutation(
@@ -965,13 +1056,38 @@ async function openProject(project) {
         ),
       },
     });
-    await loadProjects();
+    const payload = response.result || response;
+    if (Array.isArray(payload.projects)) {
+      state.projects = payload.projects;
+      state.removedProjects = payload.removedProjects || [];
+      state.currentProjectId = payload.currentProjectId || project.projectId;
+    } else {
+      state.currentProjectId = project.projectId;
+    }
+    if (changed) closeWorkspacePanels();
+    refreshProjectList();
     announce(`当前项目已切换到 ${project.name}。`);
+    return true;
   } catch (error) {
     if (error.code === "conflict") await loadProjects();
     elements.listError.hidden = false;
     elements.listError.textContent = describeFailure(error, "切换项目");
+    return false;
   }
+}
+
+async function openProject(project) {
+  await setCurrentProject(project);
+}
+
+// Capabilities act on the current project, so opening one from another row
+// first makes that project current instead of leaving the header behind.
+async function openForProject(project, open) {
+  if (project.projectId !== state.currentProjectId) {
+    const switched = await setCurrentProject(project);
+    if (!switched) return;
+  }
+  open(project);
 }
 
 async function renameProject(project) {
