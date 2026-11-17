@@ -263,6 +263,46 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         expect(second_row.locator(".current-flag")).to_be_visible()
         expect(self.page.locator("#workspace-overview")).to_be_visible()
 
+    def test_activating_the_current_row_hands_focus_to_the_header(self) -> None:
+        # "设为当前" hides itself once its row is current, which would drop
+        # focus to the document body and send the next Tab back to the top.
+        self._open_session()
+        self._add_project(self.h.make_directory("focus-handoff"), name="Focus")
+        self.page.focus("#project-rows tr .open-button")
+        self.page.keyboard.press("Enter")
+        expect(self.page.locator("#workspace-header")).to_be_visible()
+        expect(self.page.locator("#workspace-title")).to_be_focused()
+        expect(self.page.locator("#workspace-title")).to_have_text("Focus")
+
+    def test_welcome_asks_to_choose_once_a_project_exists(self) -> None:
+        # Registration does not make a project current, so "no projects" and
+        # "projects but none chosen" must not share registration copy.
+        self._open_session()
+        expect(self.page.locator("#workspace-welcome-title")).to_have_text(
+            "从一个本机项目开始"
+        )
+        self._add_project(self.h.make_directory("welcome-copy"), name="Welcome")
+        expect(self.page.locator("#workspace-welcome")).to_be_visible()
+        expect(self.page.locator("#workspace-welcome-title")).to_have_text(
+            "选择一个项目"
+        )
+        self.page.locator("#project-rows tr .open-button").click()
+        expect(self.page.locator("#workspace-welcome")).to_be_hidden()
+
+    def test_removing_the_current_project_closes_its_open_panel(self) -> None:
+        # The header and a panel both describe the current project, so a
+        # removal that takes the project away must take the panel with it.
+        self._open_session()
+        self._add_project(self.h.make_directory("panel-outlives"), name="Doomed")
+        self.page.locator("#project-rows tr .open-button").first.click()
+        self.page.click("#ws-assets")
+        expect(self.page.locator("#assets-panel")).to_be_visible()
+        row_action(self.page.locator("#project-rows tr").first, "remove").click()
+        answer_dialog(self.page)
+        expect(self.page.locator("#project-rows tr")).to_have_count(0)
+        expect(self.page.locator("#assets-panel")).to_be_hidden()
+        expect(self.page.locator("#workspace-welcome")).to_be_visible()
+
     def test_disconnected_rebind_and_removal_journey(self) -> None:
         self._open_session()
         directory = self.h.make_directory("vanish")
@@ -3139,12 +3179,20 @@ class DesktopViewportAndZoomJourneyTest(unittest.TestCase):
         self.assertAlmostEqual(overview["x"], header["x"], delta=2)
         self.assertAlmostEqual(overview["y"], projects["y"], delta=2)
 
+        # The canvas spans both columns, so it needs a row of its own: sharing
+        # row 2 would push the project list below a canvas thousands of pixels
+        # tall and take the way back to other projects with it.
         self.page.click("#ws-canvas")
         expect(self.page.locator("#canvas-panel")).to_be_visible()
         canvas = self.page.locator("#canvas-panel").bounding_box()
+        still_listed = self.page.locator("#project-panel").bounding_box()
         self.assertIsNotNone(canvas)
+        self.assertIsNotNone(still_listed)
         self.assertAlmostEqual(canvas["x"], add["x"], delta=2)
         self.assertAlmostEqual(canvas["width"], main["width"], delta=3)
+        self.assertAlmostEqual(still_listed["x"], add["x"], delta=2)
+        self.assertAlmostEqual(still_listed["y"], projects["y"], delta=2)
+        self.assertGreaterEqual(canvas["y"], still_listed["y"] + still_listed["height"])
 
         # Narrowing restores the real table.
         self._view(1366, 768, 1)
@@ -3154,6 +3202,14 @@ class DesktopViewportAndZoomJourneyTest(unittest.TestCase):
         expect(
             self.page.locator("#project-rows tr").first
         ).not_to_have_attribute("role", "listitem")
+
+        # The single-column layout draws the same cards, so it carries the same
+        # semantics as the wide one instead of announcing a table.
+        self._view(700, 900, 1)
+        expect(self.page.locator("#project-table")).to_have_attribute("role", "list")
+        expect(
+            self.page.locator("#project-rows tr").first
+        ).to_have_attribute("role", "listitem")
 
 
 if __name__ == "__main__":  # pragma: no cover - manual run

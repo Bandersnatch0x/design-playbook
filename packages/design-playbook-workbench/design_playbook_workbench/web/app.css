@@ -599,8 +599,12 @@ select option {
   #add-panel, #candidate, #project-panel { grid-column: 1; }
   #workspace-header, #workspace-welcome { grid-column: 2; grid-row: 1; }
   #workspace-overview, #assets-panel, #tokens-panel, #document-panel,
-  #proposals-panel, #canvas-panel, #work-panel, #owner-panel,
+  #proposals-panel, #work-panel, #owner-panel,
   #life-panel, #settings-panel { grid-column: 2; grid-row: 2; }
+  /* The canvas spans both columns, so it takes a row of its own: in row 2 it
+     would consume the left column as well and push the project list to row 3,
+     thousands of pixels below the canvas that just opened. */
+  #canvas-panel { grid-column: 1 / -1; grid-row: 3; }
 
   #add-panel .row-form,
   #candidate .row-form {
