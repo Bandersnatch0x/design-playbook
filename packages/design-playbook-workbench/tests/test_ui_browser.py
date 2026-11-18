@@ -98,6 +98,46 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         self.page.click("#register-button")
         expect(self.page.locator("#project-rows tr")).to_have_count(1)
 
+    def test_panels_survive_the_first_load_window(self) -> None:
+        # The session-ready signal fires before the first loadProjects()
+        # completes, so a panel opened in that window used to be discarded by
+        # the late renderProjects() as if no project held it. Register a
+        # project over the API, hold the page's projects response, and only
+        # then open the page: the boot reaches the ready state while
+        # renderProjects() has not run yet — the exact window in which the
+        # late render used to discard an open panel.
+        directory = self.h.make_directory("first-load-window")
+        (directory / "brand.md").write_text("# Brand\n", encoding="utf-8")
+        registered = self.h.register(directory, name="Window")
+        assert registered.status == 200, registered.text
+        held = []
+        self.page.route(
+            "**/api/v1/projects", lambda route: held.append(route)
+        )
+        try:
+            self.page.goto(self.h.runtime.bootstrap_url)
+            expect(self.page.locator("#session-state")).to_contain_text(
+                "会话有效"
+            )
+            self.page.locator("#settings-open").focus()
+            self.page.locator("#settings-open").press("Enter")
+            expect(self.page.locator("#settings-panel")).to_be_focused()
+            # A renderProjects() running in this window must not discard the
+            # open panel: before the projectsLoaded guard it read as orphaned.
+            self.page.wait_for_timeout(300)
+            expect(self.page.locator("#settings-panel")).to_be_focused()
+        finally:
+            for route in held:
+                route.continue_()
+        # The delayed render finally ran: the project row exists and the
+        # settings panel is still standing, not discarded as orphaned.
+        expect(self.page.locator("#project-rows tr")).to_have_count(1)
+        expect(self.page.locator("#settings-panel")).to_be_focused()
+        # The delayed render finally ran: the project row exists and the
+        # settings panel is still standing, not discarded as orphaned.
+        expect(self.page.locator("#project-rows tr")).to_have_count(1)
+        expect(self.page.locator("#settings-panel")).to_be_focused()
+
     def test_bootstrap_is_exchanged_once_and_cleared_from_the_url(self) -> None:
         self._open_session()
         # The one-time secret is gone from the address bar as soon as the
