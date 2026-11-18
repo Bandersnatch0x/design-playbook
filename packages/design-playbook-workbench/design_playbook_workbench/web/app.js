@@ -753,7 +753,13 @@ function syncWorkspaceWelcome(hasContent) {
 // closes them in `setCurrentProject`; a list refresh that loses the current
 // project (unregister, delete-data) has to do the same, or the panel keeps
 // describing a project the header no longer shows.
+// The boot guard keeps the first loadProjects() from discarding panels a fast
+// user opened while the list was still loading: the session-ready signal fires
+// before that first load completes, so early panels would otherwise look
+// orphaned even though the boot is still in progress.
+let projectsLoaded = false;
 function discardOrphanedPanels() {
+  if (!projectsLoaded) return;
   if (currentProject()) return;
   if (!workspacePanels().some((panel) => !panel.hidden)) return;
   closeWorkspacePanels();
@@ -1000,6 +1006,7 @@ async function loadProjects() {
     state.currentProjectId = payload.currentProjectId || null;
     elements.listError.hidden = true;
     renderProjects();
+    projectsLoaded = true;
   } catch (error) {
     if (error.status === 401) {
       failSession("会话已失效。请用启动时打印的 启动链接重新打开本页面。");
