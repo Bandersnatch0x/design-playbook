@@ -56,6 +56,7 @@ const elements = {
   sessionState: document.getElementById("session-state"),
   sessionError: document.getElementById("session-error"),
   sessionErrorMessage: document.getElementById("session-error-message"),
+  addPanel: document.getElementById("add-panel"),
   probeForm: document.getElementById("probe-form"),
   probeButton: document.getElementById("probe-button"),
   projectPath: document.getElementById("project-path"),
@@ -69,13 +70,17 @@ const elements = {
   cancelCandidate: document.getElementById("cancel-candidate"),
   refreshButton: document.getElementById("refresh-button"),
   listEmpty: document.getElementById("list-empty"),
+  listHeading: document.getElementById("list-heading"),
   listError: document.getElementById("list-error"),
+  projectPanel: document.getElementById("project-panel"),
   table: document.getElementById("project-table"),
   rows: document.getElementById("project-rows"),
   removedProjects: document.getElementById("removed-projects"),
   removedProjectList: document.getElementById("removed-project-list"),
   workspaceHeader: document.getElementById("workspace-header"),
   workspaceWelcome: document.getElementById("workspace-welcome"),
+  workspaceWelcomeTitle: document.getElementById("workspace-welcome-title"),
+  workspaceWelcomeBody: document.getElementById("workspace-welcome-body"),
   workspaceOverview: document.getElementById("workspace-overview"),
   workspaceTitle: document.getElementById("workspace-title"),
   ovAssets: document.getElementById("ov-assets"),
@@ -540,7 +545,12 @@ function failSession(message) {
   setSessionState("会话不可用", "failed");
   elements.sessionError.hidden = false;
   elements.sessionErrorMessage.textContent = message;
-  elements.probeForm.hidden = true;
+  // Without a session the project list cannot be refreshed and may be stale,
+  // so it leaves with the rest of the authenticated surface. The error panel
+  // is then the first thing in `main` at every width.
+  elements.addPanel.hidden = true;
+  elements.candidate.hidden = true;
+  elements.projectPanel.hidden = true;
   elements.workspaceHeader.hidden = true;
   elements.workspaceOverview.hidden = true;
   elements.workspaceWelcome.hidden = true;
@@ -725,11 +735,41 @@ function connectionText(value) {
       : value;
 }
 
+// Registration does not make a project current, so "no projects at all" and
+// "projects but none chosen" are different states: the second one has nothing
+// left to register and everything left to choose.
+function syncWorkspaceWelcome(hasContent) {
+  const registered = state.projects.length > 0;
+  elements.workspaceWelcomeTitle.textContent = registered
+    ? "选择一个项目"
+    : "从一个本机项目开始";
+  elements.workspaceWelcomeBody.textContent = registered
+    ? "项目已登记，但还没有当前项目。在项目卡上选择「设为当前」，这里就会打开它的资产、画布、任务、验证、生命周期和提案。"
+    : "先登记一个本机项目目录。登记后，项目卡会显示连接状态；当前项目会在这里打开资产、画布、任务、验证、生命周期和提案。";
+  elements.workspaceWelcome.hidden = hasContent;
+}
+
+// A panel must never outlive the project it was opened for. Switching projects
+// closes them in `setCurrentProject`; a list refresh that loses the current
+// project (unregister, delete-data) has to do the same, or the panel keeps
+// describing a project the header no longer shows.
+// The boot guard keeps the first loadProjects() from discarding panels a fast
+// user opened while the list was still loading: the session-ready signal fires
+// before that first load completes, so early panels would otherwise look
+// orphaned even though the boot is still in progress.
+let projectsLoaded = false;
+function discardOrphanedPanels() {
+  if (!projectsLoaded) return;
+  if (currentProject()) return;
+  if (!workspacePanels().some((panel) => !panel.hidden)) return;
+  closeWorkspacePanels();
+}
+
 function syncWorkspaceHome() {
   const project = currentProject();
   const anyOpen = workspacePanels().some((panel) => !panel.hidden);
   elements.workspaceHeader.hidden = !project;
-  elements.workspaceWelcome.hidden = Boolean(project) || anyOpen;
+  syncWorkspaceWelcome(Boolean(project) || anyOpen);
   elements.workspaceOverview.hidden = !project || anyOpen;
   if (!project) return;
   elements.workspaceTitle.textContent = project.name;
@@ -739,16 +779,17 @@ function syncWorkspaceHome() {
   elements.workspaceGrants.textContent = `授权 ${grantLabel(project.grantScopes)}`;
 }
 
-const wideWorkspace = window.matchMedia("(min-width: 1600px)");
+// Both card layouts (the wide operator column and the narrow single column)
+// draw one card per project instead of a row of columns, so each is a list
+// item named by the table caption. Where the columns are still drawn the real
+// table stays: its headers are the only thing tying a cell to its label.
+const cardWorkspace = window.matchMedia("(min-width: 1600px), (max-width: 760px)");
 
-// The wide layout turns table rows into cards. Explicit roles keep the list
-// navigable for assistive tech once `display: block` drops the table roles;
-// narrow layouts restore the real table unchanged.
 function syncProjectTableSemantics() {
-  const wide = wideWorkspace.matches;
+  const card = cardWorkspace.matches;
   const head = elements.table.querySelector("thead");
   const caption = elements.table.querySelector("caption");
-  if (wide) {
+  if (card) {
     elements.table.setAttribute("role", "list");
     elements.table.setAttribute("aria-label", caption.textContent);
     elements.rows.setAttribute("role", "presentation");
@@ -760,12 +801,12 @@ function syncProjectTableSemantics() {
     head.removeAttribute("aria-hidden");
   }
   for (const row of elements.rows.querySelectorAll("tr")) {
-    if (wide) row.setAttribute("role", "listitem");
+    if (card) row.setAttribute("role", "listitem");
     else row.removeAttribute("role");
   }
 }
 
-wideWorkspace.addEventListener("change", syncProjectTableSemantics);
+cardWorkspace.addEventListener("change", syncProjectTableSemantics);
 
 function applyProjectRow(row, project) {
   const isCurrent = project.projectId === state.currentProjectId;
@@ -781,7 +822,13 @@ function applyProjectRow(row, project) {
     project.connectionState === "connected";
 }
 
+// The list is rebuilt from scratch, so a row control that started an action
+// (remove, rename, rebind) is gone before the reply arrives. Focus falls to
+// the body, which sends the next Tab back to the top of the page; the list
+// heading keeps the maintainer where the work happened.
 function renderProjects() {
+  const focusWasInList = document.activeElement instanceof HTMLElement
+    && document.activeElement.closest("#project-panel") !== null;
   elements.rows.textContent = "";
   const projects = state.projects;
   elements.listEmpty.hidden = projects.length > 0;
@@ -818,7 +865,14 @@ function renderProjects() {
   }
   renderRemovedProjects();
   syncProjectTableSemantics();
+  discardOrphanedPanels();
   syncWorkspaceHome();
+  if (focusWasInList) {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement) || !active.closest("#project-panel")) {
+      elements.listHeading.focus();
+    }
+  }
 }
 
 function renderRemovedProjects() {
@@ -842,6 +896,7 @@ function renderRemovedProjects() {
 // Refresh what the open reply returned without rebuilding rows: a row the
 // maintainer is acting on keeps focus and its open trigger stays attached.
 function refreshProjectList() {
+  const focused = document.activeElement;
   const rows = Array.from(elements.rows.querySelectorAll("tr"));
   const sameOrder =
     rows.length === state.projects.length &&
@@ -855,7 +910,18 @@ function refreshProjectList() {
   rows.forEach((row, index) => applyProjectRow(row, state.projects[index]));
   renderRemovedProjects();
   syncProjectTableSemantics();
+  discardOrphanedPanels();
   syncWorkspaceHome();
+  // "设为当前" hides itself, so the control the maintainer just activated is
+  // no longer focusable and focus falls to the document body. Hand it to the
+  // header that now names that project instead of restarting at the top.
+  // Only the control that just became current gets this handoff: it names a
+  // project the header now shows. A hidden control from another row would
+  // move focus to a project the maintainer did not act on.
+  if (focused instanceof HTMLElement && focused.classList.contains("open-button")
+      && focused.hidden && !elements.workspaceHeader.hidden) {
+    elements.workspaceTitle.focus();
+  }
 }
 
 async function deleteProjectData(project) {
@@ -940,6 +1006,7 @@ async function loadProjects() {
     state.currentProjectId = payload.currentProjectId || null;
     elements.listError.hidden = true;
     renderProjects();
+    projectsLoaded = true;
   } catch (error) {
     if (error.status === 401) {
       failSession("会话已失效。请用启动时打印的 启动链接重新打开本页面。");
@@ -988,6 +1055,10 @@ async function onProbe(event) {
 async function onRegister(event) {
   event.preventDefault();
   if (!state.candidate) return;
+  // Disabling the focused submit button and hiding the candidate both move
+  // focus to the body, so remember where it was before either happens.
+  const focusWasInForm = document.activeElement instanceof HTMLElement
+    && document.activeElement.closest("#candidate") !== null;
   elements.registerButton.disabled = true;
   try {
     await api(ROUTES.PROJECTS, {
@@ -1006,6 +1077,7 @@ async function onRegister(event) {
     resetCandidate();
     elements.projectPath.value = "";
     await loadProjects();
+    if (focusWasInForm) elements.listHeading.focus();
     announce("项目已登记为只读发现。写入、执行与模型发送需要单独授权。");
   } catch (error) {
     elements.listError.hidden = false;

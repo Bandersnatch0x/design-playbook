@@ -596,11 +596,22 @@ select option {
 @media (min-width: 1600px) {
   main { grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); }
   #session-error { grid-column: 1 / -1; }
-  #add-panel, #candidate, #project-panel { grid-column: 1; }
+  #add-panel { grid-column: 1; grid-row: 1; }
+  #candidate { grid-column: 1; grid-row: 2; }
+  #project-panel { grid-column: 1; grid-row: 2; }
+  /* A visible candidate shares row 2 with the list, so the list moves down a
+     row. The canvas starts after every left-column item, or a candidate would
+     push the list below a canvas thousands of pixels tall. */
+  #candidate:not([hidden]) ~ #project-panel { grid-row: 3; }
   #workspace-header, #workspace-welcome { grid-column: 2; grid-row: 1; }
   #workspace-overview, #assets-panel, #tokens-panel, #document-panel,
-  #proposals-panel, #canvas-panel, #work-panel, #owner-panel,
+  #proposals-panel, #work-panel, #owner-panel,
   #life-panel, #settings-panel { grid-column: 2; grid-row: 2; }
+  /* The canvas spans both columns and starts after the left column content,
+     so the project list stays reachable above it. A visible candidate adds
+     the row that keeps the list above the canvas. */
+  #canvas-panel { grid-column: 1 / -1; grid-row: 3; }
+  #candidate:not([hidden]) ~ #canvas-panel { grid-row: 4; }
 
   #add-panel .row-form,
   #candidate .row-form {

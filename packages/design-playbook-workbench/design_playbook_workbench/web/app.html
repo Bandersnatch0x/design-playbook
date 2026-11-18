@@ -73,7 +73,8 @@
 
   <section class="panel" id="project-panel" aria-labelledby="list-heading">
     <div class="panel-head">
-      <h2 id="list-heading">项目</h2>
+      <!-- Focus target after a row action rebuilds the list. -->
+      <h2 id="list-heading" tabindex="-1">项目</h2>
       <button type="button" id="refresh-button" class="secondary">重新探测</button>
     </div>
     <p id="list-empty" class="empty" hidden>
@@ -106,7 +107,7 @@
   <section id="workspace-header" class="panel workspace-header" hidden aria-labelledby="workspace-title">
     <div class="workspace-identity">
       <p class="workspace-kicker">当前项目</p>
-      <h2 id="workspace-title">—</h2>
+      <h2 id="workspace-title" tabindex="-1">—</h2>
       <p id="workspace-path" class="workspace-path"></p>
       <p class="workspace-meta">
         <span id="workspace-state" class="state-badge"></span>
@@ -127,7 +128,7 @@
   <section id="workspace-welcome" class="panel workspace-welcome" aria-labelledby="workspace-welcome-title">
     <p class="workspace-kicker">工作台</p>
     <h2 id="workspace-welcome-title">从一个本机项目开始</h2>
-    <p class="hint">
+    <p class="hint" id="workspace-welcome-body">
       先登记一个本机项目目录。登记后，项目卡会显示连接状态；当前项目会在这里打开资产、画布、任务、验证、生命周期和提案。
     </p>
   </section>
