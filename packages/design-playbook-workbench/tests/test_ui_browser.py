@@ -139,6 +139,9 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         expect(row.locator(".state-badge")).to_have_text("已连接")
         expect(row.locator(".grant-list")).to_have_text("只读")
         expect(self.page.locator("#list-empty")).to_be_hidden()
+        # The candidate is hidden before the list rebuild, so registration
+        # must still land focus inside the rebuilt list.
+        expect(self.page.locator("#list-heading")).to_be_focused()
 
         row.locator(".open-button").click()
         expect(row.locator(".current-flag")).to_be_visible()
@@ -302,6 +305,34 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         expect(self.page.locator("#project-rows tr")).to_have_count(0)
         expect(self.page.locator("#assets-panel")).to_be_hidden()
         expect(self.page.locator("#workspace-welcome")).to_be_visible()
+        # Removing a row rebuilds the list, so the control that started the
+        # removal is gone. Focus must land in the list, not on the body.
+        expect(self.page.locator("#list-heading")).to_be_focused()
+
+    def test_removing_another_project_keeps_the_open_panel(self) -> None:
+        # A panel belongs to the current project. Removing a different row
+        # must not close it, and focus still has to survive the rebuild.
+        self._open_session()
+        self._add_project(self.h.make_directory("kept"), name="Kept")
+        self.page.locator("#project-rows tr .open-button").first.click()
+        self.page.fill("#project-path", str(self.h.make_directory("elsewhere")))
+        self.page.click("#probe-button")
+        expect(self.page.locator("#candidate")).to_be_visible()
+        self.page.fill("#project-name", "Elsewhere")
+        self.page.click("#register-button")
+        expect(self.page.locator("#project-rows tr")).to_have_count(2)
+
+        kept = self.page.locator("#project-rows tr", has_text="Kept")
+        row_action(kept, "assets").click()
+        expect(self.page.locator("#assets-panel")).to_be_visible()
+
+        elsewhere = self.page.locator("#project-rows tr", has_text="Elsewhere")
+        row_action(elsewhere, "remove").click()
+        answer_dialog(self.page)
+        expect(self.page.locator("#project-rows tr")).to_have_count(1)
+        expect(self.page.locator("#assets-panel")).to_be_visible()
+        expect(self.page.locator("#workspace-title")).to_have_text("Kept")
+        expect(self.page.locator("#list-heading")).to_be_focused()
 
     def test_disconnected_rebind_and_removal_journey(self) -> None:
         self._open_session()
@@ -3146,6 +3177,21 @@ class DesktopViewportAndZoomJourneyTest(unittest.TestCase):
         ]
         self.assertEqual(missing, [], "focusable controls without a focus indicator")
 
+    def test_a_failed_session_keeps_the_error_at_the_top(self) -> None:
+        # The error panel is the only full-width auto-placed item. The form
+        # and list leave the grid with the session so the error stays in the
+        # first row instead of below two panels that cannot work anyway.
+        self._view(1920, 1080, 1)
+        self.page.reload()
+        expect(self.page.locator("#session-error")).to_be_visible()
+        expect(self.page.locator("#add-panel")).to_be_hidden()
+        expect(self.page.locator("#project-panel")).to_be_hidden()
+        error = self.page.locator("#session-error").bounding_box()
+        main = self.page.locator("#main").bounding_box()
+        self.assertIsNotNone(error)
+        self.assertIsNotNone(main)
+        self.assertLess(error["y"] - main["y"], 60)
+
     def test_wide_layout_puts_the_workspace_in_the_right_column(self) -> None:
         # >=1600px is the operator layout: add/project panels on the left,
         # the current project and its panels on the right, canvas across both.
@@ -3194,6 +3240,28 @@ class DesktopViewportAndZoomJourneyTest(unittest.TestCase):
         self.assertAlmostEqual(still_listed["y"], projects["y"], delta=2)
         self.assertGreaterEqual(canvas["y"], still_listed["y"] + still_listed["height"])
 
+        # A registration candidate shares the left column. It must move the
+        # list down, not below the canvas: the way back to other projects has
+        # to stay above a canvas that is thousands of pixels tall.
+        self.page.fill(
+            "#project-path", str(self.h.make_directory("viewport-candidate"))
+        )
+        self.page.click("#probe-button")
+        expect(self.page.locator("#candidate")).to_be_visible()
+        candidate = self.page.locator("#candidate").bounding_box()
+        listed_with_candidate = self.page.locator("#project-panel").bounding_box()
+        canvas_with_candidate = self.page.locator("#canvas-panel").bounding_box()
+        self.assertIsNotNone(candidate)
+        self.assertIsNotNone(listed_with_candidate)
+        self.assertIsNotNone(canvas_with_candidate)
+        self.assertGreaterEqual(
+            listed_with_candidate["y"], candidate["y"] + candidate["height"] - 2
+        )
+        self.assertGreaterEqual(
+            canvas_with_candidate["y"],
+            listed_with_candidate["y"] + listed_with_candidate["height"] - 2,
+        )
+
         # Narrowing restores the real table.
         self._view(1366, 768, 1)
         expect(self.page.locator("#project-table")).not_to_have_attribute(
@@ -3204,7 +3272,10 @@ class DesktopViewportAndZoomJourneyTest(unittest.TestCase):
         ).not_to_have_attribute("role", "listitem")
 
         # The single-column layout draws the same cards, so it carries the same
-        # semantics as the wide one instead of announcing a table.
+        # semantics as the wide one instead of announcing a table. 760 is the
+        # boundary itself, where the CSS and the media query must agree.
+        self._view(760, 900, 1)
+        expect(self.page.locator("#project-table")).to_have_attribute("role", "list")
         self._view(700, 900, 1)
         expect(self.page.locator("#project-table")).to_have_attribute("role", "list")
         expect(

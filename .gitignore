@@ -89,6 +89,9 @@ Thumbs.db
 __pycache__/
 *.pyc
 
+# Packing a local install leaves the tarball behind; it is a build artifact.
+packages/design-playbook/*.tgz
+
 # Local tool artifacts (codegraph / graphify / playwright-cli / pi-subagents)
 .codegraph/
 .graphify/
