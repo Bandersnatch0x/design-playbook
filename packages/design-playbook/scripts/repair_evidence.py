@@ -791,11 +791,12 @@ def check_repair_evidence(
     ``requirements`` is the G1 proof-requirement projection; its criterion set
     is the declared L6 universe. ``ledger`` and ``artifact_facts`` come from
     the same capture as ``text``; an empty tuple fails every reference as
-    unavailable and is never re-read, while ``None`` means no evidence
-    authority was supplied, so the structural reading skips binding checks.
-    ``require_complete`` is set from the same complete-profile value as the
-    CLI's other complete-acceptance requirements - it is never inferred from
-    the individual ``--require-*`` flags.
+    unavailable and is never re-read. ``None`` means no evidence authority was
+    supplied: the legacy structural reading skips binding checks, while
+    complete acceptance still reports each closure as unavailable through the
+    complete obligation. ``require_complete`` is set from the same
+    complete-profile value as the CLI's other complete-acceptance requirements
+    - it is never inferred from the individual ``--require-*`` flags.
     """
     findings = parse_findings(text)
     closure_facts = parse_closures(text)
