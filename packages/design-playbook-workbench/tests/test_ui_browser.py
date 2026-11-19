@@ -133,10 +133,6 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         # settings panel is still standing, not discarded as orphaned.
         expect(self.page.locator("#project-rows tr")).to_have_count(1)
         expect(self.page.locator("#settings-panel")).to_be_focused()
-        # The delayed render finally ran: the project row exists and the
-        # settings panel is still standing, not discarded as orphaned.
-        expect(self.page.locator("#project-rows tr")).to_have_count(1)
-        expect(self.page.locator("#settings-panel")).to_be_focused()
 
     def test_bootstrap_is_exchanged_once_and_cleared_from_the_url(self) -> None:
         self._open_session()
@@ -373,6 +369,85 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         expect(self.page.locator("#assets-panel")).to_be_visible()
         expect(self.page.locator("#workspace-title")).to_have_text("Kept")
         expect(self.page.locator("#list-heading")).to_be_focused()
+
+    def test_settings_panel_survives_a_refresh_without_a_current_project(
+        self,
+    ) -> None:
+        # The settings panel is not tied to a project. With a project
+        # registered but none current, refreshing the list must not take it
+        # down as if an orphaned project panel had outlived its project.
+        self._open_session()
+        self._add_project(self.h.make_directory("settings-survives"), name="Idle")
+        self.page.click("#settings-open")
+        expect(self.page.locator("#settings-panel")).to_be_visible()
+        # loadProjects() always rebuilds the rows, so the old row node leaving
+        # the document is the refresh-complete signal. The row count alone is
+        # already satisfied before the refresh runs.
+        stale = self.page.locator("#project-rows tr").first.element_handle()
+        self.page.click("#refresh-button")
+        self.page.wait_for_function("(el) => !el.isConnected", arg=stale)
+        expect(self.page.locator("#settings-panel")).to_be_visible()
+        # Switching the current project is also a project-scope cleanup, and
+        # the settings panel still describes no project of its own.
+        self.page.locator("#project-rows tr .open-button").first.click()
+        expect(
+            self.page.locator("#project-rows tr", has_text="Idle").locator(
+                ".current-flag"
+            )
+        ).to_be_visible()
+        expect(self.page.locator("#settings-panel")).to_be_visible()
+
+    def test_failed_session_closes_the_open_project_panel(self) -> None:
+        # The header and the panel both describe the current project. When the
+        # session dies the panel leaves with the header instead of showing a
+        # project nothing on the page names any more.
+        self._open_session()
+        self._add_project(self.h.make_directory("session-panel"), name="Stale")
+        self.page.locator("#project-rows tr .open-button").first.click()
+        self.page.click("#ws-assets")
+        expect(self.page.locator("#assets-panel")).to_be_visible()
+        # A 401 on the list read is the session-expiry path loadProjects()
+        # already handles; the route makes it deterministic.
+        self.page.route(
+            "**/api/v1/projects",
+            lambda route: route.fulfill(
+                status=401,
+                json={"error": {"message": "expired", "code": "unauthorized"}},
+            ),
+        )
+        self.page.click("#refresh-button")
+        expect(self.page.locator("#session-error")).to_be_visible()
+        expect(self.page.locator("#workspace-header")).to_be_hidden()
+        expect(self.page.locator("#assets-panel")).to_be_hidden()
+
+    def test_a_successful_switch_clears_the_list_error(self) -> None:
+        # A failed action leaves an error above the list. A switch that
+        # succeeds must not leave it there reading as if the switch failed.
+        self._open_session()
+        self._add_project(self.h.make_directory("error-first"), name="First")
+        self.page.fill(
+            "#project-path", str(self.h.make_directory("error-second"))
+        )
+        self.page.click("#probe-button")
+        expect(self.page.locator("#candidate")).to_be_visible()
+        self.page.fill("#project-name", "Second")
+        self.page.click("#register-button")
+        expect(self.page.locator("#project-rows tr")).to_have_count(2)
+        self.page.route(
+            "**/api/v1/projects",
+            lambda route: route.fulfill(
+                status=500,
+                json={"error": {"message": "boom", "code": "internal"}},
+            ),
+        )
+        self.page.click("#refresh-button")
+        expect(self.page.locator("#list-error")).to_be_visible()
+        self.page.unroute("**/api/v1/projects")
+        self.page.locator("#project-rows tr", has_text="First").locator(
+            ".open-button"
+        ).click()
+        expect(self.page.locator("#workspace-title")).to_have_text("First")
+        expect(self.page.locator("#list-error")).to_be_hidden()
 
     def test_disconnected_rebind_and_removal_journey(self) -> None:
         self._open_session()
@@ -3040,6 +3115,19 @@ class IndependentReviewRegressionTest(unittest.TestCase):
         expect(more).to_have_attribute("aria-expanded", "false")
         expect(more).to_be_focused()
         expect(row.locator(".row-menu")).to_be_hidden()
+
+    def test_clicking_outside_a_row_menu_closes_it(self) -> None:
+        # One delegated document listener replaced the per-row (and per
+        # rebuild) listener; outside clicks still dismiss the menu and reset
+        # the trigger's state.
+        row = self.page.locator("#project-rows tr").first
+        row.locator(".more-button").click()
+        expect(row.locator(".row-menu")).to_be_visible()
+        self.page.click("#add-heading")
+        expect(row.locator(".row-menu")).to_be_hidden()
+        expect(row.locator(".more-button")).to_have_attribute(
+            "aria-expanded", "false"
+        )
 
     def test_each_project_row_offers_a_single_primary_action(self) -> None:
         # H-01: the row had two filled primaries (设为当前 plus 画布).
