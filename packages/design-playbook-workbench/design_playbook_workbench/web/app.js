@@ -545,15 +545,23 @@ function failSession(message) {
   setSessionState("会话不可用", "failed");
   elements.sessionError.hidden = false;
   elements.sessionErrorMessage.textContent = message;
-  // Without a session the project list cannot be refreshed and may be stale,
-  // so it leaves with the rest of the authenticated surface. The error panel
-  // is then the first thing in `main` at every width.
+  // Without a session nothing here can be refreshed: an open panel would keep
+  // describing a project the hidden header no longer names, and the settings
+  // panel's backup calls need the same session. All of them leave.
+  closeWorkspacePanels();
+  // The project list cannot be refreshed and may be stale, so it leaves with
+  // the rest of the authenticated surface. The error panel is then the first
+  // thing in `main` at every width.
   elements.addPanel.hidden = true;
   elements.candidate.hidden = true;
   elements.projectPanel.hidden = true;
   elements.workspaceHeader.hidden = true;
   elements.workspaceOverview.hidden = true;
   elements.workspaceWelcome.hidden = true;
+  // The panel that held focus is gone, so focus would fall to the document
+  // body. Land on the explanation instead: it is the only thing that can be
+  // done with this page now.
+  elements.sessionError.focus();
 }
 
 let clickedButton = null;
@@ -761,8 +769,7 @@ let projectsLoaded = false;
 function discardOrphanedPanels() {
   if (!projectsLoaded) return;
   if (currentProject()) return;
-  if (!workspacePanels().some((panel) => !panel.hidden)) return;
-  closeWorkspacePanels();
+  closeProjectPanels();
 }
 
 function syncWorkspaceHome() {
@@ -953,13 +960,18 @@ async function deleteProjectData(project) {
   }
 }
 
+function closeRowMenu(menu) {
+  menu.hidden = true;
+  const more = menu.closest("tr")?.querySelector(".more-button");
+  if (more) more.setAttribute("aria-expanded", "false");
+}
+
 function wireRowMenu(row) {
   const more = row.querySelector(".more-button");
   const menu = row.querySelector(".row-menu");
   const items = () => Array.from(menu.querySelectorAll("button")).filter((b) => !b.hidden);
   const close = (refocus) => {
-    menu.hidden = true;
-    more.setAttribute("aria-expanded", "false");
+    closeRowMenu(menu);
     if (refocus) more.focus();
   };
   const open = () => {
@@ -993,10 +1005,18 @@ function wireRowMenu(row) {
       close(false);
     }
   });
-  document.addEventListener("click", (event) => {
-    if (!menu.hidden && !row.contains(event.target)) close(false);
-  });
 }
+
+// One document listener for every row menu. Registering one per row (and per
+// rebuild) kept each rebuilt row and its project object alive for the lifetime
+// of the page.
+document.addEventListener("click", (event) => {
+  for (const menu of elements.rows.querySelectorAll(".row-menu")) {
+    const row = menu.closest("tr");
+    if (menu.hidden || !row || row.contains(event.target)) continue;
+    closeRowMenu(menu);
+  }
+});
 
 async function loadProjects() {
   try {
@@ -1115,6 +1135,18 @@ function closeWorkspacePanels() {
   syncWorkspaceHome();
 }
 
+// The settings panel is not tied to a project, so a project-scope cleanup must
+// not take it down: refreshing the list with no current project used to close
+// the settings panel the maintainer was working in. Focus shows one panel at a
+// time, so whenever a project panel is open the settings panel is already
+// hidden and the full close is safe.
+function closeProjectPanels() {
+  const openProjectPanel = workspacePanels().some(
+    (panel) => panel !== elements.settingsPanel && !panel.hidden
+  );
+  if (openProjectPanel) closeWorkspacePanels();
+}
+
 async function setCurrentProject(project) {
   const changed = project.projectId !== state.currentProjectId;
   try {
@@ -1136,7 +1168,10 @@ async function setCurrentProject(project) {
     } else {
       state.currentProjectId = project.projectId;
     }
-    if (changed) closeWorkspacePanels();
+    if (changed) closeProjectPanels();
+    // The switch succeeded, so an earlier action's error must not read as if
+    // it had failed too.
+    elements.listError.hidden = true;
     refreshProjectList();
     announce(`当前项目已切换到 ${project.name}。`);
     return true;
