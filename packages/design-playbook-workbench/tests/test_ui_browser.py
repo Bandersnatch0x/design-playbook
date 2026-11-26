@@ -419,6 +419,51 @@ class ProjectEntryJourneyTest(unittest.TestCase):
         expect(self.page.locator("#session-error")).to_be_visible()
         expect(self.page.locator("#workspace-header")).to_be_hidden()
         expect(self.page.locator("#assets-panel")).to_be_hidden()
+        # The panel that held focus is gone, so the explanation is where
+        # focus lands instead of the document body.
+        expect(self.page.locator("#session-error")).to_be_focused()
+
+    def test_failed_session_closes_the_settings_panel(self) -> None:
+        # The settings panel's backup calls need the same session, so a
+        # failed list read takes it down with the rest of the authenticated
+        # surface rather than leaving it open behind a dead session.
+        self._open_session()
+        self._add_project(self.h.make_directory("session-settings"), name="Idle")
+        self.page.click("#settings-open")
+        expect(self.page.locator("#settings-panel")).to_be_visible()
+        self.page.route(
+            "**/api/v1/projects",
+            lambda route: route.fulfill(
+                status=401,
+                json={"error": {"message": "expired", "code": "unauthorized"}},
+            ),
+        )
+        self.page.click("#refresh-button")
+        expect(self.page.locator("#settings-panel")).to_be_hidden()
+        expect(self.page.locator("#session-error")).to_be_focused()
+
+    def test_failed_session_closes_an_open_dialog(self) -> None:
+        # A list read that fails with 401 while a dialog is open must not
+        # leave the dialog behind its backdrop with focus moved under it.
+        self._open_session()
+        self._add_project(self.h.make_directory("session-dialog"), name="Idle")
+        held = []
+        self.page.route("**/api/v1/projects", lambda route: held.append(route))
+        try:
+            self.page.click("#refresh-button")
+            # Open a rename dialog and leave it open; the held read fails
+            # while it is showing.
+            row_action(self.page.locator("#project-rows tr").first, "rename").click()
+            expect(self.page.locator("#dpb-dialog")).to_be_visible()
+            held[0].fulfill(
+                status=401,
+                json={"error": {"message": "expired", "code": "unauthorized"}},
+            )
+            expect(self.page.locator("#dpb-dialog")).to_have_count(0)
+            expect(self.page.locator("#session-error")).to_be_focused()
+        finally:
+            for route in held[1:]:
+                route.continue_()
 
     def test_a_successful_switch_clears_the_list_error(self) -> None:
         # A failed action leaves an error above the list. A switch that
@@ -1093,6 +1138,122 @@ class CanvasJourneyTest(unittest.TestCase):
         self.page.click("#canvas-create")
         expect(self.page.locator("#canvas-save-state")).to_contain_text("已保存")
         expect(self.page.locator(".canvas-node")).to_have_count(1)
+
+    def test_switching_project_settles_a_canvas_draft(self) -> None:
+        # The canvas draft is queued for the project its panel is open for.
+        # A switch closes that panel and the next canvas load clears the
+        # queue, so the draft is settled before the switch instead of being
+        # dropped with the panel.
+        other = self.h.make_directory("canvas-other")
+        (other / "brand.md").write_text("# Other\n", encoding="utf-8")
+        self.page.fill("#project-path", str(other))
+        self.page.click("#probe-button")
+        expect(self.page.locator("#candidate")).to_be_visible()
+        self.page.fill("#project-name", "Other")
+        self.page.click("#register-button")
+        expect(self.page.locator("#project-rows tr")).to_have_count(2)
+
+        self.create_canvas("Alpha board")
+
+        # Refuse every command submission, so the queued edit stays a draft.
+        self.page.route(
+            "**/api/v1/projects/*/actions/canvases/*/commands",
+            lambda route: route.fulfill(
+                status=500,
+                json={"error": {"message": "boom", "code": "internal"}},
+            ),
+        )
+        # A queued board edit that cannot be submitted leaves the retry
+        # button: the draft is real and cannot be committed right now.
+        self.page.click("#canvas-board-add")
+        expect(self.page.locator("#canvas-retry")).to_be_visible()
+
+        other_row = self.page.locator("#project-rows tr", has_text="Other")
+        other_row.locator(".open-button").click()
+        # The draft blocks the switch the same way the canvas close button
+        # asks before dropping it.
+        expect(self.page.locator("#dpb-dialog")).to_contain_text("切换项目")
+        self.page.locator("#dpb-dialog .dialog-cancel").click()
+        expect(self.page.locator("#dpb-dialog")).to_have_count(0)
+        # The switch was refused: the header and the canvas panel still name
+        # the same project, and the other row still offers 设为当前.
+        expect(self.page.locator("#workspace-title")).to_have_text("Design")
+        expect(self.page.locator("#canvas-panel")).to_be_visible()
+        expect(other_row.locator(".open-button")).to_be_visible()
+        expect(self.page.locator("#list-error")).to_contain_text("未切换项目")
+
+    def test_confirmed_discard_switches_and_leaves_a_usable_switch(self) -> None:
+        # Confirming the discard closes the canvas panel with the old project,
+        # but the orphaned draft must not break the next switch: the settle
+        # step needs the panel context it no longer has.
+        other = self.h.make_directory("canvas-confirm")
+        (other / "brand.md").write_text("# Other\n", encoding="utf-8")
+        self.page.fill("#project-path", str(other))
+        self.page.click("#probe-button")
+        expect(self.page.locator("#candidate")).to_be_visible()
+        self.page.fill("#project-name", "Other")
+        self.page.click("#register-button")
+        expect(self.page.locator("#project-rows tr")).to_have_count(2)
+
+        self.create_canvas("Alpha board")
+
+        self.page.route(
+            "**/api/v1/projects/*/actions/canvases/*/commands",
+            lambda route: route.fulfill(
+                status=500,
+                json={"error": {"message": "boom", "code": "internal"}},
+            ),
+        )
+        self.page.click("#canvas-board-add")
+        expect(self.page.locator("#canvas-retry")).to_be_visible()
+
+        # Confirm the discard: the switch proceeds and the canvas panel leaves
+        # with the old project.
+        other_row = self.page.locator("#project-rows tr", has_text="Other")
+        other_row.locator(".open-button").click()
+        expect(self.page.locator("#dpb-dialog")).to_contain_text("切换项目")
+        self.page.locator("#dpb-dialog .dialog-ok").click()
+        expect(self.page.locator("#dpb-dialog")).to_have_count(0)
+        expect(self.page.locator("#workspace-title")).to_have_text("Other")
+        expect(self.page.locator("#canvas-panel")).to_be_hidden()
+
+        # The orphaned draft must not break the next switch.
+        third = self.h.make_directory("canvas-third")
+        (third / "brand.md").write_text("# Third\n", encoding="utf-8")
+        self.page.fill("#project-path", str(third))
+        self.page.click("#probe-button")
+        expect(self.page.locator("#candidate")).to_be_visible()
+        self.page.fill("#project-name", "Third")
+        self.page.click("#register-button")
+        expect(self.page.locator("#project-rows tr")).to_have_count(3)
+        third_row = self.page.locator("#project-rows tr", has_text="Third")
+        third_row.locator(".open-button").click()
+        expect(self.page.locator("#workspace-title")).to_have_text("Third")
+        expect(self.page.locator("#list-error")).to_be_hidden()
+
+    def test_switching_with_a_saved_canvas_does_not_ask(self) -> None:
+        # A canvas whose edits were committed holds no draft, so the settle
+        # step is skipped and the switch goes straight through.
+        other = self.h.make_directory("canvas-saved")
+        (other / "brand.md").write_text("# Other\n", encoding="utf-8")
+        self.page.fill("#project-path", str(other))
+        self.page.click("#probe-button")
+        expect(self.page.locator("#candidate")).to_be_visible()
+        self.page.fill("#project-name", "Other")
+        self.page.click("#register-button")
+        expect(self.page.locator("#project-rows tr")).to_have_count(2)
+
+        self.create_canvas("Alpha board")
+        # A board edit commits against the real server, so the canvas is
+        # saved and holds no draft when the switch happens.
+        self.page.click("#canvas-board-add")
+        expect(self.page.locator("#canvas-save-state")).to_contain_text("已保存")
+
+        other_row = self.page.locator("#project-rows tr", has_text="Other")
+        other_row.locator(".open-button").click()
+        expect(self.page.locator("#dpb-dialog")).to_have_count(0)
+        expect(self.page.locator("#workspace-title")).to_have_text("Other")
+        expect(self.page.locator("#canvas-panel")).to_be_hidden()
 
     def test_round3_canvas_dark_theme(self) -> None:
         self.create_canvas()

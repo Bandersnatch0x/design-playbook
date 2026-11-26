@@ -561,6 +561,9 @@ function failSession(message) {
   // The panel that held focus is gone, so focus would fall to the document
   // body. Land on the explanation instead: it is the only thing that can be
   // done with this page now.
+  // A dialog left open would keep the page behind its backdrop with the
+  // session gone, so it closes first; otherwise focus would land under it.
+  if (dialogOpen) dialogOpen.finish(null);
   elements.sessionError.focus();
 }
 
@@ -1147,8 +1150,30 @@ function closeProjectPanels() {
   if (openProjectPanel) closeWorkspacePanels();
 }
 
+// A canvas edit is queued for the project its panel is open for, but a switch
+// closes that panel and the next canvas load clears the queue. Settle the
+// draft before the switch is requested: flush it, and ask before switching
+// when it still cannot be committed, instead of dropping it with the panel.
+// The panel context is gone once a switch (or a canvas close) cleared
+// `state.canvasProject`; the flush below needs it, and the discard was already
+// consented to, so an orphaned draft is left for the next load to clear.
+async function settleCanvasDraft() {
+  if (!state.canvas || !state.canvasProject || !canvasHasUnsavedEdits()) return true;
+  await flushCanvasQueue();
+  if (!canvasHasUnsavedEdits()) return true;
+  return await askConfirm("画布还有未确认的编辑，切换项目会丢弃。确定切换？");
+}
+
 async function setCurrentProject(project) {
   const changed = project.projectId !== state.currentProjectId;
+  // Settle the canvas draft before the switch is requested: refusing here
+  // leaves both the client and the server on the current project.
+  if (changed && !(await settleCanvasDraft())) {
+    elements.listError.hidden = false;
+    elements.listError.textContent = "画布编辑未保存，未切换项目。";
+    announce(elements.listError.textContent);
+    return false;
+  }
   try {
     const response = await api(ROUTES.projectAction(project.projectId, "open"), {
       method: "POST",
