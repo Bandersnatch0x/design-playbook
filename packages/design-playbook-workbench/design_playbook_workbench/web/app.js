@@ -1130,6 +1130,14 @@ function closeWorkspacePanels() {
   state.tokensProject = null;
   state.tokensAsset = null;
   state.canvasProject = null;
+  // The queue belonged to the panel's project. Keeping it past the switch
+  // would pair the old commands with whatever project is current next, and
+  // `beforeunload` would keep warning about a draft the maintainer already
+  // consented to drop. The canvas itself stays: reopening the old project
+  // should still land on the canvas it last showed.
+  state.canvasQueue = [];
+  clearCanvasTimers();
+  setCanvasSaveState("idle");
   state.workProject = null;
   state.workSelectedId = null;
   state.ownerProject = null;
@@ -1161,6 +1169,10 @@ async function settleCanvasDraft() {
   if (!state.canvas || !state.canvasProject || !canvasHasUnsavedEdits()) return true;
   await flushCanvasQueue();
   if (!canvasHasUnsavedEdits()) return true;
+  // The flush may have been refused because the session died: the page now
+  // has nothing to act on, so asking would only stack a dialog on top of the
+  // explanation that already closed every panel.
+  if (!elements.sessionError.hidden) return false;
   return await askConfirm("画布还有未确认的编辑，切换项目会丢弃。确定切换？");
 }
 
@@ -1169,9 +1181,13 @@ async function setCurrentProject(project) {
   // Settle the canvas draft before the switch is requested: refusing here
   // leaves both the client and the server on the current project.
   if (changed && !(await settleCanvasDraft())) {
-    elements.listError.hidden = false;
-    elements.listError.textContent = "画布编辑未保存，未切换项目。";
-    announce(elements.listError.textContent);
+    // With the session gone the error panel already says why; a second
+    // message above a hidden list would misdescribe it.
+    if (elements.sessionError.hidden) {
+      elements.listError.hidden = false;
+      elements.listError.textContent = "画布编辑未保存，未切换项目。";
+      announce(elements.listError.textContent);
+    }
     return false;
   }
   try {
@@ -2897,7 +2913,12 @@ function adoptCanvasPayload(envelope) {
 }
 
 function canvasHasUnsavedEdits() {
-  return state.canvasQueue.length > 0 || state.canvasSaveState === "failed";
+  // A draft belongs to the panel's project. Once that panel is gone the queue
+  // no longer describes anything on this page, so it must not block leaving.
+  return (
+    Boolean(state.canvasProject) &&
+    (state.canvasQueue.length > 0 || state.canvasSaveState === "failed")
+  );
 }
 
 window.addEventListener("beforeunload", (event) => {

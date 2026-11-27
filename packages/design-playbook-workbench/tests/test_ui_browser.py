@@ -1255,6 +1255,47 @@ class CanvasJourneyTest(unittest.TestCase):
         expect(self.page.locator("#workspace-title")).to_have_text("Other")
         expect(self.page.locator("#canvas-panel")).to_be_hidden()
 
+    def test_a_pending_draft_is_committed_before_the_switch(self) -> None:
+        # The settle step commits what it can before it can ask. An edit still
+        # inside the debounce window must reach the service, so the switch
+        # asks nothing and the committed board outlives the closed panel.
+        other = self.h.make_directory("canvas-flush")
+        (other / "brand.md").write_text("# Other\n", encoding="utf-8")
+        self.page.fill("#project-path", str(other))
+        self.page.click("#probe-button")
+        expect(self.page.locator("#candidate")).to_be_visible()
+        self.page.fill("#project-name", "Other")
+        self.page.click("#register-button")
+        expect(self.page.locator("#project-rows tr")).to_have_count(2)
+
+        self.create_canvas("Alpha board")
+        canvas_id = self.canvas_id()
+        node_id = self.only_node_id()
+        start_x = self.node(node_id)["layout"]["x"]
+        self.page.locator(f'.canvas-node[data-node-id="{node_id}"]').click()
+        self.page.locator("#canvas-viewport").press("ArrowRight")
+
+        # Switch straight after the edit, while the move is still a draft: it
+        # must reach the service before the panel closes, and no confirm may
+        # stand in the way. Whether the settle step or the debounce timer
+        # commits it, the switch owns the outcome.
+        other_row = self.page.locator("#project-rows tr", has_text="Other")
+        other_row.locator(".open-button").click()
+        expect(self.page.locator("#dpb-dialog")).to_have_count(0)
+        expect(self.page.locator("#workspace-title")).to_have_text("Other")
+        expect(self.page.locator("#canvas-panel")).to_be_hidden()
+
+        # The service holds the move the panel no longer shows.
+        listing = http_request(
+            self.h.runtime,
+            f"/api/v1/projects/{self.project_id}/canvases/{canvas_id}",
+            token=self.h.token,
+        )
+        assert listing.status == 200, listing.text
+        nodes = listing.json["document"]["boards"][0]["nodes"]
+        moved = next(node for node in nodes if node["id"] == node_id)
+        self.assertEqual(moved["layout"]["x"], start_x + 1)
+
     def test_round3_canvas_dark_theme(self) -> None:
         self.create_canvas()
         self.page.emulate_media(color_scheme="dark")
